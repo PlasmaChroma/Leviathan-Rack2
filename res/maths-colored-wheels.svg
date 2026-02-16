@@ -44,7 +44,8 @@
    width="10337.66"
    height="13032.02"
    fill="#8a8a8a"
-   stroke="none" />
+   stroke="none"
+   style="display:inline" />
 
  <defs
    class="ClipPathGroup"
@@ -499,20 +500,7 @@
      id="shape-164"
      d="m 197.333,1121.333 c -1.333,0 -2.666,-0.333 -3.666,-1.333 L 1.333,927.333 C 0,925.333 0,922.667 1.333,921 l 210,-210 C 175,641.333 155.333,563.333 155.333,485 155.333,217.333 373.667,0 640,0 c 267.333,0 485,217.333 485,485 0,266.667 -217.667,484 -485,484 -80,0 -159.333,-20 -229.333,-58 L 200,1120 c -0.667,1 -1.667,1.333 -2.667,1.333 z" /><path
      id="shape-165"
-     d="M 644.5,0 C 375,0 156,219 156,489.5 c 0,78 19,156 55,225 L 3,922.5 c -3,3.5 -3,9 0,12.5 l 193,193 c 1.5,1.5 4,2.5 6,2.5 2.5,0 5,-1 6,-2.5 L 415,921 c 71,37 150,57 229.5,57 C 915,978 1134,759 1134,489.5 1134,219 915,0 644.5,0 Z m 0,9 C 910,9 1125,223.5 1125,489.5 1125,754 910,969 644.5,969 561.5,969 482.5,947.5 414,910 L 202,1121.5 9,928.5 222,716 C 185.5,648.5 165,571.5 165,489.5 165,223.5 379.5,9 644.5,9 Z" /></defs><g
-   id="g12"
-   transform="translate(-84.594349,-84.44)">
-  <g
-   id="id2"
-   class="Master_Slide">
-   <g
-   id="bg-id2"
-   class="Background" />
-   <g
-   id="bo-id2"
-   class="BackgroundObjects" />
-  </g>
- </g>
+     d="M 644.5,0 C 375,0 156,219 156,489.5 c 0,78 19,156 55,225 L 3,922.5 c -3,3.5 -3,9 0,12.5 l 193,193 c 1.5,1.5 4,2.5 6,2.5 2.5,0 5,-1 6,-2.5 L 415,921 c 71,37 150,57 229.5,57 C 915,978 1134,759 1134,489.5 1134,219 915,0 644.5,0 Z m 0,9 C 910,9 1125,223.5 1125,489.5 1125,754 910,969 644.5,969 561.5,969 482.5,947.5 414,910 L 202,1121.5 9,928.5 222,716 C 185.5,648.5 165,571.5 165,489.5 165,223.5 379.5,9 644.5,9 Z" /></defs>
  <g
    class="SlideGroup"
    id="g488"
@@ -8258,7 +8246,7 @@
    stroke="none"
    href="#shape-146"
    transform="translate(4192,2196)"
-   id="JackIn2" /></g>
+   id="thirdjackoutline" /></g>
       </g>
       <g
    class="com.sun.star.drawing.ClosedBezierShape"
@@ -8514,27 +8502,7 @@
    transform="translate(1246,2137)"
    id="use418" /></g>
       </g>
-      <g
-   class="com.sun.star.drawing.ClosedBezierShape"
-   id="g420">
-       <g
-   id="id410">
-        <rect
-   class="BoundingBox"
-   stroke="none"
-   fill="none"
-   x="1374"
-   y="2200"
-   width="712"
-   height="712"
-   id="rect419" />
-        <use
-   fill="#ffffff"
-   stroke="none"
-   href="#shape-145"
-   transform="translate(1374,2200)"
-   id="use419" /></g>
-      </g>
+      
       <g
    class="com.sun.star.drawing.ClosedBezierShape"
    id="g421">
@@ -8554,7 +8522,9 @@
    stroke="none"
    href="#shape-146"
    transform="translate(1369,2196)"
-   id="JackIn1" /></g>
+   id="firstJackOutline"
+   style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:28.2418;stroke-dasharray:none;stroke-opacity:1"
+   inkscape:highlight-color="#aaaaaa" /></g>
       </g>
       <g
    class="com.sun.star.drawing.ClosedBezierShape"
@@ -9828,7 +9798,8 @@
       </g>
       <g
    class="com.sun.star.drawing.ClosedBezierShape"
-   id="g485">
+   id="g485"
+   inkscape:label="g485">
        <g
    id="id475">
         <rect
@@ -9851,5 +9822,46 @@
     </g>
    </g>
   </g>
- </g>
+ </g><g
+   inkscape:groupmode="layer"
+   id="components"
+   inkscape:label="components"
+   transform="matrix(1.0141649,0,0,1.0112039,-165.30556,-173.28141)"
+   style="display:inline"><g
+     class="com.sun.star.drawing.ClosedBezierShape"
+     id="g420"
+     transform="translate(-1.3121823e-6)"
+     style="display:none">
+       <g
+   id="jack1">
+        
+        <use
+   fill="#ffffff"
+   stroke="none"
+   href="#shape-145"
+   transform="translate(1374,2200)"
+   id="use1"
+   style="display:inline;fill:#00ff00;fill-opacity:1" /></g>
+      </g><rect
+     class="BoundingBox"
+     stroke="none"
+     fill="none"
+     x="1374"
+     y="2200"
+     width="712"
+     height="712"
+     id="rect419"
+     style="display:inline"
+     transform="translate(-1.3121823e-6)" /><path
+     style="fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:34.3549;stroke-dasharray:none;stroke-opacity:1"
+     id="jack2"
+     sodipodi:type="arc"
+     sodipodi:cx="2868.5923"
+     sodipodi:cy="2555.9529"
+     sodipodi:rx="333.55276"
+     sodipodi:ry="345.49759"
+     sodipodi:start="0"
+     sodipodi:end="6.2636107"
+     sodipodi:arc-type="slice"
+     d="m 3202.1451,2555.9529 a 333.55276,345.49759 0 0 1 -331.9205,345.4934 333.55276,345.49759 0 0 1 -335.1691,-342.112 333.55276,345.49759 0 0 1 328.6401,-348.8418 333.55276,345.49759 0 0 1 338.3855,338.6978 l -333.4888,6.7626 z" /></g>
 </svg>

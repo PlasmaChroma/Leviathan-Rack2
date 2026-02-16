@@ -12,5 +12,14 @@
   "sourceUrl": "",
   "donateUrl": "",
   "changelogUrl": "",
-  "modules": []
+  "modules": [
+    {
+      "slug": "Maths",
+      "name": "Maths",
+      "description": "1:1 Replication of Maths",
+      "tags": [
+        "Slew limiter"
+      ]
+    }
+  ]
 }
