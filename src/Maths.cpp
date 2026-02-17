@@ -3,13 +3,17 @@
 
 struct Maths : Module {
 	enum ParamId {
+		ATTENUATE_1_PARAM,
 		CYCLE_1_PARAM,
 		RISE_1_PARAM,
 		RISE_4_PARAM,
+		ATTENUATE_2_PARAM,
 		FALL_1_PARAM,
 		FALL_4_PARAM,
+		ATTENUATE_3_PARAM,
 		LIN_LOG_1_PARAM,
 		LIN_LOG_4_PARAM,
+		ATTENUATE_4_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -267,6 +271,11 @@ struct MathsWidget : ModuleWidget {
 		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(72.217, 56.178)), module, Maths::FALL_4_PARAM));
 		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(30.719, 80.782)), module, Maths::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(72.166, 80.737)), module, Maths::LIN_LOG_4_PARAM));
+
+        addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(51.219, 23.24)), module, Maths::ATTENUATE_1_PARAM));
+        addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(51.199, 43.388)), module, Maths::ATTENUATE_2_PARAM));
+        addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(50.846, 63.103)), module, Maths::ATTENUATE_3_PARAM));
+        addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(51.044, 82.96)), module, Maths::ATTENUATE_4_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.794, 15.678)), module, Maths::INPUT_1_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.157, 15.659)), module, Maths::INPUT_1_TRIG_INPUT));
