@@ -76,8 +76,35 @@ struct Maths : Module {
 		return x;
 	}
 
-	float computeStageTime(float knob, float stageCv, float bothCv) const {
-		const float minTime = 0.001f;
+	float computeShapeTimeScale(float shape, float knob) const {
+		shape = clamp(shape, 0.f, 1.f);
+		// Calibrated from measured FUNCTION sweeps:
+		// Rise/Fall = 0.00 -> LOG ~180Hz, EXP ~1147Hz (linear baseline ~666Hz).
+		// Rise/Fall = 0.10 -> LOG ~123Hz, EXP ~1083Hz.
+		// Interpolate in log-domain across knob [0, 0.10], then hold.
+		float knobBlend = clamp(knob / 0.10f, 0.f, 1.f);
+		float logSlowScale = std::exp(
+			std::log(3.7f) + (std::log(1.27f) - std::log(3.7f)) * knobBlend
+		);
+		float expFastScale = std::exp(
+			std::log(0.5806f) + (std::log(0.144f) - std::log(0.5806f)) * knobBlend
+		);
+		if (shape < CH1_LINEAR_SHAPE) {
+			float t = shape / CH1_LINEAR_SHAPE;
+			return std::pow(logSlowScale, 1.f - t);
+		}
+		if (shape > CH1_LINEAR_SHAPE) {
+			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+			return std::pow(expFastScale, t);
+		}
+		return 1.f;
+	}
+
+	float computeStageTime(float knob, float stageCv, float bothCv, float shape) const {
+		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
+		const float minTime = 0.00075075f;
+		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
+		const float absoluteMinTime = 0.0001f;
 		const float maxTime = 1500.f;
 		float t = minTime * std::pow(maxTime / minTime, clamp(knob, 0.f, 1.f));
 
@@ -89,8 +116,9 @@ struct Maths : Module {
 		// Both CV is bipolar exponential, positive = faster, negative = slower.
 		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
 		t *= bothScale;
+		t *= computeShapeTimeScale(shape, knob);
 
-		return clamp(t, minTime, maxTime);
+		return clamp(t, absoluteMinTime, maxTime);
 	}
 
 	void triggerCh1Function() {
@@ -140,17 +168,19 @@ struct Maths : Module {
 			triggerCh1Function();
 		}
 
+		float shape = params[LIN_LOG_1_PARAM].getValue();
 		float riseTime = computeStageTime(
 			params[RISE_1_PARAM].getValue(),
 			inputs[CH1_RISE_CV_INPUT].getVoltage(),
-			inputs[CH1_BOTH_CV_INPUT].getVoltage()
+			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
+			shape
 		);
 		float fallTime = computeStageTime(
 			params[FALL_1_PARAM].getValue(),
 			inputs[CH1_FALL_CV_INPUT].getVoltage(),
-			inputs[CH1_BOTH_CV_INPUT].getVoltage()
+			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
+			shape
 		);
-		float shape = params[LIN_LOG_1_PARAM].getValue();
 
 		bool signalPatched = inputs[INPUT_1_INPUT].isConnected();
 		if (ch1Phase == CH1_IDLE && ch1CycleOn) {
