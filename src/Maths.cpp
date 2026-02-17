@@ -37,15 +37,76 @@ struct Maths : Module {
 		LIGHTS_LEN
 	};
 
+	enum Ch1Phase {
+		CH1_IDLE,
+		CH1_RISE,
+		CH1_FALL
+	};
+
+	dsp::SchmittTrigger ch1TrigEdge;
+	dsp::SchmittTrigger ch1CycleButtonEdge;
+	dsp::SchmittTrigger ch1CycleCvGate;
+	dsp::PulseGenerator ch1EorPulse;
+
+	Ch1Phase ch1Phase = CH1_IDLE;
+	float ch1PhasePos = 0.f;
+	float ch1Out = 0.f;
+	bool ch1CycleLatched = false;
+	static constexpr float CH1_LINEAR_SHAPE = 0.33f;
+
+	static float shapeCurve(float x, float shape) {
+		x = clamp(x, 0.f, 1.f);
+		shape = clamp(shape, 0.f, 1.f);
+		if (shape < CH1_LINEAR_SHAPE) {
+			// Log-ish: fast start, slow finish.
+			float t = shape / CH1_LINEAR_SHAPE;
+			float gamma = rescale(t, 0.f, 1.f, 0.35f, 1.f);
+			return std::pow(x, gamma);
+		}
+		if (shape > CH1_LINEAR_SHAPE) {
+			// Exp-ish: slow start, fast finish.
+			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+			float gamma = rescale(t, 0.f, 1.f, 1.f, 3.5f);
+			return std::pow(x, gamma);
+		}
+		return x;
+	}
+
+	float computeStageTime(float knob, float stageCv, float bothCv) const {
+		const float minTime = 0.001f;
+		const float maxTime = 1500.f;
+		float t = minTime * std::pow(maxTime / minTime, clamp(knob, 0.f, 1.f));
+
+		// Rise/Fall CV is linear over +/-8V.
+		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
+		linearScale = std::max(linearScale, 0.05f);
+		t *= linearScale;
+
+		// Both CV is bipolar exponential, positive = faster, negative = slower.
+		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
+		t *= bothScale;
+
+		return clamp(t, minTime, maxTime);
+	}
+
+	void triggerCh1Function() {
+		ch1Phase = CH1_RISE;
+		ch1PhasePos = 0.f;
+	}
+
 	Maths() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(FALL_4_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.f, "");
 		configInput(INPUT_1_INPUT, "");
 		configInput(INPUT_1_TRIG_INPUT, "");
 		configInput(CH1_RISE_CV_INPUT, "");
@@ -61,6 +122,97 @@ struct Maths : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		float dt = args.sampleTime;
+
+		if (ch1CycleButtonEdge.process(params[CYCLE_1_PARAM].getValue())) {
+			ch1CycleLatched = !ch1CycleLatched;
+		}
+
+		bool cycleCvHigh = ch1CycleCvGate.process(rescale(inputs[CH1_CYCLE_CV_INPUT].getVoltage(), 0.1f, 2.5f, 0.f, 1.f));
+		bool ch1CycleOn = ch1CycleLatched || cycleCvHigh;
+
+		bool trigRise = ch1TrigEdge.process(inputs[INPUT_1_TRIG_INPUT].getVoltage());
+		if (trigRise && ch1Phase != CH1_RISE) {
+			triggerCh1Function();
+		}
+
+		float riseTime = computeStageTime(
+			params[RISE_1_PARAM].getValue(),
+			inputs[CH1_RISE_CV_INPUT].getVoltage(),
+			inputs[CH1_BOTH_CV_INPUT].getVoltage()
+		);
+		float fallTime = computeStageTime(
+			params[FALL_1_PARAM].getValue(),
+			inputs[CH1_FALL_CV_INPUT].getVoltage(),
+			inputs[CH1_BOTH_CV_INPUT].getVoltage()
+		);
+		float shape = params[LIN_LOG_1_PARAM].getValue();
+
+		bool signalPatched = inputs[INPUT_1_INPUT].isConnected();
+		if (ch1Phase == CH1_IDLE && ch1CycleOn) {
+			triggerCh1Function();
+		}
+
+		if (ch1Phase != CH1_IDLE) {
+			float peak = ch1CycleOn ? 8.f : 10.f;
+			if (ch1Phase == CH1_RISE) {
+				ch1PhasePos += dt / riseTime;
+				if (ch1PhasePos >= 1.f) {
+					ch1PhasePos = 0.f;
+					ch1Phase = CH1_FALL;
+					ch1EorPulse.trigger(1e-3f);
+				}
+				else {
+						ch1Out = peak * shapeCurve(ch1PhasePos, shape);
+				}
+			}
+
+			if (ch1Phase == CH1_FALL) {
+				ch1PhasePos += dt / fallTime;
+				if (ch1PhasePos >= 1.f) {
+					ch1PhasePos = 0.f;
+					ch1Phase = CH1_IDLE;
+					ch1Out = 0.f;
+				}
+				else {
+						ch1Out = peak * (1.f - shapeCurve(ch1PhasePos, shape));
+				}
+			}
+		}
+		else if (signalPatched) {
+			// Slew mode: follow signal input with independent rise/fall timing.
+			float target = clamp(inputs[INPUT_1_INPUT].getVoltage(), -10.f, 10.f);
+			float delta = target - ch1Out;
+			float stageTime = (delta >= 0.f) ? riseTime : fallTime;
+			float alpha = clamp(dt / stageTime, 0.f, 1.f);
+			float alphaGamma = 1.f;
+			if (shape < CH1_LINEAR_SHAPE) {
+				float t = shape / CH1_LINEAR_SHAPE;
+				alphaGamma = rescale(t, 0.f, 1.f, 1.6f, 1.f);
+			}
+			else if (shape > CH1_LINEAR_SHAPE) {
+				float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+				alphaGamma = rescale(t, 0.f, 1.f, 1.f, 0.7f);
+			}
+			float shapedAlpha = std::pow(alpha, alphaGamma);
+			ch1Out += delta * shapedAlpha;
+		}
+		else {
+			ch1Out = 0.f;
+		}
+
+		bool eorHigh = ch1EorPulse.process(dt);
+		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
+
+		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1Out);
+		outputs[OUT_1_OUTPUT].setVoltage(ch1Out);
+		outputs[OUT_2_OUTPUT].setVoltage(0.f);
+		outputs[OUT_3_OUTPUT].setVoltage(0.f);
+		outputs[OUT_4_OUTPUT].setVoltage(0.f);
+
+		lights[CYCLE_1_LED_LIGHT].setBrightness(ch1CycleOn ? 1.f : 0.f);
+		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
+		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1Out) / 10.f, 0.f, 1.f));
 	}
 };
 
