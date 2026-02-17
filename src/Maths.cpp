@@ -100,7 +100,38 @@ struct Maths : Module {
 		return 1.f;
 	}
 
-	float computeStageTime(float knob, float stageCv, float bothCv, float shape) const {
+	float computeSlewStageTime(float knob, float stageCv, float bothCv) const {
+		// Slew mode calibrated separately from cycle timing.
+		// At knob minimum this yields ~10kV/s base slew rate (20V / 2ms).
+		const float minTime = 0.002f;
+		const float maxTime = 1500.f;
+		float t = minTime * std::pow(maxTime / minTime, clamp(knob, 0.f, 1.f));
+
+		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
+		linearScale = std::max(linearScale, 0.05f);
+		t *= linearScale;
+
+		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
+		t *= bothScale;
+
+		return clamp(t, 0.0002f, maxTime);
+	}
+
+	float computeSlewRate(float stageTime, float shape) const {
+		float baseRate = 20.f / std::max(stageTime, 1e-6f);
+		float shapeScale = 1.f;
+		if (shape < CH1_LINEAR_SHAPE) {
+			float t = shape / CH1_LINEAR_SHAPE;
+			shapeScale = rescale(t, 0.f, 1.f, 1.12f, 1.f);
+		}
+		else if (shape > CH1_LINEAR_SHAPE) {
+			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+			shapeScale = rescale(t, 0.f, 1.f, 1.f, 0.88f);
+		}
+		return baseRate * shapeScale;
+	}
+
+	float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
 		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
 		const float minTime = 0.00075075f;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
@@ -116,7 +147,9 @@ struct Maths : Module {
 		// Both CV is bipolar exponential, positive = faster, negative = slower.
 		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
 		t *= bothScale;
-		t *= computeShapeTimeScale(shape, knob);
+		if (applyShapeTimeScale) {
+			t *= computeShapeTimeScale(shape, knob);
+		}
 
 		return clamp(t, absoluteMinTime, maxTime);
 	}
@@ -173,15 +206,16 @@ struct Maths : Module {
 			params[RISE_1_PARAM].getValue(),
 			inputs[CH1_RISE_CV_INPUT].getVoltage(),
 			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
-			shape
+			shape,
+			true
 		);
 		float fallTime = computeStageTime(
 			params[FALL_1_PARAM].getValue(),
 			inputs[CH1_FALL_CV_INPUT].getVoltage(),
 			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
-			shape
+			shape,
+			true
 		);
-
 		bool signalPatched = inputs[INPUT_1_INPUT].isConnected();
 		if (ch1Phase == CH1_IDLE && ch1CycleOn) {
 			triggerCh1Function();
@@ -189,17 +223,17 @@ struct Maths : Module {
 
 		if (ch1Phase != CH1_IDLE) {
 			float peak = ch1CycleOn ? 8.f : 10.f;
-			if (ch1Phase == CH1_RISE) {
-				ch1PhasePos += dt / riseTime;
-				if (ch1PhasePos >= 1.f) {
+				if (ch1Phase == CH1_RISE) {
+					ch1PhasePos += dt / riseTime;
+					if (ch1PhasePos >= 1.f) {
 					ch1PhasePos = 0.f;
 					ch1Phase = CH1_FALL;
 					ch1EorPulse.trigger(1e-3f);
-				}
-				else {
+					}
+					else {
 						ch1Out = peak * shapeCurve(ch1PhasePos, shape);
+					}
 				}
-			}
 
 			if (ch1Phase == CH1_FALL) {
 				ch1PhasePos += dt / fallTime;
@@ -207,30 +241,36 @@ struct Maths : Module {
 					ch1PhasePos = 0.f;
 					ch1Phase = CH1_IDLE;
 					ch1Out = 0.f;
-				}
-				else {
+					}
+					else {
 						ch1Out = peak * (1.f - shapeCurve(ch1PhasePos, shape));
+					}
 				}
 			}
-		}
-		else if (signalPatched) {
-			// Slew mode: follow signal input with independent rise/fall timing.
-			float target = clamp(inputs[INPUT_1_INPUT].getVoltage(), -10.f, 10.f);
-			float delta = target - ch1Out;
-			float stageTime = (delta >= 0.f) ? riseTime : fallTime;
-			float alpha = clamp(dt / stageTime, 0.f, 1.f);
-			float alphaGamma = 1.f;
-			if (shape < CH1_LINEAR_SHAPE) {
-				float t = shape / CH1_LINEAR_SHAPE;
-				alphaGamma = rescale(t, 0.f, 1.f, 1.6f, 1.f);
+			else if (signalPatched) {
+				// Slew mode: true rate limiting with independent rise/fall slew.
+				float target = clamp(inputs[INPUT_1_INPUT].getVoltage(), -10.f, 10.f);
+				float delta = target - ch1Out;
+				float riseRate = computeSlewRate(
+					computeSlewStageTime(
+						params[RISE_1_PARAM].getValue(),
+						inputs[CH1_RISE_CV_INPUT].getVoltage(),
+						inputs[CH1_BOTH_CV_INPUT].getVoltage()
+					),
+					shape
+				);
+				float fallRate = computeSlewRate(
+					computeSlewStageTime(
+						params[FALL_1_PARAM].getValue(),
+						inputs[CH1_FALL_CV_INPUT].getVoltage(),
+						inputs[CH1_BOTH_CV_INPUT].getVoltage()
+					),
+					shape
+				);
+				float maxStep = (delta >= 0.f ? riseRate : fallRate) * dt;
+				float step = clamp(delta, -maxStep, maxStep);
+				ch1Out += step;
 			}
-			else if (shape > CH1_LINEAR_SHAPE) {
-				float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-				alphaGamma = rescale(t, 0.f, 1.f, 1.f, 0.7f);
-			}
-			float shapedAlpha = std::pow(alpha, alphaGamma);
-			ch1Out += delta * shapedAlpha;
-		}
 		else {
 			ch1Out = 0.f;
 		}
