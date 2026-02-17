@@ -122,13 +122,45 @@ struct Maths : Module {
 		float shapeScale = 1.f;
 		if (shape < CH1_LINEAR_SHAPE) {
 			float t = shape / CH1_LINEAR_SHAPE;
-			shapeScale = rescale(t, 0.f, 1.f, 1.12f, 1.f);
+			// LOG -> LINEAR: reduce effective slew near linear to deepen odd suppression.
+			shapeScale = rescale(t, 0.f, 1.f, 1.08f, 0.94f);
 		}
 		else if (shape > CH1_LINEAR_SHAPE) {
 			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-			shapeScale = rescale(t, 0.f, 1.f, 1.f, 0.88f);
+			// LINEAR -> EXP: increase effective slew to recover odd harmonics.
+			shapeScale = rescale(t, 0.f, 1.f, 0.94f, 1.08f);
 		}
 		return baseRate * shapeScale;
+	}
+
+	float shapeSlewTarget(float target, float shape) const {
+		float x = clamp(target / 10.f, -1.f, 1.f);
+		float oddDrive = 0.f;
+		float evenDrive = 0.f;
+
+		if (shape < CH1_LINEAR_SHAPE) {
+			float t = shape / CH1_LINEAR_SHAPE;
+			// LOG -> LINEAR: suppress odd progressively, increase even emphasis.
+			oddDrive = rescale(t, 0.f, 1.f, -0.02f, -0.08f);
+			evenDrive = rescale(t, 0.f, 1.f, 0.10f, 0.20f);
+		}
+		else if (shape > CH1_LINEAR_SHAPE) {
+			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+			// LINEAR -> EXP: restore odd and relax even emphasis toward EXP.
+			oddDrive = rescale(t, 0.f, 1.f, -0.08f, 0.16f);
+			evenDrive = rescale(t, 0.f, 1.f, 0.20f, 0.f);
+		}
+		else {
+			// Linear target: strongest odd suppression and strongest even emphasis.
+			oddDrive = -0.08f;
+			evenDrive = 0.20f;
+		}
+
+		float oddTerm = x * x * x;
+		// Center x^2 so we get even-harmonic coloration with less static DC shift.
+		float evenTerm = (x * x) - (1.f / 3.f);
+		float y = x + oddDrive * oddTerm + evenDrive * evenTerm;
+		return 10.f * clamp(y, -1.f, 1.f);
 	}
 
 	float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
@@ -248,27 +280,50 @@ struct Maths : Module {
 				}
 			}
 			else if (signalPatched) {
-				// Slew mode: true rate limiting with independent rise/fall slew.
+				// Slew mode: hard slew limiting plus a small shape-dependent soft component.
 				float target = clamp(inputs[INPUT_1_INPUT].getVoltage(), -10.f, 10.f);
-				float delta = target - ch1Out;
+				float shapedTarget = shapeSlewTarget(target, shape);
+				float delta = shapedTarget - ch1Out;
+				float riseSlewStageTime = computeSlewStageTime(
+					params[RISE_1_PARAM].getValue(),
+					inputs[CH1_RISE_CV_INPUT].getVoltage(),
+					inputs[CH1_BOTH_CV_INPUT].getVoltage()
+				);
+				float fallSlewStageTime = computeSlewStageTime(
+					params[FALL_1_PARAM].getValue(),
+					inputs[CH1_FALL_CV_INPUT].getVoltage(),
+					inputs[CH1_BOTH_CV_INPUT].getVoltage()
+				);
 				float riseRate = computeSlewRate(
-					computeSlewStageTime(
-						params[RISE_1_PARAM].getValue(),
-						inputs[CH1_RISE_CV_INPUT].getVoltage(),
-						inputs[CH1_BOTH_CV_INPUT].getVoltage()
-					),
+					riseSlewStageTime,
 					shape
 				);
 				float fallRate = computeSlewRate(
-					computeSlewStageTime(
-						params[FALL_1_PARAM].getValue(),
-						inputs[CH1_FALL_CV_INPUT].getVoltage(),
-						inputs[CH1_BOTH_CV_INPUT].getVoltage()
-					),
+					fallSlewStageTime,
 					shape
 				);
 				float maxStep = (delta >= 0.f ? riseRate : fallRate) * dt;
-				float step = clamp(delta, -maxStep, maxStep);
+				float hardStep = clamp(delta, -maxStep, maxStep);
+
+				float shapeBlend = 0.f;
+				if (shape < CH1_LINEAR_SHAPE) {
+					float t = shape / CH1_LINEAR_SHAPE;
+					// Increase soft component toward linear on the LOG side.
+					shapeBlend = rescale(t, 0.f, 1.f, 0.06f, 0.14f);
+				}
+				else if (shape > CH1_LINEAR_SHAPE) {
+					float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
+					// Decrease soft component toward full EXP to avoid re-smoothing odd content.
+					shapeBlend = rescale(t, 0.f, 1.f, 0.14f, 0.f);
+				}
+
+				float slewStageTime = (delta >= 0.f) ? riseSlewStageTime : fallSlewStageTime;
+				float onePoleAlpha = clamp(dt / (slewStageTime * 3.5f), 0.f, 1.f);
+				float softStep = delta * onePoleAlpha;
+
+				float step = hardStep + (softStep - hardStep) * shapeBlend;
+				step = clamp(step, -maxStep, maxStep);
+				step = clamp(step, -std::fabs(delta), std::fabs(delta));
 				ch1Out += step;
 			}
 		else {
