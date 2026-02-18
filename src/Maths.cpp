@@ -58,7 +58,7 @@ struct Maths : Module {
 	bool ch1CycleLatched = false;
 	static constexpr float CH1_LINEAR_SHAPE = 0.33f;
 
-	static float shapeCurve(float x, float shape) {
+		static float shapeCurve(float x, float shape) {
 		x = clamp(x, 0.f, 1.f);
 		shape = clamp(shape, 0.f, 1.f);
 		if (shape < CH1_LINEAR_SHAPE) {
@@ -73,10 +73,64 @@ struct Maths : Module {
 			float gamma = rescale(t, 0.f, 1.f, 1.f, 3.5f);
 			return std::pow(x, gamma);
 		}
-		return x;
-	}
+			return x;
+		}
 
-	float computeShapeTimeScale(float shape, float knob) const {
+		static float processRampageSlew(
+			float out,
+			float in,
+			float riseKnob01,
+			float fallKnob01,
+			float shape01,
+			float riseCvV,
+			float fallCvV,
+			float bothCvV,
+			float dt
+		) {
+			static constexpr float MIN_TIME = 0.01f;
+			static constexpr float VREF = 10.0f;
+			static constexpr float E = 2.718281828f;
+
+			float delta = in - out;
+			if (delta == 0.f) {
+				return out;
+			}
+
+			float stageKnob = (delta > 0.f) ? riseKnob01 : fallKnob01;
+			float stageCv = (delta > 0.f) ? riseCvV : fallCvV;
+
+			float baseExp = 10.f * stageKnob;
+			float stageExp = clamp(stageCv, 0.f, 10.f);
+			float bothExp = -clamp(bothCvV, -8.f, 8.f) / 2.f;
+			float rateExp = clamp(baseExp + stageExp + bothExp, 0.f, 10.f);
+			float tau = MIN_TIME * std::pow(2.f, rateExp);
+
+			float absDelta = std::fabs(delta);
+			float sgn = (delta >= 0.f) ? 1.f : -1.f;
+			float lin = sgn * (VREF / tau);
+			float logv = sgn * (4.f * VREF) / tau / (absDelta + 1.f);
+			float expv = (E * delta) / tau;
+
+			float shapeSigned = clamp(shape01 * 2.f - 1.f, -1.f, 1.f);
+			float dVdt = lin;
+			if (shapeSigned < 0.f) {
+				float mix = clamp((-shapeSigned) * 0.95f, 0.f, 1.f);
+				dVdt = lin + (logv - lin) * mix;
+			}
+			else if (shapeSigned > 0.f) {
+				float mix = clamp(shapeSigned * 0.90f, 0.f, 1.f);
+				dVdt = lin + (expv - lin) * mix;
+			}
+
+			float prevOut = out;
+			out += dVdt * dt;
+			if ((in - prevOut) * (in - out) < 0.f) {
+				out = in;
+			}
+			return out;
+		}
+
+		float computeShapeTimeScale(float shape, float knob) const {
 		shape = clamp(shape, 0.f, 1.f);
 		// Calibrated from measured FUNCTION sweeps:
 		// Rise/Fall = 0.00 -> LOG ~180Hz, EXP ~1147Hz (linear baseline ~666Hz).
@@ -100,70 +154,7 @@ struct Maths : Module {
 		return 1.f;
 	}
 
-	float computeSlewStageTime(float knob, float stageCv, float bothCv) const {
-		// Slew mode calibrated separately from cycle timing.
-		// At knob minimum this yields ~10kV/s base slew rate (20V / 2ms).
-		const float minTime = 0.002f;
-		const float maxTime = 1500.f;
-		float t = minTime * std::pow(maxTime / minTime, clamp(knob, 0.f, 1.f));
-
-		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
-		linearScale = std::max(linearScale, 0.05f);
-		t *= linearScale;
-
-		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
-		t *= bothScale;
-
-		return clamp(t, 0.0002f, maxTime);
-	}
-
-	float computeSlewRate(float stageTime, float shape) const {
-		float baseRate = 20.f / std::max(stageTime, 1e-6f);
-		float shapeScale = 1.f;
-		if (shape < CH1_LINEAR_SHAPE) {
-			float t = shape / CH1_LINEAR_SHAPE;
-			// LOG -> LINEAR: reduce effective slew near linear to deepen odd suppression.
-			shapeScale = rescale(t, 0.f, 1.f, 1.08f, 0.94f);
-		}
-		else if (shape > CH1_LINEAR_SHAPE) {
-			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-			// LINEAR -> EXP: increase effective slew to recover odd harmonics.
-			shapeScale = rescale(t, 0.f, 1.f, 0.94f, 1.08f);
-		}
-		return baseRate * shapeScale;
-	}
-
-	float shapeSlewTarget(float target, float shape) const {
-		float x = clamp(target / 10.f, -1.f, 1.f);
-		float oddDrive = 0.f;
-		float evenDrive = 0.f;
-
-		if (shape < CH1_LINEAR_SHAPE) {
-			float t = shape / CH1_LINEAR_SHAPE;
-			// LOG -> LINEAR: suppress odd progressively, increase even emphasis.
-			oddDrive = rescale(t, 0.f, 1.f, -0.02f, -0.08f);
-			evenDrive = rescale(t, 0.f, 1.f, 0.10f, 0.20f);
-		}
-		else if (shape > CH1_LINEAR_SHAPE) {
-			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-			// LINEAR -> EXP: restore odd and relax even emphasis toward EXP.
-			oddDrive = rescale(t, 0.f, 1.f, -0.08f, 0.16f);
-			evenDrive = rescale(t, 0.f, 1.f, 0.20f, 0.f);
-		}
-		else {
-			// Linear target: strongest odd suppression and strongest even emphasis.
-			oddDrive = -0.08f;
-			evenDrive = 0.20f;
-		}
-
-		float oddTerm = x * x * x;
-		// Center x^2 so we get even-harmonic coloration with less static DC shift.
-		float evenTerm = (x * x) - (1.f / 3.f);
-		float y = x + oddDrive * oddTerm + evenDrive * evenTerm;
-		return 10.f * clamp(y, -1.f, 1.f);
-	}
-
-	float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
+		float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
 		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
 		const float minTime = 0.00075075f;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
@@ -280,55 +271,29 @@ struct Maths : Module {
 				}
 			}
 			else if (signalPatched) {
-				// Slew mode: hard slew limiting plus a small shape-dependent soft component.
-				float target = clamp(inputs[INPUT_1_INPUT].getVoltage(), -10.f, 10.f);
-				float shapedTarget = shapeSlewTarget(target, shape);
-				float delta = shapedTarget - ch1Out;
-				float riseSlewStageTime = computeSlewStageTime(
-					params[RISE_1_PARAM].getValue(),
-					inputs[CH1_RISE_CV_INPUT].getVoltage(),
-					inputs[CH1_BOTH_CV_INPUT].getVoltage()
+				// Rampage-style shaped slew for external input.
+				float in = inputs[INPUT_1_INPUT].getVoltage();
+				float riseKnob01 = params[RISE_1_PARAM].getValue();
+				float fallKnob01 = params[FALL_1_PARAM].getValue();
+				float shape01 = params[LIN_LOG_1_PARAM].getValue();
+				float riseCvV = inputs[CH1_RISE_CV_INPUT].getVoltage();
+				float fallCvV = inputs[CH1_FALL_CV_INPUT].getVoltage();
+				float bothCvV = inputs[CH1_BOTH_CV_INPUT].getVoltage();
+				ch1Out = processRampageSlew(
+					ch1Out,
+					in,
+					riseKnob01,
+					fallKnob01,
+					shape01,
+					riseCvV,
+					fallCvV,
+					bothCvV,
+					dt
 				);
-				float fallSlewStageTime = computeSlewStageTime(
-					params[FALL_1_PARAM].getValue(),
-					inputs[CH1_FALL_CV_INPUT].getVoltage(),
-					inputs[CH1_BOTH_CV_INPUT].getVoltage()
-				);
-				float riseRate = computeSlewRate(
-					riseSlewStageTime,
-					shape
-				);
-				float fallRate = computeSlewRate(
-					fallSlewStageTime,
-					shape
-				);
-				float maxStep = (delta >= 0.f ? riseRate : fallRate) * dt;
-				float hardStep = clamp(delta, -maxStep, maxStep);
-
-				float shapeBlend = 0.f;
-				if (shape < CH1_LINEAR_SHAPE) {
-					float t = shape / CH1_LINEAR_SHAPE;
-					// Increase soft component toward linear on the LOG side.
-					shapeBlend = rescale(t, 0.f, 1.f, 0.06f, 0.14f);
-				}
-				else if (shape > CH1_LINEAR_SHAPE) {
-					float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-					// Decrease soft component toward full EXP to avoid re-smoothing odd content.
-					shapeBlend = rescale(t, 0.f, 1.f, 0.14f, 0.f);
-				}
-
-				float slewStageTime = (delta >= 0.f) ? riseSlewStageTime : fallSlewStageTime;
-				float onePoleAlpha = clamp(dt / (slewStageTime * 3.5f), 0.f, 1.f);
-				float softStep = delta * onePoleAlpha;
-
-				float step = hardStep + (softStep - hardStep) * shapeBlend;
-				step = clamp(step, -maxStep, maxStep);
-				step = clamp(step, -std::fabs(delta), std::fabs(delta));
-				ch1Out += step;
 			}
-		else {
-			ch1Out = 0.f;
-		}
+			else {
+				ch1Out = 0.f;
+			}
 
 		bool eorHigh = ch1EorPulse.process(dt);
 		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
