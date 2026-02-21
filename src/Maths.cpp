@@ -376,7 +376,7 @@ struct BigTL1105 : TL1105 {
 struct MathsWidget : ModuleWidget {
 	MathsWidget(Maths* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/Maths.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/maths.svg")));
 
         MyImageWidget* img = new MyImageWidget();
         img->box.pos = Vec(0, 0);  // Position on the panel
@@ -392,18 +392,16 @@ struct MathsWidget : ModuleWidget {
         // use Rogan1PSWhite for the attenuverter knobs
         // use TL1105 for the cycle buttons
 		
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.805, 23.141)), module, Maths::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(92.313, 32.315)), module, Maths::CYCLE_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.423, 34.13)), module, Maths::RISE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(71.969, 34.085)), module, Maths::RISE_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.805, 43.288)), module, Maths::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.423, 56.125)), module, Maths::FALL_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(71.969, 56.079)), module, Maths::FALL_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.805, 62.906)), module, Maths::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.423, 80.585)), module, Maths::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(71.969, 80.539)), module, Maths::LIN_LOG_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.805, 82.663)), module, Maths::ATTENUATE_4_PARAM));
+		addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(50.805, 23.141)), module, Maths::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(30.423, 34.13)), module, Maths::RISE_1_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(71.969, 34.085)), module, Maths::RISE_4_PARAM));
+		addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(50.805, 43.288)), module, Maths::ATTENUATE_2_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(30.423, 56.125)), module, Maths::FALL_1_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(71.969, 56.079)), module, Maths::FALL_4_PARAM));
+		addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(50.805, 62.906)), module, Maths::ATTENUATE_3_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(30.423, 80.585)), module, Maths::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<Rogan1PSBlue>(mm2px(Vec(71.969, 80.539)), module, Maths::LIN_LOG_4_PARAM));
+		addParam(createParamCentered<Rogan1PSWhite>(mm2px(Vec(50.805, 82.663)), module, Maths::ATTENUATE_4_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.794, 15.678)), module, Maths::INPUT_1_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.157, 15.659)), module, Maths::INPUT_1_TRIG_INPUT));
