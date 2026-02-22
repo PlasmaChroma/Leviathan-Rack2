@@ -16,24 +16,6 @@ You probably won't be able to compile this code, because the build tool is the 6
 - This behavior appears consistent/repeatable in regions, not random.
 - Likely analog coupling/locking behavior; not yet modeled intentionally in SW.
 
-## Harmonic/timbre observations at 266Hz triangle input (hardware)
-- LOG:
-  - Fundamental: -15dB
-  - H2: -36dB
-  - H3: -46dB
-  - H4: -48dB
-  - H5: -55dB
-- LINEAR:
-  - H2: -33dB
-  - H3: -62dB
-  - H4: -43dB
-  - H5: -68dB
-- EXP:
-  - H2: -33dB
-  - H3: -37dB
-  - H4: -40dB
-  - H5: -41dB
-
 ## Interpretation target for future SW tuning
 - LOG and especially LINEAR can suppress odd harmonics vs even.
 - EXP brings odd harmonics up significantly (closer to even-harmonic levels).

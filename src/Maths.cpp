@@ -60,38 +60,67 @@ struct Maths : Module {
 		LIGHTS_LEN
 	};
 
-	enum Ch1Phase {
-		CH1_IDLE,
-		CH1_RISE,
-		CH1_FALL
+	enum OuterPhase {
+		OUTER_IDLE,
+		OUTER_RISE,
+		OUTER_FALL
 	};
 
-	dsp::SchmittTrigger ch1TrigEdge;
-	dsp::SchmittTrigger ch1CycleButtonEdge;
-	dsp::SchmittTrigger ch1CycleCvGate;
-	dsp::PulseGenerator ch1EorPulse;
+	struct OuterChannelState {
+		dsp::SchmittTrigger trigEdge;
+		dsp::SchmittTrigger cycleButtonEdge;
+		dsp::SchmittTrigger cycleCvGate;
+		dsp::PulseGenerator endPulse;
 
-	Ch1Phase ch1Phase = CH1_IDLE;
-	float ch1PhasePos = 0.f;
-	float ch1Out = 0.f;
-	bool ch1CycleLatched = false;
-	static constexpr float CH1_LINEAR_SHAPE = 0.33f;
+		OuterPhase phase = OUTER_IDLE;
+		float phasePos = 0.f;
+		float out = 0.f;
+		bool cycleLatched = false;
+	};
+
+	struct OuterChannelConfig {
+		int cycleParam;
+		int trigInput;
+		int signalInput;
+		int riseParam;
+		int fallParam;
+		int shapeParam;
+		int riseCvInput;
+		int fallCvInput;
+		int bothCvInput;
+		int cycleCvInput;
+		bool pulseAtRiseEnd;
+	};
+
+	struct OuterChannelResult {
+		bool cycleOn = false;
+		bool endPulseHigh = false;
+	};
+
+	OuterChannelState ch1;
+	OuterChannelState ch4;
+	static constexpr float LINEAR_SHAPE = 0.33f;
+
+	static float attenuverterGain(float knob01) {
+		// Noon = 0, CCW = negative, CW = positive.
+		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
+	}
 
 		static float shapeCurve(float x, float shape) {
 		x = clamp(x, 0.f, 1.f);
 		shape = clamp(shape, 0.f, 1.f);
-		if (shape < CH1_LINEAR_SHAPE) {
-			// Log-ish: fast start, slow finish.
-			float t = shape / CH1_LINEAR_SHAPE;
-			float gamma = rescale(t, 0.f, 1.f, 0.35f, 1.f);
-			return std::pow(x, gamma);
-		}
-		if (shape > CH1_LINEAR_SHAPE) {
-			// Exp-ish: slow start, fast finish.
-			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-			float gamma = rescale(t, 0.f, 1.f, 1.f, 3.5f);
-			return std::pow(x, gamma);
-		}
+			if (shape < LINEAR_SHAPE) {
+				// Log-ish: fast start, slow finish.
+				float t = shape / LINEAR_SHAPE;
+				float gamma = rescale(t, 0.f, 1.f, 0.35f, 1.f);
+				return std::pow(x, gamma);
+			}
+			if (shape > LINEAR_SHAPE) {
+				// Exp-ish: slow start, fast finish.
+				float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+				float gamma = rescale(t, 0.f, 1.f, 1.f, 3.5f);
+				return std::pow(x, gamma);
+			}
 			return x;
 		}
 
@@ -162,16 +191,16 @@ struct Maths : Module {
 		float expFastScale = std::exp(
 			std::log(0.5806f) + (std::log(0.144f) - std::log(0.5806f)) * knobBlend
 		);
-		if (shape < CH1_LINEAR_SHAPE) {
-			float t = shape / CH1_LINEAR_SHAPE;
-			return std::pow(logSlowScale, 1.f - t);
+			if (shape < LINEAR_SHAPE) {
+				float t = shape / LINEAR_SHAPE;
+				return std::pow(logSlowScale, 1.f - t);
+			}
+			if (shape > LINEAR_SHAPE) {
+				float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+				return std::pow(expFastScale, t);
+			}
+			return 1.f;
 		}
-		if (shape > CH1_LINEAR_SHAPE) {
-			float t = (shape - CH1_LINEAR_SHAPE) / (1.f - CH1_LINEAR_SHAPE);
-			return std::pow(expFastScale, t);
-		}
-		return 1.f;
-	}
 
 		float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
 		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
@@ -196,25 +225,124 @@ struct Maths : Module {
 		return clamp(t, absoluteMinTime, maxTime);
 	}
 
-	void triggerCh1Function() {
-		ch1Phase = CH1_RISE;
-		ch1PhasePos = 0.f;
+	void triggerOuterFunction(OuterChannelState& ch) {
+		ch.phase = OUTER_RISE;
+		ch.phasePos = 0.f;
+	}
+
+	OuterChannelResult processOuterChannel(const ProcessArgs& args, OuterChannelState& ch, const OuterChannelConfig& cfg) {
+		float dt = args.sampleTime;
+
+		if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
+			ch.cycleLatched = !ch.cycleLatched;
+		}
+
+		bool cycleCvHigh = ch.cycleCvGate.process(rescale(inputs[cfg.cycleCvInput].getVoltage(), 0.1f, 2.5f, 0.f, 1.f));
+		bool cycleOn = ch.cycleLatched || cycleCvHigh;
+
+		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
+		if (trigRise && ch.phase != OUTER_RISE) {
+			triggerOuterFunction(ch);
+		}
+
+		float shape = params[cfg.shapeParam].getValue();
+		float riseTime = computeStageTime(
+			params[cfg.riseParam].getValue(),
+			inputs[cfg.riseCvInput].getVoltage(),
+			inputs[cfg.bothCvInput].getVoltage(),
+			shape,
+			true
+		);
+		float fallTime = computeStageTime(
+			params[cfg.fallParam].getValue(),
+			inputs[cfg.fallCvInput].getVoltage(),
+			inputs[cfg.bothCvInput].getVoltage(),
+			shape,
+			true
+		);
+
+		bool signalPatched = inputs[cfg.signalInput].isConnected();
+		if (ch.phase == OUTER_IDLE && cycleOn) {
+			triggerOuterFunction(ch);
+		}
+
+		if (ch.phase != OUTER_IDLE) {
+			float peak = cycleOn ? 8.f : 10.f;
+			if (ch.phase == OUTER_RISE) {
+				ch.phasePos += dt / riseTime;
+				if (ch.phasePos >= 1.f) {
+					ch.phasePos = 0.f;
+					ch.phase = OUTER_FALL;
+					ch.out = peak;
+					if (cfg.pulseAtRiseEnd) {
+						ch.endPulse.trigger(1e-3f);
+					}
+				}
+				else {
+					ch.out = peak * shapeCurve(ch.phasePos, shape);
+				}
+			}
+
+			if (ch.phase == OUTER_FALL) {
+				ch.phasePos += dt / fallTime;
+				if (ch.phasePos >= 1.f) {
+					ch.phasePos = 0.f;
+					ch.phase = OUTER_IDLE;
+					ch.out = 0.f;
+					if (!cfg.pulseAtRiseEnd) {
+						ch.endPulse.trigger(1e-3f);
+					}
+				}
+				else {
+					ch.out = peak * (1.f - shapeCurve(ch.phasePos, shape));
+				}
+			}
+		}
+		else if (signalPatched) {
+			// Rampage-style shaped slew for external input.
+			float in = inputs[cfg.signalInput].getVoltage();
+			float riseKnob01 = params[cfg.riseParam].getValue();
+			float fallKnob01 = params[cfg.fallParam].getValue();
+			float shape01 = params[cfg.shapeParam].getValue();
+			float riseCvV = inputs[cfg.riseCvInput].getVoltage();
+			float fallCvV = inputs[cfg.fallCvInput].getVoltage();
+			float bothCvV = inputs[cfg.bothCvInput].getVoltage();
+			ch.out = processRampageSlew(
+				ch.out,
+				in,
+				riseKnob01,
+				fallKnob01,
+				shape01,
+				riseCvV,
+				fallCvV,
+				bothCvV,
+				dt
+			);
+		}
+		else {
+			ch.out = 0.f;
+		}
+
+		OuterChannelResult result;
+		result.cycleOn = cycleOn;
+		result.endPulseHigh = ch.endPulse.process(dt);
+		return result;
 	}
 
 	Maths() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "");
 		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(FALL_4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.5f, "");
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "");
 		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.f, "");
+		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "");
 		configInput(INPUT_1_INPUT, "");
 		configInput(INPUT_1_TRIG_INPUT, "");
 		configInput(INPUT_2_INPUT, "");
@@ -243,103 +371,54 @@ struct Maths : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		float dt = args.sampleTime;
-
-		if (ch1CycleButtonEdge.process(params[CYCLE_1_PARAM].getValue())) {
-			ch1CycleLatched = !ch1CycleLatched;
-		}
-
-		bool cycleCvHigh = ch1CycleCvGate.process(rescale(inputs[CH1_CYCLE_CV_INPUT].getVoltage(), 0.1f, 2.5f, 0.f, 1.f));
-		bool ch1CycleOn = ch1CycleLatched || cycleCvHigh;
-
-		bool trigRise = ch1TrigEdge.process(inputs[INPUT_1_TRIG_INPUT].getVoltage());
-		if (trigRise && ch1Phase != CH1_RISE) {
-			triggerCh1Function();
-		}
-
-		float shape = params[LIN_LOG_1_PARAM].getValue();
-		float riseTime = computeStageTime(
-			params[RISE_1_PARAM].getValue(),
-			inputs[CH1_RISE_CV_INPUT].getVoltage(),
-			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
-			shape,
+		static const OuterChannelConfig ch1Cfg {
+			CYCLE_1_PARAM,
+			INPUT_1_TRIG_INPUT,
+			INPUT_1_INPUT,
+			RISE_1_PARAM,
+			FALL_1_PARAM,
+			LIN_LOG_1_PARAM,
+			CH1_RISE_CV_INPUT,
+			CH1_FALL_CV_INPUT,
+			CH1_BOTH_CV_INPUT,
+			CH1_CYCLE_CV_INPUT,
 			true
-		);
-		float fallTime = computeStageTime(
-			params[FALL_1_PARAM].getValue(),
-			inputs[CH1_FALL_CV_INPUT].getVoltage(),
-			inputs[CH1_BOTH_CV_INPUT].getVoltage(),
-			shape,
-			true
-		);
-		bool signalPatched = inputs[INPUT_1_INPUT].isConnected();
-		if (ch1Phase == CH1_IDLE && ch1CycleOn) {
-			triggerCh1Function();
-		}
+		};
+		static const OuterChannelConfig ch4Cfg {
+			CYCLE_4_PARAM,
+			INPUT_4_TRIG_INPUT,
+			INPUT_4_INPUT,
+			RISE_4_PARAM,
+			FALL_4_PARAM,
+			LIN_LOG_4_PARAM,
+			CH4_RISE_CV_INPUT,
+			CH4_FALL_CV_INPUT,
+			CH4_BOTH_CV_INPUT,
+			CH4_CYCLE_CV_INPUT,
+			false
+		};
 
-		if (ch1Phase != CH1_IDLE) {
-			float peak = ch1CycleOn ? 8.f : 10.f;
-				if (ch1Phase == CH1_RISE) {
-					ch1PhasePos += dt / riseTime;
-					if (ch1PhasePos >= 1.f) {
-					ch1PhasePos = 0.f;
-					ch1Phase = CH1_FALL;
-					ch1EorPulse.trigger(1e-3f);
-					}
-					else {
-						ch1Out = peak * shapeCurve(ch1PhasePos, shape);
-					}
-				}
+		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg);
+		OuterChannelResult ch4Result = processOuterChannel(args, ch4, ch4Cfg);
+		float ch1Var = clamp(ch1.out * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
+		float ch4Var = clamp(ch4.out * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
 
-			if (ch1Phase == CH1_FALL) {
-				ch1PhasePos += dt / fallTime;
-				if (ch1PhasePos >= 1.f) {
-					ch1PhasePos = 0.f;
-					ch1Phase = CH1_IDLE;
-					ch1Out = 0.f;
-					}
-					else {
-						ch1Out = peak * (1.f - shapeCurve(ch1PhasePos, shape));
-					}
-				}
-			}
-			else if (signalPatched) {
-				// Rampage-style shaped slew for external input.
-				float in = inputs[INPUT_1_INPUT].getVoltage();
-				float riseKnob01 = params[RISE_1_PARAM].getValue();
-				float fallKnob01 = params[FALL_1_PARAM].getValue();
-				float shape01 = params[LIN_LOG_1_PARAM].getValue();
-				float riseCvV = inputs[CH1_RISE_CV_INPUT].getVoltage();
-				float fallCvV = inputs[CH1_FALL_CV_INPUT].getVoltage();
-				float bothCvV = inputs[CH1_BOTH_CV_INPUT].getVoltage();
-				ch1Out = processRampageSlew(
-					ch1Out,
-					in,
-					riseKnob01,
-					fallKnob01,
-					shape01,
-					riseCvV,
-					fallCvV,
-					bothCvV,
-					dt
-				);
-			}
-			else {
-				ch1Out = 0.f;
-			}
+		outputs[EOR_1_OUTPUT].setVoltage(ch1Result.endPulseHigh ? 10.f : 0.f);
+		outputs[EOC_4_OUTPUT].setVoltage(ch4Result.endPulseHigh ? 10.f : 0.f);
 
-		bool eorHigh = ch1EorPulse.process(dt);
-		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
-
-		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1Out);
-		outputs[OUT_1_OUTPUT].setVoltage(ch1Out);
+		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1.out);
+		outputs[OUT_1_OUTPUT].setVoltage(ch1Var);
 		outputs[OUT_2_OUTPUT].setVoltage(0.f);
 		outputs[OUT_3_OUTPUT].setVoltage(0.f);
-		outputs[OUT_4_OUTPUT].setVoltage(0.f);
+		outputs[OUT_4_OUTPUT].setVoltage(ch4Var);
+		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4.out);
 
-		lights[CYCLE_1_LED_LIGHT].setBrightness(ch1CycleOn ? 1.f : 0.f);
-		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
-		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1Out) / 10.f, 0.f, 1.f));
+		lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
+		lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
+		lights[EOR_CH_1_LIGHT].setBrightness(ch1Result.endPulseHigh ? 1.f : 0.f);
+		lights[EOC_CH_4_LIGHT].setBrightness(ch4Result.endPulseHigh ? 1.f : 0.f);
+		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / 10.f, 0.f, 1.f));
+		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / 10.f, 0.f, 1.f));
 	}
 };
 
