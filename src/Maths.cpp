@@ -484,7 +484,8 @@ struct MyImageWidget : Widget {
 // Create a bigger basic button
 struct BigTL1105 : TL1105 {
     BigTL1105() {
-        box.size = mm2px(Vec(14.0, 14.0));  // default TL1105 is ~8mm
+        // Dialed back to ~85% of previous size for a tighter click area.
+        box.size = mm2px(Vec(9.5, 9.5));
     }
 };
 
@@ -497,8 +498,8 @@ struct MathsWidget : ModuleWidget {
         img->box.pos = Vec(0, 0);  // Position on the panel
         img->box.size = box.size; // Size of the image
         
-		addParam(createParamCentered<TL1105>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
-		addParam(createParamCentered<TL1105>(mm2px(Vec(92.313, 32.315)), module, Maths::CYCLE_4_PARAM));
+		addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
+		addParam(createParamCentered<BigTL1105>(mm2px(Vec(92.313, 32.315)), module, Maths::CYCLE_4_PARAM));
 
         addChild(img);
         
