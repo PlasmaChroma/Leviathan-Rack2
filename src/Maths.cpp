@@ -88,6 +88,8 @@ struct Maths : Module {
 		int fallCvInput;
 		int bothCvInput;
 		int cycleCvInput;
+		float logShapeTimeScale;
+		float expShapeTimeScale;
 	};
 
 	struct OuterChannelResult {
@@ -175,37 +177,38 @@ struct Maths : Module {
 			return out;
 		}
 
-		float computeShapeTimeScale(float shape, float knob) const {
+		float computeShapeTimeScale(float shape, float knob, float logScale, float expScale) const {
 		shape = clamp(shape, 0.f, 1.f);
-		// Calibrated from measured FUNCTION sweeps:
-		// Rise/Fall = 0.00 -> LOG ~180Hz, EXP ~1147Hz (linear baseline ~666Hz).
-		// Rise/Fall = 0.10 -> LOG ~123Hz, EXP ~1083Hz.
-		// Interpolate in log-domain across knob [0, 0.10], then hold.
-		float knobBlend = clamp(knob / 0.10f, 0.f, 1.f);
-		float logSlowScale = std::exp(
-			std::log(3.7f) + (std::log(1.27f) - std::log(3.7f)) * knobBlend
-		);
-		float expFastScale = std::exp(
-			std::log(0.5806f) + (std::log(0.144f) - std::log(0.5806f)) * knobBlend
-		);
-			if (shape < LINEAR_SHAPE) {
-				float t = shape / LINEAR_SHAPE;
-				return std::pow(logSlowScale, 1.f - t);
-			}
-			if (shape > LINEAR_SHAPE) {
-				float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
-				return std::pow(expFastScale, t);
-			}
-			return 1.f;
+		(void) knob;
+		if (shape < LINEAR_SHAPE) {
+			float t = shape / LINEAR_SHAPE;
+			return std::pow(logScale, 1.f - t);
 		}
+		if (shape > LINEAR_SHAPE) {
+			float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+			return std::pow(expScale, t);
+		}
+		return 1.f;
+	}
 
-		float computeStageTime(float knob, float stageCv, float bothCv, float shape, bool applyShapeTimeScale) const {
+		float computeStageTime(
+			float knob,
+			float stageCv,
+			float bothCv,
+			float shape,
+			bool applyShapeTimeScale,
+			float logShapeTimeScale,
+			float expShapeTimeScale
+		) const {
 		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
 		const float minTime = 0.00075075f;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
 		const float absoluteMinTime = 0.0001f;
 		const float maxTime = 1500.f;
-		float t = minTime * std::pow(maxTime / minTime, clamp(knob, 0.f, 1.f));
+		// Use a curved knob law so noon timing tracks measured hardware behavior.
+		// With this exponent, knob=0.5 is ~23x slower than knob=0 (not ~1400x).
+		float knobShaped = std::pow(clamp(knob, 0.f, 1.f), 2.2f);
+		float t = minTime * std::pow(maxTime / minTime, knobShaped);
 
 		// Rise/Fall CV is linear over +/-8V.
 		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
@@ -216,7 +219,7 @@ struct Maths : Module {
 		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
 		t *= bothScale;
 		if (applyShapeTimeScale) {
-			t *= computeShapeTimeScale(shape, knob);
+			t *= computeShapeTimeScale(shape, knob, logShapeTimeScale, expShapeTimeScale);
 		}
 
 		return clamp(t, absoluteMinTime, maxTime);
@@ -248,14 +251,18 @@ struct Maths : Module {
 			inputs[cfg.riseCvInput].getVoltage(),
 			inputs[cfg.bothCvInput].getVoltage(),
 			shape,
-			true
+			true,
+			cfg.logShapeTimeScale,
+			cfg.expShapeTimeScale
 		);
 		float fallTime = computeStageTime(
 			params[cfg.fallParam].getValue(),
 			inputs[cfg.fallCvInput].getVoltage(),
 			inputs[cfg.bothCvInput].getVoltage(),
 			shape,
-			true
+			true,
+			cfg.logShapeTimeScale,
+			cfg.expShapeTimeScale
 		);
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
@@ -360,6 +367,25 @@ struct Maths : Module {
 		configOutput(EOC_4_OUTPUT, "CH4 end of cycle");
 	}
 
+	json_t* dataToJson() override {
+		json_t* rootJ = json_object();
+		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
+		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
+		return rootJ;
+	}
+
+	void dataFromJson(json_t* rootJ) override {
+		json_t* ch1CycleJ = json_object_get(rootJ, "ch1CycleLatched");
+		if (ch1CycleJ) {
+			ch1.cycleLatched = json_boolean_value(ch1CycleJ);
+		}
+
+		json_t* ch4CycleJ = json_object_get(rootJ, "ch4CycleLatched");
+		if (ch4CycleJ) {
+			ch4.cycleLatched = json_boolean_value(ch4CycleJ);
+		}
+	}
+
 	void process(const ProcessArgs& args) override {
 		static const OuterChannelConfig ch1Cfg {
 			CYCLE_1_PARAM,
@@ -371,7 +397,9 @@ struct Maths : Module {
 			CH1_RISE_CV_INPUT,
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
-			CH1_CYCLE_CV_INPUT
+			CH1_CYCLE_CV_INPUT,
+			8.102198f,  // From doc/Measurements.md, CH1 shape min at rise/fall=0.
+			0.732835f   // From doc/Measurements.md, CH1 shape max at rise/fall=0.
 		};
 		static const OuterChannelConfig ch4Cfg {
 			CYCLE_4_PARAM,
@@ -383,7 +411,9 @@ struct Maths : Module {
 			CH4_RISE_CV_INPUT,
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
-			CH4_CYCLE_CV_INPUT
+			CH4_CYCLE_CV_INPUT,
+			7.672819f,  // From doc/Measurements.md, CH4 shape min at rise/fall=0.
+			0.690657f   // From doc/Measurements.md, CH4 shape max at rise/fall=0.
 		};
 
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg);
