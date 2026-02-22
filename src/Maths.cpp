@@ -70,7 +70,6 @@ struct Maths : Module {
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
 		dsp::SchmittTrigger cycleCvGate;
-		dsp::PulseGenerator endPulse;
 
 		OuterPhase phase = OUTER_IDLE;
 		float phasePos = 0.f;
@@ -89,12 +88,10 @@ struct Maths : Module {
 		int fallCvInput;
 		int bothCvInput;
 		int cycleCvInput;
-		bool pulseAtRiseEnd;
 	};
 
 	struct OuterChannelResult {
 		bool cycleOn = false;
-		bool endPulseHigh = false;
 	};
 
 	OuterChannelState ch1;
@@ -274,9 +271,6 @@ struct Maths : Module {
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_FALL;
 					ch.out = peak;
-					if (cfg.pulseAtRiseEnd) {
-						ch.endPulse.trigger(1e-3f);
-					}
 				}
 				else {
 					ch.out = peak * shapeCurve(ch.phasePos, shape);
@@ -289,9 +283,6 @@ struct Maths : Module {
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_IDLE;
 					ch.out = 0.f;
-					if (!cfg.pulseAtRiseEnd) {
-						ch.endPulse.trigger(1e-3f);
-					}
 				}
 				else {
 					ch.out = peak * (1.f - shapeCurve(ch.phasePos, shape));
@@ -325,7 +316,6 @@ struct Maths : Module {
 
 		OuterChannelResult result;
 		result.cycleOn = cycleOn;
-		result.endPulseHigh = ch.endPulse.process(dt);
 		return result;
 	}
 
@@ -381,8 +371,7 @@ struct Maths : Module {
 			CH1_RISE_CV_INPUT,
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
-			CH1_CYCLE_CV_INPUT,
-			true
+			CH1_CYCLE_CV_INPUT
 		};
 		static const OuterChannelConfig ch4Cfg {
 			CYCLE_4_PARAM,
@@ -394,31 +383,48 @@ struct Maths : Module {
 			CH4_RISE_CV_INPUT,
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
-			CH4_CYCLE_CV_INPUT,
-			false
+			CH4_CYCLE_CV_INPUT
 		};
 
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg);
 		OuterChannelResult ch4Result = processOuterChannel(args, ch4, ch4Cfg);
 		float ch1Var = clamp(ch1.out * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
+		float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
+		float ch2Var = clamp(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
+		float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
+		float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
 		float ch4Var = clamp(ch4.out * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
+		bool eorHigh = (ch1.phase == OUTER_FALL);
+		bool eocHigh = (ch4.phase == OUTER_RISE);
+		float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
+		float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
+		float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
+		float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
+		float sumOut = clamp(busV1 + busV2 + busV3 + busV4, -10.f, 10.f);
+		float invOut = clamp(-sumOut, -10.f, 10.f);
+		float orOut = clamp(std::fmax(0.f, std::fmax(std::fmax(busV1, busV2), std::fmax(busV3, busV4))), 0.f, 10.f);
 
-		outputs[EOR_1_OUTPUT].setVoltage(ch1Result.endPulseHigh ? 10.f : 0.f);
-		outputs[EOC_4_OUTPUT].setVoltage(ch4Result.endPulseHigh ? 10.f : 0.f);
+		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
+		outputs[EOC_4_OUTPUT].setVoltage(eocHigh ? 10.f : 0.f);
+		outputs[OR_OUT_OUTPUT].setVoltage(orOut);
+		outputs[SUM_OUT_OUTPUT].setVoltage(sumOut);
+		outputs[INV_OUT_OUTPUT].setVoltage(invOut);
 
 		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1.out);
 		outputs[OUT_1_OUTPUT].setVoltage(ch1Var);
-		outputs[OUT_2_OUTPUT].setVoltage(0.f);
-		outputs[OUT_3_OUTPUT].setVoltage(0.f);
+		outputs[OUT_2_OUTPUT].setVoltage(ch2Var);
+		outputs[OUT_3_OUTPUT].setVoltage(ch3Var);
 		outputs[OUT_4_OUTPUT].setVoltage(ch4Var);
 		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4.out);
 
 		lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
 		lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
-		lights[EOR_CH_1_LIGHT].setBrightness(ch1Result.endPulseHigh ? 1.f : 0.f);
-		lights[EOC_CH_4_LIGHT].setBrightness(ch4Result.endPulseHigh ? 1.f : 0.f);
+		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
+		lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
 		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / 10.f, 0.f, 1.f));
 		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / 10.f, 0.f, 1.f));
+		lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
+		lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
 	}
 };
 
