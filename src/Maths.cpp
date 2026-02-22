@@ -96,13 +96,42 @@ struct Maths : Module {
 		bool cycleOn = false;
 	};
 
+	struct MixNonIdealCal {
+		bool enabled = true;
+
+		// SUM
+		float sumSatV = 10.f;
+		float sumDrive = 1.15f;
+
+		// OR
+		float orSatV = 10.f;
+		float orDrive = 1.05f;
+		float orVDrop = 0.f;  // Phase 1 keeps threshold behavior disabled.
+
+		// INV
+		bool invUseExtraSat = false;
+		float invSatV = 10.f;
+		float invDrive = 1.0f;
+	};
+
 	OuterChannelState ch1;
 	OuterChannelState ch4;
+	MixNonIdealCal mixCal;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
+	}
+
+	static float softSatSym(float x, float satV, float drive) {
+		satV = std::max(satV, 1e-6f);
+		return satV * std::tanh((drive / satV) * x);
+	}
+
+	static float softSatPos(float x, float satV, float drive) {
+		float y = softSatSym(std::fmax(0.f, x), satV, drive);
+		return clamp(y, 0.f, satV);
 	}
 
 		static float shapeCurve(float x, float shape) {
@@ -371,6 +400,7 @@ struct Maths : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
 		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
+		json_object_set_new(rootJ, "mixNonIdealEnabled", json_boolean(mixCal.enabled));
 		return rootJ;
 	}
 
@@ -383,6 +413,11 @@ struct Maths : Module {
 		json_t* ch4CycleJ = json_object_get(rootJ, "ch4CycleLatched");
 		if (ch4CycleJ) {
 			ch4.cycleLatched = json_boolean_value(ch4CycleJ);
+		}
+
+		json_t* mixEnabledJ = json_object_get(rootJ, "mixNonIdealEnabled");
+		if (mixEnabledJ) {
+			mixCal.enabled = json_boolean_value(mixEnabledJ);
 		}
 	}
 
@@ -430,9 +465,24 @@ struct Maths : Module {
 		float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
 		float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
 		float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
-		float sumOut = clamp(busV1 + busV2 + busV3 + busV4, -10.f, 10.f);
-		float invOut = clamp(-sumOut, -10.f, 10.f);
-		float orOut = clamp(std::fmax(0.f, std::fmax(std::fmax(busV1, busV2), std::fmax(busV3, busV4))), 0.f, 10.f);
+		float sumRaw = busV1 + busV2 + busV3 + busV4;
+		float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1 - mixCal.orVDrop, busV2 - mixCal.orVDrop), std::fmax(busV3 - mixCal.orVDrop, busV4 - mixCal.orVDrop)));
+		float sumOut = 0.f;
+		float invOut = 0.f;
+		float orOut = 0.f;
+		if (mixCal.enabled) {
+			sumOut = softSatSym(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
+			invOut = -sumOut;
+			if (mixCal.invUseExtraSat) {
+				invOut = softSatSym(invOut, mixCal.invSatV, mixCal.invDrive);
+			}
+			orOut = softSatPos(orRaw, mixCal.orSatV, mixCal.orDrive);
+		}
+		else {
+			sumOut = clamp(sumRaw, -10.f, 10.f);
+			invOut = clamp(-sumOut, -10.f, 10.f);
+			orOut = clamp(orRaw, 0.f, 10.f);
+		}
 
 		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
 		outputs[EOC_4_OUTPUT].setVoltage(eocHigh ? 10.f : 0.f);
@@ -554,6 +604,17 @@ struct MathsWidget : ModuleWidget {
 		addChild(createLightCentered<LargeLight<YellowLight>>(mm2px(Vec(88.371, 105.495)), module, Maths::EOC_CH_4_LIGHT));
 		addChild(createLightCentered<LargeLight<RedLight>>(mm2px(Vec(30.744, 114.103)), module, Maths::OR_LED_LIGHT));
 		addChild(createLightCentered<LargeLight<GreenLight>>(mm2px(Vec(70.907, 114.109)), module, Maths::INV_LED_LIGHT));
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		Maths* maths = dynamic_cast<Maths*>(module);
+		assert(menu);
+
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel("Mix Modeling"));
+		if (maths) {
+			menu->addChild(createBoolPtrMenuItem("Analog Mix Non-Idealities", "", &maths->mixCal.enabled));
+		}
 	}
 };
 
