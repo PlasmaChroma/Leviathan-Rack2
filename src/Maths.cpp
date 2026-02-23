@@ -196,7 +196,9 @@ struct Maths : Module {
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
 		float range = OUTER_V_MAX - OUTER_V_MIN;
-		float x = clamp((out - OUTER_V_MIN) / range, 0.f, 1.f);
+		// Slew-limiting mode must handle bipolar signals.
+		// Use normalized magnitude so negative voltages don't clamp to x=0.
+		float x = clamp(std::fabs(out) / std::max(OUTER_V_MAX, 1e-6f), 0.f, 1.f);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
 
