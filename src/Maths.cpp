@@ -515,21 +515,17 @@ struct Maths : Module {
 	}
 };
 
-int imageHandle = -1;
 struct MyImageWidget : Widget {
+	int imageHandle = -1;
+
     void draw(const DrawArgs& args) override {
-        // 1. Get the path to your image in the plugin's "res" folder
         if (imageHandle < 0) {
             std::string path = asset::plugin(pluginInstance, "res/maths2.jpg");
-            // 2. Create the image handle using NanoVG
             imageHandle = nvgCreateImage(args.vg, path.c_str(), 0);
         }
 
         if (imageHandle >= 0) {
-            // 3. Define where and how big the image should be
             NVGpaint imgPaint = nvgImagePattern(args.vg, 0, 0, box.size.x, box.size.y, 0, imageHandle, 1.0f);
-            
-            // 4. Draw a rectangle and fill it with the image pattern
             nvgBeginPath(args.vg);
             nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
             nvgFillPaint(args.vg, imgPaint);
@@ -551,13 +547,13 @@ struct MathsWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/maths.svg")));
 
-        MyImageWidget* img = new MyImageWidget();
-        img->box.pos = Vec(0, 0);  // Position on the panel
-        img->box.size = box.size; // Size of the image
-        
+        // these are deliberately under the image because the buttons are not big enough for the UI elements
 		addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
 		addParam(createParamCentered<BigTL1105>(mm2px(Vec(92.313, 32.315)), module, Maths::CYCLE_4_PARAM));
 
+        MyImageWidget* img = new MyImageWidget();
+        img->box.pos = Vec(0, 0);
+        img->box.size = box.size;
         addChild(img);
         
         // use Rogan1PSBlue for the rise/fall knobs
