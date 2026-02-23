@@ -545,7 +545,7 @@ struct BigTL1105 : TL1105 {
 struct MathsWidget : ModuleWidget {
 	MathsWidget(Maths* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/maths.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/flux.svg")));
 
         // these are deliberately under the image because the buttons are not big enough for the UI elements
 		addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
@@ -554,7 +554,7 @@ struct MathsWidget : ModuleWidget {
         MyImageWidget* img = new MyImageWidget();
         img->box.pos = Vec(0, 0);
         img->box.size = box.size;
-        addChild(img);
+        //addChild(img);
         
         // use Rogan1PSBlue for the rise/fall knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
