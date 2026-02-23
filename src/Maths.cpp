@@ -118,6 +118,11 @@ struct Maths : Module {
 	OuterChannelState ch4;
 	MixNonIdealCal mixCal;
 	static constexpr float LINEAR_SHAPE = 0.33f;
+	static constexpr float OUTER_V_MIN = 0.f;
+	static constexpr float OUTER_V_MAX = 10.2f;
+	static constexpr float WARP_K_MAX = 40.f;
+	static constexpr float WARP_P = 2.f;
+	static constexpr int WARP_SCALE_SAMPLES = 16;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -134,23 +139,43 @@ struct Maths : Module {
 		return clamp(y, 0.f, satV);
 	}
 
-		static float shapeCurve(float x, float shape) {
-		x = clamp(x, 0.f, 1.f);
-		shape = clamp(shape, 0.f, 1.f);
-			if (shape < LINEAR_SHAPE) {
-				// Log-ish: fast start, slow finish.
-				float t = shape / LINEAR_SHAPE;
-				float gamma = rescale(t, 0.f, 1.f, 0.35f, 1.f);
-				return std::pow(x, gamma);
-			}
-			if (shape > LINEAR_SHAPE) {
-				// Exp-ish: slow start, fast finish.
-				float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
-				float gamma = rescale(t, 0.f, 1.f, 1.f, 3.5f);
-				return std::pow(x, gamma);
-			}
-			return x;
+	static float shapeSignedFromKnob(float shape01) {
+		shape01 = clamp(shape01, 0.f, 1.f);
+		if (shape01 < LINEAR_SHAPE) {
+			return (shape01 - LINEAR_SHAPE) / LINEAR_SHAPE;
 		}
+		if (shape01 > LINEAR_SHAPE) {
+			return (shape01 - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+		}
+		return 0.f;
+	}
+
+	static float slopeWarp(float x, float s) {
+		x = clamp(x, 0.f, 1.f);
+		float u = std::fabs(s);
+		if (u < 1e-6f) {
+			return 1.f;
+		}
+		float k = WARP_K_MAX * u;
+		if (s < 0.f) {
+			// LOG: fast near 0V, slow near top.
+			return 1.f / (1.f + k * std::pow(x, WARP_P));
+		}
+		// EXP: slow near 0V, fast near top.
+		return 1.f + k * std::pow(x, WARP_P);
+	}
+
+	static float slopeWarpScale(float s) {
+		if (std::fabs(s) < 1e-6f) {
+			return 1.f;
+		}
+		float sum = 0.f;
+		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
+			float xi = (i + 0.5f) / float(WARP_SCALE_SAMPLES);
+			sum += 1.f / slopeWarp(xi, s);
+		}
+		return sum / float(WARP_SCALE_SAMPLES);
+	}
 
 		static float processRampageSlew(
 			float out,
@@ -187,7 +212,7 @@ struct Maths : Module {
 			float logv = sgn * (4.f * VREF) / tau / (absDelta + 1.f);
 			float expv = (E * delta) / tau;
 
-			float shapeSigned = clamp(shape01 * 2.f - 1.f, -1.f, 1.f);
+			float shapeSigned = shapeSignedFromKnob(shape01);
 			float dVdt = lin;
 			if (shapeSigned < 0.f) {
 				float mix = clamp((-shapeSigned) * 0.95f, 0.f, 1.f);
@@ -300,28 +325,35 @@ struct Maths : Module {
 		}
 
 		if (ch.phase != OUTER_IDLE) {
-			float peak = cycleOn ? 8.f : 10.f;
+			float s = shapeSignedFromKnob(shape);
+			float scale = slopeWarpScale(s);
+			float range = OUTER_V_MAX - OUTER_V_MIN;
+
 			if (ch.phase == OUTER_RISE) {
 				ch.phasePos += dt / riseTime;
-				if (ch.phasePos >= 1.f) {
+				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+				float dp = clamp(dt / riseTime, 0.f, 0.5f);
+				x += dp * slopeWarp(x, s) * scale;
+				x = clamp(x, 0.f, 1.f);
+				ch.out = OUTER_V_MIN + x * range;
+				if (ch.phasePos >= 1.f || x >= 1.f) {
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_FALL;
-					ch.out = peak;
-				}
-				else {
-					ch.out = peak * shapeCurve(ch.phasePos, shape);
+					ch.out = OUTER_V_MAX;
 				}
 			}
 
 			if (ch.phase == OUTER_FALL) {
 				ch.phasePos += dt / fallTime;
-				if (ch.phasePos >= 1.f) {
+				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+				float dp = clamp(dt / fallTime, 0.f, 0.5f);
+				x -= dp * slopeWarp(x, s) * scale;
+				x = clamp(x, 0.f, 1.f);
+				ch.out = OUTER_V_MIN + x * range;
+				if (ch.phasePos >= 1.f || x <= 0.f) {
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_IDLE;
-					ch.out = 0.f;
-				}
-				else {
-					ch.out = peak * (1.f - shapeCurve(ch.phasePos, shape));
+					ch.out = OUTER_V_MIN;
 				}
 			}
 		}
@@ -501,8 +533,8 @@ struct Maths : Module {
 		lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
 		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
 		lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
-		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / 10.f, 0.f, 1.f));
-		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / 10.f, 0.f, 1.f));
+		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / OUTER_V_MAX, 0.f, 1.f));
+		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / OUTER_V_MAX, 0.f, 1.f));
 		lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
 		lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
 	}
