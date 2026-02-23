@@ -69,12 +69,14 @@ struct Maths : Module {
 	struct OuterChannelState {
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
-		dsp::SchmittTrigger cycleCvGate;
 
 		OuterPhase phase = OUTER_IDLE;
 		float phasePos = 0.f;
 		float out = 0.f;
 		bool cycleLatched = false;
+		bool warpScaleValid = false;
+		float cachedShapeSigned = 0.f;
+		float cachedWarpScale = 1.f;
 	};
 
 	struct OuterChannelConfig {
@@ -177,59 +179,34 @@ struct Maths : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
-		static float processRampageSlew(
-			float out,
-			float in,
-			float riseKnob01,
-			float fallKnob01,
-			float shape01,
-			float riseCvV,
-			float fallCvV,
-			float bothCvV,
-			float dt
-		) {
-			static constexpr float MIN_TIME = 0.01f;
-			static constexpr float VREF = 10.0f;
-			static constexpr float E = 2.718281828f;
-
-			float delta = in - out;
-			if (delta == 0.f) {
-				return out;
-			}
-
-			float stageKnob = (delta > 0.f) ? riseKnob01 : fallKnob01;
-			float stageCv = (delta > 0.f) ? riseCvV : fallCvV;
-
-			float baseExp = 10.f * stageKnob;
-			float stageExp = clamp(stageCv, 0.f, 10.f);
-			float bothExp = -clamp(bothCvV, -8.f, 8.f) / 2.f;
-			float rateExp = clamp(baseExp + stageExp + bothExp, 0.f, 10.f);
-			float tau = MIN_TIME * std::pow(2.f, rateExp);
-
-			float absDelta = std::fabs(delta);
-			float sgn = (delta >= 0.f) ? 1.f : -1.f;
-			float lin = sgn * (VREF / tau);
-			float logv = sgn * (4.f * VREF) / tau / (absDelta + 1.f);
-			float expv = (E * delta) / tau;
-
-			float shapeSigned = shapeSignedFromKnob(shape01);
-			float dVdt = lin;
-			if (shapeSigned < 0.f) {
-				float mix = clamp((-shapeSigned) * 0.95f, 0.f, 1.f);
-				dVdt = lin + (logv - lin) * mix;
-			}
-			else if (shapeSigned > 0.f) {
-				float mix = clamp(shapeSigned * 0.90f, 0.f, 1.f);
-				dVdt = lin + (expv - lin) * mix;
-			}
-
-			float prevOut = out;
-			out += dVdt * dt;
-			if ((in - prevOut) * (in - out) < 0.f) {
-				out = in;
-			}
+	static float processUnifiedShapedSlew(
+		float out,
+		float in,
+		float riseTime,
+		float fallTime,
+		float shapeSigned,
+		float warpScale,
+		float dt
+	) {
+		float delta = in - out;
+		if (delta == 0.f) {
 			return out;
 		}
+
+		float stageTime = (delta > 0.f) ? riseTime : fallTime;
+		stageTime = std::max(stageTime, 1e-6f);
+		float range = OUTER_V_MAX - OUTER_V_MIN;
+		float x = clamp((out - OUTER_V_MIN) / range, 0.f, 1.f);
+		float dp = clamp(dt / stageTime, 0.f, 0.5f);
+		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
+
+		float prevOut = out;
+		out += (delta > 0.f) ? step : -step;
+		if ((in - prevOut) * (in - out) < 0.f) {
+			out = in;
+		}
+		return out;
+	}
 
 		float computeShapeTimeScale(float shape, float knob, float logScale, float expScale) const {
 		shape = clamp(shape, 0.f, 1.f);
@@ -291,7 +268,7 @@ struct Maths : Module {
 			ch.cycleLatched = !ch.cycleLatched;
 		}
 
-		bool cycleCvHigh = ch.cycleCvGate.process(rescale(inputs[cfg.cycleCvInput].getVoltage(), 0.1f, 2.5f, 0.f, 1.f));
+		bool cycleCvHigh = inputs[cfg.cycleCvInput].getVoltage() >= 2.5f;
 		bool cycleOn = ch.cycleLatched || cycleCvHigh;
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
@@ -318,6 +295,13 @@ struct Maths : Module {
 			cfg.logShapeTimeScale,
 			cfg.expShapeTimeScale
 		);
+		float shapeSigned = shapeSignedFromKnob(shape);
+		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
+			ch.cachedShapeSigned = shapeSigned;
+			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
+			ch.warpScaleValid = true;
+		}
+		float scale = ch.cachedWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		if (ch.phase == OUTER_IDLE && cycleOn) {
@@ -325,8 +309,7 @@ struct Maths : Module {
 		}
 
 		if (ch.phase != OUTER_IDLE) {
-			float s = shapeSignedFromKnob(shape);
-			float scale = slopeWarpScale(s);
+			float s = shapeSigned;
 			float range = OUTER_V_MAX - OUTER_V_MIN;
 
 			if (ch.phase == OUTER_RISE) {
@@ -358,23 +341,15 @@ struct Maths : Module {
 			}
 		}
 		else if (signalPatched) {
-			// Rampage-style shaped slew for external input.
+			// Use the same curve-warp family as the function generator path.
 			float in = inputs[cfg.signalInput].getVoltage();
-			float riseKnob01 = params[cfg.riseParam].getValue();
-			float fallKnob01 = params[cfg.fallParam].getValue();
-			float shape01 = params[cfg.shapeParam].getValue();
-			float riseCvV = inputs[cfg.riseCvInput].getVoltage();
-			float fallCvV = inputs[cfg.fallCvInput].getVoltage();
-			float bothCvV = inputs[cfg.bothCvInput].getVoltage();
-			ch.out = processRampageSlew(
+			ch.out = processUnifiedShapedSlew(
 				ch.out,
 				in,
-				riseKnob01,
-				fallKnob01,
-				shape01,
-				riseCvV,
-				fallCvV,
-				bothCvV,
+				riseTime,
+				fallTime,
+				shapeSigned,
+				scale,
 				dt
 			);
 		}
