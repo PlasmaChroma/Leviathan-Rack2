@@ -326,5 +326,23 @@
      cx="9756.5479"
      cy="11469.046"
      rx="115.36332"
-     ry="121.18519" /></g>
+     ry="121.18519" />
+  <g id="LEVIATHAN_LOGO" style="display:inline">
+    <text
+      x="6088.27"
+      y="13780"
+      text-anchor="middle"
+      font-family="Bank Gothic, 'Orbitron', 'DejaVu Sans', sans-serif"
+      font-size="380"
+      font-weight="700"
+      letter-spacing="22"
+      fill="#ffffff"
+      fill-opacity="0.85"
+      stroke="#000000"
+      stroke-width="30"
+      paint-order="stroke fill"
+      style="pointer-events:none">LEVIATHAN</text>
+</g>
+
+</g>
 </svg>
