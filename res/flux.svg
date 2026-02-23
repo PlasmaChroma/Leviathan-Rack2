@@ -436,7 +436,8 @@
          fill-opacity="0.68"
          id="lbl_trig1">TRIG</text><circle
          cx="4200"
-         cy="2200"
+         cy="2500"
+         
          r="115"
          fill="url(#accentGrad)"
          opacity="0.95"
@@ -490,7 +491,8 @@
        id="grp_genB"
        inkscape:label="Gen B + Loop"><circle
          cx="7960"
-         cy="2200"
+         cy="2500"
+         
          r="115"
          fill="url(#accentGrad)"
          opacity="0.95"
@@ -1397,7 +1399,8 @@
        style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.61715"
        id="CYCLE_1_LED"
        cx="4200"
-       cy="2200"
+         cy="2500"
+       
        rx="115.36332"
        ry="121.18519" /><ellipse
        style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.4209"
@@ -1561,7 +1564,8 @@
    style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.61715"
    id="CYCLE_4_LED"
    cx="7960"
-   cy="2200"
+         cy="2500"
+   
    rx="115.36332"
    ry="121.18519" /><ellipse
    style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.61715"
