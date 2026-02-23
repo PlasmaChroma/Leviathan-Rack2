@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include <dsp/minblep.hpp>
 
 
 struct Maths : Module {
@@ -69,11 +70,13 @@ struct Maths : Module {
 	struct OuterChannelState {
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
+		dsp::MinBlepGenerator<16, 16> gateBlep;
 
 		OuterPhase phase = OUTER_IDLE;
 		float phasePos = 0.f;
 		float out = 0.f;
 		bool cycleLatched = false;
+		bool gateState = false;
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
 		float cachedWarpScale = 1.f;
@@ -92,6 +95,7 @@ struct Maths : Module {
 		int cycleCvInput;
 		float logShapeTimeScale;
 		float expShapeTimeScale;
+		OuterPhase gateHighPhase;
 	};
 
 	struct OuterChannelResult {
@@ -210,6 +214,24 @@ struct Maths : Module {
 		return out;
 	}
 
+	static float phaseCrossingFraction(float phasePos, float dp) {
+		if (dp <= 1e-9f) {
+			return 1.f;
+		}
+		return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
+	}
+
+	static void insertGateTransition(OuterChannelState& ch, bool newState, float fraction01) {
+		if (newState == ch.gateState) {
+			return;
+		}
+		float f = clamp(fraction01, 1e-6f, 1.f);
+		float p = f - 1.f;
+		float step = newState ? 10.f : -10.f;
+		ch.gateBlep.insertDiscontinuity(p, step);
+		ch.gateState = newState;
+	}
+
 		float computeShapeTimeScale(float shape, float knob, float logScale, float expScale) const {
 		shape = clamp(shape, 0.f, 1.f);
 		(void) knob;
@@ -272,6 +294,7 @@ struct Maths : Module {
 
 		bool cycleCvHigh = inputs[cfg.cycleCvInput].getVoltage() >= 2.5f;
 		bool cycleOn = ch.cycleLatched || cycleCvHigh;
+		bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		if (trigRise && ch.phase != OUTER_RISE) {
@@ -309,36 +332,48 @@ struct Maths : Module {
 		if (ch.phase == OUTER_IDLE && cycleOn) {
 			triggerOuterFunction(ch);
 		}
+		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
+		if (gateIsHigh != gateWasHigh) {
+			// Transition occurred at start-of-sample due to trigger/cycle state.
+			insertGateTransition(ch, gateIsHigh, 1e-6f);
+		}
 
 		if (ch.phase != OUTER_IDLE) {
 			float s = shapeSigned;
 			float range = OUTER_V_MAX - OUTER_V_MIN;
 
 			if (ch.phase == OUTER_RISE) {
-				ch.phasePos += dt / riseTime;
+				float dpPhase = dt / riseTime;
+				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / riseTime, 0.f, 0.5f);
 				x += dp * slopeWarp(x, s) * scale;
 				x = clamp(x, 0.f, 1.f);
 				ch.out = OUTER_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x >= 1.f) {
-					ch.phasePos = 0.f;
+					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
+					float overshoot = std::max(ch.phasePos - 1.f, 0.f);
+					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = OUTER_FALL;
 					ch.out = OUTER_V_MAX;
+					insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 				}
 			}
 
 			if (ch.phase == OUTER_FALL) {
-				ch.phasePos += dt / fallTime;
+				float dpPhase = dt / fallTime;
+				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / fallTime, 0.f, 0.5f);
 				x -= dp * slopeWarp(x, s) * scale;
 				x = clamp(x, 0.f, 1.f);
 				ch.out = OUTER_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x <= 0.f) {
+					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_IDLE;
 					ch.out = OUTER_V_MIN;
+					insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 				}
 			}
 		}
@@ -443,7 +478,8 @@ struct Maths : Module {
 			CH1_BOTH_CV_INPUT,
 			CH1_CYCLE_CV_INPUT,
 			8.102198f,  // From doc/Measurements.md, CH1 shape min at rise/fall=0.
-			0.732835f   // From doc/Measurements.md, CH1 shape max at rise/fall=0.
+			0.732835f,  // From doc/Measurements.md, CH1 shape max at rise/fall=0.
+			OUTER_FALL
 		};
 		static const OuterChannelConfig ch4Cfg {
 			CYCLE_4_PARAM,
@@ -457,7 +493,8 @@ struct Maths : Module {
 			CH4_BOTH_CV_INPUT,
 			CH4_CYCLE_CV_INPUT,
 			7.672819f,  // From doc/Measurements.md, CH4 shape min at rise/fall=0.
-			0.690657f   // From doc/Measurements.md, CH4 shape max at rise/fall=0.
+			0.690657f,  // From doc/Measurements.md, CH4 shape max at rise/fall=0.
+			OUTER_RISE
 		};
 
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg);
@@ -468,8 +505,10 @@ struct Maths : Module {
 		float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
 		float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
 		float ch4Var = clamp(ch4.out * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
-		bool eorHigh = (ch1.phase == OUTER_FALL);
-		bool eocHigh = (ch4.phase == OUTER_RISE);
+		float eorOut = (ch1.gateState ? 10.f : 0.f) + ch1.gateBlep.process();
+		float eocOut = (ch4.gateState ? 10.f : 0.f) + ch4.gateBlep.process();
+		bool eorHigh = ch1.gateState;
+		bool eocHigh = ch4.gateState;
 		float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
 		float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
 		float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
@@ -493,8 +532,8 @@ struct Maths : Module {
 			orOut = clamp(orRaw, 0.f, 10.f);
 		}
 
-		outputs[EOR_1_OUTPUT].setVoltage(eorHigh ? 10.f : 0.f);
-		outputs[EOC_4_OUTPUT].setVoltage(eocHigh ? 10.f : 0.f);
+		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
+		outputs[EOC_4_OUTPUT].setVoltage(eocOut);
 		outputs[OR_OUT_OUTPUT].setVoltage(orOut);
 		outputs[SUM_OUT_OUTPUT].setVoltage(sumOut);
 		outputs[INV_OUT_OUTPUT].setVoltage(invOut);
