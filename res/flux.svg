@@ -206,15 +206,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="116.74437"
-   inkscape:cy="233.69834"
+   inkscape:zoom="3.3736828"
+   inkscape:cx="154.87526"
+   inkscape:cy="138.5726"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="panel_art"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -975,7 +975,7 @@
        id="ring_att4_o" /></g></g></g>
   <g
    id="components"
-   style="display:inline"><ellipse
+   style="display:none"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_1"
      cx="1397.5443"
@@ -1009,7 +1009,7 @@
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="Light_Unity_1"
      cx="1654.6868"
-     cy="11079.945"
+     cy="11075.845"
      rx="114.98675"
      ry="120.83137" /><ellipse
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
@@ -1068,14 +1068,14 @@
      ry="120.83137" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="EoC_CH_4"
-     cx="8460.2588"
+     cx="8467.9873"
      cy="9671.5703"
      rx="114.98675"
      ry="120.83137" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.68373"
      id="Light_Unity_4"
      cx="8473.0996"
-     cy="11079.932"
+     cy="11075.831"
      rx="120"
      ry="120.83137" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
@@ -1171,7 +1171,7 @@
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="INV_LED"
      cx="7295.3501"
-     cy="11079.932"
+     cy="11075.831"
      rx="114.98675"
      ry="120.83137" /><ellipse
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
@@ -1195,7 +1195,7 @@
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="OR_LED"
      cx="2827.3867"
-     cy="11079.932"
+     cy="11075.831"
      rx="114.98675"
      ry="120.83137" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
