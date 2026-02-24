@@ -635,7 +635,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(42.007, 53.079)), module, IntegralFlux::FALL_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(59.385, 53.079)), module, IntegralFlux::FALL_4_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 57.178)), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(92.016, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
@@ -654,8 +654,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(74.56, 49.27)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, IntegralFlux::CH1_FALL_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(69.389, 63.263)), module, IntegralFlux::CH4_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.143, 75.677)), module, IntegralFlux::INPUT_2_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.585, 75.677)), module, IntegralFlux::INPUT_3_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.143, 76.377)), module, IntegralFlux::INPUT_2_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.585, 76.377)), module, IntegralFlux::INPUT_3_INPUT));
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
