@@ -213,7 +213,7 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
-	static float processUnifiedShapedSlew(
+	float processUnifiedShapedSlew(
 		float out,
 		float in,
 		float riseTime,
@@ -648,27 +648,32 @@ struct IntegralFlux : Module {
 		float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch4.gateBlep.process() : 0.f);
 		bool eorHigh = ch1.gateState;
 		bool eocHigh = ch4.gateState;
-		float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
-		float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
-		float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
-		float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
-		float sumRaw = busV1 + busV2 + busV3 + busV4;
-		float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1 - mixCal.orVDrop, busV2 - mixCal.orVDrop), std::fmax(busV3 - mixCal.orVDrop, busV4 - mixCal.orVDrop)));
 		float sumOut = 0.f;
 		float invOut = 0.f;
 		float orOut = 0.f;
-		if (mixCal.enabled) {
-			sumOut = softSatSymFast(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
-			invOut = -sumOut;
-			if (mixCal.invUseExtraSat) {
-				invOut = softSatSymFast(invOut, mixCal.invSatV, mixCal.invDrive);
+		bool mixOutputsConnected = outputs[OR_OUT_OUTPUT].isConnected()
+			|| outputs[SUM_OUT_OUTPUT].isConnected()
+			|| outputs[INV_OUT_OUTPUT].isConnected();
+		if (mixOutputsConnected || lightTick) {
+			float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
+			float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
+			float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
+			float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
+			float sumRaw = busV1 + busV2 + busV3 + busV4;
+			float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1 - mixCal.orVDrop, busV2 - mixCal.orVDrop), std::fmax(busV3 - mixCal.orVDrop, busV4 - mixCal.orVDrop)));
+			if (mixCal.enabled) {
+				sumOut = softSatSymFast(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
+				invOut = -sumOut;
+				if (mixCal.invUseExtraSat) {
+					invOut = softSatSymFast(invOut, mixCal.invSatV, mixCal.invDrive);
+				}
+				orOut = softSatPosFast(orRaw, mixCal.orSatV, mixCal.orDrive);
 			}
-			orOut = softSatPosFast(orRaw, mixCal.orSatV, mixCal.orDrive);
-		}
-		else {
-			sumOut = clamp(sumRaw, -10.f, 10.f);
-			invOut = clamp(-sumOut, -10.f, 10.f);
-			orOut = clamp(orRaw, 0.f, 10.f);
+			else {
+				sumOut = clamp(sumRaw, -10.f, 10.f);
+				invOut = clamp(-sumOut, -10.f, 10.f);
+				orOut = clamp(orRaw, 0.f, 10.f);
+			}
 		}
 
 		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
