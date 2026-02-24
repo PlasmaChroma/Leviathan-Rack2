@@ -2,15 +2,15 @@
   "slug": "Leviathan",
   "name": "Leviathan",
   "version": "2.0.0",
-  "license": "proprietary",
+  "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
-  "author": "",
-  "authorEmail": "",
+  "author": "Levi Kendall",
+  "authorEmail": "levi.kendall@gmail.com",
   "authorUrl": "",
   "pluginUrl": "",
   "manualUrl": "",
-  "sourceUrl": "",
-  "donateUrl": "",
+  "sourceUrl": "https://github.com/PlasmaChroma/Leviathan-Rack2",
+  "donateUrl": "bitcoin:16hdj3P95whJqBiQqe6Aj4UewTQgxzuhTv",
   "changelogUrl": "",
   "modules": [
     {
@@ -18,7 +18,11 @@
       "name": "Integral Flux",
       "description": "Integral Flux",
       "tags": [
-        "Slew limiter"
+        "Function Generator",
+        "Logic",
+        "Slew Limiter",
+        "Envelope Follower",
+        "Dual"
       ]
     }
   ]
