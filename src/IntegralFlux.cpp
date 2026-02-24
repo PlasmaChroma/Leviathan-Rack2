@@ -141,6 +141,7 @@ struct IntegralFlux : Module {
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	bool timingInterpolate = true;
+	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
 	static constexpr float OUTER_V_MAX = 10.2f;
@@ -148,6 +149,7 @@ struct IntegralFlux : Module {
 	static constexpr int WARP_SCALE_SAMPLES = 16;
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
+	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -635,6 +637,15 @@ struct IntegralFlux : Module {
 				timingTick = false;
 			}
 		}
+		lightUpdateTimer += args.sampleTime;
+		bool lightTick = false;
+		if (lightUpdateTimer >= LIGHT_UPDATE_INTERVAL) {
+			lightUpdateTimer -= LIGHT_UPDATE_INTERVAL;
+			if (lightUpdateTimer >= LIGHT_UPDATE_INTERVAL) {
+				lightUpdateTimer = 0.f;
+			}
+			lightTick = true;
+		}
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg, timingTick);
 		OuterChannelResult ch4Result = processOuterChannel(args, ch4, ch4Cfg, timingTick);
 		float ch1Var = clamp(ch1.out * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
@@ -683,14 +694,16 @@ struct IntegralFlux : Module {
 		outputs[OUT_4_OUTPUT].setVoltage(ch4Var);
 		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4.out);
 
-		lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
-		lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
-		lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
-		lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
-		lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / OUTER_V_MAX, 0.f, 1.f));
-		lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / OUTER_V_MAX, 0.f, 1.f));
-		lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
-		lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
+		if (lightTick) {
+			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
+			lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
+			lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
+			lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
+			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / OUTER_V_MAX, 0.f, 1.f));
+			lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / OUTER_V_MAX, 0.f, 1.f));
+			lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
+			lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
+		}
 	}
 };
 
