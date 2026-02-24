@@ -107,8 +107,8 @@ struct IntegralFlux : Module {
 		int fallCvInput;
 		int bothCvInput;
 		int cycleCvInput;
-		float logShapeTimeScale;
-		float expShapeTimeScale;
+		float logShapeTimeScaleLog2;
+		float expShapeTimeScaleLog2;
 		OuterPhase gateHighPhase;
 	};
 
@@ -150,6 +150,8 @@ struct IntegralFlux : Module {
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
+	static constexpr float KNOB_CURVE_EXP = 2.2f;
+	static constexpr float LOG2_TIME_RATIO = 20.930132f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -283,29 +285,25 @@ struct IntegralFlux : Module {
 		}
 	}
 
-		float computeShapeTimeScale(float shape, float knob, float logScale, float expScale) const {
+	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
 		shape = clamp(shape, 0.f, 1.f);
-		(void) knob;
 		if (shape < LINEAR_SHAPE) {
 			float t = shape / LINEAR_SHAPE;
-			return std::pow(logScale, 1.f - t);
+			return std::exp2((1.f - t) * logScaleLog2);
 		}
 		if (shape > LINEAR_SHAPE) {
 			float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
-			return std::pow(expScale, t);
+			return std::exp2(t * expScaleLog2);
 		}
 		return 1.f;
 	}
 
-		float computeStageTime(
-			float knob,
-			float stageCv,
-			float bothCv,
-			float shape,
-			bool applyShapeTimeScale,
-			float logShapeTimeScale,
-			float expShapeTimeScale
-		) const {
+	float computeStageTime(
+		float knob,
+		float stageCv,
+		float bothScale,
+		float shapeTimeScale
+	) const {
 		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
 		const float minTime = 0.00075075f;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
@@ -313,20 +311,16 @@ struct IntegralFlux : Module {
 		const float maxTime = 1500.f;
 		// Use a curved knob law so noon timing tracks measured hardware behavior.
 		// With this exponent, knob=0.5 is ~23x slower than knob=0 (not ~1400x).
-		float knobShaped = std::pow(clamp(knob, 0.f, 1.f), 2.2f);
-		float t = minTime * std::pow(maxTime / minTime, knobShaped);
+		float knobShaped = std::pow(clamp(knob, 0.f, 1.f), KNOB_CURVE_EXP);
+		float t = minTime * std::exp2(knobShaped * LOG2_TIME_RATIO);
 
 		// Rise/Fall CV is linear over +/-8V.
 		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
 		linearScale = std::max(linearScale, 0.05f);
 		t *= linearScale;
 
-		// Both CV is bipolar exponential, positive = faster, negative = slower.
-		float bothScale = std::pow(2.f, -clamp(bothCv, -8.f, 8.f) / 2.f);
 		t *= bothScale;
-		if (applyShapeTimeScale) {
-			t *= computeShapeTimeScale(shape, knob, logShapeTimeScale, expShapeTimeScale);
-		}
+		t *= shapeTimeScale;
 
 		return clamp(t, absoluteMinTime, maxTime);
 	}
@@ -367,23 +361,19 @@ struct IntegralFlux : Module {
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
+				float bothScale = std::exp2(-clamp(bothCv, -8.f, 8.f) * 0.5f);
+				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
 					riseCv,
-					bothCv,
-					shape,
-					true,
-					cfg.logShapeTimeScale,
-					cfg.expShapeTimeScale
+					bothScale,
+					shapeTimeScale
 				);
 				ch.cachedFallTime = computeStageTime(
 					fallKnob,
 					fallCv,
-					bothCv,
-					shape,
-					true,
-					cfg.logShapeTimeScale,
-					cfg.expShapeTimeScale
+					bothScale,
+					shapeTimeScale
 				);
 				ch.cachedRiseKnob = riseKnob;
 				ch.cachedFallKnob = fallKnob;
@@ -606,8 +596,8 @@ struct IntegralFlux : Module {
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
 			CH1_CYCLE_CV_INPUT,
-			8.102198f,  // From doc/Measurements.md, CH1 shape min at rise/fall=0.
-			0.732835f,  // From doc/Measurements.md, CH1 shape max at rise/fall=0.
+			std::log2(8.102198f),  // From doc/Measurements.md, CH1 shape min at rise/fall=0.
+			std::log2(0.732835f),  // From doc/Measurements.md, CH1 shape max at rise/fall=0.
 			OUTER_FALL
 		};
 		static const OuterChannelConfig ch4Cfg {
@@ -621,8 +611,8 @@ struct IntegralFlux : Module {
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
 			CH4_CYCLE_CV_INPUT,
-			7.672819f,  // From doc/Measurements.md, CH4 shape min at rise/fall=0.
-			0.690657f,  // From doc/Measurements.md, CH4 shape max at rise/fall=0.
+			std::log2(7.672819f),  // From doc/Measurements.md, CH4 shape min at rise/fall=0.
+			std::log2(0.690657f),  // From doc/Measurements.md, CH4 shape max at rise/fall=0.
 			OUTER_RISE
 		};
 
