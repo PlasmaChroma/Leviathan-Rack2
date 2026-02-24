@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include <dsp/minblep.hpp>
+#include <array>
 
 
 struct IntegralFlux : Module {
@@ -152,6 +153,8 @@ struct IntegralFlux : Module {
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 	static constexpr float KNOB_CURVE_EXP = 2.2f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
+	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
+	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -273,6 +276,24 @@ struct IntegralFlux : Module {
 		ch4.stageTimeValid = false;
 	}
 
+	void initKnobCurveLut() {
+		for (int i = 0; i < KNOB_CURVE_LUT_SIZE; ++i) {
+			float x = float(i) / float(KNOB_CURVE_LUT_SIZE - 1);
+			knobCurveLut[i] = std::pow(x, KNOB_CURVE_EXP);
+		}
+	}
+
+	float shapeKnobTimeCurve(float knob) const {
+		knob = clamp(knob, 0.f, 1.f);
+		float idx = knob * float(KNOB_CURVE_LUT_SIZE - 1);
+		int i0 = int(idx);
+		int i1 = std::min(i0 + 1, KNOB_CURVE_LUT_SIZE - 1);
+		float t = idx - float(i0);
+		float v0 = knobCurveLut[i0];
+		float v1 = knobCurveLut[i1];
+		return v0 + (v1 - v0) * t;
+	}
+
 	void updateActiveStageTimes(OuterChannelState& ch) {
 		if (ch.timeInterpSamplesLeft > 0) {
 			ch.activeRiseTime += ch.riseTimeStep;
@@ -311,7 +332,7 @@ struct IntegralFlux : Module {
 		const float maxTime = 1500.f;
 		// Use a curved knob law so noon timing tracks measured hardware behavior.
 		// With this exponent, knob=0.5 is ~23x slower than knob=0 (not ~1400x).
-		float knobShaped = std::pow(clamp(knob, 0.f, 1.f), KNOB_CURVE_EXP);
+		float knobShaped = shapeKnobTimeCurve(knob);
 		float t = minTime * std::exp2(knobShaped * LOG2_TIME_RATIO);
 
 		// Rise/Fall CV is linear over +/-8V.
@@ -501,6 +522,7 @@ struct IntegralFlux : Module {
 	}
 
 	IntegralFlux() {
+		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
@@ -832,7 +854,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			menu->addChild(createBoolPtrMenuItem("Analog Mix Non-Idealities", "", &maths->mixCal.enabled));
 			menu->addChild(createMenuLabel("Gate Outputs"));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
-			menu->addChild(createMenuLabel("Timing"));
+			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &maths->timingInterpolate));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
 				[=](Menu* submenu) {
