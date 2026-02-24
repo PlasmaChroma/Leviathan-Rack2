@@ -80,6 +80,15 @@ struct IntegralFlux : Module {
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
 		float cachedWarpScale = 1.f;
+		bool stageTimeValid = false;
+		float cachedRiseKnob = 0.f;
+		float cachedFallKnob = 0.f;
+		float cachedShape = 0.f;
+		float cachedRiseCv = 0.f;
+		float cachedFallCv = 0.f;
+		float cachedBothCv = 0.f;
+		float cachedRiseTime = 0.01f;
+		float cachedFallTime = 0.01f;
 	};
 
 	struct OuterChannelConfig {
@@ -129,6 +138,8 @@ struct IntegralFlux : Module {
 	static constexpr float WARP_K_MAX = 40.f;
 	static constexpr float WARP_P = 2.f;
 	static constexpr int WARP_SCALE_SAMPLES = 16;
+	static constexpr float PARAM_CACHE_EPS = 1e-4f;
+	static constexpr float CV_CACHE_EPS = 1e-3f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -301,25 +312,48 @@ struct IntegralFlux : Module {
 			triggerOuterFunction(ch);
 		}
 
+		float riseKnob = params[cfg.riseParam].getValue();
+		float fallKnob = params[cfg.fallParam].getValue();
 		float shape = params[cfg.shapeParam].getValue();
-		float riseTime = computeStageTime(
-			params[cfg.riseParam].getValue(),
-			inputs[cfg.riseCvInput].getVoltage(),
-			inputs[cfg.bothCvInput].getVoltage(),
-			shape,
-			true,
-			cfg.logShapeTimeScale,
-			cfg.expShapeTimeScale
-		);
-		float fallTime = computeStageTime(
-			params[cfg.fallParam].getValue(),
-			inputs[cfg.fallCvInput].getVoltage(),
-			inputs[cfg.bothCvInput].getVoltage(),
-			shape,
-			true,
-			cfg.logShapeTimeScale,
-			cfg.expShapeTimeScale
-		);
+		float riseCv = inputs[cfg.riseCvInput].getVoltage();
+		float fallCv = inputs[cfg.fallCvInput].getVoltage();
+		float bothCv = inputs[cfg.bothCvInput].getVoltage();
+		bool stageTimeDirty = !ch.stageTimeValid
+			|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
+			|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
+			|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
+			|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
+			|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
+			|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
+		if (stageTimeDirty) {
+			ch.cachedRiseTime = computeStageTime(
+				riseKnob,
+				riseCv,
+				bothCv,
+				shape,
+				true,
+				cfg.logShapeTimeScale,
+				cfg.expShapeTimeScale
+			);
+			ch.cachedFallTime = computeStageTime(
+				fallKnob,
+				fallCv,
+				bothCv,
+				shape,
+				true,
+				cfg.logShapeTimeScale,
+				cfg.expShapeTimeScale
+			);
+			ch.cachedRiseKnob = riseKnob;
+			ch.cachedFallKnob = fallKnob;
+			ch.cachedShape = shape;
+			ch.cachedRiseCv = riseCv;
+			ch.cachedFallCv = fallCv;
+			ch.cachedBothCv = bothCv;
+			ch.stageTimeValid = true;
+		}
+		float riseTime = ch.cachedRiseTime;
+		float fallTime = ch.cachedFallTime;
 		float shapeSigned = shapeSignedFromKnob(shape);
 		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
 			ch.cachedShapeSigned = shapeSigned;
