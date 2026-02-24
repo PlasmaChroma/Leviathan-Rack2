@@ -602,6 +602,11 @@ struct MathsWidget : ModuleWidget {
         // use Rogan1PSWhite for the attenuverter knobs
         // use TL1105 for the cycle buttons
 
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.875, 20.838)), module, Maths::CYCLE_1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(69.353, 20.838)), module, Maths::CYCLE_4_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(33.755, 36.293)), module, Maths::RISE_1_PARAM));
@@ -610,10 +615,10 @@ struct MathsWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.385, 53.079)), module, Maths::FALL_4_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15.376, 57.178)), module, Maths::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(86.017, 57.178)), module, Maths::LIN_LOG_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(25.895, 86.446)), module, Maths::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(41.843, 86.446)), module, Maths::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.385, 86.446)), module, Maths::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.732, 86.446)), module, Maths::ATTENUATE_4_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, Maths::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, Maths::ATTENUATE_2_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.585, 86.446)), module, Maths::ATTENUATE_3_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.931, 86.446)), module, Maths::ATTENUATE_4_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(9.947, 15.354)), module, Maths::INPUT_1_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.911, 15.354)), module, Maths::INPUT_1_TRIG_INPUT));
@@ -637,19 +642,19 @@ struct MathsWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(75.732, 96.915)), module, Maths::OUT_4_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.181, 96.915)), module, Maths::EOC_4_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(9.947, 108.182)), module, Maths::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.852, 108.182)), module, Maths::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(50.614, 108.182)), module, Maths::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(62.375, 108.182)), module, Maths::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.181, 108.182)), module, Maths::CH_4_UNITY_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.852, 110.882)), module, Maths::OR_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(50.614, 110.882)), module, Maths::SUM_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(62.375, 110.882)), module, Maths::INV_OUT_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.875, 14.855)), module, Maths::CYCLE_1_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.353, 14.855)), module, Maths::CYCLE_4_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.537, 96.76)), module, Maths::EOR_CH_1_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.603, 96.716)), module, Maths::EOC_CH_4_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.547, 107.999)), module, Maths::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(32.274, 107.983)), module, Maths::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(68.954, 107.983)), module, Maths::INV_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.731, 108.099)), module, Maths::LIGHT_UNITY_4_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(32.274, 110.683)), module, Maths::OR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(68.954, 110.683)), module, Maths::INV_LED_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
