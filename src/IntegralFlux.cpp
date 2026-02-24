@@ -89,6 +89,11 @@ struct IntegralFlux : Module {
 		float cachedBothCv = 0.f;
 		float cachedRiseTime = 0.01f;
 		float cachedFallTime = 0.01f;
+		float activeRiseTime = 0.01f;
+		float activeFallTime = 0.01f;
+		float riseTimeStep = 0.f;
+		float fallTimeStep = 0.f;
+		int timeInterpSamplesLeft = 0;
 	};
 
 	struct OuterChannelConfig {
@@ -132,6 +137,10 @@ struct IntegralFlux : Module {
 	OuterChannelState ch1;
 	OuterChannelState ch4;
 	MixNonIdealCal mixCal;
+	bool bandlimitedGateOutputs = false;
+	int timingUpdateDiv = 1;
+	int timingUpdateCounter = 0;
+	bool timingInterpolate = true;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
 	static constexpr float OUTER_V_MAX = 10.2f;
@@ -249,6 +258,29 @@ struct IntegralFlux : Module {
 		ch.gateState = newState;
 	}
 
+	static void setGateStateImmediate(OuterChannelState& ch, bool newState) {
+		ch.gateState = newState;
+	}
+
+	void setTimingUpdateDiv(int div) {
+		timingUpdateDiv = std::max(1, div);
+		timingUpdateCounter = 0;
+		ch1.stageTimeValid = false;
+		ch4.stageTimeValid = false;
+	}
+
+	void updateActiveStageTimes(OuterChannelState& ch) {
+		if (ch.timeInterpSamplesLeft > 0) {
+			ch.activeRiseTime += ch.riseTimeStep;
+			ch.activeFallTime += ch.fallTimeStep;
+			ch.timeInterpSamplesLeft--;
+			if (ch.timeInterpSamplesLeft == 0) {
+				ch.activeRiseTime = ch.cachedRiseTime;
+				ch.activeFallTime = ch.cachedFallTime;
+			}
+		}
+	}
+
 		float computeShapeTimeScale(float shape, float knob, float logScale, float expScale) const {
 		shape = clamp(shape, 0.f, 1.f);
 		(void) knob;
@@ -302,7 +334,7 @@ struct IntegralFlux : Module {
 		ch.phasePos = 0.f;
 	}
 
-	OuterChannelResult processOuterChannel(const ProcessArgs& args, OuterChannelState& ch, const OuterChannelConfig& cfg) {
+	OuterChannelResult processOuterChannel(const ProcessArgs& args, OuterChannelState& ch, const OuterChannelConfig& cfg, bool timingTick) {
 		float dt = args.sampleTime;
 
 		if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
@@ -324,42 +356,64 @@ struct IntegralFlux : Module {
 		float riseCv = inputs[cfg.riseCvInput].getVoltage();
 		float fallCv = inputs[cfg.fallCvInput].getVoltage();
 		float bothCv = inputs[cfg.bothCvInput].getVoltage();
-		bool stageTimeDirty = !ch.stageTimeValid
-			|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
-			|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
-			|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
-			|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
-			|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
-			|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
-		if (stageTimeDirty) {
-			ch.cachedRiseTime = computeStageTime(
-				riseKnob,
-				riseCv,
-				bothCv,
-				shape,
-				true,
-				cfg.logShapeTimeScale,
-				cfg.expShapeTimeScale
-			);
-			ch.cachedFallTime = computeStageTime(
-				fallKnob,
-				fallCv,
-				bothCv,
-				shape,
-				true,
-				cfg.logShapeTimeScale,
-				cfg.expShapeTimeScale
-			);
-			ch.cachedRiseKnob = riseKnob;
-			ch.cachedFallKnob = fallKnob;
-			ch.cachedShape = shape;
-			ch.cachedRiseCv = riseCv;
-			ch.cachedFallCv = fallCv;
-			ch.cachedBothCv = bothCv;
-			ch.stageTimeValid = true;
+		if (!ch.stageTimeValid || timingTick) {
+			bool stageTimeDirty = !ch.stageTimeValid
+				|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
+				|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
+				|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
+				|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
+				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
+				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
+			if (stageTimeDirty) {
+				ch.cachedRiseTime = computeStageTime(
+					riseKnob,
+					riseCv,
+					bothCv,
+					shape,
+					true,
+					cfg.logShapeTimeScale,
+					cfg.expShapeTimeScale
+				);
+				ch.cachedFallTime = computeStageTime(
+					fallKnob,
+					fallCv,
+					bothCv,
+					shape,
+					true,
+					cfg.logShapeTimeScale,
+					cfg.expShapeTimeScale
+				);
+				ch.cachedRiseKnob = riseKnob;
+				ch.cachedFallKnob = fallKnob;
+				ch.cachedShape = shape;
+				ch.cachedRiseCv = riseCv;
+				ch.cachedFallCv = fallCv;
+				ch.cachedBothCv = bothCv;
+				if (!ch.stageTimeValid) {
+					ch.activeRiseTime = ch.cachedRiseTime;
+					ch.activeFallTime = ch.cachedFallTime;
+					ch.riseTimeStep = 0.f;
+					ch.fallTimeStep = 0.f;
+					ch.timeInterpSamplesLeft = 0;
+				}
+				else if (timingInterpolate && timingUpdateDiv > 1) {
+					ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
+					ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
+					ch.timeInterpSamplesLeft = timingUpdateDiv;
+				}
+				else {
+					ch.activeRiseTime = ch.cachedRiseTime;
+					ch.activeFallTime = ch.cachedFallTime;
+					ch.riseTimeStep = 0.f;
+					ch.fallTimeStep = 0.f;
+					ch.timeInterpSamplesLeft = 0;
+				}
+				ch.stageTimeValid = true;
+			}
 		}
-		float riseTime = ch.cachedRiseTime;
-		float fallTime = ch.cachedFallTime;
+		updateActiveStageTimes(ch);
+		float riseTime = ch.activeRiseTime;
+		float fallTime = ch.activeFallTime;
 		float shapeSigned = shapeSignedFromKnob(shape);
 		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
 			ch.cachedShapeSigned = shapeSigned;
@@ -375,7 +429,12 @@ struct IntegralFlux : Module {
 		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
 		if (gateIsHigh != gateWasHigh) {
 			// Transition occurred at start-of-sample due to trigger/cycle state.
-			insertGateTransition(ch, gateIsHigh, 1e-6f);
+			if (bandlimitedGateOutputs) {
+				insertGateTransition(ch, gateIsHigh, 1e-6f);
+			}
+			else {
+				setGateStateImmediate(ch, gateIsHigh);
+			}
 		}
 
 		if (ch.phase != OUTER_IDLE) {
@@ -396,7 +455,12 @@ struct IntegralFlux : Module {
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = OUTER_FALL;
 					ch.out = OUTER_V_MAX;
-					insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+					if (bandlimitedGateOutputs) {
+						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+					}
+					else {
+						setGateStateImmediate(ch, ch.phase == cfg.gateHighPhase);
+					}
 				}
 			}
 
@@ -413,7 +477,12 @@ struct IntegralFlux : Module {
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_IDLE;
 					ch.out = OUTER_V_MIN;
-					insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+					if (bandlimitedGateOutputs) {
+						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+					}
+					else {
+						setGateStateImmediate(ch, ch.phase == cfg.gateHighPhase);
+					}
 				}
 			}
 		}
@@ -485,6 +554,9 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
 		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
 		json_object_set_new(rootJ, "mixNonIdealEnabled", json_boolean(mixCal.enabled));
+		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
+		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
+		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
 		return rootJ;
 	}
 
@@ -502,6 +574,21 @@ struct IntegralFlux : Module {
 		json_t* mixEnabledJ = json_object_get(rootJ, "mixNonIdealEnabled");
 		if (mixEnabledJ) {
 			mixCal.enabled = json_boolean_value(mixEnabledJ);
+		}
+
+		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
+		if (blepGatesJ) {
+			bandlimitedGateOutputs = json_boolean_value(blepGatesJ);
+		}
+
+		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
+		if (timingDivJ) {
+			setTimingUpdateDiv(json_integer_value(timingDivJ));
+		}
+
+		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
+		if (timingInterpJ) {
+			timingInterpolate = json_boolean_value(timingInterpJ);
 		}
 	}
 
@@ -537,16 +624,27 @@ struct IntegralFlux : Module {
 			OUTER_RISE
 		};
 
-		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg);
-		OuterChannelResult ch4Result = processOuterChannel(args, ch4, ch4Cfg);
+		bool timingTick = true;
+		if (timingUpdateDiv > 1) {
+			timingUpdateCounter++;
+			if (timingUpdateCounter >= timingUpdateDiv) {
+				timingUpdateCounter = 0;
+				timingTick = true;
+			}
+			else {
+				timingTick = false;
+			}
+		}
+		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg, timingTick);
+		OuterChannelResult ch4Result = processOuterChannel(args, ch4, ch4Cfg, timingTick);
 		float ch1Var = clamp(ch1.out * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 		float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
 		float ch2Var = clamp(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
 		float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
 		float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
 		float ch4Var = clamp(ch4.out * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
-		float eorOut = (ch1.gateState ? 10.f : 0.f) + ch1.gateBlep.process();
-		float eocOut = (ch4.gateState ? 10.f : 0.f) + ch4.gateBlep.process();
+		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
+		float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch4.gateBlep.process() : 0.f);
 		bool eorHigh = ch1.gateState;
 		bool eocHigh = ch4.gateState;
 		float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
@@ -724,6 +822,25 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(createMenuLabel("Mix Modeling"));
 		if (maths) {
 			menu->addChild(createBoolPtrMenuItem("Analog Mix Non-Idealities", "", &maths->mixCal.enabled));
+			menu->addChild(createMenuLabel("Gate Outputs"));
+			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
+			menu->addChild(createMenuLabel("Timing"));
+			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &maths->timingInterpolate));
+			menu->addChild(createSubmenuItem("Timing Update Rate", "",
+				[=](Menu* submenu) {
+					auto addDivItem = [=](int div, std::string label) {
+						submenu->addChild(createCheckMenuItem(label, "",
+							[=]() { return maths->timingUpdateDiv == div; },
+							[=]() { maths->setTimingUpdateDiv(div); }
+						));
+					};
+					addDivItem(1, "Audio rate (/1)");
+					addDivItem(4, "Control rate (/4)");
+					addDivItem(8, "Control rate (/8)");
+					addDivItem(16, "Control rate (/16)");
+					addDivItem(32, "Control rate (/32)");
+				}
+			));
 		}
 	}
 };
