@@ -14,9 +14,9 @@
   "changelogUrl": "",
   "modules": [
     {
-      "slug": "Maths",
-      "name": "Maths",
-      "description": "1:1 Replication of Maths",
+      "slug": "IntegralFlux",
+      "name": "Integral Flux",
+      "description": "Integral Flux",
       "tags": [
         "Slew limiter"
       ]

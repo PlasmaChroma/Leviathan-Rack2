@@ -2,7 +2,7 @@
 #include <dsp/minblep.hpp>
 
 
-struct Maths : Module {
+struct IntegralFlux : Module {
 	enum ParamId {
 		ATTENUATE_1_PARAM,
 		CYCLE_1_PARAM,
@@ -399,7 +399,7 @@ struct Maths : Module {
 		return result;
 	}
 
-	Maths() {
+	IntegralFlux() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
@@ -602,14 +602,14 @@ struct BigTL1105 : TL1105 {
     }
 };
 
-struct MathsWidget : ModuleWidget {
-	MathsWidget(Maths* module) {
+struct IntegralFluxWidget : ModuleWidget {
+	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/flux.svg")));
 
         // these are deliberately under the image because the buttons are not big enough for the UI elements
-		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, Maths::CYCLE_1_PARAM));
-		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(92.313, 32.315)), module, Maths::CYCLE_4_PARAM));
+		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, IntegralFlux::CYCLE_1_PARAM));
+		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(92.313, 32.315)), module, IntegralFlux::CYCLE_4_PARAM));
 #if 0
         MyImageWidget* img = new MyImageWidget();
         img->box.pos = Vec(0, 0);
@@ -626,58 +626,58 @@ struct MathsWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(31.875, 20.938)), module, Maths::CYCLE_1_PARAM));
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(69.552, 20.938)), module, Maths::CYCLE_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(33.755, 36.293)), module, Maths::RISE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(67.638, 36.293)), module, Maths::RISE_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.007, 53.079)), module, Maths::FALL_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.385, 53.079)), module, Maths::FALL_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(13.975, 57.178)), module, Maths::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(87.916, 57.178)), module, Maths::LIN_LOG_4_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, Maths::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, Maths::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.585, 86.446)), module, Maths::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.931, 86.446)), module, Maths::ATTENUATE_4_PARAM));
+		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(31.875, 20.938)), module, IntegralFlux::CYCLE_1_PARAM));
+		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(69.552, 20.938)), module, IntegralFlux::CYCLE_4_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(33.755, 36.293)), module, IntegralFlux::RISE_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(67.638, 36.293)), module, IntegralFlux::RISE_4_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.007, 53.079)), module, IntegralFlux::FALL_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.385, 53.079)), module, IntegralFlux::FALL_4_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(13.975, 57.178)), module, IntegralFlux::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(87.916, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.585, 86.446)), module, IntegralFlux::ATTENUATE_3_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.931, 86.446)), module, IntegralFlux::ATTENUATE_4_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(9.947, 15.354)), module, Maths::INPUT_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.911, 15.354)), module, Maths::INPUT_1_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(80.217, 15.354)), module, Maths::INPUT_4_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(91.181, 15.354)), module, Maths::INPUT_4_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(40.049, 20.838)), module, Maths::CH1_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(61.179, 20.838)), module, Maths::CH4_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.483, 36.616)), module, Maths::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(78.91, 36.616)), module, Maths::CH4_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.333, 51.47)), module, Maths::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(73.06, 51.47)), module, Maths::CH4_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, Maths::CH1_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(68.689, 63.263)), module, Maths::CH4_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(41.843, 75.677)), module, Maths::INPUT_2_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.385, 75.677)), module, Maths::INPUT_3_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(9.947, 15.354)), module, IntegralFlux::INPUT_1_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.911, 15.354)), module, IntegralFlux::INPUT_1_TRIG_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(80.217, 15.354)), module, IntegralFlux::INPUT_4_TRIG_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(91.181, 15.354)), module, IntegralFlux::INPUT_4_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(40.049, 20.838)), module, IntegralFlux::CH1_CYCLE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(61.179, 20.838)), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.483, 36.616)), module, IntegralFlux::CH1_RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(78.91, 36.616)), module, IntegralFlux::CH4_RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.333, 51.47)), module, IntegralFlux::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(73.06, 51.47)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, IntegralFlux::CH1_FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(68.689, 63.263)), module, IntegralFlux::CH4_FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(41.843, 75.677)), module, IntegralFlux::INPUT_2_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.385, 75.677)), module, IntegralFlux::INPUT_3_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.037, 96.946)), module, Maths::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(25.995, 96.915)), module, Maths::OUT_1_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(41.943, 96.915)), module, Maths::OUT_2_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(59.486, 96.915)), module, Maths::OUT_3_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(75.832, 96.915)), module, Maths::OUT_4_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 96.915)), module, Maths::EOC_4_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.047, 108.182)), module, Maths::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 108.182)), module, Maths::CH_4_UNITY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.852, 110.882)), module, Maths::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(50.614, 110.882)), module, Maths::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(62.375, 110.882)), module, Maths::INV_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(41.943, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(59.486, 96.915)), module, IntegralFlux::OUT_3_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 96.915)), module, IntegralFlux::EOC_4_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.047, 108.182)), module, IntegralFlux::CH_1_UNITY_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 108.182)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.852, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(50.614, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(62.375, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.875, 14.855)), module, Maths::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.353, 14.855)), module, Maths::CYCLE_4_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.537, 96.76)), module, Maths::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.603, 96.716)), module, Maths::EOC_CH_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.547, 107.999)), module, Maths::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.731, 108.099)), module, Maths::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.874, 110.683)), module, Maths::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.354, 110.683)), module, Maths::INV_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.353, 14.855)), module, IntegralFlux::CYCLE_4_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.537, 96.76)), module, IntegralFlux::EOR_CH_1_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.603, 96.716)), module, IntegralFlux::EOC_CH_4_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(16.547, 107.999)), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(84.731, 108.099)), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.874, 110.683)), module, IntegralFlux::OR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.354, 110.683)), module, IntegralFlux::INV_LED_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		Maths* maths = dynamic_cast<Maths*>(module);
+		IntegralFlux* maths = dynamic_cast<IntegralFlux*>(module);
 		assert(menu);
 
 		menu->addChild(new MenuSeparator());
@@ -688,4 +688,4 @@ struct MathsWidget : ModuleWidget {
 	}
 };
 
-Model* modelMaths = createModel<Maths, MathsWidget>("Maths");
+Model* modelIntegralFlux = createModel<IntegralFlux, IntegralFluxWidget>("IntegralFlux");
