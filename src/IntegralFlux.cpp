@@ -136,7 +136,6 @@ struct IntegralFlux : Module {
 	static constexpr float OUTER_V_MIN = 0.f;
 	static constexpr float OUTER_V_MAX = 10.2f;
 	static constexpr float WARP_K_MAX = 40.f;
-	static constexpr float WARP_P = 2.f;
 	static constexpr int WARP_SCALE_SAMPLES = 16;
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
@@ -146,13 +145,19 @@ struct IntegralFlux : Module {
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
 	}
 
-	static float softSatSym(float x, float satV, float drive) {
-		satV = std::max(satV, 1e-6f);
-		return satV * std::tanh((drive / satV) * x);
+	static float fastTanh(float x) {
+		// Low-cost tanh approximation.
+		float x2 = x * x;
+		return x * (27.f + x2) / (27.f + 9.f * x2);
 	}
 
-	static float softSatPos(float x, float satV, float drive) {
-		float y = softSatSym(std::fmax(0.f, x), satV, drive);
+	static float softSatSymFast(float x, float satV, float drive) {
+		satV = std::max(satV, 1e-6f);
+		return satV * fastTanh((drive / satV) * x);
+	}
+
+	static float softSatPosFast(float x, float satV, float drive) {
+		float y = softSatSymFast(std::fmax(0.f, x), satV, drive);
 		return clamp(y, 0.f, satV);
 	}
 
@@ -174,12 +179,13 @@ struct IntegralFlux : Module {
 			return 1.f;
 		}
 		float k = WARP_K_MAX * u;
+		float x2 = x * x;
 		if (s < 0.f) {
 			// LOG: fast near 0V, slow near top.
-			return 1.f / (1.f + k * std::pow(x, WARP_P));
+			return 1.f / (1.f + k * x2);
 		}
 		// EXP: slow near 0V, fast near top.
-		return 1.f + k * std::pow(x, WARP_P);
+		return 1.f + k * x2;
 	}
 
 	static float slopeWarpScale(float s) {
@@ -553,12 +559,12 @@ struct IntegralFlux : Module {
 		float invOut = 0.f;
 		float orOut = 0.f;
 		if (mixCal.enabled) {
-			sumOut = softSatSym(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
+			sumOut = softSatSymFast(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
 			invOut = -sumOut;
 			if (mixCal.invUseExtraSat) {
-				invOut = softSatSym(invOut, mixCal.invSatV, mixCal.invDrive);
+				invOut = softSatSymFast(invOut, mixCal.invSatV, mixCal.invDrive);
 			}
-			orOut = softSatPos(orRaw, mixCal.orSatV, mixCal.orDrive);
+			orOut = softSatPosFast(orRaw, mixCal.orSatV, mixCal.orDrive);
 		}
 		else {
 			sumOut = clamp(sumRaw, -10.f, 10.f);
@@ -636,20 +642,17 @@ struct BigTL1105 : TL1105 {
     }
 };
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/flux.svg")));
 
-        // these are deliberately under the image because the buttons are not big enough for the UI elements
-		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(10.349, 32.315)), module, IntegralFlux::CYCLE_1_PARAM));
-		//addParam(createParamCentered<BigTL1105>(mm2px(Vec(92.313, 32.315)), module, IntegralFlux::CYCLE_4_PARAM));
-#if 0
-        MyImageWidget* img = new MyImageWidget();
-        img->box.pos = Vec(0, 0);
-        img->box.size = box.size;
-        addChild(img);
-#endif
         // use Rogan1PSBlue for the rise/fall knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
         // use Rogan1PSWhite for the attenuverter knobs
@@ -691,17 +694,17 @@ struct IntegralFluxWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.143, 76.377)), module, IntegralFlux::INPUT_2_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.585, 76.377)), module, IntegralFlux::INPUT_3_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(41.943, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(59.486, 96.915)), module, IntegralFlux::OUT_3_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 96.915)), module, IntegralFlux::EOC_4_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.047, 110.682)), module, IntegralFlux::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(35.252, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(50.614, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(65.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.281, 110.682)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(41.943, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(59.486, 96.915)), module, IntegralFlux::OUT_3_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 96.915)), module, IntegralFlux::EOC_4_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, IntegralFlux::CH_1_UNITY_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(35.252, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(50.614, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(65.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 110.682)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.353, 14.855)), module, IntegralFlux::CYCLE_4_LED_LIGHT));
