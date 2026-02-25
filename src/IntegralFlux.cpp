@@ -180,7 +180,7 @@ struct IntegralFlux : Module {
 	static constexpr float KNOB_CURVE_EXP = 2.2f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
-	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 15.f;
+	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
@@ -357,7 +357,7 @@ struct IntegralFlux : Module {
 		float fallAbs = std::fabs(fallNow - fallPrev);
 		float riseRel = riseAbs / std::max(std::fabs(risePrev), 1e-6f);
 		float fallRel = fallAbs / std::max(std::fabs(fallPrev), 1e-6f);
-		return riseAbs > 1e-4f || fallAbs > 1e-4f || riseRel > 0.01f || fallRel > 0.01f || std::fabs(curveNow - curvePrev) > 0.01f;
+		return riseAbs > 1e-4f || fallAbs > 1e-4f || riseRel > 0.01f || fallRel > 0.01f || std::fabs(curveNow - curvePrev) > 0.005f;
 	}
 
 	void updatePreviewChannel(
@@ -937,30 +937,16 @@ struct BananutBlack : app::SvgPort {
 };
 
 struct WavePreviewWidget : Widget {
-	static constexpr int POINT_COUNT = 160;
-	IntegralFlux* module = nullptr;
+	static constexpr int POINT_COUNT = 320;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
-	float smoothedPeriodPx = -1.f;
+	float smoothedVisibleCycles = 2.f;
+	bool visibleInit = false;
 
-	WavePreviewWidget(IntegralFlux* module, int channel) {
-		this->module = module;
+	WavePreviewWidget(int channel) {
 		this->channel = channel;
-	}
-
-	static float curveWarp(float t, float curveSigned) {
-		t = clamp(t, 0.f, 1.f);
-		float u = clamp(std::fabs(curveSigned), 0.f, 1.f);
-		if (u < 1e-6f) {
-			return t;
-		}
-		float power = 1.f + 4.f * u;
-		if (curveSigned > 0.f) {
-			return std::pow(t, power);
-		}
-		return 1.f - std::pow(1.f - t, power);
 	}
 
 	static float segmentValue(float t, float curveSigned, bool rising) {
@@ -972,7 +958,7 @@ struct WavePreviewWidget : Widget {
 			return rising ? 1.f : 0.f;
 		}
 		float scale = IntegralFlux::slopeWarpScale(curveSigned);
-		int steps = std::max(1, int(std::ceil(t * 64.f)));
+		int steps = std::max(1, int(std::ceil(t * 128.f)));
 		float dp = t / float(steps);
 		float x = rising ? 0.f : 1.f;
 		for (int i = 0; i < steps; ++i) {
@@ -983,85 +969,93 @@ struct WavePreviewWidget : Widget {
 		return x;
 	}
 
-	static float cyclesAcrossWidthForFrequency(float freqHz) {
-		const float minHz = 20.f;
-		const float maxHz = 20000.f;
-		const float maxCycles = 14.f;
+	static float cycleY(float u, float curveSigned) {
+		u = clamp(u, 0.f, 1.f);
+		if (u < 0.5f) {
+			float t = u * 2.f;
+			float v = segmentValue(t, curveSigned, true);
+			return -1.f + 2.f * v;
+		}
+		float t = (u - 0.5f) * 2.f;
+		float v = segmentValue(t, curveSigned, false);
+		return -1.f + 2.f * v;
+	}
+
+	static float targetVisibleCycles(float freqHz) {
+		const float FREQ_FLOOR = 20.f;
+		const float FREQ_CEIL = 1200.f;
+		const float MIN_CYCLES = 0.30f;
+		const float BASE_CYCLES = 2.0f;
+		const float MAX_CYCLES = 10.0f;
 		freqHz = std::max(freqHz, 1e-6f);
-		if (freqHz < minHz) {
-			return clamp(freqHz / minHz, 0.08f, 1.f);
+		if (freqHz < FREQ_FLOOR) {
+			float norm = clamp(freqHz / FREQ_FLOOR, 0.f, 1.f);
+			return crossfade(MIN_CYCLES, BASE_CYCLES, std::pow(norm, 0.7f));
 		}
-		if (freqHz > maxHz) {
-			float extra = std::pow(freqHz / maxHz, 0.2f);
-			return maxCycles * extra;
-		}
-		float norm = std::log(freqHz / minHz) / std::log(maxHz / minHz);
-		return std::pow(maxCycles, clamp(norm, 0.f, 1.f));
+		float norm = clamp(std::log(freqHz / FREQ_FLOOR) / std::log(FREQ_CEIL / FREQ_FLOOR), 0.f, 1.f);
+		return crossfade(BASE_CYCLES, MAX_CYCLES, std::pow(norm, 0.85f));
 	}
 
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
+		float h = std::max(box.size.y, 1.f);
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
 		float freqHz = 1.f / totalTime;
-		float cyclesAcross = cyclesAcrossWidthForFrequency(freqHz);
-		float targetPeriodPx = w / std::max(cyclesAcross, 1e-6f);
-		float maxPeriodPx = w * 8.f;
-		targetPeriodPx = clamp(targetPeriodPx, 1.f, maxPeriodPx);
-		if (smoothedPeriodPx < 0.f) {
-			smoothedPeriodPx = targetPeriodPx;
-		}
-		else if (interactiveRecent) {
-			smoothedPeriodPx = targetPeriodPx;
+		float targetCycles = targetVisibleCycles(freqHz);
+		float alpha = interactiveRecent ? 0.35f : (freqHz < 20.f ? 0.08f : 0.15f);
+		if (!visibleInit) {
+			smoothedVisibleCycles = targetCycles;
+			visibleInit = true;
 		}
 		else {
-			smoothedPeriodPx += (targetPeriodPx - smoothedPeriodPx) * 0.25f;
+			smoothedVisibleCycles += (targetCycles - smoothedVisibleCycles) * alpha;
 		}
-		float periodPxBase = clamp(smoothedPeriodPx, 1.f, maxPeriodPx);
-		float riseRatio = clamp(riseTime / totalTime, 0.01f, 0.99f);
+		smoothedVisibleCycles = clamp(smoothedVisibleCycles, 0.30f, 10.0f);
+		float periodPx = w / std::max(smoothedVisibleCycles, 1e-6f);
+		float riseRatio = clamp(riseTime / totalTime, 0.02f, 0.98f);
 		float fallRatio = 1.f - riseRatio;
-		float minVisibleSidePx = std::max(1.5f, w * 0.015f);
-		float risePx = std::max(periodPxBase * riseRatio, minVisibleSidePx);
-		float fallPx = std::max(periodPxBase * fallRatio, minVisibleSidePx);
-		float periodPx = std::max(risePx + fallPx, 1e-6f);
+		float risePx = std::max(periodPx * riseRatio, 1e-4f);
+		float fallPx = std::max(periodPx * fallRatio, 1e-4f);
 		float centerX = 0.5f * w;
-		float seamPxEps = std::max(0.5f, periodPx * 0.01f);
-		float peakPxEps = std::max(0.5f, periodPx * 0.01f);
+		float fullPeriodPx = risePx + fallPx;
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
-			float x = (float(i) / float(POINT_COUNT - 1)) * w;
+			float xNorm = float(i) / float(POINT_COUNT - 1);
+			float x = xNorm * w;
 			float local = x - centerX;
-			float p = std::fmod(local + risePx, periodPx);
+			float p = std::fmod(local + risePx, fullPeriodPx);
 			if (p < 0.f) {
-				p += periodPx;
+				p += fullPeriodPx;
 			}
 			float y = -1.f;
-			// Snap exact trough and peak near discontinuity boundaries to avoid
-			// floating-point seam jitter when many short cycles are visible.
-			if (p <= seamPxEps || (periodPx - p) <= seamPxEps) {
-				y = -1.f;
-			}
-			else if (std::fabs(p - risePx) <= peakPxEps) {
-				y = 1.f;
-			}
-			else if (p < risePx) {
-				float t = p / std::max(risePx, 1e-6f);
+			if (p < risePx) {
+				float t = p / risePx;
 				float v = segmentValue(t, curveSigned, true);
 				y = -1.f + 2.f * v;
 			}
 			else {
-				float t = (p - risePx) / std::max(fallPx, 1e-6f);
+				float t = (p - risePx) / fallPx;
 				float v = segmentValue(t, curveSigned, false);
 				y = -1.f + 2.f * v;
 			}
-			float py = (0.5f - 0.5f * y) * box.size.y;
+			float py = (0.5f - 0.5f * y) * h;
 			points[i] = Vec(x, py);
 		}
+
+		int midIndex = POINT_COUNT / 2;
+		midIndex = std::max(0, std::min(POINT_COUNT - 1, midIndex));
+		float midX = (float(midIndex) / float(POINT_COUNT - 1)) * w;
+		points[midIndex] = Vec(midX, 0.f);
 		pointsValid = true;
 	}
 
 	void step() override {
 		Widget::step();
-		if (!module) {
+		IntegralFlux* modulePtr = nullptr;
+		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
+			modulePtr = moduleWidget->getModule<IntegralFlux>();
+		}
+		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
 			}
@@ -1072,7 +1066,7 @@ struct WavePreviewWidget : Widget {
 		float curveSigned = 0.f;
 		bool interactiveRecent = false;
 		uint32_t version = 0;
-		module->getPreviewState(channel, riseTime, fallTime, curveSigned, interactiveRecent, version);
+		modulePtr->getPreviewState(channel, riseTime, fallTime, curveSigned, interactiveRecent, version);
 		if (!pointsValid || version != lastVersion) {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
@@ -1135,13 +1129,13 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 57.178)), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
-			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
+			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
 			ch1Preview->box.pos = mm2px(Vec(13.975f - 12.f, 57.178f + 15.f));
 			ch1Preview->box.size = mm2px(Vec(24.f, 10.f));
 			addChild(ch1Preview);
 		}
 		{
-			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
+			WavePreviewWidget* ch4Preview = new WavePreviewWidget(4);
 			ch4Preview->box.pos = mm2px(Vec(91.716f - 12.f, 57.178f + 15.f));
 			ch4Preview->box.size = mm2px(Vec(24.f, 10.f));
 			addChild(ch4Preview);
