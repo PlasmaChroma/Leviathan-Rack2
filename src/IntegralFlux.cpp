@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
+#include <atomic>
 
 
 struct IntegralFlux : Module {
@@ -138,7 +139,28 @@ struct IntegralFlux : Module {
 
 	OuterChannelState ch1;
 	OuterChannelState ch4;
+	struct PreviewSharedState {
+		std::atomic<float> riseTime {0.01f};
+		std::atomic<float> fallTime {0.01f};
+		std::atomic<float> curveSigned {0.f};
+		std::atomic<uint32_t> version {1};
+	};
+	struct PreviewUpdateState {
+		float timer = 0.f;
+		float interactiveHold = 0.f;
+		float lastRiseKnob = 0.f;
+		float lastFallKnob = 0.f;
+		float lastCurveKnob = 0.33f;
+		float lastRiseSent = 0.01f;
+		float lastFallSent = 0.01f;
+		float lastCurveSent = 0.f;
+		bool sentOnce = false;
+	};
 	MixNonIdealCal mixCal;
+	PreviewSharedState previewCh1;
+	PreviewSharedState previewCh4;
+	PreviewUpdateState previewUpdateCh1;
+	PreviewUpdateState previewUpdateCh4;
 	bool bandlimitedGateOutputs = false;
 	bool bandlimitedSignalOutputs = true;
 	bool useExp2Taylor5 = true;
@@ -156,6 +178,9 @@ struct IntegralFlux : Module {
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 	static constexpr float KNOB_CURVE_EXP = 2.2f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
+	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
+	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 15.f;
+	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
@@ -318,6 +343,63 @@ struct IntegralFlux : Module {
 		}
 	}
 
+	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned) {
+		shared.riseTime.store(riseTime, std::memory_order_relaxed);
+		shared.fallTime.store(fallTime, std::memory_order_relaxed);
+		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
+		shared.version.fetch_add(1, std::memory_order_relaxed);
+	}
+
+	static bool previewChangedMeaningfully(float riseNow, float risePrev, float fallNow, float fallPrev, float curveNow, float curvePrev) {
+		float riseAbs = std::fabs(riseNow - risePrev);
+		float fallAbs = std::fabs(fallNow - fallPrev);
+		float riseRel = riseAbs / std::max(std::fabs(risePrev), 1e-6f);
+		float fallRel = fallAbs / std::max(std::fabs(fallPrev), 1e-6f);
+		return riseAbs > 1e-4f || fallAbs > 1e-4f || riseRel > 0.01f || fallRel > 0.01f || std::fabs(curveNow - curvePrev) > 0.01f;
+	}
+
+	void updatePreviewChannel(
+		PreviewSharedState& shared,
+		PreviewUpdateState& state,
+		float riseKnob,
+		float fallKnob,
+		float curveKnob,
+		float riseTime,
+		float fallTime,
+		float curveSigned,
+		float dt
+	) {
+		bool knobChanged = std::fabs(riseKnob - state.lastRiseKnob) > PARAM_CACHE_EPS
+			|| std::fabs(fallKnob - state.lastFallKnob) > PARAM_CACHE_EPS
+			|| std::fabs(curveKnob - state.lastCurveKnob) > PARAM_CACHE_EPS;
+		state.lastRiseKnob = riseKnob;
+		state.lastFallKnob = fallKnob;
+		state.lastCurveKnob = curveKnob;
+
+		if (knobChanged) {
+			state.interactiveHold = PREVIEW_INTERACTIVE_HOLD;
+		}
+		if (state.interactiveHold > 0.f) {
+			state.interactiveHold = std::max(0.f, state.interactiveHold - dt);
+		}
+		state.timer += dt;
+
+		float interval = (state.interactiveHold > 0.f) ? PREVIEW_INTERACTIVE_INTERVAL : PREVIEW_CV_INTERVAL;
+		bool changed = !state.sentOnce || previewChangedMeaningfully(
+			riseTime, state.lastRiseSent,
+			fallTime, state.lastFallSent,
+			curveSigned, state.lastCurveSent
+		);
+		if (changed && state.timer >= interval) {
+			publishPreviewState(shared, riseTime, fallTime, curveSigned);
+			state.lastRiseSent = riseTime;
+			state.lastFallSent = fallTime;
+			state.lastCurveSent = curveSigned;
+			state.sentOnce = true;
+			state.timer = 0.f;
+		}
+	}
+
 	float exp2ForTiming(float x) const {
 		return useExp2Taylor5 ? rack::dsp::exp2_taylor5(x) : std::exp2(x);
 	}
@@ -329,6 +411,14 @@ struct IntegralFlux : Module {
 		useExp2Taylor5 = enabled;
 		ch1.stageTimeValid = false;
 		ch4.stageTimeValid = false;
+	}
+
+	void getPreviewState(int channel, float& riseTime, float& fallTime, float& curveSigned, uint32_t& version) const {
+		const PreviewSharedState& shared = (channel == 4) ? previewCh4 : previewCh1;
+		riseTime = shared.riseTime.load(std::memory_order_relaxed);
+		fallTime = shared.fallTime.load(std::memory_order_relaxed);
+		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+		version = shared.version.load(std::memory_order_relaxed);
 	}
 
 	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
@@ -376,7 +466,14 @@ struct IntegralFlux : Module {
 		ch.phasePos = 0.f;
 	}
 
-	OuterChannelResult processOuterChannel(const ProcessArgs& args, OuterChannelState& ch, const OuterChannelConfig& cfg, bool timingTick) {
+	OuterChannelResult processOuterChannel(
+		const ProcessArgs& args,
+		OuterChannelState& ch,
+		const OuterChannelConfig& cfg,
+		PreviewSharedState& previewShared,
+		PreviewUpdateState& previewUpdateState,
+		bool timingTick
+	) {
 		float dt = args.sampleTime;
 
 		if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
@@ -453,6 +550,17 @@ struct IntegralFlux : Module {
 		float riseTime = ch.activeRiseTime;
 		float fallTime = ch.activeFallTime;
 		float shapeSigned = shapeSignedFromKnob(shape);
+		updatePreviewChannel(
+			previewShared,
+			previewUpdateState,
+			riseKnob,
+			fallKnob,
+			shape,
+			riseTime,
+			fallTime,
+			shapeSigned,
+			dt
+		);
 		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
 			ch.cachedShapeSigned = shapeSigned;
 			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
@@ -705,8 +813,8 @@ struct IntegralFlux : Module {
 		}
 		OuterChannelResult ch1Result;
 		OuterChannelResult ch4Result;
-		ch1Result = processOuterChannel(args, ch1, ch1Cfg, timingTick);
-		ch4Result = processOuterChannel(args, ch4, ch4Cfg, timingTick);
+		ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick);
+		ch4Result = processOuterChannel(args, ch4, ch4Cfg, previewCh4, previewUpdateCh4, timingTick);
 		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
 		float ch4OutRendered = ch4.out + (bandlimitedSignalOutputs ? ch4.signalBlep.process() : 0.f);
 		float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
@@ -825,6 +933,135 @@ struct BananutBlack : app::SvgPort {
 	}
 };
 
+struct WavePreviewWidget : Widget {
+	static constexpr int POINT_COUNT = 96;
+	IntegralFlux* module = nullptr;
+	int channel = 1;
+	std::array<Vec, POINT_COUNT> points {};
+	uint32_t lastVersion = 0;
+	bool pointsValid = false;
+
+	WavePreviewWidget(IntegralFlux* module, int channel) {
+		this->module = module;
+		this->channel = channel;
+	}
+
+	static float curveWarp(float t, float curveSigned) {
+		t = clamp(t, 0.f, 1.f);
+		float u = clamp(std::fabs(curveSigned), 0.f, 1.f);
+		if (u < 1e-6f) {
+			return t;
+		}
+		float power = 1.f + 4.f * u;
+		if (curveSigned > 0.f) {
+			return std::pow(t, power);
+		}
+		return 1.f - std::pow(1.f - t, power);
+	}
+
+	static float segmentValue(float t, float curveSigned, bool rising) {
+		t = clamp(t, 0.f, 1.f);
+		if (t <= 0.f) {
+			return rising ? 0.f : 1.f;
+		}
+		if (t >= 1.f) {
+			return rising ? 1.f : 0.f;
+		}
+		float scale = IntegralFlux::slopeWarpScale(curveSigned);
+		int steps = std::max(1, int(std::ceil(t * 64.f)));
+		float dp = t / float(steps);
+		float x = rising ? 0.f : 1.f;
+		for (int i = 0; i < steps; ++i) {
+			float d = dp * IntegralFlux::slopeWarp(x, curveSigned) * scale;
+			x += rising ? d : -d;
+			x = clamp(x, 0.f, 1.f);
+		}
+		return x;
+	}
+
+	void rebuildPoints(float riseTime, float fallTime, float curveSigned) {
+		float w = std::max(box.size.x, 1.f);
+		const float periodAt20Hz = 1.f / 20.f;
+		float rawRisePx = w * (std::max(riseTime, 1e-6f) / periodAt20Hz);
+		float rawFallPx = w * (std::max(fallTime, 1e-6f) / periodAt20Hz);
+		float minVisibleSidePx = std::max(3.f, w * 0.04f);
+		float risePx = clamp(rawRisePx, minVisibleSidePx, w * 8.f);
+		float fallPx = clamp(rawFallPx, minVisibleSidePx, w * 8.f);
+		float centerX = 0.5f * w;
+		float riseStartX = centerX - risePx;
+		float fallEndX = centerX + fallPx;
+
+		for (int i = 0; i < POINT_COUNT; ++i) {
+			float x = (float(i) / float(POINT_COUNT - 1)) * w;
+			float y = -1.f;
+			if (x <= centerX) {
+				float t = (x - riseStartX) / std::max(risePx, 1e-6f);
+				if (t > 0.f) {
+					float v = segmentValue(t, curveSigned, true);
+					y = -1.f + 2.f * v;
+				}
+			}
+			else {
+				float t = (x - centerX) / std::max(fallPx, 1e-6f);
+				if (x > fallEndX) {
+					t = 1.f;
+				}
+				float v = segmentValue(t, curveSigned, false);
+				y = -1.f + 2.f * v;
+			}
+			float py = (0.5f - 0.5f * y) * box.size.y;
+			points[i] = Vec(x, py);
+		}
+		pointsValid = true;
+	}
+
+	void step() override {
+		Widget::step();
+		if (!module) {
+			if (!pointsValid) {
+				rebuildPoints(0.01f, 0.01f, 0.f);
+			}
+			return;
+		}
+		float riseTime = 0.01f;
+		float fallTime = 0.01f;
+		float curveSigned = 0.f;
+		uint32_t version = 0;
+		module->getPreviewState(channel, riseTime, fallTime, curveSigned, version);
+		if (!pointsValid || version != lastVersion) {
+			rebuildPoints(riseTime, fallTime, curveSigned);
+			lastVersion = version;
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+
+		float midY = 0.5f * box.size.y;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 0.f, midY);
+		nvgLineTo(args.vg, box.size.x, midY);
+		nvgStrokeColor(args.vg, nvgRGBA(180, 180, 180, 90));
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStroke(args.vg);
+
+		if (pointsValid) {
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, points[0].x, points[0].y);
+			for (int i = 1; i < POINT_COUNT; ++i) {
+				nvgLineTo(args.vg, points[i].x, points[i].y);
+			}
+			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 180));
+			nvgStrokeWidth(args.vg, 1.4f);
+			nvgStroke(args.vg);
+		}
+
+		nvgResetScissor(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
@@ -850,6 +1087,18 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(59.385, 53.079)), module, IntegralFlux::FALL_4_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 57.178)), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
+		{
+			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
+			ch1Preview->box.pos = mm2px(Vec(13.975f - 12.f, 57.178f + 20.f));
+			ch1Preview->box.size = mm2px(Vec(24.f, 10.f));
+			addChild(ch1Preview);
+		}
+		{
+			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
+			ch4Preview->box.pos = mm2px(Vec(91.716f - 12.f, 57.178f + 20.f));
+			ch4Preview->box.size = mm2px(Vec(24.f, 10.f));
+			addChild(ch4Preview);
+		}
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
