@@ -141,6 +141,7 @@ struct IntegralFlux : Module {
 	MixNonIdealCal mixCal;
 	bool bandlimitedGateOutputs = false;
 	bool bandlimitedSignalOutputs = true;
+	bool useExp2Taylor5 = true;
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	bool timingInterpolate = true;
@@ -317,15 +318,28 @@ struct IntegralFlux : Module {
 		}
 	}
 
+	float exp2ForTiming(float x) const {
+		return useExp2Taylor5 ? rack::dsp::exp2_taylor5(x) : std::exp2(x);
+	}
+
+	void setUseExp2Taylor5(bool enabled) {
+		if (useExp2Taylor5 == enabled) {
+			return;
+		}
+		useExp2Taylor5 = enabled;
+		ch1.stageTimeValid = false;
+		ch4.stageTimeValid = false;
+	}
+
 	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
 		shape = clamp(shape, 0.f, 1.f);
 		if (shape < LINEAR_SHAPE) {
 			float t = shape / LINEAR_SHAPE;
-			return std::exp2((1.f - t) * logScaleLog2);
+			return exp2ForTiming((1.f - t) * logScaleLog2);
 		}
 		if (shape > LINEAR_SHAPE) {
 			float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
-			return std::exp2(t * expScaleLog2);
+			return exp2ForTiming(t * expScaleLog2);
 		}
 		return 1.f;
 	}
@@ -344,7 +358,7 @@ struct IntegralFlux : Module {
 		// Use a curved knob law so noon timing tracks measured hardware behavior.
 		// With this exponent, knob=0.5 is ~23x slower than knob=0 (not ~1400x).
 		float knobShaped = shapeKnobTimeCurve(knob);
-		float t = minTime * std::exp2(knobShaped * LOG2_TIME_RATIO);
+		float t = minTime * exp2ForTiming(knobShaped * LOG2_TIME_RATIO);
 
 		// Rise/Fall CV is linear over +/-8V.
 		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
@@ -393,7 +407,7 @@ struct IntegralFlux : Module {
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
-				float bothScale = std::exp2(-clamp(bothCv, -8.f, 8.f) * 0.5f);
+				float bothScale = exp2ForTiming(-clamp(bothCv, -8.f, 8.f) * 0.5f);
 				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
@@ -589,6 +603,7 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "mixNonIdealEnabled", json_boolean(mixCal.enabled));
 		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
+		json_object_set_new(rootJ, "useExp2Taylor5", json_boolean(useExp2Taylor5));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
 		return rootJ;
@@ -618,6 +633,11 @@ struct IntegralFlux : Module {
 		json_t* blepSignalJ = json_object_get(rootJ, "bandlimitedSignalOutputs");
 		if (blepSignalJ) {
 			bandlimitedSignalOutputs = json_boolean_value(blepSignalJ);
+		}
+
+		json_t* exp2ModeJ = json_object_get(rootJ, "useExp2Taylor5");
+		if (exp2ModeJ) {
+			setUseExp2Taylor5(json_boolean_value(exp2ModeJ));
 		}
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
@@ -884,6 +904,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			menu->addChild(createMenuLabel("Performance"));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1/CH4 Signal Outputs", "", &maths->bandlimitedSignalOutputs));
+			menu->addChild(createCheckMenuItem("Use exp2_taylor5", "",
+				[=]() { return maths->useExp2Taylor5; },
+				[=]() { maths->setUseExp2Taylor5(!maths->useExp2Taylor5); }
+			));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &maths->timingInterpolate));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
