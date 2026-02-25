@@ -1,7 +1,6 @@
 #include "plugin.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
-#include <simd/functions.hpp>
 
 
 struct IntegralFlux : Module {
@@ -73,6 +72,7 @@ struct IntegralFlux : Module {
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
 		dsp::MinBlepGenerator<16, 16> gateBlep;
+		dsp::MinBlepGenerator<16, 16> signalBlep;
 
 		OuterPhase phase = OUTER_IDLE;
 		float phasePos = 0.f;
@@ -117,10 +117,6 @@ struct IntegralFlux : Module {
 	struct OuterChannelResult {
 		bool cycleOn = false;
 	};
-	struct OuterPairResult {
-		OuterChannelResult ch1;
-		OuterChannelResult ch4;
-	};
 
 	struct MixNonIdealCal {
 		bool enabled = true;
@@ -144,7 +140,7 @@ struct IntegralFlux : Module {
 	OuterChannelState ch4;
 	MixNonIdealCal mixCal;
 	bool bandlimitedGateOutputs = false;
-	bool useSimdOuterEngine = false;
+	bool bandlimitedSignalOutputs = true;
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	bool timingInterpolate = true;
@@ -222,19 +218,6 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
-	static simd::float_4 slopeWarpSimd(simd::float_4 x, simd::float_4 s) {
-		x = simd::clamp(x, 0.f, 1.f);
-		simd::float_4 u = simd::fabs(s);
-		simd::float_4 k = WARP_K_MAX * u;
-		simd::float_4 x2 = x * x;
-		simd::float_4 logWarp = 1.f / (1.f + k * x2);
-		simd::float_4 expWarp = 1.f + k * x2;
-		simd::float_4 signMask = s < 0.f;
-		simd::float_4 nearMask = u < 1e-6f;
-		simd::float_4 warped = simd::ifelse(signMask, logWarp, expWarp);
-		return simd::ifelse(nearMask, simd::float_4(1.f), warped);
-	}
-
 	float processUnifiedShapedSlew(
 		float out,
 		float in,
@@ -286,6 +269,15 @@ struct IntegralFlux : Module {
 
 	static void setGateStateImmediate(OuterChannelState& ch, bool newState) {
 		ch.gateState = newState;
+	}
+
+	static void insertSignalTransition(OuterChannelState& ch, float step, float fraction01) {
+		if (std::fabs(step) < 1e-9f) {
+			return;
+		}
+		float f = clamp(fraction01, 1e-6f, 1.f);
+		float p = f - 1.f;
+		ch.signalBlep.insertDiscontinuity(p, step);
 	}
 
 	void setTimingUpdateDiv(int div) {
@@ -486,7 +478,11 @@ struct IntegralFlux : Module {
 					float overshoot = std::max(ch.phasePos - 1.f, 0.f);
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = OUTER_FALL;
+					float prevOut = ch.out;
 					ch.out = OUTER_V_MAX;
+					if (bandlimitedSignalOutputs) {
+						insertSignalTransition(ch, ch.out - prevOut, f);
+					}
 					if (bandlimitedGateOutputs) {
 						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 					}
@@ -508,7 +504,11 @@ struct IntegralFlux : Module {
 					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
 					ch.phasePos = 0.f;
 					ch.phase = OUTER_IDLE;
+					float prevOut = ch.out;
 					ch.out = OUTER_V_MIN;
+					if (bandlimitedSignalOutputs) {
+						insertSignalTransition(ch, ch.out - prevOut, f);
+					}
 					if (bandlimitedGateOutputs) {
 						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 					}
@@ -537,295 +537,6 @@ struct IntegralFlux : Module {
 
 		OuterChannelResult result;
 		result.cycleOn = cycleOn;
-		return result;
-	}
-
-	OuterPairResult processOuterChannelsSimd(const ProcessArgs& args, const OuterChannelConfig& cfg1, const OuterChannelConfig& cfg4, bool timingTick) {
-		float dt = args.sampleTime;
-		float range = OUTER_V_MAX - OUTER_V_MIN;
-
-		struct OuterWork {
-			bool cycleOn = false;
-			bool signalPatched = false;
-			bool idleForSignalStep = false;
-			float riseTime = 0.01f;
-			float fallTime = 0.01f;
-			float shapeSigned = 0.f;
-			float scale = 1.f;
-			OuterPhase gateHighPhase = OUTER_IDLE;
-		};
-
-		auto prepChannel = [&](OuterChannelState& ch, const OuterChannelConfig& cfg) -> OuterWork {
-			OuterWork w;
-			w.gateHighPhase = cfg.gateHighPhase;
-
-			if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
-				ch.cycleLatched = !ch.cycleLatched;
-			}
-			bool cycleCvHigh = inputs[cfg.cycleCvInput].getVoltage() >= 2.5f;
-			w.cycleOn = ch.cycleLatched || cycleCvHigh;
-			bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
-
-			bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
-			if (trigRise && ch.phase != OUTER_RISE) {
-				triggerOuterFunction(ch);
-			}
-
-			float riseKnob = params[cfg.riseParam].getValue();
-			float fallKnob = params[cfg.fallParam].getValue();
-			float shape = params[cfg.shapeParam].getValue();
-			float riseCv = inputs[cfg.riseCvInput].getVoltage();
-			float fallCv = inputs[cfg.fallCvInput].getVoltage();
-			float bothCv = inputs[cfg.bothCvInput].getVoltage();
-			if (!ch.stageTimeValid || timingTick) {
-				bool stageTimeDirty = !ch.stageTimeValid
-					|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
-					|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
-					|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
-					|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
-					|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
-					|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
-				if (stageTimeDirty) {
-					float bothScale = std::exp2(-clamp(bothCv, -8.f, 8.f) * 0.5f);
-					float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
-					ch.cachedRiseTime = computeStageTime(riseKnob, riseCv, bothScale, shapeTimeScale);
-					ch.cachedFallTime = computeStageTime(fallKnob, fallCv, bothScale, shapeTimeScale);
-					ch.cachedRiseKnob = riseKnob;
-					ch.cachedFallKnob = fallKnob;
-					ch.cachedShape = shape;
-					ch.cachedRiseCv = riseCv;
-					ch.cachedFallCv = fallCv;
-					ch.cachedBothCv = bothCv;
-					if (!ch.stageTimeValid) {
-						ch.activeRiseTime = ch.cachedRiseTime;
-						ch.activeFallTime = ch.cachedFallTime;
-						ch.riseTimeStep = 0.f;
-						ch.fallTimeStep = 0.f;
-						ch.timeInterpSamplesLeft = 0;
-					}
-					else if (timingInterpolate && timingUpdateDiv > 1) {
-						ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
-						ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
-						ch.timeInterpSamplesLeft = timingUpdateDiv;
-					}
-					else {
-						ch.activeRiseTime = ch.cachedRiseTime;
-						ch.activeFallTime = ch.cachedFallTime;
-						ch.riseTimeStep = 0.f;
-						ch.fallTimeStep = 0.f;
-						ch.timeInterpSamplesLeft = 0;
-					}
-					ch.stageTimeValid = true;
-				}
-			}
-			updateActiveStageTimes(ch);
-			w.riseTime = ch.activeRiseTime;
-			w.fallTime = ch.activeFallTime;
-			w.shapeSigned = shapeSignedFromKnob(shape);
-			if (!ch.warpScaleValid || std::fabs(w.shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
-				ch.cachedShapeSigned = w.shapeSigned;
-				ch.cachedWarpScale = slopeWarpScale(w.shapeSigned);
-				ch.warpScaleValid = true;
-			}
-			w.scale = ch.cachedWarpScale;
-			w.signalPatched = inputs[cfg.signalInput].isConnected();
-
-			if (ch.phase == OUTER_IDLE && w.cycleOn) {
-				triggerOuterFunction(ch);
-			}
-			bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
-			if (gateIsHigh != gateWasHigh) {
-				if (bandlimitedGateOutputs) {
-					insertGateTransition(ch, gateIsHigh, 1e-6f);
-				}
-				else {
-					setGateStateImmediate(ch, gateIsHigh);
-				}
-			}
-			w.idleForSignalStep = (ch.phase == OUTER_IDLE);
-
-			return w;
-		};
-
-		OuterWork w1 = prepChannel(ch1, cfg1);
-		OuterWork w4 = prepChannel(ch4, cfg4);
-
-		bool rise1 = (ch1.phase == OUTER_RISE);
-		bool rise4 = (ch4.phase == OUTER_RISE);
-		if (rise1 || rise4) {
-			float x1 = clamp((ch1.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			float x4 = clamp((ch4.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			simd::float_4 xVec(x1, x4, 0.f, 0.f);
-			simd::float_4 sVec(w1.shapeSigned, w4.shapeSigned, 0.f, 0.f);
-			simd::float_4 scaleVec(w1.scale, w4.scale, 0.f, 0.f);
-			simd::float_4 dpVec(
-				rise1 ? clamp(dt / w1.riseTime, 0.f, 0.5f) : 0.f,
-				rise4 ? clamp(dt / w4.riseTime, 0.f, 0.5f) : 0.f,
-				0.f,
-				0.f
-			);
-			xVec += dpVec * slopeWarpSimd(xVec, sVec) * scaleVec;
-			xVec = simd::clamp(xVec, 0.f, 1.f);
-			float xs[4];
-			xVec.store(xs);
-
-			if (rise1) {
-				float dpPhase = dt / w1.riseTime;
-				ch1.phasePos += dpPhase;
-				float x = xs[0];
-				ch1.out = OUTER_V_MIN + x * range;
-				if (ch1.phasePos >= 1.f || x >= 1.f) {
-					float f = phaseCrossingFraction(ch1.phasePos, dpPhase);
-					float overshoot = std::max(ch1.phasePos - 1.f, 0.f);
-					ch1.phasePos = overshoot * (w1.riseTime / std::max(w1.fallTime, 1e-6f));
-					ch1.phase = OUTER_FALL;
-					ch1.out = OUTER_V_MAX;
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch1, ch1.phase == cfg1.gateHighPhase, f);
-					}
-					else {
-						setGateStateImmediate(ch1, ch1.phase == cfg1.gateHighPhase);
-					}
-				}
-			}
-			if (rise4) {
-				float dpPhase = dt / w4.riseTime;
-				ch4.phasePos += dpPhase;
-				float x = xs[1];
-				ch4.out = OUTER_V_MIN + x * range;
-				if (ch4.phasePos >= 1.f || x >= 1.f) {
-					float f = phaseCrossingFraction(ch4.phasePos, dpPhase);
-					float overshoot = std::max(ch4.phasePos - 1.f, 0.f);
-					ch4.phasePos = overshoot * (w4.riseTime / std::max(w4.fallTime, 1e-6f));
-					ch4.phase = OUTER_FALL;
-					ch4.out = OUTER_V_MAX;
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch4, ch4.phase == cfg4.gateHighPhase, f);
-					}
-					else {
-						setGateStateImmediate(ch4, ch4.phase == cfg4.gateHighPhase);
-					}
-				}
-			}
-		}
-
-		// Match scalar ordering: after the rise block, channels that just transitioned
-		// to FALL are eligible for FALL processing in the same sample.
-		bool fall1 = (ch1.phase == OUTER_FALL);
-		bool fall4 = (ch4.phase == OUTER_FALL);
-		if (fall1 || fall4) {
-			float x1 = clamp((ch1.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			float x4 = clamp((ch4.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			simd::float_4 xVec(x1, x4, 0.f, 0.f);
-			simd::float_4 sVec(w1.shapeSigned, w4.shapeSigned, 0.f, 0.f);
-			simd::float_4 scaleVec(w1.scale, w4.scale, 0.f, 0.f);
-			simd::float_4 dpVec(
-				fall1 ? clamp(dt / w1.fallTime, 0.f, 0.5f) : 0.f,
-				fall4 ? clamp(dt / w4.fallTime, 0.f, 0.5f) : 0.f,
-				0.f,
-				0.f
-			);
-			xVec -= dpVec * slopeWarpSimd(xVec, sVec) * scaleVec;
-			xVec = simd::clamp(xVec, 0.f, 1.f);
-			float xs[4];
-			xVec.store(xs);
-
-			if (fall1) {
-				float dpPhase = dt / w1.fallTime;
-				ch1.phasePos += dpPhase;
-				float x = xs[0];
-				ch1.out = OUTER_V_MIN + x * range;
-				if (ch1.phasePos >= 1.f || x <= 0.f) {
-					float f = phaseCrossingFraction(ch1.phasePos, dpPhase);
-					ch1.phasePos = 0.f;
-					ch1.phase = OUTER_IDLE;
-					ch1.out = OUTER_V_MIN;
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch1, ch1.phase == cfg1.gateHighPhase, f);
-					}
-					else {
-						setGateStateImmediate(ch1, ch1.phase == cfg1.gateHighPhase);
-					}
-				}
-			}
-			if (fall4) {
-				float dpPhase = dt / w4.fallTime;
-				ch4.phasePos += dpPhase;
-				float x = xs[1];
-				ch4.out = OUTER_V_MIN + x * range;
-				if (ch4.phasePos >= 1.f || x <= 0.f) {
-					float f = phaseCrossingFraction(ch4.phasePos, dpPhase);
-					ch4.phasePos = 0.f;
-					ch4.phase = OUTER_IDLE;
-					ch4.out = OUTER_V_MIN;
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch4, ch4.phase == cfg4.gateHighPhase, f);
-					}
-					else {
-						setGateStateImmediate(ch4, ch4.phase == cfg4.gateHighPhase);
-					}
-				}
-			}
-		}
-
-		bool slew1 = w1.idleForSignalStep && w1.signalPatched;
-		bool slew4 = w4.idleForSignalStep && w4.signalPatched;
-		if (slew1 || slew4) {
-			float in1 = slew1 ? inputs[cfg1.signalInput].getVoltage() : 0.f;
-			float in4 = slew4 ? inputs[cfg4.signalInput].getVoltage() : 0.f;
-			float out1 = ch1.out;
-			float out4 = ch4.out;
-			float delta1 = in1 - out1;
-			float delta4 = in4 - out4;
-			float stageTime1 = (delta1 > 0.f) ? w1.riseTime : w1.fallTime;
-			float stageTime4 = (delta4 > 0.f) ? w4.riseTime : w4.fallTime;
-			stageTime1 = std::max(stageTime1, 1e-6f);
-			stageTime4 = std::max(stageTime4, 1e-6f);
-			simd::float_4 outVec(out1, out4, 0.f, 0.f);
-			simd::float_4 inVec(in1, in4, 0.f, 0.f);
-			simd::float_4 stageTimeVec(stageTime1, stageTime4, 1.f, 1.f);
-			simd::float_4 shapeVec(w1.shapeSigned, w4.shapeSigned, 0.f, 0.f);
-			simd::float_4 scaleVec(w1.scale, w4.scale, 0.f, 0.f);
-			simd::float_4 deltaVec = inVec - outVec;
-			simd::float_4 xVec = simd::clamp(simd::fabs(outVec) / OUTER_V_MAX, 0.f, 1.f);
-			simd::float_4 dpVec = simd::clamp(dt / stageTimeVec, 0.f, 0.5f);
-			simd::float_4 stepVec = dpVec * slopeWarpSimd(xVec, shapeVec) * scaleVec * range;
-			simd::float_4 signMask = deltaVec > 0.f;
-			simd::float_4 nextOut = outVec + simd::ifelse(signMask, stepVec, -stepVec);
-
-			float outArr[4];
-			float nextArr[4];
-			float inArr[4];
-			outVec.store(outArr);
-			nextOut.store(nextArr);
-			inVec.store(inArr);
-
-			if (slew1 && delta1 != 0.f) {
-				float candidate = nextArr[0];
-				if ((inArr[0] - outArr[0]) * (inArr[0] - candidate) < 0.f) {
-					candidate = inArr[0];
-				}
-				ch1.out = candidate;
-			}
-			if (slew4 && delta4 != 0.f) {
-				float candidate = nextArr[1];
-				if ((inArr[1] - outArr[1]) * (inArr[1] - candidate) < 0.f) {
-					candidate = inArr[1];
-				}
-				ch4.out = candidate;
-			}
-		}
-
-		if (w1.idleForSignalStep && !w1.signalPatched) {
-			ch1.out = 0.f;
-		}
-		if (w4.idleForSignalStep && !w4.signalPatched) {
-			ch4.out = 0.f;
-		}
-
-		OuterPairResult result;
-		result.ch1.cycleOn = w1.cycleOn;
-		result.ch4.cycleOn = w4.cycleOn;
 		return result;
 	}
 
@@ -877,7 +588,7 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
 		json_object_set_new(rootJ, "mixNonIdealEnabled", json_boolean(mixCal.enabled));
 		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
-		json_object_set_new(rootJ, "useSimdOuterEngine", json_boolean(useSimdOuterEngine));
+		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
 		return rootJ;
@@ -904,9 +615,9 @@ struct IntegralFlux : Module {
 			bandlimitedGateOutputs = json_boolean_value(blepGatesJ);
 		}
 
-		json_t* simdOuterJ = json_object_get(rootJ, "useSimdOuterEngine");
-		if (simdOuterJ) {
-			useSimdOuterEngine = json_boolean_value(simdOuterJ);
+		json_t* blepSignalJ = json_object_get(rootJ, "bandlimitedSignalOutputs");
+		if (blepSignalJ) {
+			bandlimitedSignalOutputs = json_boolean_value(blepSignalJ);
 		}
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
@@ -974,21 +685,16 @@ struct IntegralFlux : Module {
 		}
 		OuterChannelResult ch1Result;
 		OuterChannelResult ch4Result;
-		if (useSimdOuterEngine) {
-			OuterPairResult pair = processOuterChannelsSimd(args, ch1Cfg, ch4Cfg, timingTick);
-			ch1Result = pair.ch1;
-			ch4Result = pair.ch4;
-		}
-		else {
-			ch1Result = processOuterChannel(args, ch1, ch1Cfg, timingTick);
-			ch4Result = processOuterChannel(args, ch4, ch4Cfg, timingTick);
-		}
-		float ch1Var = clamp(ch1.out * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
+		ch1Result = processOuterChannel(args, ch1, ch1Cfg, timingTick);
+		ch4Result = processOuterChannel(args, ch4, ch4Cfg, timingTick);
+		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
+		float ch4OutRendered = ch4.out + (bandlimitedSignalOutputs ? ch4.signalBlep.process() : 0.f);
+		float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 		float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
 		float ch2Var = clamp(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
 		float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
 		float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
-		float ch4Var = clamp(ch4.out * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
+		float ch4Var = clamp(ch4OutRendered * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
 		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
 		float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch4.gateBlep.process() : 0.f);
 		bool eorHigh = ch1.gateState;
@@ -1027,20 +733,20 @@ struct IntegralFlux : Module {
 		outputs[SUM_OUT_OUTPUT].setVoltage(sumOut);
 		outputs[INV_OUT_OUTPUT].setVoltage(invOut);
 
-		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1.out);
+		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1OutRendered);
 		outputs[OUT_1_OUTPUT].setVoltage(ch1Var);
 		outputs[OUT_2_OUTPUT].setVoltage(ch2Var);
 		outputs[OUT_3_OUTPUT].setVoltage(ch3Var);
 		outputs[OUT_4_OUTPUT].setVoltage(ch4Var);
-		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4.out);
+		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4OutRendered);
 
 		if (lightTick) {
 			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
 			lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
 			lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
 			lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
-			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1.out) / OUTER_V_MAX, 0.f, 1.f));
-			lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4.out) / OUTER_V_MAX, 0.f, 1.f));
+			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
+			lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4OutRendered) / OUTER_V_MAX, 0.f, 1.f));
 			lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
 			lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
 		}
@@ -1175,10 +881,9 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(createMenuLabel("Mix Modeling"));
 		if (maths) {
 			menu->addChild(createBoolPtrMenuItem("Analog Mix Non-Idealities", "", &maths->mixCal.enabled));
-			menu->addChild(createMenuLabel("Gate Outputs"));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createBoolPtrMenuItem("SIMD Outer Engine", "", &maths->useSimdOuterEngine));
+			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
+			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1/CH4 Signal Outputs", "", &maths->bandlimitedSignalOutputs));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &maths->timingInterpolate));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",

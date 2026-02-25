@@ -16,7 +16,7 @@
     {
       "slug": "IntegralFlux",
       "name": "Integral Flux",
-      "description": "Integral Flux",
+      "description": "Dual slope generator, variable curve slew, attenuverters, signal mixing, full audio-rate fidelity.",
       "tags": [
         "Function Generator",
         "Logic",
