@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
+#include <cstdio>
 #include <atomic>
 
 
@@ -179,6 +180,9 @@ struct IntegralFlux : Module {
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 	static constexpr float KNOB_CURVE_EXP = 2.2f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
+	static constexpr float OUTER_MIN_TIME = 0.00064935f;
+	static constexpr float OUTER_LOG_SHAPE_SCALE = 9.625f;
+	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.70f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
@@ -443,8 +447,10 @@ struct IntegralFlux : Module {
 		float bothScale,
 		float shapeTimeScale
 	) const {
-		// Baseline at knob minimum (linear shape) calibrated near ~666Hz cycle.
-		const float minTime = 0.00075075f;
+		// Shared CH1/CH4 calibration:
+		// - min dials at curve minimum ~80 Hz
+		// - min dials at curve maximum ~1.1 kHz
+		const float minTime = OUTER_MIN_TIME;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
 		const float absoluteMinTime = 0.0001f;
 		const float maxTime = 1500.f;
@@ -774,8 +780,8 @@ struct IntegralFlux : Module {
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
 			CH1_CYCLE_CV_INPUT,
-			std::log2(8.102198f),  // From doc/Measurements.md, CH1 shape min at rise/fall=0.
-			std::log2(0.732835f),  // From doc/Measurements.md, CH1 shape max at rise/fall=0.
+			std::log2(OUTER_LOG_SHAPE_SCALE),  // Shared CH1/CH4 low-curve timing scale.
+			std::log2(OUTER_EXP_SHAPE_SCALE),  // Shared CH1/CH4 high-curve timing scale.
 			OUTER_FALL
 		};
 		static const OuterChannelConfig ch4Cfg {
@@ -789,8 +795,8 @@ struct IntegralFlux : Module {
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
 			CH4_CYCLE_CV_INPUT,
-			std::log2(7.672819f),  // From doc/Measurements.md, CH4 shape min at rise/fall=0.
-			std::log2(0.690657f),  // From doc/Measurements.md, CH4 shape max at rise/fall=0.
+			std::log2(OUTER_LOG_SHAPE_SCALE),  // Shared CH1/CH4 low-curve timing scale.
+			std::log2(OUTER_EXP_SHAPE_SCALE),  // Shared CH1/CH4 high-curve timing scale.
 			OUTER_RISE
 		};
 
@@ -941,10 +947,12 @@ struct WavePreviewWidget : Widget {
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
+	static constexpr float LABEL_FONT_SIZE = 8.5f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
+	float lastFreqHz = 100.f;
 
 	WavePreviewWidget(int channel) {
 		this->channel = channel;
@@ -1033,6 +1041,7 @@ struct WavePreviewWidget : Widget {
 		bool interactiveRecent = false;
 		uint32_t version = 0;
 		modulePtr->getPreviewState(channel, riseTime, fallTime, curveSigned, interactiveRecent, version);
+		lastFreqHz = 1.f / std::max(riseTime + fallTime, 1e-6f);
 		if (!pointsValid || version != lastVersion) {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
@@ -1058,6 +1067,19 @@ struct WavePreviewWidget : Widget {
 
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
+
+		char freqText[32];
+		if (lastFreqHz >= 1000.f) {
+			std::snprintf(freqText, sizeof(freqText), "%4.2fkHz", lastFreqHz / 1000.f);
+		}
+		else {
+			std::snprintf(freqText, sizeof(freqText), "%5.1fHz", lastFreqHz);
+		}
+		nvgFontSize(args.vg, LABEL_FONT_SIZE);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(230, 230, 220, 220));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
 };
 
