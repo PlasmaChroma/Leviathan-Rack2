@@ -179,9 +179,13 @@ struct IntegralFlux : Module {
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 	static constexpr float KNOB_CURVE_EXP = 2.2f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
-	static constexpr float OUTER_MIN_TIME = 0.00064935f;
-	static constexpr float OUTER_LOG_SHAPE_SCALE = 9.625f;
-	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.70f;
+	// Timing calibration targets at rise=0, fall=0:
+	// - Curve at linear point (0.33) ~= 500 Hz
+	// - Curve full LOG ~= 80 Hz
+	// - Curve full EXP ~= 1.0 kHz
+	static constexpr float OUTER_MIN_TIME = 0.001f;
+	static constexpr float OUTER_LOG_SHAPE_SCALE = 6.25f;
+	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
