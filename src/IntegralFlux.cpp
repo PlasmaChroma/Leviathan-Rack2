@@ -6,6 +6,7 @@
 
 
 struct IntegralFlux : Module {
+	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
 		ATTENUATE_1_PARAM,
 		CYCLE_1_PARAM,
@@ -65,25 +66,32 @@ struct IntegralFlux : Module {
 	};
 
 	enum OuterPhase {
+		// IDLE: no active function cycle unless cycle mode is engaged.
+		// RISE/FALL: function-generator mode integrates toward 10V then 0V.
 		OUTER_IDLE,
 		OUTER_RISE,
 		OUTER_FALL
 	};
 
 	struct OuterChannelState {
+		// Edge detectors for trigger input and momentary cycle button.
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
+		// Optional anti-alias compensation for hard output steps.
 		dsp::MinBlepGenerator<16, 16> gateBlep;
 		dsp::MinBlepGenerator<16, 16> signalBlep;
 
 		OuterPhase phase = OUTER_IDLE;
+		// phasePos is a normalized [0..1+] phase accumulator for the active segment.
 		float phasePos = 0.f;
 		float out = 0.f;
 		bool cycleLatched = false;
 		bool gateState = false;
+		// Cached warp compensation for the current shape setting.
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
 		float cachedWarpScale = 1.f;
+		// Stage-time cache avoids recomputing expensive mapping every sample when unchanged.
 		bool stageTimeValid = false;
 		float cachedRiseKnob = 0.f;
 		float cachedFallKnob = 0.f;
@@ -93,6 +101,7 @@ struct IntegralFlux : Module {
 		float cachedBothCv = 0.f;
 		float cachedRiseTime = 0.01f;
 		float cachedFallTime = 0.01f;
+		// Active times may interpolate toward cached targets at reduced timing update rates.
 		float activeRiseTime = 0.01f;
 		float activeFallTime = 0.01f;
 		float riseTimeStep = 0.f;
@@ -101,6 +110,7 @@ struct IntegralFlux : Module {
 	};
 
 	struct OuterChannelConfig {
+		// Per-channel wiring map so CH1/CH4 share one DSP implementation.
 		int cycleParam;
 		int trigInput;
 		int signalInput;
@@ -124,10 +134,12 @@ struct IntegralFlux : Module {
 		bool enabled = true;
 
 		// SUM
+		// Symmetric soft saturation models analog summing headroom.
 		float sumSatV = 10.f;
 		float sumDrive = 1.15f;
 
 		// OR
+		// Positive-only saturation models diode OR behavior at high levels.
 		float orSatV = 10.f;
 		float orDrive = 1.05f;
 		float orVDrop = 0.f;  // Phase 1 keeps threshold behavior disabled.
@@ -141,6 +153,8 @@ struct IntegralFlux : Module {
 	OuterChannelState ch1;
 	OuterChannelState ch4;
 	struct PreviewSharedState {
+		// Lock-free handoff from engine thread -> UI thread.
+		// Atomics keep preview independent from DSP timing.
 		std::atomic<float> riseTime {0.01f};
 		std::atomic<float> fallTime {0.01f};
 		std::atomic<float> curveSigned {0.f};
@@ -168,6 +182,7 @@ struct IntegralFlux : Module {
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	bool timingInterpolate = true;
+	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
@@ -230,6 +245,8 @@ struct IntegralFlux : Module {
 	}
 
 	static float slopeWarp(float x, float s) {
+		// Differential warp used by both function-generator and slew modes.
+		// We shape local slope, then normalize total travel time with slopeWarpScale().
 		x = clamp(x, 0.f, 1.f);
 		float u = std::fabs(s);
 		if (u < 1e-6f) {
@@ -246,6 +263,8 @@ struct IntegralFlux : Module {
 	}
 
 	static float slopeWarpScale(float s) {
+		// Numerically estimate scale so different curve settings keep similar segment duration.
+		// Integrates reciprocal slope over [0..1] with a small fixed sample count.
 		if (std::fabs(s) < 1e-6f) {
 			return 1.f;
 		}
@@ -266,6 +285,8 @@ struct IntegralFlux : Module {
 		float warpScale,
 		float dt
 	) {
+		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
+		// This reuses the same curve family used by free-running function generation.
 		float delta = in - out;
 		if (delta == 0.f) {
 			return out;
@@ -289,6 +310,8 @@ struct IntegralFlux : Module {
 	}
 
 	static float phaseCrossingFraction(float phasePos, float dp) {
+		// Returns the within-sample crossing point for BLEP insertion.
+		// 1.0 means transition near end-of-sample, 0.0 near beginning.
 		if (dp <= 1e-9f) {
 			return 1.f;
 		}
@@ -300,6 +323,7 @@ struct IntegralFlux : Module {
 			return;
 		}
 		float f = clamp(fraction01, 1e-6f, 1.f);
+		// Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
 		float p = f - 1.f;
 		float step = newState ? 10.f : -10.f;
 		ch.gateBlep.insertDiscontinuity(p, step);
@@ -320,6 +344,7 @@ struct IntegralFlux : Module {
 	}
 
 	void setTimingUpdateDiv(int div) {
+		// Changing update rate invalidates cached timing so channels resync immediately.
 		timingUpdateDiv = std::max(1, div);
 		timingUpdateCounter = 0;
 		ch1.stageTimeValid = false;
@@ -327,6 +352,7 @@ struct IntegralFlux : Module {
 	}
 
 	void initKnobCurveLut() {
+		// Precompute knob taper to trade tiny memory for lower per-sample CPU.
 		for (int i = 0; i < KNOB_CURVE_LUT_SIZE; ++i) {
 			float x = float(i) / float(KNOB_CURVE_LUT_SIZE - 1);
 			knobCurveLut[i] = std::pow(x, KNOB_CURVE_EXP);
@@ -334,6 +360,7 @@ struct IntegralFlux : Module {
 	}
 
 	float shapeKnobTimeCurve(float knob) const {
+		// Linear interpolation in LUT avoids powf() in the hot path.
 		knob = clamp(knob, 0.f, 1.f);
 		float idx = knob * float(KNOB_CURVE_LUT_SIZE - 1);
 		int i0 = int(idx);
@@ -345,6 +372,7 @@ struct IntegralFlux : Module {
 	}
 
 	void updateActiveStageTimes(OuterChannelState& ch) {
+		// Optional de-zipper when timing is updated at control rate (/4, /8, ...).
 		if (ch.timeInterpSamplesLeft > 0) {
 			ch.activeRiseTime += ch.riseTimeStep;
 			ch.activeFallTime += ch.fallTimeStep;
@@ -357,6 +385,7 @@ struct IntegralFlux : Module {
 	}
 
 	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
+		// Batched atomic publish: UI only rebuilds when version increments.
 		shared.riseTime.store(riseTime, std::memory_order_relaxed);
 		shared.fallTime.store(fallTime, std::memory_order_relaxed);
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
@@ -383,6 +412,7 @@ struct IntegralFlux : Module {
 		float curveSigned,
 		float dt
 	) {
+		// Preview refresh runs slower than audio and only pushes updates when meaningful.
 		bool knobChanged = std::fabs(riseKnob - state.lastRiseKnob) > PARAM_CACHE_EPS
 			|| std::fabs(fallKnob - state.lastFallKnob) > PARAM_CACHE_EPS
 			|| std::fabs(curveKnob - state.lastCurveKnob) > PARAM_CACHE_EPS;
@@ -424,6 +454,8 @@ struct IntegralFlux : Module {
 	}
 
 	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
+		// Shape knob (log/lin/exp) contributes a multiplicative time factor.
+		// We interpolate in log2 domain so scaling stays perceptually smooth.
 		shape = clamp(shape, 0.f, 1.f);
 		if (shape < LINEAR_SHAPE) {
 			float t = shape / LINEAR_SHAPE;
@@ -444,7 +476,7 @@ struct IntegralFlux : Module {
 	) const {
 		// Shared CH1/CH4 calibration:
 		// - min dials at curve minimum ~80 Hz
-		// - min dials at curve maximum ~1.1 kHz
+		// - min dials at curve maximum ~1.0 kHz
 		const float minTime = OUTER_MIN_TIME;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
 		const float absoluteMinTime = 0.0001f;
@@ -452,6 +484,7 @@ struct IntegralFlux : Module {
 		// Use a curved knob law so noon timing tracks measured hardware behavior.
 		// With this exponent, knob=0.5 is ~23x slower than knob=0 (not ~1400x).
 		float knobShaped = shapeKnobTimeCurve(knob);
+		// Knob controls a wide exponential span in seconds.
 		float t = minTime * rack::dsp::exp2_taylor5(knobShaped * LOG2_TIME_RATIO);
 
 		// Rise/Fall CV applies in log-time domain:
@@ -459,6 +492,7 @@ struct IntegralFlux : Module {
 		float stageOct = clamp(clamp(stageCv, -CV_CLAMP_V, CV_CLAMP_V) * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
+		// BOTH and curve-shape scaling are already multiplicative factors.
 		t *= bothScale;
 		t *= shapeTimeScale;
 
@@ -466,6 +500,7 @@ struct IntegralFlux : Module {
 	}
 
 	void triggerOuterFunction(OuterChannelState& ch) {
+		// Trigger always starts a fresh rise phase.
 		ch.phase = OUTER_RISE;
 		ch.phasePos = 0.f;
 	}
@@ -478,6 +513,9 @@ struct IntegralFlux : Module {
 		PreviewUpdateState& previewUpdateState,
 		bool timingTick
 	) {
+		// This routine handles both behaviors of an outer channel:
+		// 1) function generator when cycling/triggered
+		// 2) slew limiter when a signal is patched and phase is idle
 		float dt = args.sampleTime;
 
 		if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
@@ -500,6 +538,7 @@ struct IntegralFlux : Module {
 		float fallCv = inputs[cfg.fallCvInput].getVoltage();
 		float bothCv = inputs[cfg.bothCvInput].getVoltage();
 		if (!ch.stageTimeValid || timingTick) {
+			// Recompute times only when a relevant source changed.
 			bool stageTimeDirty = !ch.stageTimeValid
 				|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
 				|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
@@ -532,6 +571,7 @@ struct IntegralFlux : Module {
 				ch.cachedFallCv = fallCv;
 				ch.cachedBothCv = bothCv;
 				if (!ch.stageTimeValid) {
+					// Cold start: avoid interpolation artifacts.
 					ch.activeRiseTime = ch.cachedRiseTime;
 					ch.activeFallTime = ch.cachedFallTime;
 					ch.riseTimeStep = 0.f;
@@ -539,6 +579,7 @@ struct IntegralFlux : Module {
 					ch.timeInterpSamplesLeft = 0;
 				}
 				else if (timingInterpolate && timingUpdateDiv > 1) {
+					// Interpolate timing across N samples to avoid sample-and-hold zipper tone.
 					ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
 					ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
 					ch.timeInterpSamplesLeft = timingUpdateDiv;
@@ -569,6 +610,7 @@ struct IntegralFlux : Module {
 			dt
 		);
 		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
+			// Curve normalization changes only when shape changes.
 			ch.cachedShapeSigned = shapeSigned;
 			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
 			ch.warpScaleValid = true;
@@ -577,6 +619,7 @@ struct IntegralFlux : Module {
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		if (ch.phase == OUTER_IDLE && cycleOn) {
+			// Cycle retriggers as soon as the channel reaches idle.
 			triggerOuterFunction(ch);
 		}
 		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
@@ -591,6 +634,7 @@ struct IntegralFlux : Module {
 		}
 
 		if (ch.phase != OUTER_IDLE) {
+			// Function-generator integration path.
 			float s = shapeSigned;
 			float range = OUTER_V_MAX - OUTER_V_MIN;
 
@@ -603,6 +647,7 @@ struct IntegralFlux : Module {
 				x = clamp(x, 0.f, 1.f);
 				ch.out = OUTER_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x >= 1.f) {
+					// Preserve fractional overshoot so rise->fall transition remains sample-rate robust.
 					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
 					float overshoot = std::max(ch.phasePos - 1.f, 0.f);
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
@@ -761,6 +806,7 @@ struct IntegralFlux : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		// Static config structs remove repeated branching and keep CH1/CH4 path unified.
 		static const OuterChannelConfig ch1Cfg {
 			CYCLE_1_PARAM,
 			INPUT_1_TRIG_INPUT,
@@ -794,6 +840,7 @@ struct IntegralFlux : Module {
 
 		bool timingTick = true;
 		if (timingUpdateDiv > 1) {
+			// Control-rate timing update option reduces CPU when heavy CV modulation is present.
 			timingUpdateCounter++;
 			if (timingUpdateCounter >= timingUpdateDiv) {
 				timingUpdateCounter = 0;
@@ -818,6 +865,7 @@ struct IntegralFlux : Module {
 		ch4Result = processOuterChannel(args, ch4, ch4Cfg, previewCh4, previewUpdateCh4, timingTick);
 		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
 		float ch4OutRendered = ch4.out + (bandlimitedSignalOutputs ? ch4.signalBlep.process() : 0.f);
+		// Variable outputs are attenuverters; unity outputs bypass this scaling.
 		float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 		float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
 		float ch2Var = clamp(ch2In * attenuverterGain(params[ATTENUATE_2_PARAM].getValue()), -10.f, 10.f);
@@ -835,6 +883,8 @@ struct IntegralFlux : Module {
 			|| outputs[SUM_OUT_OUTPUT].isConnected()
 			|| outputs[INV_OUT_OUTPUT].isConnected();
 		if (mixOutputsConnected || lightTick) {
+			// Maths-style normalization:
+			// once a variable output jack is patched, that channel is removed from SUM/OR/INV bus.
 			float busV1 = outputs[OUT_1_OUTPUT].isConnected() ? 0.f : ch1Var;
 			float busV2 = outputs[OUT_2_OUTPUT].isConnected() ? 0.f : ch2Var;
 			float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
@@ -842,6 +892,7 @@ struct IntegralFlux : Module {
 			float sumRaw = busV1 + busV2 + busV3 + busV4;
 			float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1 - mixCal.orVDrop, busV2 - mixCal.orVDrop), std::fmax(busV3 - mixCal.orVDrop, busV4 - mixCal.orVDrop)));
 			if (mixCal.enabled) {
+				// Non-ideal mode: soft saturation and diode-ish OR response.
 				sumOut = softSatSymFast(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
 				invOut = -sumOut;
 				if (mixCal.invUseExtraSat) {
@@ -850,6 +901,7 @@ struct IntegralFlux : Module {
 				orOut = softSatPosFast(orRaw, mixCal.orSatV, mixCal.orDrive);
 			}
 			else {
+				// Ideal digital fallback: hard clamps only.
 				sumOut = clamp(sumRaw, -10.f, 10.f);
 				invOut = clamp(-sumOut, -10.f, 10.f);
 				orOut = clamp(orRaw, 0.f, 10.f);
@@ -870,6 +922,7 @@ struct IntegralFlux : Module {
 		outputs[CH_4_UNITY_OUTPUT].setVoltage(ch4OutRendered);
 
 		if (lightTick) {
+			// Light refresh is intentionally decoupled from audio rate.
 			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
 			lights[CYCLE_4_LED_LIGHT].setBrightness(ch4Result.cycleOn ? 1.f : 0.f);
 			lights[EOR_CH_1_LIGHT].setBrightness(eorHigh ? 1.f : 0.f);
@@ -886,6 +939,7 @@ struct MyImageWidget : Widget {
 	int imageHandle = -1;
 
     void draw(const DrawArgs& args) override {
+		// Lazy-load panel image on first draw to avoid startup overhead.
         if (imageHandle < 0) {
             std::string path = asset::plugin(pluginInstance, "res/maths2.jpg");
             imageHandle = nvgCreateImage(args.vg, path.c_str(), 0);
@@ -908,6 +962,7 @@ struct IMBigPushButton : CKD6 {
 		setSizeRatio(0.9f);		
 	}
 	void setSizeRatio(float ratio) {
+		// Scale only the SVG child so hit area follows the visible button.
 		sw->box.size = sw->box.size.mult(ratio);
 		fb->removeChild(sw);
 		tw = new TransformWidget();
@@ -951,6 +1006,8 @@ struct WavePreviewWidget : Widget {
 	}
 
 	static float segmentValue(float t, float curveSigned, bool rising) {
+		// Small fixed-step integrator mirrors the engine's slope warp behavior,
+		// keeping preview and audible curve family visually aligned.
 		t = clamp(t, 0.f, 1.f);
 		if (t <= 0.f) {
 			return rising ? 0.f : 1.f;
@@ -980,11 +1037,13 @@ struct WavePreviewWidget : Widget {
 		float bottom = std::max(top + 1.f, h - drawPad);
 		float drawW = right - left;
 		float drawH = bottom - top;
+		// The preview always shows exactly one full rise+fall cycle across widget width.
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
 		float riseRatio = riseTime / totalTime;
 		float peakX = left + riseRatio * drawW;
 		float riseWidth = std::max(peakX - left, 1e-4f);
 		float fallWidth = std::max(right - peakX, 1e-4f);
+		// Reserved hook if we later render interactive-state emphasis.
 		(void) interactiveRecent;
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
@@ -1033,6 +1092,7 @@ struct WavePreviewWidget : Widget {
 		bool interactiveRecent = false;
 		uint32_t version = 0;
 		modulePtr->getPreviewState(channel, riseTime, fallTime, curveSigned, interactiveRecent, version);
+		// Displayed frequency reflects the currently effective cycle period.
 		lastFreqHz = 1.f / std::max(riseTime + fallTime, 1e-6f);
 		if (!pointsValid || version != lastVersion) {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
@@ -1071,6 +1131,7 @@ struct WavePreviewWidget : Widget {
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFillColor(args.vg, nvgRGBA(230, 230, 220, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		// Keep label outside preview box to avoid occluding waveform.
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
 };
