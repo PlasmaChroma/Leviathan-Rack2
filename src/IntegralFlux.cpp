@@ -177,7 +177,8 @@ struct IntegralFlux : Module {
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
-	static constexpr float KNOB_CURVE_EXP = 2.2f;
+	// Rise/Fall knob taper tuned against hardware low-end behavior.
+	static constexpr float KNOB_CURVE_EXP = 1.5f;
 	static constexpr float LOG2_TIME_RATIO = 20.930132f;
 	// Timing calibration targets at rise=0, fall=0:
 	// - Curve at linear point (0.33) ~= 500 Hz
