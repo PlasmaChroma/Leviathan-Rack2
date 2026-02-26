@@ -187,6 +187,10 @@ struct IntegralFlux : Module {
 	static constexpr float OUTER_MIN_TIME = 0.001f;
 	static constexpr float OUTER_LOG_SHAPE_SCALE = 6.25f;
 	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.5f;
+	static constexpr float CV_CLAMP_V = 8.f;
+	static constexpr float CV_OCT_CLAMP = 12.f;
+	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
+	static constexpr float BOTH_CV_OCT_PER_V = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
@@ -450,10 +454,10 @@ struct IntegralFlux : Module {
 		float knobShaped = shapeKnobTimeCurve(knob);
 		float t = minTime * rack::dsp::exp2_taylor5(knobShaped * LOG2_TIME_RATIO);
 
-		// Rise/Fall CV is linear over +/-8V.
-		float linearScale = 1.f + clamp(stageCv, -8.f, 8.f) / 8.f;
-		linearScale = std::max(linearScale, 0.05f);
-		t *= linearScale;
+		// Rise/Fall CV applies in log-time domain:
+		// +V -> longer (slower), -V -> shorter (faster).
+		float stageOct = clamp(clamp(stageCv, -CV_CLAMP_V, CV_CLAMP_V) * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+		t *= rack::dsp::exp2_taylor5(stageOct);
 
 		t *= bothScale;
 		t *= shapeTimeScale;
@@ -504,7 +508,10 @@ struct IntegralFlux : Module {
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
-				float bothScale = rack::dsp::exp2_taylor5(-clamp(bothCv, -8.f, 8.f) * 0.5f);
+				// BOTH CV is inverse relative to Rise/Fall CV:
+				// +V -> shorter (faster), -V -> longer (slower).
+				float bothOct = clamp(-clamp(bothCv, -CV_CLAMP_V, CV_CLAMP_V) * BOTH_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+				float bothScale = rack::dsp::exp2_taylor5(bothOct);
 				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
