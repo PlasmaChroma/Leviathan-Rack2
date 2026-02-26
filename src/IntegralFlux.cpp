@@ -942,8 +942,6 @@ struct WavePreviewWidget : Widget {
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
-	float smoothedVisibleCycles = 2.f;
-	bool visibleInit = false;
 
 	WavePreviewWidget(int channel) {
 		this->channel = channel;
@@ -969,72 +967,27 @@ struct WavePreviewWidget : Widget {
 		return x;
 	}
 
-	static float cycleY(float u, float curveSigned) {
-		u = clamp(u, 0.f, 1.f);
-		if (u < 0.5f) {
-			float t = u * 2.f;
-			float v = segmentValue(t, curveSigned, true);
-			return -1.f + 2.f * v;
-		}
-		float t = (u - 0.5f) * 2.f;
-		float v = segmentValue(t, curveSigned, false);
-		return -1.f + 2.f * v;
-	}
-
-	static float targetVisibleCycles(float freqHz) {
-		const float FREQ_FLOOR = 20.f;
-		const float FREQ_CEIL = 1200.f;
-		const float MIN_CYCLES = 0.30f;
-		const float BASE_CYCLES = 2.0f;
-		const float MAX_CYCLES = 10.0f;
-		freqHz = std::max(freqHz, 1e-6f);
-		if (freqHz < FREQ_FLOOR) {
-			float norm = clamp(freqHz / FREQ_FLOOR, 0.f, 1.f);
-			return crossfade(MIN_CYCLES, BASE_CYCLES, std::pow(norm, 0.7f));
-		}
-		float norm = clamp(std::log(freqHz / FREQ_FLOOR) / std::log(FREQ_CEIL / FREQ_FLOOR), 0.f, 1.f);
-		return crossfade(BASE_CYCLES, MAX_CYCLES, std::pow(norm, 0.85f));
-	}
-
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
 		float h = std::max(box.size.y, 1.f);
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
-		float freqHz = 1.f / totalTime;
-		float targetCycles = targetVisibleCycles(freqHz);
-		float alpha = interactiveRecent ? 0.35f : (freqHz < 20.f ? 0.08f : 0.15f);
-		if (!visibleInit) {
-			smoothedVisibleCycles = targetCycles;
-			visibleInit = true;
-		}
-		else {
-			smoothedVisibleCycles += (targetCycles - smoothedVisibleCycles) * alpha;
-		}
-		smoothedVisibleCycles = clamp(smoothedVisibleCycles, 0.30f, 10.0f);
-		float periodPx = w / std::max(smoothedVisibleCycles, 1e-6f);
 		float riseRatio = clamp(riseTime / totalTime, 0.02f, 0.98f);
-		float fallRatio = 1.f - riseRatio;
-		float risePx = std::max(periodPx * riseRatio, 1e-4f);
-		float fallPx = std::max(periodPx * fallRatio, 1e-4f);
-		float centerX = 0.5f * w;
-		float fullPeriodPx = risePx + fallPx;
+		float peakX = riseRatio * w;
+		float riseWidth = std::max(peakX, 1e-4f);
+		float fallWidth = std::max(w - peakX, 1e-4f);
+		(void) interactiveRecent;
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
 			float x = xNorm * w;
-			float local = x - centerX;
-			float p = std::fmod(local + risePx, fullPeriodPx);
-			if (p < 0.f) {
-				p += fullPeriodPx;
-			}
 			float y = -1.f;
-			if (p < risePx) {
-				float t = p / risePx;
+			if (x <= peakX) {
+				float t = x / riseWidth;
 				float v = segmentValue(t, curveSigned, true);
 				y = -1.f + 2.f * v;
 			}
 			else {
-				float t = (p - risePx) / fallPx;
+				float t = (x - peakX) / fallWidth;
 				float v = segmentValue(t, curveSigned, false);
 				y = -1.f + 2.f * v;
 			}
@@ -1042,10 +995,10 @@ struct WavePreviewWidget : Widget {
 			points[i] = Vec(x, py);
 		}
 
-		int midIndex = POINT_COUNT / 2;
-		midIndex = std::max(0, std::min(POINT_COUNT - 1, midIndex));
-		float midX = (float(midIndex) / float(POINT_COUNT - 1)) * w;
-		points[midIndex] = Vec(midX, 0.f);
+		int peakIndex = int(std::round(riseRatio * float(POINT_COUNT - 1)));
+		peakIndex = std::max(0, std::min(POINT_COUNT - 1, peakIndex));
+		float peakPx = (float(peakIndex) / float(POINT_COUNT - 1)) * w;
+		points[peakIndex] = Vec(peakPx, 0.f);
 		pointsValid = true;
 	}
 
@@ -1130,14 +1083,16 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
-			ch1Preview->box.pos = mm2px(Vec(13.975f - 12.f, 57.178f + 15.f));
-			ch1Preview->box.size = mm2px(Vec(24.f, 10.f));
+			// From doc/preview_boxes.md (already includes 0.2 mm inset).
+			ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
+			ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
 			addChild(ch1Preview);
 		}
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(4);
-			ch4Preview->box.pos = mm2px(Vec(91.716f - 12.f, 57.178f + 15.f));
-			ch4Preview->box.size = mm2px(Vec(24.f, 10.f));
+			// From doc/preview_boxes.md (already includes 0.2 mm inset).
+			ch4Preview->box.pos = mm2px(Vec(77.52500000f, 68.96600100f));
+			ch4Preview->box.size = mm2px(Vec(20.78393300f, 11.24562000f));
 			addChild(ch4Preview);
 		}
 
