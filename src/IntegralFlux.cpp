@@ -1020,6 +1020,7 @@ struct BananutBlack : app::SvgPort {
 
 struct WavePreviewWidget : Widget {
 	static constexpr int POINT_COUNT = 320;
+	static constexpr int PREVIEW_LUT_SIZE = 1024;
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
@@ -1034,26 +1035,32 @@ struct WavePreviewWidget : Widget {
 		this->channel = channel;
 	}
 
-	static float segmentValue(float t, float curveSigned, bool rising) {
-		// Small fixed-step integrator mirrors the engine's slope warp behavior,
-		// keeping preview and audible curve family visually aligned.
-		t = clamp(t, 0.f, 1.f);
-		if (t <= 0.f) {
-			return rising ? 0.f : 1.f;
-		}
-		if (t >= 1.f) {
-			return rising ? 1.f : 0.f;
-		}
+	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
+		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
 		float scale = IntegralFlux::slopeWarpScale(curveSigned);
-		int steps = std::max(1, int(std::ceil(t * 128.f)));
-		float dp = t / float(steps);
+		float dp = 1.f / float(PREVIEW_LUT_SIZE - 1);
 		float x = rising ? 0.f : 1.f;
-		for (int i = 0; i < steps; ++i) {
-			float d = dp * IntegralFlux::slopeWarp(x, curveSigned) * scale;
-			x += rising ? d : -d;
+		lut[0] = x;
+		for (int i = 1; i < PREVIEW_LUT_SIZE; ++i) {
+			float k1 = IntegralFlux::slopeWarp(x, curveSigned) * scale;
+			float xMid = rising ? (x + 0.5f * dp * k1) : (x - 0.5f * dp * k1);
+			xMid = clamp(xMid, 0.f, 1.f);
+			float k2 = IntegralFlux::slopeWarp(xMid, curveSigned) * scale;
+			x += rising ? (dp * k2) : (-dp * k2);
 			x = clamp(x, 0.f, 1.f);
+			lut[i] = x;
 		}
-		return x;
+		lut.front() = rising ? 0.f : 1.f;
+		lut.back() = rising ? 1.f : 0.f;
+	}
+
+	static float sampleSegmentLut(const std::array<float, PREVIEW_LUT_SIZE>& lut, float t) {
+		t = clamp(t, 0.f, 1.f);
+		float idx = t * float(PREVIEW_LUT_SIZE - 1);
+		int i0 = int(idx);
+		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
+		float f = idx - float(i0);
+		return lut[i0] + (lut[i1] - lut[i0]) * f;
 	}
 
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
@@ -1074,6 +1081,10 @@ struct WavePreviewWidget : Widget {
 		float fallWidth = std::max(right - peakX, 1e-4f);
 		// Reserved hook if we later render interactive-state emphasis.
 		(void) interactiveRecent;
+		std::array<float, PREVIEW_LUT_SIZE> riseLut {};
+		std::array<float, PREVIEW_LUT_SIZE> fallLut {};
+		buildSegmentLut(riseLut, curveSigned, true);
+		buildSegmentLut(fallLut, curveSigned, false);
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
@@ -1081,12 +1092,12 @@ struct WavePreviewWidget : Widget {
 			float y = -1.f;
 			if (x <= peakX) {
 				float t = (x - left) / riseWidth;
-				float v = segmentValue(t, curveSigned, true);
+				float v = sampleSegmentLut(riseLut, t);
 				y = -1.f + 2.f * v;
 			}
 			else {
 				float t = (x - peakX) / fallWidth;
-				float v = segmentValue(t, curveSigned, false);
+				float v = sampleSegmentLut(fallLut, t);
 				y = -1.f + 2.f * v;
 			}
 			float py = top + (0.5f - 0.5f * y) * drawH;
