@@ -85,6 +85,11 @@ struct IntegralFlux : Module {
 		// phasePos is a normalized [0..1+] phase accumulator for the active segment.
 		float phasePos = 0.f;
 		float out = 0.f;
+		// Slew warp phase tracking for processUnifiedShapedSlew().
+		int slewDir = 0;
+		float slewStartOut = 0.f;
+		float slewTargetOut = 0.f;
+		float slewInvSpan = 0.f;
 		bool cycleLatched = false;
 		bool gateState = false;
 		// Cached warp compensation for the current shape setting.
@@ -191,6 +196,7 @@ struct IntegralFlux : Module {
 	static constexpr int WARP_SCALE_SAMPLES = 16;
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
+	static constexpr float TARGET_EPS = 1e-4f;
 	static constexpr float LIGHT_UPDATE_INTERVAL = 1.f / 120.f;
 	// Rise/Fall knob taper tuned against hardware low-end behavior.
 	static constexpr float KNOB_CURVE_EXP = 1.5f;
@@ -202,7 +208,6 @@ struct IntegralFlux : Module {
 	static constexpr float OUTER_MIN_TIME = 0.001f;
 	static constexpr float OUTER_LOG_SHAPE_SCALE = 6.25f;
 	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.5f;
-	static constexpr float CV_CLAMP_V = 8.f;
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
 	static constexpr float BOTH_CV_OCT_PER_V = 0.5f;
@@ -231,6 +236,11 @@ struct IntegralFlux : Module {
 	static float softSatPosFast(float x, float satV, float drive) {
 		float y = softSatSymFast(std::fmax(0.f, x), satV, drive);
 		return clamp(y, 0.f, satV);
+	}
+
+	static float softClamp8(float v) {
+		// Smoothly approaches +/-8V while staying linear near zero.
+		return 8.0f * std::tanh(v / 8.0f);
 	}
 
 	static float shapeSignedFromKnob(float shape01) {
@@ -276,8 +286,16 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
+	static float computeSegPhase(float out, float startOut, float invSpan) {
+		if (std::fabs(invSpan) < 1e-9f) {
+			return 1.f;
+		}
+		float phase = (out - startOut) * invSpan;
+		return clamp(phase, 0.f, 1.f);
+	}
+
 	float processUnifiedShapedSlew(
-		float out,
+		OuterChannelState& ch,
 		float in,
 		float riseTime,
 		float fallTime,
@@ -287,17 +305,26 @@ struct IntegralFlux : Module {
 	) {
 		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
 		// This reuses the same curve family used by free-running function generation.
+		float out = ch.out;
 		float delta = in - out;
 		if (delta == 0.f) {
 			return out;
+		}
+		int dir = (delta > 0.f) ? 1 : -1;
+		bool dirChanged = (ch.slewDir != dir);
+		bool targetChanged = (std::fabs(in - ch.slewTargetOut) > TARGET_EPS);
+		if (ch.slewDir == 0 || dirChanged || targetChanged) {
+			ch.slewDir = dir;
+			ch.slewStartOut = out;
+			ch.slewTargetOut = in;
+			float span = ch.slewTargetOut - ch.slewStartOut;
+			ch.slewInvSpan = (std::fabs(span) < 1e-6f) ? 0.f : (1.f / span);
 		}
 
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
 		float range = OUTER_V_MAX - OUTER_V_MIN;
-		// Slew-limiting mode must handle bipolar signals.
-		// Use normalized magnitude so negative voltages don't clamp to x=0.
-		float x = clamp(std::fabs(out) / std::max(OUTER_V_MAX, 1e-6f), 0.f, 1.f);
+		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
 
@@ -489,7 +516,8 @@ struct IntegralFlux : Module {
 
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
-		float stageOct = clamp(clamp(stageCv, -CV_CLAMP_V, CV_CLAMP_V) * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+		float stageCvSoft = softClamp8(stageCv);
+		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
 		// BOTH and curve-shape scaling are already multiplicative factors.
@@ -549,7 +577,8 @@ struct IntegralFlux : Module {
 			if (stageTimeDirty) {
 				// BOTH CV is inverse relative to Rise/Fall CV:
 				// +V -> shorter (faster), -V -> longer (slower).
-				float bothOct = clamp(-clamp(bothCv, -CV_CLAMP_V, CV_CLAMP_V) * BOTH_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
+				float bothCvSoft = softClamp8(bothCv);
+				float bothOct = clamp(-bothCvSoft * BOTH_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 				float bothScale = rack::dsp::exp2_taylor5(bothOct);
 				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
@@ -696,7 +725,7 @@ struct IntegralFlux : Module {
 			// Use the same curve-warp family as the function generator path.
 			float in = inputs[cfg.signalInput].getVoltage();
 			ch.out = processUnifiedShapedSlew(
-				ch.out,
+				ch,
 				in,
 				riseTime,
 				fallTime,
