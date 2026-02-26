@@ -940,6 +940,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr int POINT_COUNT = 320;
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
+	static constexpr float WAVE_EDGE_PAD = 1.0f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
@@ -972,7 +973,7 @@ struct WavePreviewWidget : Widget {
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
 		float h = std::max(box.size.y, 1.f);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + 0.25f;
+		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
 		float left = drawPad;
 		float top = drawPad;
 		float right = std::max(left + 1.f, w - drawPad);
@@ -980,7 +981,7 @@ struct WavePreviewWidget : Widget {
 		float drawW = right - left;
 		float drawH = bottom - top;
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
-		float riseRatio = clamp(riseTime / totalTime, 0.02f, 0.98f);
+		float riseRatio = riseTime / totalTime;
 		float peakX = left + riseRatio * drawW;
 		float riseWidth = std::max(peakX - left, 1e-4f);
 		float fallWidth = std::max(right - peakX, 1e-4f);
@@ -1001,6 +1002,7 @@ struct WavePreviewWidget : Widget {
 				y = -1.f + 2.f * v;
 			}
 			float py = top + (0.5f - 0.5f * y) * drawH;
+			py = clamp(py, top, bottom);
 			points[i] = Vec(x, py);
 		}
 
@@ -1008,6 +1010,8 @@ struct WavePreviewWidget : Widget {
 		peakIndex = std::max(0, std::min(POINT_COUNT - 1, peakIndex));
 		float peakPx = left + (float(peakIndex) / float(POINT_COUNT - 1)) * drawW;
 		points[peakIndex] = Vec(peakPx, top);
+		points.front() = Vec(left, bottom);
+		points.back() = Vec(right, bottom);
 		pointsValid = true;
 	}
 
@@ -1038,19 +1042,6 @@ struct WavePreviewWidget : Widget {
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + 0.25f;
-		float left = drawPad;
-		float top = drawPad;
-		float right = std::max(left + 1.f, box.size.x - drawPad);
-		float bottom = std::max(top + 1.f, box.size.y - drawPad);
-		float midY = top + 0.5f * (bottom - top);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, left, midY);
-		nvgLineTo(args.vg, right, midY);
-		nvgStrokeColor(args.vg, nvgRGBA(180, 180, 180, 90));
-		nvgStrokeWidth(args.vg, CENTER_LINE_WIDTH);
-		nvgStroke(args.vg);
 
 		if (pointsValid) {
 			nvgBeginPath(args.vg);
@@ -1058,9 +1049,9 @@ struct WavePreviewWidget : Widget {
 			for (int i = 1; i < POINT_COUNT; ++i) {
 				nvgLineTo(args.vg, points[i].x, points[i].y);
 			}
-			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 180));
+			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
 			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
-			nvgLineCap(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_BUTT);
 			nvgLineJoin(args.vg, NVG_ROUND);
 			nvgStroke(args.vg);
 		}
