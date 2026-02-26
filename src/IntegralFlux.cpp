@@ -988,7 +988,7 @@ struct IMBigPushButton : CKD6 {
 	int* mode = NULL;
 	TransformWidget *tw;
 	IMBigPushButton() {
-		setSizeRatio(0.9f);		
+		setSizeRatio(0.9f);
 	}
 	void setSizeRatio(float ratio) {
 		// Scale only the SVG child so hit area follows the visible button.
@@ -997,10 +997,10 @@ struct IMBigPushButton : CKD6 {
 		tw = new TransformWidget();
 		tw->addChild(sw);
 		tw->scale(Vec(ratio, ratio));
-		tw->box.size = sw->box.size; 
+		tw->box.size = sw->box.size;
 		fb->addChild(tw);
-		box.size = sw->box.size; 
-		shadow->box.size = sw->box.size; 
+		box.size = sw->box.size;
+		shadow->box.size = sw->box.size;
 	}
 };
 
@@ -1169,7 +1169,7 @@ struct WavePreviewWidget : Widget {
 		}
 		nvgFontSize(args.vg, LABEL_FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(230, 230, 220, 255));
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 		// Keep label outside preview box to avoid occluding waveform.
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
@@ -1248,8 +1248,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(65.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 110.682)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.353, 14.855)), module, IntegralFlux::CYCLE_4_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(69.353, 14.855)), module, IntegralFlux::CYCLE_4_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(16.537, 96.76)), module, IntegralFlux::EOR_CH_1_LIGHT));
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(84.603, 96.716)), module, IntegralFlux::EOC_CH_4_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.499)), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
