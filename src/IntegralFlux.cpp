@@ -938,6 +938,8 @@ struct BananutBlack : app::SvgPort {
 
 struct WavePreviewWidget : Widget {
 	static constexpr int POINT_COUNT = 320;
+	static constexpr float CENTER_LINE_WIDTH = 1.0f;
+	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
@@ -970,19 +972,26 @@ struct WavePreviewWidget : Widget {
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
 		float h = std::max(box.size.y, 1.f);
+		float drawPad = 0.5f * WAVE_LINE_WIDTH + 0.25f;
+		float left = drawPad;
+		float top = drawPad;
+		float right = std::max(left + 1.f, w - drawPad);
+		float bottom = std::max(top + 1.f, h - drawPad);
+		float drawW = right - left;
+		float drawH = bottom - top;
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
 		float riseRatio = clamp(riseTime / totalTime, 0.02f, 0.98f);
-		float peakX = riseRatio * w;
-		float riseWidth = std::max(peakX, 1e-4f);
-		float fallWidth = std::max(w - peakX, 1e-4f);
+		float peakX = left + riseRatio * drawW;
+		float riseWidth = std::max(peakX - left, 1e-4f);
+		float fallWidth = std::max(right - peakX, 1e-4f);
 		(void) interactiveRecent;
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
-			float x = xNorm * w;
+			float x = left + xNorm * drawW;
 			float y = -1.f;
 			if (x <= peakX) {
-				float t = x / riseWidth;
+				float t = (x - left) / riseWidth;
 				float v = segmentValue(t, curveSigned, true);
 				y = -1.f + 2.f * v;
 			}
@@ -991,14 +1000,14 @@ struct WavePreviewWidget : Widget {
 				float v = segmentValue(t, curveSigned, false);
 				y = -1.f + 2.f * v;
 			}
-			float py = (0.5f - 0.5f * y) * h;
+			float py = top + (0.5f - 0.5f * y) * drawH;
 			points[i] = Vec(x, py);
 		}
 
 		int peakIndex = int(std::round(riseRatio * float(POINT_COUNT - 1)));
 		peakIndex = std::max(0, std::min(POINT_COUNT - 1, peakIndex));
-		float peakPx = (float(peakIndex) / float(POINT_COUNT - 1)) * w;
-		points[peakIndex] = Vec(peakPx, 0.f);
+		float peakPx = left + (float(peakIndex) / float(POINT_COUNT - 1)) * drawW;
+		points[peakIndex] = Vec(peakPx, top);
 		pointsValid = true;
 	}
 
@@ -1029,13 +1038,18 @@ struct WavePreviewWidget : Widget {
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		float drawPad = 0.5f * WAVE_LINE_WIDTH + 0.25f;
+		float left = drawPad;
+		float top = drawPad;
+		float right = std::max(left + 1.f, box.size.x - drawPad);
+		float bottom = std::max(top + 1.f, box.size.y - drawPad);
+		float midY = top + 0.5f * (bottom - top);
 
-		float midY = 0.5f * box.size.y;
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 0.f, midY);
-		nvgLineTo(args.vg, box.size.x, midY);
+		nvgMoveTo(args.vg, left, midY);
+		nvgLineTo(args.vg, right, midY);
 		nvgStrokeColor(args.vg, nvgRGBA(180, 180, 180, 90));
-		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeWidth(args.vg, CENTER_LINE_WIDTH);
 		nvgStroke(args.vg);
 
 		if (pointsValid) {
@@ -1045,7 +1059,7 @@ struct WavePreviewWidget : Widget {
 				nvgLineTo(args.vg, points[i].x, points[i].y);
 			}
 			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 180));
-			nvgStrokeWidth(args.vg, 1.4f);
+			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
 			nvgLineCap(args.vg, NVG_ROUND);
 			nvgLineJoin(args.vg, NVG_ROUND);
 			nvgStroke(args.vg);
