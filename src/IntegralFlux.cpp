@@ -1077,7 +1077,7 @@ struct WavePreviewWidget : Widget {
 		}
 		nvgFontSize(args.vg, LABEL_FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(230, 230, 220, 220));
+		nvgFillColor(args.vg, nvgRGBA(230, 230, 220, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
