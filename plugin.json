@@ -11,7 +11,7 @@
   "manualUrl": "",
   "sourceUrl": "https://github.com/PlasmaChroma/Leviathan-Rack2",
   "donateUrl": "bitcoin:16hdj3P95whJqBiQqe6Aj4UewTQgxzuhTv",
-  "changelogUrl": "",
+  "changelogUrl": "https://github.com/PlasmaChroma/Leviathan-Rack2/blob/master/CHANGELOG.md",
   "modules": [
     {
       "slug": "IntegralFlux",
