@@ -2,7 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased] (planned `v2.1.1`)
+## [v2.1.2]
+
+- Allow for Signal IN injection with Loop ON combination on signal generators to try to mimic HW behavior.
+
+## [v2.1.1]
 
 - Replaced hard CV clamping on CH1/CH4 Rise, Fall, and BOTH timing CV paths with smooth soft saturation before octave mapping to reduce rail-edge discontinuities.
 - Updated slew warp behavior to use segment phase normalization instead of output magnitude, improving symmetry and reducing offset-dependent curvature changes.
