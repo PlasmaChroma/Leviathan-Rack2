@@ -208,6 +208,10 @@ struct IntegralFlux : Module {
 	static constexpr float OUTER_MIN_TIME = 0.001f;
 	static constexpr float OUTER_LOG_SHAPE_SCALE = 6.25f;
 	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.5f;
+	// How strongly Signal IN perturbs the running FG core while cycling/triggered.
+	static constexpr float OUTER_INJECT_GAIN = 0.55f;
+	// One-pole attraction time constant for FG input perturbation.
+	static constexpr float OUTER_INJECT_TAU = 0.0015f;
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
 	static constexpr float BOTH_CV_OCT_PER_V = 0.5f;
@@ -666,6 +670,16 @@ struct IntegralFlux : Module {
 			// Function-generator integration path.
 			float s = shapeSigned;
 			float range = OUTER_V_MAX - OUTER_V_MIN;
+			float xIn = 0.f;
+			float injectAlpha = 0.f;
+			if (signalPatched) {
+				// Map patched input into the same normalized domain as the internal integrator state.
+				float inV = inputs[cfg.signalInput].getVoltage();
+				float inSoft = softClamp8(inV);
+				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
+				float a = 1.f - std::exp(-dt / OUTER_INJECT_TAU);
+				injectAlpha = OUTER_INJECT_GAIN * clamp(a, 0.f, 1.f);
+			}
 
 			if (ch.phase == OUTER_RISE) {
 				float dpPhase = dt / riseTime;
@@ -673,6 +687,10 @@ struct IntegralFlux : Module {
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / riseTime, 0.f, 0.5f);
 				x += dp * slopeWarp(x, s) * scale;
+				if (injectAlpha > 0.f) {
+					// Hardware-like perturbation: gently pull active FG state toward input.
+					x += injectAlpha * (xIn - x);
+				}
 				x = clamp(x, 0.f, 1.f);
 				ch.out = OUTER_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x >= 1.f) {
@@ -701,6 +719,9 @@ struct IntegralFlux : Module {
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / fallTime, 0.f, 0.5f);
 				x -= dp * slopeWarp(x, s) * scale;
+				if (injectAlpha > 0.f) {
+					x += injectAlpha * (xIn - x);
+				}
 				x = clamp(x, 0.f, 1.f);
 				ch.out = OUTER_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x <= 0.f) {
