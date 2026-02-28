@@ -109,6 +109,8 @@ struct IntegralFlux : Module {
 		// Active times may interpolate toward cached targets at reduced timing update rates.
 		float activeRiseTime = 0.01f;
 		float activeFallTime = 0.01f;
+		// Trigger acceptance rearm timer for explicit max trigger rate behavior.
+		float trigRearmSec = 0.f;
 		float riseTimeStep = 0.f;
 		float fallTimeStep = 0.f;
 		int timeInterpSamplesLeft = 0;
@@ -212,9 +214,18 @@ struct IntegralFlux : Module {
 	static constexpr float OUTER_INJECT_GAIN = 0.55f;
 	// One-pole attraction time constant for FG input perturbation.
 	static constexpr float OUTER_INJECT_TAU = 0.0015f;
+	// Empirical BOTH CV response fit (hardware-calibrated saturating model).
+	static constexpr float BOTH_F_OFF_HZ = 1.93157058f;
+	static constexpr float BOTH_F_MAX_HZ = 986.84629918f;
+	static constexpr float BOTH_K_OCT_PER_V = 1.10815030f;
+	static constexpr float BOTH_V0_V = 4.15514297f;
+	static constexpr float BOTH_NEUTRAL_V = -0.05f;
+	static constexpr float BOTH_TIME_SCALE_MAX = 64.f;
+	// Hardware-like FG ceilings.
+	static constexpr float OUTER_MAX_CYCLE_HZ = 1000.f;
+	static constexpr float OUTER_MAX_TRIGGER_HZ = 2000.f;
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
-	static constexpr float BOTH_CV_OCT_PER_V = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
@@ -245,6 +256,31 @@ struct IntegralFlux : Module {
 	static float softClamp8(float v) {
 		// Smoothly approaches +/-8V while staying linear near zero.
 		return 8.0f * std::tanh(v / 8.0f);
+	}
+
+	static float bothHzFromCv(float v) {
+		float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
+		float r = rack::dsp::exp2_taylor5(x);
+		return BOTH_F_OFF_HZ + BOTH_F_MAX_HZ * (r / (1.f + r));
+	}
+
+	static float bothTimeScaleFromCv(float v) {
+		float vs = softClamp8(v);
+		float f = bothHzFromCv(vs);
+		float f0 = bothHzFromCv(BOTH_NEUTRAL_V);
+		float scale = f0 / std::max(f, 1e-6f);
+		return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
+	}
+
+	static void enforceOuterSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
+		riseTime = std::max(riseTime, 1e-6f);
+		fallTime = std::max(fallTime, 1e-6f);
+		float period = riseTime + fallTime;
+		if (period < minPeriod) {
+			float scale = minPeriod / std::max(period, 1e-9f);
+			riseTime *= scale;
+			fallTime *= scale;
+		}
 	}
 
 	static float shapeSignedFromKnob(float shape01) {
@@ -549,6 +585,7 @@ struct IntegralFlux : Module {
 		// 1) function generator when cycling/triggered
 		// 2) slew limiter when a signal is patched and phase is idle
 		float dt = args.sampleTime;
+		ch.trigRearmSec = std::max(0.f, ch.trigRearmSec - dt);
 
 		if (ch.cycleButtonEdge.process(params[cfg.cycleParam].getValue())) {
 			ch.cycleLatched = !ch.cycleLatched;
@@ -559,8 +596,11 @@ struct IntegralFlux : Module {
 		bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
-		if (trigRise && ch.phase != OUTER_RISE) {
+		bool trigAccepted = false;
+		if (trigRise && ch.trigRearmSec <= 0.f && ch.phase != OUTER_RISE) {
 			triggerOuterFunction(ch);
+			trigAccepted = true;
+			ch.trigRearmSec = 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f);
 		}
 
 		float riseKnob = params[cfg.riseParam].getValue();
@@ -579,11 +619,7 @@ struct IntegralFlux : Module {
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
-				// BOTH CV is inverse relative to Rise/Fall CV:
-				// +V -> shorter (faster), -V -> longer (slower).
-				float bothCvSoft = softClamp8(bothCv);
-				float bothOct = clamp(-bothCvSoft * BOTH_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
-				float bothScale = rack::dsp::exp2_taylor5(bothOct);
+				float bothScale = bothTimeScaleFromCv(bothCv);
 				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
@@ -630,6 +666,19 @@ struct IntegralFlux : Module {
 		updateActiveStageTimes(ch);
 		float riseTime = ch.activeRiseTime;
 		float fallTime = ch.activeFallTime;
+		bool fgActive = (ch.phase != OUTER_IDLE);
+		if (trigAccepted) {
+			// External trigger may run faster than self-cycle, but with an explicit ceiling.
+			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
+		}
+		else if (cycleOn) {
+			// Self-cycle path is held to the lower hardware-like ceiling.
+			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_CYCLE_HZ, 1.f));
+		}
+		else if (fgActive) {
+			// One-shot/triggered FG segments use trigger-domain ceiling when not cycling.
+			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
+		}
 		float shapeSigned = shapeSignedFromKnob(shape);
 		updatePreviewChannel(
 			previewShared,
