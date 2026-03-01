@@ -1029,8 +1029,10 @@ struct IntegralFlux : Module {
 			lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
 			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
 			lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4OutRendered) / OUTER_V_MAX, 0.f, 1.f));
-			lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
-			lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
+			// Mixer LEDs indicate SUM bus polarity (INV is the same signal inverted):
+			// red = negative SUM, green = positive SUM.
+			lights[OR_LED_LIGHT].setBrightness(clamp((-sumOut) / 10.f, 0.f, 1.f));
+			lights[INV_LED_LIGHT].setBrightness(clamp(sumOut / 10.f, 0.f, 1.f));
 		}
 	}
 };
