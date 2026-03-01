@@ -267,8 +267,9 @@ struct IntegralFlux : Module {
 	static float bothTimeScaleFromCv(float v) {
 		float vs = softClamp8(v);
 		float f = bothHzFromCv(vs);
-		float f0 = bothHzFromCv(BOTH_NEUTRAL_V);
-		float scale = f0 / std::max(f, 1e-6f);
+		// Neutral reference is constant for the life of the module, compute once.
+		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
+		float scale = neutralHz / std::max(f, 1e-6f);
 		return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
 	}
 
