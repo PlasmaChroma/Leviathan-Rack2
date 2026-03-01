@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.1.4]
+
+- Fixed mixer light states to just track SUM like hardware does
+- Minor optimization: stop recomputing constant value
+
 ## [v2.1.3]
 
 - Implemented CV tuning on BOTH input
