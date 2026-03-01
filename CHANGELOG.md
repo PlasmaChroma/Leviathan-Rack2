@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.1.3]
+
+- Implemented CV tuning on BOTH input
+- Implemented speed_max to try to match HW on generator portions
+
 ## [v2.1.2]
 
 - Allow for Signal IN injection with Loop ON combination on signal generators to try to mimic HW behavior.
