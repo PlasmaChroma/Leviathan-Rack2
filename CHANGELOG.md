@@ -5,8 +5,8 @@ All notable changes to this project are documented in this file.
 ## [v2.1.4]
 
 ### Integral Flux
-- Fixed mixer light states to just track SUM like hardware does
-- Minor optimization: stop recomputing constant value
+- Fixed mixer (red + green) lights to just track SUM like hardware Maths
+- Minor optimization: stop recomputing a constant value in hot-path
 
 ## [v2.1.3]
 
