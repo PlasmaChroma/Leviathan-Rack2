@@ -1,0 +1,100 @@
+flowchart LR
+
+%% =========================
+%% OUTER CHANNEL CH1
+%% =========================
+
+subgraph CH1["CH1 Outer Channel"]
+  CH1_TIME["Timing Map<br/>Rise Fall CV Both Shape"]
+  CH1_MODE["Mode Select<br/>Function or Slew"]
+  CH1_FG["Function Generator"]
+  CH1_SLEW["Shaped Slew"]
+  CH1_POST["Output Conditioning"]
+end
+
+%% =========================
+%% OUTER CHANNEL CH4
+%% =========================
+
+subgraph CH4["CH4 Outer Channel"]
+  CH4_TIME["Timing Map<br/>Rise Fall CV Both Shape"]
+  CH4_MODE["Mode Select<br/>Function or Slew"]
+  CH4_FG["Function Generator"]
+  CH4_SLEW["Shaped Slew"]
+  CH4_POST["Output Conditioning"]
+end
+
+%% =========================
+%% MIDDLE CHANNELS
+%% =========================
+
+subgraph MID["CH2 and CH3"]
+  CH2["CH2 Attenuverter<br/>Norm 10V if unpatched"]
+  CH3["CH3 Attenuverter<br/>Norm 5V if unpatched"]
+end
+
+%% =========================
+%% CHANNEL OUTPUTS
+%% =========================
+
+subgraph CHOUT["Per Channel Outputs"]
+  U1["CH1 Unity"]
+  O1["CH1 Var"]
+  EOR1["CH1 EOR"]
+
+  O2["CH2 Var"]
+  O3["CH3 Var"]
+
+  U4["CH4 Unity"]
+  O4["CH4 Var"]
+  EOC4["CH4 EOC"]
+end
+
+%% =========================
+%% MIX BUS
+%% =========================
+
+subgraph BUS["Mix Bus"]
+  BUS_PICK["Bus Inputs v1 v2 v3 v4<br/>Remove if Var patched"]
+  BUS_SUM["SUM"]
+  BUS_OR["OR"]
+  BUS_INV["INV"]
+end
+
+%% =========================
+%% CONNECTIONS
+%% =========================
+
+CH1_TIME --> CH1_MODE
+CH1_MODE --> CH1_FG
+CH1_MODE --> CH1_SLEW
+CH1_FG --> CH1_POST
+CH1_SLEW --> CH1_POST
+
+CH4_TIME --> CH4_MODE
+CH4_MODE --> CH4_FG
+CH4_MODE --> CH4_SLEW
+CH4_FG --> CH4_POST
+CH4_SLEW --> CH4_POST
+
+CH1_POST --> U1
+U1 --> O1
+CH1_FG --> EOR1
+
+CH4_POST --> U4
+U4 --> O4
+CH4_FG --> EOC4
+
+CH2 --> O2
+CH3 --> O3
+
+%% Bus wiring
+O1 --> BUS_PICK
+O2 --> BUS_PICK
+O3 --> BUS_PICK
+O4 --> BUS_PICK
+
+BUS_PICK --> BUS_SUM
+BUS_PICK --> BUS_OR
+
+BUS_SUM --> BUS_INV
