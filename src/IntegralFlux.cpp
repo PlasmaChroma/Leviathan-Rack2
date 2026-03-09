@@ -1097,7 +1097,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
-	static constexpr float LABEL_FONT_SIZE = 8.5f;
+	static constexpr float LABEL_FONT_SIZE = 9.5f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
