@@ -1234,7 +1234,10 @@ struct WavePreviewWidget : Widget {
 		nvgRestore(args.vg);
 
 		char freqText[32];
-		if (lastFreqHz >= 1000.f) {
+		if (lastFreqHz < 1.f) {
+			std::snprintf(freqText, sizeof(freqText), "%4.0fmHz", lastFreqHz * 1000.f);
+		}
+		else if (lastFreqHz >= 1000.f) {
 			std::snprintf(freqText, sizeof(freqText), "%4.2fkHz", lastFreqHz / 1000.f);
 		}
 		else {
