@@ -17,3 +17,4 @@
 
 ## Unknown Title - Fractal Module
 - Creates CV & Gate outputs based on a clock input and a fractal seed
+- Maybe use mandlebrot set as the first implementation (X&Y could be CV markers)
