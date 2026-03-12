@@ -267,8 +267,9 @@ struct IntegralFlux : Module {
 	static float bothTimeScaleFromCv(float v) {
 		float vs = softClamp8(v);
 		float f = bothHzFromCv(vs);
-		float f0 = bothHzFromCv(BOTH_NEUTRAL_V);
-		float scale = f0 / std::max(f, 1e-6f);
+		// Neutral reference is constant for the life of the module, compute once.
+		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
+		float scale = neutralHz / std::max(f, 1e-6f);
 		return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
 	}
 
@@ -1028,8 +1029,10 @@ struct IntegralFlux : Module {
 			lights[EOC_CH_4_LIGHT].setBrightness(eocHigh ? 1.f : 0.f);
 			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
 			lights[LIGHT_UNITY_4_LIGHT].setBrightness(clamp(std::fabs(ch4OutRendered) / OUTER_V_MAX, 0.f, 1.f));
-			lights[OR_LED_LIGHT].setBrightness(clamp(orOut / 10.f, 0.f, 1.f));
-			lights[INV_LED_LIGHT].setBrightness(clamp(std::fabs(invOut) / 10.f, 0.f, 1.f));
+			// Mixer LEDs indicate SUM bus polarity (INV is the same signal inverted):
+			// red = negative SUM, green = positive SUM.
+			lights[OR_LED_LIGHT].setBrightness(clamp((-sumOut) / 10.f, 0.f, 1.f));
+			lights[INV_LED_LIGHT].setBrightness(clamp(sumOut / 10.f, 0.f, 1.f));
 		}
 	}
 };
@@ -1094,7 +1097,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
-	static constexpr float LABEL_FONT_SIZE = 8.5f;
+	static constexpr float LABEL_FONT_SIZE = 9.5f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
@@ -1231,7 +1234,10 @@ struct WavePreviewWidget : Widget {
 		nvgRestore(args.vg);
 
 		char freqText[32];
-		if (lastFreqHz >= 1000.f) {
+		if (lastFreqHz < 1.f) {
+			std::snprintf(freqText, sizeof(freqText), "%4.0fmHz", lastFreqHz * 1000.f);
+		}
+		else if (lastFreqHz >= 1000.f) {
 			std::snprintf(freqText, sizeof(freqText), "%4.2fkHz", lastFreqHz / 1000.f);
 		}
 		else {
