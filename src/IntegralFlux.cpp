@@ -1384,9 +1384,9 @@ struct IntegralFluxWidget : ModuleWidget {
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 96.915)), module, IntegralFlux::EOC_4_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, IntegralFlux::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(35.252, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(50.614, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(65.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(33.652, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(50.714, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(67.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 110.682)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
@@ -1395,8 +1395,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(84.603, 96.716)), module, IntegralFlux::EOC_CH_4_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.499)), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(84.731, 110.599)), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(28.274, 110.683)), module, IntegralFlux::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(72.954, 110.683)), module, IntegralFlux::INV_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(42.374, 110.758)), module, IntegralFlux::OR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(59.554, 110.758)), module, IntegralFlux::INV_LED_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
