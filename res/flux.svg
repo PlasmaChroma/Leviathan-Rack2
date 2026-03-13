@@ -248,7 +248,7 @@
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
    inkscape:cx="190.52178"
-   inkscape:cy="105.84543"
+   inkscape:cy="193.45611"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="1978"
@@ -384,11 +384,10 @@
       
     <g
    id="lines_gen1_side"><path
-     style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:49.9999;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
-     d="M 1391.9286,5713.2849 736.16943,5175.3681"
+     style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     d="m 2382.6694,6060.1029 -657.9069,-539.492"
      id="linear_line"
-     sodipodi:nodetypes="cc"
-     transform="matrix(1.0032752,0,0,1.0029283,986.182,997.229)" /><path
+     sodipodi:nodetypes="cc" /><path
      style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.6;stroke-dasharray:none;stroke-opacity:1"
      d="m 2244.6528,3635.7115 1128.9915,-2.4362"
      id="surge_connector"
@@ -404,11 +403,10 @@
      d="M 5939.2652,5304.3017 6943.0066,6332.998"
      id="sink_connector_4"
      transform="matrix(1.0032752,0,0,1.0029283,986.182,997.229)" /><path
-     style="display:inline;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:49.9999;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
-     d="M 9172.6286,5730.126 8516.8694,5192.2092"
+     style="display:inline;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     d="m 10188.853,6060.1026 -657.9071,-539.492"
      id="linear_connector_4"
-     sodipodi:nodetypes="cc"
-     transform="matrix(1.0032752,0,0,1.0029283,986.182,997.229)" /><path
+     sodipodi:nodetypes="cc" /><path
      style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
      d="m 6754.4584,3621.2326 1136.8342,-5.5454 v 0"
      id="surge_connector_4"
@@ -495,7 +493,7 @@
        stroke-width="70"
        id="ring_sinkA_o" /><ellipse
        cx="2370.1685"
-       cy="6739.395"
+       cy="6072.2539"
        fill="none"
        stroke="#ffffff"
        stroke-opacity="0.15"
@@ -579,17 +577,16 @@
        stroke-opacity="0.15"
        stroke-width="70"
        id="ring_sinkB_o" /><ellipse
-       cx="9162.9121"
-       cy="5742.0845"
+       cx="10179.104"
+       cy="6072.0962"
        fill="none"
        stroke="#ffffff"
        stroke-opacity="0.15"
-       stroke-width="71.3515"
+       stroke-width="71.5728"
        id="ring_curveA_o-4-7"
-       rx="542.29901"
-       ry="518.0567"
-       style="display:inline"
-       transform="matrix(1.0032752,0,0,1.0029283,986.18199,997.229)" /></g><g
+       rx="544.07513"
+       ry="519.57373"
+       style="display:inline" /></g><g
      id="output_ring_guides"
      style="display:inline"
      transform="translate(1.0410941e-5)"><circle
@@ -859,7 +856,7 @@
         <text
    id="reworked_lbl_bothA"
    x="2692.261"
-   y="5482.9863"
+   y="5508.8013"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">BOTH</text>
         <text
@@ -871,13 +868,13 @@
         <text
    id="reworked_text29-1"
    x="1419.9977"
-   y="6497.4062"
+   y="5832.2129"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
    id="reworked_text27"
    x="597.8999"
-   y="4989.3716"
+   y="4324.1782"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LIN</text>
         <text
@@ -907,7 +904,7 @@
         <text
    id="reworked_lbl_bothB"
    x="7447.2183"
-   y="5488.7993"
+   y="5508.8003"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">BOTH</text>
         <text
@@ -919,13 +916,13 @@
         <text
    id="reworked_text29-1-5"
    x="9178.2988"
-   y="6497.4062"
+   y="5815.3721"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
    id="reworked_text27-6"
    x="8378.6084"
-   y="5006.2124"
+   y="4324.1782"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LIN</text>
         <text
@@ -943,13 +940,13 @@
         <text
    id="reworked_in2_unpatched_text"
    x="3463.2056"
-   y="7500.5352"
+   y="7590.5005"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">10±</text>
         <text
    id="reworked_in3_unpatched_text"
    x="6683.6084"
-   y="7500.666"
+   y="7590.6313"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">5±</text>
         <text
@@ -1027,11 +1024,11 @@
         
       </g><g
    id="components"
-   style="display:none"><ellipse
+   style="display:inline"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_1"
      cx="1397.5443"
-     cy="5717.8008"
+     cy="5052.6074"
      rx="294.84427"
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
@@ -1193,7 +1190,7 @@
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_4"
      cx="9171.5977"
-     cy="5717.8008"
+     cy="5035.7666"
      rx="294.84427"
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
