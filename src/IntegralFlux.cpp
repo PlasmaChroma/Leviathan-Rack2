@@ -1357,7 +1357,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(ch4Preview);
 		}
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(25.795, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.585, 86.446)), module, IntegralFlux::ATTENUATE_3_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.931, 86.446)), module, IntegralFlux::ATTENUATE_4_PARAM));
@@ -1378,7 +1378,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.585, 76.377)), module, IntegralFlux::INPUT_3_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.695, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(41.943, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(59.486, 96.915)), module, IntegralFlux::OUT_3_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));

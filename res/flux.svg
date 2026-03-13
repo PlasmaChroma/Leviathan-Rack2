@@ -248,7 +248,7 @@
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
    inkscape:cx="190.10259"
-   inkscape:cy="327.17767"
+   inkscape:cy="159.50173"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="1978"
@@ -292,11 +292,10 @@
     </g>
     
     <path
-   style="display:inline;opacity:0.66;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1"
-   d="m 3614.1153,7768.7706 0.039,1903.9563"
+   style="display:inline;opacity:0.66;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
+   d="m 2589.3705,6751.7711 0.039,1898.3974"
    id="gen1_attenuvert_line"
-   sodipodi:nodetypes="cc"
-   transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" /><path
+   sodipodi:nodetypes="cc" /><path
    style="display:inline;opacity:0.66;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1"
    d="m 8607.0685,7768.911 0.492,1899.8774"
    id="gen4_attenuvert_line"
@@ -366,17 +365,17 @@
    id="frame_right"
    style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
         <rect
-   x="1451.4989"
-   y="10215.198"
-   width="9272.5469"
-   height="2796.4023"
-   rx="180"
-   ry="180"
+   x="1371.4215"
+   y="10215.351"
+   width="9402.6289"
+   height="2796.0908"
+   rx="182.52522"
+   ry="179.97995"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="45"
+   stroke-width="45.312"
    id="outputs"
    style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
         
@@ -610,7 +609,7 @@
        id="ring_eoc_o"
        style="display:inline"
        transform="translate(1.0410941e-5)" /><circle
-       cx="3600"
+       cx="3569.9177"
        cy="10730"
        r="454.70001"
        fill="none"
@@ -618,8 +617,7 @@
        stroke-opacity="0.15"
        stroke-width="70"
        id="ring_out1_o"
-       style="display:inline"
-       transform="translate(1.0410941e-5)" /><circle
+       style="display:inline" /><circle
        cx="5200"
        cy="10730"
        r="454.70001"
@@ -713,7 +711,7 @@
        id="ring_in3_o"
        style="display:inline"
        transform="translate(1.0410941e-5)" /><circle
-       cx="3600"
+       cx="3569.9177"
        cy="9680"
        r="454.70001"
        fill="none"
@@ -777,7 +775,7 @@
    id="In2_In3_Lines"
    sodipodi:nodetypes="cc"
    transform="matrix(0.9967357,0,0,0.99708045,-982.96276,-994.31743)" /></g><g
-   id="g10140"
+   id="waves_layer"
    style="opacity:0.666"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
@@ -832,7 +830,7 @@
    id="reworked_LEVIATHAN_LOGO"
    x="5079.9966"
    y="12397.967"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:610.257px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke-width:37.088"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
         
@@ -946,16 +944,24 @@
    xml:space="preserve">IN 3</text>
         <text
    id="reworked_in2_unpatched_text"
-   x="3463.2056"
+   x="3493.2051"
    y="7590.5005"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">10±</text>
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan10857"
+     x="3493.2051"
+     y="7590.5005">±10</tspan></text>
         <text
    id="reworked_in3_unpatched_text"
-   x="6683.6084"
+   x="6653.6367"
    y="7590.6313"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">5±</text>
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan10877"
+     x="6653.6367"
+     y="7590.6313">±5</tspan></text>
         <text
    id="reworked_lbl_eor"
    x="1014.0171"
@@ -970,7 +976,7 @@
    xml:space="preserve">EoC</text>
         <text
    id="reworked_lbl_out1"
-   x="2601.4983"
+   x="2571.5142"
    y="10341.1"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">1</text>
@@ -1274,7 +1280,7 @@
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="ATTENUATE_1"
-     cx="2609.4443"
+     cx="2579.4602"
      cy="8644.5771"
      rx="294.84427"
      ry="295.80988" /><ellipse
@@ -1298,7 +1304,7 @@
      ry="405.17139" /><ellipse
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:43.9097"
      id="OUT_1"
-     cx="2599.4983"
+     cx="2569.5142"
      cy="9691.5117"
      rx="387.49817"
      ry="405.17139" /></g>

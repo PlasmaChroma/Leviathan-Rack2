@@ -1,9 +1,9 @@
 # Branding
 
 ## Fonts
-* Ancient - Leviathan stylized brand
-* Consolas - Module Titles
-* Rubik Bold 6 - Module Description
+* Ancient - Leviathan stylized (18 point)
+* Rubik Bold - Module Titles (15 point)
+* Rubik Normal 6 - Module Description
 * Rubik Bold 8 - Labels
 
 ## Colors
