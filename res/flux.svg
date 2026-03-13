@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="flux.svg"
-   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -246,13 +246,13 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="190.10259"
-   inkscape:cy="159.50173"
-   inkscape:window-width="1862"
-   inkscape:window-height="1016"
-   inkscape:window-x="1978"
-   inkscape:window-y="27"
+   inkscape:zoom="3.3736828"
+   inkscape:cx="182.14516"
+   inkscape:cy="265.14051"
+   inkscape:window-width="2560"
+   inkscape:window-height="1377"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
    inkscape:window-maximized="1"
    inkscape:current-layer="svg488"
    showgrid="false"
@@ -268,7 +268,7 @@
       <rect
    x="986.18201"
    y="997.229"
-   width="10193.273"
+   width="1022665.6"
    height="12887.627"
    rx="0"
    ry="0"
@@ -287,13 +287,13 @@
    stroke-opacity="0.1"
    stroke-width="60"
    id="rect11"
-   style="display:inline" />
+   style="display:inline;stroke:#ffffff;stroke-opacity:0.19562043" />
       
     </g>
     
     <path
    style="display:inline;opacity:0.66;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
-   d="m 2589.3705,6751.7711 0.039,1898.3974"
+   d="m 2549.3705,6751.7711 0.039,1898.3974"
    id="gen1_attenuvert_line"
    sodipodi:nodetypes="cc" /><path
    style="display:inline;opacity:0.66;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1"
@@ -324,7 +324,7 @@
    stroke-width="45.4351"
    id="frame_left"
    style="opacity:0.33;fill:#5740bf;fill-opacity:1" /><rect
-   x="4159.186"
+   x="4199.3169"
    y="7895.5234"
    width="1569.8323"
    height="1233.2272"
@@ -414,7 +414,7 @@
     
   <g
    id="ring_guides"
-   style="display:inline"
+   style="display:none"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)"><g
      id="GenA_Guide_Rings"
      style="display:inline"
@@ -609,7 +609,7 @@
        id="ring_eoc_o"
        style="display:inline"
        transform="translate(1.0410941e-5)" /><circle
-       cx="3569.9177"
+       cx="3529.7866"
        cy="10730"
        r="454.70001"
        fill="none"
@@ -618,7 +618,7 @@
        stroke-width="70"
        id="ring_out1_o"
        style="display:inline" /><circle
-       cx="5200"
+       cx="5240.1309"
        cy="10730"
        r="454.70001"
        fill="none"
@@ -626,8 +626,7 @@
        stroke-opacity="0.15"
        stroke-width="70"
        id="ring_out2_o"
-       style="display:inline"
-       transform="translate(1.0410941e-5)" /><circle
+       style="display:inline" /><circle
        cx="6960"
        cy="10730"
        r="454.70001"
@@ -711,7 +710,7 @@
        id="ring_in3_o"
        style="display:inline"
        transform="translate(1.0410941e-5)" /><circle
-       cx="3569.9177"
+       cx="3529.7866"
        cy="9680"
        r="454.70001"
        fill="none"
@@ -719,7 +718,7 @@
        stroke-opacity="0.15"
        stroke-width="70"
        id="ring_att1_o" /><circle
-       cx="5200"
+       cx="5240.1309"
        cy="9680"
        r="454.70001"
        fill="none"
@@ -770,13 +769,12 @@
    id="top_horizontal_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" /><path
-   style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1"
-   d="m 5215.0714,9671.822 -0.9135,-1114.7976 m 1752.883,1114.7987 -0.9135,-1114.7977"
+   style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.6;stroke-dasharray:none;stroke-opacity:1"
+   d="m 4255.0847,8649.2672 -0.9105,-1111.5429 m 1701.927,1097.6802 2.338,-967.3592"
    id="In2_In3_Lines"
-   sodipodi:nodetypes="cc"
-   transform="matrix(0.9967357,0,0,0.99708045,-982.96276,-994.31743)" /></g><g
+   sodipodi:nodetypes="cccc" /></g><g
    id="waves_layer"
-   style="opacity:0.666"><g
+   style="opacity:0.5"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
      style="display:inline">
@@ -788,10 +786,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        <path
-   style="fill:#7a5cff"
-   d="m 406.626,345.468 c 98.15,-7.286 125.848,-141.731 24.747,-212.111 -21.967,-15.288 -61.03,-32.494 -97.992,-34.425 3.351,-0.122 6.775,-0.182 10.261,-0.182 38.869,0 81.43,18.384 104.731,34.607 106.723,74.291 69.931,219.956 -41.747,212.111 z"
-   id="path153" />
+        
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -808,10 +803,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        <path
-   style="fill:#7a5cff"
-   d="m 406.626,345.468 c 98.15,-7.286 125.848,-141.731 24.747,-212.111 -21.967,-15.288 -61.03,-32.494 -97.992,-34.425 3.351,-0.122 6.775,-0.182 10.261,-0.182 38.869,0 81.43,18.384 104.731,34.607 106.723,74.291 69.931,219.956 -41.747,212.111 z"
-   id="path162" />
+        
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -873,7 +865,7 @@
         <text
    id="reworked_text29-1"
    x="1419.9977"
-   y="5832.2129"
+   y="5882.2412"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
@@ -921,7 +913,7 @@
         <text
    id="reworked_text29-1-5"
    x="9178.2988"
-   y="5815.3721"
+   y="5865.4004"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
@@ -932,7 +924,7 @@
    xml:space="preserve">LIN</text>
         <text
    id="reworked_lbl_in2"
-   x="4219.9082"
+   x="4259.9082"
    y="7053.3281"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">IN 2</text>
@@ -944,13 +936,13 @@
    xml:space="preserve">IN 3</text>
         <text
    id="reworked_in2_unpatched_text"
-   x="3493.2051"
+   x="3533.2048"
    y="7590.5005"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan10857"
-     x="3493.2051"
+     x="3533.2048"
      y="7590.5005">±10</tspan></text>
         <text
    id="reworked_in3_unpatched_text"
@@ -976,13 +968,13 @@
    xml:space="preserve">EoC</text>
         <text
    id="reworked_lbl_out1"
-   x="2571.5142"
+   x="2531.5142"
    y="10341.1"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">1</text>
         <text
    id="reworked_lbl_out2"
-   x="4201.1694"
+   x="4241.1694"
    y="10344.487"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">2</text>
@@ -1033,11 +1025,16 @@
    x="5079.9966"
    y="815.19421"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve">generator • attenuverters • mix/logic</text>
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     x="5079.9966"
+     y="815.19421"
+     style="display:inline;opacity:1;mix-blend-mode:normal"
+     id="tspan2">generator • slew limiter • attenuverters • mix/logic</tspan></text>
         
       </g><g
    id="components"
-   style="display:none"><ellipse
+   style="display:inline"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_1"
      cx="1397.5443"
@@ -1226,7 +1223,7 @@
      ry="405.17142" /><ellipse
      style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
      id="INPUT_2"
-     cx="4214.2988"
+     cx="4254.2988"
      cy="7637.7334"
      rx="398.39865"
      ry="405.17142" /><ellipse
@@ -1274,13 +1271,13 @@
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="ATTENUATE_2"
-     cx="4204.2441"
+     cx="4254.2441"
      cy="8644.5771"
      rx="294.84427"
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="ATTENUATE_1"
-     cx="2579.4602"
+     cx="2549.4443"
      cy="8644.5771"
      rx="294.84427"
      ry="295.80988" /><ellipse
@@ -1298,26 +1295,26 @@
      ry="405.17139" /><ellipse
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
      id="OUT_2"
-     cx="4194.2988"
+     cx="4234.2988"
      cy="9691.5117"
      rx="398.39865"
      ry="405.17139" /><ellipse
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:43.9097"
      id="OUT_1"
-     cx="2569.5142"
+     cx="2529.5142"
      cy="9691.5117"
      rx="387.49817"
      ry="405.17139" /></g>
 <rect
-   style="display:inline;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:22.514;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+   style="display:inline;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.2375;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
    id="CH4_PREVIEW"
-   width="2115.8794"
-   height="1477.4861"
-   x="7733.7573"
-   y="6111.2568" /><rect
-   style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:22.514;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+   width="2255.1626"
+   height="1476.7626"
+   x="7694.1187"
+   y="6211.6187" /><rect
+   style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.2376;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
    id="CH1_PREVIEW"
-   width="2115.8792"
-   height="1477.4861"
-   x="297.25699"
-   y="6111.2573" /></svg>
+   width="2255.1624"
+   height="1476.767"
+   x="197.61882"
+   y="6211.6187" /></svg>
