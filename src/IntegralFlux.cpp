@@ -1370,8 +1370,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(61.179, 20.838)), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(21.683, 36.416)), module, IntegralFlux::CH1_RISE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(79.81, 36.216)), module, IntegralFlux::CH4_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(26.633, 49.47)), module, IntegralFlux::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(74.56, 49.27)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(26.633, 50.27)), module, IntegralFlux::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(74.56, 50.07)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, IntegralFlux::CH1_FALL_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(69.389, 63.263)), module, IntegralFlux::CH4_FALL_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.543, 76.377)), module, IntegralFlux::INPUT_2_INPUT));
