@@ -1082,11 +1082,10 @@
    inkscape:label="Labels Reworked"
    style="display:inline"><text
    id="reworked_module_title_text"
-   x="5063.0693"
-   y="447.20084"
+   x="5079.9964"
+   y="447.27815"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
-   xml:space="preserve"
-   transform="scale(0.99982712,1.0001729)">Integral Flux</text><g
+   xml:space="preserve">Integral Flux</text><g
    id="branding_wave_left"
    transform="matrix(1.72,0,0,1.72,2343.0744,11996.75)"
    style="display:inline">
@@ -1128,11 +1127,10 @@
    id="path164" />
       </g><text
    id="reworked_LEVIATHAN_LOGO"
-   x="4794.5054"
-   y="13115.767"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:645.583px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke-width:39.2346"
+   x="5079.9967"
+   y="12397.9669"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:610.257px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke-width:37.0880"
    xml:space="preserve"
-   transform="scale(1.0578851,0.94528224)"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
         
         <text
@@ -1323,7 +1321,7 @@
    xml:space="preserve">∫4</text>
         <text
    id="reworked_module_description"
-   x="5079.353"
+   x="5079.9967"
    y="815.19421"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve">generator • attenuverters • mix/logic</text>
