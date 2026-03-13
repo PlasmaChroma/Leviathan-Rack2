@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Integral Flux
 - Fixed mixer (red + green) lights to just track SUM like hardware Maths
 - Minor optimization: stop recomputing a constant value in hot-path
+- Added mHz (milli-Hertz) frequency tracking under 1Hz
 
 ## [v2.1.3]
 
