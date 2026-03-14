@@ -11,7 +11,6 @@
 struct Proc : Module {
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
-		ATTENUATE_1_PARAM,
 		CYCLE_1_PARAM,
 		RISE_1_PARAM,
 		FALL_1_PARAM,
@@ -28,7 +27,6 @@ struct Proc : Module {
 		INPUTS_LEN
 	};
 	enum OutputId {
-		OUT_1_OUTPUT,
 		EOR_1_OUTPUT,
 		CH_1_UNITY_OUTPUT,
 		OUTPUTS_LEN
@@ -144,7 +142,9 @@ struct Proc : Module {
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
-	static constexpr float OUTER_V_MAX = 10.2f;
+	// Proc's free-running FG mode spans 0-8 V, while slew mode keeps the wider reference range.
+	static constexpr float FG_V_MAX = 8.f;
+	static constexpr float SLEW_REF_V_MAX = 10.2f;
 	static constexpr float WARP_K_MAX = 40.f;
 	static constexpr int WARP_SCALE_SAMPLES = 16;
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
@@ -182,27 +182,6 @@ struct Proc : Module {
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
-
-	static float attenuverterGain(float knob01) {
-		// Noon = 0, CCW = negative, CW = positive.
-		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
-	}
-
-	static float fastTanh(float x) {
-		// Low-cost tanh approximation.
-		float x2 = x * x;
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-
-	static float softSatSymFast(float x, float satV, float drive) {
-		satV = std::max(satV, 1e-6f);
-		return satV * fastTanh((drive / satV) * x);
-	}
-
-	static float softSatPosFast(float x, float satV, float drive) {
-		float y = softSatSymFast(std::fmax(0.f, x), satV, drive);
-		return clamp(y, 0.f, satV);
-	}
 
 	static float softClamp8(float v) {
 		// Smoothly approaches +/-8V while staying linear near zero.
@@ -315,7 +294,7 @@ struct Proc : Module {
 
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
-		float range = OUTER_V_MAX - OUTER_V_MIN;
+		float range = SLEW_REF_V_MAX - OUTER_V_MIN;
 		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
@@ -669,7 +648,7 @@ struct Proc : Module {
 		if (ch.phase != OUTER_IDLE) {
 			// Function-generator integration path.
 			float s = shapeSigned;
-			float range = OUTER_V_MAX - OUTER_V_MIN;
+			float range = FG_V_MAX - OUTER_V_MIN;
 			float xIn = 0.f;
 			float injectAlpha = 0.f;
 			if (signalPatched) {
@@ -700,7 +679,7 @@ struct Proc : Module {
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = OUTER_FALL;
 					float prevOut = ch.out;
-					ch.out = OUTER_V_MAX;
+					ch.out = FG_V_MAX;
 					if (bandlimitedSignalOutputs) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
@@ -767,18 +746,16 @@ struct Proc : Module {
 	Proc() {
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise");
 		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall");
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
 		configInput(INPUT_1_INPUT, "CH1 signal");
 		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
-		configInput(CH1_RISE_CV_INPUT, "CH1 rise CV");
-		configInput(CH1_BOTH_CV_INPUT, "CH1 both CV");
-		configInput(CH1_FALL_CV_INPUT, "CH1 fall CV");
-		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle CV");
-		configOutput(OUT_1_OUTPUT, "CH1 variable");
+		configInput(CH1_RISE_CV_INPUT, "CH1 rise");
+		configInput(CH1_BOTH_CV_INPUT, "CH1 both");
+		configInput(CH1_FALL_CV_INPUT, "CH1 fall");
+		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle");
 		configOutput(EOR_1_OUTPUT, "CH1 end of rise");
 		configOutput(CH_1_UNITY_OUTPUT, "CH1 unity");
 	}
@@ -859,40 +836,20 @@ struct Proc : Module {
 
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick);
 		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
-		float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
 
 		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
 		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1OutRendered);
-		outputs[OUT_1_OUTPUT].setVoltage(ch1Var);
 
 		if (lightTick) {
 			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
 			lights[EOR_CH_1_LIGHT].setBrightness(ch1.gateState ? 1.f : 0.f);
-			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / OUTER_V_MAX, 0.f, 1.f));
+			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / FG_V_MAX, 0.f, 1.f));
 		}
 	}
 };
 
-struct MyImageWidget : Widget {
-	int imageHandle = -1;
-
-    void draw(const DrawArgs& args) override {
-		// Lazy-load panel image on first draw to avoid startup overhead.
-        if (imageHandle < 0) {
-            std::string path = asset::plugin(pluginInstance, "res/maths2.jpg");
-            imageHandle = nvgCreateImage(args.vg, path.c_str(), 0);
-        }
-
-        if (imageHandle >= 0) {
-            NVGpaint imgPaint = nvgImagePattern(args.vg, 0, 0, box.size.x, box.size.y, 0, imageHandle, 1.0f);
-            nvgBeginPath(args.vg);
-            nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-            nvgFillPaint(args.vg, imgPaint);
-            nvgFill(args.vg);
-        }
-    }
-};
+namespace {
 
 struct IMBigPushButton : CKD6 {
 	int* mode = NULL;
@@ -1142,12 +1099,6 @@ struct ProcWidget : ModuleWidget {
 		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
 		setPanel(createPanel(panelPath));
 
-        // use Rogan1PSBlue for the rise/fall knobs
-        // use LargeLight<RedLight> for the cycle and EOR LEDs
-        // use Rogan1PSWhite for the attenuverter knobs
-        // use TL1105 for the cycle buttons
-        // Davies1900hWhiteKnob
-
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
@@ -1172,8 +1123,6 @@ struct ProcWidget : ModuleWidget {
 			addChild(ch1Preview);
 		}
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(25.494, 86.446)), module, Proc::ATTENUATE_1_PARAM));
-
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(9.947, 15.354)), module, Proc::INPUT_1_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.911, 15.354)), module, Proc::INPUT_1_TRIG_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(40.049, 20.838)), module, Proc::CH1_CYCLE_CV_INPUT));
@@ -1182,7 +1131,6 @@ struct ProcWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, Proc::CH1_FALL_CV_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, Proc::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.295, 96.915)), module, Proc::OUT_1_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, Proc::CH_1_UNITY_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(31.875, 14.855)), module, Proc::CYCLE_1_LED_LIGHT));
@@ -1219,5 +1167,7 @@ struct ProcWidget : ModuleWidget {
 		}
 	}
 };
+
+} // namespace
 
 Model* modelProc = createModel<Proc, ProcWidget>("Proc");
