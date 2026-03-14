@@ -3,6 +3,9 @@
 #include <array>
 #include <cstdio>
 #include <atomic>
+#include <fstream>
+#include <regex>
+#include <sstream>
 
 
 struct IntegralFlux : Module {
@@ -1097,7 +1100,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
-	static constexpr float LABEL_FONT_SIZE = 9.5f;
+	static constexpr float LABEL_FONT_SIZE = 11.5f;
 	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
@@ -1235,13 +1238,13 @@ struct WavePreviewWidget : Widget {
 
 		char freqText[32];
 		if (lastFreqHz < 1.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.0fmHz", lastFreqHz * 1000.f);
+			std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
 		}
 		else if (lastFreqHz >= 1000.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.2fkHz", lastFreqHz / 1000.f);
+			std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
 		}
 		else {
-			std::snprintf(freqText, sizeof(freqText), "%5.1fHz", lastFreqHz);
+			std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
 		}
 		nvgFontSize(args.vg, LABEL_FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -1252,10 +1255,58 @@ struct WavePreviewWidget : Widget {
 	}
 };
 
+static bool loadPreviewRectMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
+	std::ifstream svgFile(svgPath);
+	if (!svgFile.good()) {
+		return false;
+	}
+	std::ostringstream svgBuffer;
+	svgBuffer << svgFile.rdbuf();
+	const std::string svgText = svgBuffer.str();
+
+	const std::regex rectRegex("<rect\\b[^>]*\\bid\\s*=\\s*\"" + rectId + "\"[^>]*>", std::regex::icase);
+	std::smatch rectMatch;
+	if (!std::regex_search(svgText, rectMatch, rectRegex)) {
+		return false;
+	}
+	const std::string rectTag = rectMatch.str(0);
+
+	auto parseAttrMm = [&](const char* attr, float& outMm) {
+		const std::regex attrRegex(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
+		std::smatch attrMatch;
+		if (!std::regex_search(rectTag, attrMatch, attrRegex)) {
+			return false;
+		}
+		outMm = std::stof(attrMatch.str(1)) * 0.01f;
+		return true;
+	};
+
+	float xMm = 0.f;
+	float yMm = 0.f;
+	float wMm = 0.f;
+	float hMm = 0.f;
+	if (!parseAttrMm("x", xMm) || !parseAttrMm("y", yMm) || !parseAttrMm("width", wMm) || !parseAttrMm("height", hMm)) {
+		return false;
+	}
+
+	outRect->pos = Vec(xMm, yMm);
+	outRect->size = Vec(wMm, hMm);
+	return true;
+}
+
+static math::Rect insetRectMm(math::Rect rect, float insetMm) {
+	rect.pos.x += insetMm;
+	rect.pos.y += insetMm;
+	rect.size.x = std::max(0.f, rect.size.x - 2.f * insetMm);
+	rect.size.y = std::max(0.f, rect.size.y - 2.f * insetMm);
+	return rect;
+}
+
 struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/flux.svg")));
+		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
+		setPanel(createPanel(panelPath));
 
         // use Rogan1PSBlue for the rise/fall knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
@@ -1275,25 +1326,39 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(67.638, 36.293)), module, IntegralFlux::RISE_4_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(42.007, 53.079)), module, IntegralFlux::FALL_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(59.385, 53.079)), module, IntegralFlux::FALL_4_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 57.178)), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 57.178)), module, IntegralFlux::LIN_LOG_4_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 50.526)), module, IntegralFlux::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(91.716, 50.526)), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
-			// From doc/preview_boxes.md (already includes 0.2 mm inset).
-			ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-			ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+			math::Rect previewRectMm;
+			if (loadPreviewRectMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+				previewRectMm = insetRectMm(previewRectMm, 0.2f);
+				ch1Preview->box.pos = mm2px(previewRectMm.pos);
+				ch1Preview->box.size = mm2px(previewRectMm.size);
+			}
+			else {
+				ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
+				ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+			}
 			addChild(ch1Preview);
 		}
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(4);
-			// From doc/preview_boxes.md (already includes 0.2 mm inset).
-			ch4Preview->box.pos = mm2px(Vec(77.52500000f, 68.96600100f));
-			ch4Preview->box.size = mm2px(Vec(20.78393300f, 11.24562000f));
+			math::Rect previewRectMm;
+			if (loadPreviewRectMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
+				previewRectMm = insetRectMm(previewRectMm, 0.2f);
+				ch4Preview->box.pos = mm2px(previewRectMm.pos);
+				ch4Preview->box.size = mm2px(previewRectMm.size);
+			}
+			else {
+				ch4Preview->box.pos = mm2px(Vec(77.52500000f, 68.96600100f));
+				ch4Preview->box.size = mm2px(Vec(20.78393300f, 11.24562000f));
+			}
 			addChild(ch4Preview);
 		}
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(26.094, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.042, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(25.494, 86.446)), module, IntegralFlux::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.542, 86.446)), module, IntegralFlux::ATTENUATE_2_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(59.585, 86.446)), module, IntegralFlux::ATTENUATE_3_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(75.931, 86.446)), module, IntegralFlux::ATTENUATE_4_PARAM));
 
@@ -1305,23 +1370,23 @@ struct IntegralFluxWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(61.179, 20.838)), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(21.683, 36.416)), module, IntegralFlux::CH1_RISE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(79.81, 36.216)), module, IntegralFlux::CH4_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(26.633, 49.47)), module, IntegralFlux::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(74.56, 49.27)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(26.633, 50.27)), module, IntegralFlux::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(74.56, 50.07)), module, IntegralFlux::CH4_BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, IntegralFlux::CH1_FALL_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(69.389, 63.263)), module, IntegralFlux::CH4_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.143, 76.377)), module, IntegralFlux::INPUT_2_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.543, 76.377)), module, IntegralFlux::INPUT_2_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(59.585, 76.377)), module, IntegralFlux::INPUT_3_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, IntegralFlux::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.995, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(41.943, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(25.295, 96.915)), module, IntegralFlux::OUT_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(42.343, 96.915)), module, IntegralFlux::OUT_2_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(59.486, 96.915)), module, IntegralFlux::OUT_3_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(75.832, 96.915)), module, IntegralFlux::OUT_4_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 96.915)), module, IntegralFlux::EOC_4_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, IntegralFlux::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(35.252, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(50.614, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(65.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(33.652, 110.882)), module, IntegralFlux::OR_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(50.714, 110.882)), module, IntegralFlux::SUM_OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(67.975, 110.882)), module, IntegralFlux::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(91.281, 110.682)), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(31.875, 14.855)), module, IntegralFlux::CYCLE_1_LED_LIGHT));
@@ -1330,8 +1395,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(84.603, 96.716)), module, IntegralFlux::EOC_CH_4_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.499)), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(84.731, 110.599)), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(28.274, 110.683)), module, IntegralFlux::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(72.954, 110.683)), module, IntegralFlux::INV_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(42.374, 110.758)), module, IntegralFlux::OR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(59.554, 110.758)), module, IntegralFlux::INV_LED_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
