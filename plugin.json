@@ -24,6 +24,16 @@
         "Envelope Follower",
         "Dual"
       ]
+    },
+    {
+      "slug": "Proc",
+      "name": "Proc",
+      "description": "Single generator and slew section derived from Integral Flux.",
+      "tags": [
+        "Function Generator",
+        "Slew Limiter",
+        "Envelope Follower"
+      ]
     }
   ]
 }

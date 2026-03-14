@@ -246,15 +246,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="232.83161"
-   inkscape:cy="202.894"
+   inkscape:zoom="2.385554"
+   inkscape:cx="185.91069"
+   inkscape:cy="226.57211"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g100"
+   inkscape:current-layer="panel_labels_reworked"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -819,7 +819,7 @@
    id="reworked_module_title_text"
    x="5079.9966"
    y="447.27814"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
    xml:space="preserve">Integral Flux</text><text
    id="reworked_LEVIATHAN_LOGO"
    x="5079.9966"
@@ -832,115 +832,115 @@
    id="reworked_lbl_in1"
    x="992.87653"
    y="2194.4358"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">IN 1</text>
         <text
    id="reworked_lbl_trig1"
    x="2107.8149"
    y="2192.9202"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">TRIG</text>
         <text
    id="reworked_lbl_surgeA"
    x="3392.3579"
    y="4482.8999"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">SURGE</text>
         <text
    id="reworked_lbl_sinkA"
    x="4217.5156"
    y="6175.1001"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">SINK</text>
         <text
    id="reworked_lbl_bothA"
    x="2662.2698"
    y="5648.8013"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">BOTH</text>
         <text
    id="reworked_text36"
    x="3566.0229"
    y="2709.7002"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LOOP</text>
         <text
    id="reworked_text29-1"
    x="1419.9977"
    y="5922.2412"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
    id="reworked_text27"
    x="597.8999"
    y="4324.1782"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LIN</text>
         <text
    id="reworked_lbl_trig4"
    x="8038.3926"
    y="2192.9202"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">TRIG</text>
         <text
    id="reworked_lbl_in4"
    x="9134.9414"
    y="2194.3657"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">IN 4</text>
         <text
    id="reworked_lbl_surgeB"
    x="6780.7212"
    y="4482.8999"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">SURGE</text>
         <text
    id="reworked_lbl_sinkB"
    x="5955.2847"
    y="6175.1001"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">SINK</text>
         <text
    id="reworked_lbl_bothB"
    x="7447.2183"
    y="5648.8003"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">BOTH</text>
         <text
    id="reworked_text36-2"
    x="6541.9229"
    y="2709.7002"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LOOP</text>
         <text
    id="reworked_text29-1-5"
    x="9178.2988"
    y="5905.4004"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
         <text
    id="reworked_text27-6"
    x="8378.6084"
    y="4324.1782"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LIN</text>
         <text
    id="reworked_lbl_in2"
    x="4259.9082"
    y="7053.3281"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">IN 2</text>
         <text
    id="reworked_lbl_in3"
    x="5957.9062"
    y="7053.3281"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">IN 3</text>
         <text
    id="reworked_in2_unpatched_text"
    x="3533.2048"
    y="7590.5005"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan10857"
@@ -950,7 +950,7 @@
    id="reworked_in3_unpatched_text"
    x="6653.6367"
    y="7590.6313"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan10877"
@@ -960,85 +960,89 @@
    id="reworked_lbl_eor"
    x="1014.0171"
    y="10341.131"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">EoR</text>
         <text
    id="reworked_lbl_eoc"
    x="9138.7285"
    y="10343.922"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">EoC</text>
         <text
    id="reworked_lbl_out1"
    x="2531.5142"
    y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">1</text>
         <text
    id="reworked_lbl_out2"
    x="4241.1694"
    y="10344.487"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">2</text>
         <text
    id="reworked_lbl_out3"
    x="5952.8721"
    y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">3</text>
         <text
    id="reworked_lbl_out4"
    x="7588.1367"
    y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">4</text>
         <text
    id="reworked_text29-0"
    x="5081.7354"
    y="11740.522"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">SUM</text>
         <text
    id="reworked_text29-7"
    x="6803.3994"
    y="11737.7"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">INV</text>
         <text
    id="reworked_text29"
    x="3357.9534"
    y="11740.523"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22299049px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">OR</text>
         <text
    id="reworked_lbl_s1"
    x="993.21527"
    y="11741.934"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">∫1</text>
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan101">∫ 1</tspan></text>
         <text
    id="reworked_lbl_s4"
    x="9135.2803"
    y="11741.934"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">∫4</text>
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan100">∫ 4</tspan></text>
         <text
    id="reworked_module_description"
    x="5079.9966"
    y="815.19421"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      x="5079.9966"
      y="815.19421"
-     style="display:inline;opacity:1;mix-blend-mode:normal"
+     style="display:inline;opacity:1;mix-blend-mode:normal;-inkscape-font-specification:'Rubik, Light';font-family:Rubik;font-weight:300;font-style:normal;font-stretch:normal;font-variant:normal;font-size:211.666997px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal"
      id="tspan2">generator • slew limiter • attenuverters • mix/logic</tspan></text>
         
       </g><g
    id="g100"
    inkscape:groupmode="layer"
    inkscape:label="Labels Reworked copy"
-   style="display:inline"><path
+   style="display:none"><path
    d="m 3457.0744,584.86156 q -5.8209,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 V 227.67384 q 0,-5.82084 3.7042,-9.52501 3.7041,-3.70417 9.525,-3.70417 h 70.9084 q 5.8208,0 9.525,3.70417 3.7041,3.70417 3.7041,9.52501 v 343.95854 q 0,5.82084 -3.7041,9.52501 -3.7042,3.70417 -9.525,3.70417 z m 165.6289,0 q -5.8208,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 V 322.9239 q 0,-5.82084 3.7042,-9.52501 3.7042,-3.70417 9.525,-3.70417 h 60.8542 q 5.8209,0 9.525,3.70417 3.7042,3.70417 3.7042,9.52501 v 20.10834 q 13.7583,-16.40418 35.9834,-27.51668 22.225,-11.11251 52.3875,-11.11251 30.6917,0 53.975,13.75834 23.8125,13.75834 37.0417,40.74586 13.7584,26.45835 13.7584,65.08754 v 147.63759 q 0,5.82084 -4.2334,9.52501 -3.7042,3.70417 -8.9958,3.70417 h -66.6751 q -5.2916,0 -9.525,-3.70417 -3.7041,-3.70417 -3.7041,-9.52501 V 427.16979 q 0,-24.87085 -12.1709,-38.10002 -11.6417,-13.75834 -34.925,-13.75834 -21.6958,0 -34.925,13.75834 -12.7,13.22917 -12.7,38.10002 v 144.46259 q 0,5.82084 -4.2334,9.52501 -3.7041,3.70417 -8.9958,3.70417 z m 464.8736,0 q -33.8667,0 -58.7375,-10.58334 -24.3417,-11.11251 -37.5709,-33.86669 -13.2292,-23.28335 -13.2292,-59.79587 V 379.0156 h -41.275 q -5.8208,0 -10.0542,-3.70417 -3.7041,-3.70417 -3.7041,-9.52501 V 322.9239 q 0,-5.82084 3.7041,-9.52501 4.2334,-3.70417 10.0542,-3.70417 h 41.275 v -87.31255 q 0,-5.82084 3.7042,-9.52501 4.2334,-3.70417 9.525,-3.70417 h 61.3834 q 5.8208,0 9.525,3.70417 3.7042,3.70417 3.7042,9.52501 v 87.31255 h 66.1458 q 5.8209,0 9.525,3.70417 3.7042,3.70417 3.7042,9.52501 v 42.86252 q 0,5.82084 -3.7042,9.52501 -3.7041,3.70417 -9.525,3.70417 h -66.1458 v 94.19172 q 0,17.99168 6.8791,28.57502 6.8792,10.58334 23.2834,10.58334 h 40.7458 q 5.8209,0 9.525,3.70417 3.7042,3.70417 3.7042,9.525 v 46.03753 q 0,5.82084 -3.7042,9.52501 -3.7041,3.70417 -9.525,3.70417 z m 233.3632,5.29167 q -62.4417,0 -99.4834,-33.86669 -37.0417,-33.86669 -38.6292,-100.54173 0,-3.70417 0,-9.525 0,-5.82084 0,-8.99584 1.5875,-41.8042 18.5209,-71.43755 17.4625,-30.16252 47.625,-45.50836 30.6917,-15.87501 71.4375,-15.87501 46.5667,0 76.7292,18.52085 30.6917,18.52084 46.0376,50.27086 15.3458,31.75002 15.3458,72.49588 v 12.70001 q 0,5.82083 -4.2333,9.525 -3.7042,3.70417 -8.9959,3.70417 h -169.3334 q 0,0.52917 0,1.5875 0,1.05834 0,2.11667 0.5292,15.34584 5.2917,28.04585 4.7625,12.70001 14.8166,20.10835 10.0542,7.40833 24.3417,7.40833 10.5834,0 17.4625,-3.175 7.4084,-3.70417 12.1709,-7.9375 4.7625,-4.76251 7.4083,-7.93751 4.7625,-5.29167 7.4084,-6.35 3.175,-1.5875 9.525,-1.5875 h 65.6167 q 5.2916,0 8.4666,3.175 3.7042,2.64583 3.175,7.9375 -0.5291,8.99584 -8.9958,21.69585 -8.4667,12.70001 -24.8708,25.40002 -15.8751,12.17084 -40.2167,20.10834 -24.3417,7.93751 -56.6209,7.93751 z m -44.9792,-170.92094 h 89.4292 v -1.05834 q 0,-16.93334 -5.2916,-29.63335 -4.7626,-12.7 -15.3459,-19.57918 -10.0542,-6.87917 -24.3417,-6.87917 -14.2875,0 -24.3417,6.87917 -9.525,6.87918 -14.8166,19.57918 -5.2917,12.70001 -5.2917,29.63335 z m 367.2418,282.04601 q -40.7459,0 -67.7334,-10.58334 -26.4584,-10.58334 -42.3334,-25.40002 -15.3458,-14.81668 -22.225,-29.63335 -6.8791,-14.28751 -7.4083,-22.75418 -0.5292,-5.82084 3.7042,-9.52501 4.2333,-3.70417 10.0541,-3.70417 h 67.2042 q 4.7625,0 7.9375,2.11667 3.7042,2.64584 5.8209,8.46667 2.6458,5.82084 6.8791,12.17084 4.7626,6.35001 12.7001,10.05418 8.4666,4.23333 22.7541,4.23333 15.875,0 26.4584,-5.29167 10.5833,-4.7625 15.875,-16.40417 5.2917,-11.11251 5.2917,-30.16252 v -35.45419 q -12.1709,13.22917 -31.2209,21.69585 -19.05,7.9375 -46.0375,7.9375 -26.9875,0 -47.625,-7.9375 -20.6376,-7.93751 -34.3959,-23.81252 -13.7583,-15.87501 -21.6958,-38.62919 -7.4084,-22.75418 -8.9959,-52.38753 -0.5292,-13.75834 0,-27.51669 1.5875,-28.57501 8.9959,-51.32919 7.4083,-22.75418 21.1666,-39.15836 14.2875,-16.40418 34.9251,-24.87085 20.6375,-8.99584 47.625,-8.99584 28.575,0 48.6833,11.11251 20.6376,10.58334 33.8667,26.98751 V 322.9239 q 0,-5.29167 3.7042,-8.99584 3.7042,-4.23334 9.525,-4.23334 h 60.8542 q 5.8209,0 9.525,4.23334 4.2334,3.70417 4.2334,8.99584 v 254.52932 q 0,40.21669 -16.4042,67.73337 -16.4042,27.51669 -47.0959,41.8042 -30.6917,14.28751 -74.6125,14.28751 z m -3.7042,-191.02929 q 16.9333,0 27.5167,-7.40834 10.5833,-7.40833 15.3458,-19.05001 5.2917,-11.64167 5.8209,-24.87085 0.5291,-5.82083 0.5291,-16.40417 0,-10.58334 -0.5291,-15.87501 -0.5292,-13.75835 -5.8209,-25.40002 -4.7625,-11.64167 -15.3458,-18.52084 -10.5834,-7.40834 -27.5167,-7.40834 -17.4625,0 -28.0458,7.40834 -10.0542,7.40833 -14.8167,20.10834 -4.2334,12.70001 -5.2917,28.04585 -0.5292,11.64168 0,23.81252 1.0583,15.34584 5.2917,28.04585 4.7625,12.70001 14.8167,20.10834 10.5833,7.40834 28.0458,7.40834 z m 217.4881,74.61255 q -5.8209,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 V 322.9239 q 0,-5.29167 3.7042,-8.99584 3.7041,-4.23334 9.525,-4.23334 h 60.8542 q 5.8208,0 9.525,4.23334 3.7042,3.70417 3.7042,8.99584 v 21.16668 q 14.2875,-16.40418 33.8666,-25.40002 20.1084,-8.99584 44.9792,-8.99584 h 23.2834 q 5.2917,0 8.9958,3.70417 4.2334,3.70417 4.2334,9.52501 v 54.5042 q 0,5.29167 -4.2334,9.525 -3.7041,3.70417 -8.9958,3.70417 H 4981.87 q -21.6959,0 -33.8667,12.17084 -11.6417,11.64168 -11.6417,33.33752 v 135.46675 q 0,5.82084 -4.2333,9.52501 -3.7042,3.70417 -9.525,3.70417 z m 304.9988,5.29167 q -28.575,0 -51.3292,-10.58334 -22.225,-11.11251 -35.4542,-29.63335 -13.2291,-18.52085 -13.2291,-41.8042 0,-37.57085 30.6917,-59.2667 30.6916,-22.22501 81.4917,-30.16252 l 66.1458,-10.05417 v -7.40834 q 0,-19.05001 -7.9375,-29.10418 -7.9375,-10.05418 -29.1041,-10.05418 -14.8167,0 -24.3417,5.82084 -8.9959,5.82084 -14.2875,15.87501 -4.7625,6.87917 -13.2292,6.87917 h -59.2667 q -5.8209,0 -8.9959,-3.175 -3.175,-3.70417 -2.6458,-8.46667 0,-9.52501 6.8792,-21.69585 7.4083,-12.70001 22.225,-24.87085 14.8167,-12.17084 38.1,-20.10834 23.2834,-7.93751 56.0917,-7.93751 34.3959,0 58.7376,7.93751 24.3416,7.9375 39.1583,22.22501 15.3459,14.28751 22.7542,33.86669 7.4083,19.05001 7.4083,42.33336 v 160.86676 q 0,5.82084 -4.2333,9.52501 -3.7042,3.70417 -8.9958,3.70417 h -61.3834 q -5.8209,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 v -18.52084 q -6.8792,10.05417 -18.5208,18.52084 -11.6417,8.46667 -27.5167,13.22918 -15.3459,5.29167 -35.9834,5.29167 z m 24.8709,-60.32504 q 15.3458,0 27.5167,-6.35 12.7,-6.87917 19.5791,-20.63752 7.4084,-14.28751 7.4084,-35.45419 v -7.40833 l -44.9792,7.9375 q -24.8709,4.23334 -36.5125,13.22918 -11.1125,8.46667 -11.1125,20.10834 0,8.99584 5.2916,15.34585 5.2917,6.35 13.7584,10.05417 8.4666,3.175 19.05,3.175 z m 218.0169,55.03337 q -5.8209,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 V 222.38217 q 0,-5.82084 3.7042,-9.52501 3.7041,-3.70417 9.525,-3.70417 h 62.4417 q 5.8208,0 9.525,3.70417 3.7041,3.70417 3.7041,9.52501 v 349.25021 q 0,5.82084 -3.7041,9.52501 -3.7042,3.70417 -9.525,3.70417 z m 269.8745,0 q -5.8208,0 -9.525,-3.70417 -3.7042,-3.70417 -3.7042,-9.52501 V 227.67384 q 0,-5.82084 3.7042,-9.52501 3.7042,-3.70417 9.525,-3.70417 h 242.8877 q 5.8208,0 9.525,3.70417 4.2333,3.70417 4.2333,9.52501 v 53.44586 q 0,5.82084 -4.2333,9.52501 -3.7042,3.70417 -9.525,3.70417 h -162.9835 v 77.78755 h 152.4001 q 5.8209,0 9.525,4.23333 4.2334,3.70417 4.2334,9.52501 v 52.9167 q 0,5.29167 -4.2334,9.525 -3.7041,3.70417 -9.525,3.70417 h -152.4001 v 119.59174 q 0,5.82084 -3.7041,9.52501 -3.7042,3.70417 -9.525,3.70417 z m 321.2043,0 q -5.8208,0 -9.525,-3.70417 -3.7041,-3.70417 -3.7041,-9.52501 V 222.38217 q 0,-5.82084 3.7041,-9.52501 3.7042,-3.70417 9.525,-3.70417 h 62.4417 q 5.8209,0 9.525,3.70417 3.7042,3.70417 3.7042,9.52501 v 349.25021 q 0,5.82084 -3.7042,9.52501 -3.7041,3.70417 -9.525,3.70417 z m 239.1831,5.29167 q -30.1626,0 -53.9751,-13.75834 -23.2833,-13.75835 -36.5125,-40.2167 -13.2292,-26.98751 -13.2292,-65.6167 V 322.9239 q 0,-5.82084 3.7042,-9.52501 3.7042,-3.70417 9.525,-3.70417 h 66.1459 q 5.8208,0 9.525,3.70417 3.7041,3.70417 3.7041,9.52501 v 144.46258 q 0,51.85837 46.5667,51.85837 21.6959,0 34.3959,-13.22917 13.2292,-13.75835 13.2292,-38.6292 V 322.9239 q 0,-5.82084 3.7041,-9.52501 3.7042,-3.70417 9.525,-3.70417 h 66.1459 q 5.8209,0 9.525,3.70417 3.7042,3.70417 3.7042,9.52501 v 248.70848 q 0,5.82084 -3.7042,9.52501 -3.7041,3.70417 -9.525,3.70417 h -61.3833 q -5.2917,0 -9.5251,-3.70417 -3.7041,-3.70417 -3.7041,-9.52501 v -20.10834 q -13.7584,19.05001 -35.9834,29.10418 -21.6958,9.52501 -51.8583,9.52501 z m 227.0131,-5.29167 q -4.7625,0 -8.4667,-3.175 -3.175,-3.70417 -3.175,-8.46668 0,-1.5875 0.5292,-3.70417 0.5291,-2.64583 2.1166,-4.7625 l 88.3709,-121.17924 -80.4333,-113.7709 q -1.5875,-2.11667 -2.6459,-4.23334 -0.5291,-2.11667 -0.5291,-4.23334 0,-4.7625 3.7041,-7.9375 3.7042,-3.70417 8.4667,-3.70417 h 64.5584 q 6.8791,0 10.0541,3.175 3.7042,3.175 5.2917,5.82084 l 49.2125,68.26254 48.6834,-67.73337 q 2.1167,-2.64584 5.2917,-5.82084 3.7041,-3.70417 10.5833,-3.70417 h 61.9125 q 4.7626,0 7.9376,3.70417 3.7041,3.175 3.7041,7.9375 0,2.11667 -0.5291,4.23334 -0.5292,2.11667 -2.1167,4.23334 l -82.5501,113.7709 89.4293,121.17924 q 2.1166,2.11667 2.6458,4.23334 0.5292,2.11667 0.5292,4.23333 0,4.76251 -3.7042,8.46668 -3.175,3.175 -8.4667,3.175 h -67.2042 q -6.35,0 -9.525,-2.64584 -3.175,-3.175 -5.2917,-5.82083 l -53.4458,-72.49588 -53.9751,72.49588 q -2.1166,2.11666 -5.2916,5.29167 -3.175,3.175 -10.0542,3.175 z"
    id="text67"
    style="font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variation-settings:'wght' 700;dominant-baseline:middle;text-anchor:middle;fill:url(#linearGradient500);stroke-width:28.1347"

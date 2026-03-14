@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.1.5]
+
+### Proc
+- New Module (match Make Noise Function)
+
+### Integral Flux
+- More UI Adjusting
+
 ## [v2.1.4]
 
 ### Integral Flux
