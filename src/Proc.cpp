@@ -20,27 +20,31 @@ struct Proc : Module {
 	enum InputId {
 		INPUT_1_INPUT,
 		INPUT_1_TRIG_INPUT,
+		CV_HALT_INPUT,
 		CH1_RISE_CV_INPUT,
 		CH1_BOTH_CV_INPUT,
 		CH1_FALL_CV_INPUT,
-		CH1_CYCLE_CV_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
 		EOR_1_OUTPUT,
+		EOC_1_OUTPUT,
 		CH_1_UNITY_OUTPUT,
+		CH_1_NEG_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
 		CYCLE_1_LED_LIGHT,
 		EOR_CH_1_LIGHT,
+		EOC_CH_1_LIGHT,
 		LIGHT_UNITY_1_LIGHT,
+		LIGHT_NEG_1_LIGHT,
 		LIGHTS_LEN
 	};
 
 	enum OuterPhase {
 		// IDLE: no active function cycle unless cycle mode is engaged.
-		// RISE/FALL: function-generator mode integrates toward 10V then 0V.
+		// RISE/FALL: function-generator mode integrates toward 8V then 0V.
 		OUTER_IDLE,
 		OUTER_RISE,
 		OUTER_FALL
@@ -52,6 +56,7 @@ struct Proc : Module {
 		dsp::SchmittTrigger cycleButtonEdge;
 		// Optional anti-alias compensation for hard output steps.
 		dsp::MinBlepGenerator<16, 16> gateBlep;
+		dsp::MinBlepGenerator<16, 16> riseGateBlep;
 		dsp::MinBlepGenerator<16, 16> signalBlep;
 
 		OuterPhase phase = OUTER_IDLE;
@@ -65,6 +70,7 @@ struct Proc : Module {
 		float slewInvSpan = 0.f;
 		bool cycleLatched = false;
 		bool gateState = false;
+		bool riseGateState = false;
 		// Cached warp compensation for the current shape setting.
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
@@ -90,17 +96,17 @@ struct Proc : Module {
 	};
 
 	struct OuterChannelConfig {
-		// Per-channel wiring map so CH1/CH4 share one DSP implementation.
+		// Wiring map keeps the DSP path decoupled from panel/control layout.
 		int cycleParam;
 		int trigInput;
 		int signalInput;
+		int haltInput;
 		int riseParam;
 		int fallParam;
 		int shapeParam;
 		int riseCvInput;
 		int fallCvInput;
 		int bothCvInput;
-		int cycleCvInput;
 		float logShapeTimeScaleLog2;
 		float expShapeTimeScaleLog2;
 		OuterPhase gateHighPhase;
@@ -316,20 +322,20 @@ struct Proc : Module {
 		return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
 	}
 
-	static void insertGateTransition(OuterChannelState& ch, bool newState, float fraction01) {
-		if (newState == ch.gateState) {
+	static void insertGateTransition(dsp::MinBlepGenerator<16, 16>& blep, bool& state, bool newState, float fraction01) {
+		if (newState == state) {
 			return;
 		}
 		float f = clamp(fraction01, 1e-6f, 1.f);
 		// Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
 		float p = f - 1.f;
 		float step = newState ? 10.f : -10.f;
-		ch.gateBlep.insertDiscontinuity(p, step);
-		ch.gateState = newState;
+		blep.insertDiscontinuity(p, step);
+		state = newState;
 	}
 
-	static void setGateStateImmediate(OuterChannelState& ch, bool newState) {
-		ch.gateState = newState;
+	static void setGateStateImmediate(bool& state, bool newState) {
+		state = newState;
 	}
 
 	static void insertSignalTransition(OuterChannelState& ch, float step, float fraction01) {
@@ -521,13 +527,14 @@ struct Proc : Module {
 			ch.cycleLatched = !ch.cycleLatched;
 		}
 
-		bool cycleCvHigh = inputs[cfg.cycleCvInput].getVoltage() >= 2.5f;
-		bool cycleOn = ch.cycleLatched || cycleCvHigh;
+		bool haltHigh = inputs[cfg.haltInput].getVoltage() >= 2.5f;
+		bool cycleOn = ch.cycleLatched;
 		bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
+		bool riseGateWasHigh = (ch.phase == OUTER_RISE);
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
-		if (trigRise && ch.trigRearmSec <= 0.f && ch.phase != OUTER_RISE) {
+		if (!haltHigh && trigRise && ch.trigRearmSec <= 0.f && ch.phase != OUTER_RISE) {
 			triggerOuterFunction(ch);
 			trigAccepted = true;
 			ch.trigRearmSec = 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f);
@@ -630,19 +637,33 @@ struct Proc : Module {
 		float scale = ch.cachedWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
-		if (ch.phase == OUTER_IDLE && cycleOn) {
+		if (!haltHigh && ch.phase == OUTER_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
 			triggerOuterFunction(ch);
 		}
 		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
+		bool riseGateIsHigh = (ch.phase == OUTER_RISE);
 		if (gateIsHigh != gateWasHigh) {
 			// Transition occurred at start-of-sample due to trigger/cycle state.
 			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch, gateIsHigh, 1e-6f);
+				insertGateTransition(ch.gateBlep, ch.gateState, gateIsHigh, 1e-6f);
 			}
 			else {
-				setGateStateImmediate(ch, gateIsHigh);
+				setGateStateImmediate(ch.gateState, gateIsHigh);
 			}
+		}
+		if (riseGateIsHigh != riseGateWasHigh) {
+			if (bandlimitedGateOutputs) {
+				insertGateTransition(ch.riseGateBlep, ch.riseGateState, riseGateIsHigh, 1e-6f);
+			}
+			else {
+				setGateStateImmediate(ch.riseGateState, riseGateIsHigh);
+			}
+		}
+		if (haltHigh) {
+			OuterChannelResult result;
+			result.cycleOn = cycleOn;
+			return result;
 		}
 
 		if (ch.phase != OUTER_IDLE) {
@@ -684,10 +705,12 @@ struct Proc : Module {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.gateBlep, ch.gateState, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.riseGateBlep, ch.riseGateState, ch.phase == OUTER_RISE, f);
 					}
 					else {
-						setGateStateImmediate(ch, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.gateState, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.riseGateState, ch.phase == OUTER_RISE);
 					}
 				}
 			}
@@ -713,10 +736,12 @@ struct Proc : Module {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.gateBlep, ch.gateState, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.riseGateBlep, ch.riseGateState, ch.phase == OUTER_RISE, f);
 					}
 					else {
-						setGateStateImmediate(ch, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.gateState, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.riseGateState, ch.phase == OUTER_RISE);
 					}
 				}
 			}
@@ -750,14 +775,16 @@ struct Proc : Module {
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise");
 		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall");
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
-		configInput(INPUT_1_INPUT, "CH1 signal");
-		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
-		configInput(CH1_RISE_CV_INPUT, "CH1 rise");
-		configInput(CH1_BOTH_CV_INPUT, "CH1 both");
-		configInput(CH1_FALL_CV_INPUT, "CH1 fall");
-		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle");
-		configOutput(EOR_1_OUTPUT, "CH1 end of rise");
-		configOutput(CH_1_UNITY_OUTPUT, "CH1 unity");
+		configInput(INPUT_1_INPUT, "Signal");
+		configInput(INPUT_1_TRIG_INPUT, "Trigger");
+		configInput(CV_HALT_INPUT, "Halt CV");
+		configInput(CH1_RISE_CV_INPUT, "Rise CV");
+		configInput(CH1_BOTH_CV_INPUT, "Both CV");
+		configInput(CH1_FALL_CV_INPUT, "Fall CV");
+		configOutput(EOR_1_OUTPUT, "End of rise");
+		configOutput(EOC_1_OUTPUT, "End of cycle");
+		configOutput(CH_1_UNITY_OUTPUT, "Output");
+		configOutput(CH_1_NEG_OUTPUT, "Negative output");
 	}
 
 	json_t* dataToJson() override {
@@ -802,13 +829,13 @@ struct Proc : Module {
 			CYCLE_1_PARAM,
 			INPUT_1_TRIG_INPUT,
 			INPUT_1_INPUT,
+			CV_HALT_INPUT,
 			RISE_1_PARAM,
 			FALL_1_PARAM,
 			LIN_LOG_1_PARAM,
 			CH1_RISE_CV_INPUT,
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
-			CH1_CYCLE_CV_INPUT,
 			std::log2(OUTER_LOG_SHAPE_SCALE),
 			std::log2(OUTER_EXP_SHAPE_SCALE),
 			OUTER_FALL
@@ -837,14 +864,20 @@ struct Proc : Module {
 		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick);
 		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
 		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
+		float eocOut = (ch1.riseGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.riseGateBlep.process() : 0.f);
+		float ch1OutNeg = -ch1OutRendered;
 
 		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
+		outputs[EOC_1_OUTPUT].setVoltage(eocOut);
 		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1OutRendered);
+		outputs[CH_1_NEG_OUTPUT].setVoltage(ch1OutNeg);
 
 		if (lightTick) {
 			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
 			lights[EOR_CH_1_LIGHT].setBrightness(ch1.gateState ? 1.f : 0.f);
+			lights[EOC_CH_1_LIGHT].setBrightness(ch1.riseGateState ? 1.f : 0.f);
 			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / FG_V_MAX, 0.f, 1.f));
+			lights[LIGHT_NEG_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutNeg) / FG_V_MAX, 0.f, 1.f));
 		}
 	}
 };
@@ -1096,7 +1129,7 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
+		const std::string panelPath = asset::plugin(pluginInstance, "res/proc.svg");
 		setPanel(createPanel(panelPath));
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
@@ -1104,10 +1137,10 @@ struct ProcWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(31.875, 20.938)), module, Proc::CYCLE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(33.755, 36.293)), module, Proc::RISE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(42.007, 53.079)), module, Proc::FALL_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(13.975, 50.526)), module, Proc::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(32.875, 19.538)), module, Proc::CYCLE_1_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(31.955, 36.293)), module, Proc::RISE_1_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_1_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::LIN_LOG_1_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
 			math::Rect previewRectMm;
@@ -1123,19 +1156,23 @@ struct ProcWidget : ModuleWidget {
 			addChild(ch1Preview);
 		}
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(9.947, 15.354)), module, Proc::INPUT_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.911, 15.354)), module, Proc::INPUT_1_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(40.049, 20.838)), module, Proc::CH1_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(21.683, 36.416)), module, Proc::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(26.633, 50.27)), module, Proc::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(32.704, 63.263)), module, Proc::CH1_FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::INPUT_1_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.611, 16.654)), module, Proc::INPUT_1_TRIG_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::CV_HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.883, 36.416)), module, Proc::CH1_RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(21.864, 48.961)), module, Proc::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::CH1_FALL_CV_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, Proc::EOR_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(27.195, 96.915)), module, Proc::EOC_1_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, Proc::CH_1_UNITY_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(27.152, 110.882)), module, Proc::CH_1_NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(31.875, 14.855)), module, Proc::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(32.875, 13.455)), module, Proc::CYCLE_1_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(16.537, 96.76)), module, Proc::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.499)), module, Proc::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(34.245, 96.952)), module, Proc::EOC_CH_1_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.758)), module, Proc::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(34.179, 110.941)), module, Proc::LIGHT_NEG_1_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1145,7 +1182,7 @@ struct ProcWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (proc) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR", "", &proc->bandlimitedGateOutputs));
+			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &proc->bandlimitedGateOutputs));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1 Signal Outputs", "", &proc->bandlimitedSignalOutputs));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &proc->timingInterpolate));
