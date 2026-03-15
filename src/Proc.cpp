@@ -805,8 +805,8 @@ struct Proc : Module {
 		configInput(FALL_CV_INPUT, "Fall CV");
 		configOutput(EOR_OUTPUT, "End of rise");
 		configOutput(EOC_OUTPUT, "End of cycle");
-		configOutput(MAIN_OUTPUT, "Output");
-		configOutput(NEG_OUTPUT, "Negative output");
+		configOutput(MAIN_OUTPUT, "Positive");
+		configOutput(NEG_OUTPUT, "Negative");
 	}
 
 	json_t* dataToJson() override {
