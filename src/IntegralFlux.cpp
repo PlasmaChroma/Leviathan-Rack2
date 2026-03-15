@@ -140,6 +140,11 @@ struct IntegralFlux : Module {
 		bool cycleOn = false;
 	};
 
+	struct SlewStepResult {
+		float out = 0.f;
+		int direction = 0;
+	};
+
 	struct MixNonIdealCal {
 		bool enabled = true;
 
@@ -338,7 +343,7 @@ struct IntegralFlux : Module {
 		return clamp(phase, 0.f, 1.f);
 	}
 
-	float processUnifiedShapedSlew(
+	SlewStepResult processUnifiedShapedSlew(
 		OuterChannelState& ch,
 		float in,
 		float riseTime,
@@ -349,12 +354,27 @@ struct IntegralFlux : Module {
 	) {
 		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
 		// This reuses the same curve family used by free-running function generation.
+		SlewStepResult result;
 		float out = ch.out;
+		float prevTargetOut = ch.slewTargetOut;
 		float delta = in - out;
-		if (delta == 0.f) {
-			return out;
+		if (std::fabs(delta) <= TARGET_EPS) {
+			float targetDelta = in - prevTargetOut;
+			if (targetDelta > TARGET_EPS) {
+				result.direction = 1;
+			}
+			else if (targetDelta < -TARGET_EPS) {
+				result.direction = -1;
+			}
+			else {
+				result.direction = ch.slewDir;
+			}
+			ch.slewDir = 0;
+			result.out = out;
+			return result;
 		}
 		int dir = (delta > 0.f) ? 1 : -1;
+		result.direction = dir;
 		bool dirChanged = (ch.slewDir != dir);
 		bool targetChanged = (std::fabs(in - ch.slewTargetOut) > TARGET_EPS);
 		if (ch.slewDir == 0 || dirChanged || targetChanged) {
@@ -376,8 +396,13 @@ struct IntegralFlux : Module {
 		out += (delta > 0.f) ? step : -step;
 		if ((in - prevOut) * (in - out) < 0.f) {
 			out = in;
+			ch.slewDir = 0;
 		}
-		return out;
+		else {
+			ch.slewDir = dir;
+		}
+		result.out = out;
+		return result;
 	}
 
 	static float phaseCrossingFraction(float phasePos, float dp) {
@@ -597,7 +622,7 @@ struct IntegralFlux : Module {
 
 		bool cycleCvHigh = inputs[cfg.cycleCvInput].getVoltage() >= 2.5f;
 		bool cycleOn = ch.cycleLatched || cycleCvHigh;
-		bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
+		bool gateWasHigh = ch.gateState;
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
@@ -704,18 +729,29 @@ struct IntegralFlux : Module {
 		float scale = ch.cachedWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
+		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
 		if (ch.phase == OUTER_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
 			triggerOuterFunction(ch);
 		}
-		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
-		if (gateIsHigh != gateWasHigh) {
-			// Transition occurred at start-of-sample due to trigger/cycle state.
+		if (ch.phase != OUTER_IDLE) {
+			bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
+			if (gateIsHigh != gateWasHigh) {
+				// Transition occurred at start-of-sample due to trigger/cycle state.
+				if (bandlimitedGateOutputs) {
+					insertGateTransition(ch, gateIsHigh, 1e-6f);
+				}
+				else {
+					setGateStateImmediate(ch, gateIsHigh);
+				}
+			}
+		}
+		else if (!signalPatched && gateWasHigh) {
 			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch, gateIsHigh, 1e-6f);
+				insertGateTransition(ch, false, 1e-6f);
 			}
 			else {
-				setGateStateImmediate(ch, gateIsHigh);
+				setGateStateImmediate(ch, false);
 			}
 		}
 
@@ -727,8 +763,7 @@ struct IntegralFlux : Module {
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// Map patched input into the same normalized domain as the internal integrator state.
-				float inV = inputs[cfg.signalInput].getVoltage();
-				float inSoft = softClamp8(inV);
+				float inSoft = softClamp8(signalIn);
 				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
 				float a = 1.f - std::exp(-dt / OUTER_INJECT_TAU);
 				injectAlpha = OUTER_INJECT_GAIN * clamp(a, 0.f, 1.f);
@@ -797,18 +832,28 @@ struct IntegralFlux : Module {
 		}
 		else if (signalPatched) {
 			// Use the same curve-warp family as the function generator path.
-			float in = inputs[cfg.signalInput].getVoltage();
-			ch.out = processUnifiedShapedSlew(
+			SlewStepResult slewStep = processUnifiedShapedSlew(
 				ch,
-				in,
+				signalIn,
 				riseTime,
 				fallTime,
 				shapeSigned,
 				scale,
 				dt
 			);
+			ch.out = slewStep.out;
+			bool gateIsHigh = (cfg.gateHighPhase == OUTER_RISE) ? (slewStep.direction > 0) : (slewStep.direction < 0);
+			if (gateIsHigh != gateWasHigh) {
+				if (bandlimitedGateOutputs) {
+					insertGateTransition(ch, gateIsHigh, 1e-6f);
+				}
+				else {
+					setGateStateImmediate(ch, gateIsHigh);
+				}
+			}
 		}
 		else {
+			ch.slewDir = 0;
 			ch.out = 0.f;
 		}
 

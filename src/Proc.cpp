@@ -116,6 +116,13 @@ struct Proc : Module {
 		bool cycleOn = false;
 	};
 
+	struct SlewStepResult {
+		float out = 0.f;
+		int direction = 0;
+		bool reachedTarget = false;
+		float targetFraction = 1.f;
+	};
+
 	ChannelState channel;
 	struct PreviewSharedState {
 		// Lock-free handoff from engine thread -> UI thread.
@@ -271,7 +278,7 @@ struct Proc : Module {
 		return clamp(phase, 0.f, 1.f);
 	}
 
-	float processUnifiedShapedSlew(
+	SlewStepResult processUnifiedShapedSlew(
 		ChannelState& ch,
 		float in,
 		float riseTime,
@@ -282,12 +289,27 @@ struct Proc : Module {
 	) {
 		// Shared "core limiter" path when the channel is acting as a slew on input signal.
 		// This reuses the same curve family used by free-running function generation.
+		SlewStepResult result;
 		float out = ch.out;
+		float prevTargetOut = ch.slewTargetOut;
 		float delta = in - out;
-		if (delta == 0.f) {
-			return out;
+		if (std::fabs(delta) <= TARGET_EPS) {
+			float targetDelta = in - prevTargetOut;
+			if (targetDelta > TARGET_EPS) {
+				result.direction = 1;
+			}
+			else if (targetDelta < -TARGET_EPS) {
+				result.direction = -1;
+			}
+			else {
+				result.direction = ch.slewDir;
+			}
+			ch.slewDir = 0;
+			result.out = out;
+			return result;
 		}
 		int dir = (delta > 0.f) ? 1 : -1;
+		result.direction = dir;
 		bool dirChanged = (ch.slewDir != dir);
 		bool targetChanged = (std::fabs(in - ch.slewTargetOut) > TARGET_EPS);
 		if (ch.slewDir == 0 || dirChanged || targetChanged) {
@@ -306,11 +328,22 @@ struct Proc : Module {
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
 
 		float prevOut = out;
-		out += (delta > 0.f) ? step : -step;
-		if ((in - prevOut) * (in - out) < 0.f) {
+		float nextOut = out + ((delta > 0.f) ? step : -step);
+		if ((in - prevOut) * (in - nextOut) < 0.f) {
+			float denom = nextOut - prevOut;
+			if (std::fabs(denom) > 1e-9f) {
+				result.targetFraction = clamp((in - prevOut) / denom, 1e-6f, 1.f);
+			}
+			result.reachedTarget = true;
 			out = in;
+			ch.slewDir = 0;
 		}
-		return out;
+		else {
+			out = nextOut;
+			ch.slewDir = dir;
+		}
+		result.out = out;
+		return result;
 	}
 
 	static float phaseCrossingFraction(float phasePos, float dp) {
@@ -517,6 +550,17 @@ struct Proc : Module {
 		PreviewUpdateState& previewUpdateState,
 		bool timingTick
 	) {
+		auto updateGateOutputs = [&](bool eorHigh, bool eocHigh, float fraction01) {
+			if (bandlimitedGateOutputs) {
+				insertGateTransition(ch.eorGateBlep, ch.eorGateState, eorHigh, fraction01);
+				insertGateTransition(ch.eocGateBlep, ch.eocGateState, eocHigh, fraction01);
+			}
+			else {
+				setGateStateImmediate(ch.eorGateState, eorHigh);
+				setGateStateImmediate(ch.eocGateState, eocHigh);
+			}
+		};
+
 		// This routine handles both behaviors of Proc's single channel:
 		// 1) function generator when cycling/triggered
 		// 2) slew limiter when a signal is patched and phase is idle
@@ -529,8 +573,6 @@ struct Proc : Module {
 
 		bool haltHigh = inputs[cfg.haltInput].getVoltage() >= 2.5f;
 		bool cycleOn = ch.cycleLatched;
-		bool eorGateWasHigh = (ch.phase == cfg.gateHighPhase);
-		bool eocGateWasHigh = (ch.phase == CHANNEL_RISE);
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
@@ -637,33 +679,24 @@ struct Proc : Module {
 		float scale = ch.cachedWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
+		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
 		if (!haltHigh && ch.phase == CHANNEL_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
 			triggerFunction(ch);
-		}
-		bool eorGateIsHigh = (ch.phase == cfg.gateHighPhase);
-		bool eocGateIsHigh = (ch.phase == CHANNEL_RISE);
-		if (eorGateIsHigh != eorGateWasHigh) {
-			// Transition occurred at start-of-sample due to trigger/cycle state.
-			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch.eorGateBlep, ch.eorGateState, eorGateIsHigh, 1e-6f);
-			}
-			else {
-				setGateStateImmediate(ch.eorGateState, eorGateIsHigh);
-			}
-		}
-		if (eocGateIsHigh != eocGateWasHigh) {
-			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch.eocGateBlep, ch.eocGateState, eocGateIsHigh, 1e-6f);
-			}
-			else {
-				setGateStateImmediate(ch.eocGateState, eocGateIsHigh);
-			}
 		}
 		if (haltHigh) {
 			ChannelResult result;
 			result.cycleOn = cycleOn;
 			return result;
+		}
+
+		if (ch.phase != CHANNEL_IDLE) {
+			bool eorGateIsHigh = (ch.phase == cfg.gateHighPhase);
+			bool eocGateIsHigh = (ch.phase == CHANNEL_RISE);
+			updateGateOutputs(eorGateIsHigh, eocGateIsHigh, 1e-6f);
+		}
+		else if (!signalPatched) {
+			updateGateOutputs(false, false, 1e-6f);
 		}
 
 		if (ch.phase != CHANNEL_IDLE) {
@@ -674,8 +707,7 @@ struct Proc : Module {
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// Map patched input into the same normalized domain as the internal integrator state.
-				float inV = inputs[cfg.signalInput].getVoltage();
-				float inSoft = softClamp8(inV);
+				float inSoft = softClamp8(signalIn);
 				xIn = clamp((inSoft - FUNCTION_V_MIN) / range, 0.f, 1.f);
 				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
 				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
@@ -704,14 +736,7 @@ struct Proc : Module {
 					if (bandlimitedSignalOutputs) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch.eorGateBlep, ch.eorGateState, ch.phase == cfg.gateHighPhase, f);
-						insertGateTransition(ch.eocGateBlep, ch.eocGateState, ch.phase == CHANNEL_RISE, f);
-					}
-					else {
-						setGateStateImmediate(ch.eorGateState, ch.phase == cfg.gateHighPhase);
-						setGateStateImmediate(ch.eocGateState, ch.phase == CHANNEL_RISE);
-					}
+					updateGateOutputs(ch.phase == cfg.gateHighPhase, ch.phase == CHANNEL_RISE, f);
 				}
 			}
 
@@ -735,31 +760,28 @@ struct Proc : Module {
 					if (bandlimitedSignalOutputs) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
-					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch.eorGateBlep, ch.eorGateState, ch.phase == cfg.gateHighPhase, f);
-						insertGateTransition(ch.eocGateBlep, ch.eocGateState, ch.phase == CHANNEL_RISE, f);
-					}
-					else {
-						setGateStateImmediate(ch.eorGateState, ch.phase == cfg.gateHighPhase);
-						setGateStateImmediate(ch.eocGateState, ch.phase == CHANNEL_RISE);
-					}
+					updateGateOutputs(ch.phase == cfg.gateHighPhase, ch.phase == CHANNEL_RISE, f);
 				}
 			}
 		}
 		else if (signalPatched) {
 			// Use the same curve-warp family as the function generator path.
-			float in = inputs[cfg.signalInput].getVoltage();
-			ch.out = processUnifiedShapedSlew(
+			SlewStepResult slewStep = processUnifiedShapedSlew(
 				ch,
-				in,
+				signalIn,
 				riseTime,
 				fallTime,
 				shapeSigned,
 				scale,
 				dt
 			);
+			ch.out = slewStep.out;
+			bool eorGateIsHigh = slewStep.direction < 0;
+			bool eocGateIsHigh = slewStep.direction > 0;
+			updateGateOutputs(eorGateIsHigh, eocGateIsHigh, 1e-6f);
 		}
 		else {
+			ch.slewDir = 0;
 			ch.out = 0.f;
 		}
 
