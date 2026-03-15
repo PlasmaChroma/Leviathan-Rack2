@@ -2,9 +2,9 @@
 
 ## Fonts
 * Ancient - Leviathan stylized (18 point)
-* Rubik Bold - Module Titles (15 point)
+* Rubik Semi-Bold - Module Titles (15 point)
 * Rubik Normal 6 - Module Description
-* Rubik Bold 8 - Labels
+* Rubik Normal 8 - Labels
 
 ## Colors
 - Purple (251, 100, 68, 100)

@@ -838,14 +838,14 @@ struct IntegralFlux : Module {
 		configInput(INPUT_3_INPUT, "CH3 signal");
 		configInput(INPUT_4_TRIG_INPUT, "CH4 trigger");
 		configInput(INPUT_4_INPUT, "CH4 signal");
-		configInput(CH1_RISE_CV_INPUT, "CH1 rise CV");
-		configInput(CH4_RISE_CV_INPUT, "CH4 rise CV");
-		configInput(CH1_BOTH_CV_INPUT, "CH1 both CV");
-		configInput(CH4_BOTH_CV_INPUT, "CH4 both CV");
-		configInput(CH1_FALL_CV_INPUT, "CH1 fall CV");
-		configInput(CH4_FALL_CV_INPUT, "CH4 fall CV");
-		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle CV");
-		configInput(CH4_CYCLE_CV_INPUT, "CH4 cycle CV");
+		configInput(CH1_RISE_CV_INPUT, "CH1 rise");
+		configInput(CH4_RISE_CV_INPUT, "CH4 rise");
+		configInput(CH1_BOTH_CV_INPUT, "CH1 both");
+		configInput(CH4_BOTH_CV_INPUT, "CH4 both");
+		configInput(CH1_FALL_CV_INPUT, "CH1 fall");
+		configInput(CH4_FALL_CV_INPUT, "CH4 fall");
+		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle");
+		configInput(CH4_CYCLE_CV_INPUT, "CH4 cycle");
 		configOutput(OUT_1_OUTPUT, "CH1 variable");
 		configOutput(OUT_2_OUTPUT, "CH2 variable");
 		configOutput(OUT_3_OUTPUT, "CH3 variable");
@@ -1039,6 +1039,8 @@ struct IntegralFlux : Module {
 		}
 	}
 };
+
+namespace {
 
 struct MyImageWidget : Widget {
 	int imageHandle = -1;
@@ -1430,5 +1432,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 	}
 };
+
+} // namespace
 
 Model* modelIntegralFlux = createModel<IntegralFlux, IntegralFluxWidget>("IntegralFlux");
