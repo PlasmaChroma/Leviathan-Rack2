@@ -771,10 +771,10 @@ struct Proc : Module {
 	Proc() {
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
-		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise");
-		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall");
-		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
+		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "Cycle");
+		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "Rise");
+		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "Fall");
+		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "Shape");
 		configInput(INPUT_1_INPUT, "Signal");
 		configInput(INPUT_1_TRIG_INPUT, "Trigger");
 		configInput(CV_HALT_INPUT, "Halt CV");
@@ -1134,11 +1134,11 @@ struct ProcWidget : ModuleWidget {
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(32.875, 19.538)), module, Proc::CYCLE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(31.955, 36.293)), module, Proc::RISE_1_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::LIN_LOG_1_PARAM));
 		{
@@ -1159,20 +1159,21 @@ struct ProcWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::INPUT_1_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.611, 16.654)), module, Proc::INPUT_1_TRIG_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::CV_HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.883, 36.416)), module, Proc::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(21.864, 48.961)), module, Proc::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::CH1_RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::CH1_BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::CH1_FALL_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.037, 96.946)), module, Proc::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(27.195, 96.915)), module, Proc::EOC_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(10.047, 110.682)), module, Proc::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(27.152, 110.882)), module, Proc::CH_1_NEG_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.437, 96.946)), module, Proc::EOR_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.595, 96.915)), module, Proc::EOC_1_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::CH_1_UNITY_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::CH_1_NEG_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(32.875, 13.455)), module, Proc::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(16.537, 96.76)), module, Proc::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(34.245, 96.952)), module, Proc::EOC_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(16.547, 110.758)), module, Proc::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(34.179, 110.941)), module, Proc::LIGHT_NEG_1_LIGHT));
+
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_CH_1_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_CH_1_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.947, 110.758)), module, Proc::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.579, 110.941)), module, Proc::LIGHT_NEG_1_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
