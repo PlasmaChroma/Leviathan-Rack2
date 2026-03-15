@@ -254,7 +254,7 @@
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g97"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -751,7 +751,7 @@
         
       </g><g
    id="components"
-   style="display:inline"><ellipse
+   style="display:none"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_1"
      cx="1177.5327"
