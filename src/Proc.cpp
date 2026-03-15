@@ -11,55 +11,55 @@
 struct Proc : Module {
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
-		CYCLE_1_PARAM,
-		RISE_1_PARAM,
-		FALL_1_PARAM,
-		LIN_LOG_1_PARAM,
+		CYCLE_PARAM,
+		RISE_PARAM,
+		FALL_PARAM,
+		SHAPE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
-		INPUT_1_INPUT,
-		INPUT_1_TRIG_INPUT,
-		CV_HALT_INPUT,
-		CH1_RISE_CV_INPUT,
-		CH1_BOTH_CV_INPUT,
-		CH1_FALL_CV_INPUT,
+		SIGNAL_INPUT,
+		TRIGGER_INPUT,
+		HALT_INPUT,
+		RISE_CV_INPUT,
+		BOTH_CV_INPUT,
+		FALL_CV_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
-		EOR_1_OUTPUT,
-		EOC_1_OUTPUT,
-		CH_1_UNITY_OUTPUT,
-		CH_1_NEG_OUTPUT,
+		EOR_OUTPUT,
+		EOC_OUTPUT,
+		MAIN_OUTPUT,
+		NEG_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
-		CYCLE_1_LED_LIGHT,
-		EOR_CH_1_LIGHT,
-		EOC_CH_1_LIGHT,
-		LIGHT_UNITY_1_LIGHT,
-		LIGHT_NEG_1_LIGHT,
+		CYCLE_LIGHT,
+		EOR_LIGHT,
+		EOC_LIGHT,
+		MAIN_LIGHT,
+		NEG_LIGHT,
 		LIGHTS_LEN
 	};
 
-	enum OuterPhase {
+	enum ChannelPhase {
 		// IDLE: no active function cycle unless cycle mode is engaged.
 		// RISE/FALL: function-generator mode integrates toward 8V then 0V.
-		OUTER_IDLE,
-		OUTER_RISE,
-		OUTER_FALL
+		CHANNEL_IDLE,
+		CHANNEL_RISE,
+		CHANNEL_FALL
 	};
 
-	struct OuterChannelState {
+	struct ChannelState {
 		// Edge detectors for trigger input and momentary cycle button.
 		dsp::SchmittTrigger trigEdge;
 		dsp::SchmittTrigger cycleButtonEdge;
 		// Optional anti-alias compensation for hard output steps.
-		dsp::MinBlepGenerator<16, 16> gateBlep;
-		dsp::MinBlepGenerator<16, 16> riseGateBlep;
+		dsp::MinBlepGenerator<16, 16> eorGateBlep;
+		dsp::MinBlepGenerator<16, 16> eocGateBlep;
 		dsp::MinBlepGenerator<16, 16> signalBlep;
 
-		OuterPhase phase = OUTER_IDLE;
+		ChannelPhase phase = CHANNEL_IDLE;
 		// phasePos is a normalized [0..1+] phase accumulator for the active segment.
 		float phasePos = 0.f;
 		float out = 0.f;
@@ -69,8 +69,8 @@ struct Proc : Module {
 		float slewTargetOut = 0.f;
 		float slewInvSpan = 0.f;
 		bool cycleLatched = false;
-		bool gateState = false;
-		bool riseGateState = false;
+		bool eorGateState = false;
+		bool eocGateState = false;
 		// Cached warp compensation for the current shape setting.
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
@@ -95,7 +95,7 @@ struct Proc : Module {
 		int timeInterpSamplesLeft = 0;
 	};
 
-	struct OuterChannelConfig {
+	struct ChannelConfig {
 		// Wiring map keeps the DSP path decoupled from panel/control layout.
 		int cycleParam;
 		int trigInput;
@@ -109,14 +109,14 @@ struct Proc : Module {
 		int bothCvInput;
 		float logShapeTimeScaleLog2;
 		float expShapeTimeScaleLog2;
-		OuterPhase gateHighPhase;
+		ChannelPhase gateHighPhase;
 	};
 
-	struct OuterChannelResult {
+	struct ChannelResult {
 		bool cycleOn = false;
 	};
 
-	OuterChannelState ch1;
+	ChannelState channel;
 	struct PreviewSharedState {
 		// Lock-free handoff from engine thread -> UI thread.
 		// Atomics keep preview independent from DSP timing.
@@ -137,8 +137,8 @@ struct Proc : Module {
 		float lastCurveSent = 0.f;
 		bool sentOnce = false;
 	};
-	PreviewSharedState previewCh1;
-	PreviewUpdateState previewUpdateCh1;
+	PreviewSharedState previewState;
+	PreviewUpdateState previewUpdate;
 	bool bandlimitedGateOutputs = false;
 	bool bandlimitedSignalOutputs = true;
 	int timingUpdateDiv = 1;
@@ -147,7 +147,7 @@ struct Proc : Module {
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
-	static constexpr float OUTER_V_MIN = 0.f;
+	static constexpr float FUNCTION_V_MIN = 0.f;
 	// Proc's free-running FG mode spans 0-8 V, while slew mode keeps the wider reference range.
 	static constexpr float FG_V_MAX = 8.f;
 	static constexpr float SLEW_REF_V_MAX = 10.2f;
@@ -164,13 +164,13 @@ struct Proc : Module {
 	// - Curve at linear point (0.33) ~= 500 Hz
 	// - Curve full LOG ~= 80 Hz
 	// - Curve full EXP ~= 1.0 kHz
-	static constexpr float OUTER_MIN_TIME = 0.001f;
-	static constexpr float OUTER_LOG_SHAPE_SCALE = 6.25f;
-	static constexpr float OUTER_EXP_SHAPE_SCALE = 0.5f;
+	static constexpr float MIN_STAGE_TIME = 0.001f;
+	static constexpr float LOG_SHAPE_TIME_SCALE = 6.25f;
+	static constexpr float EXP_SHAPE_TIME_SCALE = 0.5f;
 	// How strongly Signal IN perturbs the running FG core while cycling/triggered.
-	static constexpr float OUTER_INJECT_GAIN = 0.55f;
+	static constexpr float SIGNAL_INJECT_GAIN = 0.55f;
 	// One-pole attraction time constant for FG input perturbation.
-	static constexpr float OUTER_INJECT_TAU = 0.0015f;
+	static constexpr float SIGNAL_INJECT_TAU = 0.0015f;
 	// Empirical BOTH CV response fit (hardware-calibrated saturating model).
 	static constexpr float BOTH_F_OFF_HZ = 1.93157058f;
 	static constexpr float BOTH_F_MAX_HZ = 986.84629918f;
@@ -179,8 +179,8 @@ struct Proc : Module {
 	static constexpr float BOTH_NEUTRAL_V = -0.05f;
 	static constexpr float BOTH_TIME_SCALE_MAX = 64.f;
 	// Hardware-like FG ceilings.
-	static constexpr float OUTER_MAX_CYCLE_HZ = 1000.f;
-	static constexpr float OUTER_MAX_TRIGGER_HZ = 2000.f;
+	static constexpr float MAX_CYCLE_HZ = 1000.f;
+	static constexpr float MAX_TRIGGER_HZ = 2000.f;
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
@@ -209,7 +209,7 @@ struct Proc : Module {
 		return clamp(scale, 1.f / BOTH_TIME_SCALE_MAX, BOTH_TIME_SCALE_MAX);
 	}
 
-	static void enforceOuterSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
+	static void enforceSpeedLimit(float& riseTime, float& fallTime, float minPeriod) {
 		riseTime = std::max(riseTime, 1e-6f);
 		fallTime = std::max(fallTime, 1e-6f);
 		float period = riseTime + fallTime;
@@ -272,7 +272,7 @@ struct Proc : Module {
 	}
 
 	float processUnifiedShapedSlew(
-		OuterChannelState& ch,
+		ChannelState& ch,
 		float in,
 		float riseTime,
 		float fallTime,
@@ -280,7 +280,7 @@ struct Proc : Module {
 		float warpScale,
 		float dt
 	) {
-		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
+		// Shared "core limiter" path when the channel is acting as a slew on input signal.
 		// This reuses the same curve family used by free-running function generation.
 		float out = ch.out;
 		float delta = in - out;
@@ -300,7 +300,7 @@ struct Proc : Module {
 
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
-		float range = SLEW_REF_V_MAX - OUTER_V_MIN;
+		float range = SLEW_REF_V_MAX - FUNCTION_V_MIN;
 		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
 		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
@@ -338,7 +338,7 @@ struct Proc : Module {
 		state = newState;
 	}
 
-	static void insertSignalTransition(OuterChannelState& ch, float step, float fraction01) {
+	static void insertSignalTransition(ChannelState& ch, float step, float fraction01) {
 		if (std::fabs(step) < 1e-9f) {
 			return;
 		}
@@ -348,10 +348,10 @@ struct Proc : Module {
 	}
 
 	void setTimingUpdateDiv(int div) {
-		// Changing update rate invalidates cached timing so channels resync immediately.
+		// Changing update rate invalidates cached timing so the channel resyncs immediately.
 		timingUpdateDiv = std::max(1, div);
 		timingUpdateCounter = 0;
-		ch1.stageTimeValid = false;
+		channel.stageTimeValid = false;
 	}
 
 	void initKnobCurveLut() {
@@ -374,7 +374,7 @@ struct Proc : Module {
 		return v0 + (v1 - v0) * t;
 	}
 
-	void updateActiveStageTimes(OuterChannelState& ch) {
+	void updateActiveStageTimes(ChannelState& ch) {
 		// Optional de-zipper when timing is updated at control rate (/4, /8, ...).
 		if (ch.timeInterpSamplesLeft > 0) {
 			ch.activeRiseTime += ch.riseTimeStep;
@@ -448,7 +448,7 @@ struct Proc : Module {
 	}
 
 	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, bool& interactiveRecent, uint32_t& version) const {
-		const PreviewSharedState& shared = previewCh1;
+		const PreviewSharedState& shared = previewState;
 		riseTime = shared.riseTime.load(std::memory_order_relaxed);
 		fallTime = shared.fallTime.load(std::memory_order_relaxed);
 		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
@@ -477,10 +477,10 @@ struct Proc : Module {
 		float bothScale,
 		float shapeTimeScale
 	) const {
-		// Shared CH1/CH4 calibration:
+		// Timing calibration inherited from the original Flux channel behavior:
 		// - min dials at curve minimum ~80 Hz
 		// - min dials at curve maximum ~1.0 kHz
-		const float minTime = OUTER_MIN_TIME;
+		const float minTime = MIN_STAGE_TIME;
 		// Absolute floor allows EXP/positive CV to run faster than the linear baseline.
 		const float absoluteMinTime = 0.0001f;
 		const float maxTime = 1500.f;
@@ -503,21 +503,21 @@ struct Proc : Module {
 		return clamp(t, absoluteMinTime, maxTime);
 	}
 
-	void triggerOuterFunction(OuterChannelState& ch) {
+	void triggerFunction(ChannelState& ch) {
 		// Trigger always starts a fresh rise phase.
-		ch.phase = OUTER_RISE;
+		ch.phase = CHANNEL_RISE;
 		ch.phasePos = 0.f;
 	}
 
-	OuterChannelResult processOuterChannel(
+	ChannelResult processChannel(
 		const ProcessArgs& args,
-		OuterChannelState& ch,
-		const OuterChannelConfig& cfg,
+		ChannelState& ch,
+		const ChannelConfig& cfg,
 		PreviewSharedState& previewShared,
 		PreviewUpdateState& previewUpdateState,
 		bool timingTick
 	) {
-		// This routine handles both behaviors of an outer channel:
+		// This routine handles both behaviors of Proc's single channel:
 		// 1) function generator when cycling/triggered
 		// 2) slew limiter when a signal is patched and phase is idle
 		float dt = args.sampleTime;
@@ -529,15 +529,15 @@ struct Proc : Module {
 
 		bool haltHigh = inputs[cfg.haltInput].getVoltage() >= 2.5f;
 		bool cycleOn = ch.cycleLatched;
-		bool gateWasHigh = (ch.phase == cfg.gateHighPhase);
-		bool riseGateWasHigh = (ch.phase == OUTER_RISE);
+		bool eorGateWasHigh = (ch.phase == cfg.gateHighPhase);
+		bool eocGateWasHigh = (ch.phase == CHANNEL_RISE);
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
-		if (!haltHigh && trigRise && ch.trigRearmSec <= 0.f && ch.phase != OUTER_RISE) {
-			triggerOuterFunction(ch);
+		if (!haltHigh && trigRise && ch.trigRearmSec <= 0.f && ch.phase != CHANNEL_RISE) {
+			triggerFunction(ch);
 			trigAccepted = true;
-			ch.trigRearmSec = 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f);
+			ch.trigRearmSec = 1.f / std::max(MAX_TRIGGER_HZ, 1.f);
 		}
 
 		float riseKnob = params[cfg.riseParam].getValue();
@@ -603,18 +603,18 @@ struct Proc : Module {
 		updateActiveStageTimes(ch);
 		float riseTime = ch.activeRiseTime;
 		float fallTime = ch.activeFallTime;
-		bool fgActive = (ch.phase != OUTER_IDLE);
+		bool fgActive = (ch.phase != CHANNEL_IDLE);
 		if (trigAccepted) {
 			// External trigger may run faster than self-cycle, but with an explicit ceiling.
-			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
+			enforceSpeedLimit(riseTime, fallTime, 1.f / std::max(MAX_TRIGGER_HZ, 1.f));
 		}
 		else if (cycleOn) {
 			// Self-cycle path is held to the lower hardware-like ceiling.
-			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_CYCLE_HZ, 1.f));
+			enforceSpeedLimit(riseTime, fallTime, 1.f / std::max(MAX_CYCLE_HZ, 1.f));
 		}
 		else if (fgActive) {
 			// One-shot/triggered FG segments use trigger-domain ceiling when not cycling.
-			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
+			enforceSpeedLimit(riseTime, fallTime, 1.f / std::max(MAX_TRIGGER_HZ, 1.f));
 		}
 		float shapeSigned = shapeSignedFromKnob(shape);
 		updatePreviewChannel(
@@ -637,54 +637,54 @@ struct Proc : Module {
 		float scale = ch.cachedWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
-		if (!haltHigh && ch.phase == OUTER_IDLE && cycleOn) {
+		if (!haltHigh && ch.phase == CHANNEL_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
-			triggerOuterFunction(ch);
+			triggerFunction(ch);
 		}
-		bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
-		bool riseGateIsHigh = (ch.phase == OUTER_RISE);
-		if (gateIsHigh != gateWasHigh) {
+		bool eorGateIsHigh = (ch.phase == cfg.gateHighPhase);
+		bool eocGateIsHigh = (ch.phase == CHANNEL_RISE);
+		if (eorGateIsHigh != eorGateWasHigh) {
 			// Transition occurred at start-of-sample due to trigger/cycle state.
 			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch.gateBlep, ch.gateState, gateIsHigh, 1e-6f);
+				insertGateTransition(ch.eorGateBlep, ch.eorGateState, eorGateIsHigh, 1e-6f);
 			}
 			else {
-				setGateStateImmediate(ch.gateState, gateIsHigh);
+				setGateStateImmediate(ch.eorGateState, eorGateIsHigh);
 			}
 		}
-		if (riseGateIsHigh != riseGateWasHigh) {
+		if (eocGateIsHigh != eocGateWasHigh) {
 			if (bandlimitedGateOutputs) {
-				insertGateTransition(ch.riseGateBlep, ch.riseGateState, riseGateIsHigh, 1e-6f);
+				insertGateTransition(ch.eocGateBlep, ch.eocGateState, eocGateIsHigh, 1e-6f);
 			}
 			else {
-				setGateStateImmediate(ch.riseGateState, riseGateIsHigh);
+				setGateStateImmediate(ch.eocGateState, eocGateIsHigh);
 			}
 		}
 		if (haltHigh) {
-			OuterChannelResult result;
+			ChannelResult result;
 			result.cycleOn = cycleOn;
 			return result;
 		}
 
-		if (ch.phase != OUTER_IDLE) {
+		if (ch.phase != CHANNEL_IDLE) {
 			// Function-generator integration path.
 			float s = shapeSigned;
-			float range = FG_V_MAX - OUTER_V_MIN;
+			float range = FG_V_MAX - FUNCTION_V_MIN;
 			float xIn = 0.f;
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// Map patched input into the same normalized domain as the internal integrator state.
 				float inV = inputs[cfg.signalInput].getVoltage();
 				float inSoft = softClamp8(inV);
-				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
-				float a = 1.f - std::exp(-dt / OUTER_INJECT_TAU);
-				injectAlpha = OUTER_INJECT_GAIN * clamp(a, 0.f, 1.f);
+				xIn = clamp((inSoft - FUNCTION_V_MIN) / range, 0.f, 1.f);
+				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
+				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
 			}
 
-			if (ch.phase == OUTER_RISE) {
+			if (ch.phase == CHANNEL_RISE) {
 				float dpPhase = dt / riseTime;
 				ch.phasePos += dpPhase;
-				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+				float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / riseTime, 0.f, 0.5f);
 				x += dp * slopeWarp(x, s) * scale;
 				if (injectAlpha > 0.f) {
@@ -692,56 +692,56 @@ struct Proc : Module {
 					x += injectAlpha * (xIn - x);
 				}
 				x = clamp(x, 0.f, 1.f);
-				ch.out = OUTER_V_MIN + x * range;
+				ch.out = FUNCTION_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x >= 1.f) {
 					// Preserve fractional overshoot so rise->fall transition remains sample-rate robust.
 					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
 					float overshoot = std::max(ch.phasePos - 1.f, 0.f);
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
-					ch.phase = OUTER_FALL;
+					ch.phase = CHANNEL_FALL;
 					float prevOut = ch.out;
 					ch.out = FG_V_MAX;
 					if (bandlimitedSignalOutputs) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch.gateBlep, ch.gateState, ch.phase == cfg.gateHighPhase, f);
-						insertGateTransition(ch.riseGateBlep, ch.riseGateState, ch.phase == OUTER_RISE, f);
+						insertGateTransition(ch.eorGateBlep, ch.eorGateState, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.eocGateBlep, ch.eocGateState, ch.phase == CHANNEL_RISE, f);
 					}
 					else {
-						setGateStateImmediate(ch.gateState, ch.phase == cfg.gateHighPhase);
-						setGateStateImmediate(ch.riseGateState, ch.phase == OUTER_RISE);
+						setGateStateImmediate(ch.eorGateState, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.eocGateState, ch.phase == CHANNEL_RISE);
 					}
 				}
 			}
 
-			if (ch.phase == OUTER_FALL) {
+			if (ch.phase == CHANNEL_FALL) {
 				float dpPhase = dt / fallTime;
 				ch.phasePos += dpPhase;
-				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
+				float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / fallTime, 0.f, 0.5f);
 				x -= dp * slopeWarp(x, s) * scale;
 				if (injectAlpha > 0.f) {
 					x += injectAlpha * (xIn - x);
 				}
 				x = clamp(x, 0.f, 1.f);
-				ch.out = OUTER_V_MIN + x * range;
+				ch.out = FUNCTION_V_MIN + x * range;
 				if (ch.phasePos >= 1.f || x <= 0.f) {
 					float f = phaseCrossingFraction(ch.phasePos, dpPhase);
 					ch.phasePos = 0.f;
-					ch.phase = OUTER_IDLE;
+					ch.phase = CHANNEL_IDLE;
 					float prevOut = ch.out;
-					ch.out = OUTER_V_MIN;
+					ch.out = FUNCTION_V_MIN;
 					if (bandlimitedSignalOutputs) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					if (bandlimitedGateOutputs) {
-						insertGateTransition(ch.gateBlep, ch.gateState, ch.phase == cfg.gateHighPhase, f);
-						insertGateTransition(ch.riseGateBlep, ch.riseGateState, ch.phase == OUTER_RISE, f);
+						insertGateTransition(ch.eorGateBlep, ch.eorGateState, ch.phase == cfg.gateHighPhase, f);
+						insertGateTransition(ch.eocGateBlep, ch.eocGateState, ch.phase == CHANNEL_RISE, f);
 					}
 					else {
-						setGateStateImmediate(ch.gateState, ch.phase == cfg.gateHighPhase);
-						setGateStateImmediate(ch.riseGateState, ch.phase == OUTER_RISE);
+						setGateStateImmediate(ch.eorGateState, ch.phase == cfg.gateHighPhase);
+						setGateStateImmediate(ch.eocGateState, ch.phase == CHANNEL_RISE);
 					}
 				}
 			}
@@ -763,7 +763,7 @@ struct Proc : Module {
 			ch.out = 0.f;
 		}
 
-		OuterChannelResult result;
+		ChannelResult result;
 		result.cycleOn = cycleOn;
 		return result;
 	}
@@ -771,25 +771,25 @@ struct Proc : Module {
 	Proc() {
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "Cycle");
-		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "Rise");
-		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "Fall");
-		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "Shape");
-		configInput(INPUT_1_INPUT, "Signal");
-		configInput(INPUT_1_TRIG_INPUT, "Trigger");
-		configInput(CV_HALT_INPUT, "Halt CV");
-		configInput(CH1_RISE_CV_INPUT, "Rise CV");
-		configInput(CH1_BOTH_CV_INPUT, "Both CV");
-		configInput(CH1_FALL_CV_INPUT, "Fall CV");
-		configOutput(EOR_1_OUTPUT, "End of rise");
-		configOutput(EOC_1_OUTPUT, "End of cycle");
-		configOutput(CH_1_UNITY_OUTPUT, "Output");
-		configOutput(CH_1_NEG_OUTPUT, "Negative output");
+		configParam(CYCLE_PARAM, 0.f, 1.f, 0.f, "Cycle");
+		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
+		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
+		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+		configInput(SIGNAL_INPUT, "Signal");
+		configInput(TRIGGER_INPUT, "Trigger");
+		configInput(HALT_INPUT, "Halt CV");
+		configInput(RISE_CV_INPUT, "Rise CV");
+		configInput(BOTH_CV_INPUT, "Both CV");
+		configInput(FALL_CV_INPUT, "Fall CV");
+		configOutput(EOR_OUTPUT, "End of rise");
+		configOutput(EOC_OUTPUT, "End of cycle");
+		configOutput(MAIN_OUTPUT, "Output");
+		configOutput(NEG_OUTPUT, "Negative output");
 	}
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
-		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
+		json_object_set_new(rootJ, "cycleLatched", json_boolean(channel.cycleLatched));
 		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
@@ -798,9 +798,13 @@ struct Proc : Module {
 	}
 
 	void dataFromJson(json_t* rootJ) override {
-		json_t* ch1CycleJ = json_object_get(rootJ, "ch1CycleLatched");
-		if (ch1CycleJ) {
-			ch1.cycleLatched = json_boolean_value(ch1CycleJ);
+		json_t* cycleJ = json_object_get(rootJ, "cycleLatched");
+		if (!cycleJ) {
+			// Backward-compatibility for early Proc patches saved before the naming cleanup.
+			cycleJ = json_object_get(rootJ, "ch1CycleLatched");
+		}
+		if (cycleJ) {
+			channel.cycleLatched = json_boolean_value(cycleJ);
 		}
 
 		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
@@ -825,20 +829,20 @@ struct Proc : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		static const OuterChannelConfig ch1Cfg {
-			CYCLE_1_PARAM,
-			INPUT_1_TRIG_INPUT,
-			INPUT_1_INPUT,
-			CV_HALT_INPUT,
-			RISE_1_PARAM,
-			FALL_1_PARAM,
-			LIN_LOG_1_PARAM,
-			CH1_RISE_CV_INPUT,
-			CH1_FALL_CV_INPUT,
-			CH1_BOTH_CV_INPUT,
-			std::log2(OUTER_LOG_SHAPE_SCALE),
-			std::log2(OUTER_EXP_SHAPE_SCALE),
-			OUTER_FALL
+		static const ChannelConfig channelConfig {
+			CYCLE_PARAM,
+			TRIGGER_INPUT,
+			SIGNAL_INPUT,
+			HALT_INPUT,
+			RISE_PARAM,
+			FALL_PARAM,
+			SHAPE_PARAM,
+			RISE_CV_INPUT,
+			FALL_CV_INPUT,
+			BOTH_CV_INPUT,
+			std::log2(LOG_SHAPE_TIME_SCALE),
+			std::log2(EXP_SHAPE_TIME_SCALE),
+			CHANNEL_FALL
 		};
 
 		bool timingTick = true;
@@ -861,23 +865,23 @@ struct Proc : Module {
 			lightTick = true;
 		}
 
-		OuterChannelResult ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick);
-		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
-		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
-		float eocOut = (ch1.riseGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.riseGateBlep.process() : 0.f);
-		float ch1OutNeg = -ch1OutRendered;
+		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
+		float outRendered = channel.out + (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
+		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
+		float negOut = -outRendered;
 
-		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
-		outputs[EOC_1_OUTPUT].setVoltage(eocOut);
-		outputs[CH_1_UNITY_OUTPUT].setVoltage(ch1OutRendered);
-		outputs[CH_1_NEG_OUTPUT].setVoltage(ch1OutNeg);
+		outputs[EOR_OUTPUT].setVoltage(eorOut);
+		outputs[EOC_OUTPUT].setVoltage(eocOut);
+		outputs[MAIN_OUTPUT].setVoltage(outRendered);
+		outputs[NEG_OUTPUT].setVoltage(negOut);
 
 		if (lightTick) {
-			lights[CYCLE_1_LED_LIGHT].setBrightness(ch1Result.cycleOn ? 1.f : 0.f);
-			lights[EOR_CH_1_LIGHT].setBrightness(ch1.gateState ? 1.f : 0.f);
-			lights[EOC_CH_1_LIGHT].setBrightness(ch1.riseGateState ? 1.f : 0.f);
-			lights[LIGHT_UNITY_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutRendered) / FG_V_MAX, 0.f, 1.f));
-			lights[LIGHT_NEG_1_LIGHT].setBrightness(clamp(std::fabs(ch1OutNeg) / FG_V_MAX, 0.f, 1.f));
+			lights[CYCLE_LIGHT].setBrightness(channelResult.cycleOn ? 1.f : 0.f);
+			lights[EOR_LIGHT].setBrightness(channel.eorGateState ? 1.f : 0.f);
+			lights[EOC_LIGHT].setBrightness(channel.eocGateState ? 1.f : 0.f);
+			lights[MAIN_LIGHT].setBrightness(clamp(std::fabs(outRendered) / FG_V_MAX, 0.f, 1.f));
+			lights[NEG_LIGHT].setBrightness(clamp(std::fabs(negOut) / FG_V_MAX, 0.f, 1.f));
 		}
 	}
 };
@@ -925,15 +929,12 @@ struct WavePreviewWidget : Widget {
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
-	int channel = 1;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
 
-	WavePreviewWidget(int channel) {
-		this->channel = channel;
-	}
+	WavePreviewWidget() = default;
 
 	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
 		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
@@ -1137,43 +1138,44 @@ struct ProcWidget : ModuleWidget {
 		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(32.875, 19.538)), module, Proc::CYCLE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(32.875, 19.538)), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
 		{
-			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
+			WavePreviewWidget* previewWidget = new WavePreviewWidget();
 			math::Rect previewRectMm;
 			if (loadPreviewRectMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+				// Keep the legacy SVG id until proc.svg is cleaned up as well.
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
-				ch1Preview->box.pos = mm2px(previewRectMm.pos);
-				ch1Preview->box.size = mm2px(previewRectMm.size);
+				previewWidget->box.pos = mm2px(previewRectMm.pos);
+				previewWidget->box.size = mm2px(previewRectMm.size);
 			}
 			else {
-				ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-				ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+				previewWidget->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
+				previewWidget->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
 			}
-			addChild(ch1Preview);
+			addChild(previewWidget);
 		}
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::INPUT_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.611, 16.654)), module, Proc::INPUT_1_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::CV_HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::CH1_FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.611, 16.654)), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::FALL_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.437, 96.946)), module, Proc::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.595, 96.915)), module, Proc::EOC_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::CH_1_NEG_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.437, 96.946)), module, Proc::EOR_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.595, 96.915)), module, Proc::EOC_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::MAIN_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(32.875, 13.455)), module, Proc::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(32.875, 13.455)), module, Proc::CYCLE_LIGHT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.947, 110.758)), module, Proc::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.579, 110.941)), module, Proc::LIGHT_NEG_1_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.947, 110.758)), module, Proc::MAIN_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.579, 110.941)), module, Proc::NEG_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1184,7 +1186,7 @@ struct ProcWidget : ModuleWidget {
 		if (proc) {
 			menu->addChild(createMenuLabel("Performance"));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &proc->bandlimitedGateOutputs));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1 Signal Outputs", "", &proc->bandlimitedSignalOutputs));
+			menu->addChild(createBoolPtrMenuItem("Bandlimited Signal Outputs", "", &proc->bandlimitedSignalOutputs));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &proc->timingInterpolate));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
