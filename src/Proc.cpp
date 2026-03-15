@@ -1138,7 +1138,7 @@ struct ProcWidget : ModuleWidget {
 		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(32.875, 19.538)), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(33.075, 20.138)), module, Proc::CYCLE_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
@@ -1159,7 +1159,7 @@ struct ProcWidget : ModuleWidget {
 		}
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.611, 16.654)), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::HALT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
@@ -1170,7 +1170,7 @@ struct ProcWidget : ModuleWidget {
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::MAIN_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(32.875, 13.455)), module, Proc::CYCLE_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(33.075, 14.055)), module, Proc::CYCLE_LIGHT));
 
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_LIGHT));
