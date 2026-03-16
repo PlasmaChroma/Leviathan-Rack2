@@ -131,6 +131,7 @@ struct TemporalDeckEngine {
 	bool slipReturning = false;
 	float scratchLagSamples = 0.f;
 	float lastPositionLag = 0.f;
+	float lastPlatterLagTarget = 0.f;
 
 	void reset(float sr) {
 		sampleRate = sr;
@@ -142,6 +143,7 @@ struct TemporalDeckEngine {
 		slipReturning = false;
 		scratchLagSamples = 0.f;
 		lastPositionLag = 0.f;
+		lastPlatterLagTarget = 0.f;
 	}
 
 	float maxLagFromKnob(float knob) const {
@@ -253,6 +255,7 @@ struct TemporalDeckEngine {
 		}
 		if (!wasScratchActive && anyScratch) {
 			scratchLagSamples = currentLag();
+			lastPlatterLagTarget = platterLagTarget;
 		}
 		scratchActive = anyScratch;
 
@@ -288,8 +291,15 @@ struct TemporalDeckEngine {
 		}
 
 		if (manualScratch) {
+			if (!freezeState) {
+				// Holding the platter should pin the audio while the write head continues moving.
+				scratchLagSamples += 1.f;
+			}
+			float platterDelta = platterLagTarget - lastPlatterLagTarget;
+			scratchLagSamples += platterDelta;
 			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
-			scratchLagSamples = clampLag(platterLagTarget + platterVelocity * dt, limit);
+			scratchLagSamples = clampLag(scratchLagSamples + platterVelocity * dt, limit);
+			lastPlatterLagTarget = platterLagTarget;
 			readHead = buffer.wrapPosition(float(buffer.writeHead) - scratchLagSamples);
 			if (slipState) {
 				timelineHead = buffer.wrapPosition(timelineHead + speed);
@@ -357,25 +367,32 @@ struct TemporalDeckDisplayWidget : Widget {
 };
 
 
-struct TemporalDeckPlatterWidget : Widget {
+struct TemporalDeckPlatterWidget : OpaqueWidget {
 	TemporalDeck* module = nullptr;
-	Vec centerMm = mm2px(Vec(50.8f, 72.f));
+	Vec centerPx = mm2px(Vec(50.8f, 72.f));
 	float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 	float deadZonePx = 0.f;
 	bool dragging = false;
 	float lastAngle = 0.f;
 	float localLagSamples = 0.f;
 
-	bool isWithinActivePlatter(Vec panelPos) const {
-		Vec local = panelPos.minus(centerMm);
-		float radius = local.norm();
-		return radius >= deadZonePx && radius <= platterRadiusPx;
+	Vec localCenter() const {
+		return centerPx.minus(box.pos);
 	}
 
+	bool isWithinPlatter(Vec panelPos) const {
+		Vec local = panelPos.minus(localCenter());
+		float radius = local.norm();
+		return radius <= platterRadiusPx;
+	}
+
+	void updateScratchFromLocal(Vec local, Vec mouseDelta);
+
 	void draw(const DrawArgs& args) override;
+	void onHover(const event::Hover& e) override;
 	void onButton(const event::Button& e) override;
-	void onDragStart(const event::DragStart& e) override;
 	void onDragMove(const event::DragMove& e) override;
+	void onDragStart(const event::DragStart& e) override;
 	void onDragEnd(const event::DragEnd& e) override;
 };
 
@@ -640,12 +657,13 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	nvgSave(args.vg);
 	float rotation = module ? module->uiPlatterAngle.load() : 0.f;
+	Vec center = localCenter();
 
 	NVGcolor outerDark = nvgRGB(20, 22, 26);
 	NVGpaint vinylGrad = nvgRadialGradient(
 		args.vg,
-		centerMm.x - platterRadiusPx * 0.18f,
-		centerMm.y - platterRadiusPx * 0.22f,
+		center.x - platterRadiusPx * 0.18f,
+		center.y - platterRadiusPx * 0.22f,
 		platterRadiusPx * 0.15f,
 		platterRadiusPx * 1.05f,
 		nvgRGBA(52, 56, 64, 220),
@@ -653,7 +671,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	);
 
 	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, centerMm.x, centerMm.y, platterRadiusPx);
+	nvgCircle(args.vg, center.x, center.y, platterRadiusPx);
 	nvgFillPaint(args.vg, vinylGrad);
 	nvgFill(args.vg);
 
@@ -661,7 +679,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 		float grooveRadius = platterRadiusPx * (0.28f + 0.047f * i);
 		float alpha = (i % 2 == 0) ? 34.f : 18.f;
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, centerMm.x, centerMm.y, grooveRadius);
+		nvgCircle(args.vg, center.x, center.y, grooveRadius);
 		nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
 		nvgStrokeWidth(args.vg, 0.7f);
 		nvgStroke(args.vg);
@@ -669,12 +687,12 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 
 	float labelRadius = platterRadiusPx * 0.33f;
 	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, centerMm.x, centerMm.y, labelRadius);
+	nvgCircle(args.vg, center.x, center.y, labelRadius);
 	nvgFillColor(args.vg, nvgRGB(138, 86, 34));
 	nvgFill(args.vg);
 
 	nvgSave(args.vg);
-	nvgTranslate(args.vg, centerMm.x, centerMm.y);
+	nvgTranslate(args.vg, center.x, center.y);
 	nvgRotate(args.vg, rotation);
 
 	nvgBeginPath(args.vg);
@@ -702,18 +720,18 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 
 	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, centerMm.x, centerMm.y, labelRadius * 0.12f);
+	nvgCircle(args.vg, center.x, center.y, labelRadius * 0.12f);
 	nvgFillColor(args.vg, nvgRGB(222, 228, 235));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, centerMm.x, centerMm.y, platterRadiusPx);
+	nvgCircle(args.vg, center.x, center.y, platterRadiusPx);
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 32));
 	nvgStrokeWidth(args.vg, 1.1f);
 	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
-	nvgArc(args.vg, centerMm.x, centerMm.y, platterRadiusPx * 0.92f, rotation - 2.45f, rotation - 1.35f, NVG_CW);
+	nvgArc(args.vg, center.x, center.y, platterRadiusPx * 0.92f, rotation - 2.45f, rotation - 1.35f, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 30));
 	nvgStrokeWidth(args.vg, 2.f);
 	nvgStroke(args.vg);
@@ -722,38 +740,12 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	Widget::draw(args);
 }
 
-
-void TemporalDeckPlatterWidget::onButton(const event::Button& e) {
-	if (e.button == GLFW_MOUSE_BUTTON_LEFT && isWithinActivePlatter(e.pos)) {
-		e.consume(this);
-	}
-	Widget::onButton(e);
-}
-
-void TemporalDeckPlatterWidget::onDragStart(const event::DragStart& e) {
-	if (!module) {
-		return;
-	}
-	Vec panelPos = APP->scene->rack->getMousePos().minus(getAbsoluteOffset(Vec()));
-	if (!isWithinActivePlatter(panelPos)) {
-		return;
-	}
-	Vec local = panelPos.minus(centerMm);
-	dragging = true;
-	lastAngle = std::atan2(local.y, local.x);
-	localLagSamples = module->uiLagSamples.load();
-	module->setPlatterScratch(true, localLagSamples, 0.f);
-	e.consume(this);
-}
-
-void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
+void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta) {
 	if (!module || !dragging) {
 		return;
 	}
-	Vec panelPos = APP->scene->rack->getMousePos().minus(getAbsoluteOffset(Vec()));
-	Vec local = panelPos.minus(centerMm);
 	float radius = local.norm();
-	if (radius < deadZonePx) {
+	if (radius < deadZonePx * 0.25f) {
 		return;
 	}
 	float angle = std::atan2(local.y, local.x);
@@ -764,25 +756,72 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
 	if (deltaAngle < -M_PI) {
 		deltaAngle += 2.f * M_PI;
 	}
-	float weight = clamp(radius / platterRadiusPx, 0.3f, 1.f);
+	float effectiveRadius = std::max(radius, deadZonePx);
+	float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
 	float lagDelta = deltaAngle * (module->uiSampleRate.load() / float(M_PI)) * weight;
 	localLagSamples = clamp(localLagSamples - lagDelta, 0.f, module->uiAccessibleLagSamples.load());
-	float velocity = (std::fabs(e.mouseDelta.x) + std::fabs(e.mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f;
+	float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f;
 	if (deltaAngle < 0.f) {
 		velocity *= -1.f;
 	}
 	module->setPlatterScratch(true, localLagSamples, velocity);
 	lastAngle = angle;
+}
+
+void TemporalDeckPlatterWidget::onHover(const event::Hover& e) {
+	if (dragging) {
+		updateScratchFromLocal(e.pos.minus(localCenter()), e.mouseDelta);
+	}
+	OpaqueWidget::onHover(e);
+}
+
+
+void TemporalDeckPlatterWidget::onButton(const event::Button& e) {
+	if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && isWithinPlatter(e.pos)) {
+		Vec local = e.pos.minus(localCenter());
+		dragging = true;
+		lastAngle = std::atan2(local.y, local.x);
+		localLagSamples = module ? module->uiLagSamples.load() : 0.f;
+		if (module) {
+			module->setPlatterScratch(true, localLagSamples, 0.f);
+		}
+		e.consume(this);
+		return;
+	}
+	if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE && dragging) {
+		dragging = false;
+		if (module) {
+			module->setPlatterScratch(false, localLagSamples, 0.f);
+		}
+		e.consume(this);
+		return;
+	}
+	OpaqueWidget::onButton(e);
+}
+
+void TemporalDeckPlatterWidget::onDragStart(const event::DragStart& e) {
+	if (dragging) {
+		e.consume(this);
+	}
+}
+
+void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
+	if (!dragging) {
+		return;
+	}
+	Vec panelPos = APP->scene->rack->getMousePos().minus(getAbsoluteOffset(Vec()));
+	updateScratchFromLocal(panelPos.minus(localCenter()), e.mouseDelta);
 	e.consume(this);
 }
 
 void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd& e) {
-	if (!module) {
-		return;
+	if (dragging) {
+		dragging = false;
+		if (module) {
+			module->setPlatterScratch(false, localLagSamples, 0.f);
+		}
+		e.consume(this);
 	}
-	dragging = false;
-	module->setPlatterScratch(false, localLagSamples, 0.f);
-	e.consume(this);
 }
 
 
@@ -831,10 +870,11 @@ struct TemporalDeckWidget : ModuleWidget {
 
 		auto platter = new TemporalDeckPlatterWidget();
 		platter->module = module;
-		platter->centerMm = platterCenter;
+		platter->centerPx = platterCenter;
 		platter->platterRadiusPx = platterRadius;
-		platter->deadZonePx = platterRadius * 0.2f;
-		platter->box.size = box.size;
+		platter->deadZonePx = platterRadius * 0.08f;
+		platter->box.pos = platterCenter.minus(Vec(platterRadius, platterRadius));
+		platter->box.size = Vec(platterRadius * 2.f, platterRadius * 2.f);
 		addChild(platter);
 	}
 
