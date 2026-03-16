@@ -1,146 +1,18 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-     width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1">
-  <defs>
-    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#07101f"/>
-      <stop offset="100%" stop-color="#030712"/>
-    </linearGradient>
-    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#7c5cff"/>
-      <stop offset="100%" stop-color="#1cccd9"/>
-    </linearGradient>
-    <linearGradient id="purpleGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#24195f"/>
-      <stop offset="100%" stop-color="#2e1f73"/>
-    </linearGradient>
-    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0a344a"/>
-      <stop offset="100%" stop-color="#0d4a60"/>
-    </linearGradient>
-    <linearGradient id="deckGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#091427"/>
-      <stop offset="100%" stop-color="#020713"/>
-    </linearGradient>
-    <style>
-      .label { font-family: Orbitron, Arial, sans-serif; fill: #edf3ff; text-anchor: middle; dominant-baseline: middle; }
-      .title { font-size: 760px; font-weight: 700; fill: url(#titleGrad); }
-      .subtitle { font-size: 180px; letter-spacing: 8px; fill:#d8e7ff; opacity:0.9; }
-      .section { font-size: 170px; letter-spacing: 10px; }
-      .small { font-size: 235px; letter-spacing: 8px; }
-      .tiny { font-size: 175px; letter-spacing: 6px; }
-      .micro { font-size: 145px; letter-spacing: 4px; }
-    </style>
-  </defs>
-
-  <g id="panel_art" inkscape:label="panel_art">
-    <rect id="panel_bg" x="35" y="35" width="10090" height="12780" rx="260" ry="260"
-          fill="url(#panelGrad)" stroke="#2b3852" stroke-width="70"/>
-
-    <text x="5080" y="770" class="label title">Temporal Deck</text>
-    <text x="5080" y="1160" class="label subtitle">stereo time deck • scratch transport • buffered delay instrument</text>
-    <line x1="420" y1="1490" x2="9740" y2="1490" stroke="#6b58ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
-
-    <!-- Top control band -->
-    <rect id="TOP_CONTROL_BG" x="520" y="1660" width="9120" height="1200" rx="220" ry="220"
-          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="26"/>
-    <text x="1450" y="1940" class="label small">BUFFER</text>
-    <text x="3650" y="1940" class="label small">RATE</text>
-    <text x="5850" y="1940" class="label small">MIX</text>
-    <text x="8050" y="1940" class="label small">FEEDBACK</text>
-    <text x="3650" y="2145" class="label micro" style="fill:#cad8ff; opacity:0.72;">center = normal flow</text>
-
-    <!-- Main deck field -->
-    <rect id="DECK_FIELD" x="1120" y="3180" width="7920" height="5720" rx="420" ry="420"
-          fill="#030916" stroke="#2d3854" stroke-width="34"/>
-    <text x="5080" y="3460" class="label section" style="fill:#9eb1d8; opacity:0.76;">TEMPORAL RESERVOIR</text>
-
-    <!-- Upper hemicircle arc guide -->
-    <path id="arc_outline" d="M 2110 5990 A 2970 2970 0 0 1 8050 5990"
-          fill="none" stroke="#7058ff" stroke-width="74" stroke-linecap="round" opacity="0.95"/>
-    <path id="arc_fill_hint" d="M 2150 5990 A 2930 2930 0 0 1 8010 5990"
-          fill="none" stroke="#f6d84d" stroke-width="54" stroke-linecap="round" opacity="0.96"/>
-    <circle cx="8010" cy="5990" r="88" fill="#f9f8f1" stroke="#6d58ff" stroke-width="20"/>
-    <text x="8300" y="5860" class="label micro" style="fill:#f6d84d; text-anchor:start;">NOW</text>
-
-    <!-- Platter -->
-    <circle cx="5080" cy="5990" r="2950" fill="none" stroke="#18214a" stroke-width="20" opacity="0.8"/>
-    <circle cx="5080" cy="5990" r="2460" fill="none" stroke="#2a2d58" stroke-width="24" opacity="0.72"/>
-    <circle cx="5080" cy="5990" r="2100" fill="url(#deckGrad)" stroke="#193b62" stroke-width="22"/>
-    <circle cx="5080" cy="5990" r="1870" fill="none" stroke="#1737a5" stroke-width="12" opacity="0.62"/>
-    <circle cx="5080" cy="5990" r="1650" fill="none" stroke="#1737a5" stroke-width="10" opacity="0.56"/>
-    <circle cx="5080" cy="5990" r="1430" fill="none" stroke="#1737a5" stroke-width="9" opacity="0.50"/>
-    <circle cx="5080" cy="5990" r="1210" fill="none" stroke="#1737a5" stroke-width="8" opacity="0.46"/>
-    <circle cx="5080" cy="5990" r="990" fill="none" stroke="#1737a5" stroke-width="7" opacity="0.42"/>
-    <line x1="5080" y1="5505" x2="5080" y2="4700" stroke="#eef4ff" stroke-width="42" stroke-linecap="round" opacity="0.95"/>
-    <circle cx="5080" cy="5990" r="305" fill="#041627" stroke="#20cfff" stroke-width="20"/>
-    <circle cx="5080" cy="5990" r="104" fill="#24b8dc"/>
-
-    <!-- Side CV islands -->
-    <rect id="SIDE_LEFT_BG" x="410" y="5020" width="1180" height="1480" rx="220" ry="220"
-          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
-    <rect id="SIDE_RIGHT_BG" x="8570" y="5020" width="1180" height="1480" rx="220" ry="220"
-          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
-    <text x="1000" y="5330" class="label tiny">POSITION</text>
-    <text x="1000" y="5545" class="label tiny">CV</text>
-    <text x="9160" y="5330" class="label tiny">RATE</text>
-    <text x="9160" y="5545" class="label tiny">CV</text>
-
-    <!-- Transport strip -->
-    <rect id="TRANSPORT_BG" x="1960" y="8880" width="6240" height="860" rx="220" ry="220"
-          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
-    <text x="5080" y="9020" class="label micro" style="fill:#cad8ff; opacity:0.72;">TRANSPORT</text>
-    <circle cx="3040" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
-    <circle cx="5080" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
-    <circle cx="7120" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
-    <text x="3040" y="9365" class="label small">FREEZE</text>
-    <text x="5080" y="9365" class="label small">REVERSE</text>
-    <text x="7120" y="9365" class="label small">SLIP</text>
-
-    <!-- Bottom IO -->
-    <rect id="INPUT_ZONE_BG" x="380" y="10960" width="6140" height="1500" rx="220" ry="220"
-          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
-    <rect id="OUTPUT_ZONE_BG" x="6700" y="10960" width="3080" height="1500" rx="220" ry="220"
-          fill="url(#blueGrad)" stroke="#1cccd9" stroke-width="24"/>
-    <text x="3450" y="11300" class="label small">INPUTS</text>
-    <text x="8240" y="11300" class="label small">OUTPUTS</text>
-    <text x="1700" y="11770" class="label tiny">IN L</text>
-    <text x="3650" y="11770" class="label tiny">IN R</text>
-    <text x="1700" y="12225" class="label tiny">FREEZE</text>
-    <text x="1700" y="12425" class="label tiny">GATE</text>
-    <text x="3650" y="12225" class="label tiny">SCRATCH</text>
-    <text x="3650" y="12425" class="label tiny">GATE</text>
-    <text x="7780" y="12010" class="label tiny">OUT L</text>
-    <text x="9070" y="12010" class="label tiny">OUT R</text>
-  </g>
-
-  <g id="components" style="display:none">
-    <!-- red = params / controls -->
-    <ellipse id="BUFFER_PARAM" cx="1450" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="RATE_PARAM" cx="3650" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="MIX_PARAM" cx="5850" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="FEEDBACK_PARAM" cx="8050" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="PLATTER_AREA" cx="5080" cy="5990" rx="2950" ry="2950" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="ARC_AREA" cx="5080" cy="5990" rx="3310" ry="3310" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="FREEZE_PARAM" cx="3040" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="REVERSE_PARAM" cx="5080" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-    <ellipse id="SLIP_PARAM" cx="7120" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
-
-    <!-- magenta = lights -->
-    <ellipse id="FREEZE_LIGHT" cx="3040" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
-    <ellipse id="REVERSE_LIGHT" cx="5080" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
-    <ellipse id="SLIP_LIGHT" cx="7120" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
-
-    <!-- green = inputs -->
-    <ellipse id="POSITION_CV" cx="1000" cy="5960" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-    <ellipse id="RATE_CV" cx="9160" cy="5960" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-    <ellipse id="INPUT_L" cx="1700" cy="12000" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-    <ellipse id="INPUT_R" cx="3650" cy="12000" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-    <ellipse id="FREEZE_GATE" cx="1700" cy="12470" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-    <ellipse id="SCRATCH_GATE" cx="3650" cy="12470" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
-
-    <!-- blue = outputs -->
-    <ellipse id="OUTPUT_L" cx="7780" cy="12230" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none"/>
-    <ellipse id="OUTPUT_R" cx="9070" cy="12230" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none"/>
-  </g>
-</svg>
+<?xml version="1.0" encoding="utf-8" ?>
+<svg baseProfile="full" height="128.5mm" version="1.1" viewBox="0 0 10160 12850" width="101.6mm" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="panelGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#07101f" /><stop offset="100%" stop-color="#020611" /></linearGradient><linearGradient id="titleGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#7c5cff" /><stop offset="100%" stop-color="#1cccd9" /></linearGradient><linearGradient id="purpleGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#25195e" /><stop offset="100%" stop-color="#2f1f72" /></linearGradient><linearGradient id="blueGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#0b344b" /><stop offset="100%" stop-color="#0d4b61" /></linearGradient><linearGradient id="deckGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#0a1426" /><stop offset="100%" stop-color="#030714" /></linearGradient><radialGradient cx="50%" cy="42%" id="platterGlow" r="62%"><stop offset="0%" stop-color="#0b2c55" stop-opacity="0.25" /><stop offset="60%" stop-color="#071122" stop-opacity="0.1" /><stop offset="100%" stop-color="#000000" stop-opacity="0" /></radialGradient><style type="text/css"><![CDATA[
+.label { font-family: Orbitron, Arial, sans-serif; fill: #edf3ff; text-anchor: middle; dominant-baseline: middle; }
+.title { font-size: 760px; font-weight: 700; fill: url(#titleGrad); }
+.subtitle { font-size: 180px; letter-spacing: 8px; fill:#d8e7ff; opacity:0.9; }
+.section { font-size: 170px; letter-spacing: 10px; }
+.small { font-size: 235px; letter-spacing: 8px; }
+.tiny { font-size: 175px; letter-spacing: 6px; }
+.micro { font-size: 145px; letter-spacing: 4px; }
+]]></style></defs><defs><linearGradient id="panelGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#07101f" /><stop offset="100%" stop-color="#020611" /></linearGradient><linearGradient id="titleGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#7c5cff" /><stop offset="100%" stop-color="#1cccd9" /></linearGradient><linearGradient id="purpleGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#25195e" /><stop offset="100%" stop-color="#2f1f72" /></linearGradient><linearGradient id="blueGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="#0b344b" /><stop offset="100%" stop-color="#0d4b61" /></linearGradient><linearGradient id="deckGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#0a1426" /><stop offset="100%" stop-color="#030714" /></linearGradient><radialGradient cx="50%" cy="42%" id="platterGlow" r="62%"><stop offset="0%" stop-color="#0b2c55" stop-opacity="0.25" /><stop offset="60%" stop-color="#071122" stop-opacity="0.1" /><stop offset="100%" stop-color="#000000" stop-opacity="0" /></radialGradient><style type="text/css"><![CDATA[
+.label { font-family: Orbitron, Arial, sans-serif; fill: #edf3ff; text-anchor: middle; dominant-baseline: middle; }
+.title { font-size: 760px; font-weight: 700; fill: url(#titleGrad); }
+.subtitle { font-size: 180px; letter-spacing: 8px; fill:#d8e7ff; opacity:0.9; }
+.section { font-size: 170px; letter-spacing: 10px; }
+.small { font-size: 235px; letter-spacing: 8px; }
+.tiny { font-size: 175px; letter-spacing: 6px; }
+.micro { font-size: 145px; letter-spacing: 4px; }
+]]></style></defs><g id="panel_art"><rect fill="url(#panelGrad)" height="12780" rx="260" ry="260" stroke="#2b3852" stroke-width="70" width="10090" x="35" y="35" /><text class="label title" x="5080" y="770">Temporal Deck</text><text class="label subtitle" x="5080" y="1160">stereo time deck • scratch transport • buffered delay instrument</text><line opacity="0.95" stroke="#6b58ff" stroke-linecap="round" stroke-width="40" x1="420" x2="9740" y1="1490" y2="1490" /><rect fill="url(#purpleGrad)" height="1200" id="TOP_CONTROL_BG" rx="220" ry="220" stroke="#5b4ef0" stroke-width="26" width="9120" x="520" y="1660" /><text class="label small" x="1450" y="1940">BUFFER</text><text class="label small" x="3650" y="1940">RATE</text><text class="label small" x="5850" y="1940">MIX</text><text class="label small" x="8050" y="1940">FEEDBACK</text><text class="label micro" style="fill:#cad8ff; opacity:0.72;" x="3650" y="2145">center = normal flow</text><text class="label micro" style="fill:#f6de61; opacity:0.9;" x="6980" y="2145">lag arc = delta to NOW    • = buffer limit</text><rect fill="#030916" height="5720" id="DECK_FIELD" rx="420" ry="420" stroke="#2d3854" stroke-width="34" width="7920" x="1120" y="3180" /><text class="label section" style="fill:#9eb1d8; opacity:0.76;" x="5080" y="3460">TEMPORAL RESERVOIR</text><path d="M 2110.00 5990.00 A 2970.00 2970.00 0 0 1 8050.00 5990.00" fill="none" opacity="0.98" stroke="#7058ff" stroke-linecap="round" stroke-width="80" /><path d="M 2110.00 5990.00 A 2970.00 2970.00 0 0 1 8050.00 5990.00" fill="none" opacity="0.98" stroke="#f6d84d" stroke-linecap="round" stroke-width="56" /><circle cx="2804.8480039366355" cy="4080.9207992309784" fill="#f6d84d" opacity="0.95" r="62" stroke="#6d58ff" stroke-width="18" /><circle cx="8050" cy="5990" fill="#f9f8f1" r="90" stroke="#6d58ff" stroke-width="22" /><text class="label micro" style="fill:#f6d84d; text-anchor:start;" x="8340" y="5860">NOW</text><text class="label micro" style="fill:#cad8ff; opacity:0.6;" x="2760" y="3520">older</text><text class="label micro" style="fill:#cad8ff; opacity:0.6;" x="7480" y="3520">present</text><circle cx="5080" cy="5990" fill="none" opacity="0.8" r="2950" stroke="#18214a" stroke-width="20" /><circle cx="5080" cy="5990" fill="none" opacity="0.72" r="2460" stroke="#2a2d58" stroke-width="24" /><circle cx="5080" cy="5990" fill="url(#deckGrad)" r="2100" stroke="#193b62" stroke-width="24" /><circle cx="5080" cy="5990" fill="url(#platterGlow)" r="2100" /><circle cx="5080" cy="5990" fill="none" opacity="0.6" r="1870" stroke="#1737a5" stroke-width="12" /><circle cx="5080" cy="5990" fill="none" opacity="0.54" r="1650" stroke="#1737a5" stroke-width="10" /><circle cx="5080" cy="5990" fill="none" opacity="0.48" r="1430" stroke="#1737a5" stroke-width="9" /><circle cx="5080" cy="5990" fill="none" opacity="0.44" r="1210" stroke="#1737a5" stroke-width="8" /><circle cx="5080" cy="5990" fill="none" opacity="0.4" r="990" stroke="#1737a5" stroke-width="7" /><path d="M 5080 5490 L 5115 4700 L 5045 4700 Z" fill="#eef4ff" opacity="0.95" /><line opacity="0.7" stroke="#eef4ff" stroke-linecap="round" stroke-width="24" x1="5080" x2="5080" y1="5475" y2="4300" /><polygon fill="#0d2443" opacity="0.45" points="6349.685668647937,6879.043476344122 6389.198436616345,7254.278234235375 6598.961938245592,6730.847238073541" /><polygon fill="#0d2443" opacity="0.45" points="3810.3143313520623,6879.043476344121 3444.194835735516,6787.8354871561205 3864.31573742768,7163.972646075705" /><polygon fill="#0d2443" opacity="0.45" points="4678.830480091093,4492.814969251944 4889.758196852871,4179.970150429743 4392.615073201898,4446.1081765840045" /><circle cx="5080" cy="5990" fill="#041627" r="305" stroke="#20cfff" stroke-width="20" /><circle cx="5080" cy="5990" fill="#24b8dc" r="104" /><text class="label micro" style="fill:#cad8ff; opacity:0.62;" x="5080" y="8350">touch + drag</text><rect fill="url(#purpleGrad)" height="1480" id="SIDE_LEFT_BG" rx="220" ry="220" stroke="#5b4ef0" stroke-width="24" width="1180" x="410" y="5020" /><rect fill="url(#purpleGrad)" height="1480" id="SIDE_RIGHT_BG" rx="220" ry="220" stroke="#5b4ef0" stroke-width="24" width="1180" x="8570" y="5020" /><text class="label tiny" x="1000" y="5330">POSITION</text><text class="label tiny" x="1000" y="5545">CV</text><text class="label tiny" x="9160" y="5330">RATE</text><text class="label tiny" x="9160" y="5545">CV</text><text class="label micro" style="fill:#cad8ff; opacity:0.62;" x="1000" y="5750">temporal</text><text class="label micro" style="fill:#cad8ff; opacity:0.62;" x="9160" y="5750">flow</text><rect fill="url(#purpleGrad)" height="860" id="TRANSPORT_BG" rx="220" ry="220" stroke="#5b4ef0" stroke-width="24" width="6240" x="1960" y="8880" /><text class="label micro" style="fill:#cad8ff; opacity:0.72;" x="5080" y="9020">TRANSPORT</text><circle cx="3040" cy="9190" fill="#ffde5e" opacity="0.78" r="48" /><text class="label small" x="3040" y="9365">FREEZE</text><circle cx="5080" cy="9190" fill="#ffde5e" opacity="0.78" r="48" /><text class="label small" x="5080" y="9365">REVERSE</text><circle cx="7120" cy="9190" fill="#ffde5e" opacity="0.78" r="48" /><text class="label small" x="7120" y="9365">SLIP</text><rect fill="url(#purpleGrad)" height="1500" id="INPUT_ZONE_BG" rx="220" ry="220" stroke="#5b4ef0" stroke-width="24" width="6140" x="380" y="10960" /><rect fill="url(#blueGrad)" height="1500" id="OUTPUT_ZONE_BG" rx="220" ry="220" stroke="#1cccd9" stroke-width="24" width="3080" x="6700" y="10960" /><text class="label small" x="3450" y="11300">INPUTS</text><text class="label small" x="8240" y="11300">OUTPUTS</text><text class="label tiny" x="1700" y="11770">IN L</text><text class="label tiny" x="3650" y="11770">IN R</text><text class="label tiny" x="1700" y="12225">FREEZE</text><text class="label tiny" x="1700" y="12425">GATE</text><text class="label tiny" x="3650" y="12225">SCRATCH</text><text class="label tiny" x="3650" y="12425">GATE</text><text class="label tiny" x="7780" y="12010">OUT L</text><text class="label tiny" x="9070" y="12010">OUT R</text></g><g id="components" style="display:none"><ellipse cx="1450" cy="2440" id="BUFFER_PARAM" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="3650" cy="2440" id="RATE_PARAM" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="5850" cy="2440" id="MIX_PARAM" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="8050" cy="2440" id="FEEDBACK_PARAM" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="3040" cy="9200" id="FREEZE_PARAM" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="5080" cy="9200" id="REVERSE_PARAM" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="7120" cy="9200" id="SLIP_PARAM" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none" /><ellipse cx="3040" cy="8920" id="FREEZE_LIGHT" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none" /><ellipse cx="5080" cy="8920" id="REVERSE_LIGHT" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none" /><ellipse cx="7120" cy="8920" id="SLIP_LIGHT" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none" /><ellipse cx="1000" cy="5960" id="POSITION_CV" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="9160" cy="5960" id="RATE_CV" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="1700" cy="12000" id="INPUT_L" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="3650" cy="12000" id="INPUT_R" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="1700" cy="12470" id="FREEZE_GATE" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="3650" cy="12470" id="SCRATCH_GATE" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none" /><ellipse cx="7780" cy="12230" id="OUTPUT_L" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none" /><ellipse cx="9070" cy="12230" id="OUTPUT_R" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none" /></g><g id="custom_anchors" style="display:none"><ellipse cx="5080" cy="5990" id="PLATTER_AREA" rx="2950" ry="2950" style="fill:#ff0000;fill-opacity:1;stroke:none" /></g></svg>
