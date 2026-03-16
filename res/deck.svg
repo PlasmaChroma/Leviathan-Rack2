@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1">
+  <defs>
+    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#050a18"/><stop offset="100%" stop-color="#01040d"/></linearGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#1cccd9"/></linearGradient>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7b5cff"/><stop offset="55%" stop-color="#487fff"/><stop offset="100%" stop-color="#19d2ff"/></linearGradient>
+    <linearGradient id="controlGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#241b63"/><stop offset="100%" stop-color="#2b206c"/></linearGradient>
+    <linearGradient id="outputGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#07364e"/><stop offset="100%" stop-color="#0a4a5a"/></linearGradient>
+    <style>
+      .label { font-family: Orbitron, Arial, sans-serif; fill: #edf3ff; text-anchor: middle; dominant-baseline: middle; }
+      .small { font-size: 250px; letter-spacing: 10px; }
+      .tiny { font-size: 185px; letter-spacing: 5px; }
+      .micro { font-size: 145px; letter-spacing: 3px; }
+      .section { font-size: 170px; letter-spacing: 9px; }
+    </style>
+  </defs>
+  <g id="panel_art" inkscape:label="panel_art">
+    <rect id="panel_bg" x="35" y="35" width="10090" height="12780" rx="260" ry="260" fill="url(#panelGrad)" stroke="#2b3852" stroke-width="70"/>
+    <text x="5080" y="760" class="label" style="font-size: 760px; font-weight: 700; fill: url(#titleGrad);">Temporal Deck</text>
+    <text x="5080" y="1160" class="label tiny" style="fill:#dce9ff; opacity:0.92;">stereo time deck • scratch transport • buffered delay instrument</text>
+    <line x1="420" y1="1485" x2="9740" y2="1485" stroke="#6b58ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
+    <rect id="top_band" x="520" y="1650" width="9120" height="1180" rx="220" ry="220" fill="#231b60" stroke="#5b4ef0" stroke-width="24"/>
+    <text x="1450" y="1935" class="label small">BUFFER</text>
+    <text x="3650" y="1935" class="label small">SPEED</text>
+    <text x="3650" y="2140" class="label micro" style="fill:#cdd8ff; opacity:0.72;">trim around deck rate</text>
+    <text x="5850" y="1935" class="label small">MIX</text>
+    <text x="8050" y="1935" class="label small">FEEDBACK</text>
+    <circle cx="1450" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
+    <circle cx="3650" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
+    <rect x="2460" y="1925" width="700" height="230" rx="90" ry="90" fill="#1a144d" stroke="#5b4ef0" stroke-width="18" opacity="0.96"/>
+    <text x="2810" y="2005" class="label micro" style="fill:#edf3ff;">33 / 45</text>
+    <circle cx="5850" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
+    <circle cx="8050" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
+    <rect id="platter_frame" x="1160" y="3200" width="7840" height="5660" rx="380" ry="380" fill="#020918" stroke="#2d3854" stroke-width="34"/>
+    <circle cx="5080" cy="5990" r="2840" fill="none" stroke="#161f44" stroke-width="26" opacity="0.95"/>
+    <path id="arc_hint_fill" d="M 2506.1 4789.8 A 2840 2840 0 1 1 7488.5 7495.0" fill="none" stroke="url(#ringGrad)" stroke-width="74" stroke-linecap="round" opacity="0.96"/>
+    <circle cx="3410.7" cy="3692.4" r="72" fill="#eef4ff" opacity="0.98"/>
+    <circle cx="5080" cy="5990" r="2460" fill="none" stroke="url(#ringGrad)" stroke-width="30"/>
+    <circle cx="5080" cy="5990" r="2260" fill="none" stroke="#14315d" stroke-width="16" opacity="0.82"/>
+    <circle cx="5080" cy="5990" r="2100" fill="#000915" stroke="#193b62" stroke-width="18"/>
+    <circle cx="5080" cy="5990" r="1880" fill="none" stroke="#1737a5" stroke-width="12" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="1700" fill="none" stroke="#1737a5" stroke-width="11" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="1520" fill="none" stroke="#1737a5" stroke-width="10" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="1340" fill="none" stroke="#1737a5" stroke-width="9" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="1160" fill="none" stroke="#1737a5" stroke-width="8" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="980" fill="none" stroke="#1737a5" stroke-width="7" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="800" fill="none" stroke="#1737a5" stroke-width="6" opacity="0.78"/>
+    <circle cx="5080" cy="5990" r="620" fill="none" stroke="#1737a5" stroke-width="5" opacity="0.78"/>
+    <line x1="5080" y1="5530" x2="5080" y2="4750" stroke="#e8f2ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
+    <circle cx="5080" cy="5990" r="300" fill="#041627" stroke="#20cfff" stroke-width="20"/>
+    <circle cx="5080" cy="5990" r="102" fill="#24b8dc"/>
+    <text x="5080" y="3380" class="label section" style="fill:#8e9ec2; opacity:0.78;">TEMPORAL RESERVOIR</text>
+    <rect id="SIDE_LEFT_BG" x="520" y="4700" width="1200" height="1640" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
+    <rect id="SIDE_RIGHT_BG" x="8440" y="4700" width="1200" height="1640" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
+    <text x="1120" y="5010" class="label tiny">POSITION</text>
+    <text x="1120" y="5220" class="label tiny">CV</text>
+    <text x="9040" y="5010" class="label tiny">SPEED</text>
+    <text x="9040" y="5220" class="label tiny">CV</text>
+    <line x1="790" y1="5510" x2="1450" y2="5510" stroke="#7d64ff" stroke-width="28" stroke-linecap="round" opacity="0.9"/>
+    <line x1="8710" y1="5510" x2="9370" y2="5510" stroke="#7d64ff" stroke-width="28" stroke-linecap="round" opacity="0.9"/>
+    <rect id="control_strip" x="1840" y="8780" width="6480" height="940" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
+    <text x="5080" y="8915" class="label micro" style="fill:#cdd8ff; opacity:0.72;">TRANSPORT</text>
+    <text x="2960" y="9070" class="label small">FREEZE</text>
+    <text x="5080" y="9070" class="label small">REVERSE</text>
+    <circle cx="2960" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
+    <circle cx="5080" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
+    <circle cx="7200" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
+    <text x="7200" y="9070" class="label small">SLIP</text>
+    <rect id="INPUT_ZONE_BG" x="380" y="10960" width="6140" height="1500" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
+    <rect id="OUTPUT_ZONE_BG" x="6700" y="10960" width="3080" height="1500" rx="220" ry="220" fill="#07385c" stroke="#1cccd9" stroke-width="24"/>
+    <text x="3450" y="11300" class="label small">INPUTS</text>
+    <text x="8240" y="11300" class="label small">OUTPUTS</text>
+    <text x="1700" y="11770" class="label tiny">IN L</text>
+    <text x="3650" y="11770" class="label tiny">IN R</text>
+    <text x="1700" y="12245" class="label tiny">FREEZE</text>
+    <text x="1700" y="12445" class="label tiny">GATE</text>
+    <text x="3650" y="12245" class="label tiny">SCRATCH</text>
+    <text x="3650" y="12445" class="label tiny">GATE</text>
+    <text x="7780" y="12010" class="label tiny">OUT L</text>
+    <text x="9070" y="12010" class="label tiny">OUT R</text>
+    <path d="M 1620 12370 C 1840 12430, 1940 11890, 2280 11890 C 2620 11890, 2720 12430, 2940 12370" fill="none" stroke="url(#titleGrad)" stroke-width="70" stroke-linecap="round" opacity="0.95"/>
+    <text x="5080" y="12340" class="label" style="font-size: 560px; font-weight: 700; fill: url(#titleGrad);">Leviathan</text>
+    <path d="M 7220 12370 C 7440 12430, 7540 11890, 7880 11890 C 8220 11890, 8320 12430, 8540 12370" fill="none" stroke="url(#titleGrad)" stroke-width="70" stroke-linecap="round" opacity="0.95"/>
+  </g>
+  <g id="components" inkscape:label="components" style="display:none">
+    <circle id="BUFFER_PARAM" cx="1450" cy="2340" r="450" fill="#ff0000"/>
+    <circle id="SPEED_PARAM" cx="3650" cy="2340" r="450" fill="#ff0000"/>
+    <circle id="RPM_PARAM" cx="2810" cy="2040" r="170" fill="#ff0000"/>
+    <circle id="MIX_PARAM" cx="5850" cy="2340" r="450" fill="#ff0000"/>
+    <circle id="FEEDBACK_PARAM" cx="8050" cy="2340" r="450" fill="#ff0000"/>
+    <circle id="PLATTER_AREA" cx="5080" cy="5990" r="2840" fill="#ff0000"/>
+    <circle id="FREEZE_PARAM" cx="2960" cy="9320" r="260" fill="#ff0000"/>
+    <circle id="REVERSE_PARAM" cx="5080" cy="9320" r="260" fill="#ff0000"/>
+    <circle id="SLIP_PARAM" cx="7200" cy="9320" r="260" fill="#ff0000"/>
+    <circle id="FREEZE_LIGHT" cx="2960" cy="8960" r="90" fill="#ff00ff"/>
+    <circle id="REVERSE_LIGHT" cx="5080" cy="8960" r="90" fill="#ff00ff"/>
+    <circle id="SLIP_LIGHT" cx="7200" cy="8960" r="90" fill="#ff00ff"/>
+    <circle id="SCRATCH_LIGHT" cx="5080" cy="3470" r="90" fill="#ff00ff"/>
+    <circle id="POSITION_CV" cx="1120" cy="5900" r="250" fill="#00ff00"/>
+    <circle id="SPEED_CV" cx="9040" cy="5900" r="250" fill="#00ff00"/>
+    <circle id="INPUT_L" cx="1700" cy="12010" r="250" fill="#00ff00"/>
+    <circle id="INPUT_R" cx="3650" cy="12010" r="250" fill="#00ff00"/>
+    <circle id="FREEZE_GATE" cx="1700" cy="12530" r="250" fill="#00ff00"/>
+    <circle id="SCRATCH_GATE" cx="3650" cy="12530" r="250" fill="#00ff00"/>
+    <circle id="OUTPUT_L" cx="7780" cy="12270" r="250" fill="#0000ff"/>
+    <circle id="OUTPUT_R" cx="9070" cy="12270" r="250" fill="#0000ff"/>
+  </g>
+</svg>
