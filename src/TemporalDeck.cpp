@@ -185,6 +185,7 @@ struct TemporalDeckEngine {
 		float outR = 0.f;
 		float lag = 0.f;
 		float accessibleLag = 0.f;
+		float platterAngle = 0.f;
 	};
 
 	FrameResult process(
@@ -318,13 +319,14 @@ struct TemporalDeckEngine {
 			buffer.write(inL + outL * feedback, inR + outR * feedback);
 		}
 
-		result.outL = outL;
-		result.outR = outR;
-		result.lag = currentLag();
-		result.accessibleLag = limit;
-		return result;
-	}
-};
+			result.outL = outL;
+			result.outR = outR;
+			result.lag = currentLag();
+			result.accessibleLag = limit;
+			result.platterAngle = -readHead * (float(M_PI) / std::max(sampleRate, 1.f));
+			return result;
+		}
+	};
 
 
 struct TemporalDeck;
@@ -353,6 +355,7 @@ struct TemporalDeckPlatterWidget : Widget {
 		return radius >= deadZonePx && radius <= platterRadiusPx;
 	}
 
+	void draw(const DrawArgs& args) override;
 	void onButton(const event::Button& e) override;
 	void onDragStart(const event::DragStart& e) override;
 	void onDragMove(const event::DragMove& e) override;
@@ -406,6 +409,7 @@ struct TemporalDeck : Module {
 	std::atomic<float> uiLagSamples {0.f};
 	std::atomic<float> uiAccessibleLagSamples {0.f};
 	std::atomic<float> uiSampleRate {44100.f};
+	std::atomic<float> uiPlatterAngle {0.f};
 	bool positionCvOffsetMode = false;
 
 	TemporalDeck() {
@@ -435,6 +439,7 @@ struct TemporalDeck : Module {
 		uiSampleRate.store(cachedSampleRate);
 		uiLagSamples.store(0.f);
 		uiAccessibleLagSamples.store(0.f);
+		uiPlatterAngle.store(0.f);
 	}
 
 	json_t* dataToJson() override {
@@ -519,6 +524,7 @@ struct TemporalDeck : Module {
 		uiLagSamples.store(frame.lag);
 		uiAccessibleLagSamples.store(frame.accessibleLag);
 		uiSampleRate.store(args.sampleRate);
+		uiPlatterAngle.store(frame.platterAngle);
 	}
 
 	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples) {
@@ -579,6 +585,92 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	nvgFillColor(args.vg, nvgRGBA(244, 210, 75, 240));
 	nvgFill(args.vg);
 	nvgRestore(args.vg);
+}
+
+
+void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
+	nvgSave(args.vg);
+	float rotation = module ? module->uiPlatterAngle.load() : 0.f;
+
+	NVGcolor outerDark = nvgRGB(20, 22, 26);
+	NVGpaint vinylGrad = nvgRadialGradient(
+		args.vg,
+		centerMm.x - platterRadiusPx * 0.18f,
+		centerMm.y - platterRadiusPx * 0.22f,
+		platterRadiusPx * 0.15f,
+		platterRadiusPx * 1.05f,
+		nvgRGBA(52, 56, 64, 220),
+		outerDark
+	);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, centerMm.x, centerMm.y, platterRadiusPx);
+	nvgFillPaint(args.vg, vinylGrad);
+	nvgFill(args.vg);
+
+	for (int i = 0; i < 14; ++i) {
+		float grooveRadius = platterRadiusPx * (0.28f + 0.047f * i);
+		float alpha = (i % 2 == 0) ? 34.f : 18.f;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, centerMm.x, centerMm.y, grooveRadius);
+		nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
+		nvgStrokeWidth(args.vg, 0.7f);
+		nvgStroke(args.vg);
+	}
+
+	float labelRadius = platterRadiusPx * 0.33f;
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, centerMm.x, centerMm.y, labelRadius);
+	nvgFillColor(args.vg, nvgRGB(138, 86, 34));
+	nvgFill(args.vg);
+
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, centerMm.x, centerMm.y);
+	nvgRotate(args.vg, rotation);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, 0.f, 0.f, labelRadius * 0.74f);
+	nvgFillColor(args.vg, nvgRGB(196, 155, 87));
+	nvgFill(args.vg);
+
+	for (int i = 0; i < 3; ++i) {
+		float angle = 2.f * float(M_PI) * float(i) / 3.f;
+		Vec a(std::cos(angle) * labelRadius * 0.22f, std::sin(angle) * labelRadius * 0.22f);
+		Vec b(std::cos(angle) * labelRadius * 0.62f, std::sin(angle) * labelRadius * 0.62f);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, a.x, a.y);
+		nvgLineTo(args.vg, b.x, b.y);
+		nvgStrokeColor(args.vg, nvgRGBA(90, 52, 19, 170));
+		nvgStrokeWidth(args.vg, 1.2f);
+		nvgStroke(args.vg);
+	}
+
+	nvgBeginPath(args.vg);
+	nvgRoundedRect(args.vg, -labelRadius * 0.42f, -labelRadius * 0.055f, labelRadius * 0.84f, labelRadius * 0.11f, 1.2f);
+	nvgFillColor(args.vg, nvgRGBA(120, 72, 28, 120));
+	nvgFill(args.vg);
+
+	nvgRestore(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, centerMm.x, centerMm.y, labelRadius * 0.12f);
+	nvgFillColor(args.vg, nvgRGB(222, 228, 235));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, centerMm.x, centerMm.y, platterRadiusPx);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 32));
+	nvgStrokeWidth(args.vg, 1.1f);
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, centerMm.x, centerMm.y, platterRadiusPx * 0.92f, rotation - 2.45f, rotation - 1.35f, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 30));
+	nvgStrokeWidth(args.vg, 2.f);
+	nvgStroke(args.vg);
+
+	nvgRestore(args.vg);
+	Widget::draw(args);
 }
 
 
