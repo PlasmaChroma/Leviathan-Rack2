@@ -11,3 +11,4 @@ extern Plugin* pluginInstance;
 // extern Model* modelMyModule;
 extern Model* modelIntegralFlux;
 extern Model* modelProc;
+extern Model* modelTemporalDeck;
