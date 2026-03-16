@@ -34,6 +34,14 @@
         "Slew Limiter",
         "Envelope Follower"
       ]
+    },
+    {
+      "slug": "TemporalDeck",
+      "name": "Temporal Deck",
+      "description": "",
+      "tags": [
+        "Delay"
+      ]
     }
   ]
 }
