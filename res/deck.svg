@@ -1,108 +1,146 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1">
   <defs>
-    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#050a18"/><stop offset="100%" stop-color="#01040d"/></linearGradient>
-    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#1cccd9"/></linearGradient>
-    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7b5cff"/><stop offset="55%" stop-color="#487fff"/><stop offset="100%" stop-color="#19d2ff"/></linearGradient>
-    <linearGradient id="controlGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#241b63"/><stop offset="100%" stop-color="#2b206c"/></linearGradient>
-    <linearGradient id="outputGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#07364e"/><stop offset="100%" stop-color="#0a4a5a"/></linearGradient>
+    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#07101f"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#1cccd9"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#24195f"/>
+      <stop offset="100%" stop-color="#2e1f73"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0a344a"/>
+      <stop offset="100%" stop-color="#0d4a60"/>
+    </linearGradient>
+    <linearGradient id="deckGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#091427"/>
+      <stop offset="100%" stop-color="#020713"/>
+    </linearGradient>
     <style>
       .label { font-family: Orbitron, Arial, sans-serif; fill: #edf3ff; text-anchor: middle; dominant-baseline: middle; }
-      .small { font-size: 250px; letter-spacing: 10px; }
-      .tiny { font-size: 185px; letter-spacing: 5px; }
-      .micro { font-size: 145px; letter-spacing: 3px; }
-      .section { font-size: 170px; letter-spacing: 9px; }
+      .title { font-size: 760px; font-weight: 700; fill: url(#titleGrad); }
+      .subtitle { font-size: 180px; letter-spacing: 8px; fill:#d8e7ff; opacity:0.9; }
+      .section { font-size: 170px; letter-spacing: 10px; }
+      .small { font-size: 235px; letter-spacing: 8px; }
+      .tiny { font-size: 175px; letter-spacing: 6px; }
+      .micro { font-size: 145px; letter-spacing: 4px; }
     </style>
   </defs>
+
   <g id="panel_art" inkscape:label="panel_art">
-    <rect id="panel_bg" x="35" y="35" width="10090" height="12780" rx="260" ry="260" fill="url(#panelGrad)" stroke="#2b3852" stroke-width="70"/>
-    <text x="5080" y="760" class="label" style="font-size: 760px; font-weight: 700; fill: url(#titleGrad);">Temporal Deck</text>
-    <text x="5080" y="1160" class="label tiny" style="fill:#dce9ff; opacity:0.92;">stereo time deck • scratch transport • buffered delay instrument</text>
-    <line x1="420" y1="1485" x2="9740" y2="1485" stroke="#6b58ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
-    <rect id="top_band" x="520" y="1650" width="9120" height="1180" rx="220" ry="220" fill="#231b60" stroke="#5b4ef0" stroke-width="24"/>
-    <text x="1450" y="1935" class="label small">BUFFER</text>
-    <text x="3650" y="1935" class="label small">SPEED</text>
-    <text x="3650" y="2140" class="label micro" style="fill:#cdd8ff; opacity:0.72;">trim around deck rate</text>
-    <text x="5850" y="1935" class="label small">MIX</text>
-    <text x="8050" y="1935" class="label small">FEEDBACK</text>
-    <circle cx="1450" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
-    <circle cx="3650" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
-    <rect x="2460" y="1925" width="700" height="230" rx="90" ry="90" fill="#1a144d" stroke="#5b4ef0" stroke-width="18" opacity="0.96"/>
-    <text x="2810" y="2005" class="label micro" style="fill:#edf3ff;">33 / 45</text>
-    <circle cx="5850" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
-    <circle cx="8050" cy="2450" r="90" fill="#8ea3d0" opacity="0.28"/>
-    <rect id="platter_frame" x="1160" y="3200" width="7840" height="5660" rx="380" ry="380" fill="#020918" stroke="#2d3854" stroke-width="34"/>
-    <circle cx="5080" cy="5990" r="2840" fill="none" stroke="#161f44" stroke-width="26" opacity="0.95"/>
-    <path id="arc_hint_fill" d="M 2506.1 4789.8 A 2840 2840 0 1 1 7488.5 7495.0" fill="none" stroke="url(#ringGrad)" stroke-width="74" stroke-linecap="round" opacity="0.96"/>
-    <circle cx="3410.7" cy="3692.4" r="72" fill="#eef4ff" opacity="0.98"/>
-    <circle cx="5080" cy="5990" r="2460" fill="none" stroke="url(#ringGrad)" stroke-width="30"/>
-    <circle cx="5080" cy="5990" r="2260" fill="none" stroke="#14315d" stroke-width="16" opacity="0.82"/>
-    <circle cx="5080" cy="5990" r="2100" fill="#000915" stroke="#193b62" stroke-width="18"/>
-    <circle cx="5080" cy="5990" r="1880" fill="none" stroke="#1737a5" stroke-width="12" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="1700" fill="none" stroke="#1737a5" stroke-width="11" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="1520" fill="none" stroke="#1737a5" stroke-width="10" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="1340" fill="none" stroke="#1737a5" stroke-width="9" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="1160" fill="none" stroke="#1737a5" stroke-width="8" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="980" fill="none" stroke="#1737a5" stroke-width="7" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="800" fill="none" stroke="#1737a5" stroke-width="6" opacity="0.78"/>
-    <circle cx="5080" cy="5990" r="620" fill="none" stroke="#1737a5" stroke-width="5" opacity="0.78"/>
-    <line x1="5080" y1="5530" x2="5080" y2="4750" stroke="#e8f2ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
-    <circle cx="5080" cy="5990" r="300" fill="#041627" stroke="#20cfff" stroke-width="20"/>
-    <circle cx="5080" cy="5990" r="102" fill="#24b8dc"/>
-    <text x="5080" y="3380" class="label section" style="fill:#8e9ec2; opacity:0.78;">TEMPORAL RESERVOIR</text>
-    <rect id="SIDE_LEFT_BG" x="520" y="4700" width="1200" height="1640" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
-    <rect id="SIDE_RIGHT_BG" x="8440" y="4700" width="1200" height="1640" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
-    <text x="1120" y="5010" class="label tiny">POSITION</text>
-    <text x="1120" y="5220" class="label tiny">CV</text>
-    <text x="9040" y="5010" class="label tiny">SPEED</text>
-    <text x="9040" y="5220" class="label tiny">CV</text>
-    <line x1="790" y1="5510" x2="1450" y2="5510" stroke="#7d64ff" stroke-width="28" stroke-linecap="round" opacity="0.9"/>
-    <line x1="8710" y1="5510" x2="9370" y2="5510" stroke="#7d64ff" stroke-width="28" stroke-linecap="round" opacity="0.9"/>
-    <rect id="control_strip" x="1840" y="8780" width="6480" height="940" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
-    <text x="5080" y="8915" class="label micro" style="fill:#cdd8ff; opacity:0.72;">TRANSPORT</text>
-    <text x="2960" y="9070" class="label small">FREEZE</text>
-    <text x="5080" y="9070" class="label small">REVERSE</text>
-    <circle cx="2960" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
-    <circle cx="5080" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
-    <circle cx="7200" cy="8910" r="48" fill="#ff8aff" opacity="0.75"/>
-    <text x="7200" y="9070" class="label small">SLIP</text>
-    <rect id="INPUT_ZONE_BG" x="380" y="10960" width="6140" height="1500" rx="220" ry="220" fill="#241b63" stroke="#5b4ef0" stroke-width="24"/>
-    <rect id="OUTPUT_ZONE_BG" x="6700" y="10960" width="3080" height="1500" rx="220" ry="220" fill="#07385c" stroke="#1cccd9" stroke-width="24"/>
+    <rect id="panel_bg" x="35" y="35" width="10090" height="12780" rx="260" ry="260"
+          fill="url(#panelGrad)" stroke="#2b3852" stroke-width="70"/>
+
+    <text x="5080" y="770" class="label title">Temporal Deck</text>
+    <text x="5080" y="1160" class="label subtitle">stereo time deck • scratch transport • buffered delay instrument</text>
+    <line x1="420" y1="1490" x2="9740" y2="1490" stroke="#6b58ff" stroke-width="40" stroke-linecap="round" opacity="0.95"/>
+
+    <!-- Top control band -->
+    <rect id="TOP_CONTROL_BG" x="520" y="1660" width="9120" height="1200" rx="220" ry="220"
+          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="26"/>
+    <text x="1450" y="1940" class="label small">BUFFER</text>
+    <text x="3650" y="1940" class="label small">RATE</text>
+    <text x="5850" y="1940" class="label small">MIX</text>
+    <text x="8050" y="1940" class="label small">FEEDBACK</text>
+    <text x="3650" y="2145" class="label micro" style="fill:#cad8ff; opacity:0.72;">center = normal flow</text>
+
+    <!-- Main deck field -->
+    <rect id="DECK_FIELD" x="1120" y="3180" width="7920" height="5720" rx="420" ry="420"
+          fill="#030916" stroke="#2d3854" stroke-width="34"/>
+    <text x="5080" y="3460" class="label section" style="fill:#9eb1d8; opacity:0.76;">TEMPORAL RESERVOIR</text>
+
+    <!-- Upper hemicircle arc guide -->
+    <path id="arc_outline" d="M 2110 5990 A 2970 2970 0 0 1 8050 5990"
+          fill="none" stroke="#7058ff" stroke-width="74" stroke-linecap="round" opacity="0.95"/>
+    <path id="arc_fill_hint" d="M 2150 5990 A 2930 2930 0 0 1 8010 5990"
+          fill="none" stroke="#f6d84d" stroke-width="54" stroke-linecap="round" opacity="0.96"/>
+    <circle cx="8010" cy="5990" r="88" fill="#f9f8f1" stroke="#6d58ff" stroke-width="20"/>
+    <text x="8300" y="5860" class="label micro" style="fill:#f6d84d; text-anchor:start;">NOW</text>
+
+    <!-- Platter -->
+    <circle cx="5080" cy="5990" r="2950" fill="none" stroke="#18214a" stroke-width="20" opacity="0.8"/>
+    <circle cx="5080" cy="5990" r="2460" fill="none" stroke="#2a2d58" stroke-width="24" opacity="0.72"/>
+    <circle cx="5080" cy="5990" r="2100" fill="url(#deckGrad)" stroke="#193b62" stroke-width="22"/>
+    <circle cx="5080" cy="5990" r="1870" fill="none" stroke="#1737a5" stroke-width="12" opacity="0.62"/>
+    <circle cx="5080" cy="5990" r="1650" fill="none" stroke="#1737a5" stroke-width="10" opacity="0.56"/>
+    <circle cx="5080" cy="5990" r="1430" fill="none" stroke="#1737a5" stroke-width="9" opacity="0.50"/>
+    <circle cx="5080" cy="5990" r="1210" fill="none" stroke="#1737a5" stroke-width="8" opacity="0.46"/>
+    <circle cx="5080" cy="5990" r="990" fill="none" stroke="#1737a5" stroke-width="7" opacity="0.42"/>
+    <line x1="5080" y1="5505" x2="5080" y2="4700" stroke="#eef4ff" stroke-width="42" stroke-linecap="round" opacity="0.95"/>
+    <circle cx="5080" cy="5990" r="305" fill="#041627" stroke="#20cfff" stroke-width="20"/>
+    <circle cx="5080" cy="5990" r="104" fill="#24b8dc"/>
+
+    <!-- Side CV islands -->
+    <rect id="SIDE_LEFT_BG" x="410" y="5020" width="1180" height="1480" rx="220" ry="220"
+          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
+    <rect id="SIDE_RIGHT_BG" x="8570" y="5020" width="1180" height="1480" rx="220" ry="220"
+          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
+    <text x="1000" y="5330" class="label tiny">POSITION</text>
+    <text x="1000" y="5545" class="label tiny">CV</text>
+    <text x="9160" y="5330" class="label tiny">RATE</text>
+    <text x="9160" y="5545" class="label tiny">CV</text>
+
+    <!-- Transport strip -->
+    <rect id="TRANSPORT_BG" x="1960" y="8880" width="6240" height="860" rx="220" ry="220"
+          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
+    <text x="5080" y="9020" class="label micro" style="fill:#cad8ff; opacity:0.72;">TRANSPORT</text>
+    <circle cx="3040" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
+    <circle cx="5080" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
+    <circle cx="7120" cy="9190" r="48" fill="#ff8aff" opacity="0.75"/>
+    <text x="3040" y="9365" class="label small">FREEZE</text>
+    <text x="5080" y="9365" class="label small">REVERSE</text>
+    <text x="7120" y="9365" class="label small">SLIP</text>
+
+    <!-- Bottom IO -->
+    <rect id="INPUT_ZONE_BG" x="380" y="10960" width="6140" height="1500" rx="220" ry="220"
+          fill="url(#purpleGrad)" stroke="#5b4ef0" stroke-width="24"/>
+    <rect id="OUTPUT_ZONE_BG" x="6700" y="10960" width="3080" height="1500" rx="220" ry="220"
+          fill="url(#blueGrad)" stroke="#1cccd9" stroke-width="24"/>
     <text x="3450" y="11300" class="label small">INPUTS</text>
     <text x="8240" y="11300" class="label small">OUTPUTS</text>
     <text x="1700" y="11770" class="label tiny">IN L</text>
     <text x="3650" y="11770" class="label tiny">IN R</text>
-    <text x="1700" y="12245" class="label tiny">FREEZE</text>
-    <text x="1700" y="12445" class="label tiny">GATE</text>
-    <text x="3650" y="12245" class="label tiny">SCRATCH</text>
-    <text x="3650" y="12445" class="label tiny">GATE</text>
+    <text x="1700" y="12225" class="label tiny">FREEZE</text>
+    <text x="1700" y="12425" class="label tiny">GATE</text>
+    <text x="3650" y="12225" class="label tiny">SCRATCH</text>
+    <text x="3650" y="12425" class="label tiny">GATE</text>
     <text x="7780" y="12010" class="label tiny">OUT L</text>
     <text x="9070" y="12010" class="label tiny">OUT R</text>
-    <path d="M 1620 12370 C 1840 12430, 1940 11890, 2280 11890 C 2620 11890, 2720 12430, 2940 12370" fill="none" stroke="url(#titleGrad)" stroke-width="70" stroke-linecap="round" opacity="0.95"/>
-    <text x="5080" y="12340" class="label" style="font-size: 560px; font-weight: 700; fill: url(#titleGrad);">Leviathan</text>
-    <path d="M 7220 12370 C 7440 12430, 7540 11890, 7880 11890 C 8220 11890, 8320 12430, 8540 12370" fill="none" stroke="url(#titleGrad)" stroke-width="70" stroke-linecap="round" opacity="0.95"/>
   </g>
-  <g id="components" inkscape:label="components" style="display:none">
-    <circle id="BUFFER_PARAM" cx="1450" cy="2340" r="450" fill="#ff0000"/>
-    <circle id="SPEED_PARAM" cx="3650" cy="2340" r="450" fill="#ff0000"/>
-    <circle id="RPM_PARAM" cx="2810" cy="2040" r="170" fill="#ff0000"/>
-    <circle id="MIX_PARAM" cx="5850" cy="2340" r="450" fill="#ff0000"/>
-    <circle id="FEEDBACK_PARAM" cx="8050" cy="2340" r="450" fill="#ff0000"/>
-    <circle id="PLATTER_AREA" cx="5080" cy="5990" r="2840" fill="#ff0000"/>
-    <circle id="FREEZE_PARAM" cx="2960" cy="9320" r="260" fill="#ff0000"/>
-    <circle id="REVERSE_PARAM" cx="5080" cy="9320" r="260" fill="#ff0000"/>
-    <circle id="SLIP_PARAM" cx="7200" cy="9320" r="260" fill="#ff0000"/>
-    <circle id="FREEZE_LIGHT" cx="2960" cy="8960" r="90" fill="#ff00ff"/>
-    <circle id="REVERSE_LIGHT" cx="5080" cy="8960" r="90" fill="#ff00ff"/>
-    <circle id="SLIP_LIGHT" cx="7200" cy="8960" r="90" fill="#ff00ff"/>
-    <circle id="SCRATCH_LIGHT" cx="5080" cy="3470" r="90" fill="#ff00ff"/>
-    <circle id="POSITION_CV" cx="1120" cy="5900" r="250" fill="#00ff00"/>
-    <circle id="SPEED_CV" cx="9040" cy="5900" r="250" fill="#00ff00"/>
-    <circle id="INPUT_L" cx="1700" cy="12010" r="250" fill="#00ff00"/>
-    <circle id="INPUT_R" cx="3650" cy="12010" r="250" fill="#00ff00"/>
-    <circle id="FREEZE_GATE" cx="1700" cy="12530" r="250" fill="#00ff00"/>
-    <circle id="SCRATCH_GATE" cx="3650" cy="12530" r="250" fill="#00ff00"/>
-    <circle id="OUTPUT_L" cx="7780" cy="12270" r="250" fill="#0000ff"/>
-    <circle id="OUTPUT_R" cx="9070" cy="12270" r="250" fill="#0000ff"/>
+
+  <g id="components" style="display:none">
+    <!-- red = params / controls -->
+    <ellipse id="BUFFER_PARAM" cx="1450" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="RATE_PARAM" cx="3650" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="MIX_PARAM" cx="5850" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="FEEDBACK_PARAM" cx="8050" cy="2440" rx="295" ry="295" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="PLATTER_AREA" cx="5080" cy="5990" rx="2950" ry="2950" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="ARC_AREA" cx="5080" cy="5990" rx="3310" ry="3310" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="FREEZE_PARAM" cx="3040" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="REVERSE_PARAM" cx="5080" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+    <ellipse id="SLIP_PARAM" cx="7120" cy="9200" rx="250" ry="250" style="fill:#ff0000;fill-opacity:1;stroke:none"/>
+
+    <!-- magenta = lights -->
+    <ellipse id="FREEZE_LIGHT" cx="3040" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
+    <ellipse id="REVERSE_LIGHT" cx="5080" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
+    <ellipse id="SLIP_LIGHT" cx="7120" cy="8920" rx="120" ry="120" style="fill:#ff00ff;fill-opacity:1;stroke:none"/>
+
+    <!-- green = inputs -->
+    <ellipse id="POSITION_CV" cx="1000" cy="5960" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+    <ellipse id="RATE_CV" cx="9160" cy="5960" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+    <ellipse id="INPUT_L" cx="1700" cy="12000" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+    <ellipse id="INPUT_R" cx="3650" cy="12000" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+    <ellipse id="FREEZE_GATE" cx="1700" cy="12470" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+    <ellipse id="SCRATCH_GATE" cx="3650" cy="12470" rx="398" ry="405" style="fill:#00ff00;fill-opacity:1;stroke:none"/>
+
+    <!-- blue = outputs -->
+    <ellipse id="OUTPUT_L" cx="7780" cy="12230" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none"/>
+    <ellipse id="OUTPUT_R" cx="9070" cy="12230" rx="398" ry="405" style="fill:#0000ff;fill-opacity:1;stroke:none"/>
   </g>
 </svg>
