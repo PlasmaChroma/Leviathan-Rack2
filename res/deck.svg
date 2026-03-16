@@ -6,8 +6,8 @@
    width="101.6mm"
    id="svg1713"
    sodipodi:docname="deck.svg"
-   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04)"
-   inkscape:label="components"
+   inkscape:version="1.4.3 (1:1.4.3+202512261034+0d15f75042)"
+   inkscape:label="art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -23,19 +23,22 @@
      inkscape:document-units="mm"
      showgrid="false"
      inkscape:zoom="1.737808"
-     inkscape:cx="191.90842"
-     inkscape:cy="242.83465"
-     inkscape:window-width="1920"
-     inkscape:window-height="1043"
-     inkscape:window-x="3840"
-     inkscape:window-y="0"
+     inkscape:cx="191.90843"
+     inkscape:cy="242.54693"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="1978"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg1713" />
+     inkscape:current-layer="svg1713"
+     inkscape:showpageshadow="2"
+     inkscape:deskcolor="#d1d1d1" />
   <defs
      id="defs1527" />
   <g
      id="panel_art"
-     style="display:inline">
+     style="display:inline"
+     inkscape:label="panel_art">
     <rect
        fill="#0e1016"
        height="128.5"
@@ -221,25 +224,9 @@
        x="84"
        y="28.5"
        id="text1569">FEEDBACK</text>
-    <path
-       d="m 17.8,72 a 33,33 0 0 1 66,0"
-       fill="none"
-       opacity="0.75"
-       stroke="#7e50c7"
-       stroke-linecap="round"
-       stroke-width="4.9"
-       id="path1571" />
-    <path
-       d="m 17.8,72 a 33,33 0 0 1 66,0"
-       fill="none"
-       opacity="1"
-       stroke="#f4d24b"
-       stroke-linecap="round"
-       stroke-width="3.7"
-       id="path1573" />
     <circle
        cx="83.800003"
-       cy="72"
+       cy="77.525002"
        fill="#f8e89a"
        r="1.65"
        stroke="#7e50c7"
@@ -254,83 +241,104 @@
        stroke="#7e50c7"
        stroke-width="0.3"
        id="circle1577" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="none"
-       r="30.700001"
-       stroke="#2d3550"
-       stroke-width="0.8"
-       id="circle1579" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="#11131c"
-       r="29.5"
-       stroke="#3d4564"
-       stroke-width="0.55"
-       id="circle1581" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="none"
-       opacity="0.35"
-       r="24"
-       stroke="#4c567d"
-       stroke-width="0.35"
-       id="circle1583" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="none"
-       opacity="0.3"
-       r="19"
-       stroke="#4c567d"
-       stroke-width="0.3"
-       id="circle1585" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="none"
-       opacity="0.25"
-       r="14"
-       stroke="#4c567d"
-       stroke-width="0.25"
-       id="circle1587" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="none"
-       opacity="0.22"
-       r="9"
-       stroke="#4c567d"
-       stroke-width="0.25"
-       id="circle1589" />
-    <line
-       opacity="0.9"
-       stroke="#f8e89a"
-       stroke-linecap="round"
-       stroke-width="0.65"
-       x1="50.799999"
-       x2="71.688377"
-       y1="72"
-       y2="57.373802"
-       id="line1591" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="#d6dae6"
-       r="3.2"
-       stroke="#505873"
-       stroke-width="0.35"
-       id="circle1593" />
-    <circle
-       cx="50.799999"
-       cy="72"
-       fill="#969db0"
-       r="0.94999999"
-       stroke="none"
-       id="circle1595" />
+    <g
+       id="platter">
+      <circle
+         cx="50.799999"
+         cy="62"
+         fill="none"
+         r="30.700001"
+         stroke="#2d3550"
+         stroke-width="0.8"
+         id="circle1579" />
+      <path
+         d="m 17.8,62.099986 a 33,33 0 0 1 66,0"
+         fill="none"
+         opacity="0.75"
+         stroke="#7e50c7"
+         stroke-linecap="round"
+         stroke-width="4.9"
+         id="path1571" />
+      <path
+         d="m 17.8,62.099986 c 0,-18.225409 14.774604,-32.999993 33,-32.999993 18.225396,0 33,14.774577 33,32.999986"
+         fill="none"
+         opacity="1"
+         stroke="#f4d24b"
+         stroke-linecap="round"
+         stroke-width="3.7"
+         id="path1573"
+         sodipodi:nodetypes="csc"
+         style="display:none" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="#11131c"
+         r="29.5"
+         stroke="#3d4564"
+         stroke-width="0.55"
+         id="circle1581" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="none"
+         opacity="0.35"
+         r="24"
+         stroke="#4c567d"
+         stroke-width="0.35"
+         id="circle1583" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="none"
+         opacity="0.3"
+         r="19"
+         stroke="#4c567d"
+         stroke-width="0.3"
+         id="circle1585" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="none"
+         opacity="0.25"
+         r="14"
+         stroke="#4c567d"
+         stroke-width="0.25"
+         id="circle1587" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="none"
+         opacity="0.22"
+         r="9"
+         stroke="#4c567d"
+         stroke-width="0.25"
+         id="circle1589" />
+      <line
+         opacity="0.9"
+         stroke="#f8e89a"
+         stroke-linecap="round"
+         stroke-width="0.65"
+         x1="50.799999"
+         x2="71.688377"
+         y1="62.100025"
+         y2="47.473782"
+         id="line1591" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="#d6dae6"
+         r="3.2"
+         stroke="#505873"
+         stroke-width="0.35"
+         id="circle1593" />
+      <circle
+         cx="50.799999"
+         cy="62.100025"
+         fill="#969db0"
+         r="0.94999999"
+         stroke="none"
+         id="circle1595" />
+    </g>
     <text
        fill="#7e86a5"
        font-family="Orbitron, sans-serif"
@@ -350,11 +358,11 @@
        stroke-width="0.45"
        width="16.4"
        x="3.8"
-       y="60.700001"
+       y="66.224998"
        id="rect1599" />
     <circle
        cx="12"
-       cy="72"
+       cy="77.524994"
        fill="#171a23"
        r="4.1999998"
        stroke="#4f5c80"
@@ -366,7 +374,7 @@
        font-size="2.05px"
        text-anchor="middle"
        x="12"
-       y="81.5"
+       y="87.024994"
        id="text1603">POSITION CV</text>
     <rect
        fill="#241935"
@@ -377,11 +385,11 @@
        stroke-width="0.45"
        width="16.4"
        x="80.800003"
-       y="60.700001"
+       y="66.224998"
        id="rect1605" />
     <circle
        cx="89"
-       cy="72"
+       cy="77.525002"
        fill="#171a23"
        r="4.1999998"
        stroke="#4f5c80"
@@ -393,7 +401,7 @@
        font-size="2.05px"
        text-anchor="middle"
        x="89"
-       y="81.5"
+       y="87.025002"
        id="text1609">RATE CV</text>
     <rect
        fill="#241935"
@@ -652,73 +660,10 @@
        x="83.400002"
        y="111.2"
        id="text1673">OUTPUTS</text>
-    <circle
-       cx="4.5"
-       cy="4.5"
-       fill="#131722"
-       r="1.7"
-       stroke="#4b5168"
-       stroke-width="0.35"
-       id="circle1675" />
-    <line
-       stroke="#77809a"
-       stroke-width="0.25"
-       x1="3.7"
-       x2="5.3000002"
-       y1="4.5"
-       y2="4.5"
-       id="line1677" />
-    <circle
-       cx="97.099998"
-       cy="4.5"
-       fill="#131722"
-       r="1.7"
-       stroke="#4b5168"
-       stroke-width="0.35"
-       id="circle1679" />
-    <line
-       stroke="#77809a"
-       stroke-width="0.25"
-       x1="96.300003"
-       x2="97.900002"
-       y1="4.5"
-       y2="4.5"
-       id="line1681" />
-    <circle
-       cx="4.5"
-       cy="124"
-       fill="#131722"
-       r="1.7"
-       stroke="#4b5168"
-       stroke-width="0.35"
-       id="circle1683" />
-    <line
-       stroke="#77809a"
-       stroke-width="0.25"
-       x1="3.7"
-       x2="5.3000002"
-       y1="124"
-       y2="124"
-       id="line1685" />
-    <circle
-       cx="97.099998"
-       cy="124"
-       fill="#131722"
-       r="1.7"
-       stroke="#4b5168"
-       stroke-width="0.35"
-       id="circle1687" />
-    <line
-       stroke="#77809a"
-       stroke-width="0.25"
-       x1="96.300003"
-       x2="97.900002"
-       y1="124"
-       y2="124"
-       id="line1689" />
   </g>
   <g
-     id="components">
+     id="components"
+     style="display:inline">
     <circle
        cx="18"
        cy="18"
@@ -781,13 +726,13 @@
        style="fill:#ff00ff;fill-opacity:1" />
     <circle
        cx="12"
-       cy="72"
+       cy="77.524994"
        id="POSITION_CV"
        r="4.1500001"
        style="fill:#00ff00;fill-opacity:1" />
     <circle
        cx="89"
-       cy="72"
+       cy="77.525002"
        id="RATE_CV"
        r="4.1500001"
        style="fill:#00ff00;fill-opacity:1" />
@@ -833,7 +778,7 @@
      style="display:none">
     <circle
        cx="50.799999"
-       cy="72"
+       cy="62.200001"
        fill="none"
        id="PLATTER_AREA"
        r="29.5"

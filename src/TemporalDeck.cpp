@@ -6,6 +6,7 @@
 #include <fstream>
 #include <limits>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -156,7 +157,16 @@ struct TemporalDeckEngine {
 	}
 
 	float computeBaseSpeed(float rateKnob, float rateCv, bool reverse) const {
-		float speed = (clamp(rateKnob, 0.f, 1.f) - 0.5f) * 4.f;
+		rateKnob = clamp(rateKnob, 0.f, 1.f);
+		float speed = 1.f;
+		if (rateKnob < 0.5f) {
+			float t = rateKnob / 0.5f;
+			speed = -2.f + t * 3.f;
+		}
+		else {
+			float t = (rateKnob - 0.5f) / 0.5f;
+			speed = 1.f + t;
+		}
 		speed += clamp(rateCv / 5.f, -1.f, 1.f);
 		speed = clamp(speed, -3.f, 3.f);
 		if (reverse) {
@@ -178,6 +188,21 @@ struct TemporalDeckEngine {
 			lag += float(buffer.size);
 		}
 		return lag;
+	}
+
+	float unwrapReadNearWrite(float readPos) const {
+		if (buffer.size <= 0) {
+			return readPos;
+		}
+		float writePos = float(buffer.writeHead);
+		float sizeF = float(buffer.size);
+		while (readPos > writePos) {
+			readPos -= sizeF;
+		}
+		while (readPos <= writePos - sizeF) {
+			readPos += sizeF;
+		}
+		return readPos;
 	}
 
 	struct FrameResult {
@@ -236,18 +261,10 @@ struct TemporalDeckEngine {
 		}
 
 		if (!scratchActive) {
-			readHead = buffer.wrapPosition(readHead + speed);
-			float lag = float(buffer.writeHead) - readHead;
-			if (lag < 0.f) {
-				lag += float(buffer.size);
-			}
-			if (lag < minLag) {
-				readHead = float(buffer.writeHead) - minLag;
-			}
-			if (lag > maxLag) {
-				readHead = float(buffer.writeHead) - maxLag;
-			}
-			readHead = buffer.wrapPosition(readHead);
+			float writePos = float(buffer.writeHead);
+			float candidate = unwrapReadNearWrite(readHead) + speed;
+			candidate = clamp(candidate, writePos - maxLag, writePos - minLag);
+			readHead = buffer.wrapPosition(candidate);
 			if (slipState) {
 				timelineHead = readHead;
 			}
@@ -535,22 +552,52 @@ struct TemporalDeck : Module {
 };
 
 
+static bool loadSvgCircleMm(const std::string& svgPath, const std::string& circleId, Vec* outCenterMm, float* outRadiusMm) {
+	std::ifstream svgFile(svgPath);
+	if (!svgFile.good()) {
+		return false;
+	}
+	std::ostringstream svgBuffer;
+	svgBuffer << svgFile.rdbuf();
+	const std::string svgText = svgBuffer.str();
+
+	const std::regex tagRe("<circle\\b[^>]*\\bid\\s*=\\s*\"" + circleId + "\"[^>]*/?>", std::regex::icase);
+	std::smatch tagMatch;
+	if (!std::regex_search(svgText, tagMatch, tagRe) || tagMatch.empty()) {
+		return false;
+	}
+
+	const std::string tag = tagMatch.str(0);
+	auto parseAttr = [&](const char* attr, float* out) {
+		const std::regex attrRe(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
+		std::smatch attrMatch;
+		if (!std::regex_search(tag, attrMatch, attrRe)) {
+			return false;
+		}
+		*out = std::stof(attrMatch.str(1));
+		return true;
+	};
+
+	float cxMm = 0.f;
+	float cyMm = 0.f;
+	float radiusMm = 0.f;
+	if (!parseAttr("cx", &cxMm) || !parseAttr("cy", &cyMm) || !parseAttr("r", &radiusMm)) {
+		return false;
+	}
+
+	*outCenterMm = Vec(cxMm, cyMm);
+	*outRadiusMm = radiusMm;
+	return true;
+}
+
 static bool loadPlatterAnchor(Vec& centerPx, float& radiusPx) {
-	std::ifstream svg(asset::plugin(pluginInstance, "res/deck.svg"));
-	if (!svg.is_open()) {
+	Vec centerMm;
+	float radiusMm = 0.f;
+	if (!loadSvgCircleMm(asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm)) {
 		return false;
 	}
-	std::string text((std::istreambuf_iterator<char>(svg)), std::istreambuf_iterator<char>());
-	std::regex re("id=\"PLATTER_AREA\"[\\s\\S]*?cx=\"([^\"]+)\"[\\s\\S]*?cy=\"([^\"]+)\"[\\s\\S]*?r=\"([^\"]+)\"");
-	std::smatch match;
-	if (!std::regex_search(text, match, re) || match.size() != 4) {
-		return false;
-	}
-	float cx = std::stof(match[1].str());
-	float cy = std::stof(match[2].str());
-	float r = std::stof(match[3].str());
-	centerPx = mm2px(Vec(cx, cy));
-	radiusPx = mm2px(Vec(r, 0.f)).x;
+	centerPx = mm2px(centerMm);
+	radiusPx = mm2px(Vec(radiusMm, 0.f)).x;
 	return true;
 }
 
@@ -568,16 +615,18 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
 
-	float startAngle = 0.f;
-	float lagAngle = -M_PI * lagRatio;
-	float limitAngle = -M_PI * limitRatio;
+	float endAngle = 0.f;
+	float lagAngle = endAngle - M_PI * lagRatio;
+	float limitAngle = endAngle - M_PI * limitRatio;
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, startAngle, lagAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 220));
-	nvgStrokeWidth(args.vg, mm2px(Vec(1.8f, 0.f)).x);
-	nvgStroke(args.vg);
+	if (lagRatio > 0.f) {
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 220));
+		nvgStrokeWidth(args.vg, mm2px(Vec(1.8f, 0.f)).x);
+		nvgStroke(args.vg);
+	}
 
 	Vec dotPos = centerMm.plus(Vec(std::cos(limitAngle), std::sin(limitAngle)).mult(arcRadius));
 	nvgBeginPath(args.vg);
