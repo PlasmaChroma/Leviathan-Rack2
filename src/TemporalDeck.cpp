@@ -373,6 +373,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
 	float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 	float deadZonePx = 0.f;
 	bool dragging = false;
+	Vec onButtonPos;
 	float lastAngle = 0.f;
 	float localLagSamples = 0.f;
 
@@ -389,7 +390,6 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
 	void updateScratchFromLocal(Vec local, Vec mouseDelta);
 
 	void draw(const DrawArgs& args) override;
-	void onHover(const event::Hover& e) override;
 	void onButton(const event::Button& e) override;
 	void onDragMove(const event::DragMove& e) override;
 	void onDragStart(const event::DragStart& e) override;
@@ -768,54 +768,38 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	lastAngle = angle;
 }
 
-void TemporalDeckPlatterWidget::onHover(const event::Hover& e) {
-	if (dragging) {
-		updateScratchFromLocal(e.pos.minus(localCenter()), e.mouseDelta);
-	}
-	OpaqueWidget::onHover(e);
-}
-
-
 void TemporalDeckPlatterWidget::onButton(const event::Button& e) {
+	onButtonPos = e.pos;
 	if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && isWithinPlatter(e.pos)) {
-		Vec local = e.pos.minus(localCenter());
-		dragging = true;
-		lastAngle = std::atan2(local.y, local.x);
-		localLagSamples = module ? module->uiLagSamples.load() : 0.f;
-		if (module) {
-			module->setPlatterScratch(true, localLagSamples, 0.f);
-		}
 		e.consume(this);
 		return;
 	}
-	if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE && dragging) {
-		dragging = false;
-		if (module) {
-			module->setPlatterScratch(false, localLagSamples, 0.f);
-		}
-		e.consume(this);
-		return;
-	}
-	OpaqueWidget::onButton(e);
+	Widget::onButton(e);
 }
 
 void TemporalDeckPlatterWidget::onDragStart(const event::DragStart& e) {
-	if (dragging) {
-		e.consume(this);
+	if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || !isWithinPlatter(onButtonPos)) {
+		return;
 	}
+	Vec local = onButtonPos.minus(localCenter());
+	dragging = true;
+	lastAngle = std::atan2(local.y, local.x);
+	localLagSamples = module->uiLagSamples.load();
+	module->setPlatterScratch(true, localLagSamples, 0.f);
+	e.consume(this);
 }
 
 void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
-	if (!dragging) {
+	if (!dragging || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 		return;
 	}
-	Vec panelPos = APP->scene->rack->getMousePos().minus(getAbsoluteOffset(Vec()));
-	updateScratchFromLocal(panelPos.minus(localCenter()), e.mouseDelta);
+	Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
+	updateScratchFromLocal(local, e.mouseDelta);
 	e.consume(this);
 }
 
 void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd& e) {
-	if (dragging) {
+	if (dragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 		dragging = false;
 		if (module) {
 			module->setPlatterScratch(false, localLagSamples, 0.f);
