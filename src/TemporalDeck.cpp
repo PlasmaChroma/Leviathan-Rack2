@@ -893,18 +893,12 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
 		char text[32];
 		std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
-		Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(5.0f, 0.f)).x, -arcRadius * 0.86f));
+		Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
 
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, mm2px(Vec(3.4f, 0.f)).x);
+		nvgFontSize(args.vg, 11.5f);
 		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-
-		nvgFontBlur(args.vg, 1.6f);
-		nvgFillColor(args.vg, nvgRGBA(255, 214, 52, 72));
-		nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
-
-		nvgFontBlur(args.vg, 0.f);
-		nvgFillColor(args.vg, nvgRGBA(255, 238, 160, 230));
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
 	}
 	nvgRestore(args.vg);
@@ -946,29 +940,29 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 			float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
 			float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
 
-			nvgBeginPath(args.vg);
-			constexpr int kSteps = 64; // Reduced from 96 for performance
-			for (int step = 0; step <= kSteps; ++step) {
+				nvgBeginPath(args.vg);
+				constexpr int kSteps = 64; // Reduced from 96 for performance
+				for (int step = 0; step <= kSteps; ++step) {
 				float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
 				// Simplified wobble: removed expensive pow and copysign
 				float wobble = std::sin(t * wobbleFreq + wobblePhase);
 				float radius = grooveRadius + wobbleAmp * wobble;
 				float x = std::cos(t) * radius;
 				float y = std::sin(t) * radius;
-				if (step == 0) nvgMoveTo(args.vg, x, y);
-				else nvgLineTo(args.vg, x, y);
+					if (step == 0) nvgMoveTo(args.vg, x, y);
+					else nvgLineTo(args.vg, x, y);
+				}
+				nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
+				nvgStrokeWidth(args.vg, 0.7f);
+				nvgStroke(args.vg);
 			}
-			nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
-			nvgStrokeWidth(args.vg, 0.7f);
-			nvgStroke(args.vg);
-		}
 		nvgRestore(args.vg);
 	}
 
 	float labelRadius = platterRadiusPx * 0.33f;
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, labelRadius);
-	nvgFillColor(args.vg, nvgRGB(138, 86, 34));
+	nvgFillColor(args.vg, nvgRGB(90, 178, 187));
 	nvgFill(args.vg);
 
 	nvgSave(args.vg);
@@ -977,7 +971,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, 0.f, 0.f, labelRadius * 0.74f);
-	nvgFillColor(args.vg, nvgRGB(196, 155, 87));
+	nvgFillColor(args.vg, nvgRGB(12, 41, 45));
 	nvgFill(args.vg);
 
 	for (int i = 0; i < 3; ++i) {
@@ -987,14 +981,14 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, a.x, a.y);
 		nvgLineTo(args.vg, b.x, b.y);
-		nvgStrokeColor(args.vg, nvgRGBA(90, 52, 19, 170));
+		nvgStrokeColor(args.vg, nvgRGBA(90, 178, 187, 255));
 		nvgStrokeWidth(args.vg, 1.2f);
 		nvgStroke(args.vg);
 	}
 
 	nvgBeginPath(args.vg);
 	nvgRoundedRect(args.vg, -labelRadius * 0.42f, -labelRadius * 0.055f, labelRadius * 0.84f, labelRadius * 0.11f, 1.2f);
-	nvgFillColor(args.vg, nvgRGBA(120, 72, 28, 120));
+	nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 120));
 	nvgFill(args.vg);
 
 	nvgRestore(args.vg);
