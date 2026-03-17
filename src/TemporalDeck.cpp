@@ -24,7 +24,7 @@ struct TemporalDeckBuffer {
 
 	void reset(float sr) {
 		sampleRate = sr;
-		size = std::max(1, int(std::round(sampleRate * 8.f)));
+		size = std::max(1, int(std::round(sampleRate * 9.f)));
 		left.assign(size, 0.f);
 		right.assign(size, 0.f);
 		writeHead = 0;
