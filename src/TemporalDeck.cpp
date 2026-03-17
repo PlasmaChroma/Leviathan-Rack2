@@ -245,6 +245,7 @@ struct TemporalDeckEngine {
 		float positionCv,
 		float rateCv,
 		bool platterTouched,
+		bool wheelScratchHeld,
 		float platterLagTarget,
 		float platterGestureVelocity,
 		float wheelDelta
@@ -262,7 +263,9 @@ struct TemporalDeckEngine {
 		float baseSpeed = computeBaseSpeed(rateKnob, rateCv, reverseState);
 		float speed = baseSpeed;
 		bool externalScratch = scratchGate && positionConnected;
-		bool manualScratch = platterTouched;
+		bool manualTouchScratch = platterTouched;
+		bool wheelScratch = wheelScratchHeld;
+		bool manualScratch = manualTouchScratch || wheelScratch;
 		bool anyScratch = externalScratch || manualScratch;
 		bool wasScratchActive = scratchActive;
 		bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -310,9 +313,8 @@ struct TemporalDeckEngine {
 		}
 
 		if (manualScratch) {
-			if (!freezeState) {
-				// Holding platter still while time moves = increasing lag.
-				scratchLagTargetSamples += 1.f;
+			if (manualTouchScratch) {
+				scratchLagTargetSamples = clampLag(platterLagTarget, limit);
 			}
 			// Add any wheel movement accumulation to the "to-be-applied" pool.
 			wheelDeltaRemaining += wheelDelta;
@@ -327,10 +329,10 @@ struct TemporalDeckEngine {
 			scratchLagTargetSamples += applyNow;
 			wheelDeltaRemaining -= applyNow;
 			
-			float platterDelta = platterLagTarget - lastPlatterLagTarget;
-			scratchLagTargetSamples += platterDelta;
-			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
-			scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
+			if (manualTouchScratch) {
+				platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
+				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
+			}
 			
 			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
 			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
@@ -678,7 +680,8 @@ struct TemporalDeck : Module {
 			inputs[POSITION_CV_INPUT].isConnected(),
 			positionCv,
 			rateCv,
-			platterTouched.load() || wheelScratchHeld,
+			platterTouched.load(),
+			wheelScratchHeld,
 			platterLagTarget.load(),
 			platterGestureVelocity.load(),
 			wheelDelta
