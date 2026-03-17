@@ -139,6 +139,7 @@ struct TemporalDeckEngine {
 	float wheelDeltaRemaining = 0.f;
 	float lastPositionLag = 0.f;
 	float lastPlatterLagTarget = 0.f;
+	uint32_t lastPlatterGestureRevision = 0;
 
 	void reset(float sr) {
 		sampleRate = sr;
@@ -276,6 +277,8 @@ struct TemporalDeckEngine {
 		float rateCv,
 		bool platterTouched,
 		bool wheelScratchHeld,
+		bool platterMotionActive,
+		uint32_t platterGestureRevision,
 		float platterLagTarget,
 		float platterGestureVelocity,
 		float wheelDelta
@@ -296,19 +299,21 @@ struct TemporalDeckEngine {
 		float baseSpeed = computeBaseSpeed(rateKnob, rateCv, reverseState);
 		float speed = baseSpeed;
 		bool externalScratch = scratchGate && positionConnected;
-		bool manualTouchScratch = platterTouched;
-		bool wheelScratch = wheelScratchHeld;
-		bool manualScratch = manualTouchScratch || wheelScratch;
+			bool manualTouchScratch = platterTouched;
+			bool wheelScratch = wheelScratchHeld;
+			bool manualScratch = manualTouchScratch || wheelScratch;
 		bool anyScratch = externalScratch || manualScratch;
 		bool wasScratchActive = scratchActive;
 		bool releasedFromScratch = !anyScratch && wasScratchActive;
 		bool slipJustEnabled = slipState && !prevSlipState;
 		float newestPos = newestReadablePos();
+		bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
 
 		if (!wasScratchActive && anyScratch) {
 			scratchLagSamples = currentLagFromNewest(newestPos);
 			scratchLagTargetSamples = scratchLagSamples;
 			lastPlatterLagTarget = platterLagTarget;
+			lastPlatterGestureRevision = platterGestureRevision;
 		}
 		scratchActive = anyScratch;
 
@@ -355,46 +360,63 @@ struct TemporalDeckEngine {
 			speed = 0.f;
 		}
 
-		if (manualScratch) {
-			if (manualTouchScratch) {
-				scratchLagTargetSamples = clampLag(platterLagTarget, limit);
-				if (scratchLagTargetSamples <= nowSnapThresholdSamples) {
-					scratchLagTargetSamples = 0.f;
+			if (manualScratch) {
+				if (manualTouchScratch) {
+					if (hasFreshPlatterGesture) {
+						scratchLagTargetSamples = clampLag(platterLagTarget, limit);
+						if (scratchLagTargetSamples <= nowSnapThresholdSamples) {
+							scratchLagTargetSamples = 0.f;
+						}
+						lastPlatterGestureRevision = platterGestureRevision;
+					}
+					bool stationaryManualHold = !hasFreshPlatterGesture;
+					if (stationaryManualHold) {
+						platterVelocity = 0.f;
+						readHead = prevReadHead;
+						scratchLagSamples = currentLagFromNewest(newestPos);
+						scratchLagTargetSamples = scratchLagSamples;
+					}
+					else {
+						platterVelocity = 0.f;
+						scratchLagSamples = scratchLagTargetSamples;
+						if (scratchLagSamples <= nowSnapThresholdSamples) {
+							scratchLagSamples = 0.f;
+							pinToNow = true;
+						}
+						readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+					}
 				}
+				else {
+					// Add any wheel movement accumulation to the "to-be-applied" pool.
+					wheelDeltaRemaining += wheelDelta;
+
+					// Bleed wheel delta into target over time (~20ms reach).
+					float wheelBleedAlpha = 0.002f;
+					float applyNow = wheelDeltaRemaining * wheelBleedAlpha;
+					// Ensure small remainders are eventually applied.
+					if (std::fabs(applyNow) < 0.1f && std::fabs(wheelDeltaRemaining) > 0.f) {
+						applyNow = std::copysign(std::min(0.5f, std::fabs(wheelDeltaRemaining)), wheelDeltaRemaining);
+					}
+					scratchLagTargetSamples += applyNow;
+					wheelDeltaRemaining -= applyNow;
+
+					float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+					float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+					float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
+					lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
+					
+					scratchLagSamples += lagStep;
+					scratchLagSamples = clampLag(scratchLagSamples, limit);
+					readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+				}
+				if (manualTouchScratch && scratchLagSamples <= nowSnapThresholdSamples) {
+					scratchLagSamples = 0.f;
+				}
+				if (manualTouchScratch && scratchLagSamples <= nowSnapThresholdSamples) {
+					pinToNow = true;
+				}
+				lastPlatterLagTarget = platterLagTarget;
 			}
-			// Add any wheel movement accumulation to the "to-be-applied" pool.
-			wheelDeltaRemaining += wheelDelta;
-
-			// Bleed wheel delta into target over time (~20ms reach).
-			float wheelBleedAlpha = 0.002f;
-			float applyNow = wheelDeltaRemaining * wheelBleedAlpha;
-			// Ensure small remainders are eventually applied.
-			if (std::fabs(applyNow) < 0.1f && std::fabs(wheelDeltaRemaining) > 0.f) {
-				applyNow = std::copysign(std::min(0.5f, std::fabs(wheelDeltaRemaining)), wheelDeltaRemaining);
-			}
-			scratchLagTargetSamples += applyNow;
-			wheelDeltaRemaining -= applyNow;
-
-			if (manualTouchScratch) {
-				platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
-				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
-			}
-
-			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
-			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
-			float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
-			lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
-
-			scratchLagSamples += lagStep;
-			scratchLagSamples = clampLag(scratchLagSamples, limit);
-			if (manualTouchScratch && scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples) {
-				scratchLagSamples = 0.f;
-				pinToNow = true;
-			}
-			lastPlatterLagTarget = platterLagTarget;
-
-			readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
-		}
 		else if (externalScratch) {
 			scratchLagSamples = lagForPositionCv(positionCv, limit);
 			scratchLagTargetSamples = scratchLagSamples;
@@ -617,10 +639,12 @@ struct TemporalDeck : Module {
 	bool reverseLatched = false;
 	bool slipLatched = false;
 	std::atomic<bool> platterTouched {false};
+	std::atomic<uint32_t> platterGestureRevision {0};
 	std::atomic<float> platterLagTarget {0.f};
 	std::atomic<float> platterGestureVelocity {0.f};
 	std::atomic<float> platterWheelDelta {0.f};
 	std::atomic<int> platterScratchHoldSamples {0};
+	std::atomic<int> platterMotionFreshSamples {0};
 	std::atomic<float> uiLagSamples {0.f};
 	std::atomic<float> uiAccessibleLagSamples {0.f};
 	std::atomic<float> uiSampleRate {44100.f};
@@ -659,6 +683,7 @@ struct TemporalDeck : Module {
 		uiPlatterAngle.store(0.f);
 		uiPublishTimerSec = 0.f;
 		platterScratchHoldSamples.store(0);
+		platterMotionFreshSamples.store(0);
 		for (int i = 0; i < kArcLightCount; ++i) {
 			lights[ARC_LIGHT_START + i].setBrightness(0.f);
 		}
@@ -743,6 +768,11 @@ struct TemporalDeck : Module {
 		if (wheelScratchHeld) {
 			platterScratchHoldSamples.store(std::max(0, scratchHold - 1));
 		}
+		int motionFresh = platterMotionFreshSamples.load();
+		bool platterMotionActive = motionFresh > 0;
+		if (platterMotionActive) {
+			platterMotionFreshSamples.store(std::max(0, motionFresh - 1));
+		}
 		float wheelDelta = platterWheelDelta.exchange(0.f);
 
 		auto frame = engine.process(
@@ -763,6 +793,8 @@ struct TemporalDeck : Module {
 			rateCv,
 			platterTouched.load(),
 			wheelScratchHeld,
+			platterMotionActive,
+			platterGestureRevision.load(),
 			platterLagTarget.load(),
 			platterGestureVelocity.load(),
 			wheelDelta
@@ -808,6 +840,7 @@ struct TemporalDeck : Module {
 
 	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
 		platterTouched.store(touched);
+		platterGestureRevision.fetch_add(1);
 		platterLagTarget.store(lagSamples);
 		platterGestureVelocity.store(velocitySamples);
 		platterScratchHoldSamples.store(std::max(0, holdSamples));
@@ -815,6 +848,10 @@ struct TemporalDeck : Module {
 		if (touched || holdSamples == 0) {
 			platterWheelDelta.store(0.f);
 		}
+	}
+
+	void setPlatterMotionFreshSamples(int motionFreshSamples) {
+		platterMotionFreshSamples.store(std::max(0, motionFreshSamples));
 	}
 
 	void addPlatterWheelDelta(float delta, int holdSamples) {
@@ -890,6 +927,17 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
 	if (APP && APP->window && APP->window->uiFont) {
+		const char* mouseText = module->platterTouched.load() ? "mDown" : "mUp";
+		const char* motionText = module->platterMotionFreshSamples.load() > 0 ? "drag" : "still";
+		Vec debugPos = centerMm.plus(Vec(-platterRadiusPx * 0.92f, -platterRadiusPx * 0.98f));
+
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.0f);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 210));
+		nvgText(args.vg, debugPos.x, debugPos.y, mouseText, nullptr);
+		nvgText(args.vg, debugPos.x, debugPos.y + 11.5f, motionText, nullptr);
+
 		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
 		char text[32];
 		std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
@@ -1012,6 +1060,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	if (!module || !dragging) {
 		return;
 	}
+	constexpr float kScratchMoveThresholdPx = 0.75f;
+	constexpr float kScratchMoveThresholdRad = 0.0035f;
 	float radius = local.norm();
 	if (radius < deadZonePx * 0.25f) {
 		return;
@@ -1023,6 +1073,10 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	}
 	if (deltaAngle < -M_PI) {
 		deltaAngle += 2.f * M_PI;
+	}
+	float mouseMovePx = std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y);
+	if (mouseMovePx < kScratchMoveThresholdPx && std::fabs(deltaAngle) < kScratchMoveThresholdRad) {
+		return;
 	}
 	float effectiveRadius = std::max(radius, deadZonePx);
 	float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
@@ -1036,14 +1090,31 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 		velocity *= -1.f;
 	}
 	module->setPlatterScratch(true, localLagSamples, velocity);
+	int motionFreshSamples = std::max(1, int(std::round(module->uiSampleRate.load() * 0.02f)));
+	module->setPlatterMotionFreshSamples(motionFreshSamples);
 	lastAngle = angle;
 }
 
 void TemporalDeckPlatterWidget::onButton(const event::Button& e) {
 	onButtonPos = e.pos;
-	if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && isWithinPlatter(e.pos)) {
-		e.consume(this);
-		return;
+	if (e.button == GLFW_MOUSE_BUTTON_LEFT && isWithinPlatter(e.pos)) {
+		if (e.action == GLFW_PRESS) {
+			if (module) {
+				localLagSamples = module->uiLagSamples.load();
+				module->setPlatterScratch(true, localLagSamples, 0.f);
+				module->setPlatterMotionFreshSamples(0);
+			}
+			e.consume(this);
+			return;
+		}
+		if (e.action == GLFW_RELEASE && !dragging) {
+			if (module) {
+				module->setPlatterScratch(false, localLagSamples, 0.f);
+				module->setPlatterMotionFreshSamples(0);
+			}
+			e.consume(this);
+			return;
+		}
 	}
 	Widget::onButton(e);
 }
@@ -1085,6 +1156,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart& e) {
 	lastAngle = std::atan2(local.y, local.x);
 	localLagSamples = module->uiLagSamples.load();
 	module->setPlatterScratch(true, localLagSamples, 0.f);
+	module->setPlatterMotionFreshSamples(0);
 	e.consume(this);
 }
 
@@ -1096,6 +1168,7 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
 		dragging = false;
 		if (module) {
 			module->setPlatterScratch(false, localLagSamples, 0.f);
+			module->setPlatterMotionFreshSamples(0);
 		}
 		return;
 	}
@@ -1113,6 +1186,7 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd& e) {
 		dragging = false;
 		if (module) {
 			module->setPlatterScratch(false, localLagSamples, 0.f);
+			module->setPlatterMotionFreshSamples(0);
 		}
 		e.consume(this);
 	}
