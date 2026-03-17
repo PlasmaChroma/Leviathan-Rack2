@@ -120,6 +120,7 @@ struct TemporalDeckEngine {
 	float slipReturnStartLag = 0.f;
 	float scratchLagSamples = 0.f;
 	float scratchLagTargetSamples = 0.f;
+	float wheelDeltaRemaining = 0.f;
 	float lastPositionLag = 0.f;
 	float lastPlatterLagTarget = 0.f;
 
@@ -137,6 +138,7 @@ struct TemporalDeckEngine {
 		slipReturnStartLag = 0.f;
 		scratchLagSamples = 0.f;
 		scratchLagTargetSamples = 0.f;
+		wheelDeltaRemaining = 0.f;
 		lastPositionLag = 0.f;
 		lastPlatterLagTarget = 0.f;
 	}
@@ -312,8 +314,18 @@ struct TemporalDeckEngine {
 				// Holding platter still while time moves = increasing lag.
 				scratchLagTargetSamples += 1.f;
 			}
-			// Add any wheel movement accumulation.
-			scratchLagTargetSamples += wheelDelta;
+			// Add any wheel movement accumulation to the "to-be-applied" pool.
+			wheelDeltaRemaining += wheelDelta;
+			
+			// Bleed wheel delta into target over time (~20ms reach).
+			float wheelBleedAlpha = 0.002f; 
+			float applyNow = wheelDeltaRemaining * wheelBleedAlpha;
+			// Ensure small remainders are eventually applied.
+			if (std::fabs(applyNow) < 0.1f && std::fabs(wheelDeltaRemaining) > 0.f) {
+				applyNow = std::copysign(std::min(0.5f, std::fabs(wheelDeltaRemaining)), wheelDeltaRemaining);
+			}
+			scratchLagTargetSamples += applyNow;
+			wheelDeltaRemaining -= applyNow;
 			
 			float platterDelta = platterLagTarget - lastPlatterLagTarget;
 			scratchLagTargetSamples += platterDelta;
@@ -338,19 +350,27 @@ struct TemporalDeckEngine {
 		}
 		else if (slipReturning) {
 			// Return to NOW (lag = 0)
-			float lagNow = currentLag();
+			float currentLagSamples = currentLag();
 			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
 			if (!slipFinalCatchActive) {
-				// Approach zero lag.
-				float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
-				float newLag = lagNow * (1.f - returnMix);
-				readHead = buffer.wrapPosition(newestReadablePos() - newLag);
+				// Exponential-like approach to zero lag.
+				// We target a specific lag value that decreases over time.
+				float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
+				float targetLag = currentLagSamples * (1.f - alpha);
 				
-				if (newLag <= finalCatchThresholdSamples) {
+				// Ensure we actually move towards zero even if alpha is tiny.
+				if (targetLag > currentLagSamples - 0.5f) {
+					targetLag = currentLagSamples - 0.5f;
+				}
+				if (targetLag < 0.f) targetLag = 0.f;
+
+				readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
+				
+				if (targetLag <= finalCatchThresholdSamples) {
 					slipFinalCatchActive = true;
 					slipReturnRemaining = kSlipFinalCatchTime;
-					slipReturnStartLag = newLag;
+					slipReturnStartLag = targetLag;
 				}
 			}
 			else {
@@ -358,11 +378,11 @@ struct TemporalDeckEngine {
 				slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
 				float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
 				float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
-				float newLag = slipReturnStartLag * (1.f - shapedProgress);
+				float targetLag = slipReturnStartLag * (1.f - shapedProgress);
 				
-				readHead = buffer.wrapPosition(newestReadablePos() - newLag);
+				readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
 				
-				if (slipReturnRemaining <= 0.f || newLag < 0.5f) {
+				if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
 					readHead = newestReadablePos();
 					slipReturning = false;
 					slipFinalCatchActive = false;
