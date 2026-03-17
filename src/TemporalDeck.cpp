@@ -625,13 +625,28 @@ struct TemporalDeck : Module {
 		}
 
 		if (freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
-			freezeLatched = !freezeLatched;
+			bool next = !freezeLatched;
+			freezeLatched = next;
+			if (next) {
+				reverseLatched = false;
+				slipLatched = false;
+			}
 		}
 		if (reverseTrigger.process(params[REVERSE_PARAM].getValue())) {
-			reverseLatched = !reverseLatched;
+			bool next = !reverseLatched;
+			reverseLatched = next;
+			if (next) {
+				freezeLatched = false;
+				slipLatched = false;
+			}
 		}
 		if (slipTrigger.process(params[SLIP_PARAM].getValue())) {
-			slipLatched = !slipLatched;
+			bool next = !slipLatched;
+			slipLatched = next;
+			if (next) {
+				freezeLatched = false;
+				reverseLatched = false;
+			}
 		}
 
 		float inL = inputs[INPUT_L_INPUT].getVoltage();
