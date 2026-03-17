@@ -86,32 +86,6 @@ struct TemporalDeckBuffer {
 			cubicSample(right[i0], right[i1], right[i2], right[i3], t)
 		};
 	}
-
-	float zeroCrossCatch(float targetPos, float minLag, float maxLag) const {
-		if (size <= 0 || filled <= 0) {
-			return wrapPosition(targetPos);
-		}
-		float newestReadable = wrapPosition(float(writeHead) - 1.f);
-		float bestPos = wrapPosition(targetPos);
-		float bestScore = std::numeric_limits<float>::infinity();
-		for (int offset = -24; offset <= 24; ++offset) {
-			float candidate = wrapPosition(targetPos + float(offset));
-			float lag = newestReadable - candidate;
-			if (lag < 0.f) {
-				lag += float(size);
-			}
-			if (lag < minLag || lag > maxLag) {
-				continue;
-			}
-			auto sample = readCubic(candidate);
-			float score = std::fabs(sample.first) + std::fabs(sample.second);
-			if (score < bestScore) {
-				bestScore = score;
-				bestPos = candidate;
-			}
-		}
-		return bestPos;
-	}
 };
 
 
@@ -270,7 +244,8 @@ struct TemporalDeckEngine {
 		float rateCv,
 		bool platterTouched,
 		float platterLagTarget,
-		float platterGestureVelocity
+		float platterGestureVelocity,
+		float wheelDelta
 	) {
 		FrameResult result;
 		float prevReadHead = readHead;
@@ -291,43 +266,37 @@ struct TemporalDeckEngine {
 		bool releasedFromScratch = !anyScratch && wasScratchActive;
 		bool slipJustEnabled = slipState && !prevSlipState;
 
-		if (slipState && !wasScratchActive && anyScratch) {
-			timelineHead = readHead;
-		}
 		if (!wasScratchActive && anyScratch) {
 			scratchLagSamples = currentLag();
 			scratchLagTargetSamples = scratchLagSamples;
 			lastPlatterLagTarget = platterLagTarget;
 		}
 		scratchActive = anyScratch;
+
 		if (!slipState) {
 			slipReturning = false;
 			slipFinalCatchActive = false;
-			slipReturnRemaining = 0.f;
-			slipReturnStartLag = 0.f;
 		}
+
 		if (releasedFromScratch && slipState) {
 			slipReturning = true;
 			slipFinalCatchActive = false;
 			slipReturnRemaining = 0.f;
-			slipReturnStartLag = 0.f;
 		}
+
 		if (slipJustEnabled && !anyScratch) {
 			if (currentLag() > kSlipEnableReturnThreshold) {
 				slipReturning = true;
 				slipFinalCatchActive = false;
-				slipReturnRemaining = 0.f;
-				slipReturnStartLag = 0.f;
-			}
-			else {
-				timelineHead = readHead;
-				slipReturning = false;
-				slipFinalCatchActive = false;
-				slipReturnRemaining = 0.f;
-				slipReturnStartLag = 0.f;
 			}
 		}
 
+		if (anyScratch) {
+			slipReturning = false;
+			slipFinalCatchActive = false;
+		}
+
+		// 3. Determine actual playhead (readHead)
 		if (freezeState) {
 			speed = 0.f;
 		}
@@ -338,17 +307,70 @@ struct TemporalDeckEngine {
 			speed = 0.f;
 		}
 
-		if (!scratchActive && !(slipState && slipReturning)) {
-			float writePos = newestReadablePos();
-			float candidate = unwrapReadNearWrite(readHead) + speed;
-			candidate = clamp(candidate, writePos - maxLag, writePos - minLag);
-			readHead = buffer.wrapPosition(candidate);
-			if (slipState) {
-				timelineHead = readHead;
+		if (manualScratch) {
+			if (!freezeState) {
+				// Holding platter still while time moves = increasing lag.
+				scratchLagTargetSamples += 1.f;
+			}
+			// Add any wheel movement accumulation.
+			scratchLagTargetSamples += wheelDelta;
+			
+			float platterDelta = platterLagTarget - lastPlatterLagTarget;
+			scratchLagTargetSamples += platterDelta;
+			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
+			scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
+			
+			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+			float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
+			lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
+			
+			scratchLagSamples += lagStep;
+			scratchLagSamples = clampLag(scratchLagSamples, limit);
+			lastPlatterLagTarget = platterLagTarget;
+			
+			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
+		}
+		else if (externalScratch) {
+			scratchLagSamples = lagForPositionCv(positionCv, limit);
+			scratchLagTargetSamples = scratchLagSamples;
+			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
+		}
+		else if (slipReturning) {
+			// Return to NOW (lag = 0)
+			float lagNow = currentLag();
+			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
+
+			if (!slipFinalCatchActive) {
+				// Approach zero lag.
+				float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
+				float newLag = lagNow * (1.f - returnMix);
+				readHead = buffer.wrapPosition(newestReadablePos() - newLag);
+				
+				if (newLag <= finalCatchThresholdSamples) {
+					slipFinalCatchActive = true;
+					slipReturnRemaining = kSlipFinalCatchTime;
+					slipReturnStartLag = newLag;
+				}
+			}
+			else {
+				// Final catch phase: smooth snap to live input.
+				slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
+				float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
+				float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
+				float newLag = slipReturnStartLag * (1.f - shapedProgress);
+				
+				readHead = buffer.wrapPosition(newestReadablePos() - newLag);
+				
+				if (slipReturnRemaining <= 0.f || newLag < 0.5f) {
+					readHead = newestReadablePos();
+					slipReturning = false;
+					slipFinalCatchActive = false;
+				}
 			}
 		}
-
-		if (positionConnected && !externalScratch && !manualScratch) {
+		else if (positionConnected && !externalScratch) {
+			// Absolute Position CV
 			float targetLag = lagForPositionCv(positionCv, limit);
 			if (positionCvOffsetMode) {
 				targetLag = clampLag(currentLag() + targetLag - lastPositionLag, limit);
@@ -357,71 +379,14 @@ struct TemporalDeckEngine {
 			else {
 				lastPositionLag = targetLag;
 			}
-			float targetReadHead = buffer.wrapPosition(newestReadablePos() - targetLag);
-			targetReadHead = buffer.zeroCrossCatch(targetReadHead, minLag, maxLag);
-			readHead = targetReadHead;
-			if (slipState) {
-				timelineHead = buffer.wrapPosition(timelineHead + speed);
-			}
+			readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
 		}
-
-		if (manualScratch) {
-			if (!freezeState) {
-				// Holding the platter should pin the audio while the write head continues moving.
-				scratchLagTargetSamples += 1.f;
-			}
-			float platterDelta = platterLagTarget - lastPlatterLagTarget;
-			scratchLagTargetSamples += platterDelta;
-			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
-			scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
-			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
-			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
-			float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
-			lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
-			scratchLagSamples += lagStep;
-			scratchLagSamples = clampLag(scratchLagSamples, limit);
-			lastPlatterLagTarget = platterLagTarget;
-			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
-			if (slipState) {
-				timelineHead = buffer.wrapPosition(timelineHead + speed);
-			}
-		}
-		else if (externalScratch) {
-			scratchLagSamples = lagForPositionCv(positionCv, limit);
-			scratchLagTargetSamples = scratchLagSamples;
-			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
-			if (slipState) {
-				timelineHead = buffer.wrapPosition(timelineHead + speed);
-			}
-		}
-		else if (slipState && slipReturning) {
+		else {
+			// Normal Transport
 			float writePos = newestReadablePos();
-			float lag = clamp(currentLag(), 0.f, maxLag);
-			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
-			if (!slipFinalCatchActive) {
-				float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
-				float newLag = lag * (1.f - returnMix);
-				readHead = buffer.wrapPosition(writePos - newLag);
-				if (newLag <= finalCatchThresholdSamples) {
-					slipFinalCatchActive = true;
-					slipReturnRemaining = kSlipFinalCatchTime;
-					slipReturnStartLag = newLag;
-				}
-			}
-			else {
-				slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
-				float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
-				float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
-				float newLag = slipReturnStartLag * (1.f - shapedProgress);
-				readHead = buffer.wrapPosition(writePos - newLag);
-				if (slipReturnRemaining <= 0.f || newLag < 1.f) {
-					readHead = writePos;
-					slipReturning = false;
-					slipFinalCatchActive = false;
-					slipReturnRemaining = 0.f;
-					slipReturnStartLag = 0.f;
-				}
-			}
+			float candidate = unwrapReadNearWrite(readHead) + speed;
+			candidate = clamp(candidate, writePos - maxLag, writePos - minLag);
+			readHead = buffer.wrapPosition(candidate);
 		}
 
 		if (anyScratch) {
@@ -561,6 +526,7 @@ struct TemporalDeck : Module {
 	std::atomic<bool> platterTouched {false};
 	std::atomic<float> platterLagTarget {0.f};
 	std::atomic<float> platterGestureVelocity {0.f};
+	std::atomic<float> platterWheelDelta {0.f};
 	std::atomic<int> platterScratchHoldSamples {0};
 	std::atomic<float> uiLagSamples {0.f};
 	std::atomic<float> uiAccessibleLagSamples {0.f};
@@ -659,6 +625,7 @@ struct TemporalDeck : Module {
 		if (wheelScratchHeld) {
 			platterScratchHoldSamples.store(std::max(0, scratchHold - 1));
 		}
+		float wheelDelta = platterWheelDelta.exchange(0.f);
 
 		auto frame = engine.process(
 			args.sampleTime,
@@ -678,7 +645,8 @@ struct TemporalDeck : Module {
 			rateCv,
 			platterTouched.load() || wheelScratchHeld,
 			platterLagTarget.load(),
-			platterGestureVelocity.load()
+			platterGestureVelocity.load(),
+			wheelDelta
 		);
 
 		outputs[OUTPUT_L_OUTPUT].setVoltage(frame.outL);
@@ -702,6 +670,16 @@ struct TemporalDeck : Module {
 		platterTouched.store(touched);
 		platterLagTarget.store(lagSamples);
 		platterGestureVelocity.store(velocitySamples);
+		platterScratchHoldSamples.store(std::max(0, holdSamples));
+		// Reset wheel delta when starting a new gesture or manual touch.
+		if (touched || holdSamples == 0) {
+			platterWheelDelta.store(0.f);
+		}
+	}
+
+	void addPlatterWheelDelta(float delta, int holdSamples) {
+		float current = platterWheelDelta.load();
+		platterWheelDelta.store(current + delta);
 		platterScratchHoldSamples.store(std::max(0, holdSamples));
 	}
 };
@@ -855,38 +833,38 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	nvgFillPaint(args.vg, vinylGrad);
 	nvgFill(args.vg);
 
-	nvgSave(args.vg);
-	nvgTranslate(args.vg, center.x, center.y);
-	nvgRotate(args.vg, rotation * 0.92f);
-	for (int i = 0; i < 16; ++i) {
-		float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
-		float alpha = (i % 2 == 0) ? 34.f : 18.f;
-		float wobbleAmp = 0.55f + 0.05f * float(i % 4);
-		float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
-		float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
-		float wobbleSkew = 0.62f + 0.08f * float((i + 2) % 4);
-		float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
-		nvgBeginPath(args.vg);
-		for (int step = 0; step <= 96; ++step) {
-			float t = 2.f * float(M_PI) * float(step) / 96.f + ringRotation;
-			float wobble = std::sin(t * wobbleFreq + wobblePhase);
-			wobble = std::copysign(std::pow(std::fabs(wobble), wobbleSkew), wobble);
-			float radius = grooveRadius + wobbleAmp * wobble;
-			float x = std::cos(t) * radius;
-			float y = std::sin(t) * radius;
-			if (step == 0) {
-				nvgMoveTo(args.vg, x, y);
+	// Optimization: Skip complex grooves if platter is too small to see them clearly
+	if (platterRadiusPx > 10.f) {
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgRotate(args.vg, rotation * 0.92f);
+		
+		for (int i = 0; i < 16; ++i) {
+			float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
+			float alpha = (i % 2 == 0) ? 34.f : 18.f;
+			float wobbleAmp = 0.55f + 0.05f * float(i % 4);
+			float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
+			float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
+			float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
+			
+			nvgBeginPath(args.vg);
+			constexpr int kSteps = 64; // Reduced from 96 for performance
+			for (int step = 0; step <= kSteps; ++step) {
+				float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
+				// Simplified wobble: removed expensive pow and copysign
+				float wobble = std::sin(t * wobbleFreq + wobblePhase);
+				float radius = grooveRadius + wobbleAmp * wobble;
+				float x = std::cos(t) * radius;
+				float y = std::sin(t) * radius;
+				if (step == 0) nvgMoveTo(args.vg, x, y);
+				else nvgLineTo(args.vg, x, y);
 			}
-			else {
-				nvgLineTo(args.vg, x, y);
-			}
+			nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
+			nvgStrokeWidth(args.vg, 0.7f);
+			nvgStroke(args.vg);
 		}
-		nvgClosePath(args.vg);
-		nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
-		nvgStrokeWidth(args.vg, 0.7f);
-		nvgStroke(args.vg);
+		nvgRestore(args.vg);
 	}
-	nvgRestore(args.vg);
 
 	float labelRadius = platterRadiusPx * 0.33f;
 	nvgBeginPath(args.vg);
@@ -983,7 +961,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
 		return;
 	}
 
-	float scroll = e.scrollDelta.y;
+	float scroll = -e.scrollDelta.y;
 	if (std::fabs(scroll) < 1e-4f) {
 		OpaqueWidget::onHoverScroll(e);
 		return;
@@ -996,15 +974,12 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
 	}
 
 	float sampleRate = module->uiSampleRate.load();
-	float samplesPerNotch = module->uiSampleRate.load() * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale;
+	float samplesPerNotch = sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale;
 	float lagDelta = scroll * samplesPerNotch;
 	float holdSeconds = module->slipLatched ? 0.09f : 0.02f;
-	float baseLag = module->platterScratchHoldSamples.load() > 0
-		? module->platterLagTarget.load()
-		: module->uiLagSamples.load();
-	float lag = clamp(baseLag + lagDelta, 0.f, maxLag);
 	int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
-	module->setPlatterScratch(false, lag, 0.f, holdSamples);
+	
+	module->addPlatterWheelDelta(lagDelta, holdSamples);
 	e.consume(this);
 }
 
