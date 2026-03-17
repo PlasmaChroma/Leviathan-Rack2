@@ -86,6 +86,20 @@ struct TemporalDeckBuffer {
 			cubicSample(right[i0], right[i1], right[i2], right[i3], t)
 		};
 	}
+
+	std::pair<float, float> readLinear(float pos) const {
+		if (size <= 0 || filled <= 0) {
+			return {0.f, 0.f};
+		}
+		pos = wrapPosition(pos);
+		int i0 = int(pos);
+		int i1 = wrapIndex(i0 + 1);
+		float t = pos - float(i0);
+		return {
+			crossfade(left[i0], left[i1], t),
+			crossfade(right[i0], right[i1], t)
+		};
+	}
 };
 
 
@@ -114,6 +128,7 @@ struct TemporalDeckEngine {
 	bool reverseState = false;
 	bool slipState = false;
 	bool positionCvOffsetMode = false;
+	bool highQualityScratchInterpolation = false;
 	bool scratchActive = false;
 	bool slipReturning = false;
 	bool slipFinalCatchActive = false;
@@ -195,7 +210,11 @@ struct TemporalDeckEngine {
 		if (buffer.size <= 0 || buffer.filled <= 0) {
 			return 0.f;
 		}
-		return buffer.wrapPosition(float(buffer.writeHead) - 1.f);
+		int newest = buffer.writeHead - 1;
+		if (newest < 0) {
+			newest += buffer.size;
+		}
+		return float(newest);
 	}
 
 	float platterRadiansPerSample() const {
@@ -206,11 +225,21 @@ struct TemporalDeckEngine {
 		return 1.f / std::max(platterRadiansPerSample(), 1e-9f);
 	}
 
-	float unwrapReadNearWrite(float readPos) const {
+	float currentLagFromNewest(float newestPos) const {
+		if (buffer.size <= 0) {
+			return 0.f;
+		}
+		float lag = newestPos - readHead;
+		if (lag < 0.f) {
+			lag += float(buffer.size);
+		}
+		return lag;
+	}
+
+	float unwrapReadNearWrite(float readPos, float writePos) const {
 		if (buffer.size <= 0) {
 			return readPos;
 		}
-		float writePos = newestReadablePos();
 		float sizeF = float(buffer.size);
 		while (readPos > writePos) {
 			readPos -= sizeF;
@@ -274,9 +303,10 @@ struct TemporalDeckEngine {
 		bool wasScratchActive = scratchActive;
 		bool releasedFromScratch = !anyScratch && wasScratchActive;
 		bool slipJustEnabled = slipState && !prevSlipState;
+		float newestPos = newestReadablePos();
 
 		if (!wasScratchActive && anyScratch) {
-			scratchLagSamples = currentLag();
+			scratchLagSamples = currentLagFromNewest(newestPos);
 			scratchLagTargetSamples = scratchLagSamples;
 			lastPlatterLagTarget = platterLagTarget;
 		}
@@ -293,8 +323,8 @@ struct TemporalDeckEngine {
 			slipReturnRemaining = 0.f;
 		}
 
-		if (releasedFromScratch && currentLag() <= nowSnapThresholdSamples) {
-			readHead = newestReadablePos();
+		if (releasedFromScratch && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
+			readHead = newestPos;
 			scratchLagSamples = 0.f;
 			scratchLagTargetSamples = 0.f;
 			slipReturning = false;
@@ -303,7 +333,7 @@ struct TemporalDeckEngine {
 		}
 
 		if (slipJustEnabled && !anyScratch) {
-			if (currentLag() > kSlipEnableReturnThreshold) {
+			if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
 				slipReturning = true;
 				slipFinalCatchActive = false;
 			}
@@ -319,7 +349,7 @@ struct TemporalDeckEngine {
 			speed = 0.f;
 		}
 
-		float lagNow = currentLag();
+		float lagNow = currentLagFromNewest(newestPos);
 		bool reverseAtOldestEdge = !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
 		if (reverseAtOldestEdge && speed < 0.f) {
 			speed = 0.f;
@@ -363,20 +393,20 @@ struct TemporalDeckEngine {
 			}
 			lastPlatterLagTarget = platterLagTarget;
 
-			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
+			readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 		}
 		else if (externalScratch) {
 			scratchLagSamples = lagForPositionCv(positionCv, limit);
 			scratchLagTargetSamples = scratchLagSamples;
-			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
+			readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 		}
 		else if (slipReturning) {
 			// Return to NOW (lag = 0)
-			float currentLagSamples = currentLag();
+			float currentLagSamples = currentLagFromNewest(newestPos);
 			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
 			if (currentLagSamples <= nowSnapThresholdSamples) {
-				readHead = newestReadablePos();
+				readHead = newestPos;
 				slipReturning = false;
 				slipFinalCatchActive = false;
 				scratchLagSamples = 0.f;
@@ -397,8 +427,8 @@ struct TemporalDeckEngine {
 				}
 					if (targetLag < 0.f) targetLag = 0.f;
 
-					readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
-					keepSlipLagAligned = true;
+						readHead = buffer.wrapPosition(newestPos - targetLag);
+						keepSlipLagAligned = true;
 
 					if (targetLag <= finalCatchThresholdSamples) {
 						slipFinalCatchActive = true;
@@ -413,33 +443,32 @@ struct TemporalDeckEngine {
 					float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
 					float targetLag = slipReturnStartLag * (1.f - shapedProgress);
 
-					readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
-					keepSlipLagAligned = true;
+						readHead = buffer.wrapPosition(newestPos - targetLag);
+						keepSlipLagAligned = true;
 
-					if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
-						readHead = newestReadablePos();
-					slipReturning = false;
-					slipFinalCatchActive = false;
-				}
+						if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
+							readHead = newestPos;
+						slipReturning = false;
+						slipFinalCatchActive = false;
+					}
 			}
 		}
 		else if (positionConnected && !externalScratch) {
 			// Absolute Position CV
 			float targetLag = lagForPositionCv(positionCv, limit);
 			if (positionCvOffsetMode) {
-				targetLag = clampLag(currentLag() + targetLag - lastPositionLag, limit);
+				targetLag = clampLag(currentLagFromNewest(newestPos) + targetLag - lastPositionLag, limit);
 				lastPositionLag = lagForPositionCv(positionCv, limit);
 			}
 			else {
 				lastPositionLag = targetLag;
 			}
-			readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
+			readHead = buffer.wrapPosition(newestPos - targetLag);
 		}
 		else {
 			// Normal Transport
-			float writePos = newestReadablePos();
-			float candidate = unwrapReadNearWrite(readHead) + speed;
-			candidate = clamp(candidate, writePos - maxLag, writePos - minLag);
+			float candidate = unwrapReadNearWrite(readHead, newestPos) + speed;
+			candidate = clamp(candidate, newestPos - maxLag, newestPos - minLag);
 			readHead = buffer.wrapPosition(candidate);
 		}
 
@@ -454,7 +483,8 @@ struct TemporalDeckEngine {
 		bool holdAtReverseEdge = reverseAtOldestEdge;
 		bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
-		auto wet = buffer.readCubic(readHead);
+		bool useLinearInterpolation = !highQualityScratchInterpolation && (anyScratch || positionConnected);
+		auto wet = useLinearInterpolation ? buffer.readLinear(readHead) : buffer.readCubic(readHead);
 		float mix = clamp(mixKnob, 0.f, 1.f);
 		float outL = inL * (1.f - mix) + wet.first * mix;
 		float outR = inR * (1.f - mix) + wet.second * mix;
@@ -462,8 +492,9 @@ struct TemporalDeckEngine {
 		if (!freezeState && !holdAtBufferEdge) {
 			float feedback = clamp(feedbackKnob, 0.f, 1.f);
 			buffer.write(inL + outL * feedback, inR + outR * feedback);
+			newestPos = newestReadablePos();
 			if (pinToNow) {
-				readHead = newestReadablePos();
+				readHead = newestPos;
 			}
 			else if (keepSlipLagAligned) {
 				readHead = buffer.wrapPosition(readHead + 1.f);
@@ -484,7 +515,7 @@ struct TemporalDeckEngine {
 
 			result.outL = outL;
 			result.outR = outR;
-			result.lag = currentLag();
+			result.lag = currentLagFromNewest(newestPos);
 			result.accessibleLag = limit;
 			result.platterAngle = platterPhase;
 			return result;
@@ -596,6 +627,7 @@ struct TemporalDeck : Module {
 	std::atomic<float> uiPlatterAngle {0.f};
 	float uiPublishTimerSec = 0.f;
 	bool positionCvOffsetMode = false;
+	bool highQualityScratchInterpolation = false;
 
 	TemporalDeck() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -638,6 +670,7 @@ struct TemporalDeck : Module {
 		json_object_set_new(root, "reverseLatched", json_boolean(reverseLatched));
 		json_object_set_new(root, "slipLatched", json_boolean(slipLatched));
 		json_object_set_new(root, "positionCvOffsetMode", json_boolean(positionCvOffsetMode));
+		json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(highQualityScratchInterpolation));
 		return root;
 	}
 
@@ -649,6 +682,7 @@ struct TemporalDeck : Module {
 		json_t* reverseJ = json_object_get(root, "reverseLatched");
 		json_t* slipJ = json_object_get(root, "slipLatched");
 		json_t* offsetJ = json_object_get(root, "positionCvOffsetMode");
+		json_t* scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
 		if (freezeJ) {
 			freezeLatched = json_boolean_value(freezeJ);
 		}
@@ -661,6 +695,9 @@ struct TemporalDeck : Module {
 		if (offsetJ) {
 			positionCvOffsetMode = json_boolean_value(offsetJ);
 			engine.positionCvOffsetMode = positionCvOffsetMode;
+		}
+		if (scratchInterpJ) {
+			highQualityScratchInterpolation = json_boolean_value(scratchInterpJ);
 		}
 	}
 
@@ -700,6 +737,7 @@ struct TemporalDeck : Module {
 		float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
 		engine.positionCvOffsetMode = positionCvOffsetMode;
+		engine.highQualityScratchInterpolation = highQualityScratchInterpolation;
 		int scratchHold = platterScratchHoldSamples.load();
 		bool wheelScratchHeld = scratchHold > 0;
 		if (wheelScratchHeld) {
@@ -1153,6 +1191,7 @@ struct TemporalDeckWidget : ModuleWidget {
 		assert(menu);
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("Position CV offset mode", "", module ? &module->positionCvOffsetMode : nullptr));
+		menu->addChild(createBoolPtrMenuItem("High-quality scratch interpolation", "", module ? &module->highQualityScratchInterpolation : nullptr));
 	}
 };
 
