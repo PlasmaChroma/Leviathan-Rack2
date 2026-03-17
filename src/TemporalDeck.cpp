@@ -89,11 +89,12 @@ struct TemporalDeckBuffer {
 		if (size <= 0 || filled <= 0) {
 			return wrapPosition(targetPos);
 		}
+		float newestReadable = wrapPosition(float(writeHead) - 1.f);
 		float bestPos = wrapPosition(targetPos);
 		float bestScore = std::numeric_limits<float>::infinity();
 		for (int offset = -24; offset <= 24; ++offset) {
 			float candidate = wrapPosition(targetPos + float(offset));
-			float lag = float(writeHead) - candidate;
+			float lag = newestReadable - candidate;
 			if (lag < 0.f) {
 				lag += float(size);
 			}
@@ -117,6 +118,7 @@ struct TemporalDeckEngine {
 	static constexpr float kFreezeGateThreshold = 1.f;
 	static constexpr float kSlipReturnTime = 0.12f;
 	static constexpr float kInertiaBlend = 0.25f;
+	static constexpr float kNominalPlatterRpm = 33.333333f;
 
 	TemporalDeckBuffer buffer;
 	float sampleRate = 44100.f;
@@ -185,18 +187,33 @@ struct TemporalDeckEngine {
 		if (buffer.size <= 0) {
 			return 0.f;
 		}
-		float lag = float(buffer.writeHead) - readHead;
+		float lag = newestReadablePos() - readHead;
 		if (lag < 0.f) {
 			lag += float(buffer.size);
 		}
 		return lag;
 	}
 
+	float newestReadablePos() const {
+		if (buffer.size <= 0 || buffer.filled <= 0) {
+			return 0.f;
+		}
+		return buffer.wrapPosition(float(buffer.writeHead) - 1.f);
+	}
+
+	float platterRadiansPerSample() const {
+		return (2.f * float(M_PI) * (kNominalPlatterRpm / 60.f)) / std::max(sampleRate, 1.f);
+	}
+
+	float samplesPerPlatterRadian() const {
+		return 1.f / std::max(platterRadiansPerSample(), 1e-9f);
+	}
+
 	float unwrapReadNearWrite(float readPos) const {
 		if (buffer.size <= 0) {
 			return readPos;
 		}
-		float writePos = float(buffer.writeHead);
+		float writePos = newestReadablePos();
 		float sizeF = float(buffer.size);
 		while (readPos > writePos) {
 			readPos -= sizeF;
@@ -238,6 +255,7 @@ struct TemporalDeckEngine {
 		FrameResult result;
 		freezeState = freezeButton || freezeGate;
 		reverseState = reverseButton;
+		bool prevSlipState = slipState;
 		slipState = slipButton;
 
 		float limit = accessibleLag(bufferKnob);
@@ -249,6 +267,8 @@ struct TemporalDeckEngine {
 		bool manualScratch = platterTouched;
 		bool anyScratch = externalScratch || manualScratch;
 		bool wasScratchActive = scratchActive;
+		bool releasedFromScratch = !anyScratch && wasScratchActive;
+		bool slipJustEnabled = slipState && !prevSlipState;
 
 		if (slipState && !wasScratchActive && anyScratch) {
 			timelineHead = readHead;
@@ -258,13 +278,22 @@ struct TemporalDeckEngine {
 			lastPlatterLagTarget = platterLagTarget;
 		}
 		scratchActive = anyScratch;
+		if (!slipState) {
+			slipReturning = false;
+		}
+		if (releasedFromScratch && slipState) {
+			slipReturning = true;
+		}
+		if (slipJustEnabled && !anyScratch && currentLag() > 1.f) {
+			slipReturning = true;
+		}
 
 		if (freezeState) {
 			speed = 0.f;
 		}
 
-		if (!scratchActive) {
-			float writePos = float(buffer.writeHead);
+		if (!scratchActive && !(slipState && slipReturning)) {
+			float writePos = newestReadablePos();
 			float candidate = unwrapReadNearWrite(readHead) + speed;
 			candidate = clamp(candidate, writePos - maxLag, writePos - minLag);
 			readHead = buffer.wrapPosition(candidate);
@@ -282,7 +311,7 @@ struct TemporalDeckEngine {
 			else {
 				lastPositionLag = targetLag;
 			}
-			float targetReadHead = buffer.wrapPosition(float(buffer.writeHead) - targetLag);
+			float targetReadHead = buffer.wrapPosition(newestReadablePos() - targetLag);
 			targetReadHead = buffer.zeroCrossCatch(targetReadHead, minLag, maxLag);
 			readHead = targetReadHead;
 			if (slipState) {
@@ -300,21 +329,22 @@ struct TemporalDeckEngine {
 			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
 			scratchLagSamples = clampLag(scratchLagSamples + platterVelocity * dt, limit);
 			lastPlatterLagTarget = platterLagTarget;
-			readHead = buffer.wrapPosition(float(buffer.writeHead) - scratchLagSamples);
+			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
 			if (slipState) {
 				timelineHead = buffer.wrapPosition(timelineHead + speed);
 			}
 		}
 		else if (externalScratch) {
 			scratchLagSamples = lagForPositionCv(positionCv, limit);
-			readHead = buffer.wrapPosition(float(buffer.writeHead) - scratchLagSamples);
+			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
 			if (slipState) {
 				timelineHead = buffer.wrapPosition(timelineHead + speed);
 			}
 		}
 		else if (slipState && slipReturning) {
 			float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
-			float target = buffer.zeroCrossCatch(timelineHead, minLag, maxLag);
+			float writePos = newestReadablePos();
+			float target = buffer.zeroCrossCatch(writePos, minLag, maxLag);
 			float delta = target - readHead;
 			if (delta > float(buffer.size) * 0.5f) {
 				delta -= float(buffer.size);
@@ -324,24 +354,23 @@ struct TemporalDeckEngine {
 			}
 			readHead = buffer.wrapPosition(readHead + delta * returnMix);
 			if (std::fabs(delta) < 1.f) {
-				readHead = target;
+				readHead = writePos;
 				slipReturning = false;
 			}
 		}
 
-		if (!anyScratch && slipState && !slipReturning && wasScratchActive) {
-			slipReturning = true;
-		}
 		if (anyScratch) {
 			slipReturning = false;
 		}
+
+		bool holdAtBufferEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
 
 		auto wet = buffer.readCubic(readHead);
 		float mix = clamp(mixKnob, 0.f, 1.f);
 		float outL = inL * (1.f - mix) + wet.first * mix;
 		float outR = inR * (1.f - mix) + wet.second * mix;
 
-		if (!freezeState) {
+		if (!freezeState && !holdAtBufferEdge) {
 			float feedback = clamp(feedbackKnob, 0.f, 1.f);
 			buffer.write(inL + outL * feedback, inR + outR * feedback);
 		}
@@ -350,7 +379,7 @@ struct TemporalDeckEngine {
 			result.outR = outR;
 			result.lag = currentLag();
 			result.accessibleLag = limit;
-			result.platterAngle = -readHead * (float(M_PI) / std::max(sampleRate, 1.f));
+			result.platterAngle = readHead * platterRadiansPerSample();
 			return result;
 		}
 	};
@@ -391,6 +420,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
 
 	void draw(const DrawArgs& args) override;
 	void onButton(const event::Button& e) override;
+	void onHoverScroll(const event::HoverScroll& e) override;
 	void onDragMove(const event::DragMove& e) override;
 	void onDragStart(const event::DragStart& e) override;
 	void onDragEnd(const event::DragEnd& e) override;
@@ -440,6 +470,7 @@ struct TemporalDeck : Module {
 	std::atomic<bool> platterTouched {false};
 	std::atomic<float> platterLagTarget {0.f};
 	std::atomic<float> platterGestureVelocity {0.f};
+	std::atomic<int> platterScratchHoldSamples {0};
 	std::atomic<float> uiLagSamples {0.f};
 	std::atomic<float> uiAccessibleLagSamples {0.f};
 	std::atomic<float> uiSampleRate {44100.f};
@@ -474,6 +505,7 @@ struct TemporalDeck : Module {
 		uiLagSamples.store(0.f);
 		uiAccessibleLagSamples.store(0.f);
 		uiPlatterAngle.store(0.f);
+		platterScratchHoldSamples.store(0);
 	}
 
 	json_t* dataToJson() override {
@@ -529,6 +561,12 @@ struct TemporalDeck : Module {
 		float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
 		engine.positionCvOffsetMode = positionCvOffsetMode;
+		int scratchHold = platterScratchHoldSamples.load();
+		bool wheelScratchHeld = scratchHold > 0;
+		if (wheelScratchHeld) {
+			platterScratchHoldSamples.store(std::max(0, scratchHold - 1));
+		}
+
 		auto frame = engine.process(
 			args.sampleTime,
 			inL,
@@ -545,7 +583,7 @@ struct TemporalDeck : Module {
 			inputs[POSITION_CV_INPUT].isConnected(),
 			positionCv,
 			rateCv,
-			platterTouched.load(),
+			platterTouched.load() || wheelScratchHeld,
 			platterLagTarget.load(),
 			platterGestureVelocity.load()
 		);
@@ -561,10 +599,11 @@ struct TemporalDeck : Module {
 		uiPlatterAngle.store(frame.platterAngle);
 	}
 
-	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples) {
+	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
 		platterTouched.store(touched);
 		platterLagTarget.store(lagSamples);
 		platterGestureVelocity.store(velocitySamples);
+		platterScratchHoldSamples.store(std::max(0, holdSamples));
 	}
 };
 
@@ -618,13 +657,18 @@ static bool loadPlatterAnchor(Vec& centerPx, float& radiusPx) {
 	return true;
 }
 
+static bool isLeftMouseDown() {
+	return APP && APP->window && APP->window->win
+		&& glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+}
+
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	if (!module) {
 		return;
 	}
-	float lag = module->uiLagSamples.load();
 	float accessibleLag = std::max(1.f, module->uiAccessibleLagSamples.load());
+	float lag = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
 	float maxLag = std::max(1.f, module->uiSampleRate.load() * 8.f);
 	float lagRatio = clamp(lag / maxLag, 0.f, 1.f);
 	float limitRatio = clamp(accessibleLag / maxLag, 0.f, 1.f);
@@ -638,6 +682,24 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
 	if (lagRatio > 0.f) {
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 12));
+		nvgStrokeWidth(args.vg, mm2px(Vec(8.6f, 0.f)).x);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 24));
+		nvgStrokeWidth(args.vg, mm2px(Vec(6.4f, 0.f)).x);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 54));
+		nvgStrokeWidth(args.vg, mm2px(Vec(4.2f, 0.f)).x);
+		nvgStroke(args.vg);
+
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
 		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 220));
@@ -675,15 +737,38 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	nvgFillPaint(args.vg, vinylGrad);
 	nvgFill(args.vg);
 
-	for (int i = 0; i < 14; ++i) {
-		float grooveRadius = platterRadiusPx * (0.28f + 0.047f * i);
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, center.x, center.y);
+	nvgRotate(args.vg, rotation * 0.92f);
+	for (int i = 0; i < 16; ++i) {
+		float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
 		float alpha = (i % 2 == 0) ? 34.f : 18.f;
+		float wobbleAmp = 0.55f + 0.05f * float(i % 4);
+		float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
+		float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
+		float wobbleSkew = 0.62f + 0.08f * float((i + 2) % 4);
+		float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, center.x, center.y, grooveRadius);
+		for (int step = 0; step <= 96; ++step) {
+			float t = 2.f * float(M_PI) * float(step) / 96.f + ringRotation;
+			float wobble = std::sin(t * wobbleFreq + wobblePhase);
+			wobble = std::copysign(std::pow(std::fabs(wobble), wobbleSkew), wobble);
+			float radius = grooveRadius + wobbleAmp * wobble;
+			float x = std::cos(t) * radius;
+			float y = std::sin(t) * radius;
+			if (step == 0) {
+				nvgMoveTo(args.vg, x, y);
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+		}
+		nvgClosePath(args.vg);
 		nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char) alpha));
 		nvgStrokeWidth(args.vg, 0.7f);
 		nvgStroke(args.vg);
 	}
+	nvgRestore(args.vg);
 
 	float labelRadius = platterRadiusPx * 0.33f;
 	nvgBeginPath(args.vg);
@@ -730,12 +815,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 	nvgStrokeWidth(args.vg, 1.1f);
 	nvgStroke(args.vg);
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, platterRadiusPx * 0.92f, rotation - 2.45f, rotation - 1.35f, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 30));
-	nvgStrokeWidth(args.vg, 2.f);
-	nvgStroke(args.vg);
-
 	nvgRestore(args.vg);
 	Widget::draw(args);
 }
@@ -758,7 +837,9 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	}
 	float effectiveRadius = std::max(radius, deadZonePx);
 	float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
-	float lagDelta = deltaAngle * (module->uiSampleRate.load() / float(M_PI)) * weight;
+	float samplesPerRadian = 60.f * module->uiSampleRate.load()
+		/ (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm);
+	float lagDelta = deltaAngle * samplesPerRadian * weight;
 	localLagSamples = clamp(localLagSamples - lagDelta, 0.f, module->uiAccessibleLagSamples.load());
 	float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f;
 	if (deltaAngle < 0.f) {
@@ -777,6 +858,38 @@ void TemporalDeckPlatterWidget::onButton(const event::Button& e) {
 	Widget::onButton(e);
 }
 
+void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
+	if (!module || !isWithinPlatter(e.pos)) {
+		OpaqueWidget::onHoverScroll(e);
+		return;
+	}
+
+	float scroll = e.scrollDelta.y;
+	if (std::fabs(scroll) < 1e-4f) {
+		OpaqueWidget::onHoverScroll(e);
+		return;
+	}
+
+	float maxLag = module->uiAccessibleLagSamples.load();
+	if (maxLag <= 0.f) {
+		e.consume(this);
+		return;
+	}
+
+	float sampleRate = module->uiSampleRate.load();
+	float samplesPerNotch = module->uiSampleRate.load() * 0.008f;
+	float lagDelta = -scroll * samplesPerNotch;
+	float velocity = -scroll * sampleRate * 0.06f;
+	float holdSeconds = module->slipLatched ? 0.09f : 0.02f;
+	float baseLag = module->platterScratchHoldSamples.load() > 0
+		? module->platterLagTarget.load()
+		: module->uiLagSamples.load();
+	float lag = clamp(baseLag + lagDelta, 0.f, maxLag);
+	int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
+	module->setPlatterScratch(false, lag, velocity, holdSamples);
+	e.consume(this);
+}
+
 void TemporalDeckPlatterWidget::onDragStart(const event::DragStart& e) {
 	if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || !isWithinPlatter(onButtonPos)) {
 		return;
@@ -793,6 +906,13 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
 	if (!dragging || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 		return;
 	}
+	if (!isLeftMouseDown()) {
+		dragging = false;
+		if (module) {
+			module->setPlatterScratch(false, localLagSamples, 0.f);
+		}
+		return;
+	}
 	Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
 	updateScratchFromLocal(local, e.mouseDelta);
 	e.consume(this);
@@ -800,6 +920,10 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove& e) {
 
 void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd& e) {
 	if (dragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+		if (isLeftMouseDown()) {
+			e.consume(this);
+			return;
+		}
 		dragging = false;
 		if (module) {
 			module->setPlatterScratch(false, localLagSamples, 0.f);
