@@ -12,6 +12,8 @@
 #include <vector>
 
 
+namespace {
+
 struct TemporalDeckBuffer {
 	std::vector<float> left;
 	std::vector<float> right;
@@ -118,6 +120,12 @@ struct TemporalDeckEngine {
 	static constexpr float kFreezeGateThreshold = 1.f;
 	static constexpr float kSlipReturnTime = 0.12f;
 	static constexpr float kSlipEnableReturnThreshold = 64.f;
+	static constexpr float kSlipFinalCatchThresholdMs = 120.f;
+	static constexpr float kSlipFinalCatchTime = 0.035f;
+	static constexpr float kScratchFollowTime = 0.012f;
+	static constexpr float kScratchSoftLagStepLimit = 10.0f;
+	static constexpr float kMouseScratchTravelScale = 4.0f;
+	static constexpr float kWheelScratchTravelScale = 4.5f;
 	static constexpr float kInertiaBlend = 0.25f;
 	static constexpr float kNominalPlatterRpm = 33.333333f;
 
@@ -133,7 +141,11 @@ struct TemporalDeckEngine {
 	bool positionCvOffsetMode = false;
 	bool scratchActive = false;
 	bool slipReturning = false;
+	bool slipFinalCatchActive = false;
+	float slipReturnRemaining = 0.f;
+	float slipReturnStartLag = 0.f;
 	float scratchLagSamples = 0.f;
+	float scratchLagTargetSamples = 0.f;
 	float lastPositionLag = 0.f;
 	float lastPlatterLagTarget = 0.f;
 
@@ -146,7 +158,11 @@ struct TemporalDeckEngine {
 		platterVelocity = 0.f;
 		scratchActive = false;
 		slipReturning = false;
+		slipFinalCatchActive = false;
+		slipReturnRemaining = 0.f;
+		slipReturnStartLag = 0.f;
 		scratchLagSamples = 0.f;
+		scratchLagTargetSamples = 0.f;
 		lastPositionLag = 0.f;
 		lastPlatterLagTarget = 0.f;
 	}
@@ -163,17 +179,18 @@ struct TemporalDeckEngine {
 		return clamp(lag, 0.f, std::max(0.f, limit));
 	}
 
-	float computeBaseSpeed(float rateKnob, float rateCv, bool reverse) const {
+	static float baseSpeedFromKnob(float rateKnob) {
 		rateKnob = clamp(rateKnob, 0.f, 1.f);
-		float speed = 1.f;
 		if (rateKnob < 0.5f) {
 			float t = rateKnob / 0.5f;
-			speed = -2.f + t * 3.f;
+			return -2.f + t * 3.f;
 		}
-		else {
-			float t = (rateKnob - 0.5f) / 0.5f;
-			speed = 1.f + t;
-		}
+		float t = (rateKnob - 0.5f) / 0.5f;
+		return 1.f + t;
+	}
+
+	float computeBaseSpeed(float rateKnob, float rateCv, bool reverse) const {
+		float speed = baseSpeedFromKnob(rateKnob);
 		speed += clamp(rateCv / 5.f, -1.f, 1.f);
 		speed = clamp(speed, -3.f, 3.f);
 		if (reverse) {
@@ -279,26 +296,45 @@ struct TemporalDeckEngine {
 		}
 		if (!wasScratchActive && anyScratch) {
 			scratchLagSamples = currentLag();
+			scratchLagTargetSamples = scratchLagSamples;
 			lastPlatterLagTarget = platterLagTarget;
 		}
 		scratchActive = anyScratch;
 		if (!slipState) {
 			slipReturning = false;
+			slipFinalCatchActive = false;
+			slipReturnRemaining = 0.f;
+			slipReturnStartLag = 0.f;
 		}
 		if (releasedFromScratch && slipState) {
 			slipReturning = true;
+			slipFinalCatchActive = false;
+			slipReturnRemaining = 0.f;
+			slipReturnStartLag = 0.f;
 		}
 		if (slipJustEnabled && !anyScratch) {
 			if (currentLag() > kSlipEnableReturnThreshold) {
 				slipReturning = true;
+				slipFinalCatchActive = false;
+				slipReturnRemaining = 0.f;
+				slipReturnStartLag = 0.f;
 			}
 			else {
 				timelineHead = readHead;
 				slipReturning = false;
+				slipFinalCatchActive = false;
+				slipReturnRemaining = 0.f;
+				slipReturnStartLag = 0.f;
 			}
 		}
 
 		if (freezeState) {
+			speed = 0.f;
+		}
+
+		float lagNow = currentLag();
+		bool reverseAtOldestEdge = !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
+		if (reverseAtOldestEdge && speed < 0.f) {
 			speed = 0.f;
 		}
 
@@ -332,12 +368,18 @@ struct TemporalDeckEngine {
 		if (manualScratch) {
 			if (!freezeState) {
 				// Holding the platter should pin the audio while the write head continues moving.
-				scratchLagSamples += 1.f;
+				scratchLagTargetSamples += 1.f;
 			}
 			float platterDelta = platterLagTarget - lastPlatterLagTarget;
-			scratchLagSamples += platterDelta;
+			scratchLagTargetSamples += platterDelta;
 			platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
-			scratchLagSamples = clampLag(scratchLagSamples + platterVelocity * dt, limit);
+			scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
+			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+			float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
+			lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
+			scratchLagSamples += lagStep;
+			scratchLagSamples = clampLag(scratchLagSamples, limit);
 			lastPlatterLagTarget = platterLagTarget;
 			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
 			if (slipState) {
@@ -346,28 +388,52 @@ struct TemporalDeckEngine {
 		}
 		else if (externalScratch) {
 			scratchLagSamples = lagForPositionCv(positionCv, limit);
+			scratchLagTargetSamples = scratchLagSamples;
 			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
 			if (slipState) {
 				timelineHead = buffer.wrapPosition(timelineHead + speed);
 			}
 		}
 		else if (slipState && slipReturning) {
-			float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
 			float writePos = newestReadablePos();
 			float lag = clamp(currentLag(), 0.f, maxLag);
-			float newLag = lag * (1.f - returnMix);
-			readHead = buffer.wrapPosition(writePos - newLag);
-			if (newLag < 1.f) {
-				readHead = writePos;
-				slipReturning = false;
+			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
+			if (!slipFinalCatchActive) {
+				float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
+				float newLag = lag * (1.f - returnMix);
+				readHead = buffer.wrapPosition(writePos - newLag);
+				if (newLag <= finalCatchThresholdSamples) {
+					slipFinalCatchActive = true;
+					slipReturnRemaining = kSlipFinalCatchTime;
+					slipReturnStartLag = newLag;
+				}
+			}
+			else {
+				slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
+				float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
+				float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
+				float newLag = slipReturnStartLag * (1.f - shapedProgress);
+				readHead = buffer.wrapPosition(writePos - newLag);
+				if (slipReturnRemaining <= 0.f || newLag < 1.f) {
+					readHead = writePos;
+					slipReturning = false;
+					slipFinalCatchActive = false;
+					slipReturnRemaining = 0.f;
+					slipReturnStartLag = 0.f;
+				}
 			}
 		}
 
 		if (anyScratch) {
 			slipReturning = false;
+			slipFinalCatchActive = false;
+			slipReturnRemaining = 0.f;
+			slipReturnStartLag = 0.f;
 		}
 
-		bool holdAtBufferEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
+		bool holdAtScratchEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
+		bool holdAtReverseEdge = reverseAtOldestEdge;
+		bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
 		auto wet = buffer.readCubic(readHead);
 		float mix = clamp(mixKnob, 0.f, 1.f);
@@ -442,8 +508,17 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
 	void onDragEnd(const event::DragEnd& e) override;
 };
 
+struct DeckRateQuantity : ParamQuantity {
+	std::string getDisplayValueString() override {
+		return string::f("%.2fx", TemporalDeckEngine::baseSpeedFromKnob(getValue()));
+	}
+};
+
 
 struct TemporalDeck : Module {
+	static constexpr float kUiPublishRateHz = 120.f;
+	static constexpr float kUiPublishIntervalSec = 1.f / kUiPublishRateHz;
+
 	enum ParamId {
 		BUFFER_PARAM,
 		RATE_PARAM,
@@ -491,12 +566,13 @@ struct TemporalDeck : Module {
 	std::atomic<float> uiAccessibleLagSamples {0.f};
 	std::atomic<float> uiSampleRate {44100.f};
 	std::atomic<float> uiPlatterAngle {0.f};
+	float uiPublishTimerSec = 0.f;
 	bool positionCvOffsetMode = false;
 
 	TemporalDeck() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 8.f);
-		configParam(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
+		configParam<DeckRateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
 		configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix");
 		configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.f, "Feedback");
 		configButton(FREEZE_PARAM, "Freeze");
@@ -521,6 +597,7 @@ struct TemporalDeck : Module {
 		uiLagSamples.store(0.f);
 		uiAccessibleLagSamples.store(0.f);
 		uiPlatterAngle.store(0.f);
+		uiPublishTimerSec = 0.f;
 		platterScratchHoldSamples.store(0);
 	}
 
@@ -609,10 +686,16 @@ struct TemporalDeck : Module {
 		lights[FREEZE_LIGHT].setBrightness(freezeLatched ? 1.f : 0.f);
 		lights[REVERSE_LIGHT].setBrightness(reverseLatched ? 1.f : 0.f);
 		lights[SLIP_LIGHT].setBrightness(slipLatched ? 1.f : 0.f);
-		uiLagSamples.store(frame.lag);
-		uiAccessibleLagSamples.store(frame.accessibleLag);
-		uiSampleRate.store(args.sampleRate);
+		// Keep platter rotation responsive during scratch gestures.
 		uiPlatterAngle.store(frame.platterAngle);
+
+		uiPublishTimerSec += args.sampleTime;
+		if (uiPublishTimerSec >= kUiPublishIntervalSec) {
+			uiPublishTimerSec = std::fmod(uiPublishTimerSec, kUiPublishIntervalSec);
+			uiLagSamples.store(frame.lag);
+			uiAccessibleLagSamples.store(frame.accessibleLag);
+			uiSampleRate.store(args.sampleRate);
+		}
 	}
 
 	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
@@ -733,7 +816,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
 		char text[32];
 		std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
-		Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(2.2f, 0.f)).x, -arcRadius * 0.86f));
+		Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(5.0f, 0.f)).x, -arcRadius * 0.86f));
 
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFontSize(args.vg, mm2px(Vec(3.4f, 0.f)).x);
@@ -873,7 +956,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	float effectiveRadius = std::max(radius, deadZonePx);
 	float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
 	float samplesPerRadian = 60.f * module->uiSampleRate.load()
-		/ (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm);
+		/ (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm)
+		* TemporalDeckEngine::kMouseScratchTravelScale;
 	float lagDelta = deltaAngle * samplesPerRadian * weight;
 	localLagSamples = clamp(localLagSamples - lagDelta, 0.f, module->uiAccessibleLagSamples.load());
 	float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f;
@@ -912,16 +996,15 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
 	}
 
 	float sampleRate = module->uiSampleRate.load();
-	float samplesPerNotch = module->uiSampleRate.load() * 0.008f;
-	float lagDelta = -scroll * samplesPerNotch;
-	float velocity = -scroll * sampleRate * 0.06f;
+	float samplesPerNotch = module->uiSampleRate.load() * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale;
+	float lagDelta = scroll * samplesPerNotch;
 	float holdSeconds = module->slipLatched ? 0.09f : 0.02f;
 	float baseLag = module->platterScratchHoldSamples.load() > 0
 		? module->platterLagTarget.load()
 		: module->uiLagSamples.load();
 	float lag = clamp(baseLag + lagDelta, 0.f, maxLag);
 	int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
-	module->setPlatterScratch(false, lag, velocity, holdSamples);
+	module->setPlatterScratch(false, lag, 0.f, holdSamples);
 	e.consume(this);
 }
 
@@ -1029,5 +1112,6 @@ struct TemporalDeckWidget : ModuleWidget {
 	}
 };
 
+} // namespace
 
 Model* modelTemporalDeck = createModel<TemporalDeck, TemporalDeckWidget>("TemporalDeck");
