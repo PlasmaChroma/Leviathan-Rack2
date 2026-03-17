@@ -334,9 +334,9 @@ struct TemporalDeckEngine {
 			}
 			// Add any wheel movement accumulation to the "to-be-applied" pool.
 			wheelDeltaRemaining += wheelDelta;
-			
+
 			// Bleed wheel delta into target over time (~20ms reach).
-			float wheelBleedAlpha = 0.002f; 
+			float wheelBleedAlpha = 0.002f;
 			float applyNow = wheelDeltaRemaining * wheelBleedAlpha;
 			// Ensure small remainders are eventually applied.
 			if (std::fabs(applyNow) < 0.1f && std::fabs(wheelDeltaRemaining) > 0.f) {
@@ -344,17 +344,17 @@ struct TemporalDeckEngine {
 			}
 			scratchLagTargetSamples += applyNow;
 			wheelDeltaRemaining -= applyNow;
-			
+
 			if (manualTouchScratch) {
 				platterVelocity += (platterGestureVelocity - platterVelocity) * kInertiaBlend;
 				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + platterVelocity * dt, limit);
 			}
-			
+
 			float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
 			float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
 			float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
 			lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
-			
+
 			scratchLagSamples += lagStep;
 			scratchLagSamples = clampLag(scratchLagSamples, limit);
 			if (manualTouchScratch && scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples) {
@@ -362,7 +362,7 @@ struct TemporalDeckEngine {
 				pinToNow = true;
 			}
 			lastPlatterLagTarget = platterLagTarget;
-			
+
 			readHead = buffer.wrapPosition(newestReadablePos() - scratchLagSamples);
 		}
 		else if (externalScratch) {
@@ -390,7 +390,7 @@ struct TemporalDeckEngine {
 					// We target a specific lag value that decreases over time.
 					float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
 					float targetLag = currentLagSamples * (1.f - alpha);
-				
+
 				// Ensure we actually move towards zero even if alpha is tiny.
 				if (targetLag > currentLagSamples - 0.5f) {
 					targetLag = currentLagSamples - 0.5f;
@@ -399,7 +399,7 @@ struct TemporalDeckEngine {
 
 					readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
 					keepSlipLagAligned = true;
-					
+
 					if (targetLag <= finalCatchThresholdSamples) {
 						slipFinalCatchActive = true;
 					slipReturnRemaining = kSlipFinalCatchTime;
@@ -412,10 +412,10 @@ struct TemporalDeckEngine {
 				float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
 					float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
 					float targetLag = slipReturnStartLag * (1.f - shapedProgress);
-					
+
 					readHead = buffer.wrapPosition(newestReadablePos() - targetLag);
 					keepSlipLagAligned = true;
-					
+
 					if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
 						readHead = newestReadablePos();
 					slipReturning = false;
@@ -826,39 +826,60 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	float lagRatio = clamp(lag / maxLag, 0.f, 1.f);
 	float limitRatio = clamp(accessibleLag / maxLag, 0.f, 1.f);
 
-	nvgSave(args.vg);
-	nvgLineCap(args.vg, NVG_ROUND);
+		nvgSave(args.vg);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgShapeAntiAlias(args.vg, true);
 
 	float endAngle = 0.f;
 	float lagAngle = endAngle - M_PI * lagRatio;
 	float limitAngle = endAngle - M_PI * limitRatio;
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
-	if (lagRatio > 0.f) {
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 228, 92, 16));
-		nvgStrokeWidth(args.vg, mm2px(Vec(8.6f, 0.f)).x);
-		nvgStroke(args.vg);
+		if (lagRatio > 0.f) {
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(32, 26, 8, 92));
+			nvgStrokeWidth(args.vg, mm2px(Vec(3.2f, 0.f)).x);
+			nvgStroke(args.vg);
 
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 224, 86, 34));
-		nvgStrokeWidth(args.vg, mm2px(Vec(6.4f, 0.f)).x);
-		nvgStroke(args.vg);
+			nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 215, 20, 8));
+			nvgStrokeWidth(args.vg, mm2px(Vec(7.2f, 0.f)).x);
+			nvgStroke(args.vg);
 
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 218, 70, 78));
-		nvgStrokeWidth(args.vg, mm2px(Vec(4.2f, 0.f)).x);
-		nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 220, 40, 14));
+			nvgStrokeWidth(args.vg, mm2px(Vec(6.0f, 0.f)).x);
+			nvgStroke(args.vg);
 
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 214, 52, 242));
-		nvgStrokeWidth(args.vg, mm2px(Vec(1.8f, 0.f)).x);
-		nvgStroke(args.vg);
-	}
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 222, 54, 24));
+			nvgStrokeWidth(args.vg, mm2px(Vec(4.8f, 0.f)).x);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 228, 92, 34));
+			nvgStrokeWidth(args.vg, mm2px(Vec(3.6f, 0.f)).x);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 120, 28));
+			nvgStrokeWidth(args.vg, mm2px(Vec(2.8f, 0.f)).x);
+			nvgStroke(args.vg);
+
+			nvgGlobalCompositeOperation(args.vg, NVG_SOURCE_OVER);
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 219, 42, 224));
+			nvgStrokeWidth(args.vg, mm2px(Vec(1.7f, 0.f)).x);
+			nvgStroke(args.vg);
+		}
 
 	Vec dotPos = centerMm.plus(Vec(std::cos(limitAngle), std::sin(limitAngle)).mult(arcRadius));
 	nvgBeginPath(args.vg);
@@ -914,7 +935,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, center.x, center.y);
 		nvgRotate(args.vg, rotation * 0.92f);
-		
+
 		for (int i = 0; i < 16; ++i) {
 			float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
 			float alpha = (i % 2 == 0) ? 34.f : 18.f;
@@ -922,7 +943,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs& args) {
 			float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
 			float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
 			float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
-			
+
 			nvgBeginPath(args.vg);
 			constexpr int kSteps = 64; // Reduced from 96 for performance
 			for (int step = 0; step <= kSteps; ++step) {
@@ -1054,7 +1075,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
 	float lagDelta = scroll * samplesPerNotch;
 	float holdSeconds = module->slipLatched ? 0.09f : 0.02f;
 	int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
-	
+
 	module->addPlatterWheelDelta(lagDelta, holdSamples);
 	e.consume(this);
 }
