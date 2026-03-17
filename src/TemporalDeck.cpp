@@ -117,6 +117,7 @@ struct TemporalDeckEngine {
 	static constexpr float kScratchGateThreshold = 1.f;
 	static constexpr float kFreezeGateThreshold = 1.f;
 	static constexpr float kSlipReturnTime = 0.12f;
+	static constexpr float kSlipEnableReturnThreshold = 64.f;
 	static constexpr float kInertiaBlend = 0.25f;
 	static constexpr float kNominalPlatterRpm = 33.333333f;
 
@@ -124,6 +125,7 @@ struct TemporalDeckEngine {
 	float sampleRate = 44100.f;
 	float readHead = 0.f;
 	float timelineHead = 0.f;
+	float platterPhase = 0.f;
 	float platterVelocity = 0.f;
 	bool freezeState = false;
 	bool reverseState = false;
@@ -140,6 +142,7 @@ struct TemporalDeckEngine {
 		buffer.reset(sr);
 		readHead = 0.f;
 		timelineHead = 0.f;
+		platterPhase = 0.f;
 		platterVelocity = 0.f;
 		scratchActive = false;
 		slipReturning = false;
@@ -253,6 +256,7 @@ struct TemporalDeckEngine {
 		float platterGestureVelocity
 	) {
 		FrameResult result;
+		float prevReadHead = readHead;
 		freezeState = freezeButton || freezeGate;
 		reverseState = reverseButton;
 		bool prevSlipState = slipState;
@@ -284,8 +288,14 @@ struct TemporalDeckEngine {
 		if (releasedFromScratch && slipState) {
 			slipReturning = true;
 		}
-		if (slipJustEnabled && !anyScratch && currentLag() > 1.f) {
-			slipReturning = true;
+		if (slipJustEnabled && !anyScratch) {
+			if (currentLag() > kSlipEnableReturnThreshold) {
+				slipReturning = true;
+			}
+			else {
+				timelineHead = readHead;
+				slipReturning = false;
+			}
 		}
 
 		if (freezeState) {
@@ -344,16 +354,10 @@ struct TemporalDeckEngine {
 		else if (slipState && slipReturning) {
 			float returnMix = clamp(dt / kSlipReturnTime, 0.f, 1.f);
 			float writePos = newestReadablePos();
-			float target = buffer.zeroCrossCatch(writePos, minLag, maxLag);
-			float delta = target - readHead;
-			if (delta > float(buffer.size) * 0.5f) {
-				delta -= float(buffer.size);
-			}
-			if (delta < -float(buffer.size) * 0.5f) {
-				delta += float(buffer.size);
-			}
-			readHead = buffer.wrapPosition(readHead + delta * returnMix);
-			if (std::fabs(delta) < 1.f) {
+			float lag = clamp(currentLag(), 0.f, maxLag);
+			float newLag = lag * (1.f - returnMix);
+			readHead = buffer.wrapPosition(writePos - newLag);
+			if (newLag < 1.f) {
 				readHead = writePos;
 				slipReturning = false;
 			}
@@ -375,11 +379,23 @@ struct TemporalDeckEngine {
 			buffer.write(inL + outL * feedback, inR + outR * feedback);
 		}
 
+		if (buffer.size > 0) {
+			float readDelta = readHead - prevReadHead;
+			float halfSize = float(buffer.size) * 0.5f;
+			if (readDelta > halfSize) {
+				readDelta -= float(buffer.size);
+			}
+			if (readDelta < -halfSize) {
+				readDelta += float(buffer.size);
+			}
+			platterPhase += readDelta * platterRadiansPerSample();
+		}
+
 			result.outL = outL;
 			result.outR = outR;
 			result.lag = currentLag();
 			result.accessibleLag = limit;
-			result.platterAngle = readHead * platterRadiansPerSample();
+			result.platterAngle = platterPhase;
 			return result;
 		}
 	};
@@ -684,25 +700,25 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	if (lagRatio > 0.f) {
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 12));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 228, 92, 16));
 		nvgStrokeWidth(args.vg, mm2px(Vec(8.6f, 0.f)).x);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 24));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 224, 86, 34));
 		nvgStrokeWidth(args.vg, mm2px(Vec(6.4f, 0.f)).x);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 54));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 218, 70, 78));
 		nvgStrokeWidth(args.vg, mm2px(Vec(4.2f, 0.f)).x);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(244, 210, 75, 220));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 214, 52, 242));
 		nvgStrokeWidth(args.vg, mm2px(Vec(1.8f, 0.f)).x);
 		nvgStroke(args.vg);
 	}
@@ -710,8 +726,27 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	Vec dotPos = centerMm.plus(Vec(std::cos(limitAngle), std::sin(limitAngle)).mult(arcRadius));
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, dotPos.x, dotPos.y, mm2px(Vec(1.15f, 0.f)).x);
-	nvgFillColor(args.vg, nvgRGBA(244, 210, 75, 240));
+	nvgFillColor(args.vg, nvgRGBA(255, 220, 64, 245));
 	nvgFill(args.vg);
+
+	if (APP && APP->window && APP->window->uiFont) {
+		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
+		char text[32];
+		std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
+		Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(2.2f, 0.f)).x, -arcRadius * 0.86f));
+
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, mm2px(Vec(3.4f, 0.f)).x);
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+
+		nvgFontBlur(args.vg, 1.6f);
+		nvgFillColor(args.vg, nvgRGBA(255, 214, 52, 72));
+		nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
+
+		nvgFontBlur(args.vg, 0.f);
+		nvgFillColor(args.vg, nvgRGBA(255, 238, 160, 230));
+		nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
+	}
 	nvgRestore(args.vg);
 }
 
