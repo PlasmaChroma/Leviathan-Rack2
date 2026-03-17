@@ -543,6 +543,7 @@ struct DeckRateQuantity : ParamQuantity {
 struct TemporalDeck : Module {
 	static constexpr float kUiPublishRateHz = 120.f;
 	static constexpr float kUiPublishIntervalSec = 1.f / kUiPublishRateHz;
+	static constexpr int kArcLightCount = 31;
 
 	enum ParamId {
 		BUFFER_PARAM,
@@ -572,7 +573,8 @@ struct TemporalDeck : Module {
 		FREEZE_LIGHT,
 		REVERSE_LIGHT,
 		SLIP_LIGHT,
-		LIGHTS_LEN
+		ARC_LIGHT_START,
+		LIGHTS_LEN = ARC_LIGHT_START + kArcLightCount
 	};
 
 	TemporalDeckEngine engine;
@@ -625,6 +627,9 @@ struct TemporalDeck : Module {
 		uiPlatterAngle.store(0.f);
 		uiPublishTimerSec = 0.f;
 		platterScratchHoldSamples.store(0);
+		for (int i = 0; i < kArcLightCount; ++i) {
+			lights[ARC_LIGHT_START + i].setBrightness(0.f);
+		}
 	}
 
 	json_t* dataToJson() override {
@@ -739,6 +744,27 @@ struct TemporalDeck : Module {
 			uiLagSamples.store(frame.lag);
 			uiAccessibleLagSamples.store(frame.accessibleLag);
 			uiSampleRate.store(args.sampleRate);
+			float maxLag = std::max(1.f, args.sampleRate * 8.f);
+			float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
+			float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
+			float lagLed = lagRatio * float(kArcLightCount - 1);
+			float limitLed = limitRatio * float(kArcLightCount - 1);
+			for (int i = 0; i < kArcLightCount; ++i) {
+				float brightness = 0.f;
+				if (i == 0) {
+					brightness = clamp(lagLed, 0.f, 1.f);
+				}
+				else {
+					brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
+				}
+				if (limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f) {
+					brightness = std::max(brightness, 0.28f);
+				}
+				if (float(i) > limitLed + 0.5f) {
+					brightness = 0.f;
+				}
+				lights[ARC_LIGHT_START + i].setBrightness(brightness);
+			}
 		}
 	}
 
@@ -822,70 +848,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	}
 	float accessibleLag = std::max(1.f, module->uiAccessibleLagSamples.load());
 	float lag = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
-	float maxLag = std::max(1.f, module->uiSampleRate.load() * 8.f);
-	float lagRatio = clamp(lag / maxLag, 0.f, 1.f);
-	float limitRatio = clamp(accessibleLag / maxLag, 0.f, 1.f);
-
-		nvgSave(args.vg);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgShapeAntiAlias(args.vg, true);
-
-	float endAngle = 0.f;
-	float lagAngle = endAngle - M_PI * lagRatio;
-	float limitAngle = endAngle - M_PI * limitRatio;
+	nvgSave(args.vg);
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
-
-		if (lagRatio > 0.f) {
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(32, 26, 8, 92));
-			nvgStrokeWidth(args.vg, mm2px(Vec(3.2f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 215, 20, 8));
-			nvgStrokeWidth(args.vg, mm2px(Vec(7.2f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 220, 40, 14));
-			nvgStrokeWidth(args.vg, mm2px(Vec(6.0f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 222, 54, 24));
-			nvgStrokeWidth(args.vg, mm2px(Vec(4.8f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 228, 92, 34));
-			nvgStrokeWidth(args.vg, mm2px(Vec(3.6f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 120, 28));
-			nvgStrokeWidth(args.vg, mm2px(Vec(2.8f, 0.f)).x);
-			nvgStroke(args.vg);
-
-			nvgGlobalCompositeOperation(args.vg, NVG_SOURCE_OVER);
-			nvgBeginPath(args.vg);
-			nvgArc(args.vg, centerMm.x, centerMm.y, arcRadius, lagAngle, endAngle, NVG_CW);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 219, 42, 224));
-			nvgStrokeWidth(args.vg, mm2px(Vec(1.7f, 0.f)).x);
-			nvgStroke(args.vg);
-		}
-
-	Vec dotPos = centerMm.plus(Vec(std::cos(limitAngle), std::sin(limitAngle)).mult(arcRadius));
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, dotPos.x, dotPos.y, mm2px(Vec(1.15f, 0.f)).x);
-	nvgFillColor(args.vg, nvgRGBA(255, 220, 64, 245));
-	nvgFill(args.vg);
 
 	if (APP && APP->window && APP->window->uiFont) {
 		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
@@ -1158,6 +1122,14 @@ struct TemporalDeckWidget : ModuleWidget {
 		Vec platterCenter = mm2px(Vec(50.8f, 72.f));
 		float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
 		loadPlatterAnchor(platterCenter, platterRadius);
+
+		float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
+		for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+			float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
+			float angle = -float(M_PI) * t;
+			Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
+			addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
+		}
 
 		auto display = new TemporalDeckDisplayWidget();
 		display->module = module;
