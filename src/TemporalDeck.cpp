@@ -112,7 +112,8 @@ struct TemporalDeckEngine {
 	static constexpr float kSlipFinalCatchTime = 0.035f;
 	static constexpr float kScratchFollowTime = 0.012f;
 	static constexpr float kScratchSoftLagStepLimit = 10.0f;
-	static constexpr float kNowSnapThresholdMs = 12.0f;
+	static constexpr float kNowSnapThresholdMs = 20.0f;
+	static constexpr float kNowCatchTime = 0.004f;
 	static constexpr float kMouseScratchTravelScale = 4.0f;
 	static constexpr float kWheelScratchTravelScale = 4.5f;
 	static constexpr float kInertiaBlend = 0.25f;
@@ -132,8 +133,11 @@ struct TemporalDeckEngine {
 	bool scratchActive = false;
 	bool slipReturning = false;
 	bool slipFinalCatchActive = false;
+	bool nowCatchActive = false;
 	float slipReturnRemaining = 0.f;
 	float slipReturnStartLag = 0.f;
+	float nowCatchRemaining = 0.f;
+	float nowCatchStartLag = 0.f;
 	float scratchLagSamples = 0.f;
 	float scratchLagTargetSamples = 0.f;
 	float wheelDeltaRemaining = 0.f;
@@ -151,8 +155,11 @@ struct TemporalDeckEngine {
 		scratchActive = false;
 		slipReturning = false;
 		slipFinalCatchActive = false;
+		nowCatchActive = false;
 		slipReturnRemaining = 0.f;
 		slipReturnStartLag = 0.f;
+		nowCatchRemaining = 0.f;
+		nowCatchStartLag = 0.f;
 		scratchLagSamples = 0.f;
 		scratchLagTargetSamples = 0.f;
 		wheelDeltaRemaining = 0.f;
@@ -282,13 +289,14 @@ struct TemporalDeckEngine {
 		float platterLagTarget,
 		float platterGestureVelocity,
 		float wheelDelta
-	) {
-		FrameResult result;
-		float prevReadHead = readHead;
-		float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
-		bool pinToNow = false;
-		bool keepSlipLagAligned = false;
-		freezeState = freezeButton || freezeGate;
+		) {
+			FrameResult result;
+			float prevReadHead = readHead;
+			float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
+			bool pinToNow = false;
+			bool keepSlipLagAligned = false;
+			bool keepNowCatchLagAligned = false;
+			freezeState = freezeButton || freezeGate;
 		reverseState = reverseButton;
 		bool prevSlipState = slipState;
 		slipState = slipButton;
@@ -304,10 +312,15 @@ struct TemporalDeckEngine {
 			bool manualScratch = manualTouchScratch || wheelScratch;
 		bool anyScratch = externalScratch || manualScratch;
 		bool wasScratchActive = scratchActive;
-		bool releasedFromScratch = !anyScratch && wasScratchActive;
-		bool slipJustEnabled = slipState && !prevSlipState;
-		float newestPos = newestReadablePos();
-		bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
+			bool releasedFromScratch = !anyScratch && wasScratchActive;
+			bool slipJustEnabled = slipState && !prevSlipState;
+			float newestPos = newestReadablePos();
+			bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
+			auto startNowCatch = [&](float startLag) {
+				nowCatchActive = true;
+				nowCatchRemaining = kNowCatchTime;
+				nowCatchStartLag = std::max(0.f, startLag);
+			};
 
 		if (!wasScratchActive && anyScratch) {
 			scratchLagSamples = currentLagFromNewest(newestPos);
@@ -328,14 +341,11 @@ struct TemporalDeckEngine {
 			slipReturnRemaining = 0.f;
 		}
 
-		if (releasedFromScratch && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
-			readHead = newestPos;
-			scratchLagSamples = 0.f;
-			scratchLagTargetSamples = 0.f;
-			slipReturning = false;
-			slipFinalCatchActive = false;
-			pinToNow = true;
-		}
+			if (releasedFromScratch && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
+				startNowCatch(currentLagFromNewest(newestPos));
+				slipReturning = false;
+				slipFinalCatchActive = false;
+			}
 
 		if (slipJustEnabled && !anyScratch) {
 			if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
@@ -362,13 +372,32 @@ struct TemporalDeckEngine {
 
 			if (manualScratch) {
 				if (manualTouchScratch) {
+					// Manual mouse scratching is intentionally event-driven.
+					//
+					// We tried bridging sparse UI drag events by continuing to follow the
+					// previous drag target between updates, but that caused two regressions:
+					// 1. click-and-hold would drift instead of freezing
+					// 2. slow reverse drags would still creep clockwise because the live
+					//    write point kept moving while the old target stayed latched
+					//
+					// The rule here is strict:
+					// - fresh gesture revision: move to the new requested lag
+					// - no fresh gesture revision: hold the current audio position
+					//
+					// Be careful changing this. Any "helpful" smoothing between gesture
+					// updates needs to be validated against stationary hold and very slow
+					// reverse drag behavior.
 					if (hasFreshPlatterGesture) {
+						if (nowCatchActive && platterLagTarget > nowSnapThresholdSamples) {
+							nowCatchActive = false;
+						}
 						scratchLagTargetSamples = clampLag(platterLagTarget, limit);
 						if (scratchLagTargetSamples <= nowSnapThresholdSamples) {
-							scratchLagTargetSamples = 0.f;
+							startNowCatch(std::max(scratchLagSamples, scratchLagTargetSamples));
 						}
 						lastPlatterGestureRevision = platterGestureRevision;
 					}
+					// A mouse-down with no new gesture is a true freeze, not a coast.
 					bool stationaryManualHold = !hasFreshPlatterGesture;
 					if (stationaryManualHold) {
 						platterVelocity = 0.f;
@@ -379,13 +408,9 @@ struct TemporalDeckEngine {
 					else {
 						platterVelocity = 0.f;
 						scratchLagSamples = scratchLagTargetSamples;
-						if (scratchLagSamples <= nowSnapThresholdSamples) {
-							scratchLagSamples = 0.f;
-							pinToNow = true;
+							readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 						}
-						readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 					}
-				}
 				else {
 					// Add any wheel movement accumulation to the "to-be-applied" pool.
 					wheelDeltaRemaining += wheelDelta;
@@ -409,14 +434,8 @@ struct TemporalDeckEngine {
 					scratchLagSamples = clampLag(scratchLagSamples, limit);
 					readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 				}
-				if (manualTouchScratch && scratchLagSamples <= nowSnapThresholdSamples) {
-					scratchLagSamples = 0.f;
+					lastPlatterLagTarget = platterLagTarget;
 				}
-				if (manualTouchScratch && scratchLagSamples <= nowSnapThresholdSamples) {
-					pinToNow = true;
-				}
-				lastPlatterLagTarget = platterLagTarget;
-			}
 		else if (externalScratch) {
 			scratchLagSamples = lagForPositionCv(positionCv, limit);
 			scratchLagTargetSamples = scratchLagSamples;
@@ -427,14 +446,11 @@ struct TemporalDeckEngine {
 			float currentLagSamples = currentLagFromNewest(newestPos);
 			float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
-			if (currentLagSamples <= nowSnapThresholdSamples) {
-				readHead = newestPos;
-				slipReturning = false;
-				slipFinalCatchActive = false;
-				scratchLagSamples = 0.f;
-				scratchLagTargetSamples = 0.f;
-				pinToNow = true;
-			}
+				if (currentLagSamples <= nowSnapThresholdSamples) {
+					startNowCatch(currentLagSamples);
+					slipReturning = false;
+					slipFinalCatchActive = false;
+				}
 			else
 
 				if (!slipFinalCatchActive) {
@@ -494,14 +510,32 @@ struct TemporalDeckEngine {
 			readHead = buffer.wrapPosition(candidate);
 		}
 
-		if (anyScratch) {
-			slipReturning = false;
-			slipFinalCatchActive = false;
-			slipReturnRemaining = 0.f;
-			slipReturnStartLag = 0.f;
-		}
+			if (anyScratch) {
+				slipReturning = false;
+				slipFinalCatchActive = false;
+				slipReturnRemaining = 0.f;
+				slipReturnStartLag = 0.f;
+			}
 
-		bool holdAtScratchEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
+			if (nowCatchActive) {
+				nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
+				float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
+				float shapedProgress = progress * (2.f - progress);
+				float targetLag = nowCatchStartLag * (1.f - shapedProgress);
+				if (nowCatchRemaining <= 0.f || targetLag < 0.5f) {
+					nowCatchActive = false;
+					targetLag = 0.f;
+					pinToNow = true;
+				}
+				else {
+					keepNowCatchLagAligned = true;
+				}
+				scratchLagSamples = targetLag;
+				scratchLagTargetSamples = targetLag;
+				readHead = buffer.wrapPosition(newestPos - targetLag);
+			}
+
+			bool holdAtScratchEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
 		bool holdAtReverseEdge = reverseAtOldestEdge;
 		bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
@@ -515,13 +549,13 @@ struct TemporalDeckEngine {
 			float feedback = clamp(feedbackKnob, 0.f, 1.f);
 			buffer.write(inL + outL * feedback, inR + outR * feedback);
 			newestPos = newestReadablePos();
-			if (pinToNow) {
-				readHead = newestPos;
+				if (pinToNow) {
+					readHead = newestPos;
+				}
+				else if (keepSlipLagAligned || keepNowCatchLagAligned) {
+					readHead = buffer.wrapPosition(readHead + 1.f);
+				}
 			}
-			else if (keepSlipLagAligned) {
-				readHead = buffer.wrapPosition(readHead + 1.f);
-			}
-		}
 
 		if (buffer.size > 0) {
 			float readDelta = readHead - prevReadHead;
@@ -807,13 +841,16 @@ struct TemporalDeck : Module {
 		lights[SLIP_LIGHT].setBrightness(slipLatched ? 1.f : 0.f);
 		// Keep platter rotation responsive during scratch gestures.
 		uiPlatterAngle.store(frame.platterAngle);
+		// Manual drag math consumes uiLagSamples as its base state. This must stay
+		// current at audio rate; publishing only on the slower UI tick reintroduced
+		// stale-lag errors where slow reverse drags fought the user.
+		uiLagSamples.store(frame.lag);
+		uiAccessibleLagSamples.store(frame.accessibleLag);
+		uiSampleRate.store(args.sampleRate);
 
 		uiPublishTimerSec += args.sampleTime;
 		if (uiPublishTimerSec >= kUiPublishIntervalSec) {
 			uiPublishTimerSec = std::fmod(uiPublishTimerSec, kUiPublishIntervalSec);
-			uiLagSamples.store(frame.lag);
-			uiAccessibleLagSamples.store(frame.accessibleLag);
-			uiSampleRate.store(args.sampleRate);
 			float maxLag = std::max(1.f, args.sampleRate * 8.f);
 			float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
 			float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
@@ -1060,8 +1097,11 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	if (!module || !dragging) {
 		return;
 	}
-	constexpr float kScratchMoveThresholdPx = 0.75f;
-	constexpr float kScratchMoveThresholdRad = 0.0035f;
+	// These thresholds are intentionally small so slow deliberate platter motion
+	// still becomes a fresh gesture. Raising them too far makes the engine fall
+	// back to the stationary-hold path and the platter starts to feel resistant.
+	constexpr float kScratchMoveThresholdPx = 0.2f;
+	constexpr float kScratchMoveThresholdRad = 0.001f;
 	float radius = local.norm();
 	if (radius < deadZonePx * 0.25f) {
 		return;
@@ -1078,13 +1118,18 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 	if (mouseMovePx < kScratchMoveThresholdPx && std::fabs(deltaAngle) < kScratchMoveThresholdRad) {
 		return;
 	}
+	// Always apply drag deltas to the engine's latest lag, not the last UI event's
+	// cached lag. The live point continues to advance while the mouse is held, so
+	// stale lag here causes slow backward drags to creep forward.
+	float accessibleLag = module->uiAccessibleLagSamples.load();
+	localLagSamples = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
 	float effectiveRadius = std::max(radius, deadZonePx);
 	float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
 	float samplesPerRadian = 60.f * module->uiSampleRate.load()
 		/ (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm)
 		* TemporalDeckEngine::kMouseScratchTravelScale;
 	float lagDelta = deltaAngle * samplesPerRadian * weight;
-	localLagSamples = clamp(localLagSamples - lagDelta, 0.f, module->uiAccessibleLagSamples.load());
+	localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
 	float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f;
 	if (deltaAngle < 0.f) {
 		velocity *= -1.f;
