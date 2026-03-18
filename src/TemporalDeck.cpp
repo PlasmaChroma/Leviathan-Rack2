@@ -111,7 +111,8 @@ struct TemporalDeckEngine {
 	static constexpr float kSlipFinalCatchThresholdMs = 120.f;
 	static constexpr float kSlipFinalCatchTime = 0.035f;
 	static constexpr float kScratchFollowTime = 0.012f;
-	static constexpr float kScratchSoftLagStepLimit = 10.0f;
+	static constexpr float kScratchSoftLagStepMin = 6.0f;
+	static constexpr float kScratchSoftLagStepMax = 28.0f;
 	static constexpr float kNowSnapThresholdMs = 20.0f;
 	static constexpr float kNowCatchTime = 0.004f;
 	static constexpr float kMouseScratchTravelScale = 4.0f;
@@ -140,7 +141,6 @@ struct TemporalDeckEngine {
 	float nowCatchStartLag = 0.f;
 	float scratchLagSamples = 0.f;
 	float scratchLagTargetSamples = 0.f;
-	float wheelDeltaRemaining = 0.f;
 	float lastPositionLag = 0.f;
 	float lastPlatterLagTarget = 0.f;
 	uint32_t lastPlatterGestureRevision = 0;
@@ -162,7 +162,6 @@ struct TemporalDeckEngine {
 		nowCatchStartLag = 0.f;
 		scratchLagSamples = 0.f;
 		scratchLagTargetSamples = 0.f;
-		wheelDeltaRemaining = 0.f;
 		lastPositionLag = 0.f;
 		lastPlatterLagTarget = 0.f;
 	}
@@ -410,25 +409,20 @@ struct TemporalDeckEngine {
 						scratchLagSamples = scratchLagTargetSamples;
 							readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 						}
-					}
-				else {
-					// Add any wheel movement accumulation to the "to-be-applied" pool.
-					wheelDeltaRemaining += wheelDelta;
+				}
+			else {
+				// Wheel scratch is immediate: apply delta directly to the target.
+				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDelta, limit);
 
-					// Bleed wheel delta into target over time (~20ms reach).
-					float wheelBleedAlpha = 0.002f;
-					float applyNow = wheelDeltaRemaining * wheelBleedAlpha;
-					// Ensure small remainders are eventually applied.
-					if (std::fabs(applyNow) < 0.1f && std::fabs(wheelDeltaRemaining) > 0.f) {
-						applyNow = std::copysign(std::min(0.5f, std::fabs(wheelDeltaRemaining)), wheelDeltaRemaining);
-					}
-					scratchLagTargetSamples += applyNow;
-					wheelDeltaRemaining -= applyNow;
-
-					float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
-					float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
-					float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
-					lagStep = kScratchSoftLagStepLimit * std::tanh(lagStep / std::max(kScratchSoftLagStepLimit, 1e-6f));
+				float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+				float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+				float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
+				float dynamicSoftLimit = clamp(
+					kScratchSoftLagStepMin + std::fabs(wheelDelta) * 0.35f + std::fabs(platterGestureVelocity) * 0.002f,
+					kScratchSoftLagStepMin,
+					kScratchSoftLagStepMax
+				);
+				lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
 					
 					scratchLagSamples += lagStep;
 					scratchLagSamples = clampLag(scratchLagSamples, limit);
@@ -1237,6 +1231,11 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd& e) {
 	}
 }
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
 
 struct TemporalDeckWidget : ModuleWidget {
 	TemporalDeckWidget(TemporalDeck* module) {
@@ -1248,27 +1247,27 @@ struct TemporalDeckWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.0, 18.0)), module, TemporalDeck::BUFFER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(40.0, 18.0)), module, TemporalDeck::RATE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(62.0, 18.0)), module, TemporalDeck::MIX_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(84.0, 18.0)), module, TemporalDeck::FEEDBACK_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(32.0, 100.0)), module, TemporalDeck::FREEZE_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(50.8, 100.0)), module, TemporalDeck::REVERSE_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(69.0, 100.0)), module, TemporalDeck::SLIP_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8.408, 17.086)), module, TemporalDeck::BUFFER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module, TemporalDeck::FREEZE_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module, TemporalDeck::REVERSE_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module, TemporalDeck::SLIP_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.0, 72.0)), module, TemporalDeck::POSITION_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(89.0, 72.0)), module, TemporalDeck::RATE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(14.0, 118.0)), module, TemporalDeck::INPUT_L_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.0, 118.0)), module, TemporalDeck::INPUT_R_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(46.0, 118.0)), module, TemporalDeck::SCRATCH_GATE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.0, 118.0)), module, TemporalDeck::FREEZE_GATE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.465, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_L_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_R_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(37.703, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.1, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(78.0, 118.0)), module, TemporalDeck::OUTPUT_L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(94.0, 118.0)), module, TemporalDeck::OUTPUT_R_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.041, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.0, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(32.0, 94.2)), module, TemporalDeck::FREEZE_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(50.8, 94.2)), module, TemporalDeck::REVERSE_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.0, 94.2)), module, TemporalDeck::SLIP_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(62.1, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(50.2, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
 
 		Vec platterCenter = mm2px(Vec(50.8f, 72.f));
 		float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
