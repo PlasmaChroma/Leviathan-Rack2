@@ -396,8 +396,8 @@ struct TemporalDeckEngine {
 						}
 						lastPlatterGestureRevision = platterGestureRevision;
 					}
-					// A mouse-down with no new gesture is a true freeze, not a coast.
-					bool stationaryManualHold = !hasFreshPlatterGesture;
+					// A mouse-down with no recent platter motion is a true freeze, not a coast.
+					bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
 					if (stationaryManualHold) {
 						platterVelocity = 0.f;
 						readHead = prevReadHead;
@@ -405,8 +405,24 @@ struct TemporalDeckEngine {
 						scratchLagTargetSamples = scratchLagSamples;
 					}
 					else {
-						platterVelocity = 0.f;
-						scratchLagSamples = scratchLagTargetSamples;
+						// During active drag, chase the requested lag with a bounded step.
+						// This preserves stationary hold while removing zipper/click artifacts
+						// from event-rate target jumps.
+						float lagError = scratchLagTargetSamples - scratchLagSamples;
+						float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+						float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+						float lagStep = lagError * shapedFollow;
+						bool backwardScratch = lagError > 0.f;
+						float dynamicSoftLimit = clamp(
+							kScratchSoftLagStepMin
+								+ std::fabs(platterGestureVelocity) * 0.003f
+								+ std::fabs(lagError) * 0.08f,
+							kScratchSoftLagStepMin,
+							kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f)
+						);
+						lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
+						scratchLagSamples = clampLag(scratchLagSamples + lagStep, limit);
+						platterVelocity = lagStep;
 						readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 					}
 				}

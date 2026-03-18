@@ -25,7 +25,7 @@
      showgrid="false"
      inkscape:zoom="2.4576316"
      inkscape:cx="186.76517"
-     inkscape:cy="251.66505"
+     inkscape:cy="186.56173"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -123,14 +123,14 @@
        id="panel_buffer_display"
        inkscape:label="Buffer Display">
       <path
-         d="m 10.321945,53.996773 a 40.428081,40.42808 0 0 1 80.856109,0"
+         d="m 10.125045,53.978356 a 40.678809,40.714555 0 0 1 81.357566,0"
          fill="none"
          opacity="0.75"
          stroke="#7e50c7"
          stroke-linecap="round"
          stroke-width="6.15074"
          id="path1571"
-         style="display:inline;opacity:1;stroke:#5740bf;stroke-width:5.544;stroke-dasharray:none;stroke-opacity:1" />
+         style="display:inline;opacity:1;stroke:#5740bf;stroke-width:5.58084;stroke-dasharray:none;stroke-opacity:1" />
       <path
          d="m 17.8,62.099986 c 0,-18.225409 14.774604,-32.999993 33,-32.999993 18.225396,0 33,14.774577 33,32.999986"
          fill="none"
