@@ -407,10 +407,10 @@ struct TemporalDeckEngine {
 					else {
 						platterVelocity = 0.f;
 						scratchLagSamples = scratchLagTargetSamples;
-							readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
-						}
+						readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+					}
 				}
-			else {
+				else {
 				// Wheel scratch is immediate: apply delta directly to the target.
 				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDelta, limit);
 
@@ -1179,7 +1179,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll& e) {
 	float sampleRate = module->uiSampleRate.load();
 	float samplesPerNotch = sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale;
 	float lagDelta = scroll * samplesPerNotch;
-	float holdSeconds = module->slipLatched ? 0.09f : 0.02f;
+	float holdSeconds = module->slipLatched ? 0.16f : 0.03f;
 	int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
 	module->addPlatterWheelDelta(lagDelta, holdSamples);
