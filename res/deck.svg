@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="2.4576316"
-     inkscape:cx="186.76517"
-     inkscape:cy="186.56173"
+     inkscape:zoom="3.475616"
+     inkscape:cx="167.74005"
+     inkscape:cy="120.69803"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -98,14 +98,14 @@
        id="rect1529"
        style="fill:#000000;fill-opacity:1" />
     <path
-       d="M 8.5369379,17.056614 18.168629,25.78081"
+       d="m 8.5369379,17.056614 9.8267631,8.586218"
        stroke="url(#accentGrad)"
        stroke-width="0.350551"
        stroke-linecap="round"
        opacity="0.55"
        fill="none"
        id="rate_connector-8"
-       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
+       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-linecap:butt;stroke-dasharray:none;stroke-opacity:1"
        sodipodi:nodetypes="cc" />
     <rect
        fill="none"
@@ -123,14 +123,14 @@
        id="panel_buffer_display"
        inkscape:label="Buffer Display">
       <path
-         d="m 10.125045,53.978356 a 40.678809,40.714555 0 0 1 81.357566,0"
+         d="m 9.9639766,54.363096 a 40.831924,41.008194 0 0 1 81.6637964,0"
          fill="none"
          opacity="0.75"
          stroke="#7e50c7"
          stroke-linecap="round"
          stroke-width="6.15074"
          id="path1571"
-         style="display:inline;opacity:1;stroke:#5740bf;stroke-width:5.58084;stroke-dasharray:none;stroke-opacity:1" />
+         style="display:inline;opacity:0.33;fill:none;fill-opacity:1;stroke:#5740bf;stroke-width:5.61147;stroke-dasharray:none;stroke-opacity:1" />
       <path
          d="m 17.8,62.099986 c 0,-18.225409 14.774604,-32.999993 33,-32.999993 18.225396,0 33,14.774577 33,32.999986"
          fill="none"
@@ -153,7 +153,7 @@
        x="5.0387301"
        y="93.28196"
        id="rect1631"
-       style="stroke:none" />
+       style="stroke:none;fill:#553ec1;fill-opacity:1;opacity:0.33" />
     <path
        d="m 24.365339,98.898431 0.01805,14.120149"
        stroke="url(#accentGrad)"

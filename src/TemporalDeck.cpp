@@ -427,22 +427,41 @@ struct TemporalDeckEngine {
 					}
 				}
 				else {
-				// Wheel scratch is immediate: apply delta directly to the target.
-				scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDelta, limit);
+				// Wheel scratch accumulates target lag per scroll event, then glides
+				// toward that target with SLIP-like easing while wheel-hold is active.
+				float wheelDeltaSoftRange = sampleRate * 0.08f * kWheelScratchTravelScale;
+				float wheelDeltaShaped = wheelDeltaSoftRange
+					* std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
+				if (wheelDeltaShaped < 0.f) {
+					wheelDeltaShaped *= 1.3f;
+				}
+				// Rebase from current lag only when a new wheel event arrives to avoid
+				// directional drift without collapsing the target between events.
+				if (std::fabs(wheelDelta) > 1e-6f) {
+					scratchLagTargetSamples = clampLag(scratchLagSamples + wheelDeltaShaped, limit);
+				}
 
-				float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
-				float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
-				float lagStep = (scratchLagTargetSamples - scratchLagSamples) * shapedFollow;
-				float dynamicSoftLimit = clamp(
-					kScratchSoftLagStepMin + std::fabs(wheelDelta) * 0.35f + std::fabs(platterGestureVelocity) * 0.002f,
-					kScratchSoftLagStepMin,
-					kScratchSoftLagStepMax
-				);
-				lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
-					
-					scratchLagSamples += lagStep;
-					scratchLagSamples = clampLag(scratchLagSamples, limit);
-					readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+				float lagError = scratchLagTargetSamples - scratchLagSamples;
+				float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
+				float lagStep = lagError * alpha;
+
+				// Keep progression audible even for tiny alpha / small errors.
+				float minStep = 0.35f;
+				if (std::fabs(lagError) > minStep && std::fabs(lagStep) < minStep) {
+					lagStep = std::copysign(minStep, lagError);
+				}
+
+				// Symmetric glide cap in both directions to avoid directional bias.
+				float maxStep = kScratchSoftLagStepMax * 1.6f;
+				lagStep = clamp(lagStep, -maxStep, maxStep);
+
+				if (std::fabs(lagError) <= 0.5f) {
+					scratchLagSamples = scratchLagTargetSamples;
+				}
+				else {
+					scratchLagSamples = clampLag(scratchLagSamples + lagStep, limit);
+				}
+				readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
 				}
 					lastPlatterLagTarget = platterLagTarget;
 				}
@@ -973,17 +992,19 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs& args) {
 	nvgSave(args.vg);
 	float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
-	if (APP && APP->window && APP->window->uiFont) {
-		const char* mouseText = module->platterTouched.load() ? "mDown" : "mUp";
-		const char* motionText = module->platterMotionFreshSamples.load() > 0 ? "drag" : "still";
-		Vec debugPos = centerMm.plus(Vec(-platterRadiusPx * 0.92f, -platterRadiusPx * 0.98f));
+		if (APP && APP->window && APP->window->uiFont) {
+			/*
+			const char* mouseText = module->platterTouched.load() ? "mDown" : "mUp";
+			const char* motionText = module->platterMotionFreshSamples.load() > 0 ? "drag" : "still";
+			Vec debugPos = centerMm.plus(Vec(-platterRadiusPx * 0.92f, -platterRadiusPx * 0.98f));
 
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, 10.0f);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 210));
-		nvgText(args.vg, debugPos.x, debugPos.y, mouseText, nullptr);
-		nvgText(args.vg, debugPos.x, debugPos.y + 11.5f, motionText, nullptr);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 10.0f);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 210));
+			nvgText(args.vg, debugPos.x, debugPos.y, mouseText, nullptr);
+			nvgText(args.vg, debugPos.x, debugPos.y + 11.5f, motionText, nullptr);
+			*/
 
 		float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
 		char text[32];
