@@ -733,6 +733,21 @@ struct DeckRateQuantity : ParamQuantity {
   }
 };
 
+struct ScratchSensitivityQuantity : ParamQuantity {
+  static float sensitivityForValue(float v) {
+    if (v <= 0.5f) {
+      return rescale(v, 0.f, 0.5f, 0.5f, 1.f);
+    }
+    return rescale(v, 0.5f, 1.f, 1.f, 2.f);
+  }
+
+  std::string getDisplayValueString() override {
+    return string::f("%.2fx", sensitivityForValue(getValue()));
+  }
+
+  std::string getLabel() override { return "Scratch sensitivity"; }
+};
+
 struct TemporalDeck : Module {
   static constexpr float kUiPublishRateHz = 120.f;
   static constexpr float kUiPublishIntervalSec = 1.f / kUiPublishRateHz;
@@ -741,6 +756,7 @@ struct TemporalDeck : Module {
   enum ParamId {
     BUFFER_PARAM,
     RATE_PARAM,
+    SCRATCH_SENSITIVITY_PARAM,
     MIX_PARAM,
     FEEDBACK_PARAM,
     FREEZE_PARAM,
@@ -789,10 +805,17 @@ struct TemporalDeck : Module {
   float uiPublishTimerSec = 0.f;
   bool highQualityScratchInterpolation = true;
 
+  float scratchSensitivity() {
+    return ScratchSensitivityQuantity::sensitivityForValue(
+        params[SCRATCH_SENSITIVITY_PARAM].getValue());
+  }
+
   TemporalDeck() {
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
     configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 8.f);
     configParam<DeckRateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
+    configParam<ScratchSensitivityQuantity>(SCRATCH_SENSITIVITY_PARAM, 0.f, 1.f,
+                                            0.5f, "Scratch sensitivity");
     configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix");
     configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.f, "Feedback");
     configButton(FREEZE_PARAM, "Freeze");
@@ -1230,14 +1253,15 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local,
   localLagSamples = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
   float effectiveRadius = std::max(radius, deadZonePx);
   float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
+  float sensitivity = module->scratchSensitivity();
   float samplesPerRadian =
       60.f * module->uiSampleRate.load() /
       (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm) *
-      TemporalDeckEngine::kMouseScratchTravelScale;
+      TemporalDeckEngine::kMouseScratchTravelScale * sensitivity;
   float lagDelta = deltaAngle * samplesPerRadian * weight;
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
   float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) *
-                   module->uiSampleRate.load() * 0.0005f;
+                   module->uiSampleRate.load() * 0.0005f * sensitivity;
   if (deltaAngle < 0.f) {
     velocity *= -1.f;
   }
@@ -1292,7 +1316,8 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
 
   float sampleRate = module->uiSampleRate.load();
   float samplesPerNotch =
-      sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale;
+      sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale *
+      module->scratchSensitivity();
   float lagDelta = scroll * samplesPerNotch;
   float holdSeconds = module->slipLatched ? 0.16f : 0.03f;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
@@ -1440,6 +1465,10 @@ struct TemporalDeckWidget : ModuleWidget {
     platter->box.pos = platterCenter.minus(Vec(platterRadius, platterRadius));
     platter->box.size = Vec(platterRadius * 2.f, platterRadius * 2.f);
     addChild(platter);
+
+    addParam(createParamCentered<RoundBlackKnob>(
+        mm2px(Vec(18.5, 85.5)), module,
+        TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
   }
 
   void appendContextMenu(Menu *menu) override {
