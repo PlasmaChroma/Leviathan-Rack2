@@ -118,9 +118,12 @@ Two-stage return to NOW:
 
 ## Position CV Mode
 
-- Position CV can operate in absolute or offset mode.
-- Context menu option:
-  - `Position CV offset mode`
+- Position CV is absolute-only in this version.
+- Mapping is symmetric around `0V`:
+  - `0V` -> NOW
+  - `+10V` -> oldest reachable point
+  - `-10V` -> oldest reachable point
+  - `+5V` and `-5V` both map to 50% of accessible lag
 
 ## UI and Visuals
 
@@ -147,7 +150,6 @@ Persisted JSON fields:
 - `freezeLatched`
 - `reverseLatched`
 - `slipLatched`
-- `positionCvOffsetMode`
 
 ## Notable Current Caveats
 
