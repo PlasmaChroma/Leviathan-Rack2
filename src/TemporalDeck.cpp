@@ -836,6 +836,14 @@ struct TemporalDeckDisplayWidget : Widget {
   void draw(const DrawArgs &args) override;
 };
 
+struct TemporalDeckTonearmWidget : Widget {
+  TemporalDeck *module = nullptr;
+  Vec centerPx = mm2px(Vec(50.8f, 72.f));
+  float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
+
+  void draw(const DrawArgs &args) override;
+};
+
 struct TemporalDeckPlatterWidget : OpaqueWidget {
   TemporalDeck *module = nullptr;
   Vec centerPx = mm2px(Vec(50.8f, 72.f));
@@ -1261,6 +1269,99 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   nvgRestore(args.vg);
 }
 
+void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
+  nvgSave(args.vg);
+  Vec center = centerPx;
+  Vec armPivot =
+      center.plus(Vec(platterRadiusPx * 1.0f, platterRadiusPx * 0.72f));
+  Vec stylusTip =
+      center.plus(Vec(platterRadiusPx * 0.9f, platterRadiusPx * 0.04f));
+  float platterPhase = module ? module->uiPlatterAngle.load() : 0.f;
+  float wobbleAngle = 0.012f * std::sin(platterPhase * 0.31f)
+                    + 0.006f * std::sin(platterPhase * 0.77f + 0.8f);
+  auto rotateAroundPivot = [&](Vec p) {
+    Vec rel = p.minus(armPivot);
+    float c = std::cos(wobbleAngle);
+    float s = std::sin(wobbleAngle);
+    return armPivot.plus(Vec(rel.x * c - rel.y * s, rel.x * s + rel.y * c));
+  };
+  stylusTip = rotateAroundPivot(stylusTip);
+  Vec armDir = stylusTip.minus(armPivot);
+  float armLen = armDir.norm();
+  if (armLen > 1e-4f) {
+    armDir = armDir.div(armLen);
+    Vec armNormal(-armDir.y, armDir.x);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, armPivot.x, armPivot.y, mm2px(Vec(5.3f, 0.f)).x);
+    nvgFillColor(args.vg, nvgRGBA(28, 31, 36, 236));
+    nvgFill(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, armPivot.x, armPivot.y, mm2px(Vec(3.0f, 0.f)).x);
+    nvgFillColor(args.vg, nvgRGBA(142, 148, 156, 235));
+    nvgFill(args.vg);
+
+    Vec counterweight = armPivot.minus(armDir.mult(mm2px(Vec(4.2f, 0.f)).x));
+    nvgBeginPath(args.vg);
+    nvgRoundedRect(args.vg, counterweight.x - mm2px(Vec(2.2f, 0.f)).x,
+                   counterweight.y - mm2px(Vec(1.6f, 0.f)).x,
+                   mm2px(Vec(4.4f, 0.f)).x, mm2px(Vec(3.2f, 0.f)).x, 1.2f);
+    nvgFillColor(args.vg, nvgRGBA(74, 78, 86, 220));
+    nvgFill(args.vg);
+
+    Vec armStart = armPivot.plus(armDir.mult(mm2px(Vec(4.8f, 0.f)).x));
+    Vec armEnd = stylusTip.minus(armDir.mult(mm2px(Vec(6.2f, 0.f)).x));
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, armStart.x, armStart.y);
+    nvgLineTo(args.vg, armEnd.x, armEnd.y);
+    nvgStrokeColor(args.vg, nvgRGBA(196, 202, 209, 236));
+    nvgStrokeWidth(args.vg, 3.3f);
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, armStart.x, armStart.y);
+    nvgLineTo(args.vg, armEnd.x, armEnd.y);
+    nvgStrokeColor(args.vg, nvgRGBA(86, 90, 98, 176));
+    nvgStrokeWidth(args.vg, 1.0f);
+    nvgStroke(args.vg);
+
+    Vec elbow = armEnd.plus(armDir.mult(mm2px(Vec(1.9f, 0.f)).x));
+    Vec headshellFront = stylusTip.minus(armDir.mult(mm2px(Vec(1.4f, 0.f)).x));
+    Vec headshellA = elbow.plus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
+    Vec headshellB = elbow.minus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
+    Vec headshellC =
+        headshellFront.minus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
+    Vec headshellD =
+        headshellFront.plus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, headshellA.x, headshellA.y);
+    nvgLineTo(args.vg, headshellD.x, headshellD.y);
+    nvgLineTo(args.vg, headshellC.x, headshellC.y);
+    nvgLineTo(args.vg, headshellB.x, headshellB.y);
+    nvgClosePath(args.vg);
+    nvgFillColor(args.vg, nvgRGBA(206, 172, 86, 226));
+    nvgFill(args.vg);
+
+    Vec cartBack = headshellFront.minus(armDir.mult(mm2px(Vec(0.6f, 0.f)).x));
+    Vec cartFront = cartBack.plus(armDir.mult(mm2px(Vec(3.3f, 0.f)).x));
+    Vec cartA = cartBack.plus(armNormal.mult(mm2px(Vec(1.55f, 0.f)).x));
+    Vec cartB = cartBack.minus(armNormal.mult(mm2px(Vec(1.55f, 0.f)).x));
+    Vec cartC = cartFront.minus(armNormal.mult(mm2px(Vec(1.35f, 0.f)).x));
+    Vec cartD = cartFront.plus(armNormal.mult(mm2px(Vec(1.35f, 0.f)).x));
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, cartA.x, cartA.y);
+    nvgLineTo(args.vg, cartD.x, cartD.y);
+    nvgLineTo(args.vg, cartC.x, cartC.y);
+    nvgLineTo(args.vg, cartB.x, cartB.y);
+    nvgClosePath(args.vg);
+    nvgFillColor(args.vg, nvgRGBA(46, 49, 56, 238));
+    nvgFill(args.vg);
+
+  }
+  nvgRestore(args.vg);
+}
+
 void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   float rotation = module ? module->uiPlatterAngle.load() : 0.f;
@@ -1612,6 +1713,14 @@ struct TemporalDeckWidget : ModuleWidget {
     platter->box.pos = platterCenter.minus(Vec(platterRadius, platterRadius));
     platter->box.size = Vec(platterRadius * 2.f, platterRadius * 2.f);
     addChild(platter);
+
+    auto *tonearm = new TemporalDeckTonearmWidget;
+    tonearm->module = module;
+    tonearm->centerPx = platterCenter;
+    tonearm->platterRadiusPx = platterRadius;
+    tonearm->box.pos = Vec(0.f, 0.f);
+    tonearm->box.size = box.size;
+    addChild(tonearm);
 
     addParam(createParamCentered<RoundBlackKnob>(
         mm2px(Vec(18.5, 85.5)), module,
