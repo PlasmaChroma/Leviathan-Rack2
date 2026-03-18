@@ -130,7 +130,7 @@ struct TemporalDeckEngine {
 	bool reverseState = false;
 	bool slipState = false;
 	bool positionCvOffsetMode = false;
-	bool highQualityScratchInterpolation = false;
+	bool highQualityScratchInterpolation = true;
 	bool scratchActive = false;
 	bool slipReturning = false;
 	bool slipFinalCatchActive = false;
@@ -180,9 +180,10 @@ struct TemporalDeckEngine {
 
 	static float baseSpeedFromKnob(float rateKnob) {
 		rateKnob = clamp(rateKnob, 0.f, 1.f);
+		// Knob-only range is 0.5x .. 2.0x, centered at 1.0x.
 		if (rateKnob < 0.5f) {
 			float t = rateKnob / 0.5f;
-			return -2.f + t * 3.f;
+			return 0.5f + t * 0.5f;
 		}
 		float t = (rateKnob - 0.5f) / 0.5f;
 		return 1.f + t;
@@ -429,11 +430,11 @@ struct TemporalDeckEngine {
 				else {
 				// Wheel scratch accumulates target lag per scroll event, then glides
 				// toward that target with SLIP-like easing while wheel-hold is active.
-				float wheelDeltaSoftRange = sampleRate * 0.08f * kWheelScratchTravelScale;
+				float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
 				float wheelDeltaShaped = wheelDeltaSoftRange
 					* std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
 				if (wheelDeltaShaped < 0.f) {
-					wheelDeltaShaped *= 1.3f;
+					wheelDeltaShaped *= 1.5f;
 				}
 				// Rebase from current lag only when a new wheel event arrives to avoid
 				// directional drift without collapsing the target between events.
@@ -690,7 +691,8 @@ struct TemporalDeck : Module {
 		REVERSE_LIGHT,
 		SLIP_LIGHT,
 		ARC_LIGHT_START,
-		LIGHTS_LEN = ARC_LIGHT_START + kArcLightCount
+		ARC_MAX_LIGHT_START = ARC_LIGHT_START + kArcLightCount,
+		LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount
 	};
 
 	TemporalDeckEngine engine;
@@ -749,6 +751,7 @@ struct TemporalDeck : Module {
 		platterMotionFreshSamples.store(0);
 		for (int i = 0; i < kArcLightCount; ++i) {
 			lights[ARC_LIGHT_START + i].setBrightness(0.f);
+			lights[ARC_MAX_LIGHT_START + i].setBrightness(0.f);
 		}
 	}
 
@@ -885,10 +888,10 @@ struct TemporalDeck : Module {
 			float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
 			float lagLed = lagRatio * float(kArcLightCount - 1);
 			float limitLed = limitRatio * float(kArcLightCount - 1);
-			for (int i = 0; i < kArcLightCount; ++i) {
-				float brightness = 0.f;
-				if (i == 0) {
-					brightness = clamp(lagLed, 0.f, 1.f);
+				for (int i = 0; i < kArcLightCount; ++i) {
+					float brightness = 0.f;
+					if (i == 0) {
+						brightness = clamp(lagLed, 0.f, 1.f);
 				}
 				else {
 					brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
@@ -896,13 +899,15 @@ struct TemporalDeck : Module {
 				if (limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f) {
 					brightness = std::max(brightness, 0.28f);
 				}
-				if (float(i) > limitLed + 0.5f) {
-					brightness = 0.f;
+					if (float(i) > limitLed + 0.5f) {
+						brightness = 0.f;
+					}
+					lights[ARC_LIGHT_START + i].setBrightness(brightness);
+					bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
+					lights[ARC_MAX_LIGHT_START + i].setBrightness(isLimitLed ? 1.f : 0.f);
 				}
-				lights[ARC_LIGHT_START + i].setBrightness(brightness);
 			}
 		}
-	}
 
 	void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
 		platterTouched.store(touched);
@@ -1294,8 +1299,8 @@ struct TemporalDeckWidget : ModuleWidget {
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.465, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_L_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_R_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(37.703, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.1, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
 
@@ -1311,12 +1316,13 @@ struct TemporalDeckWidget : ModuleWidget {
 		loadPlatterAnchor(platterCenter, platterRadius);
 
 		float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
-		for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-			float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
-			float angle = -float(M_PI) * t;
-			Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
-			addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
-		}
+			for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+				float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
+				float angle = -float(M_PI) * t;
+				Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
+				addChild(createLightCentered<MediumLight<RedLight>>(ledPos, module, TemporalDeck::ARC_MAX_LIGHT_START + i));
+				addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
+			}
 
 		auto display = new TemporalDeckDisplayWidget();
 		display->module = module;
