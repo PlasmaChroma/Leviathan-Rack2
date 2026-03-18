@@ -41,7 +41,8 @@ This document describes the **currently implemented** behavior in `src/TemporalD
 - Internal buffer size is `sampleRate * 8` samples.
 - `writeHead` is next-write index.
 - "NOW" is treated as **newest readable sample** (`writeHead - 1` wrapped).
-- Read path uses cubic interpolation (`readCubic`).
+- Normal transport uses cubic interpolation (`readCubic`).
+- Scratch/position-follow uses a higher-quality 6-point interpolation path when `High-quality scratch interpolation` is enabled; otherwise it falls back to linear for that path.
 - Default transport speed is from a mapped rate law (`baseSpeedFromKnob`) plus rate CV.
 
 ## Rate Mapping
@@ -166,4 +167,3 @@ Persisted JSON fields:
 - `kWheelScratchTravelScale = 4.5`
 - `kUiPublishRateHz = 120`
 - `kNominalPlatterRpm = 33.333333`
-

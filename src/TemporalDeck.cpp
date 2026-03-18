@@ -7,6 +7,7 @@
 #include <limits>
 #include <regex>
 #include <sstream>
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -71,6 +72,22 @@ struct TemporalDeckBuffer {
 		return ((a0 * t + a1) * t + a2) * t + a3;
 	}
 
+	static float lagrange6Sample(const std::array<float, 6>& y, float t) {
+		static constexpr float kNodes[6] = {-2.f, -1.f, 0.f, 1.f, 2.f, 3.f};
+		float sum = 0.f;
+		for (int j = 0; j < 6; ++j) {
+			float weight = 1.f;
+			for (int m = 0; m < 6; ++m) {
+				if (m == j) {
+					continue;
+				}
+				weight *= (t - kNodes[m]) / (kNodes[j] - kNodes[m]);
+			}
+			sum += y[j] * weight;
+		}
+		return sum;
+	}
+
 	std::pair<float, float> readCubic(float pos) const {
 		if (size <= 0 || filled <= 0) {
 			return {0.f, 0.f};
@@ -98,6 +115,30 @@ struct TemporalDeckBuffer {
 		return {
 			crossfade(left[i0], left[i1], t),
 			crossfade(right[i0], right[i1], t)
+		};
+	}
+
+	std::pair<float, float> readHighQuality(float pos) const {
+		if (size <= 0 || filled <= 0) {
+			return {0.f, 0.f};
+		}
+		pos = wrapPosition(pos);
+		int i2 = int(std::floor(pos));
+		float t = pos - float(i2);
+		int i0 = wrapIndex(i2 - 2);
+		int i1 = wrapIndex(i2 - 1);
+		int i3 = wrapIndex(i2 + 1);
+		int i4 = wrapIndex(i2 + 2);
+		int i5 = wrapIndex(i2 + 3);
+		std::array<float, 6> l = {
+			left[i0], left[i1], left[i2], left[i3], left[i4], left[i5]
+		};
+		std::array<float, 6> r = {
+			right[i0], right[i1], right[i2], right[i3], right[i4], right[i5]
+		};
+		return {
+			lagrange6Sample(l, t),
+			lagrange6Sample(r, t)
 		};
 	}
 };
@@ -626,8 +667,13 @@ struct TemporalDeckEngine {
 		bool holdAtReverseEdge = reverseAtOldestEdge;
 		bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
-		bool useLinearInterpolation = !highQualityScratchInterpolation && (anyScratch || positionFollow);
-		auto wet = useLinearInterpolation ? buffer.readLinear(readHead) : buffer.readCubic(readHead);
+			bool scratchReadPath = anyScratch || positionFollow;
+			bool useLinearInterpolation = !highQualityScratchInterpolation && scratchReadPath;
+			auto wet = useLinearInterpolation
+				? buffer.readLinear(readHead)
+				: (highQualityScratchInterpolation && scratchReadPath)
+					? buffer.readHighQuality(readHead)
+					: buffer.readCubic(readHead);
 		float mix = clamp(mixKnob, 0.f, 1.f);
 		float outL = inL * (1.f - mix) + wet.first * mix;
 		float outR = inR * (1.f - mix) + wet.second * mix;
@@ -773,7 +819,7 @@ struct TemporalDeck : Module {
 	std::atomic<float> uiPlatterAngle {0.f};
 	float uiPublishTimerSec = 0.f;
 	bool positionCvOffsetMode = false;
-	bool highQualityScratchInterpolation = false;
+	bool highQualityScratchInterpolation = true;
 
 	TemporalDeck() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
