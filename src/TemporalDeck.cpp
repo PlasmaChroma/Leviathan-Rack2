@@ -155,6 +155,58 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
+  enum CartridgeCharacter {
+    CARTRIDGE_CLEAN,
+    CARTRIDGE_CLASSIC,
+    CARTRIDGE_BATTLE,
+    CARTRIDGE_LOFI,
+    CARTRIDGE_COUNT
+  };
+
+  struct OnePoleState {
+    float z = 0.f;
+
+    void reset() { z = 0.f; }
+
+    float lowpass(float in, float coeff) {
+      z += coeff * (in - z);
+      return z;
+    }
+  };
+
+  struct CartridgeChannelState {
+    OnePoleState rumble;
+    OnePoleState body;
+    OnePoleState air;
+
+    void reset() {
+      rumble.reset();
+      body.reset();
+      air.reset();
+    }
+  };
+
+  struct CartridgeParams {
+    float hpHz = 0.f;
+    float bodyHz = 0.f;
+    float lpHz = 0.f;
+    float lpMotionHz = 0.f;
+    float bodyGain = 0.f;
+    float presenceGain = 0.f;
+    float crossfeed = 0.f;
+    float drive = 1.f;
+    float stereoTilt = 0.f;
+
+    CartridgeParams() {}
+
+    CartridgeParams(float hpHz, float bodyHz, float lpHz, float lpMotionHz,
+                    float bodyGain, float presenceGain, float crossfeed,
+                    float drive, float stereoTilt)
+        : hpHz(hpHz), bodyHz(bodyHz), lpHz(lpHz), lpMotionHz(lpMotionHz),
+          bodyGain(bodyGain), presenceGain(presenceGain),
+          crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt) {}
+  };
+
   TemporalDeckBuffer buffer;
   float sampleRate = 44100.f;
   float readHead = 0.f;
@@ -178,6 +230,9 @@ struct TemporalDeckEngine {
   float filteredManualLagTargetSamples = 0.f;
   float lastPlatterLagTarget = 0.f;
   uint32_t lastPlatterGestureRevision = 0;
+  int cartridgeCharacter = CARTRIDGE_CLEAN;
+  CartridgeChannelState cartridgeLeft;
+  CartridgeChannelState cartridgeRight;
 
   void reset(float sr) {
     sampleRate = sr;
@@ -198,6 +253,8 @@ struct TemporalDeckEngine {
     scratchLagTargetSamples = 0.f;
     filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
+    cartridgeLeft.reset();
+    cartridgeRight.reset();
   }
 
   float maxLagFromKnob(float knob) const {
@@ -236,6 +293,75 @@ struct TemporalDeckEngine {
   float lagForPositionCv(float cv, float limit) const {
     float normalized = clamp(std::fabs(cv) / 10.f, 0.f, 1.f);
     return normalized * limit;
+  }
+
+  float onePoleCoeff(float hz) const {
+    hz = clamp(hz, 0.f, sampleRate * 0.45f);
+    if (hz <= 0.f) {
+      return 0.f;
+    }
+    return 1.f - std::exp(-2.f * float(M_PI) * hz / std::max(sampleRate, 1.f));
+  }
+
+  static CartridgeParams paramsForCartridge(int mode) {
+    switch (mode) {
+    case CARTRIDGE_CLASSIC:
+      return {35.f, 1600.f, 12500.f, 11800.f, 0.10f, 0.08f, 0.025f, 1.03f,
+              0.02f};
+    case CARTRIDGE_BATTLE:
+      return {55.f, 1900.f, 14500.f, 9200.f, 0.03f, 0.20f, 0.015f, 1.08f,
+              0.03f};
+    case CARTRIDGE_LOFI:
+      return {90.f, 1250.f, 6800.f, 3800.f, 0.22f, -0.10f, 0.05f, 1.18f,
+              0.08f};
+    case CARTRIDGE_CLEAN:
+    default:
+      return {};
+    }
+  }
+
+  std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in,
+                                                  float motionAmount) {
+    if (cartridgeCharacter == CARTRIDGE_CLEAN) {
+      return in;
+    }
+
+    const CartridgeParams p = paramsForCartridge(cartridgeCharacter);
+    motionAmount = clamp(motionAmount, 0.f, 1.f);
+
+    float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * motionAmount;
+    float lpHzL = lpHz * (1.f - p.stereoTilt);
+    float lpHzR = lpHz * (1.f + p.stereoTilt);
+    float hpCoeff = onePoleCoeff(p.hpHz);
+    float bodyCoeff = onePoleCoeff(p.bodyHz);
+    float lpCoeffL = onePoleCoeff(lpHzL);
+    float lpCoeffR = onePoleCoeff(lpHzR);
+
+    auto processChannel = [&](float x, CartridgeChannelState& state,
+                              float lpCoeff) {
+      float rumble = state.rumble.lowpass(x, hpCoeff);
+      float hp = x - rumble;
+      float body = state.body.lowpass(hp, bodyCoeff);
+      float air = state.air.lowpass(hp, lpCoeff);
+      float presence = air - body;
+      float voiced = air + p.bodyGain * body + p.presenceGain * presence;
+      if (p.drive > 1.f) {
+        float norm = std::tanh(p.drive);
+        voiced = std::tanh(voiced * p.drive) / std::max(norm, 1e-6f);
+      }
+      return voiced;
+    };
+
+    float left = processChannel(in.first, cartridgeLeft, lpCoeffL);
+    float right = processChannel(in.second, cartridgeRight, lpCoeffR);
+    float xfeed = clamp(p.crossfeed, 0.f, 0.45f);
+    if (xfeed > 0.f) {
+      float mixedL = left * (1.f - xfeed) + right * xfeed;
+      float mixedR = right * (1.f - xfeed) + left * xfeed;
+      left = mixedL;
+      right = mixedR;
+    }
+    return {left, right};
   }
 
   float currentLag() const {
@@ -648,10 +774,22 @@ struct TemporalDeckEngine {
     bool scratchReadPath = anyScratch || positionFollow;
     bool useLinearInterpolation =
         !highQualityScratchInterpolation && scratchReadPath;
+    float readDeltaForTone = readHead - prevReadHead;
+    if (buffer.size > 0) {
+      float halfSize = float(buffer.size) * 0.5f;
+      if (readDeltaForTone > halfSize) {
+        readDeltaForTone -= float(buffer.size);
+      }
+      if (readDeltaForTone < -halfSize) {
+        readDeltaForTone += float(buffer.size);
+      }
+    }
+    float motionAmount = clamp((std::fabs(readDeltaForTone) - 1.f) / 3.f, 0.f, 1.f);
     auto wet = useLinearInterpolation ? buffer.readLinear(readHead)
                : (highQualityScratchInterpolation && scratchReadPath)
                    ? buffer.readHighQuality(readHead)
                    : buffer.readCubic(readHead);
+    wet = applyCartridgeCharacter(wet, motionAmount);
     float mix = clamp(mixKnob, 0.f, 1.f);
     float outL = inL * (1.f - mix) + wet.first * mix;
     float outR = inR * (1.f - mix) + wet.second * mix;
@@ -804,6 +942,7 @@ struct TemporalDeck : Module {
   std::atomic<float> uiPlatterAngle{0.f};
   float uiPublishTimerSec = 0.f;
   bool highQualityScratchInterpolation = true;
+  int cartridgeCharacter = TemporalDeckEngine::CARTRIDGE_CLEAN;
 
   float scratchSensitivity() {
     return ScratchSensitivityQuantity::sensitivityForValue(
@@ -855,6 +994,8 @@ struct TemporalDeck : Module {
     json_object_set_new(root, "slipLatched", json_boolean(slipLatched));
     json_object_set_new(root, "highQualityScratchInterpolation",
                         json_boolean(highQualityScratchInterpolation));
+    json_object_set_new(root, "cartridgeCharacter",
+                        json_integer(cartridgeCharacter));
     return root;
   }
 
@@ -867,6 +1008,7 @@ struct TemporalDeck : Module {
     json_t *slipJ = json_object_get(root, "slipLatched");
     json_t *scratchInterpJ =
         json_object_get(root, "highQualityScratchInterpolation");
+    json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
     if (freezeJ) {
       freezeLatched = json_boolean_value(freezeJ);
     }
@@ -878,6 +1020,10 @@ struct TemporalDeck : Module {
     }
     if (scratchInterpJ) {
       highQualityScratchInterpolation = json_boolean_value(scratchInterpJ);
+    }
+    if (cartridgeJ) {
+      cartridgeCharacter = clamp((int) json_integer_value(cartridgeJ), 0,
+                                 TemporalDeckEngine::CARTRIDGE_COUNT - 1);
     }
   }
 
@@ -919,6 +1065,7 @@ struct TemporalDeck : Module {
     float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
     engine.highQualityScratchInterpolation = highQualityScratchInterpolation;
+    engine.cartridgeCharacter = cartridgeCharacter;
     int scratchHold = platterScratchHoldSamples.load();
     bool wheelScratchHeld = scratchHold > 0;
     if (wheelScratchHeld) {
@@ -1475,6 +1622,10 @@ struct TemporalDeckWidget : ModuleWidget {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
     assert(menu);
     menu->addChild(new MenuSeparator());
+    menu->addChild(createIndexPtrSubmenuItem(
+        "Cartridge character",
+        {"Clean", "Classic", "Battle", "Lo-Fi"},
+        module ? &module->cartridgeCharacter : nullptr));
     menu->addChild(createBoolPtrMenuItem(
         "High-quality scratch interpolation", "",
         module ? &module->highQualityScratchInterpolation : nullptr));
