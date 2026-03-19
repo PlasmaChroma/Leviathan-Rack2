@@ -390,6 +390,8 @@ struct TemporalDeckEngine {
     if (cachedCartridgeCharacter == cartridgeCharacter) {
       return;
     }
+    // Cartridge mode changes are infrequent; cache derived values so the
+    // per-sample path avoids repeated parameter/coeff recomputation.
     cachedCartridgeCharacter = cartridgeCharacter;
     cachedCartridgeParams = paramsForCartridge(cartridgeCharacter);
     cachedHpCoeff = onePoleCoeff(cachedCartridgeParams.hpHz);
@@ -416,6 +418,7 @@ struct TemporalDeckEngine {
     const CartridgeParams &p = cachedCartridgeParams;
     motionAmount = clamp(motionAmount, 0.f, 1.f);
 
+    // Motion amount modulates LP corner for "stylus under motion" dulling.
     float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * motionAmount;
     float lpCoeff = onePoleCoeff(lpHz);
 
@@ -435,6 +438,7 @@ struct TemporalDeckEngine {
     float left = processChannel(in.first, cartridgeLeft, lpCoeff);
     float right = processChannel(in.second, cartridgeRight, lpCoeff);
     if (p.stereoTilt != 0.f) {
+      // Lightweight stereo mismatch emulation (channel imbalance/azimuth-ish).
       float tilt = clamp(p.stereoTilt, -0.2f, 0.2f);
       left *= 1.f - tilt * 0.5f;
       right *= 1.f + tilt * 0.5f;
@@ -462,6 +466,7 @@ struct TemporalDeckEngine {
       if (lofiFlutterPhase > kTau)
         lofiFlutterPhase -= kTau;
 
+      // Sum of slow wow + quicker flutter components (deterministic, low cost).
       float wowFlutter = 0.0064f * std::sin(lofiWowPhaseA) + 0.0041f * std::sin(lofiWowPhaseB + 0.7f) +
                          0.0022f * std::sin(lofiFlutterPhase + 1.4f);
       float wearTilt = 1.f + wowFlutter;
@@ -758,6 +763,8 @@ struct TemporalDeckEngine {
           float baseLag = wheelDeltaShaped < 0.f ? std::min(scratchLagSamples, scratchLagTargetSamples)
                                                  : std::max(scratchLagSamples, scratchLagTargetSamples);
           scratchLagTargetSamples = clampLag(baseLag + wheelDeltaShaped, limit);
+          // Near-zero snap keeps repeated forward wheel strokes from "hovering"
+          // just above NOW due to smoothing/integration tails.
           float wheelNowSnapThreshold = sampleRate * 0.012f;
           if (scratchLagTargetSamples < wheelNowSnapThreshold) {
             scratchLagTargetSamples = 0.f;
@@ -918,6 +925,7 @@ struct TemporalDeckEngine {
       if (deltaSign != 0) {
         prevScratchDeltaSign = deltaSign;
       }
+      // Derive transient from real signal edge change, not synthetic impulse.
       float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
       float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
       float transientBase = wheelScratch ? 0.06f : (manualTouchScratch ? 0.14f : 0.30f);
