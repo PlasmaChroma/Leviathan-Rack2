@@ -366,11 +366,11 @@ struct TemporalDeckEngine {
   static float makeupGainForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_VINTAGE:
-      return 1.08f;
+      return 1.24f;
     case CARTRIDGE_BATTLE:
-      return 1.10f;
+      return 1.28f;
     case CARTRIDGE_LOFI:
-      return 1.16f;
+      return 1.36f;
     case CARTRIDGE_CLEAN:
     default:
       return 1.f;
