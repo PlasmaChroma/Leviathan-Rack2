@@ -163,6 +163,7 @@ struct TemporalDeckEngine {
   static constexpr float kNowCatchTime = 0.004f;
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
+  static constexpr float kManualVelocityPredictScale = 0.95f;
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
@@ -669,6 +670,11 @@ struct TemporalDeckEngine {
             startNowCatch(std::max(scratchLagSamples, scratchLagTargetSamples));
           }
           lastPlatterGestureRevision = platterGestureRevision;
+        } else if (platterMotionActive) {
+          // UI drag events are sparse versus audio rate. Predict target drift
+          // between events so slow manual reverse feels continuous, not stepped.
+          float predictedDelta = -platterGestureVelocity * dt * kManualVelocityPredictScale;
+          scratchLagTargetSamples = clampLag(scratchLagTargetSamples + predictedDelta, limit);
         }
         // A mouse-down with no recent platter motion is a true freeze, not a
         // coast.
@@ -890,7 +896,8 @@ struct TemporalDeckEngine {
         prevScratchDeltaSign = deltaSign;
       }
       float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
-      float transient = detailMid * (0.42f * scratchFlipTransientEnv);
+      float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
+      float transient = detailMid * (0.42f * scratchFlipTransientEnv * transientMotion);
       wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
       wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
       scratchFlipTransientEnv *= 0.968f;
@@ -928,7 +935,14 @@ struct TemporalDeckEngine {
       if (readDelta < -halfSize) {
         readDelta += float(buffer.size);
       }
-      platterPhase += readDelta * platterRadiansPerSample();
+      float visualDelta = readDelta;
+      bool normalTransportVisual = !anyScratch && !positionFollow && !slipReturning;
+      if (normalTransportVisual) {
+        // Keep platter animation responsive to RATE even when readHead is near
+        // NOW and constrained by buffer causality.
+        visualDelta = speed;
+      }
+      platterPhase += visualDelta * platterRadiansPerSample();
     }
 
     result.outL = outL;
