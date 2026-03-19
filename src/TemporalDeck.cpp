@@ -164,6 +164,8 @@ struct TemporalDeckEngine {
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
   static constexpr float kManualVelocityPredictScale = 0.95f;
+  static constexpr float kScratchInertiaFollowHz = 950.f;
+  static constexpr float kScratchInertiaDampingHz = 380.f;
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
@@ -353,10 +355,11 @@ struct TemporalDeckEngine {
       // Vintage (audiophile): extended bandwidth, low distortion, subtle warmth.
       return {24.f, 1450.f, 17800.f, 16800.f, 0.08f, 0.03f, 0.006f, 1.015f, 0.01f};
     case CARTRIDGE_BATTLE:
-      // Battle: heavier low-end rumble with forward cut presence.
-      return {16.f, 1200.f, 14200.f, 9000.f, 0.18f, 0.17f, 0.015f, 1.11f, 0.03f};
+      // Battle: weighted low-end with cleaner top and less lo-fi smear.
+      return {22.f, 1050.f, 17000.f, 14200.f, 0.12f, 0.12f, 0.006f, 1.045f, 0.015f};
     case CARTRIDGE_LOFI:
-      return {90.f, 1250.f, 6800.f, 3800.f, 0.22f, -0.10f, 0.05f, 1.18f, 0.08f};
+      // Lo-Fi: intentionally veiled, smeared, and dirty.
+      return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
     case CARTRIDGE_CLEAN:
     default:
       return {};
@@ -459,12 +462,12 @@ struct TemporalDeckEngine {
       if (lofiFlutterPhase > kTau)
         lofiFlutterPhase -= kTau;
 
-      float wowFlutter = 0.0042f * std::sin(lofiWowPhaseA) + 0.0026f * std::sin(lofiWowPhaseB + 0.7f) +
-                         0.0012f * std::sin(lofiFlutterPhase + 1.4f);
+      float wowFlutter = 0.0064f * std::sin(lofiWowPhaseA) + 0.0041f * std::sin(lofiWowPhaseB + 0.7f) +
+                         0.0022f * std::sin(lofiFlutterPhase + 1.4f);
       float wearTilt = 1.f + wowFlutter;
 
       // Semi-worn character: gentle high smearing + channel mismatch.
-      float lofiBlend = clamp(0.18f + motionAmount * 0.24f, 0.f, 0.48f);
+      float lofiBlend = clamp(0.28f + motionAmount * 0.34f, 0.f, 0.68f);
       float mono = 0.5f * (left + right);
       left = left * (1.f - lofiBlend) + mono * lofiBlend * (1.01f + 0.35f * wowFlutter);
       right = right * (1.f - lofiBlend) + mono * lofiBlend * (0.99f - 0.30f * wowFlutter);
@@ -472,18 +475,18 @@ struct TemporalDeckEngine {
       right *= (0.995f - 0.009f * wearTilt);
 
       // Light vinyl bed noise.
-      float hissBase = 0.0014f + 0.0008f * motionAmount;
+      float hissBase = 0.0024f + 0.0018f * motionAmount;
       float hissL = hissBase * lofiRandSigned();
       float hissR = hissBase * lofiRandSigned();
 
       // Occasional tiny crackle pops, slightly more frequent during motion.
-      float crackleChance = 0.000045f + 0.00011f * motionAmount;
+      float crackleChance = 0.00009f + 0.00020f * motionAmount;
       if (lofiRandUnit() < crackleChance) {
         lofiCrackleEnv = std::max(lofiCrackleEnv, 0.45f + 0.55f * lofiRandUnit());
         lofiCracklePolarity = lofiRandSigned() >= 0.f ? 1.f : -1.f;
       }
-      float crackle = lofiCracklePolarity * lofiCrackleEnv * (0.0065f + 0.005f * motionAmount);
-      lofiCrackleEnv *= 0.89f;
+      float crackle = lofiCracklePolarity * lofiCrackleEnv * (0.010f + 0.008f * motionAmount);
+      lofiCrackleEnv *= 0.87f;
 
       left += hissL + crackle;
       right += hissR + crackle * 0.94f;
@@ -712,12 +715,20 @@ struct TemporalDeckEngine {
             float adaptiveFollowTime = kScratchFollowTime * (1.15f - 0.75f * motionNorm);
             float followProgress = clamp(dt / std::max(adaptiveFollowTime, 1e-6f), 0.f, 1.f);
             float shapedFollow = followProgress * (2.f - followProgress);
-            float lagStep = lagError * shapedFollow;
+            float targetStep = lagError * shapedFollow;
             bool backwardScratch = lagError > 0.f;
             float dynamicSoftLimit =
               clamp(kScratchSoftLagStepMin + std::fabs(platterGestureVelocity) * 0.003f + std::fabs(lagError) * 0.08f,
                     kScratchSoftLagStepMin,
                     kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f) * (1.f + 0.45f * motionNorm));
+
+            // Lightweight inertia model: chase target step with a damped velocity
+            // state so manual scratch movement has weight and less zipper edge.
+            float followAlpha = clamp(dt * kScratchInertiaFollowHz, 0.f, 1.f);
+            float damping = clamp(1.f - dt * kScratchInertiaDampingHz, 0.f, 1.f);
+            platterVelocity = platterVelocity * damping + (targetStep - platterVelocity) * followAlpha;
+            float lagStep = crossfade(targetStep, platterVelocity, kInertiaBlend);
+
             lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
             if (backwardScratch && velMag > kReverseBiteVelocityThreshold) {
               float biteT =
@@ -758,7 +769,7 @@ struct TemporalDeckEngine {
         float wheelFollowTime = movingTowardNow ? (kSlipReturnTime * 0.5f) : kSlipReturnTime;
         float wheelMotionNorm =
           clamp(std::fabs(wheelDeltaShaped) / std::max(sampleRate * 0.01f * kWheelScratchTravelScale, 1e-6f), 0.f, 1.f);
-        wheelFollowTime *= (1.f - 0.65f * wheelMotionNorm);
+        wheelFollowTime *= (1.f - 0.35f * wheelMotionNorm);
         float alpha = dt / std::max(wheelFollowTime, 1e-6f);
         float lagStep = lagError * alpha;
 
@@ -769,7 +780,7 @@ struct TemporalDeckEngine {
         }
 
         // Symmetric glide cap in both directions to avoid directional bias.
-        float maxStep = kScratchSoftLagStepMax * 1.6f;
+        float maxStep = kScratchSoftLagStepMax * (0.9f + 0.45f * wheelMotionNorm);
         lagStep = clamp(lagStep, -maxStep, maxStep);
 
         if (std::fabs(lagError) <= 0.5f) {
@@ -909,7 +920,8 @@ struct TemporalDeckEngine {
       }
       float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
       float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
-      float transient = detailMid * (0.30f * scratchFlipTransientEnv * transientMotion);
+      float transientBase = wheelScratch ? 0.06f : (manualTouchScratch ? 0.14f : 0.30f);
+      float transient = detailMid * (transientBase * scratchFlipTransientEnv * transientMotion);
       wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
       wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
       scratchFlipTransientEnv *= 0.968f;
@@ -934,9 +946,18 @@ struct TemporalDeckEngine {
       }
 
       float microStepAmt = clamp((1.1f - std::fabs(readDeltaForTone)) / 1.1f, 0.f, 1.f);
-      float deClickAmt = manualScratch ? (0.38f * microStepAmt) : (0.22f * microStepAmt);
+      float deClickAmt = wheelScratch ? (0.48f * microStepAmt) : (manualTouchScratch ? (0.38f * microStepAmt) : (0.22f * microStepAmt));
       wet.first = crossfade(wet.first, prevScratchOutL, deClickAmt);
       wet.second = crossfade(wet.second, prevScratchOutR, deClickAmt);
+
+      // Manual glides can still sound "needle-grindy" from fast micro-edge
+      // changes; add a tiny adaptive smoothing layer only in manual mode.
+      if (manualScratch) {
+        float grindAmt = clamp((1.55f - std::fabs(readDeltaForTone)) / 1.55f, 0.f, 1.f);
+        float smoothAmt = 0.16f * grindAmt;
+        wet.first = crossfade(wet.first, prevWetL, smoothAmt);
+        wet.second = crossfade(wet.second, prevWetR, smoothAmt);
+      }
     } else {
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
