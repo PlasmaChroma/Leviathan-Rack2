@@ -28,6 +28,16 @@ static const char *cartridgeLabel(int index) {
   }
 }
 
+static const char *scratchModelLabel(int index) {
+  switch (index) {
+  case 1:
+    return "Hybrid";
+  case 0:
+  default:
+    return "Legacy";
+  }
+}
+
 struct TemporalDeckBuffer {
   std::vector<float> left;
   std::vector<float> right;
@@ -164,12 +174,20 @@ struct TemporalDeckEngine {
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
   static constexpr float kManualVelocityPredictScale = 0.95f;
+  static constexpr float kHybridScratchVelocityFollowHz = 240.f;
+  static constexpr float kHybridScratchVelocityDampingHz = 18.f;
+  static constexpr float kHybridScratchCorrectionHz = 70.f;
+  static constexpr float kHybridScratchWheelBurstDecayHz = 24.f;
+  static constexpr float kHybridScratchWheelImpulseTime = 0.03f;
+  static constexpr float kHybridScratchMaxVelocity = 96000.f;
+  static constexpr float kHybridScratchVelocityDeadband = 8.f;
   static constexpr float kScratchInertiaFollowHz = 950.f;
   static constexpr float kScratchInertiaDampingHz = 380.f;
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
   enum CartridgeCharacter { CARTRIDGE_CLEAN, CARTRIDGE_VINTAGE, CARTRIDGE_BATTLE, CARTRIDGE_LOFI, CARTRIDGE_COUNT };
+  enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_COUNT };
 
   struct OnePoleState {
     float z = 0.f;
@@ -233,10 +251,13 @@ struct TemporalDeckEngine {
   float nowCatchStartLag = 0.f;
   float scratchLagSamples = 0.f;
   float scratchLagTargetSamples = 0.f;
+  float scratchMotionVelocity = 0.f;
+  float scratchWheelVelocityBurst = 0.f;
   float filteredManualLagTargetSamples = 0.f;
   float lastPlatterLagTarget = 0.f;
   uint32_t lastPlatterGestureRevision = 0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
+  int scratchModel = SCRATCH_MODEL_HYBRID;
   CartridgeChannelState cartridgeLeft;
   CartridgeChannelState cartridgeRight;
   float lofiWowPhaseA = 0.f;
@@ -280,8 +301,11 @@ struct TemporalDeckEngine {
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
     scratchLagTargetSamples = 0.f;
+    scratchMotionVelocity = 0.f;
+    scratchWheelVelocityBurst = 0.f;
     filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
+    lastPlatterGestureRevision = 0;
     cartridgeLeft.reset();
     cartridgeRight.reset();
     lofiWowPhaseA = 0.f;
@@ -554,6 +578,55 @@ struct TemporalDeckEngine {
     return readPos;
   }
 
+  void clearScratchMotionState() {
+    platterVelocity = 0.f;
+    scratchMotionVelocity = 0.f;
+    scratchWheelVelocityBurst = 0.f;
+  }
+
+  void decayHybridWheelBurst(float dt) {
+    float decay = clamp(1.f - dt * kHybridScratchWheelBurstDecayHz, 0.f, 1.f);
+    scratchWheelVelocityBurst *= decay;
+    if (std::fabs(scratchWheelVelocityBurst) < kHybridScratchVelocityDeadband) {
+      scratchWheelVelocityBurst = 0.f;
+    }
+  }
+
+  void integrateHybridScratch(float dt, float limit, float newestPos, float driveVelocity, float followScale,
+                              float dampingScale, float correctionScale, float nowSnapThresholdSamples) {
+    scratchLagTargetSamples = clampLag(scratchLagTargetSamples, limit);
+    scratchLagSamples = clampLag(scratchLagSamples, limit);
+
+    float lagError = scratchLagTargetSamples - scratchLagSamples;
+    float correctionVelocity = clamp(lagError * (kHybridScratchCorrectionHz * correctionScale),
+                                     -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
+    float desiredVelocity = driveVelocity + scratchWheelVelocityBurst + correctionVelocity;
+    float speedNorm = clamp(std::fabs(desiredVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
+    float followHz = kHybridScratchVelocityFollowHz * followScale * (0.65f + 0.75f * speedNorm);
+    float followAlpha = clamp(dt * followHz, 0.f, 1.f);
+    scratchMotionVelocity += (desiredVelocity - scratchMotionVelocity) * followAlpha;
+
+    float damping = clamp(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale), 0.f, 1.f);
+    scratchMotionVelocity *= damping;
+
+    if (std::fabs(scratchMotionVelocity) < kHybridScratchVelocityDeadband && std::fabs(lagError) < 0.5f &&
+        std::fabs(desiredVelocity) < kHybridScratchVelocityDeadband) {
+      scratchMotionVelocity = 0.f;
+    }
+
+    scratchLagSamples = clampLag(scratchLagSamples + scratchMotionVelocity * dt, limit);
+
+    if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
+        scratchMotionVelocity <= 0.f) {
+      scratchLagSamples = 0.f;
+      scratchLagTargetSamples = 0.f;
+      scratchMotionVelocity = 0.f;
+      scratchWheelVelocityBurst = 0.f;
+    }
+
+    readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+  }
+
   struct FrameResult {
     float outL = 0.f;
     float outR = 0.f;
@@ -589,6 +662,7 @@ struct TemporalDeckEngine {
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
+    bool hybridManualScratch = manualScratch && scratchModel == SCRATCH_MODEL_HYBRID;
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -607,6 +681,7 @@ struct TemporalDeckEngine {
       filteredManualLagTargetSamples = scratchLagSamples;
       lastPlatterLagTarget = platterLagTarget;
       lastPlatterGestureRevision = platterGestureRevision;
+      clearScratchMotionState();
     }
     scratchActive = anyScratch;
 
@@ -652,7 +727,55 @@ struct TemporalDeckEngine {
     }
 
     if (manualScratch) {
-      if (manualTouchScratch) {
+      if (hybridManualScratch) {
+        // Hybrid scratch keeps lag as the authoritative state, but moves it
+        // from an integrated motion model instead of direct target chasing.
+        if (manualTouchScratch) {
+          scratchWheelVelocityBurst = 0.f;
+          if (hasFreshPlatterGesture) {
+            if (nowCatchActive && platterLagTarget > nowSnapThresholdSamples) {
+              nowCatchActive = false;
+            }
+            scratchLagTargetSamples = clampLag(platterLagTarget, limit);
+            lastPlatterGestureRevision = platterGestureRevision;
+          }
+
+          bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
+          if (stationaryManualHold) {
+            clearScratchMotionState();
+            readHead = prevReadHead;
+            scratchLagSamples = currentLagFromNewest(newestPos);
+            scratchLagTargetSamples = scratchLagSamples;
+          } else {
+            float driveVelocity = 0.f;
+            if (platterMotionActive || hasFreshPlatterGesture) {
+              // UI drag updates are sparse. Treat gesture velocity as a target
+              // platter motion and let the integrated lag state follow it.
+              driveVelocity = -platterGestureVelocity * kManualVelocityPredictScale;
+            }
+            float motionNorm = clamp(std::fabs(driveVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
+            integrateHybridScratch(dt, limit, newestPos, driveVelocity, 1.05f + 0.35f * motionNorm,
+                                   1.12f - 0.28f * motionNorm, 0.72f, nowSnapThresholdSamples);
+          }
+        } else {
+          float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
+          float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
+          if (wheelDeltaShaped < 0.f) {
+            wheelDeltaShaped *= 2.0f;
+          }
+          if (std::fabs(wheelDelta) > 1e-6f) {
+            scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
+            if (scratchLagTargetSamples < sampleRate * 0.012f) {
+              scratchLagTargetSamples = 0.f;
+            }
+            scratchWheelVelocityBurst += wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
+            scratchWheelVelocityBurst =
+              clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
+          }
+          decayHybridWheelBurst(dt);
+          integrateHybridScratch(dt, limit, newestPos, 0.f, 0.92f, 1.0f, 1.05f, nowSnapThresholdSamples);
+        }
+      } else if (manualTouchScratch) {
         // Manual mouse scratching is intentionally event-driven.
         //
         // We tried bridging sparse UI drag events by continuing to follow the
@@ -917,54 +1040,77 @@ struct TemporalDeckEngine {
                                                                       : buffer.readCubic(readHead);
     wet = applyCartridgeCharacter(wet, motionAmount);
     if (scratchReadPath) {
-      int deltaSign = (readDeltaForTone > 0.2f) ? 1 : ((readDeltaForTone < -0.2f) ? -1 : 0);
-      if (deltaSign != 0 && prevScratchDeltaSign != 0 && deltaSign != prevScratchDeltaSign) {
-        float jerk = std::fabs(readDeltaForTone - prevScratchReadDelta);
-        scratchFlipTransientEnv = std::max(scratchFlipTransientEnv, clamp(jerk * 0.18f, 0.f, 1.f));
-      }
-      if (deltaSign != 0) {
-        prevScratchDeltaSign = deltaSign;
-      }
-      // Derive transient from real signal edge change, not synthetic impulse.
-      float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
-      float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
-      float transientBase = wheelScratch ? 0.06f : (manualTouchScratch ? 0.14f : 0.30f);
-      float transient = detailMid * (transientBase * scratchFlipTransientEnv * transientMotion);
-      wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
-      wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
-      scratchFlipTransientEnv *= 0.968f;
-
-      // Slow reverse glide: trim sub-rumble and suppress tiny discontinuity
-      // clicks without flattening fast scratch articulation.
-      float slowReverseAmt = 0.f;
-      if (manualScratch && readDeltaForTone < 0.f) {
-        slowReverseAmt = clamp((1.35f - std::fabs(readDeltaForTone)) / 1.35f, 0.f, 1.f);
-      }
-      if (slowReverseAmt > 0.f) {
-        constexpr float kDcR = 0.995f;
-        float hpL = wet.first - scratchDcInL + kDcR * scratchDcOutL;
-        float hpR = wet.second - scratchDcInR + kDcR * scratchDcOutR;
+      if (hybridManualScratch) {
+        // The hybrid motion model is meant to stand on its own, so keep only a
+        // light continuity/de-click layer instead of the full legacy cleanup
+        // stack.
+        scratchFlipTransientEnv = 0.f;
+        prevScratchDeltaSign = 0;
         scratchDcInL = wet.first;
         scratchDcInR = wet.second;
-        scratchDcOutL = hpL;
-        scratchDcOutR = hpR;
-        float rumbleTrim = 0.55f * slowReverseAmt;
-        wet.first = crossfade(wet.first, hpL, rumbleTrim);
-        wet.second = crossfade(wet.second, hpR, rumbleTrim);
-      }
+        scratchDcOutL = 0.f;
+        scratchDcOutR = 0.f;
 
-      float microStepAmt = clamp((1.1f - std::fabs(readDeltaForTone)) / 1.1f, 0.f, 1.f);
-      float deClickAmt = wheelScratch ? (0.48f * microStepAmt) : (manualTouchScratch ? (0.38f * microStepAmt) : (0.22f * microStepAmt));
-      wet.first = crossfade(wet.first, prevScratchOutL, deClickAmt);
-      wet.second = crossfade(wet.second, prevScratchOutR, deClickAmt);
+        float microStepAmt = clamp((0.95f - std::fabs(readDeltaForTone)) / 0.95f, 0.f, 1.f);
+        float continuityAmt = wheelScratch ? (0.30f * microStepAmt) : (0.20f * microStepAmt);
+        wet.first = crossfade(wet.first, prevScratchOutL, continuityAmt);
+        wet.second = crossfade(wet.second, prevScratchOutR, continuityAmt);
 
-      // Manual glides can still sound "needle-grindy" from fast micro-edge
-      // changes; add a tiny adaptive smoothing layer only in manual mode.
-      if (manualScratch) {
-        float grindAmt = clamp((1.55f - std::fabs(readDeltaForTone)) / 1.55f, 0.f, 1.f);
-        float smoothAmt = 0.16f * grindAmt;
+        float ultraSlowAmt = clamp((0.32f - std::fabs(readDeltaForTone)) / 0.32f, 0.f, 1.f);
+        float smoothAmt = manualTouchScratch ? (0.08f * ultraSlowAmt) : (0.05f * ultraSlowAmt);
         wet.first = crossfade(wet.first, prevWetL, smoothAmt);
         wet.second = crossfade(wet.second, prevWetR, smoothAmt);
+      } else {
+        int deltaSign = (readDeltaForTone > 0.2f) ? 1 : ((readDeltaForTone < -0.2f) ? -1 : 0);
+        if (deltaSign != 0 && prevScratchDeltaSign != 0 && deltaSign != prevScratchDeltaSign) {
+          float jerk = std::fabs(readDeltaForTone - prevScratchReadDelta);
+          scratchFlipTransientEnv = std::max(scratchFlipTransientEnv, clamp(jerk * 0.18f, 0.f, 1.f));
+        }
+        if (deltaSign != 0) {
+          prevScratchDeltaSign = deltaSign;
+        }
+        // Derive transient from real signal edge change, not synthetic impulse.
+        float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
+        float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
+        float transientBase = wheelScratch ? 0.06f : (manualTouchScratch ? 0.14f : 0.30f);
+        float transient = detailMid * (transientBase * scratchFlipTransientEnv * transientMotion);
+        wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
+        wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
+        scratchFlipTransientEnv *= 0.968f;
+
+        // Slow reverse glide: trim sub-rumble and suppress tiny discontinuity
+        // clicks without flattening fast scratch articulation.
+        float slowReverseAmt = 0.f;
+        if (manualScratch && readDeltaForTone < 0.f) {
+          slowReverseAmt = clamp((1.35f - std::fabs(readDeltaForTone)) / 1.35f, 0.f, 1.f);
+        }
+        if (slowReverseAmt > 0.f) {
+          constexpr float kDcR = 0.995f;
+          float hpL = wet.first - scratchDcInL + kDcR * scratchDcOutL;
+          float hpR = wet.second - scratchDcInR + kDcR * scratchDcOutR;
+          scratchDcInL = wet.first;
+          scratchDcInR = wet.second;
+          scratchDcOutL = hpL;
+          scratchDcOutR = hpR;
+          float rumbleTrim = 0.55f * slowReverseAmt;
+          wet.first = crossfade(wet.first, hpL, rumbleTrim);
+          wet.second = crossfade(wet.second, hpR, rumbleTrim);
+        }
+
+        float microStepAmt = clamp((1.1f - std::fabs(readDeltaForTone)) / 1.1f, 0.f, 1.f);
+        float deClickAmt = wheelScratch ? (0.48f * microStepAmt)
+                                        : (manualTouchScratch ? (0.38f * microStepAmt) : (0.22f * microStepAmt));
+        wet.first = crossfade(wet.first, prevScratchOutL, deClickAmt);
+        wet.second = crossfade(wet.second, prevScratchOutR, deClickAmt);
+
+        // Manual glides can still sound "needle-grindy" from fast micro-edge
+        // changes; add a tiny adaptive smoothing layer only in manual mode.
+        if (manualScratch) {
+          float grindAmt = clamp((1.55f - std::fabs(readDeltaForTone)) / 1.55f, 0.f, 1.f);
+          float smoothAmt = 0.16f * grindAmt;
+          wet.first = crossfade(wet.first, prevWetL, smoothAmt);
+          wet.second = crossfade(wet.second, prevWetR, smoothAmt);
+        }
       }
     } else {
       scratchFlipTransientEnv *= 0.92f;
@@ -1149,6 +1295,7 @@ struct TemporalDeck : Module {
   float uiPublishTimerSec = 0.f;
   bool highQualityScratchInterpolation = true;
   int cartridgeCharacter = TemporalDeckEngine::CARTRIDGE_CLEAN;
+  int scratchModel = TemporalDeckEngine::SCRATCH_MODEL_HYBRID;
 
   float scratchSensitivity() {
     return ScratchSensitivityQuantity::sensitivityForValue(params[SCRATCH_SENSITIVITY_PARAM].getValue());
@@ -1199,6 +1346,7 @@ struct TemporalDeck : Module {
     json_object_set_new(root, "slipLatched", json_boolean(slipLatched));
     json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(highQualityScratchInterpolation));
     json_object_set_new(root, "cartridgeCharacter", json_integer(cartridgeCharacter));
+    json_object_set_new(root, "scratchModel", json_integer(scratchModel));
     return root;
   }
 
@@ -1211,6 +1359,7 @@ struct TemporalDeck : Module {
     json_t *slipJ = json_object_get(root, "slipLatched");
     json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
     json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
+    json_t *scratchModelJ = json_object_get(root, "scratchModel");
     if (freezeJ) {
       freezeLatched = json_boolean_value(freezeJ);
     }
@@ -1225,6 +1374,9 @@ struct TemporalDeck : Module {
     }
     if (cartridgeJ) {
       cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, TemporalDeckEngine::CARTRIDGE_COUNT - 1);
+    }
+    if (scratchModelJ) {
+      scratchModel = clamp((int)json_integer_value(scratchModelJ), 0, TemporalDeckEngine::SCRATCH_MODEL_COUNT - 1);
     }
   }
 
@@ -1268,6 +1420,7 @@ struct TemporalDeck : Module {
 
     engine.highQualityScratchInterpolation = highQualityScratchInterpolation;
     engine.cartridgeCharacter = cartridgeCharacter;
+    engine.scratchModel = scratchModel;
     int scratchHold = platterScratchHoldSamples.load();
     bool wheelScratchHeld = scratchHold > 0;
     if (wheelScratchHeld) {
@@ -1812,7 +1965,8 @@ struct TemporalDeckWidget : ModuleWidget {
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module, TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module,
+                                                 TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module, TemporalDeck::FREEZE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module, TemporalDeck::REVERSE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module, TemporalDeck::SLIP_PARAM));
@@ -1877,6 +2031,15 @@ struct TemporalDeckWidget : ModuleWidget {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
     assert(menu);
     menu->addChild(new MenuSeparator());
+    if (module) {
+      menu->addChild(createMenuLabel("Scratch"));
+      menu->addChild(createSubmenuItem("Scratch model", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeckEngine::SCRATCH_MODEL_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            scratchModelLabel(i), "", [=]() { return module->scratchModel == i; }, [=]() { module->scratchModel = i; }));
+        }
+      }));
+    }
     menu->addChild(createBoolPtrMenuItem("High-quality scratch interpolation", "",
                                          module ? &module->highQualityScratchInterpolation : nullptr));
   }
