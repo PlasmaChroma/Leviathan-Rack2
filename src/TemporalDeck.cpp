@@ -592,15 +592,19 @@ struct TemporalDeckEngine {
     }
   }
 
-  void integrateHybridScratch(float dt, float limit, float newestPos, float driveVelocity, float followScale,
+  void integrateHybridScratch(float dt, float limit, float newestPos, float targetReadVelocity, float followScale,
                               float dampingScale, float correctionScale, float nowSnapThresholdSamples) {
+    // Hybrid scratch is velocity-first internally. We still keep lag as the
+    // module-facing state, but we integrate the read head in buffer space and
+    // derive lag from that position so "zero hand velocity" naturally means a
+    // stationary read head.
     scratchLagTargetSamples = clampLag(scratchLagTargetSamples, limit);
     scratchLagSamples = clampLag(scratchLagSamples, limit);
 
     float lagError = scratchLagTargetSamples - scratchLagSamples;
-    float correctionVelocity = clamp(lagError * (kHybridScratchCorrectionHz * correctionScale),
+    float correctionVelocity = clamp(-lagError * (kHybridScratchCorrectionHz * correctionScale),
                                      -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
-    float desiredVelocity = driveVelocity + scratchWheelVelocityBurst + correctionVelocity;
+    float desiredVelocity = targetReadVelocity + scratchWheelVelocityBurst + correctionVelocity;
     float speedNorm = clamp(std::fabs(desiredVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
     float followHz = kHybridScratchVelocityFollowHz * followScale * (0.65f + 0.75f * speedNorm);
     float followAlpha = clamp(dt * followHz, 0.f, 1.f);
@@ -614,17 +618,19 @@ struct TemporalDeckEngine {
       scratchMotionVelocity = 0.f;
     }
 
-    scratchLagSamples = clampLag(scratchLagSamples + scratchMotionVelocity * dt, limit);
+    float candidate = unwrapReadNearWrite(readHead, newestPos) + scratchMotionVelocity * dt;
+    candidate = clamp(candidate, newestPos - std::max(limit, 0.f), newestPos);
+    readHead = buffer.wrapPosition(candidate);
+    scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
 
     if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
-        scratchMotionVelocity <= 0.f) {
+        scratchMotionVelocity >= 0.f) {
       scratchLagSamples = 0.f;
       scratchLagTargetSamples = 0.f;
       scratchMotionVelocity = 0.f;
       scratchWheelVelocityBurst = 0.f;
+      readHead = newestPos;
     }
-
-    readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
   }
 
   struct FrameResult {
@@ -730,6 +736,7 @@ struct TemporalDeckEngine {
       if (hybridManualScratch) {
         // Hybrid scratch keeps lag as the authoritative state, but moves it
         // from an integrated motion model instead of direct target chasing.
+        scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
         if (manualTouchScratch) {
           scratchWheelVelocityBurst = 0.f;
           if (hasFreshPlatterGesture) {
@@ -742,19 +749,18 @@ struct TemporalDeckEngine {
 
           bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
           if (stationaryManualHold) {
-            clearScratchMotionState();
-            readHead = prevReadHead;
-            scratchLagSamples = currentLagFromNewest(newestPos);
             scratchLagTargetSamples = scratchLagSamples;
+            scratchMotionVelocity = 0.f;
           } else {
-            float driveVelocity = 0.f;
+            float targetReadVelocity = 0.f;
             if (platterMotionActive || hasFreshPlatterGesture) {
-              // UI drag updates are sparse. Treat gesture velocity as a target
-              // platter motion and let the integrated lag state follow it.
-              driveVelocity = -platterGestureVelocity * kManualVelocityPredictScale;
+              // Use the user's measured gesture velocity directly. The hybrid
+              // path should not under-drive motion and let the correction term
+              // create a compensating buzz.
+              targetReadVelocity = platterGestureVelocity;
             }
-            float motionNorm = clamp(std::fabs(driveVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
-            integrateHybridScratch(dt, limit, newestPos, driveVelocity, 1.05f + 0.35f * motionNorm,
+            float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
+            integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.05f + 0.35f * motionNorm,
                                    1.12f - 0.28f * motionNorm, 0.72f, nowSnapThresholdSamples);
           }
         } else {
@@ -768,7 +774,7 @@ struct TemporalDeckEngine {
             if (scratchLagTargetSamples < sampleRate * 0.012f) {
               scratchLagTargetSamples = 0.f;
             }
-            scratchWheelVelocityBurst += wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
+            scratchWheelVelocityBurst -= wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
             scratchWheelVelocityBurst =
               clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
           }
