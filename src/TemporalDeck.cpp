@@ -1186,8 +1186,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
 void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   Vec center = centerPx;
-  Vec armPivot = center.plus(Vec(platterRadiusPx * 1.0f, platterRadiusPx * 0.72f));
-  Vec stylusTip = center.plus(Vec(platterRadiusPx * 0.9f, platterRadiusPx * 0.04f));
+  Vec armPivot = center.plus(Vec(platterRadiusPx * 1.18f, platterRadiusPx * 0.34f));
+  Vec stylusTip = center.plus(Vec(platterRadiusPx * 0.62f, platterRadiusPx * 0.64f));
   float platterPhase = module ? module->uiPlatterAngle.load() : 0.f;
   float wobbleAngle = 0.012f * std::sin(platterPhase * 0.31f) + 0.006f * std::sin(platterPhase * 0.77f + 0.8f);
   auto rotateAroundPivot = [&](Vec p) {
@@ -1221,50 +1221,59 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     nvgFill(args.vg);
 
     Vec armStart = armPivot.plus(armDir.mult(mm2px(Vec(4.8f, 0.f)).x));
-    Vec armEnd = stylusTip.minus(armDir.mult(mm2px(Vec(6.2f, 0.f)).x));
+    Vec shellBack = stylusTip.minus(armDir.mult(mm2px(Vec(4.0f, 0.f)).x));
+    Vec armEnd = shellBack;
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, armStart.x, armStart.y);
     nvgLineTo(args.vg, armEnd.x, armEnd.y);
-    nvgStrokeColor(args.vg, nvgRGBA(196, 202, 209, 236));
-    nvgStrokeWidth(args.vg, 3.3f);
+    nvgStrokeColor(args.vg, nvgRGBA(74, 80, 88, 236));
+    nvgStrokeWidth(args.vg, 3.0f);
     nvgStroke(args.vg);
 
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, armStart.x, armStart.y);
     nvgLineTo(args.vg, armEnd.x, armEnd.y);
-    nvgStrokeColor(args.vg, nvgRGBA(86, 90, 98, 176));
-    nvgStrokeWidth(args.vg, 1.0f);
+    nvgStrokeColor(args.vg, nvgRGBA(186, 194, 204, 170));
+    nvgStrokeWidth(args.vg, 0.9f);
     nvgStroke(args.vg);
 
-    Vec elbow = armEnd.plus(armDir.mult(mm2px(Vec(1.9f, 0.f)).x));
-    Vec headshellFront = stylusTip.minus(armDir.mult(mm2px(Vec(1.4f, 0.f)).x));
-    Vec headshellA = elbow.plus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
-    Vec headshellB = elbow.minus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
-    Vec headshellC = headshellFront.minus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
-    Vec headshellD = headshellFront.plus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
+    // Vaguely DJ-style headshell/cart assembly with mounting holes.
+    Vec shellFront = stylusTip.minus(armDir.mult(mm2px(Vec(0.8f, 0.f)).x));
+    Vec headshellA = shellBack.plus(armNormal.mult(mm2px(Vec(1.25f, 0.f)).x));
+    Vec headshellB = shellBack.minus(armNormal.mult(mm2px(Vec(1.25f, 0.f)).x));
+    Vec headshellC = shellFront.minus(armNormal.mult(mm2px(Vec(1.95f, 0.f)).x));
+    Vec headshellD = shellFront.plus(armNormal.mult(mm2px(Vec(1.95f, 0.f)).x));
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, headshellA.x, headshellA.y);
     nvgLineTo(args.vg, headshellD.x, headshellD.y);
     nvgLineTo(args.vg, headshellC.x, headshellC.y);
     nvgLineTo(args.vg, headshellB.x, headshellB.y);
     nvgClosePath(args.vg);
-    nvgFillColor(args.vg, nvgRGBA(206, 172, 86, 226));
+    nvgFillColor(args.vg, nvgRGBA(26, 29, 34, 236));
     nvgFill(args.vg);
 
-    Vec cartBack = headshellFront.minus(armDir.mult(mm2px(Vec(0.6f, 0.f)).x));
-    Vec cartFront = cartBack.plus(armDir.mult(mm2px(Vec(3.3f, 0.f)).x));
-    Vec cartA = cartBack.plus(armNormal.mult(mm2px(Vec(1.55f, 0.f)).x));
-    Vec cartB = cartBack.minus(armNormal.mult(mm2px(Vec(1.55f, 0.f)).x));
-    Vec cartC = cartFront.minus(armNormal.mult(mm2px(Vec(1.35f, 0.f)).x));
-    Vec cartD = cartFront.plus(armNormal.mult(mm2px(Vec(1.35f, 0.f)).x));
     nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, cartA.x, cartA.y);
-    nvgLineTo(args.vg, cartD.x, cartD.y);
-    nvgLineTo(args.vg, cartC.x, cartC.y);
-    nvgLineTo(args.vg, cartB.x, cartB.y);
+    nvgMoveTo(args.vg, headshellA.x, headshellA.y);
+    nvgLineTo(args.vg, headshellD.x, headshellD.y);
+    nvgLineTo(args.vg, headshellC.x, headshellC.y);
+    nvgLineTo(args.vg, headshellB.x, headshellB.y);
     nvgClosePath(args.vg);
-    nvgFillColor(args.vg, nvgRGBA(46, 49, 56, 238));
-    nvgFill(args.vg);
+    nvgStrokeColor(args.vg, nvgRGBA(80, 86, 96, 180));
+    nvgStrokeWidth(args.vg, 0.85f);
+    nvgStroke(args.vg);
+
+    auto drawHole = [&](Vec p, float rMm) {
+      nvgBeginPath(args.vg);
+      nvgCircle(args.vg, p.x, p.y, mm2px(Vec(rMm, 0.f)).x);
+      nvgFillColor(args.vg, nvgRGBA(216, 222, 230, 210));
+      nvgFill(args.vg);
+    };
+    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(1.2f, 0.f)).x)), 0.38f);
+    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
+    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
+    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(3.1f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.82f, 0.f)).x)), 0.28f);
+    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(3.1f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.82f, 0.f)).x)), 0.28f);
+
   }
   nvgRestore(args.vg);
 }
@@ -1534,12 +1543,12 @@ struct TemporalDeckWidget : ModuleWidget {
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.5, 85.5)), module, TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module, TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module, TemporalDeck::FREEZE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module, TemporalDeck::REVERSE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.465, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(49.965, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
     addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
     addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
     addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
