@@ -109,8 +109,7 @@ struct TemporalDeckBuffer {
     int i0 = int(pos);
     int i1 = wrapIndex(i0 + 1);
     float t = pos - float(i0);
-    return {crossfade(left[i0], left[i1], t),
-            crossfade(right[i0], right[i1], t)};
+    return {crossfade(left[i0], left[i1], t), crossfade(right[i0], right[i1], t)};
   }
 
   std::pair<float, float> readHighQuality(float pos) const {
@@ -125,10 +124,8 @@ struct TemporalDeckBuffer {
     int i3 = wrapIndex(i2 + 1);
     int i4 = wrapIndex(i2 + 2);
     int i5 = wrapIndex(i2 + 3);
-    std::array<float, 6> l = {left[i0], left[i1], left[i2],
-                              left[i3], left[i4], left[i5]};
-    std::array<float, 6> r = {right[i0], right[i1], right[i2],
-                              right[i3], right[i4], right[i5]};
+    std::array<float, 6> l = {left[i0], left[i1], left[i2], left[i3], left[i4], left[i5]};
+    std::array<float, 6> r = {right[i0], right[i1], right[i2], right[i3], right[i4], right[i5]};
     return {lagrange6Sample(l, t), lagrange6Sample(r, t)};
   }
 };
@@ -155,13 +152,7 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
-  enum CartridgeCharacter {
-    CARTRIDGE_CLEAN,
-    CARTRIDGE_CLASSIC,
-    CARTRIDGE_BATTLE,
-    CARTRIDGE_LOFI,
-    CARTRIDGE_COUNT
-  };
+  enum CartridgeCharacter { CARTRIDGE_CLEAN, CARTRIDGE_CLASSIC, CARTRIDGE_BATTLE, CARTRIDGE_LOFI, CARTRIDGE_COUNT };
 
   struct OnePoleState {
     float z = 0.f;
@@ -199,12 +190,10 @@ struct TemporalDeckEngine {
 
     CartridgeParams() {}
 
-    CartridgeParams(float hpHz, float bodyHz, float lpHz, float lpMotionHz,
-                    float bodyGain, float presenceGain, float crossfeed,
-                    float drive, float stereoTilt)
-        : hpHz(hpHz), bodyHz(bodyHz), lpHz(lpHz), lpMotionHz(lpMotionHz),
-          bodyGain(bodyGain), presenceGain(presenceGain),
-          crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt) {}
+    CartridgeParams(float hpHz, float bodyHz, float lpHz, float lpMotionHz, float bodyGain, float presenceGain,
+                    float crossfeed, float drive, float stereoTilt)
+        : hpHz(hpHz), bodyHz(bodyHz), lpHz(lpHz), lpMotionHz(lpMotionHz), bodyGain(bodyGain),
+          presenceGain(presenceGain), crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt) {}
   };
 
   TemporalDeckBuffer buffer;
@@ -257,17 +246,11 @@ struct TemporalDeckEngine {
     cartridgeRight.reset();
   }
 
-  float maxLagFromKnob(float knob) const {
-    return clamp(knob, 0.f, 1.f) * sampleRate * 8.f;
-  }
+  float maxLagFromKnob(float knob) const { return clamp(knob, 0.f, 1.f) * sampleRate * 8.f; }
 
-  float accessibleLag(float knob) const {
-    return std::min(maxLagFromKnob(knob), float(buffer.filled));
-  }
+  float accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), float(buffer.filled)); }
 
-  float clampLag(float lag, float limit) const {
-    return clamp(lag, 0.f, std::max(0.f, limit));
-  }
+  float clampLag(float lag, float limit) const { return clamp(lag, 0.f, std::max(0.f, limit)); }
 
   static float baseSpeedFromKnob(float rateKnob) {
     rateKnob = clamp(rateKnob, 0.f, 1.f);
@@ -306,22 +289,18 @@ struct TemporalDeckEngine {
   static CartridgeParams paramsForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_CLASSIC:
-      return {35.f, 1600.f, 12500.f, 11800.f, 0.10f, 0.08f, 0.025f, 1.03f,
-              0.02f};
+      return {35.f, 1600.f, 12500.f, 11800.f, 0.10f, 0.08f, 0.025f, 1.03f, 0.02f};
     case CARTRIDGE_BATTLE:
-      return {55.f, 1900.f, 14500.f, 9200.f, 0.03f, 0.20f, 0.015f, 1.08f,
-              0.03f};
+      return {55.f, 1900.f, 14500.f, 9200.f, 0.03f, 0.20f, 0.015f, 1.08f, 0.03f};
     case CARTRIDGE_LOFI:
-      return {90.f, 1250.f, 6800.f, 3800.f, 0.22f, -0.10f, 0.05f, 1.18f,
-              0.08f};
+      return {90.f, 1250.f, 6800.f, 3800.f, 0.22f, -0.10f, 0.05f, 1.18f, 0.08f};
     case CARTRIDGE_CLEAN:
     default:
       return {};
     }
   }
 
-  std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in,
-                                                  float motionAmount) {
+  std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in, float motionAmount) {
     if (cartridgeCharacter == CARTRIDGE_CLEAN) {
       return in;
     }
@@ -337,8 +316,7 @@ struct TemporalDeckEngine {
     float lpCoeffL = onePoleCoeff(lpHzL);
     float lpCoeffR = onePoleCoeff(lpHzR);
 
-    auto processChannel = [&](float x, CartridgeChannelState& state,
-                              float lpCoeff) {
+    auto processChannel = [&](float x, CartridgeChannelState &state, float lpCoeff) {
       float rumble = state.rumble.lowpass(x, hpCoeff);
       float hp = x - rumble;
       float body = state.body.lowpass(hp, bodyCoeff);
@@ -387,13 +365,10 @@ struct TemporalDeckEngine {
   }
 
   float platterRadiansPerSample() const {
-    return (2.f * float(M_PI) * (kNominalPlatterRpm / 60.f)) /
-           std::max(sampleRate, 1.f);
+    return (2.f * float(M_PI) * (kNominalPlatterRpm / 60.f)) / std::max(sampleRate, 1.f);
   }
 
-  float samplesPerPlatterRadian() const {
-    return 1.f / std::max(platterRadiansPerSample(), 1e-9f);
-  }
+  float samplesPerPlatterRadian() const { return 1.f / std::max(platterRadiansPerSample(), 1e-9f); }
 
   float currentLagFromNewest(float newestPos) const {
     if (buffer.size <= 0) {
@@ -428,15 +403,12 @@ struct TemporalDeckEngine {
     float platterAngle = 0.f;
   };
 
-  FrameResult process(float dt, float inL, float inR, float bufferKnob,
-                      float rateKnob, float mixKnob, float feedbackKnob,
-                      bool freezeButton, bool reverseButton, bool slipButton,
-                      bool freezeGate, bool scratchGate,
-                      bool scratchGateConnected, bool positionConnected,
-                      float positionCv, float rateCv, bool platterTouched,
-                      bool wheelScratchHeld, bool platterMotionActive,
-                      uint32_t platterGestureRevision, float platterLagTarget,
-                      float platterGestureVelocity, float wheelDelta) {
+  FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
+                      float feedbackKnob, bool freezeButton, bool reverseButton, bool slipButton, bool freezeGate,
+                      bool scratchGate, bool scratchGateConnected, bool positionConnected, float positionCv,
+                      float rateCv, bool platterTouched, bool wheelScratchHeld, bool platterMotionActive,
+                      uint32_t platterGestureRevision, float platterLagTarget, float platterGestureVelocity,
+                      float wheelDelta) {
     FrameResult result;
     float prevReadHead = readHead;
     float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
@@ -453,8 +425,7 @@ struct TemporalDeckEngine {
     float maxLag = std::max(limit, 0.f);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, reverseState);
     float speed = baseSpeed;
-    bool externalScratch =
-        scratchGateConnected && scratchGate && positionConnected;
+    bool externalScratch = scratchGateConnected && scratchGate && positionConnected;
     bool positionFollow = positionConnected && !scratchGateConnected;
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
@@ -464,8 +435,7 @@ struct TemporalDeckEngine {
     bool releasedFromScratch = !anyScratch && wasScratchActive;
     bool slipJustEnabled = slipState && !prevSlipState;
     float newestPos = newestReadablePos();
-    bool hasFreshPlatterGesture =
-        platterGestureRevision != lastPlatterGestureRevision;
+    bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     auto startNowCatch = [&](float startLag) {
       nowCatchActive = true;
       nowCatchRemaining = kNowCatchTime;
@@ -492,8 +462,7 @@ struct TemporalDeckEngine {
       slipReturnRemaining = 0.f;
     }
 
-    if (releasedFromScratch &&
-        currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
+    if (releasedFromScratch && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
       startNowCatch(currentLagFromNewest(newestPos));
       slipReturning = false;
       slipFinalCatchActive = false;
@@ -517,9 +486,8 @@ struct TemporalDeckEngine {
     }
 
     float lagNow = currentLagFromNewest(newestPos);
-    bool reverseAtOldestEdge = !scratchActive && !slipReturning &&
-                               reverseState && limit > 0.f &&
-                               lagNow >= (limit - 0.5f);
+    bool reverseAtOldestEdge =
+      !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
     if (reverseAtOldestEdge && speed < 0.f) {
       speed = 0.f;
     }
@@ -549,20 +517,16 @@ struct TemporalDeckEngine {
           float rawTargetLag = clampLag(platterLagTarget, limit);
           float velMag = std::fabs(platterGestureVelocity);
           if (velMag < kSlowScratchVelThreshold) {
-            float alpha = clamp(dt / std::max(kSlowScratchSmoothingTime, 1e-6f),
-                                0.f, 1.f);
+            float alpha = clamp(dt / std::max(kSlowScratchSmoothingTime, 1e-6f), 0.f, 1.f);
             filteredManualLagTargetSamples =
-                filteredManualLagTargetSamples +
-                (rawTargetLag - filteredManualLagTargetSamples) * alpha;
-            if (std::fabs(rawTargetLag - filteredManualLagTargetSamples) <
-                kScratchTargetJitterThreshold) {
+              filteredManualLagTargetSamples + (rawTargetLag - filteredManualLagTargetSamples) * alpha;
+            if (std::fabs(rawTargetLag - filteredManualLagTargetSamples) < kScratchTargetJitterThreshold) {
               filteredManualLagTargetSamples = rawTargetLag;
             }
           } else {
             filteredManualLagTargetSamples = rawTargetLag;
           }
-          scratchLagTargetSamples =
-              clampLag(filteredManualLagTargetSamples, limit);
+          scratchLagTargetSamples = clampLag(filteredManualLagTargetSamples, limit);
           if (scratchLagTargetSamples <= nowSnapThresholdSamples) {
             startNowCatch(std::max(scratchLagSamples, scratchLagTargetSamples));
           }
@@ -570,8 +534,7 @@ struct TemporalDeckEngine {
         }
         // A mouse-down with no recent platter motion is a true freeze, not a
         // coast.
-        bool stationaryManualHold =
-            !platterMotionActive && !hasFreshPlatterGesture;
+        bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
         if (stationaryManualHold) {
           platterVelocity = 0.f;
           readHead = prevReadHead;
@@ -583,32 +546,24 @@ struct TemporalDeckEngine {
           // artifacts from event-rate target jumps.
           float lagError = scratchLagTargetSamples - scratchLagSamples;
           float velMag = std::fabs(platterGestureVelocity);
-          bool snappedSlow =
-              velMag < kSlowScratchVelThreshold &&
-              std::fabs(lagError) < kScratchTargetJitterThreshold;
+          bool snappedSlow = velMag < kSlowScratchVelThreshold && std::fabs(lagError) < kScratchTargetJitterThreshold;
           if (snappedSlow) {
             scratchLagSamples = scratchLagTargetSamples;
             platterVelocity = 0.f;
             readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
           } else {
-            float followProgress =
-                clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
+            float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
             float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
             float lagStep = lagError * shapedFollow;
             bool backwardScratch = lagError > 0.f;
-            float dynamicSoftLimit = clamp(
-                kScratchSoftLagStepMin +
-                    std::fabs(platterGestureVelocity) * 0.003f +
-                    std::fabs(lagError) * 0.08f,
-                kScratchSoftLagStepMin,
-                kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f));
-            lagStep = dynamicSoftLimit *
-                      std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
+            float dynamicSoftLimit =
+              clamp(kScratchSoftLagStepMin + std::fabs(platterGestureVelocity) * 0.003f + std::fabs(lagError) * 0.08f,
+                    kScratchSoftLagStepMin, kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f));
+            lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
             if (backwardScratch && velMag > kReverseBiteVelocityThreshold) {
               float biteT =
-                  clamp((velMag - kReverseBiteVelocityThreshold) /
-                            std::max(kReverseBiteVelocityThreshold, 1e-6f),
-                        0.f, 1.f);
+                clamp((velMag - kReverseBiteVelocityThreshold) / std::max(kReverseBiteVelocityThreshold, 1e-6f), 0.f,
+                      1.f);
               float biteBoost = 1.f + (kReverseBiteMaxBoost - 1.f) * biteT;
               lagStep *= biteBoost;
             }
@@ -620,11 +575,8 @@ struct TemporalDeckEngine {
       } else {
         // Wheel scratch accumulates target lag per scroll event, then glides
         // toward that target with SLIP-like easing while wheel-hold is active.
-        float wheelDeltaSoftRange =
-            sampleRate * 0.16f * kWheelScratchTravelScale;
-        float wheelDeltaShaped =
-            wheelDeltaSoftRange *
-            std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
+        float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
+        float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
         if (wheelDeltaShaped < 0.f) {
           wheelDeltaShaped *= 2.0f;
         }
@@ -633,10 +585,8 @@ struct TemporalDeckEngine {
         if (std::fabs(wheelDelta) > 1e-6f) {
           // Direction-aware base avoids "fighting" the glide when moving
           // toward NOW with repeated small forward scrolls.
-          float baseLag =
-              wheelDeltaShaped < 0.f
-                  ? std::min(scratchLagSamples, scratchLagTargetSamples)
-                  : std::max(scratchLagSamples, scratchLagTargetSamples);
+          float baseLag = wheelDeltaShaped < 0.f ? std::min(scratchLagSamples, scratchLagTargetSamples)
+                                                 : std::max(scratchLagSamples, scratchLagTargetSamples);
           scratchLagTargetSamples = clampLag(baseLag + wheelDeltaShaped, limit);
           float wheelNowSnapThreshold = sampleRate * 0.012f;
           if (scratchLagTargetSamples < wheelNowSnapThreshold) {
@@ -646,8 +596,7 @@ struct TemporalDeckEngine {
 
         float lagError = scratchLagTargetSamples - scratchLagSamples;
         bool movingTowardNow = lagError < 0.f;
-        float wheelFollowTime =
-            movingTowardNow ? (kSlipReturnTime * 0.5f) : kSlipReturnTime;
+        float wheelFollowTime = movingTowardNow ? (kSlipReturnTime * 0.5f) : kSlipReturnTime;
         float alpha = dt / std::max(wheelFollowTime, 1e-6f);
         float lagStep = lagError * alpha;
 
@@ -681,8 +630,7 @@ struct TemporalDeckEngine {
     } else if (slipReturning) {
       // Return to NOW (lag = 0)
       float currentLagSamples = currentLagFromNewest(newestPos);
-      float finalCatchThresholdSamples =
-          sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
+      float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
       if (currentLagSamples <= nowSnapThresholdSamples) {
         startNowCatch(currentLagSamples);
@@ -690,7 +638,7 @@ struct TemporalDeckEngine {
         slipFinalCatchActive = false;
       } else
 
-          if (!slipFinalCatchActive) {
+        if (!slipFinalCatchActive) {
         // Exponential-like approach to zero lag.
         // We target a specific lag value that decreases over time.
         float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
@@ -714,9 +662,7 @@ struct TemporalDeckEngine {
       } else {
         // Final catch phase: smooth snap to live input.
         slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
-        float progress = 1.f - clamp(slipReturnRemaining /
-                                         std::max(kSlipFinalCatchTime, 1e-6f),
-                                     0.f, 1.f);
+        float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
         float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
         float targetLag = slipReturnStartLag * (1.f - shapedProgress);
 
@@ -749,9 +695,7 @@ struct TemporalDeckEngine {
 
     if (nowCatchActive) {
       nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
-      float progress =
-          1.f -
-          clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
+      float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
       float shapedProgress = progress * (2.f - progress);
       float targetLag = nowCatchStartLag * (1.f - shapedProgress);
       if (nowCatchRemaining <= 0.f || targetLag < 0.5f) {
@@ -766,14 +710,12 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(newestPos - targetLag);
     }
 
-    bool holdAtScratchEdge =
-        manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
+    bool holdAtScratchEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
     bool holdAtReverseEdge = reverseAtOldestEdge;
     bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
     bool scratchReadPath = anyScratch || positionFollow;
-    bool useLinearInterpolation =
-        !highQualityScratchInterpolation && scratchReadPath;
+    bool useLinearInterpolation = !highQualityScratchInterpolation && scratchReadPath;
     float readDeltaForTone = readHead - prevReadHead;
     if (buffer.size > 0) {
       float halfSize = float(buffer.size) * 0.5f;
@@ -785,10 +727,9 @@ struct TemporalDeckEngine {
       }
     }
     float motionAmount = clamp((std::fabs(readDeltaForTone) - 1.f) / 3.f, 0.f, 1.f);
-    auto wet = useLinearInterpolation ? buffer.readLinear(readHead)
-               : (highQualityScratchInterpolation && scratchReadPath)
-                   ? buffer.readHighQuality(readHead)
-                   : buffer.readCubic(readHead);
+    auto wet = useLinearInterpolation                                 ? buffer.readLinear(readHead)
+               : (highQualityScratchInterpolation && scratchReadPath) ? buffer.readHighQuality(readHead)
+                                                                      : buffer.readCubic(readHead);
     wet = applyCartridgeCharacter(wet, motionAmount);
     float mix = clamp(mixKnob, 0.f, 1.f);
     float outL = inL * (1.f - mix) + wet.first * mix;
@@ -874,8 +815,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
 
 struct DeckRateQuantity : ParamQuantity {
   std::string getDisplayValueString() override {
-    return string::f("%.2fx",
-                     TemporalDeckEngine::baseSpeedFromKnob(getValue()));
+    return string::f("%.2fx", TemporalDeckEngine::baseSpeedFromKnob(getValue()));
   }
 };
 
@@ -887,9 +827,7 @@ struct ScratchSensitivityQuantity : ParamQuantity {
     return rescale(v, 0.5f, 1.f, 1.f, 2.f);
   }
 
-  std::string getDisplayValueString() override {
-    return string::f("%.2fx", sensitivityForValue(getValue()));
-  }
+  std::string getDisplayValueString() override { return string::f("%.2fx", sensitivityForValue(getValue())); }
 
   std::string getLabel() override { return "Scratch sensitivity"; }
 };
@@ -953,16 +891,14 @@ struct TemporalDeck : Module {
   int cartridgeCharacter = TemporalDeckEngine::CARTRIDGE_CLEAN;
 
   float scratchSensitivity() {
-    return ScratchSensitivityQuantity::sensitivityForValue(
-        params[SCRATCH_SENSITIVITY_PARAM].getValue());
+    return ScratchSensitivityQuantity::sensitivityForValue(params[SCRATCH_SENSITIVITY_PARAM].getValue());
   }
 
   TemporalDeck() {
     config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
     configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 8.f);
     configParam<DeckRateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
-    configParam<ScratchSensitivityQuantity>(SCRATCH_SENSITIVITY_PARAM, 0.f, 1.f,
-                                            0.5f, "Scratch sensitivity");
+    configParam<ScratchSensitivityQuantity>(SCRATCH_SENSITIVITY_PARAM, 0.f, 1.f, 0.5f, "Scratch sensitivity");
     configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix");
     configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.f, "Feedback");
     configButton(FREEZE_PARAM, "Freeze");
@@ -1000,10 +936,8 @@ struct TemporalDeck : Module {
     json_object_set_new(root, "freezeLatched", json_boolean(freezeLatched));
     json_object_set_new(root, "reverseLatched", json_boolean(reverseLatched));
     json_object_set_new(root, "slipLatched", json_boolean(slipLatched));
-    json_object_set_new(root, "highQualityScratchInterpolation",
-                        json_boolean(highQualityScratchInterpolation));
-    json_object_set_new(root, "cartridgeCharacter",
-                        json_integer(cartridgeCharacter));
+    json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(highQualityScratchInterpolation));
+    json_object_set_new(root, "cartridgeCharacter", json_integer(cartridgeCharacter));
     return root;
   }
 
@@ -1014,8 +948,7 @@ struct TemporalDeck : Module {
     json_t *freezeJ = json_object_get(root, "freezeLatched");
     json_t *reverseJ = json_object_get(root, "reverseLatched");
     json_t *slipJ = json_object_get(root, "slipLatched");
-    json_t *scratchInterpJ =
-        json_object_get(root, "highQualityScratchInterpolation");
+    json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
     json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
     if (freezeJ) {
       freezeLatched = json_boolean_value(freezeJ);
@@ -1030,8 +963,7 @@ struct TemporalDeck : Module {
       highQualityScratchInterpolation = json_boolean_value(scratchInterpJ);
     }
     if (cartridgeJ) {
-      cartridgeCharacter = clamp((int) json_integer_value(cartridgeJ), 0,
-                                 TemporalDeckEngine::CARTRIDGE_COUNT - 1);
+      cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, TemporalDeckEngine::CARTRIDGE_COUNT - 1);
     }
   }
 
@@ -1066,9 +998,7 @@ struct TemporalDeck : Module {
     }
 
     float inL = inputs[INPUT_L_INPUT].getVoltage();
-    float inR = inputs[INPUT_R_INPUT].isConnected()
-                    ? inputs[INPUT_R_INPUT].getVoltage()
-                    : inL;
+    float inR = inputs[INPUT_R_INPUT].isConnected() ? inputs[INPUT_R_INPUT].getVoltage() : inL;
     float positionCv = inputs[POSITION_CV_INPUT].getVoltage();
     float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
@@ -1086,20 +1016,14 @@ struct TemporalDeck : Module {
     }
     float wheelDelta = platterWheelDelta.exchange(0.f);
 
-    auto frame = engine.process(
-        args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(),
-        params[RATE_PARAM].getValue(), params[MIX_PARAM].getValue(),
-        params[FEEDBACK_PARAM].getValue(), freezeLatched, reverseLatched,
-        slipLatched,
-        inputs[FREEZE_GATE_INPUT].getVoltage() >=
-            TemporalDeckEngine::kFreezeGateThreshold,
-        inputs[SCRATCH_GATE_INPUT].getVoltage() >=
-            TemporalDeckEngine::kScratchGateThreshold,
-        inputs[SCRATCH_GATE_INPUT].isConnected(),
-        inputs[POSITION_CV_INPUT].isConnected(), positionCv, rateCv,
-        platterTouched.load(), wheelScratchHeld, platterMotionActive,
-        platterGestureRevision.load(), platterLagTarget.load(),
-        platterGestureVelocity.load(), wheelDelta);
+    auto frame =
+      engine.process(args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(), params[RATE_PARAM].getValue(),
+                     params[MIX_PARAM].getValue(), params[FEEDBACK_PARAM].getValue(), freezeLatched, reverseLatched,
+                     slipLatched, inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold,
+                     inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold,
+                     inputs[SCRATCH_GATE_INPUT].isConnected(), inputs[POSITION_CV_INPUT].isConnected(), positionCv,
+                     rateCv, platterTouched.load(), wheelScratchHeld, platterMotionActive,
+                     platterGestureRevision.load(), platterLagTarget.load(), platterGestureVelocity.load(), wheelDelta);
 
     outputs[OUTPUT_L_OUTPUT].setVoltage(frame.outL);
     outputs[OUTPUT_R_OUTPUT].setVoltage(frame.outR);
@@ -1137,15 +1061,13 @@ struct TemporalDeck : Module {
           brightness = 0.f;
         }
         lights[ARC_LIGHT_START + i].setBrightness(brightness);
-        bool isLimitLed =
-            limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
+        bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
         lights[ARC_MAX_LIGHT_START + i].setBrightness(isLimitLed ? 1.f : 0.f);
       }
     }
   }
 
-  void setPlatterScratch(bool touched, float lagSamples, float velocitySamples,
-                         int holdSamples = 0) {
+  void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
     platterTouched.store(touched);
     platterGestureRevision.fetch_add(1);
     platterLagTarget.store(lagSamples);
@@ -1168,8 +1090,7 @@ struct TemporalDeck : Module {
   }
 };
 
-static bool loadSvgCircleMm(const std::string &svgPath,
-                            const std::string &circleId, Vec *outCenterMm,
+static bool loadSvgCircleMm(const std::string &svgPath, const std::string &circleId, Vec *outCenterMm,
                             float *outRadiusMm) {
   std::ifstream svgFile(svgPath);
   if (!svgFile.good()) {
@@ -1179,9 +1100,7 @@ static bool loadSvgCircleMm(const std::string &svgPath,
   svgBuffer << svgFile.rdbuf();
   const std::string svgText = svgBuffer.str();
 
-  const std::regex tagRe("<circle\\b[^>]*\\bid\\s*=\\s*\"" + circleId +
-                             "\"[^>]*/?>",
-                         std::regex::icase);
+  const std::regex tagRe("<circle\\b[^>]*\\bid\\s*=\\s*\"" + circleId + "\"[^>]*/?>", std::regex::icase);
   std::smatch tagMatch;
   if (!std::regex_search(svgText, tagMatch, tagRe) || tagMatch.empty()) {
     return false;
@@ -1189,8 +1108,7 @@ static bool loadSvgCircleMm(const std::string &svgPath,
 
   const std::string tag = tagMatch.str(0);
   auto parseAttr = [&](const char *attr, float *out) {
-    const std::regex attrRe(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"",
-                            std::regex::icase);
+    const std::regex attrRe(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
     std::smatch attrMatch;
     if (!std::regex_search(tag, attrMatch, attrRe)) {
       return false;
@@ -1202,8 +1120,7 @@ static bool loadSvgCircleMm(const std::string &svgPath,
   float cxMm = 0.f;
   float cyMm = 0.f;
   float radiusMm = 0.f;
-  if (!parseAttr("cx", &cxMm) || !parseAttr("cy", &cyMm) ||
-      !parseAttr("r", &radiusMm)) {
+  if (!parseAttr("cx", &cxMm) || !parseAttr("cy", &cyMm) || !parseAttr("r", &radiusMm)) {
     return false;
   }
 
@@ -1215,8 +1132,7 @@ static bool loadSvgCircleMm(const std::string &svgPath,
 static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
   Vec centerMm;
   float radiusMm = 0.f;
-  if (!loadSvgCircleMm(asset::plugin(pluginInstance, "res/deck.svg"),
-                       "PLATTER_AREA", &centerMm, &radiusMm)) {
+  if (!loadSvgCircleMm(asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm)) {
     return false;
   }
   centerPx = mm2px(centerMm);
@@ -1226,8 +1142,7 @@ static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
 
 static bool isLeftMouseDown() {
   return APP && APP->window && APP->window->win &&
-         glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) ==
-             GLFW_PRESS;
+         glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
@@ -1257,8 +1172,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
     float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
     char text[32];
     std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
-    Vec textPos = centerMm.plus(
-        Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
+    Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
 
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFontSize(args.vg, 11.5f);
@@ -1272,13 +1186,10 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
 void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   Vec center = centerPx;
-  Vec armPivot =
-      center.plus(Vec(platterRadiusPx * 1.0f, platterRadiusPx * 0.72f));
-  Vec stylusTip =
-      center.plus(Vec(platterRadiusPx * 0.9f, platterRadiusPx * 0.04f));
+  Vec armPivot = center.plus(Vec(platterRadiusPx * 1.0f, platterRadiusPx * 0.72f));
+  Vec stylusTip = center.plus(Vec(platterRadiusPx * 0.9f, platterRadiusPx * 0.04f));
   float platterPhase = module ? module->uiPlatterAngle.load() : 0.f;
-  float wobbleAngle = 0.012f * std::sin(platterPhase * 0.31f)
-                    + 0.006f * std::sin(platterPhase * 0.77f + 0.8f);
+  float wobbleAngle = 0.012f * std::sin(platterPhase * 0.31f) + 0.006f * std::sin(platterPhase * 0.77f + 0.8f);
   auto rotateAroundPivot = [&](Vec p) {
     Vec rel = p.minus(armPivot);
     float c = std::cos(wobbleAngle);
@@ -1304,8 +1215,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
 
     Vec counterweight = armPivot.minus(armDir.mult(mm2px(Vec(4.2f, 0.f)).x));
     nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, counterweight.x - mm2px(Vec(2.2f, 0.f)).x,
-                   counterweight.y - mm2px(Vec(1.6f, 0.f)).x,
+    nvgRoundedRect(args.vg, counterweight.x - mm2px(Vec(2.2f, 0.f)).x, counterweight.y - mm2px(Vec(1.6f, 0.f)).x,
                    mm2px(Vec(4.4f, 0.f)).x, mm2px(Vec(3.2f, 0.f)).x, 1.2f);
     nvgFillColor(args.vg, nvgRGBA(74, 78, 86, 220));
     nvgFill(args.vg);
@@ -1330,10 +1240,8 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     Vec headshellFront = stylusTip.minus(armDir.mult(mm2px(Vec(1.4f, 0.f)).x));
     Vec headshellA = elbow.plus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
     Vec headshellB = elbow.minus(armNormal.mult(mm2px(Vec(1.8f, 0.f)).x));
-    Vec headshellC =
-        headshellFront.minus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
-    Vec headshellD =
-        headshellFront.plus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
+    Vec headshellC = headshellFront.minus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
+    Vec headshellD = headshellFront.plus(armNormal.mult(mm2px(Vec(1.05f, 0.f)).x));
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, headshellA.x, headshellA.y);
     nvgLineTo(args.vg, headshellD.x, headshellD.y);
@@ -1357,7 +1265,6 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     nvgClosePath(args.vg);
     nvgFillColor(args.vg, nvgRGBA(46, 49, 56, 238));
     nvgFill(args.vg);
-
   }
   nvgRestore(args.vg);
 }
@@ -1368,10 +1275,9 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   Vec center = localCenter();
 
   NVGcolor outerDark = nvgRGB(20, 22, 26);
-  NVGpaint vinylGrad = nvgRadialGradient(
-      args.vg, center.x - platterRadiusPx * 0.18f,
-      center.y - platterRadiusPx * 0.22f, platterRadiusPx * 0.15f,
-      platterRadiusPx * 1.05f, nvgRGBA(52, 56, 64, 220), outerDark);
+  NVGpaint vinylGrad =
+    nvgRadialGradient(args.vg, center.x - platterRadiusPx * 0.18f, center.y - platterRadiusPx * 0.22f,
+                      platterRadiusPx * 0.15f, platterRadiusPx * 1.05f, nvgRGBA(52, 56, 64, 220), outerDark);
 
   nvgBeginPath(args.vg);
   nvgCircle(args.vg, center.x, center.y, platterRadiusPx);
@@ -1396,8 +1302,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       nvgBeginPath(args.vg);
       constexpr int kSteps = 64; // Reduced from 96 for performance
       for (int step = 0; step <= kSteps; ++step) {
-        float t =
-            2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
+        float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
         // Simplified wobble: removed expensive pow and copysign
         float wobble = std::sin(t * wobbleFreq + wobblePhase);
         float radius = grooveRadius + wobbleAmp * wobble;
@@ -1432,10 +1337,8 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
 
   for (int i = 0; i < 3; ++i) {
     float angle = 2.f * float(M_PI) * float(i) / 3.f;
-    Vec a(std::cos(angle) * labelRadius * 0.22f,
-          std::sin(angle) * labelRadius * 0.22f);
-    Vec b(std::cos(angle) * labelRadius * 0.62f,
-          std::sin(angle) * labelRadius * 0.62f);
+    Vec a(std::cos(angle) * labelRadius * 0.22f, std::sin(angle) * labelRadius * 0.22f);
+    Vec b(std::cos(angle) * labelRadius * 0.62f, std::sin(angle) * labelRadius * 0.62f);
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, a.x, a.y);
     nvgLineTo(args.vg, b.x, b.y);
@@ -1445,8 +1348,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   }
 
   nvgBeginPath(args.vg);
-  nvgRoundedRect(args.vg, -labelRadius * 0.42f, -labelRadius * 0.055f,
-                 labelRadius * 0.84f, labelRadius * 0.11f, 1.2f);
+  nvgRoundedRect(args.vg, -labelRadius * 0.42f, -labelRadius * 0.055f, labelRadius * 0.84f, labelRadius * 0.11f, 1.2f);
   nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 120));
   nvgFill(args.vg);
 
@@ -1467,8 +1369,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   Widget::draw(args);
 }
 
-void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local,
-                                                       Vec mouseDelta) {
+void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta) {
   if (!module || !dragging) {
     return;
   }
@@ -1490,8 +1391,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local,
     deltaAngle += 2.f * M_PI;
   }
   float mouseMovePx = std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y);
-  if (mouseMovePx < kScratchMoveThresholdPx &&
-      std::fabs(deltaAngle) < kScratchMoveThresholdRad) {
+  if (mouseMovePx < kScratchMoveThresholdPx && std::fabs(deltaAngle) < kScratchMoveThresholdRad) {
     return;
   }
   // Always apply drag deltas to the engine's latest lag, not the last UI
@@ -1502,20 +1402,18 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local,
   float effectiveRadius = std::max(radius, deadZonePx);
   float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
   float sensitivity = module->scratchSensitivity();
-  float samplesPerRadian =
-      60.f * module->uiSampleRate.load() /
-      (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm) *
-      TemporalDeckEngine::kMouseScratchTravelScale * sensitivity;
+  float samplesPerRadian = 60.f * module->uiSampleRate.load() /
+                           (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm) *
+                           TemporalDeckEngine::kMouseScratchTravelScale * sensitivity;
   float lagDelta = deltaAngle * samplesPerRadian * weight;
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
-  float velocity = (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) *
-                   module->uiSampleRate.load() * 0.0005f * sensitivity;
+  float velocity =
+    (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f * sensitivity;
   if (deltaAngle < 0.f) {
     velocity *= -1.f;
   }
   module->setPlatterScratch(true, localLagSamples, velocity);
-  int motionFreshSamples =
-      std::max(1, int(std::round(module->uiSampleRate.load() * 0.02f)));
+  int motionFreshSamples = std::max(1, int(std::round(module->uiSampleRate.load() * 0.02f)));
   module->setPlatterMotionFreshSamples(motionFreshSamples);
   lastAngle = angle;
 }
@@ -1564,8 +1462,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
 
   float sampleRate = module->uiSampleRate.load();
   float samplesPerNotch =
-      sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale *
-      module->scratchSensitivity();
+    sampleRate * 0.008f * TemporalDeckEngine::kWheelScratchTravelScale * module->scratchSensitivity();
   float lagDelta = scroll * samplesPerNotch;
   float holdSeconds = module->slipLatched ? 0.16f : 0.03f;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
@@ -1575,8 +1472,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
 }
 
 void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
-  if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT ||
-      !isWithinPlatter(onButtonPos)) {
+  if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || !isWithinPlatter(onButtonPos)) {
     return;
   }
   Vec local = onButtonPos.minus(localCenter());
@@ -1600,10 +1496,7 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
     }
     return;
   }
-  Vec local = APP->scene->rack->getMousePos()
-                  .minus(parent->box.pos)
-                  .minus(box.pos)
-                  .minus(localCenter());
+  Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
   updateScratchFromLocal(local, e.mouseDelta);
   e.consume(this);
 }
@@ -1624,9 +1517,7 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
 }
 
 struct BananutBlack : app::SvgPort {
-  BananutBlack() {
-    setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-  }
+  BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
 };
 
 struct TemporalDeckWidget : ModuleWidget {
@@ -1635,52 +1526,32 @@ struct TemporalDeckWidget : ModuleWidget {
     setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
 
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-    addChild(
-        createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(
-        Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-    addChild(createWidget<ScrewSilver>(Vec(
-        box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-    addParam(createParamCentered<RoundBlackKnob>(
-        mm2px(Vec(8.408, 17.086)), module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(
-        mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(
-        mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(
-        mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module,
-                                            TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module,
-                                            TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module,
-                                            TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8.408, 17.086)), module, TemporalDeck::BUFFER_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.5, 85.5)), module, TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module, TemporalDeck::REVERSE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.465, 112.9)), module,
-                                             TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module,
-                                             TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module,
-                                             TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module,
-                                             TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(37.703, 112.9)), module,
-                                             TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.1, 112.9)), module,
-                                             TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.465, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(37.703, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.1, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
 
-    addOutput(createOutputCentered<BananutBlack>(
-        mm2px(Vec(94.041, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(
-        mm2px(Vec(94.0, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.041, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.0, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(
-        mm2px(Vec(62.1, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(
-        mm2px(Vec(50.2, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(
-        mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(62.1, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(50.2, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
 
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
@@ -1690,12 +1561,9 @@ struct TemporalDeckWidget : ModuleWidget {
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
       float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
       float angle = -float(M_PI) * t;
-      Vec ledPos = platterCenter.plus(
-          Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
-      addChild(createLightCentered<MediumLight<RedLight>>(
-          ledPos, module, TemporalDeck::ARC_MAX_LIGHT_START + i));
-      addChild(createLightCentered<MediumLight<YellowLight>>(
-          ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
+      Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
+      addChild(createLightCentered<MediumLight<RedLight>>(ledPos, module, TemporalDeck::ARC_MAX_LIGHT_START + i));
+      addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
     }
 
     auto display = new TemporalDeckDisplayWidget();
@@ -1721,27 +1589,19 @@ struct TemporalDeckWidget : ModuleWidget {
     tonearm->box.pos = Vec(0.f, 0.f);
     tonearm->box.size = box.size;
     addChild(tonearm);
-
-    addParam(createParamCentered<RoundBlackKnob>(
-        mm2px(Vec(18.5, 85.5)), module,
-        TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
   }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
     assert(menu);
     menu->addChild(new MenuSeparator());
-    menu->addChild(createIndexPtrSubmenuItem(
-        "Cartridge character",
-        {"Clean", "Classic", "Battle", "Lo-Fi"},
-        module ? &module->cartridgeCharacter : nullptr));
-    menu->addChild(createBoolPtrMenuItem(
-        "High-quality scratch interpolation", "",
-        module ? &module->highQualityScratchInterpolation : nullptr));
+    menu->addChild(createIndexPtrSubmenuItem("Cartridge character", {"Clean", "Classic", "Battle", "Lo-Fi"},
+                                             module ? &module->cartridgeCharacter : nullptr));
+    menu->addChild(createBoolPtrMenuItem("High-quality scratch interpolation", "",
+                                         module ? &module->highQualityScratchInterpolation : nullptr));
   }
 };
 
 } // namespace
 
-Model *modelTemporalDeck =
-    createModel<TemporalDeck, TemporalDeckWidget>("TemporalDeck");
+Model *modelTemporalDeck = createModel<TemporalDeck, TemporalDeckWidget>("TemporalDeck");
