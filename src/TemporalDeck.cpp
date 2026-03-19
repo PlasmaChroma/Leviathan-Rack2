@@ -242,6 +242,17 @@ struct TemporalDeckEngine {
   float lofiCrackleEnv = 0.f;
   float lofiCracklePolarity = 1.f;
   uint32_t lofiRng = 0x5A17C3E1u;
+  int cachedCartridgeCharacter = -1;
+  CartridgeParams cachedCartridgeParams;
+  float cachedHpCoeff = 0.f;
+  float cachedBodyCoeff = 0.f;
+  float cachedDriveNorm = 1.f;
+  float cachedMakeupGain = 1.f;
+  float prevScratchReadDelta = 0.f;
+  int prevScratchDeltaSign = 0;
+  float scratchFlipTransientEnv = 0.f;
+  float prevWetL = 0.f;
+  float prevWetR = 0.f;
 
   void reset(float sr) {
     sampleRate = sr;
@@ -270,6 +281,17 @@ struct TemporalDeckEngine {
     lofiCrackleEnv = 0.f;
     lofiCracklePolarity = 1.f;
     lofiRng = 0x5A17C3E1u;
+    cachedCartridgeCharacter = -1;
+    cachedCartridgeParams = CartridgeParams();
+    cachedHpCoeff = 0.f;
+    cachedBodyCoeff = 0.f;
+    cachedDriveNorm = 1.f;
+    cachedMakeupGain = 1.f;
+    prevScratchReadDelta = 0.f;
+    prevScratchDeltaSign = 0;
+    scratchFlipTransientEnv = 0.f;
+    prevWetL = 0.f;
+    prevWetR = 0.f;
   }
 
   float maxLagFromKnob(float knob) const { return clamp(knob, 0.f, 1.f) * sampleRate * 8.f; }
@@ -328,6 +350,38 @@ struct TemporalDeckEngine {
     }
   }
 
+  static float makeupGainForCartridge(int mode) {
+    switch (mode) {
+    case CARTRIDGE_VINTAGE:
+      return 1.08f;
+    case CARTRIDGE_BATTLE:
+      return 1.10f;
+    case CARTRIDGE_LOFI:
+      return 1.16f;
+    case CARTRIDGE_CLEAN:
+    default:
+      return 1.f;
+    }
+  }
+
+  static float fastTanh(float x) {
+    x = clamp(x, -3.f, 3.f);
+    float x2 = x * x;
+    return x * (27.f + x2) / (27.f + 9.f * x2);
+  }
+
+  void refreshCartridgeCache() {
+    if (cachedCartridgeCharacter == cartridgeCharacter) {
+      return;
+    }
+    cachedCartridgeCharacter = cartridgeCharacter;
+    cachedCartridgeParams = paramsForCartridge(cartridgeCharacter);
+    cachedHpCoeff = onePoleCoeff(cachedCartridgeParams.hpHz);
+    cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
+    cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
+    cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
+  }
+
   float lofiRandUnit() {
     // Small xorshift RNG for deterministic low-cost analog-ish modulation.
     lofiRng ^= (lofiRng << 13);
@@ -342,34 +396,33 @@ struct TemporalDeckEngine {
     if (cartridgeCharacter == CARTRIDGE_CLEAN) {
       return in;
     }
-
-    const CartridgeParams p = paramsForCartridge(cartridgeCharacter);
+    refreshCartridgeCache();
+    const CartridgeParams &p = cachedCartridgeParams;
     motionAmount = clamp(motionAmount, 0.f, 1.f);
 
     float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * motionAmount;
-    float lpHzL = lpHz * (1.f - p.stereoTilt);
-    float lpHzR = lpHz * (1.f + p.stereoTilt);
-    float hpCoeff = onePoleCoeff(p.hpHz);
-    float bodyCoeff = onePoleCoeff(p.bodyHz);
-    float lpCoeffL = onePoleCoeff(lpHzL);
-    float lpCoeffR = onePoleCoeff(lpHzR);
+    float lpCoeff = onePoleCoeff(lpHz);
 
     auto processChannel = [&](float x, CartridgeChannelState &state, float lpCoeff) {
-      float rumble = state.rumble.lowpass(x, hpCoeff);
+      float rumble = state.rumble.lowpass(x, cachedHpCoeff);
       float hp = x - rumble;
-      float body = state.body.lowpass(hp, bodyCoeff);
+      float body = state.body.lowpass(hp, cachedBodyCoeff);
       float air = state.air.lowpass(hp, lpCoeff);
       float presence = air - body;
       float voiced = air + p.bodyGain * body + p.presenceGain * presence;
       if (p.drive > 1.f) {
-        float norm = std::tanh(p.drive);
-        voiced = std::tanh(voiced * p.drive) / std::max(norm, 1e-6f);
+        voiced = fastTanh(voiced * p.drive) / cachedDriveNorm;
       }
       return voiced;
     };
 
-    float left = processChannel(in.first, cartridgeLeft, lpCoeffL);
-    float right = processChannel(in.second, cartridgeRight, lpCoeffR);
+    float left = processChannel(in.first, cartridgeLeft, lpCoeff);
+    float right = processChannel(in.second, cartridgeRight, lpCoeff);
+    if (p.stereoTilt != 0.f) {
+      float tilt = clamp(p.stereoTilt, -0.2f, 0.2f);
+      left *= 1.f - tilt * 0.5f;
+      right *= 1.f + tilt * 0.5f;
+    }
     float xfeed = clamp(p.crossfeed, 0.f, 0.45f);
     if (xfeed > 0.f) {
       float mixedL = left * (1.f - xfeed) + right * xfeed;
@@ -422,6 +475,8 @@ struct TemporalDeckEngine {
       left += hissL + crackle;
       right += hissR + crackle * 0.94f;
     }
+    left *= cachedMakeupGain;
+    right *= cachedMakeupGain;
     return {left, right};
   }
 
@@ -635,13 +690,16 @@ struct TemporalDeckEngine {
             platterVelocity = 0.f;
             readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
           } else {
-            float followProgress = clamp(dt / std::max(kScratchFollowTime, 1e-6f), 0.f, 1.f);
-            float shapedFollow = 1.f - std::pow(1.f - followProgress, 2.2f);
+            float motionNorm = clamp(velMag / 140.f, 0.f, 1.f);
+            float adaptiveFollowTime = kScratchFollowTime * (1.15f - 0.75f * motionNorm);
+            float followProgress = clamp(dt / std::max(adaptiveFollowTime, 1e-6f), 0.f, 1.f);
+            float shapedFollow = followProgress * (2.f - followProgress);
             float lagStep = lagError * shapedFollow;
             bool backwardScratch = lagError > 0.f;
             float dynamicSoftLimit =
               clamp(kScratchSoftLagStepMin + std::fabs(platterGestureVelocity) * 0.003f + std::fabs(lagError) * 0.08f,
-                    kScratchSoftLagStepMin, kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f));
+                    kScratchSoftLagStepMin,
+                    kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f) * (1.f + 0.45f * motionNorm));
             lagStep = dynamicSoftLimit * std::tanh(lagStep / std::max(dynamicSoftLimit, 1e-6f));
             if (backwardScratch && velMag > kReverseBiteVelocityThreshold) {
               float biteT =
@@ -680,11 +738,14 @@ struct TemporalDeckEngine {
         float lagError = scratchLagTargetSamples - scratchLagSamples;
         bool movingTowardNow = lagError < 0.f;
         float wheelFollowTime = movingTowardNow ? (kSlipReturnTime * 0.5f) : kSlipReturnTime;
+        float wheelMotionNorm =
+          clamp(std::fabs(wheelDeltaShaped) / std::max(sampleRate * 0.01f * kWheelScratchTravelScale, 1e-6f), 0.f, 1.f);
+        wheelFollowTime *= (1.f - 0.65f * wheelMotionNorm);
         float alpha = dt / std::max(wheelFollowTime, 1e-6f);
         float lagStep = lagError * alpha;
 
         // Keep progression audible even for tiny alpha / small errors.
-        float minStep = movingTowardNow ? 0.8f : 0.35f;
+        float minStep = (movingTowardNow ? 0.8f : 0.35f) * (1.f + 0.8f * wheelMotionNorm);
         if (std::fabs(lagError) > minStep && std::fabs(lagStep) < minStep) {
           lagStep = std::copysign(minStep, lagError);
         }
@@ -819,6 +880,30 @@ struct TemporalDeckEngine {
                : (highQualityScratchInterpolation && scratchReadPath) ? buffer.readHighQuality(readHead)
                                                                       : buffer.readCubic(readHead);
     wet = applyCartridgeCharacter(wet, motionAmount);
+    if (scratchReadPath) {
+      int deltaSign = (readDeltaForTone > 0.2f) ? 1 : ((readDeltaForTone < -0.2f) ? -1 : 0);
+      if (deltaSign != 0 && prevScratchDeltaSign != 0 && deltaSign != prevScratchDeltaSign) {
+        float jerk = std::fabs(readDeltaForTone - prevScratchReadDelta);
+        scratchFlipTransientEnv = std::max(scratchFlipTransientEnv, clamp(jerk * 0.18f, 0.f, 1.f));
+      }
+      if (deltaSign != 0) {
+        prevScratchDeltaSign = deltaSign;
+      }
+      float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
+      float transient = detailMid * (0.42f * scratchFlipTransientEnv);
+      wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
+      wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
+      scratchFlipTransientEnv *= 0.968f;
+    } else {
+      scratchFlipTransientEnv *= 0.92f;
+      if (scratchFlipTransientEnv < 1e-4f) {
+        scratchFlipTransientEnv = 0.f;
+        prevScratchDeltaSign = 0;
+      }
+    }
+    prevScratchReadDelta = readDeltaForTone;
+    prevWetL = wet.first;
+    prevWetR = wet.second;
     float mix = clamp(mixKnob, 0.f, 1.f);
     float outL = inL * (1.f - mix) + wet.first * mix;
     float outR = inR * (1.f - mix) + wet.second * mix;
