@@ -14,6 +14,20 @@
 
 namespace {
 
+static const char *cartridgeLabel(int index) {
+  switch (index) {
+  case 1:
+    return "Vintage";
+  case 2:
+    return "Battle";
+  case 3:
+    return "Lo-Fi";
+  case 0:
+  default:
+    return "Clean";
+  }
+}
+
 struct TemporalDeckBuffer {
   std::vector<float> left;
   std::vector<float> right;
@@ -152,7 +166,7 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
-  enum CartridgeCharacter { CARTRIDGE_CLEAN, CARTRIDGE_CLASSIC, CARTRIDGE_BATTLE, CARTRIDGE_LOFI, CARTRIDGE_COUNT };
+  enum CartridgeCharacter { CARTRIDGE_CLEAN, CARTRIDGE_VINTAGE, CARTRIDGE_BATTLE, CARTRIDGE_LOFI, CARTRIDGE_COUNT };
 
   struct OnePoleState {
     float z = 0.f;
@@ -222,6 +236,12 @@ struct TemporalDeckEngine {
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   CartridgeChannelState cartridgeLeft;
   CartridgeChannelState cartridgeRight;
+  float lofiWowPhaseA = 0.f;
+  float lofiWowPhaseB = 0.f;
+  float lofiFlutterPhase = 0.f;
+  float lofiCrackleEnv = 0.f;
+  float lofiCracklePolarity = 1.f;
+  uint32_t lofiRng = 0x5A17C3E1u;
 
   void reset(float sr) {
     sampleRate = sr;
@@ -244,6 +264,12 @@ struct TemporalDeckEngine {
     lastPlatterLagTarget = 0.f;
     cartridgeLeft.reset();
     cartridgeRight.reset();
+    lofiWowPhaseA = 0.f;
+    lofiWowPhaseB = 0.f;
+    lofiFlutterPhase = 0.f;
+    lofiCrackleEnv = 0.f;
+    lofiCracklePolarity = 1.f;
+    lofiRng = 0x5A17C3E1u;
   }
 
   float maxLagFromKnob(float knob) const { return clamp(knob, 0.f, 1.f) * sampleRate * 8.f; }
@@ -288,10 +314,12 @@ struct TemporalDeckEngine {
 
   static CartridgeParams paramsForCartridge(int mode) {
     switch (mode) {
-    case CARTRIDGE_CLASSIC:
-      return {35.f, 1600.f, 12500.f, 11800.f, 0.10f, 0.08f, 0.025f, 1.03f, 0.02f};
+    case CARTRIDGE_VINTAGE:
+      // Vintage (audiophile): extended bandwidth, low distortion, subtle warmth.
+      return {24.f, 1450.f, 17800.f, 16800.f, 0.08f, 0.03f, 0.006f, 1.015f, 0.01f};
     case CARTRIDGE_BATTLE:
-      return {55.f, 1900.f, 14500.f, 9200.f, 0.03f, 0.20f, 0.015f, 1.08f, 0.03f};
+      // Battle: heavier low-end rumble with forward cut presence.
+      return {16.f, 1200.f, 14200.f, 9000.f, 0.18f, 0.17f, 0.015f, 1.11f, 0.03f};
     case CARTRIDGE_LOFI:
       return {90.f, 1250.f, 6800.f, 3800.f, 0.22f, -0.10f, 0.05f, 1.18f, 0.08f};
     case CARTRIDGE_CLEAN:
@@ -299,6 +327,16 @@ struct TemporalDeckEngine {
       return {};
     }
   }
+
+  float lofiRandUnit() {
+    // Small xorshift RNG for deterministic low-cost analog-ish modulation.
+    lofiRng ^= (lofiRng << 13);
+    lofiRng ^= (lofiRng >> 17);
+    lofiRng ^= (lofiRng << 5);
+    return float(lofiRng & 0x00FFFFFFu) / float(0x01000000u);
+  }
+
+  float lofiRandSigned() { return lofiRandUnit() * 2.f - 1.f; }
 
   std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in, float motionAmount) {
     if (cartridgeCharacter == CARTRIDGE_CLEAN) {
@@ -338,6 +376,51 @@ struct TemporalDeckEngine {
       float mixedR = right * (1.f - xfeed) + left * xfeed;
       left = mixedL;
       right = mixedR;
+    }
+
+    if (cartridgeCharacter == CARTRIDGE_LOFI) {
+      float sr = std::max(sampleRate, 1.f);
+      float dt = 1.f / sr;
+      constexpr float kTau = 2.f * float(M_PI);
+
+      lofiWowPhaseA += kTau * 0.33f * dt;
+      lofiWowPhaseB += kTau * 0.57f * dt;
+      lofiFlutterPhase += kTau * 7.6f * dt;
+      if (lofiWowPhaseA > kTau)
+        lofiWowPhaseA -= kTau;
+      if (lofiWowPhaseB > kTau)
+        lofiWowPhaseB -= kTau;
+      if (lofiFlutterPhase > kTau)
+        lofiFlutterPhase -= kTau;
+
+      float wowFlutter = 0.0042f * std::sin(lofiWowPhaseA) + 0.0026f * std::sin(lofiWowPhaseB + 0.7f) +
+                         0.0012f * std::sin(lofiFlutterPhase + 1.4f);
+      float wearTilt = 1.f + wowFlutter;
+
+      // Semi-worn character: gentle high smearing + channel mismatch.
+      float lofiBlend = clamp(0.18f + motionAmount * 0.24f, 0.f, 0.48f);
+      float mono = 0.5f * (left + right);
+      left = left * (1.f - lofiBlend) + mono * lofiBlend * (1.01f + 0.35f * wowFlutter);
+      right = right * (1.f - lofiBlend) + mono * lofiBlend * (0.99f - 0.30f * wowFlutter);
+      left *= (0.995f + 0.010f * wearTilt);
+      right *= (0.995f - 0.009f * wearTilt);
+
+      // Light vinyl bed noise.
+      float hissBase = 0.0014f + 0.0008f * motionAmount;
+      float hissL = hissBase * lofiRandSigned();
+      float hissR = hissBase * lofiRandSigned();
+
+      // Occasional tiny crackle pops, slightly more frequent during motion.
+      float crackleChance = 0.000045f + 0.00011f * motionAmount;
+      if (lofiRandUnit() < crackleChance) {
+        lofiCrackleEnv = std::max(lofiCrackleEnv, 0.45f + 0.55f * lofiRandUnit());
+        lofiCracklePolarity = lofiRandSigned() >= 0.f ? 1.f : -1.f;
+      }
+      float crackle = lofiCracklePolarity * lofiCrackleEnv * (0.0065f + 0.005f * motionAmount);
+      lofiCrackleEnv *= 0.89f;
+
+      left += hissL + crackle;
+      right += hissR + crackle * 0.94f;
     }
     return {left, right};
   }
@@ -727,6 +810,11 @@ struct TemporalDeckEngine {
       }
     }
     float motionAmount = clamp((std::fabs(readDeltaForTone) - 1.f) / 3.f, 0.f, 1.f);
+    if (scratchReadPath) {
+      // Preserve more buffer detail during scratching by reducing motion-driven
+      // cartridge darkening.
+      motionAmount *= 0.4f;
+    }
     auto wet = useLinearInterpolation                                 ? buffer.readLinear(readHead)
                : (highQualityScratchInterpolation && scratchReadPath) ? buffer.readHighQuality(readHead)
                                                                       : buffer.readCubic(readHead);
@@ -846,6 +934,7 @@ struct TemporalDeck : Module {
     FREEZE_PARAM,
     REVERSE_PARAM,
     SLIP_PARAM,
+    CARTRIDGE_CYCLE_PARAM,
     PARAMS_LEN
   };
   enum InputId {
@@ -871,6 +960,7 @@ struct TemporalDeck : Module {
   dsp::SchmittTrigger freezeTrigger;
   dsp::SchmittTrigger reverseTrigger;
   dsp::SchmittTrigger slipTrigger;
+  dsp::SchmittTrigger cartridgeCycleTrigger;
   float cachedSampleRate = 0.f;
   bool freezeLatched = false;
   bool reverseLatched = false;
@@ -904,6 +994,7 @@ struct TemporalDeck : Module {
     configButton(FREEZE_PARAM, "Freeze");
     configButton(REVERSE_PARAM, "Reverse");
     configButton(SLIP_PARAM, "Slip");
+    configButton(CARTRIDGE_CYCLE_PARAM, "Cycle cartridge");
     configInput(POSITION_CV_INPUT, "Position CV");
     configInput(RATE_CV_INPUT, "Rate CV");
     configInput(INPUT_L_INPUT, "Left audio");
@@ -995,6 +1086,9 @@ struct TemporalDeck : Module {
         freezeLatched = false;
         reverseLatched = false;
       }
+    }
+    if (cartridgeCycleTrigger.process(params[CARTRIDGE_CYCLE_PARAM].getValue())) {
+      cartridgeCharacter = (cartridgeCharacter + 1) % TemporalDeckEngine::CARTRIDGE_COUNT;
     }
 
     float inL = inputs[INPUT_L_INPUT].getVoltage();
@@ -1186,7 +1280,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
 void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   Vec center = centerPx;
-  Vec armPivot = center.plus(Vec(platterRadiusPx * 1.18f, platterRadiusPx * 0.34f));
+  Vec armPivot = center.plus(Vec(platterRadiusPx * 1.12f, platterRadiusPx * 0.34f));
   Vec stylusTip = center.plus(Vec(platterRadiusPx * 0.62f, platterRadiusPx * 0.64f));
   float platterPhase = module ? module->uiPlatterAngle.load() : 0.f;
   float wobbleAngle = 0.012f * std::sin(platterPhase * 0.31f) + 0.006f * std::sin(platterPhase * 0.77f + 0.8f);
@@ -1217,7 +1311,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, counterweight.x - mm2px(Vec(2.2f, 0.f)).x, counterweight.y - mm2px(Vec(1.6f, 0.f)).x,
                    mm2px(Vec(4.4f, 0.f)).x, mm2px(Vec(3.2f, 0.f)).x, 1.2f);
-    nvgFillColor(args.vg, nvgRGBA(74, 78, 86, 220));
+    nvgFillColor(args.vg, nvgRGBA(74, 78, 86, 255));
     nvgFill(args.vg);
 
     Vec armStart = armPivot.plus(armDir.mult(mm2px(Vec(4.8f, 0.f)).x));
@@ -1271,9 +1365,14 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(1.2f, 0.f)).x)), 0.38f);
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
-    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(3.1f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.82f, 0.f)).x)), 0.28f);
-    drawHole(shellBack.plus(armDir.mult(mm2px(Vec(3.1f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.82f, 0.f)).x)), 0.28f);
-
+  }
+  if (module && APP && APP->window && APP->window->uiFont) {
+    Vec labelPos = armPivot.plus(Vec(0.f, mm2px(Vec(7.8f, 0.f)).x));
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgFontSize(args.vg, 11.f);
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+    nvgText(args.vg, labelPos.x, labelPos.y, cartridgeLabel(module->cartridgeCharacter), nullptr);
   }
   nvgRestore(args.vg);
 }
@@ -1565,6 +1664,7 @@ struct TemporalDeckWidget : ModuleWidget {
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
     loadPlatterAnchor(platterCenter, platterRadius);
+    Vec tonearmPivot = platterCenter.plus(Vec(platterRadius * 1.12f, platterRadius * 0.34f));
 
     float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
@@ -1598,14 +1698,15 @@ struct TemporalDeckWidget : ModuleWidget {
     tonearm->box.pos = Vec(0.f, 0.f);
     tonearm->box.size = box.size;
     addChild(tonearm);
+
+    // Add after platter/tonearm so this control is visible on top.
+    addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
   }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
     assert(menu);
     menu->addChild(new MenuSeparator());
-    menu->addChild(createIndexPtrSubmenuItem("Cartridge character", {"Clean", "Classic", "Battle", "Lo-Fi"},
-                                             module ? &module->cartridgeCharacter : nullptr));
     menu->addChild(createBoolPtrMenuItem("High-quality scratch interpolation", "",
                                          module ? &module->highQualityScratchInterpolation : nullptr));
   }
