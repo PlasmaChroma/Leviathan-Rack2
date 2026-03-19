@@ -254,6 +254,12 @@ struct TemporalDeckEngine {
   float scratchFlipTransientEnv = 0.f;
   float prevWetL = 0.f;
   float prevWetR = 0.f;
+  float prevScratchOutL = 0.f;
+  float prevScratchOutR = 0.f;
+  float scratchDcInL = 0.f;
+  float scratchDcInR = 0.f;
+  float scratchDcOutL = 0.f;
+  float scratchDcOutR = 0.f;
 
   void reset(float sr) {
     sampleRate = sr;
@@ -293,6 +299,12 @@ struct TemporalDeckEngine {
     scratchFlipTransientEnv = 0.f;
     prevWetL = 0.f;
     prevWetR = 0.f;
+    prevScratchOutL = 0.f;
+    prevScratchOutR = 0.f;
+    scratchDcInL = 0.f;
+    scratchDcInR = 0.f;
+    scratchDcOutL = 0.f;
+    scratchDcOutR = 0.f;
   }
 
   float maxLagFromKnob(float knob) const { return clamp(knob, 0.f, 1.f) * sampleRate * 8.f; }
@@ -897,20 +909,50 @@ struct TemporalDeckEngine {
       }
       float detailMid = 0.5f * ((wet.first - prevWetL) + (wet.second - prevWetR));
       float transientMotion = clamp((std::fabs(readDeltaForTone) - 1.15f) / 1.9f, 0.f, 1.f);
-      float transient = detailMid * (0.42f * scratchFlipTransientEnv * transientMotion);
+      float transient = detailMid * (0.30f * scratchFlipTransientEnv * transientMotion);
       wet.first += transient * (prevScratchDeltaSign >= 0 ? 1.0f : 0.9f);
       wet.second += transient * (prevScratchDeltaSign <= 0 ? 1.0f : 0.9f);
       scratchFlipTransientEnv *= 0.968f;
+
+      // Slow reverse glide: trim sub-rumble and suppress tiny discontinuity
+      // clicks without flattening fast scratch articulation.
+      float slowReverseAmt = 0.f;
+      if (manualScratch && readDeltaForTone < 0.f) {
+        slowReverseAmt = clamp((1.35f - std::fabs(readDeltaForTone)) / 1.35f, 0.f, 1.f);
+      }
+      if (slowReverseAmt > 0.f) {
+        constexpr float kDcR = 0.995f;
+        float hpL = wet.first - scratchDcInL + kDcR * scratchDcOutL;
+        float hpR = wet.second - scratchDcInR + kDcR * scratchDcOutR;
+        scratchDcInL = wet.first;
+        scratchDcInR = wet.second;
+        scratchDcOutL = hpL;
+        scratchDcOutR = hpR;
+        float rumbleTrim = 0.55f * slowReverseAmt;
+        wet.first = crossfade(wet.first, hpL, rumbleTrim);
+        wet.second = crossfade(wet.second, hpR, rumbleTrim);
+      }
+
+      float microStepAmt = clamp((1.1f - std::fabs(readDeltaForTone)) / 1.1f, 0.f, 1.f);
+      float deClickAmt = manualScratch ? (0.38f * microStepAmt) : (0.22f * microStepAmt);
+      wet.first = crossfade(wet.first, prevScratchOutL, deClickAmt);
+      wet.second = crossfade(wet.second, prevScratchOutR, deClickAmt);
     } else {
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
         scratchFlipTransientEnv = 0.f;
         prevScratchDeltaSign = 0;
       }
+      scratchDcInL = wet.first;
+      scratchDcInR = wet.second;
+      scratchDcOutL = 0.f;
+      scratchDcOutR = 0.f;
     }
     prevScratchReadDelta = readDeltaForTone;
     prevWetL = wet.first;
     prevWetR = wet.second;
+    prevScratchOutL = wet.first;
+    prevScratchOutR = wet.second;
     float mix = clamp(mixKnob, 0.f, 1.f);
     float outL = inL * (1.f - mix) + wet.first * mix;
     float outR = inR * (1.f - mix) + wet.second * mix;
@@ -1413,7 +1455,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     nvgFillColor(args.vg, nvgRGBA(74, 78, 86, 255));
     nvgFill(args.vg);
 
-    Vec armStart = armPivot.plus(armDir.mult(mm2px(Vec(4.8f, 0.f)).x));
+    Vec armStart = armPivot;
     Vec shellBack = stylusTip.minus(armDir.mult(mm2px(Vec(4.0f, 0.f)).x));
     Vec armEnd = shellBack;
     nvgBeginPath(args.vg);
