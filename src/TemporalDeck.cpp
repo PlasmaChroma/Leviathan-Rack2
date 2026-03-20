@@ -174,12 +174,13 @@ struct TemporalDeckEngine {
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
   static constexpr float kManualVelocityPredictScale = 0.95f;
-  static constexpr float kHybridScratchVelocityFollowHz = 240.f;
-  static constexpr float kHybridScratchVelocityDampingHz = 18.f;
+  static constexpr float kHybridScratchHandFollowHz = 220.f;
+  static constexpr float kHybridScratchVelocityDampingHz = 9.f;
   static constexpr float kHybridScratchCorrectionHz = 70.f;
   static constexpr float kHybridScratchWheelBurstDecayHz = 24.f;
   static constexpr float kHybridScratchWheelImpulseTime = 0.03f;
   static constexpr float kHybridScratchMaxVelocity = 96000.f;
+  static constexpr float kHybridScratchMaxAccel = 1200000.f;
   static constexpr float kHybridScratchVelocityDeadband = 8.f;
   static constexpr float kScratchInertiaFollowHz = 950.f;
   static constexpr float kScratchInertiaDampingHz = 380.f;
@@ -251,6 +252,7 @@ struct TemporalDeckEngine {
   float nowCatchStartLag = 0.f;
   float scratchLagSamples = 0.f;
   float scratchLagTargetSamples = 0.f;
+  float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
   float scratchWheelVelocityBurst = 0.f;
   float filteredManualLagTargetSamples = 0.f;
@@ -301,6 +303,7 @@ struct TemporalDeckEngine {
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
     scratchLagTargetSamples = 0.f;
+    scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratchWheelVelocityBurst = 0.f;
     filteredManualLagTargetSamples = 0.f;
@@ -580,6 +583,7 @@ struct TemporalDeckEngine {
 
   void clearScratchMotionState() {
     platterVelocity = 0.f;
+    scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratchWheelVelocityBurst = 0.f;
   }
@@ -604,17 +608,28 @@ struct TemporalDeckEngine {
     float lagError = scratchLagTargetSamples - scratchLagSamples;
     float correctionVelocity = clamp(-lagError * (kHybridScratchCorrectionHz * correctionScale),
                                      -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
-    float desiredVelocity = targetReadVelocity + scratchWheelVelocityBurst + correctionVelocity;
+    float handFollowHz = kHybridScratchHandFollowHz * followScale;
+    float handAlpha = clamp(dt * handFollowHz, 0.f, 1.f);
+    scratchHandVelocity += (targetReadVelocity - scratchHandVelocity) * handAlpha;
+
+    float desiredVelocity = scratchHandVelocity + scratchWheelVelocityBurst + correctionVelocity;
     float speedNorm = clamp(std::fabs(desiredVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
-    float followHz = kHybridScratchVelocityFollowHz * followScale * (0.65f + 0.75f * speedNorm);
-    float followAlpha = clamp(dt * followHz, 0.f, 1.f);
-    scratchMotionVelocity += (desiredVelocity - scratchMotionVelocity) * followAlpha;
+    float accelLimit = kHybridScratchMaxAccel * (0.55f + 0.85f * speedNorm) * followScale;
+    float velocityError = desiredVelocity - scratchMotionVelocity;
+    bool reversingPlatter = scratchMotionVelocity * desiredVelocity < 0.f;
+    float maxVelocityStep = accelLimit * (reversingPlatter ? 1.35f : 1.0f) * dt;
+    scratchMotionVelocity += clamp(velocityError, -maxVelocityStep, maxVelocityStep);
 
     float damping = clamp(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale), 0.f, 1.f);
-    scratchMotionVelocity *= damping;
+    float coastDamping = std::fabs(desiredVelocity) < (0.75f * kHybridScratchVelocityDeadband)
+                           ? clamp(1.f - dt * (kHybridScratchVelocityDampingHz * dampingScale * 1.8f), 0.f, 1.f)
+                           : damping;
+    scratchMotionVelocity *= coastDamping;
 
-    if (std::fabs(scratchMotionVelocity) < kHybridScratchVelocityDeadband && std::fabs(lagError) < 0.5f &&
+    if (std::fabs(scratchHandVelocity) < kHybridScratchVelocityDeadband &&
+        std::fabs(scratchMotionVelocity) < kHybridScratchVelocityDeadband && std::fabs(lagError) < 0.5f &&
         std::fabs(desiredVelocity) < kHybridScratchVelocityDeadband) {
+      scratchHandVelocity = 0.f;
       scratchMotionVelocity = 0.f;
     }
 
@@ -627,6 +642,7 @@ struct TemporalDeckEngine {
         scratchMotionVelocity >= 0.f) {
       scratchLagSamples = 0.f;
       scratchLagTargetSamples = 0.f;
+      scratchHandVelocity = 0.f;
       scratchMotionVelocity = 0.f;
       scratchWheelVelocityBurst = 0.f;
       readHead = newestPos;
@@ -750,6 +766,7 @@ struct TemporalDeckEngine {
           bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
           if (stationaryManualHold) {
             scratchLagTargetSamples = scratchLagSamples;
+            scratchHandVelocity = 0.f;
             scratchMotionVelocity = 0.f;
           } else {
             float targetReadVelocity = 0.f;
@@ -759,9 +776,15 @@ struct TemporalDeckEngine {
               // create a compensating buzz.
               targetReadVelocity = platterGestureVelocity;
             }
+            if (targetReadVelocity > 0.f || scratchLagTargetSamples < scratchLagSamples) {
+              // Moving toward NOW has to outrun the write head's implicit +1x
+              // motion. Add that baseline here so forward scratches do not feel
+              // resistant while reverse still behaves freely.
+              targetReadVelocity += sampleRate;
+            }
             float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
-            integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.05f + 0.35f * motionNorm,
-                                   1.12f - 0.28f * motionNorm, 0.72f, nowSnapThresholdSamples);
+            integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
+                                   0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples);
           }
         } else {
           float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
@@ -1166,6 +1189,9 @@ struct TemporalDeckEngine {
         visualDelta = speed;
       }
       platterPhase += visualDelta * platterRadiansPerSample();
+      if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
+        platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
+      }
     }
 
     result.outL = outL;
@@ -1202,7 +1228,8 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   float deadZonePx = 0.f;
   bool dragging = false;
   Vec onButtonPos;
-  float lastAngle = 0.f;
+  float contactAngle = 0.f;
+  float contactRadiusPx = 0.f;
   float localLagSamples = 0.f;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
@@ -1810,49 +1837,45 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!module || !dragging) {
     return;
   }
-  // These thresholds are intentionally small so slow deliberate platter motion
-  // still becomes a fresh gesture. Raising them too far makes the engine fall
-  // back to the stationary-hold path and the platter starts to feel resistant.
-  constexpr float kScratchMoveThresholdPx = 0.2f;
-  constexpr float kScratchMoveThresholdRad = 0.001f;
-  float radius = local.norm();
-  if (radius < deadZonePx * 0.25f) {
+  // Physical screen-space model:
+  // lock a contact radius at drag start and only use tangential motion to move
+  // the platter. Radial cursor drift is ignored instead of redefining the
+  // platter angle directly from the current mouse position.
+  constexpr float kScratchMoveThresholdPx = 0.15f;
+  float effectiveRadius = std::max(contactRadiusPx, platterRadiusPx * 0.32f);
+  if (effectiveRadius <= 1e-3f) {
     return;
   }
-  float angle = std::atan2(local.y, local.x);
-  float deltaAngle = angle - lastAngle;
-  if (deltaAngle > M_PI) {
-    deltaAngle -= 2.f * M_PI;
-  }
-  if (deltaAngle < -M_PI) {
-    deltaAngle += 2.f * M_PI;
-  }
-  float mouseMovePx = std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y);
-  if (mouseMovePx < kScratchMoveThresholdPx && std::fabs(deltaAngle) < kScratchMoveThresholdRad) {
+  Vec radial(std::cos(contactAngle), std::sin(contactAngle));
+  Vec tangent(-radial.y, radial.x);
+  float tangentialPx = mouseDelta.x * tangent.x + mouseDelta.y * tangent.y;
+  if (std::fabs(tangentialPx) < kScratchMoveThresholdPx) {
     return;
   }
+  float deltaAngle = tangentialPx / effectiveRadius;
   // Always apply drag deltas to the engine's latest lag, not the last UI
   // event's cached lag. The live point continues to advance while the mouse is
   // held, so stale lag here causes slow backward drags to creep forward.
   float accessibleLag = module->uiAccessibleLagSamples.load();
   localLagSamples = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
-  float effectiveRadius = std::max(radius, deadZonePx);
-  float weight = clamp(effectiveRadius / platterRadiusPx, 0.3f, 1.f);
   float sensitivity = module->scratchSensitivity();
   float samplesPerRadian = 60.f * module->uiSampleRate.load() /
                            (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm) *
                            TemporalDeckEngine::kMouseScratchTravelScale * sensitivity;
-  float lagDelta = deltaAngle * samplesPerRadian * weight;
+  float lagDelta = deltaAngle * samplesPerRadian;
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
-  float velocity =
-    (std::fabs(mouseDelta.x) + std::fabs(mouseDelta.y)) * module->uiSampleRate.load() * 0.0005f * sensitivity;
-  if (deltaAngle < 0.f) {
-    velocity *= -1.f;
-  }
+  float radiusRatio = clamp(platterRadiusPx / effectiveRadius, 0.8f, 2.6f);
+  float velocity = tangentialPx * module->uiSampleRate.load() * 0.0007f * sensitivity * radiusRatio;
   module->setPlatterScratch(true, localLagSamples, velocity);
   int motionFreshSamples = std::max(1, int(std::round(module->uiSampleRate.load() * 0.02f)));
   module->setPlatterMotionFreshSamples(motionFreshSamples);
-  lastAngle = angle;
+  contactAngle += deltaAngle;
+  if (contactAngle > M_PI) {
+    contactAngle -= 2.f * M_PI;
+  }
+  if (contactAngle < -M_PI) {
+    contactAngle += 2.f * M_PI;
+  }
 }
 
 void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
@@ -1914,7 +1937,8 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   }
   Vec local = onButtonPos.minus(localCenter());
   dragging = true;
-  lastAngle = std::atan2(local.y, local.x);
+  contactAngle = std::atan2(local.y, local.x);
+  contactRadiusPx = clamp(local.norm(), platterRadiusPx * 0.32f, platterRadiusPx * 0.98f);
   localLagSamples = module->uiLagSamples.load();
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
