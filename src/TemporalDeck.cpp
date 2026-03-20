@@ -45,8 +45,8 @@ static CartridgeVisualStyle cartridgeVisualStyle(int index) {
     // Ortofon MKII Scratch: white body with black detailing.
     return {nvgRGBA(242, 242, 242, 240), nvgRGBA(26, 26, 26, 210), nvgRGBA(18, 18, 18, 228)};
   case 3:
-    // Stanton 680 HP: industrial silver with cream/neutral fasteners.
-    return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(244, 241, 220, 225)};
+    // Stanton 680 HP: industrial silver with glossy black fasteners.
+    return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(24, 24, 28, 230)};
   case 4:
     // Lo-Fi: darker, worn, and slightly grimier.
     return {nvgRGBA(56, 51, 44, 238), nvgRGBA(98, 84, 70, 190), nvgRGBA(186, 170, 138, 210)};
@@ -66,6 +66,32 @@ static const char *scratchModelLabel(int index) {
   }
 }
 
+static const char *bufferDurationLabel(int index) {
+  switch (index) {
+  case 1:
+    return "16 s";
+  case 2:
+    return "8 min";
+  case 0:
+  default:
+    return "8 s";
+  }
+}
+
+static float realBufferSecondsForMode(int index) {
+  switch (index) {
+  case 1:
+    return 17.f;
+  case 2:
+    return 481.f;
+  case 0:
+  default:
+    return 9.f;
+  }
+}
+
+static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
+
 struct TemporalDeckBuffer {
   std::vector<float> left;
   std::vector<float> right;
@@ -73,10 +99,12 @@ struct TemporalDeckBuffer {
   int writeHead = 0;
   int filled = 0;
   float sampleRate = 44100.f;
+  float durationSeconds = 9.f;
 
-  void reset(float sr) {
+  void reset(float sr, float seconds = 9.f) {
     sampleRate = sr;
-    size = std::max(1, int(std::round(sampleRate * 9.f)));
+    durationSeconds = std::max(1.f, seconds);
+    size = std::max(1, int(std::round(sampleRate * durationSeconds)));
     left.assign(size, 0.f);
     right.assign(size, 0.f);
     writeHead = 0;
@@ -224,6 +252,7 @@ struct TemporalDeckEngine {
     CARTRIDGE_COUNT
   };
   enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_COUNT };
+  enum BufferDurationMode { BUFFER_DURATION_8S, BUFFER_DURATION_16S, BUFFER_DURATION_8MIN, BUFFER_DURATION_COUNT };
 
   struct OnePoleState {
     float z = 0.f;
@@ -258,13 +287,17 @@ struct TemporalDeckEngine {
     float crossfeed = 0.f;
     float drive = 1.f;
     float stereoTilt = 0.f;
+    float saturationMix = 1.f;
+    float motionDulling = 1.f;
 
     CartridgeParams() {}
 
     CartridgeParams(float hpHz, float bodyHz, float lpHz, float lpMotionHz, float bodyGain, float presenceGain,
-                    float crossfeed, float drive, float stereoTilt)
+                    float crossfeed, float drive, float stereoTilt, float saturationMix = 1.f,
+                    float motionDulling = 1.f)
         : hpHz(hpHz), bodyHz(bodyHz), lpHz(lpHz), lpMotionHz(lpMotionHz), bodyGain(bodyGain),
-          presenceGain(presenceGain), crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt) {}
+          presenceGain(presenceGain), crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt),
+          saturationMix(saturationMix), motionDulling(motionDulling) {}
   };
 
   TemporalDeckBuffer buffer;
@@ -295,6 +328,7 @@ struct TemporalDeckEngine {
   uint32_t lastPlatterGestureRevision = 0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   int scratchModel = SCRATCH_MODEL_HYBRID;
+  int bufferDurationMode = BUFFER_DURATION_8S;
   CartridgeChannelState cartridgeLeft;
   CartridgeChannelState cartridgeRight;
   float lofiWowPhaseA = 0.f;
@@ -323,7 +357,7 @@ struct TemporalDeckEngine {
 
   void reset(float sr) {
     sampleRate = sr;
-    buffer.reset(sr);
+    buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode));
     readHead = 0.f;
     timelineHead = 0.f;
     platterPhase = 0.f;
@@ -371,7 +405,9 @@ struct TemporalDeckEngine {
     scratchDcOutR = 0.f;
   }
 
-  float maxLagFromKnob(float knob) const { return clamp(knob, 0.f, 1.f) * sampleRate * 8.f; }
+  float maxLagFromKnob(float knob) const {
+    return clamp(knob, 0.f, 1.f) * sampleRate * usableBufferSecondsForMode(bufferDurationMode);
+  }
 
   float accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), float(buffer.filled)); }
 
@@ -414,14 +450,14 @@ struct TemporalDeckEngine {
   static CartridgeParams paramsForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      // M44-7: big low shelf, hot output, slight upper-mid softness.
-      return {20.f, 80.f, 17500.f, 16000.f, 0.20f, -0.06f, 0.004f, 1.02f, 0.008f};
+      // M44-7: warm/fat and hot, but still fundamentally hi-fi rather than degraded.
+      return {20.f, 110.f, 17800.f, 16800.f, 0.15f, -0.03f, 0.003f, 1.01f, 0.006f, 0.75f, 0.35f};
     case CARTRIDGE_CONCORDE_SCRATCH:
-      // Concorde Scratch: flat/controlled low end, hotter edge, stiffer under motion.
-      return {30.f, 1800.f, 18000.f, 12000.f, 0.06f, 0.15f, 0.005f, 1.10f, 0.012f};
+      // Concorde MKII Scratch: energetic and hot, with more bite than warmth.
+      return {28.f, 2100.f, 18000.f, 15600.f, 0.05f, 0.08f, 0.004f, 1.025f, 0.008f, 0.65f, 0.35f};
     case CARTRIDGE_680_HP:
-      // Stanton 680 HP: warm body, silky top, slightly wider club/hi-fi image.
-      return {18.f, 700.f, 12000.f, 9500.f, 0.14f, -0.04f, 0.012f, 1.01f, 0.02f};
+      // Stanton 680 HP: warm/musical with silky highs and a little extra width.
+      return {18.f, 820.f, 13500.f, 11800.f, 0.11f, -0.02f, 0.010f, 1.01f, 0.016f, 0.22f, 0.45f};
     case CARTRIDGE_LOFI:
       // Lo-Fi: intentionally veiled, smeared, and dirty.
       return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
@@ -434,11 +470,11 @@ struct TemporalDeckEngine {
   static float makeupGainForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      return 1.18f;
-    case CARTRIDGE_CONCORDE_SCRATCH:
       return 1.10f;
+    case CARTRIDGE_CONCORDE_SCRATCH:
+      return 1.06f;
     case CARTRIDGE_680_HP:
-      return 1.17f;
+      return 1.08f;
     case CARTRIDGE_LOFI:
       return 1.36f;
     case CARTRIDGE_CLEAN:
@@ -486,7 +522,7 @@ struct TemporalDeckEngine {
     motionAmount = clamp(motionAmount, 0.f, 1.f);
 
     // Motion amount modulates LP corner for "stylus under motion" dulling.
-    float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * motionAmount;
+    float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * (motionAmount * p.motionDulling);
     float lpCoeff = onePoleCoeff(lpHz);
 
     auto processChannel = [&](float x, CartridgeChannelState &state, float lpCoeff) {
@@ -497,7 +533,9 @@ struct TemporalDeckEngine {
       float presence = air - body;
       float voiced = air + p.bodyGain * body + p.presenceGain * presence;
       if (p.drive > 1.f) {
-        voiced = fastTanh(voiced * p.drive) / cachedDriveNorm;
+        float dry = voiced;
+        float sat = fastTanh(voiced * p.drive) / cachedDriveNorm;
+        voiced = crossfade(dry, sat, clamp(p.saturationMix, 0.f, 1.f));
       }
       return voiced;
     };
@@ -1227,6 +1265,21 @@ struct TemporalDeckEngine {
         // Keep platter animation responsive to RATE even when readHead is near
         // NOW and constrained by buffer causality.
         visualDelta = speed;
+      } else if (manualTouchScratch) {
+        // Audio read motion is intentionally smoothed/limited during manual
+        // scratch, which can make the platter graphic look unresponsive on
+        // quick direction changes. For the visual, prefer the direct gesture
+        // direction so fast back-and-forth scratches stay unambiguous.
+        float gestureDelta = platterGestureVelocity * dt;
+        float platterModelDelta = (hybridManualScratch ? scratchMotionVelocity : platterVelocity) * dt;
+        bool gestureActive = std::fabs(gestureDelta) > 1e-5f;
+        if (gestureActive) {
+          // During active drag, the platter graphic should reflect the hand's
+          // direction first and only use the motion model as a small stabilizer.
+          visualDelta = crossfade(gestureDelta, platterModelDelta, 0.18f);
+        } else {
+          visualDelta = crossfade(readDelta, platterModelDelta, 0.82f);
+        }
       }
       platterPhase += visualDelta * platterRadiansPerSample();
       if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
@@ -1369,9 +1422,19 @@ struct TemporalDeck : Module {
   bool highQualityScratchInterpolation = true;
   int cartridgeCharacter = TemporalDeckEngine::CARTRIDGE_CLEAN;
   int scratchModel = TemporalDeckEngine::SCRATCH_MODEL_HYBRID;
+  int bufferDurationMode = TemporalDeckEngine::BUFFER_DURATION_8S;
 
   float scratchSensitivity() {
     return ScratchSensitivityQuantity::sensitivityForValue(params[SCRATCH_SENSITIVITY_PARAM].getValue());
+  }
+
+  void applyBufferDurationMode(int mode) {
+    bufferDurationMode = clamp(mode, 0, TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+    engine.bufferDurationMode = bufferDurationMode;
+    if (paramQuantities[BUFFER_PARAM]) {
+      paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(bufferDurationMode);
+    }
+    onSampleRateChange();
   }
 
   TemporalDeck() {
@@ -1393,11 +1456,15 @@ struct TemporalDeck : Module {
     configInput(FREEZE_GATE_INPUT, "Freeze gate");
     configOutput(OUTPUT_L_OUTPUT, "Left audio");
     configOutput(OUTPUT_R_OUTPUT, "Right audio");
+    if (paramQuantities[BUFFER_PARAM]) {
+      paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(bufferDurationMode);
+    }
     onSampleRateChange();
   }
 
   void onSampleRateChange() override {
     cachedSampleRate = APP->engine->getSampleRate();
+    engine.bufferDurationMode = bufferDurationMode;
     engine.reset(cachedSampleRate);
     uiSampleRate.store(cachedSampleRate);
     uiLagSamples.store(0.f);
@@ -1420,6 +1487,7 @@ struct TemporalDeck : Module {
     json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(highQualityScratchInterpolation));
     json_object_set_new(root, "cartridgeCharacter", json_integer(cartridgeCharacter));
     json_object_set_new(root, "scratchModel", json_integer(scratchModel));
+    json_object_set_new(root, "bufferDurationMode", json_integer(bufferDurationMode));
     return root;
   }
 
@@ -1433,6 +1501,7 @@ struct TemporalDeck : Module {
     json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
     json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
     json_t *scratchModelJ = json_object_get(root, "scratchModel");
+    json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
     if (freezeJ) {
       freezeLatched = json_boolean_value(freezeJ);
     }
@@ -1450,6 +1519,14 @@ struct TemporalDeck : Module {
     }
     if (scratchModelJ) {
       scratchModel = clamp((int)json_integer_value(scratchModelJ), 0, TemporalDeckEngine::SCRATCH_MODEL_COUNT - 1);
+    }
+    if (bufferDurationJ) {
+      bufferDurationMode =
+        clamp((int)json_integer_value(bufferDurationJ), 0, TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+    }
+    engine.bufferDurationMode = bufferDurationMode;
+    if (paramQuantities[BUFFER_PARAM]) {
+      paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(bufferDurationMode);
     }
   }
 
@@ -1532,7 +1609,7 @@ struct TemporalDeck : Module {
     uiPublishTimerSec += args.sampleTime;
     if (uiPublishTimerSec >= kUiPublishIntervalSec) {
       uiPublishTimerSec = std::fmod(uiPublishTimerSec, kUiPublishIntervalSec);
-      float maxLag = std::max(1.f, args.sampleRate * 8.f);
+      float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(bufferDurationMode));
       float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
       float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
       float lagLed = lagRatio * float(kArcLightCount - 1);
@@ -2109,6 +2186,14 @@ struct TemporalDeckWidget : ModuleWidget {
         for (int i = 0; i < TemporalDeckEngine::SCRATCH_MODEL_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(
             scratchModelLabel(i), "", [=]() { return module->scratchModel == i; }, [=]() { module->scratchModel = i; }));
+        }
+      }));
+      menu->addChild(createMenuLabel("Advanced"));
+      menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeckEngine::BUFFER_DURATION_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(bufferDurationLabel(i), "",
+                                                [=]() { return module->bufferDurationMode == i; },
+                                                [=]() { module->applyBufferDurationMode(i); }));
         }
       }));
     }
