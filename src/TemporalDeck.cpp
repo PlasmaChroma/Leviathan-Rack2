@@ -58,6 +58,8 @@ static CartridgeVisualStyle cartridgeVisualStyle(int index) {
 
 static const char *scratchModelLabel(int index) {
   switch (index) {
+  case 2:
+    return "Scratch3";
   case 1:
     return "Hybrid";
   case 0:
@@ -238,6 +240,12 @@ struct TemporalDeckEngine {
   static constexpr float kHybridScratchMaxVelocity = 96000.f;
   static constexpr float kHybridScratchMaxAccel = 1200000.f;
   static constexpr float kHybridScratchVelocityDeadband = 8.f;
+  static constexpr float kScratch3LagAlpha = 0.32f;
+  static constexpr float kScratch3LagBeta = 0.018f;
+  static constexpr float kScratch3VelocityFollowHz = 28.f;
+  static constexpr float kScratch3VelocityDecayHz = 30.f;
+  static constexpr float kScratch3VelocityDeadband = 10.f;
+  static constexpr float kScratch3MaxLagVelocity = 96000.f;
   static constexpr float kScratchInertiaFollowHz = 950.f;
   static constexpr float kScratchInertiaDampingHz = 380.f;
   static constexpr float kInertiaBlend = 0.25f;
@@ -251,7 +259,7 @@ struct TemporalDeckEngine {
     CARTRIDGE_LOFI,
     CARTRIDGE_COUNT
   };
-  enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_COUNT };
+  enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_SCRATCH3, SCRATCH_MODEL_COUNT };
   enum BufferDurationMode { BUFFER_DURATION_8S, BUFFER_DURATION_16S, BUFFER_DURATION_8MIN, BUFFER_DURATION_COUNT };
 
   struct OnePoleState {
@@ -322,6 +330,8 @@ struct TemporalDeckEngine {
   double scratchLagTargetSamples = 0.0;
   float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
+  float scratch3LagVelocity = 0.f;
+  float scratch3GestureAgeSec = 0.f;
   float scratchWheelVelocityBurst = 0.f;
   double filteredManualLagTargetSamples = 0.0;
   double lastPlatterLagTarget = 0.0;
@@ -374,6 +384,8 @@ struct TemporalDeckEngine {
     scratchLagTargetSamples = 0.f;
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
+    scratch3LagVelocity = 0.f;
+    scratch3GestureAgeSec = 0.f;
     scratchWheelVelocityBurst = 0.f;
     filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
@@ -663,6 +675,8 @@ struct TemporalDeckEngine {
     platterVelocity = 0.f;
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
+    scratch3LagVelocity = 0.f;
+    scratch3GestureAgeSec = 0.f;
     scratchWheelVelocityBurst = 0.f;
   }
 
@@ -727,6 +741,67 @@ struct TemporalDeckEngine {
     }
   }
 
+  void integrateScratch3Touch(float dt, double limit, double newestPos, double prevReadHead,
+                              bool hasFreshPlatterGesture, bool platterMotionActive, float platterLagTarget,
+                              float platterGestureVelocity, float nowSnapThresholdSamples) {
+    if (hasFreshPlatterGesture) {
+      if (nowCatchActive && platterLagTarget > nowSnapThresholdSamples) {
+        nowCatchActive = false;
+      }
+      scratchLagTargetSamples = clampLag(platterLagTarget, limit);
+      scratch3GestureAgeSec = 0.f;
+    } else {
+      scratch3GestureAgeSec += dt;
+    }
+
+    bool gestureAlive = hasFreshPlatterGesture || platterMotionActive;
+    if (!gestureAlive && std::fabs(scratch3LagVelocity) < kScratch3VelocityDeadband) {
+      scratch3LagVelocity = 0.f;
+      readHead = prevReadHead;
+      scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+      scratchLagTargetSamples = scratchLagSamples;
+      return;
+    }
+
+    scratchLagSamples = clampLag(scratchLagSamples, limit);
+    scratchLagTargetSamples = clampLag(scratchLagTargetSamples, limit);
+
+    float lagEstimate = scratchLagSamples;
+    float lagVelocity = scratch3LagVelocity;
+    if (gestureAlive) {
+      float desiredLagVelocity = -platterGestureVelocity;
+      float speedNorm = clamp(std::fabs(desiredLagVelocity) / std::max(sampleRate * 0.4f, 1.f), 0.f, 1.f);
+      float velAlpha = clamp(dt * (kScratch3VelocityFollowHz * (0.8f + 0.6f * speedNorm)), 0.f, 1.f);
+      lagVelocity += (desiredLagVelocity - lagVelocity) * velAlpha;
+
+      float lagPred = lagEstimate + lagVelocity * dt;
+      float residual = scratchLagTargetSamples - lagPred;
+      lagEstimate = lagPred + kScratch3LagAlpha * residual;
+      lagVelocity += (kScratch3LagBeta / std::max(dt, 1e-6f)) * residual;
+    } else {
+      float decay = clamp(1.f - dt * kScratch3VelocityDecayHz, 0.f, 1.f);
+      lagVelocity *= decay;
+      lagEstimate += lagVelocity * dt;
+      if (std::fabs(lagVelocity) < kScratch3VelocityDeadband) {
+        lagVelocity = 0.f;
+      }
+    }
+
+    lagVelocity = clamp(lagVelocity, -kScratch3MaxLagVelocity, kScratch3MaxLagVelocity);
+    lagEstimate = clampLag(lagEstimate, limit);
+    scratch3LagVelocity = lagVelocity;
+    scratchLagSamples = lagEstimate;
+    readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+
+    if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
+        scratch3LagVelocity <= 0.f) {
+      scratchLagSamples = 0.f;
+      scratchLagTargetSamples = 0.f;
+      scratch3LagVelocity = 0.f;
+      readHead = newestPos;
+    }
+  }
+
   struct FrameResult {
     float outL = 0.f;
     float outR = 0.f;
@@ -763,6 +838,7 @@ struct TemporalDeckEngine {
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
     bool hybridManualScratch = manualScratch && scratchModel == SCRATCH_MODEL_HYBRID;
+    bool scratch3ManualScratch = manualScratch && scratchModel == SCRATCH_MODEL_SCRATCH3;
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -864,6 +940,33 @@ struct TemporalDeckEngine {
             integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
                                    0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples);
           }
+        } else {
+          float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
+          float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
+          if (wheelDeltaShaped < 0.f) {
+            wheelDeltaShaped *= 2.0f;
+          }
+          if (std::fabs(wheelDelta) > 1e-6f) {
+            scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
+            if (scratchLagTargetSamples < sampleRate * 0.012f) {
+              scratchLagTargetSamples = 0.f;
+            }
+            scratchWheelVelocityBurst -= wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
+            scratchWheelVelocityBurst =
+              clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
+          }
+          decayHybridWheelBurst(dt);
+          integrateHybridScratch(dt, limit, newestPos, 0.f, 0.92f, 1.0f, 1.05f, nowSnapThresholdSamples);
+        }
+      } else if (scratch3ManualScratch) {
+        scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+        if (manualTouchScratch) {
+          scratchWheelVelocityBurst = 0.f;
+          if (hasFreshPlatterGesture) {
+            lastPlatterGestureRevision = platterGestureRevision;
+          }
+          integrateScratch3Touch(dt, limit, newestPos, prevReadHead, hasFreshPlatterGesture, platterMotionActive,
+                                 platterLagTarget, platterGestureVelocity, nowSnapThresholdSamples);
         } else {
           float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
           float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
@@ -1147,7 +1250,7 @@ struct TemporalDeckEngine {
                                                                       : buffer.readCubic(readHead);
     wet = applyCartridgeCharacter(wet, motionAmount);
     if (scratchReadPath) {
-      if (hybridManualScratch) {
+      if (hybridManualScratch || scratch3ManualScratch) {
         // The hybrid motion model is meant to stand on its own, so keep only a
         // light continuity/de-click layer instead of the full legacy cleanup
         // stack.
@@ -1271,7 +1374,9 @@ struct TemporalDeckEngine {
         // quick direction changes. For the visual, prefer the direct gesture
         // direction so fast back-and-forth scratches stay unambiguous.
         double gestureDelta = double(platterGestureVelocity) * double(dt);
-        double platterModelDelta = double(hybridManualScratch ? scratchMotionVelocity : platterVelocity) * double(dt);
+        double platterModelDelta = hybridManualScratch ? double(scratchMotionVelocity) * double(dt)
+                                  : (scratch3ManualScratch ? double(-scratch3LagVelocity) * double(dt)
+                                                           : double(platterVelocity) * double(dt));
         bool gestureActive = std::fabs(gestureDelta) > 1e-5f;
         if (gestureActive) {
           // During active drag, the platter graphic should reflect the hand's
