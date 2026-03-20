@@ -674,7 +674,7 @@ struct TemporalDeckEngine {
     }
   }
 
-  void integrateHybridScratch(float dt, float limit, float newestPos, float targetReadVelocity, float followScale,
+  void integrateHybridScratch(float dt, double limit, double newestPos, float targetReadVelocity, float followScale,
                               float dampingScale, float correctionScale, float nowSnapThresholdSamples) {
     // Hybrid scratch is velocity-first internally. We still keep lag as the
     // module-facing state, but we integrate the read head in buffer space and
@@ -711,8 +711,8 @@ struct TemporalDeckEngine {
       scratchMotionVelocity = 0.f;
     }
 
-    float candidate = unwrapReadNearWrite(readHead, newestPos) + scratchMotionVelocity * dt;
-    candidate = clamp(candidate, newestPos - std::max(limit, 0.f), newestPos);
+    double candidate = unwrapReadNearWrite(readHead, newestPos) + double(scratchMotionVelocity) * double(dt);
+    candidate = std::max(newestPos - std::max(limit, 0.0), std::min(candidate, newestPos));
     readHead = buffer.wrapPosition(candidate);
     scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
 
@@ -742,7 +742,7 @@ struct TemporalDeckEngine {
                       uint32_t platterGestureRevision, float platterLagTarget, float platterGestureVelocity,
                       float wheelDelta) {
     FrameResult result;
-    float prevReadHead = readHead;
+    double prevReadHead = readHead;
     float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
     bool pinToNow = false;
     bool keepSlipLagAligned = false;
@@ -752,9 +752,9 @@ struct TemporalDeckEngine {
     bool prevSlipState = slipState;
     slipState = slipButton;
 
-    float limit = accessibleLag(bufferKnob);
-    float minLag = 0.f;
-    float maxLag = std::max(limit, 0.f);
+    double limit = accessibleLag(bufferKnob);
+    double minLag = 0.0;
+    double maxLag = std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, reverseState);
     float speed = baseSpeed;
     bool externalScratch = scratchGateConnected && scratchGate && positionConnected;
@@ -767,7 +767,7 @@ struct TemporalDeckEngine {
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
     bool slipJustEnabled = slipState && !prevSlipState;
-    float newestPos = newestReadablePos();
+    double newestPos = newestReadablePos();
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     auto startNowCatch = [&](float startLag) {
       nowCatchActive = true;
@@ -1039,7 +1039,7 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
     } else if (slipReturning) {
       // Return to NOW (lag = 0)
-      float currentLagSamples = currentLagFromNewest(newestPos);
+      double currentLagSamples = currentLagFromNewest(newestPos);
       float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
       if (currentLagSamples <= nowSnapThresholdSamples) {
@@ -1052,7 +1052,7 @@ struct TemporalDeckEngine {
         // Exponential-like approach to zero lag.
         // We target a specific lag value that decreases over time.
         float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
-        float targetLag = currentLagSamples * (1.f - alpha);
+        double targetLag = currentLagSamples * double(1.f - alpha);
 
         // Ensure we actually move towards zero even if alpha is tiny.
         if (targetLag > currentLagSamples - 0.5f) {
@@ -1074,7 +1074,7 @@ struct TemporalDeckEngine {
         slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
         float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
         float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
-        float targetLag = slipReturnStartLag * (1.f - shapedProgress);
+        double targetLag = slipReturnStartLag * double(1.f - shapedProgress);
 
         readHead = buffer.wrapPosition(newestPos - targetLag);
         keepSlipLagAligned = true;
@@ -1087,12 +1087,12 @@ struct TemporalDeckEngine {
       }
     } else if (positionFollow && !externalScratch) {
       // Absolute Position CV
-      float targetLag = lagForPositionCv(positionCv, limit);
+      double targetLag = lagForPositionCv(positionCv, limit);
       readHead = buffer.wrapPosition(newestPos - targetLag);
     } else {
       // Normal Transport
-      float candidate = unwrapReadNearWrite(readHead, newestPos) + speed;
-      candidate = clamp(candidate, newestPos - maxLag, newestPos - minLag);
+      double candidate = unwrapReadNearWrite(readHead, newestPos) + double(speed);
+      candidate = std::max(newestPos - maxLag, std::min(candidate, newestPos - minLag));
       readHead = buffer.wrapPosition(candidate);
     }
 
@@ -1107,7 +1107,7 @@ struct TemporalDeckEngine {
       nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
       float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
       float shapedProgress = progress * (2.f - progress);
-      float targetLag = nowCatchStartLag * (1.f - shapedProgress);
+      double targetLag = nowCatchStartLag * double(1.f - shapedProgress);
       if (nowCatchRemaining <= 0.f || targetLag < 0.5f) {
         nowCatchActive = false;
         targetLag = 0.f;
@@ -1126,17 +1126,17 @@ struct TemporalDeckEngine {
 
     bool scratchReadPath = anyScratch || positionFollow;
     bool useLinearInterpolation = !highQualityScratchInterpolation && scratchReadPath;
-    float readDeltaForTone = readHead - prevReadHead;
+    double readDeltaForTone = readHead - prevReadHead;
     if (buffer.size > 0) {
-      float halfSize = float(buffer.size) * 0.5f;
+      double halfSize = double(buffer.size) * 0.5;
       if (readDeltaForTone > halfSize) {
-        readDeltaForTone -= float(buffer.size);
+        readDeltaForTone -= double(buffer.size);
       }
       if (readDeltaForTone < -halfSize) {
-        readDeltaForTone += float(buffer.size);
+        readDeltaForTone += double(buffer.size);
       }
     }
-    float motionAmount = clamp((std::fabs(readDeltaForTone) - 1.f) / 3.f, 0.f, 1.f);
+    float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
     if (scratchReadPath) {
       // Preserve more buffer detail during scratching by reducing motion-driven
       // cartridge darkening.
@@ -1251,37 +1251,37 @@ struct TemporalDeckEngine {
     }
 
     if (buffer.size > 0) {
-      float readDelta = readHead - prevReadHead;
-      float halfSize = float(buffer.size) * 0.5f;
+      double readDelta = readHead - prevReadHead;
+      double halfSize = double(buffer.size) * 0.5;
       if (readDelta > halfSize) {
-        readDelta -= float(buffer.size);
+        readDelta -= double(buffer.size);
       }
       if (readDelta < -halfSize) {
-        readDelta += float(buffer.size);
+        readDelta += double(buffer.size);
       }
-      float visualDelta = readDelta;
+      double visualDelta = readDelta;
       bool normalTransportVisual = !anyScratch && !positionFollow && !slipReturning;
       if (normalTransportVisual) {
         // Keep platter animation responsive to RATE even when readHead is near
         // NOW and constrained by buffer causality.
-        visualDelta = speed;
+        visualDelta = double(speed);
       } else if (manualTouchScratch) {
         // Audio read motion is intentionally smoothed/limited during manual
         // scratch, which can make the platter graphic look unresponsive on
         // quick direction changes. For the visual, prefer the direct gesture
         // direction so fast back-and-forth scratches stay unambiguous.
-        float gestureDelta = platterGestureVelocity * dt;
-        float platterModelDelta = (hybridManualScratch ? scratchMotionVelocity : platterVelocity) * dt;
+        double gestureDelta = double(platterGestureVelocity) * double(dt);
+        double platterModelDelta = double(hybridManualScratch ? scratchMotionVelocity : platterVelocity) * double(dt);
         bool gestureActive = std::fabs(gestureDelta) > 1e-5f;
         if (gestureActive) {
           // During active drag, the platter graphic should reflect the hand's
           // direction first and only use the motion model as a small stabilizer.
-          visualDelta = crossfade(gestureDelta, platterModelDelta, 0.18f);
+          visualDelta = crossfade(float(gestureDelta), float(platterModelDelta), 0.18f);
         } else {
-          visualDelta = crossfade(readDelta, platterModelDelta, 0.82f);
+          visualDelta = crossfade(float(readDelta), float(platterModelDelta), 0.82f);
         }
       }
-      platterPhase += visualDelta * platterRadiansPerSample();
+      platterPhase += float(visualDelta) * platterRadiansPerSample();
       if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
         platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
       }
@@ -1872,7 +1872,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   if (platterRadiusPx > 10.f) {
     nvgSave(args.vg);
     nvgTranslate(args.vg, center.x, center.y);
-    nvgRotate(args.vg, rotation * 0.92f);
+    nvgRotate(args.vg, rotation);
 
     for (int i = 0; i < 16; ++i) {
       float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
