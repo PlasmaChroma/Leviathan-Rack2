@@ -1315,15 +1315,24 @@ struct TemporalDeckTonearmWidget : Widget {
 };
 
 struct TemporalDeckPlatterWidget : OpaqueWidget {
+  static constexpr double kDefaultGestureDtSec = 1.0 / 60.0;
+  static constexpr double kMinGestureDtSec = 1.0 / 240.0;
+  static constexpr double kMaxGestureDtSec = 1.0 / 20.0;
+
   TemporalDeck *module = nullptr;
   Vec centerPx = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
   float deadZonePx = 0.f;
   bool dragging = false;
+  bool dragHasTiming = false;
+  bool cursorLocked = false;
   Vec onButtonPos;
   float contactAngle = 0.f;
   float contactRadiusPx = 0.f;
   float localLagSamples = 0.f;
+  float filteredGestureVelocity = 0.f;
+  double lastMoveTimeSec = 0.0;
+  double recentGestureDtSec = kDefaultGestureDtSec;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
 
@@ -1420,6 +1429,7 @@ struct TemporalDeck : Module {
   std::atomic<float> uiPlatterAngle{0.f};
   float uiPublishTimerSec = 0.f;
   bool highQualityScratchInterpolation = true;
+  bool platterCursorLock = false;
   int cartridgeCharacter = TemporalDeckEngine::CARTRIDGE_CLEAN;
   int scratchModel = TemporalDeckEngine::SCRATCH_MODEL_HYBRID;
   int bufferDurationMode = TemporalDeckEngine::BUFFER_DURATION_8S;
@@ -1485,6 +1495,7 @@ struct TemporalDeck : Module {
     json_object_set_new(root, "reverseLatched", json_boolean(reverseLatched));
     json_object_set_new(root, "slipLatched", json_boolean(slipLatched));
     json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(highQualityScratchInterpolation));
+    json_object_set_new(root, "platterCursorLock", json_boolean(platterCursorLock));
     json_object_set_new(root, "cartridgeCharacter", json_integer(cartridgeCharacter));
     json_object_set_new(root, "scratchModel", json_integer(scratchModel));
     json_object_set_new(root, "bufferDurationMode", json_integer(bufferDurationMode));
@@ -1499,6 +1510,7 @@ struct TemporalDeck : Module {
     json_t *reverseJ = json_object_get(root, "reverseLatched");
     json_t *slipJ = json_object_get(root, "slipLatched");
     json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
+    json_t *platterCursorLockJ = json_object_get(root, "platterCursorLock");
     json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
     json_t *scratchModelJ = json_object_get(root, "scratchModel");
     json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
@@ -1513,6 +1525,9 @@ struct TemporalDeck : Module {
     }
     if (scratchInterpJ) {
       highQualityScratchInterpolation = json_boolean_value(scratchInterpJ);
+    }
+    if (platterCursorLockJ) {
+      platterCursorLock = json_boolean_value(platterCursorLockJ);
     }
     if (cartridgeJ) {
       cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, TemporalDeckEngine::CARTRIDGE_COUNT - 1);
@@ -1956,6 +1971,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!module || !dragging) {
     return;
   }
+  (void)local;
   // Physical screen-space model:
   // lock a contact radius at drag start and only use tangential motion to move
   // the platter. Radial cursor drift is ignored instead of redefining the
@@ -1965,6 +1981,13 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (effectiveRadius <= 1e-3f) {
     return;
   }
+  double nowSec = system::getTime();
+  double dtSec = dragHasTiming ? (nowSec - lastMoveTimeSec) : recentGestureDtSec;
+  dtSec = std::max(kMinGestureDtSec, std::min(dtSec, kMaxGestureDtSec));
+  recentGestureDtSec = dtSec;
+  lastMoveTimeSec = nowSec;
+  dragHasTiming = true;
+
   Vec radial(std::cos(contactAngle), std::sin(contactAngle));
   Vec tangent(-radial.y, radial.x);
   float tangentialPx = mouseDelta.x * tangent.x + mouseDelta.y * tangent.y;
@@ -1983,10 +2006,14 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
                            TemporalDeckEngine::kMouseScratchTravelScale * sensitivity;
   float lagDelta = deltaAngle * samplesPerRadian;
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
-  float radiusRatio = clamp(platterRadiusPx / effectiveRadius, 0.8f, 2.6f);
-  float velocity = tangentialPx * module->uiSampleRate.load() * 0.0007f * sensitivity * radiusRatio;
-  module->setPlatterScratch(true, localLagSamples, velocity);
-  int motionFreshSamples = std::max(1, int(std::round(module->uiSampleRate.load() * 0.02f)));
+
+  float measuredVelocity = lagDelta / float(dtSec);
+  float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
+  filteredGestureVelocity += (measuredVelocity - filteredGestureVelocity) * velocityAlpha;
+  module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+
+  int motionFreshSamples = int(std::round(module->uiSampleRate.load() * float(dtSec) * 1.25f));
+  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->uiSampleRate.load() * 0.03f)));
   module->setPlatterMotionFreshSamples(motionFreshSamples);
   contactAngle += deltaAngle;
   if (contactAngle > M_PI) {
@@ -2003,6 +2030,9 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
     if (e.action == GLFW_PRESS) {
       if (module) {
         localLagSamples = module->uiLagSamples.load();
+        filteredGestureVelocity = 0.f;
+        dragHasTiming = false;
+        recentGestureDtSec = kDefaultGestureDtSec;
         module->setPlatterScratch(true, localLagSamples, 0.f);
         module->setPlatterMotionFreshSamples(0);
       }
@@ -2056,11 +2086,19 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   }
   Vec local = onButtonPos.minus(localCenter());
   dragging = true;
+  dragHasTiming = false;
+  lastMoveTimeSec = system::getTime();
+  recentGestureDtSec = kDefaultGestureDtSec;
+  filteredGestureVelocity = 0.f;
   contactAngle = std::atan2(local.y, local.x);
   contactRadiusPx = clamp(local.norm(), platterRadiusPx * 0.32f, platterRadiusPx * 0.98f);
   localLagSamples = float(module->uiLagSamples.load());
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
+  if (!cursorLocked && module->platterCursorLock && settings::allowCursorLock && APP && APP->window) {
+    APP->window->cursorLock();
+    cursorLocked = true;
+  }
   e.consume(this);
 }
 
@@ -2074,6 +2112,12 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
+    if (cursorLocked && APP && APP->window) {
+      APP->window->cursorUnlock();
+      cursorLocked = false;
+    }
+    dragHasTiming = false;
+    filteredGestureVelocity = 0.f;
     return;
   }
   Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
@@ -2092,6 +2136,12 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
+    if (cursorLocked && APP && APP->window) {
+      APP->window->cursorUnlock();
+      cursorLocked = false;
+    }
+    dragHasTiming = false;
+    filteredGestureVelocity = 0.f;
     e.consume(this);
   }
 }
@@ -2196,6 +2246,7 @@ struct TemporalDeckWidget : ModuleWidget {
                                                 [=]() { module->applyBufferDurationMode(i); }));
         }
       }));
+      menu->addChild(createBoolPtrMenuItem("Cursor lock on platter drag", "", &module->platterCursorLock));
     }
     menu->addChild(createBoolPtrMenuItem("High-quality scratch interpolation", "",
                                          module ? &module->highQualityScratchInterpolation : nullptr));
