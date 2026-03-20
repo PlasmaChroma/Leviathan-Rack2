@@ -122,13 +122,13 @@ struct TemporalDeckBuffer {
     return index;
   }
 
-  float wrapPosition(float pos) const {
+  double wrapPosition(double pos) const {
     if (size <= 0) {
-      return 0.f;
+      return 0.0;
     }
-    pos = std::fmod(pos, float(size));
-    if (pos < 0.f) {
-      pos += float(size);
+    pos = std::fmod(pos, double(size));
+    if (pos < 0.0) {
+      pos += double(size);
     }
     return pos;
   }
@@ -167,13 +167,13 @@ struct TemporalDeckBuffer {
     return sum;
   }
 
-  std::pair<float, float> readCubic(float pos) const {
+  std::pair<float, float> readCubic(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
     }
     pos = wrapPosition(pos);
     int i1 = int(std::floor(pos));
-    float t = pos - float(i1);
+    float t = float(pos - double(i1));
     int i0 = wrapIndex(i1 - 1);
     int i2 = wrapIndex(i1 + 1);
     int i3 = wrapIndex(i1 + 2);
@@ -181,24 +181,24 @@ struct TemporalDeckBuffer {
             cubicSample(right[i0], right[i1], right[i2], right[i3], t)};
   }
 
-  std::pair<float, float> readLinear(float pos) const {
+  std::pair<float, float> readLinear(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
     }
     pos = wrapPosition(pos);
     int i0 = int(pos);
     int i1 = wrapIndex(i0 + 1);
-    float t = pos - float(i0);
+    float t = float(pos - double(i0));
     return {crossfade(left[i0], left[i1], t), crossfade(right[i0], right[i1], t)};
   }
 
-  std::pair<float, float> readHighQuality(float pos) const {
+  std::pair<float, float> readHighQuality(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
     }
     pos = wrapPosition(pos);
     int i2 = int(std::floor(pos));
-    float t = pos - float(i2);
+    float t = float(pos - double(i2));
     int i0 = wrapIndex(i2 - 2);
     int i1 = wrapIndex(i2 - 1);
     int i3 = wrapIndex(i2 + 1);
@@ -302,8 +302,8 @@ struct TemporalDeckEngine {
 
   TemporalDeckBuffer buffer;
   float sampleRate = 44100.f;
-  float readHead = 0.f;
-  float timelineHead = 0.f;
+  double readHead = 0.0;
+  double timelineHead = 0.0;
   float platterPhase = 0.f;
   float platterVelocity = 0.f;
   bool freezeState = false;
@@ -318,13 +318,13 @@ struct TemporalDeckEngine {
   float slipReturnStartLag = 0.f;
   float nowCatchRemaining = 0.f;
   float nowCatchStartLag = 0.f;
-  float scratchLagSamples = 0.f;
-  float scratchLagTargetSamples = 0.f;
+  double scratchLagSamples = 0.0;
+  double scratchLagTargetSamples = 0.0;
   float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
   float scratchWheelVelocityBurst = 0.f;
-  float filteredManualLagTargetSamples = 0.f;
-  float lastPlatterLagTarget = 0.f;
+  double filteredManualLagTargetSamples = 0.0;
+  double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   int scratchModel = SCRATCH_MODEL_HYBRID;
@@ -405,13 +405,13 @@ struct TemporalDeckEngine {
     scratchDcOutR = 0.f;
   }
 
-  float maxLagFromKnob(float knob) const {
-    return clamp(knob, 0.f, 1.f) * sampleRate * usableBufferSecondsForMode(bufferDurationMode);
+  double maxLagFromKnob(float knob) const {
+    return double(clamp(knob, 0.f, 1.f)) * double(sampleRate) * double(usableBufferSecondsForMode(bufferDurationMode));
   }
 
-  float accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), float(buffer.filled)); }
+  double accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), double(buffer.filled)); }
 
-  float clampLag(float lag, float limit) const { return clamp(lag, 0.f, std::max(0.f, limit)); }
+  double clampLag(double lag, double limit) const { return std::max(0.0, std::min(lag, std::max(0.0, limit))); }
 
   static float baseSpeedFromKnob(float rateKnob) {
     rateKnob = clamp(rateKnob, 0.f, 1.f);
@@ -434,8 +434,8 @@ struct TemporalDeckEngine {
     return speed;
   }
 
-  float lagForPositionCv(float cv, float limit) const {
-    float normalized = clamp(std::fabs(cv) / 10.f, 0.f, 1.f);
+  double lagForPositionCv(float cv, double limit) const {
+    double normalized = double(clamp(std::fabs(cv) / 10.f, 0.f, 1.f));
     return normalized * limit;
   }
 
@@ -606,26 +606,26 @@ struct TemporalDeckEngine {
     return {left, right};
   }
 
-  float currentLag() const {
+  double currentLag() const {
     if (buffer.size <= 0) {
-      return 0.f;
+      return 0.0;
     }
-    float lag = newestReadablePos() - readHead;
-    if (lag < 0.f) {
-      lag += float(buffer.size);
+    double lag = newestReadablePos() - readHead;
+    if (lag < 0.0) {
+      lag += double(buffer.size);
     }
     return lag;
   }
 
-  float newestReadablePos() const {
+  double newestReadablePos() const {
     if (buffer.size <= 0 || buffer.filled <= 0) {
-      return 0.f;
+      return 0.0;
     }
     int newest = buffer.writeHead - 1;
     if (newest < 0) {
       newest += buffer.size;
     }
-    return float(newest);
+    return double(newest);
   }
 
   float platterRadiansPerSample() const {
@@ -634,22 +634,22 @@ struct TemporalDeckEngine {
 
   float samplesPerPlatterRadian() const { return 1.f / std::max(platterRadiansPerSample(), 1e-9f); }
 
-  float currentLagFromNewest(float newestPos) const {
+  double currentLagFromNewest(double newestPos) const {
     if (buffer.size <= 0) {
-      return 0.f;
+      return 0.0;
     }
-    float lag = newestPos - readHead;
-    if (lag < 0.f) {
-      lag += float(buffer.size);
+    double lag = newestPos - readHead;
+    if (lag < 0.0) {
+      lag += double(buffer.size);
     }
     return lag;
   }
 
-  float unwrapReadNearWrite(float readPos, float writePos) const {
+  double unwrapReadNearWrite(double readPos, double writePos) const {
     if (buffer.size <= 0) {
       return readPos;
     }
-    float sizeF = float(buffer.size);
+    double sizeF = double(buffer.size);
     while (readPos > writePos) {
       readPos -= sizeF;
     }
@@ -730,8 +730,8 @@ struct TemporalDeckEngine {
   struct FrameResult {
     float outL = 0.f;
     float outR = 0.f;
-    float lag = 0.f;
-    float accessibleLag = 0.f;
+    double lag = 0.0;
+    double accessibleLag = 0.0;
     float platterAngle = 0.f;
   };
 
@@ -1414,8 +1414,8 @@ struct TemporalDeck : Module {
   std::atomic<float> platterWheelDelta{0.f};
   std::atomic<int> platterScratchHoldSamples{0};
   std::atomic<int> platterMotionFreshSamples{0};
-  std::atomic<float> uiLagSamples{0.f};
-  std::atomic<float> uiAccessibleLagSamples{0.f};
+  std::atomic<double> uiLagSamples{0.0};
+  std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<float> uiPlatterAngle{0.f};
   float uiPublishTimerSec = 0.f;
@@ -1467,8 +1467,8 @@ struct TemporalDeck : Module {
     engine.bufferDurationMode = bufferDurationMode;
     engine.reset(cachedSampleRate);
     uiSampleRate.store(cachedSampleRate);
-    uiLagSamples.store(0.f);
-    uiAccessibleLagSamples.store(0.f);
+    uiLagSamples.store(0.0);
+    uiAccessibleLagSamples.store(0.0);
     uiPlatterAngle.store(0.f);
     uiPublishTimerSec = 0.f;
     platterScratchHoldSamples.store(0);
@@ -1716,8 +1716,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   if (!module) {
     return;
   }
-  float accessibleLag = std::max(1.f, module->uiAccessibleLagSamples.load());
-  float lag = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
+  double accessibleLag = std::max(1.0, module->uiAccessibleLagSamples.load());
+  double lag = std::max(0.0, std::min(module->uiLagSamples.load(), accessibleLag));
   nvgSave(args.vg);
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
@@ -1736,7 +1736,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
     nvgText(args.vg, debugPos.x, debugPos.y + 11.5f, motionText, nullptr);
     */
 
-    float lagMs = 1000.f * lag / std::max(module->uiSampleRate.load(), 1.f);
+    double lagMs = 1000.0 * lag / std::max(module->uiSampleRate.load(), 1.f);
     char text[32];
     std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
     Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
@@ -1975,8 +1975,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   // Always apply drag deltas to the engine's latest lag, not the last UI
   // event's cached lag. The live point continues to advance while the mouse is
   // held, so stale lag here causes slow backward drags to creep forward.
-  float accessibleLag = module->uiAccessibleLagSamples.load();
-  localLagSamples = clamp(module->uiLagSamples.load(), 0.f, accessibleLag);
+  double accessibleLag = module->uiAccessibleLagSamples.load();
+  localLagSamples = clamp(float(module->uiLagSamples.load()), 0.f, float(accessibleLag));
   float sensitivity = module->scratchSensitivity();
   float samplesPerRadian = 60.f * module->uiSampleRate.load() /
                            (2.f * float(M_PI) * TemporalDeckEngine::kNominalPlatterRpm) *
@@ -2033,7 +2033,7 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
     return;
   }
 
-  float maxLag = module->uiAccessibleLagSamples.load();
+  float maxLag = float(module->uiAccessibleLagSamples.load());
   if (maxLag <= 0.f) {
     e.consume(this);
     return;
@@ -2058,7 +2058,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   dragging = true;
   contactAngle = std::atan2(local.y, local.x);
   contactRadiusPx = clamp(local.norm(), platterRadiusPx * 0.32f, platterRadiusPx * 0.98f);
-  localLagSamples = module->uiLagSamples.load();
+  localLagSamples = float(module->uiLagSamples.load());
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
   e.consume(this);
