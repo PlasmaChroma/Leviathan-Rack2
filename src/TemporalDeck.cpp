@@ -52,7 +52,7 @@ static CartridgeVisualStyle cartridgeVisualStyle(int index) {
     return {nvgRGBA(56, 51, 44, 238), nvgRGBA(98, 84, 70, 190), nvgRGBA(186, 170, 138, 210)};
   case 0:
   default:
-    return {nvgRGBA(26, 29, 34, 236), nvgRGBA(80, 86, 96, 180), nvgRGBA(216, 222, 230, 210)};
+    return {nvgRGBA(90, 178, 187, 236), nvgRGBA(12, 41, 45, 190), nvgRGBA(18, 18, 18, 230)};
   }
 }
 
