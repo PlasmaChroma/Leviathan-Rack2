@@ -357,12 +357,11 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!module || !dragging) {
     return;
   }
-  (void)local;
   // Physical screen-space model:
   // lock a contact radius at drag start and only use tangential motion to move
   // the platter. Radial cursor drift is ignored instead of redefining the
   // platter angle directly from the current mouse position.
-  constexpr float kScratchMoveThresholdPx = 0.15f;
+  constexpr float kScratchMoveThresholdPx = 0.05f;
   float effectiveRadius = std::max(contactRadiusPx, platterRadiusPx * 0.32f);
   if (effectiveRadius <= 1e-3f) {
     return;
@@ -378,6 +377,13 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   Vec tangent(-radial.y, radial.x);
   float tangentialPx = mouseDelta.x * tangent.x + mouseDelta.y * tangent.y;
   if (std::fabs(tangentialPx) < kScratchMoveThresholdPx) {
+    float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
+    filteredGestureVelocity += (0.f - filteredGestureVelocity) * settleAlpha;
+    if (std::fabs(filteredGestureVelocity) < 1.f) {
+      filteredGestureVelocity = 0.f;
+    }
+    module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+    module->setPlatterMotionFreshSamples(0);
     return;
   }
   float deltaAngle = tangentialPx / effectiveRadius;
@@ -399,9 +405,21 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
 
   int motionFreshSamples = int(std::round(module->getUiSampleRate() * float(dtSec) * 1.25f));
-  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.03f)));
+  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.02f)));
   module->setPlatterMotionFreshSamples(motionFreshSamples);
   contactAngle += deltaAngle;
+  float localRadius = local.norm();
+  if (!cursorLocked && localRadius > std::max(deadZonePx, platterRadiusPx * 0.16f)) {
+    float localAngle = std::atan2(local.y, local.x);
+    float angleError = localAngle - contactAngle;
+    while (angleError > float(M_PI)) {
+      angleError -= 2.f * float(M_PI);
+    }
+    while (angleError < -float(M_PI)) {
+      angleError += 2.f * float(M_PI);
+    }
+    contactAngle += clamp(angleError * 0.18f, -0.24f, 0.24f);
+  }
   if (contactAngle > M_PI) {
     contactAngle -= 2.f * M_PI;
   }

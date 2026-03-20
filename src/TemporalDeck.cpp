@@ -856,17 +856,13 @@ struct TemporalDeckEngine {
             scratchMotionVelocity = 0.f;
           } else {
             float targetReadVelocity = 0.f;
-            if (platterMotionActive || hasFreshPlatterGesture) {
-              // Use the user's measured gesture velocity directly. The hybrid
-              // path should not under-drive motion and let the correction term
-              // create a compensating buzz.
-              targetReadVelocity = platterGestureVelocity;
-            }
-            if (targetReadVelocity > 0.f || scratchLagTargetSamples < scratchLagSamples) {
-              // Moving toward NOW has to outrun the write head's implicit +1x
-              // motion. Add that baseline here so forward scratches do not feel
-              // resistant while reverse still behaves freely.
-              targetReadVelocity += sampleRate;
+            if (hasFreshPlatterGesture) {
+              // Convert lag-space gesture velocity into buffer read velocity.
+              // d(lag)/dt = writeVel - readVel  =>  readVel = writeVel + gestureVel
+              //
+              // Only consume fresh gesture velocity here; reusing stale
+              // velocity while the mouse is held still causes directional drift.
+              targetReadVelocity = sampleRate + platterGestureVelocity;
             }
             float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
             integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
