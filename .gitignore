@@ -8,8 +8,5 @@
 *.dylib
 *.dll
 /build
-/build-default
-/build-linux
-/build-stale
 /dep
 /dist

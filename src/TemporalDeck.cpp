@@ -17,14 +17,42 @@ namespace {
 static const char *cartridgeLabel(int index) {
   switch (index) {
   case 1:
-    return "Vintage";
+    return "M44-7";
   case 2:
-    return "Battle";
+    return "MKII Scratch";
   case 3:
+    return "680 HP";
+  case 4:
     return "Lo-Fi";
   case 0:
   default:
     return "Clean";
+  }
+}
+
+struct CartridgeVisualStyle {
+  NVGcolor shellFill;
+  NVGcolor shellStroke;
+  NVGcolor holeFill;
+};
+
+static CartridgeVisualStyle cartridgeVisualStyle(int index) {
+  switch (index) {
+  case 1:
+    // Shure M44-7: matte black with bright white stylus accents.
+    return {nvgRGBA(26, 26, 26, 238), nvgRGBA(110, 110, 118, 190), nvgRGBA(252, 252, 252, 235)};
+  case 2:
+    // Ortofon MKII Scratch: white body with black detailing.
+    return {nvgRGBA(242, 242, 242, 240), nvgRGBA(26, 26, 26, 210), nvgRGBA(18, 18, 18, 228)};
+  case 3:
+    // Stanton 680 HP: industrial silver with cream/neutral fasteners.
+    return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(244, 241, 220, 225)};
+  case 4:
+    // Lo-Fi: darker, worn, and slightly grimier.
+    return {nvgRGBA(56, 51, 44, 238), nvgRGBA(98, 84, 70, 190), nvgRGBA(186, 170, 138, 210)};
+  case 0:
+  default:
+    return {nvgRGBA(26, 29, 34, 236), nvgRGBA(80, 86, 96, 180), nvgRGBA(216, 222, 230, 210)};
   }
 }
 
@@ -187,7 +215,14 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
 
-  enum CartridgeCharacter { CARTRIDGE_CLEAN, CARTRIDGE_VINTAGE, CARTRIDGE_BATTLE, CARTRIDGE_LOFI, CARTRIDGE_COUNT };
+  enum CartridgeCharacter {
+    CARTRIDGE_CLEAN,
+    CARTRIDGE_M44_7,
+    CARTRIDGE_CONCORDE_SCRATCH,
+    CARTRIDGE_680_HP,
+    CARTRIDGE_LOFI,
+    CARTRIDGE_COUNT
+  };
   enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_COUNT };
 
   struct OnePoleState {
@@ -378,12 +413,15 @@ struct TemporalDeckEngine {
 
   static CartridgeParams paramsForCartridge(int mode) {
     switch (mode) {
-    case CARTRIDGE_VINTAGE:
-      // Vintage (audiophile): extended bandwidth, low distortion, subtle warmth.
-      return {24.f, 1450.f, 17800.f, 16800.f, 0.08f, 0.03f, 0.006f, 1.015f, 0.01f};
-    case CARTRIDGE_BATTLE:
-      // Battle: weighted low-end with cleaner top and less lo-fi smear.
-      return {22.f, 1050.f, 17000.f, 14200.f, 0.12f, 0.12f, 0.006f, 1.045f, 0.015f};
+    case CARTRIDGE_M44_7:
+      // M44-7: big low shelf, hot output, slight upper-mid softness.
+      return {20.f, 80.f, 17500.f, 16000.f, 0.20f, -0.06f, 0.004f, 1.02f, 0.008f};
+    case CARTRIDGE_CONCORDE_SCRATCH:
+      // Concorde Scratch: flat/controlled low end, hotter edge, stiffer under motion.
+      return {30.f, 1800.f, 18000.f, 12000.f, 0.06f, 0.15f, 0.005f, 1.10f, 0.012f};
+    case CARTRIDGE_680_HP:
+      // Stanton 680 HP: warm body, silky top, slightly wider club/hi-fi image.
+      return {18.f, 700.f, 12000.f, 9500.f, 0.14f, -0.04f, 0.012f, 1.01f, 0.02f};
     case CARTRIDGE_LOFI:
       // Lo-Fi: intentionally veiled, smeared, and dirty.
       return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
@@ -395,10 +433,12 @@ struct TemporalDeckEngine {
 
   static float makeupGainForCartridge(int mode) {
     switch (mode) {
-    case CARTRIDGE_VINTAGE:
-      return 1.24f;
-    case CARTRIDGE_BATTLE:
-      return 1.28f;
+    case CARTRIDGE_M44_7:
+      return 1.18f;
+    case CARTRIDGE_CONCORDE_SCRATCH:
+      return 1.10f;
+    case CARTRIDGE_680_HP:
+      return 1.17f;
     case CARTRIDGE_LOFI:
       return 1.36f;
     case CARTRIDGE_CLEAN:
@@ -1693,13 +1733,15 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     Vec headshellB = shellBack.minus(armNormal.mult(mm2px(Vec(1.25f, 0.f)).x));
     Vec headshellC = shellFront.minus(armNormal.mult(mm2px(Vec(1.95f, 0.f)).x));
     Vec headshellD = shellFront.plus(armNormal.mult(mm2px(Vec(1.95f, 0.f)).x));
+    CartridgeVisualStyle cartStyle = cartridgeVisualStyle(module ? module->cartridgeCharacter : 0);
+
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, headshellA.x, headshellA.y);
     nvgLineTo(args.vg, headshellD.x, headshellD.y);
     nvgLineTo(args.vg, headshellC.x, headshellC.y);
     nvgLineTo(args.vg, headshellB.x, headshellB.y);
     nvgClosePath(args.vg);
-    nvgFillColor(args.vg, nvgRGBA(26, 29, 34, 236));
+    nvgFillColor(args.vg, cartStyle.shellFill);
     nvgFill(args.vg);
 
     nvgBeginPath(args.vg);
@@ -1708,14 +1750,14 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     nvgLineTo(args.vg, headshellC.x, headshellC.y);
     nvgLineTo(args.vg, headshellB.x, headshellB.y);
     nvgClosePath(args.vg);
-    nvgStrokeColor(args.vg, nvgRGBA(80, 86, 96, 180));
+    nvgStrokeColor(args.vg, cartStyle.shellStroke);
     nvgStrokeWidth(args.vg, 0.85f);
     nvgStroke(args.vg);
 
     auto drawHole = [&](Vec p, float rMm) {
       nvgBeginPath(args.vg);
       nvgCircle(args.vg, p.x, p.y, mm2px(Vec(rMm, 0.f)).x);
-      nvgFillColor(args.vg, nvgRGBA(216, 222, 230, 210));
+      nvgFillColor(args.vg, cartStyle.holeFill);
       nvgFill(args.vg);
     };
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(1.2f, 0.f)).x)), 0.38f);
