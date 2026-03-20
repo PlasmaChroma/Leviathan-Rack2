@@ -19,7 +19,7 @@ static const char *cartridgeLabel(int index) {
   case 1:
     return "M44-7";
   case 2:
-    return "MKII Scratch";
+    return "C.MKII S";
   case 3:
     return "680 HP";
   case 4:
