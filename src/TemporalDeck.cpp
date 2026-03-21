@@ -976,60 +976,26 @@ struct TemporalDeckEngine {
                                  0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples);
         }
       } else {
-        // Wheel scratch accumulates target lag per scroll event, then glides
-        // toward that target with SLIP-like easing while wheel-hold is active.
+        // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
         if (wheelDeltaShaped < 0.f) {
-          wheelDeltaShaped *= 2.0f;
+          // Toward-NOW wheel strokes need extra help to overcome the live
+          // write head, especially now that Hybrid is the only wheel path.
+          wheelDeltaShaped *= 2.6f;
         }
-        // Rebase from current lag only when a new wheel event arrives to avoid
-        // directional drift without collapsing the target between events.
         if (std::fabs(wheelDelta) > 1e-6f) {
-          // Direction-aware base avoids "fighting" the glide when moving
-          // toward NOW with repeated small forward scrolls.
-          float baseLag = wheelDeltaShaped < 0.f ? std::min(scratchLagSamples, scratchLagTargetSamples)
-                                                 : std::max(scratchLagSamples, scratchLagTargetSamples);
-          scratchLagTargetSamples = clampLag(baseLag + wheelDeltaShaped, limit);
-          // Near-zero snap keeps repeated forward wheel strokes from "hovering"
-          // just above NOW due to smoothing/integration tails.
+          scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
           float wheelNowSnapThreshold = sampleRate * 0.012f;
           if (scratchLagTargetSamples < wheelNowSnapThreshold) {
             scratchLagTargetSamples = 0.f;
           }
+          scratchWheelVelocityBurst -= wheelDeltaShaped / std::max(kHybridScratchWheelImpulseTime, 1e-6f);
+          scratchWheelVelocityBurst =
+            clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
         }
-
-        float lagError = scratchLagTargetSamples - scratchLagSamples;
-        bool movingTowardNow = lagError < 0.f;
-        float configuredSlipTime = std::max(configuredSlipReturnTime(), 1e-6f);
-        float wheelFollowTime = movingTowardNow ? (configuredSlipTime * 0.5f) : configuredSlipTime;
-        float wheelMotionNorm =
-          clamp(std::fabs(wheelDeltaShaped) / std::max(sampleRate * 0.01f * kWheelScratchTravelScale, 1e-6f), 0.f, 1.f);
-        wheelFollowTime *= (1.f - 0.35f * wheelMotionNorm);
-        float alpha = dt / std::max(wheelFollowTime, 1e-6f);
-        float lagStep = lagError * alpha;
-
-        // Keep progression audible even for tiny alpha / small errors.
-        float minStep = (movingTowardNow ? 0.8f : 0.35f) * (1.f + 0.8f * wheelMotionNorm);
-        if (std::fabs(lagError) > minStep && std::fabs(lagStep) < minStep) {
-          lagStep = std::copysign(minStep, lagError);
-        }
-
-        // Symmetric glide cap in both directions to avoid directional bias.
-        float maxStep = kScratchSoftLagStepMax * (0.9f + 0.45f * wheelMotionNorm);
-        lagStep = clamp(lagStep, -maxStep, maxStep);
-
-        if (std::fabs(lagError) <= 0.5f) {
-          scratchLagSamples = scratchLagTargetSamples;
-        } else {
-          scratchLagSamples = clampLag(scratchLagSamples + lagStep, limit);
-        }
-        float wheelNowSnapThreshold = sampleRate * 0.010f;
-        if (movingTowardNow && scratchLagSamples < wheelNowSnapThreshold) {
-          scratchLagSamples = 0.f;
-          scratchLagTargetSamples = 0.f;
-        }
-        readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+        decayHybridWheelBurst(dt);
+        integrateHybridScratch(dt, limit, newestPos, 0.f, 0.92f, 1.0f, 1.05f, nowSnapThresholdSamples);
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {
