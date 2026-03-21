@@ -34,7 +34,7 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_COUNT = 3;
 
   static constexpr float kNominalPlatterRpm = 33.3333f;
-  static constexpr float kMouseScratchTravelScale = 1.25f;
+  static constexpr float kMouseScratchTravelScale = 1.00f;
   static constexpr float kWheelScratchTravelScale = 1.10f;
 
   static constexpr float kUiPublishRateHz = 120.f;

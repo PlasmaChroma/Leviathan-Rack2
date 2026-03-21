@@ -966,15 +966,14 @@ struct TemporalDeckEngine {
           scratchMotionVelocity = 0.f;
         } else {
           float targetReadVelocity = 0.f;
-          if (hasFreshPlatterGesture) {
-            // Consume only fresh gesture velocity here so stale UI velocity
-            // cannot leak into click-and-hold drift.
+          if (hasFreshPlatterGesture || platterMotionActive) {
+            // While motion is fresh, gesture velocity is relative to the write
+            // head. Convert it into absolute read velocity by adding the write
+            // baseline (except in freeze, where write head is stationary).
             targetReadVelocity = platterGestureVelocity;
-          }
-          if (!freezeState && (targetReadVelocity > 0.f || scratchLagTargetSamples < scratchLagSamples)) {
-            // Moving the hand toward NOW still has to keep up with the
-            // write head's implicit +1x advance between sparse UI events.
-            targetReadVelocity += sampleRate;
+            if (!freezeState) {
+              targetReadVelocity += sampleRate;
+            }
           }
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
@@ -1259,21 +1258,6 @@ struct TemporalDeckEngine {
         // Keep platter animation responsive to RATE even when readHead is near
         // NOW and constrained by buffer causality.
         visualDelta = double(speed);
-      } else if (manualTouchScratch) {
-        // Audio read motion is intentionally smoothed/limited during manual
-        // scratch, which can make the platter graphic look unresponsive on
-        // quick direction changes. For the visual, prefer the direct gesture
-        // direction so fast back-and-forth scratches stay unambiguous.
-        double gestureDelta = double(platterGestureVelocity) * double(dt);
-        double platterModelDelta = double(scratchMotionVelocity) * double(dt);
-        bool gestureActive = std::fabs(gestureDelta) > 1e-5f;
-        if (gestureActive) {
-          // During active drag, the platter graphic should reflect the hand's
-          // direction first and only use the motion model as a small stabilizer.
-          visualDelta = crossfade(float(gestureDelta), float(platterModelDelta), 0.18f);
-        } else {
-          visualDelta = crossfade(float(readDelta), float(platterModelDelta), 0.82f);
-        }
       }
       platterPhase += float(visualDelta) * platterRadiansPerSample();
       if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {

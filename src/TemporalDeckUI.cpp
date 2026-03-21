@@ -359,30 +359,66 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   lastMoveTimeSec = nowSec;
   dragHasTiming = true;
 
-  Vec radial(std::cos(contactAngle), std::sin(contactAngle));
-  Vec tangent(-radial.y, radial.x);
-  float tangentialPx = mouseDelta.x * tangent.x + mouseDelta.y * tangent.y;
-  if (std::fabs(tangentialPx) < kScratchMoveThresholdPx) {
-    float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
-    filteredGestureVelocity += (0.f - filteredGestureVelocity) * settleAlpha;
-    if (std::fabs(filteredGestureVelocity) < 1.f) {
-      filteredGestureVelocity = 0.f;
+  float localRadius = local.norm();
+  bool useCursorAngle = !cursorLocked && localRadius > std::max(deadZonePx, platterRadiusPx * 0.16f);
+  float deltaAngle = 0.f;
+  if (useCursorAngle) {
+    float localAngle = std::atan2(local.y, local.x);
+    deltaAngle = localAngle - contactAngle;
+    while (deltaAngle > float(M_PI)) {
+      deltaAngle -= 2.f * float(M_PI);
     }
-    module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
-    module->setPlatterMotionFreshSamples(0);
-    return;
+    while (deltaAngle < -float(M_PI)) {
+      deltaAngle += 2.f * float(M_PI);
+    }
+    float minAngleMotion = kScratchMoveThresholdPx / std::max(effectiveRadius, 1e-3f);
+    if (std::fabs(deltaAngle) < minAngleMotion) {
+      float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
+      filteredGestureVelocity += (0.f - filteredGestureVelocity) * settleAlpha;
+      if (std::fabs(filteredGestureVelocity) < 1.f) {
+        filteredGestureVelocity = 0.f;
+      }
+      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterMotionFreshSamples(0);
+      return;
+    }
+    contactAngle = localAngle;
+  } else {
+    Vec radial(std::cos(contactAngle), std::sin(contactAngle));
+    Vec tangent(-radial.y, radial.x);
+    float tangentialPx = mouseDelta.x * tangent.x + mouseDelta.y * tangent.y;
+    if (std::fabs(tangentialPx) < kScratchMoveThresholdPx) {
+      float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
+      filteredGestureVelocity += (0.f - filteredGestureVelocity) * settleAlpha;
+      if (std::fabs(filteredGestureVelocity) < 1.f) {
+        filteredGestureVelocity = 0.f;
+      }
+      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterMotionFreshSamples(0);
+      return;
+    }
+    deltaAngle = tangentialPx / effectiveRadius;
+    contactAngle += deltaAngle;
   }
-  float deltaAngle = tangentialPx / effectiveRadius;
   // Always apply drag deltas to the engine's latest lag, not the last UI
-  // event's cached lag. The live point continues to advance while the mouse is
-  // held, so stale lag here causes slow backward drags to creep forward.
+  // event's cached lag. Use direction-aware rebasing so we don't collapse
+  // accumulated hand motion when DSP smoothing lags behind dense UI events.
   double accessibleLag = module->getUiAccessibleLagSamples();
-  localLagSamples = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
+  float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
   float sensitivity = module->scratchSensitivity();
   float samplesPerRadian = 60.f * module->getUiSampleRate() /
                            (2.f * float(M_PI) * TemporalDeck::kNominalPlatterRpm) *
                            TemporalDeck::kMouseScratchTravelScale * sensitivity;
   float lagDelta = deltaAngle * samplesPerRadian;
+  if (lagDelta > 0.f) {
+    // Toward NOW: keep the more-forward target.
+    localLagSamples = std::min(localLagSamples, liveLag);
+  } else if (lagDelta < 0.f) {
+    // Away from NOW: keep the farther-behind target.
+    localLagSamples = std::max(localLagSamples, liveLag);
+  } else {
+    localLagSamples = liveLag;
+  }
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
 
   float measuredVelocity = lagDelta / float(dtSec);
@@ -390,22 +426,9 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   filteredGestureVelocity += (measuredVelocity - filteredGestureVelocity) * velocityAlpha;
   module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
 
-  int motionFreshSamples = int(std::round(module->getUiSampleRate() * float(dtSec) * 1.25f));
-  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.02f)));
+  int motionFreshSamples = int(std::round(module->getUiSampleRate() * float(dtSec) * 1.35f));
+  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.025f)));
   module->setPlatterMotionFreshSamples(motionFreshSamples);
-  contactAngle += deltaAngle;
-  float localRadius = local.norm();
-  if (!cursorLocked && localRadius > std::max(deadZonePx, platterRadiusPx * 0.16f)) {
-    float localAngle = std::atan2(local.y, local.x);
-    float angleError = localAngle - contactAngle;
-    while (angleError > float(M_PI)) {
-      angleError -= 2.f * float(M_PI);
-    }
-    while (angleError < -float(M_PI)) {
-      angleError += 2.f * float(M_PI);
-    }
-    contactAngle += clamp(angleError * 0.18f, -0.24f, 0.24f);
-  }
   if (contactAngle > M_PI) {
     contactAngle -= 2.f * M_PI;
   }
