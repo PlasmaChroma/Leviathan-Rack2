@@ -1,5 +1,7 @@
 #include "platter_spec_cases.hpp"
-#include "../src/PlatterInteractionMath.hpp"
+#define TEMPORALDECK_MATH_ONLY
+#include "../src/TemporalDeck.hpp"
+#undef TEMPORALDECK_MATH_ONLY
 
 #include <algorithm>
 #include <cmath>
