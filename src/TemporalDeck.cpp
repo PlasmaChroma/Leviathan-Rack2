@@ -193,6 +193,24 @@ struct TemporalDeckEngine {
   };
   enum ScratchModel { SCRATCH_MODEL_LEGACY, SCRATCH_MODEL_HYBRID, SCRATCH_MODEL_SCRATCH3, SCRATCH_MODEL_COUNT };
   enum BufferDurationMode { BUFFER_DURATION_8S, BUFFER_DURATION_16S, BUFFER_DURATION_8MIN, BUFFER_DURATION_COUNT };
+  static_assert(CARTRIDGE_CLEAN == TemporalDeck::CARTRIDGE_CLEAN, "Cartridge enum mismatch: CLEAN");
+  static_assert(CARTRIDGE_M44_7 == TemporalDeck::CARTRIDGE_M44_7, "Cartridge enum mismatch: M44-7");
+  static_assert(CARTRIDGE_CONCORDE_SCRATCH == TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH,
+                "Cartridge enum mismatch: Ortofon Scratch");
+  static_assert(CARTRIDGE_680_HP == TemporalDeck::CARTRIDGE_STANTON_680HP,
+                "Cartridge enum mismatch: Stanton 680HP");
+  static_assert(CARTRIDGE_LOFI == TemporalDeck::CARTRIDGE_LOFI, "Cartridge enum mismatch: Lo-Fi");
+  static_assert(CARTRIDGE_COUNT == TemporalDeck::CARTRIDGE_COUNT, "Cartridge enum mismatch: count");
+  static_assert(SCRATCH_MODEL_LEGACY == TemporalDeck::SCRATCH_MODEL_LEGACY, "Scratch model enum mismatch: Legacy");
+  static_assert(SCRATCH_MODEL_HYBRID == TemporalDeck::SCRATCH_MODEL_HYBRID, "Scratch model enum mismatch: Hybrid");
+  static_assert(SCRATCH_MODEL_SCRATCH3 == TemporalDeck::SCRATCH_MODEL_SCRATCH3,
+                "Scratch model enum mismatch: Scratch3");
+  static_assert(SCRATCH_MODEL_COUNT == TemporalDeck::SCRATCH_MODEL_COUNT, "Scratch model enum mismatch: count");
+  static_assert(BUFFER_DURATION_8S == TemporalDeck::BUFFER_DURATION_8S, "Buffer duration enum mismatch: 8s");
+  static_assert(BUFFER_DURATION_16S == TemporalDeck::BUFFER_DURATION_16S, "Buffer duration enum mismatch: 16s");
+  static_assert(BUFFER_DURATION_8MIN == TemporalDeck::BUFFER_DURATION_8M, "Buffer duration enum mismatch: 8m");
+  static_assert(BUFFER_DURATION_COUNT == TemporalDeck::BUFFER_DURATION_COUNT,
+                "Buffer duration enum mismatch: count");
 
   struct OnePoleState {
     float z = 0.f;
@@ -1475,8 +1493,8 @@ void TemporalDeck::applyBufferDurationMode(int mode) {
   onSampleRateChange();
 }
 
-void TemporalDeck::onSampleRateChange() {
-  impl->cachedSampleRate = APP->engine->getSampleRate();
+void TemporalDeck::applySampleRateChange(float sampleRate) {
+  impl->cachedSampleRate = sampleRate;
   impl->engine.bufferDurationMode = impl->bufferDurationMode;
   impl->engine.reset(impl->cachedSampleRate);
   impl->uiSampleRate.store(impl->cachedSampleRate);
@@ -1490,6 +1508,10 @@ void TemporalDeck::onSampleRateChange() {
     lights[ARC_LIGHT_START + i].setBrightness(0.f);
     lights[ARC_MAX_LIGHT_START + i].setBrightness(0.f);
   }
+}
+
+void TemporalDeck::onSampleRateChange() {
+  applySampleRateChange(APP->engine->getSampleRate());
 }
 
 json_t *TemporalDeck::dataToJson() {
@@ -1549,7 +1571,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
 
 void TemporalDeck::process(const ProcessArgs &args) {
   if (args.sampleRate != impl->cachedSampleRate) {
-    onSampleRateChange();
+    applySampleRateChange(args.sampleRate);
   }
 
   if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
@@ -1665,8 +1687,10 @@ void TemporalDeck::setPlatterMotionFreshSamples(int motionFreshSamples) {
 }
 
 void TemporalDeck::addPlatterWheelDelta(float delta, int holdSamples) {
-  float current = impl->platterWheelDelta.load();
-  impl->platterWheelDelta.store(current + delta);
+  float expected = impl->platterWheelDelta.load(std::memory_order_relaxed);
+  while (!impl->platterWheelDelta.compare_exchange_weak(expected, expected + delta, std::memory_order_relaxed,
+                                                         std::memory_order_relaxed)) {
+  }
   impl->platterScratchHoldSamples.store(std::max(0, holdSamples));
 }
 

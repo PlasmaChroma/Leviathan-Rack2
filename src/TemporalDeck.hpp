@@ -106,6 +106,8 @@ struct TemporalDeck final : Module {
   void setHighQualityScratchInterpolationEnabled(bool enabled);
 
 private:
+  void applySampleRateChange(float sampleRate);
+
   struct Impl;
   std::unique_ptr<Impl> impl;
 };
