@@ -972,12 +972,14 @@ struct TemporalDeckEngine {
           } else {
             float targetReadVelocity = 0.f;
             if (hasFreshPlatterGesture) {
-              // Convert lag-space gesture velocity into buffer read velocity.
-              // d(lag)/dt = writeVel - readVel  =>  readVel = writeVel + gestureVel
-              //
-              // Only consume fresh gesture velocity here; reusing stale
-              // velocity while the mouse is held still causes directional drift.
-              targetReadVelocity = sampleRate + platterGestureVelocity;
+              // Consume only fresh gesture velocity here so stale UI velocity
+              // cannot leak into click-and-hold drift.
+              targetReadVelocity = platterGestureVelocity;
+            }
+            if (!freezeState && (targetReadVelocity > 0.f || scratchLagTargetSamples < scratchLagSamples)) {
+              // Moving the hand toward NOW still has to keep up with the
+              // write head's implicit +1x advance between sparse UI events.
+              targetReadVelocity += sampleRate;
             }
             float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
             integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
@@ -1101,7 +1103,7 @@ struct TemporalDeckEngine {
             float dynamicSoftLimit =
               clamp(kScratchSoftLagStepMin + std::fabs(platterGestureVelocity) * 0.003f + std::fabs(lagError) * 0.08f,
                     kScratchSoftLagStepMin,
-                    kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 1.35f) * (1.f + 0.45f * motionNorm));
+                    kScratchSoftLagStepMax * (backwardScratch ? 2.5f : 2.0f) * (1.f + 0.45f * motionNorm));
 
             // Lightweight inertia model: chase target step with a damped velocity
             // state so manual scratch movement has weight and less zipper edge.
