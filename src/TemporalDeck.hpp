@@ -109,6 +109,8 @@ struct TemporalDeck final : Module {
 
   bool isPlatterCursorLockEnabled() const;
   void setPlatterCursorLockEnabled(bool enabled);
+  bool isFreezeTraceLoggingEnabled() const;
+  void setFreezeTraceLoggingEnabled(bool enabled);
 
   bool isHighQualityScratchInterpolationEnabled() const;
   void setHighQualityScratchInterpolationEnabled(bool enabled);

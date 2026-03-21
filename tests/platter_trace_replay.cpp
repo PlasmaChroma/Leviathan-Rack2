@@ -74,11 +74,12 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
     }
 
     double tSec = 0.0;
+    double freezeFlag = 0.0;
     double lagDelta = 0.0;
     double liveLag = 0.0;
     double localLag = 0.0;
-    if (!parseDouble(cols[1], &tSec) || !parseDouble(cols[12], &lagDelta) || !parseDouble(cols[13], &liveLag) ||
-        !parseDouble(cols[14], &localLag)) {
+    if (!parseDouble(cols[1], &tSec) || !parseDouble(cols[3], &freezeFlag) || !parseDouble(cols[12], &lagDelta) ||
+        !parseDouble(cols[13], &liveLag) || !parseDouble(cols[14], &localLag)) {
       continue;
     }
 
@@ -103,7 +104,9 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
       continue;
     }
 
-    replayLag = platter_interaction::rebaseLagTarget(float(replayLag), float(liveLag), float(lagDelta));
+    if (freezeFlag < 0.5) {
+      replayLag = platter_interaction::rebaseLagTarget(float(replayLag), float(liveLag), float(lagDelta));
+    }
     replayLag = std::max(0.0, replayLag - lagDelta);
 
     double absErr = std::fabs(replayLag - localLag);

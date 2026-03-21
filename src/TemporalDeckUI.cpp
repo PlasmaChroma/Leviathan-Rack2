@@ -135,6 +135,10 @@ void TemporalDeckPlatterWidget::syncTraceCaptureState() {
     stopTraceCapture();
     return;
   }
+  if (!module->isFreezeTraceLoggingEnabled()) {
+    stopTraceCapture();
+    return;
+  }
   bool freezeLatched = module->isUiFreezeLatched();
   if (freezeLatched) {
     startTraceCapture();
@@ -493,11 +497,14 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   // accumulated hand motion when DSP smoothing lags behind dense UI events.
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
+  bool freezeLatched = module->isUiFreezeLatched();
   float sensitivity = module->scratchSensitivity();
   float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
                                                           TemporalDeck::kMouseScratchTravelScale,
                                                           TemporalDeck::kNominalPlatterRpm);
-  localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+  if (!freezeLatched) {
+    localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+  }
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
 
   float measuredVelocity = lagDelta / float(dtSec);
@@ -773,6 +780,9 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createCheckMenuItem("Cursor lock on platter drag", "",
                                          [=]() { return module->isPlatterCursorLockEnabled(); },
                                          [=]() { module->setPlatterCursorLockEnabled(!module->isPlatterCursorLockEnabled()); }));
+      menu->addChild(createCheckMenuItem("Debug trace on freeze", "",
+                                         [=]() { return module->isFreezeTraceLoggingEnabled(); },
+                                         [=]() { module->setFreezeTraceLoggingEnabled(!module->isFreezeTraceLoggingEnabled()); }));
     }
     if (module) {
       menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {

@@ -1328,6 +1328,7 @@ struct TemporalDeck::Impl {
   float uiPublishTimerSec = 0.f;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterCursorLock = false;
+  bool freezeTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   int bufferDurationMode = TemporalDeck::BUFFER_DURATION_8S;
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
@@ -1474,6 +1475,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterCursorLock", json_boolean(impl->platterCursorLock));
+  json_object_set_new(root, "freezeTraceLoggingEnabled", json_boolean(impl->freezeTraceLoggingEnabled));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
   json_object_set_new(root, "cartridgeCharacterV2", json_integer(impl->cartridgeCharacter));
   int legacyCartridgeCharacter = impl->cartridgeCharacter;
@@ -1497,6 +1499,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
   json_t *platterCursorLockJ = json_object_get(root, "platterCursorLock");
+  json_t *freezeTraceLoggingJ = json_object_get(root, "freezeTraceLoggingEnabled");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
@@ -1520,6 +1523,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (platterCursorLockJ) {
     impl->platterCursorLock = json_boolean_value(platterCursorLockJ);
+  }
+  if (freezeTraceLoggingJ) {
+    impl->freezeTraceLoggingEnabled = json_boolean_value(freezeTraceLoggingJ);
   }
   if (slipReturnModeJ) {
     impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
@@ -1733,6 +1739,14 @@ bool TemporalDeck::isPlatterCursorLockEnabled() const {
 
 void TemporalDeck::setPlatterCursorLockEnabled(bool enabled) {
   impl->platterCursorLock = enabled;
+}
+
+bool TemporalDeck::isFreezeTraceLoggingEnabled() const {
+  return impl->freezeTraceLoggingEnabled;
+}
+
+void TemporalDeck::setFreezeTraceLoggingEnabled(bool enabled) {
+  impl->freezeTraceLoggingEnabled = enabled;
 }
 
 bool TemporalDeck::isHighQualityScratchInterpolationEnabled() const {
