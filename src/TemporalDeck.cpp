@@ -456,14 +456,14 @@ struct TemporalDeckEngine {
   static CartridgeParams paramsForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      // M44-7: warm/fat and hot, but still fundamentally hi-fi rather than degraded.
-      return {20.f, 110.f, 17800.f, 16800.f, 0.15f, -0.03f, 0.003f, 1.01f, 0.006f, 0.75f, 0.35f};
+      // M44-7: warm/fat, slight high roll-off, moderate output saturation.
+      return {20.f, 140.f, 17000.f, 15000.f, 0.20f, -0.08f, 0.004f, 1.035f, 0.004f, 0.85f, 0.40f};
     case CARTRIDGE_CONCORDE_SCRATCH:
-      // Concorde MKII Scratch: energetic and hot, with more bite than warmth.
-      return {28.f, 2100.f, 18000.f, 15600.f, 0.05f, 0.08f, 0.004f, 1.025f, 0.008f, 0.65f, 0.35f};
+      // Concorde MKII Scratch: energetic, crisp transients, 5k-10k bite region.
+      return {28.f, 2600.f, 18200.f, 16300.f, 0.03f, 0.16f, 0.003f, 1.03f, 0.008f, 0.55f, 0.35f};
     case CARTRIDGE_680_HP:
-      // Stanton 680 HP: warm/musical with silky highs and a little extra width.
-      return {18.f, 820.f, 13500.f, 11800.f, 0.11f, -0.02f, 0.010f, 1.01f, 0.016f, 0.22f, 0.45f};
+      // Stanton 680 HP: silky highs + low-mid bloom with strong stereo separation.
+      return {18.f, 350.f, 19500.f, 17000.f, 0.13f, -0.01f, 0.002f, 1.018f, 0.010f, 0.30f, 0.35f};
     case CARTRIDGE_LOFI:
       // Lo-Fi: intentionally veiled, smeared, and dirty.
       return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
@@ -476,11 +476,11 @@ struct TemporalDeckEngine {
   static float makeupGainForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      return 1.10f;
+      return 1.12f;
     case CARTRIDGE_CONCORDE_SCRATCH:
-      return 1.06f;
-    case CARTRIDGE_680_HP:
       return 1.08f;
+    case CARTRIDGE_680_HP:
+      return 1.07f;
     case CARTRIDGE_LOFI:
       return 1.36f;
     case CARTRIDGE_CLEAN:
