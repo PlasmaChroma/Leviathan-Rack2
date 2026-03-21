@@ -474,9 +474,11 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   }
 
   float sampleRate = module->getUiSampleRate();
+  float scrollAbs = std::fabs(scroll);
+  float scrollShaped = (scroll >= 0.f ? 1.f : -1.f) * (scrollAbs + 0.65f * scrollAbs * scrollAbs);
   float samplesPerNotch =
-    sampleRate * 0.008f * TemporalDeck::kWheelScratchTravelScale * module->scratchSensitivity();
-  float lagDelta = scroll * samplesPerNotch;
+    sampleRate * 0.018f * TemporalDeck::kWheelScratchTravelScale * module->scratchSensitivity();
+  float lagDelta = scrollShaped * samplesPerNotch;
   float holdSeconds = module->isSlipLatched() ? 0.16f : 0.03f;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 

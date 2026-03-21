@@ -1525,7 +1525,7 @@ const char *TemporalDeck::scratchInterpolationLabelFor(int index) {
   case SCRATCH_INTERP_LAGRANGE6:
     return "6-point Lagrange";
   case SCRATCH_INTERP_SINC:
-    return "Sinc";
+    return "Sinc (CPU heavy)";
   case SCRATCH_INTERP_CUBIC:
   default:
     return "Cubic";
