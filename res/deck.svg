@@ -23,15 +23,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="3.4756159"
-     inkscape:cx="239.23817"
-     inkscape:cy="349.72218"
+     inkscape:zoom="2.4576316"
+     inkscape:cx="141.39629"
+     inkscape:cy="219.92719"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg1713"
+     inkscape:current-layer="panel_art"
      inkscape:showpageshadow="2"
      inkscape:deskcolor="#d1d1d1" />
   <defs
@@ -80,11 +80,55 @@
        y2="125.28868"
        gradientUnits="userSpaceOnUse"
        gradientTransform="translate(-1.6233675,-0.55061291)" />
+    <linearGradient
+       id="bgGrad"
+       x1="1108.8855"
+       y1="886.8808"
+       x2="1108.8855"
+       y2="12348.43"
+       gradientTransform="matrix(8.8641807e-5,0,0,0.01121139,-0.09829384,-9.9431708)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+   offset="0%"
+   stop-color="#0b0d10"
+   id="stop1" />
+
+      <stop
+   offset="50%"
+   stop-color="#10141a"
+   id="stop2" />
+
+      <stop
+   offset="100%"
+   stop-color="#07080a"
+   id="stop3-6" />
+
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#bgGrad"
+       id="linearGradient38"
+       x1="0"
+       y1="64.249977"
+       x2="101.93"
+       y2="64.249977"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <g
      id="panel_art"
      style="display:inline"
      inkscape:label="panel_art">
+    <rect
+       x="0"
+       y="3.5527137e-15"
+       width="101.93"
+       height="128.49995"
+       rx="0"
+       ry="0"
+       fill="url(#bgGrad)"
+       id="black_background"
+       style="display:inline;fill:url(#linearGradient38);stroke-width:0.000996894"
+       sodipodi:insensitive="true" />
     <rect
        fill="#0e1016"
        height="128.5"
@@ -96,7 +140,7 @@
        x="0"
        y="0"
        id="rect1529"
-       style="fill:#101319;fill-opacity:1" />
+       style="display:none;fill:#101319;fill-opacity:1" />
     <path
        d="m 8.5369379,17.056614 9.8267631,8.586218"
        stroke="url(#accentGrad)"
