@@ -1324,6 +1324,7 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<float> uiPlatterAngle{0.f};
+  std::atomic<bool> uiFreezeLatched{false};
   float uiPublishTimerSec = 0.f;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterCursorLock = false;
@@ -1452,6 +1453,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->uiLagSamples.store(0.0);
   impl->uiAccessibleLagSamples.store(0.0);
   impl->uiPlatterAngle.store(0.f);
+  impl->uiFreezeLatched.store(false);
   impl->uiPublishTimerSec = 0.f;
   impl->platterScratchHoldSamples.store(0);
   impl->platterMotionFreshSamples.store(0);
@@ -1640,6 +1642,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiLagSamples.store(frame.lag);
   impl->uiAccessibleLagSamples.store(frame.accessibleLag);
   impl->uiSampleRate.store(args.sampleRate);
+  impl->uiFreezeLatched.store(impl->freezeLatched);
 
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
@@ -1706,6 +1709,10 @@ float TemporalDeck::getUiSampleRate() const {
 
 float TemporalDeck::getUiPlatterAngle() const {
   return impl->uiPlatterAngle.load();
+}
+
+bool TemporalDeck::isUiFreezeLatched() const {
+  return impl->uiFreezeLatched.load();
 }
 
 bool TemporalDeck::isSlipLatched() const {

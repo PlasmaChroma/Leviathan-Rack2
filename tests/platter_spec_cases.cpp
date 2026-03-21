@@ -1,7 +1,5 @@
 #include "platter_spec_cases.hpp"
-#define TEMPORALDECK_MATH_ONLY
-#include "../src/TemporalDeck.hpp"
-#undef TEMPORALDECK_MATH_ONLY
+#include "../src/TemporalDeckTest.hpp"
 
 #include <algorithm>
 #include <cmath>

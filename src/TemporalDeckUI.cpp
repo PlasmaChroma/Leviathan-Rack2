@@ -1,6 +1,8 @@
 #include "TemporalDeck.hpp"
 
+#include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <regex>
 #include <sstream>
 
@@ -25,6 +27,14 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   static constexpr double kMinGestureDtSec = 1.0 / 240.0;
   static constexpr double kMaxGestureDtSec = 1.0 / 20.0;
 
+  struct InteractionTraceRecorder {
+    bool active = false;
+    std::ofstream file;
+    std::string path;
+    double startTimeSec = 0.0;
+    uint64_t sequence = 0;
+  };
+
   TemporalDeck *module = nullptr;
   Vec centerPx = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
@@ -39,6 +49,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   float filteredGestureVelocity = 0.f;
   double lastMoveTimeSec = 0.0;
   double recentGestureDtSec = kDefaultGestureDtSec;
+  InteractionTraceRecorder traceRecorder;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
 
@@ -49,6 +60,11 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   }
 
   void updateScratchFromLocal(Vec local, Vec mouseDelta);
+  void syncTraceCaptureState();
+  void startTraceCapture();
+  void stopTraceCapture();
+  void logTraceEvent(const char *eventName, Vec local, Vec mouseDelta, float scroll, float deltaAngle, float lagDelta,
+                     float liveLag, float localLag, float velocity);
 
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
@@ -56,6 +72,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   void onDragMove(const event::DragMove &e) override;
   void onDragStart(const event::DragStart &e) override;
   void onDragEnd(const event::DragEnd &e) override;
+  ~TemporalDeckPlatterWidget() override { stopTraceCapture(); }
 };
 
 static bool loadSvgCircleMm(const std::string &svgPath, const std::string &circleId, Vec *outCenterMm,
@@ -111,6 +128,77 @@ static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
 static bool isLeftMouseDown() {
   return APP && APP->window && APP->window->win &&
          glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+}
+
+void TemporalDeckPlatterWidget::syncTraceCaptureState() {
+  if (!module) {
+    stopTraceCapture();
+    return;
+  }
+  bool freezeLatched = module->isUiFreezeLatched();
+  if (freezeLatched) {
+    startTraceCapture();
+  } else {
+    stopTraceCapture();
+  }
+}
+
+void TemporalDeckPlatterWidget::startTraceCapture() {
+  if (!module || traceRecorder.active) {
+    return;
+  }
+  std::string traceDir = system::join(asset::user(), "TemporalDeck/platter_traces");
+  system::createDirectories(traceDir);
+  long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+  std::string filename = "platter_trace_" + std::to_string(stampMs) + ".csv";
+  traceRecorder.path = system::join(traceDir, filename);
+  traceRecorder.file.open(traceRecorder.path.c_str(), std::ios::out | std::ios::trunc);
+  if (!traceRecorder.file.good()) {
+    WARN("TemporalDeck: failed to open platter trace file: %s", traceRecorder.path.c_str());
+    traceRecorder.path.clear();
+    return;
+  }
+  traceRecorder.file.setf(std::ios::fixed);
+  traceRecorder.file << std::setprecision(6);
+  traceRecorder.file << "# TemporalDeck platter interaction trace v1\n";
+  traceRecorder.file << "# Start when freeze latch turns on, stop when freeze latch turns off\n";
+  traceRecorder.file
+    << "seq,t_sec,event,freeze,dragging,cursor_locked,x,y,dx,dy,scroll,delta_angle,lag_delta,live_lag,local_lag,"
+       "velocity,sensitivity,sample_rate\n";
+  traceRecorder.startTimeSec = system::getTime();
+  traceRecorder.sequence = 0;
+  traceRecorder.active = true;
+  INFO("TemporalDeck: platter trace capture started: %s", traceRecorder.path.c_str());
+}
+
+void TemporalDeckPlatterWidget::stopTraceCapture() {
+  if (!traceRecorder.active) {
+    return;
+  }
+  if (traceRecorder.file.good()) {
+    traceRecorder.file.flush();
+    traceRecorder.file.close();
+  }
+  INFO("TemporalDeck: platter trace capture saved: %s", traceRecorder.path.c_str());
+  traceRecorder.active = false;
+  traceRecorder.startTimeSec = 0.0;
+  traceRecorder.sequence = 0;
+  traceRecorder.path.clear();
+}
+
+void TemporalDeckPlatterWidget::logTraceEvent(const char *eventName, Vec local, Vec mouseDelta, float scroll,
+                                              float deltaAngle, float lagDelta, float liveLag, float localLag,
+                                              float velocity) {
+  if (!module || !traceRecorder.active || !traceRecorder.file.good()) {
+    return;
+  }
+  double tSec = std::max(0.0, system::getTime() - traceRecorder.startTimeSec);
+  traceRecorder.file << traceRecorder.sequence++ << "," << tSec << "," << eventName << ","
+                     << (module->isUiFreezeLatched() ? 1 : 0) << "," << (dragging ? 1 : 0) << ","
+                     << (cursorLocked ? 1 : 0) << "," << local.x << "," << local.y << "," << mouseDelta.x << ","
+                     << mouseDelta.y << "," << scroll << "," << deltaAngle << "," << lagDelta << "," << liveLag
+                     << "," << localLag << "," << velocity << "," << module->scratchSensitivity() << ","
+                     << module->getUiSampleRate() << "\n";
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
@@ -240,6 +328,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
 }
 
 void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
+  syncTraceCaptureState();
   nvgSave(args.vg);
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
@@ -343,6 +432,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!module || !dragging) {
     return;
   }
+  syncTraceCaptureState();
   // Physical screen-space model:
   // lock a contact radius at drag start and only use tangential motion to move
   // the platter. Radial cursor drift is ignored instead of redefining the
@@ -374,6 +464,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       }
       module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
       module->setPlatterMotionFreshSamples(0);
+      logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, deltaAngle, 0.f, float(module->getUiLagSamples()),
+                    localLagSamples, filteredGestureVelocity);
       return;
     }
     contactAngle = localAngle;
@@ -389,6 +481,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       }
       module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
       module->setPlatterMotionFreshSamples(0);
+      logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, 0.f, 0.f, float(module->getUiLagSamples()),
+                    localLagSamples, filteredGestureVelocity);
       return;
     }
     deltaAngle = tangentialPx / effectiveRadius;
@@ -410,6 +504,8 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
   filteredGestureVelocity += (measuredVelocity - filteredGestureVelocity) * velocityAlpha;
   module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+  logTraceEvent("SCRATCH_APPLY", local, mouseDelta, 0.f, deltaAngle, lagDelta, liveLag, localLagSamples,
+                filteredGestureVelocity);
 
   int motionFreshSamples = int(std::round(module->getUiSampleRate() * float(dtSec) * 1.35f));
   motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.025f)));
@@ -423,9 +519,13 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 }
 
 void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
+  syncTraceCaptureState();
   onButtonPos = e.pos;
   if (e.button == GLFW_MOUSE_BUTTON_LEFT && isWithinPlatter(e.pos)) {
+    Vec local = e.pos.minus(localCenter());
     if (e.action == GLFW_PRESS) {
+      logTraceEvent("BUTTON_PRESS", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
+                    localLagSamples, filteredGestureVelocity);
       if (module) {
         localLagSamples = module->getUiLagSamples();
         filteredGestureVelocity = 0.f;
@@ -438,6 +538,8 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
       return;
     }
     if (e.action == GLFW_RELEASE && !dragging) {
+      logTraceEvent("BUTTON_RELEASE", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f,
+                    float(module ? module->getUiLagSamples() : 0.f), localLagSamples, filteredGestureVelocity);
       if (module) {
         module->setPlatterScratch(false, localLagSamples, 0.f);
         module->setPlatterMotionFreshSamples(0);
@@ -450,6 +552,7 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
 }
 
 void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
+  syncTraceCaptureState();
   if (!module || !isWithinPlatter(e.pos)) {
     OpaqueWidget::onHoverScroll(e);
     return;
@@ -477,10 +580,14 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
   module->addPlatterWheelDelta(lagDelta, holdSamples);
+  Vec local = e.pos.minus(localCenter());
+  logTraceEvent("WHEEL", local, Vec(0.f, 0.f), scroll, 0.f, lagDelta, float(module->getUiLagSamples()), localLagSamples,
+                filteredGestureVelocity);
   e.consume(this);
 }
 
 void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
+  syncTraceCaptureState();
   if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || !isWithinPlatter(onButtonPos)) {
     return;
   }
@@ -495,6 +602,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   localLagSamples = float(module->getUiLagSamples());
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
+  logTraceEvent("DRAG_START", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, localLagSamples, localLagSamples, 0.f);
   if (!cursorLocked && module->isPlatterCursorLockEnabled() && settings::allowCursorLock && APP && APP->window) {
     APP->window->cursorLock();
     cursorLocked = true;
@@ -503,6 +611,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
 }
 
 void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
+  syncTraceCaptureState();
   if (!dragging || e.button != GLFW_MOUSE_BUTTON_LEFT) {
     return;
   }
@@ -512,6 +621,8 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
+    logTraceEvent("DRAG_CANCEL", Vec(0.f, 0.f), e.mouseDelta, 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
+                  localLagSamples, filteredGestureVelocity);
     if (cursorLocked && APP && APP->window) {
       APP->window->cursorUnlock();
       cursorLocked = false;
@@ -521,11 +632,14 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
     return;
   }
   Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
+  logTraceEvent("DRAG_MOVE", local, e.mouseDelta, 0.f, 0.f, 0.f, float(module->getUiLagSamples()), localLagSamples,
+                filteredGestureVelocity);
   updateScratchFromLocal(local, e.mouseDelta);
   e.consume(this);
 }
 
 void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
+  syncTraceCaptureState();
   if (dragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
     if (isLeftMouseDown()) {
       e.consume(this);
@@ -536,6 +650,8 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
+    logTraceEvent("DRAG_END", Vec(0.f, 0.f), Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
+                  localLagSamples, filteredGestureVelocity);
     if (cursorLocked && APP && APP->window) {
       APP->window->cursorUnlock();
       cursorLocked = false;
