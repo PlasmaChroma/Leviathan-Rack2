@@ -451,9 +451,13 @@ struct TemporalDeckEngine {
     return 1.f + t;
   }
 
-  float computeBaseSpeed(float rateKnob, float rateCv, bool reverse) const {
-    float speed = baseSpeedFromKnob(rateKnob);
-    speed += clamp(rateCv / 5.f, -1.f, 1.f);
+  static float baseSpeedFromCv(float rateCv) {
+    float t = clamp((rateCv + 10.f) / 20.f, 0.f, 1.f);
+    return 0.5f + 1.5f * t;
+  }
+
+  float computeBaseSpeed(float rateKnob, float rateCv, bool rateCvConnected, bool reverse) const {
+    float speed = rateCvConnected ? baseSpeedFromCv(rateCv) : baseSpeedFromKnob(rateKnob);
     speed = clamp(speed, -3.f, 3.f);
     if (reverse) {
       speed *= -1.f;
@@ -844,7 +848,8 @@ struct TemporalDeckEngine {
   FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
                       float feedbackKnob, bool freezeButton, bool reverseButton, bool slipButton, bool freezeGate,
                       bool scratchGate, bool scratchGateConnected, bool positionConnected, float positionCv,
-                      float rateCv, bool platterTouched, bool wheelScratchHeld, bool platterMotionActive,
+                      float rateCv, bool rateCvConnected, bool platterTouched, bool wheelScratchHeld,
+                      bool platterMotionActive,
                       uint32_t platterGestureRevision, float platterLagTarget, float platterGestureVelocity,
                       float wheelDelta) {
     FrameResult result;
@@ -863,7 +868,7 @@ struct TemporalDeckEngine {
     double limit = accessibleLag(bufferKnob);
     double minLag = 0.0;
     double maxLag = std::max(limit, 0.0);
-    float baseSpeed = computeBaseSpeed(rateKnob, rateCv, reverseState);
+    float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
     float speed = baseSpeed;
     bool externalScratch = scratchGateConnected && scratchGate && positionConnected;
     bool positionFollow = positionConnected && !scratchGateConnected;
@@ -1286,6 +1291,18 @@ struct TemporalDeckEngine {
 };
 
 struct DeckRateQuantity : ParamQuantity {
+  static float valueForSpeed(float speed) {
+    speed = clamp(speed, 0.5f, 2.f);
+    if (speed <= 1.f) {
+      return speed - 0.5f;
+    }
+    return speed * 0.5f;
+  }
+
+  float getDisplayValue() override { return TemporalDeckEngine::baseSpeedFromKnob(getValue()); }
+
+  void setDisplayValue(float displayValue) override { setImmediateValue(valueForSpeed(displayValue)); }
+
   std::string getDisplayValueString() override {
     return string::f("%.2fx", TemporalDeckEngine::baseSpeedFromKnob(getValue()));
   }
@@ -1593,6 +1610,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   float inR = inputs[INPUT_R_INPUT].isConnected() ? inputs[INPUT_R_INPUT].getVoltage() : inL;
   float positionCv = inputs[POSITION_CV_INPUT].getVoltage();
   float rateCv = inputs[RATE_CV_INPUT].getVoltage();
+  bool rateCvConnected = inputs[RATE_CV_INPUT].isConnected();
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
@@ -1616,7 +1634,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
                        inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold,
                        inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold,
                        inputs[SCRATCH_GATE_INPUT].isConnected(), inputs[POSITION_CV_INPUT].isConnected(), positionCv,
-                       rateCv, impl->platterTouched.load(), wheelScratchHeld, platterMotionActive,
+                       rateCv, rateCvConnected, impl->platterTouched.load(), wheelScratchHeld, platterMotionActive,
                        impl->platterGestureRevision.load(), impl->platterLagTarget.load(),
                        impl->platterGestureVelocity.load(), wheelDelta);
 
