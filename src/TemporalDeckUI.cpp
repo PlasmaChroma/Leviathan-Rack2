@@ -625,14 +625,6 @@ struct TemporalDeckWidget : ModuleWidget {
     assert(menu);
     menu->addChild(new MenuSeparator());
     if (module) {
-      menu->addChild(createMenuLabel("Scratch"));
-      menu->addChild(createSubmenuItem("Scratch model", "", [=](Menu *submenu) {
-        for (int i = 0; i < TemporalDeck::SCRATCH_MODEL_COUNT; ++i) {
-          submenu->addChild(createCheckMenuItem(
-            TemporalDeck::scratchModelLabelFor(i), "", [=]() { return module->getScratchModel() == i; },
-            [=]() { module->setScratchModel(i); }));
-        }
-      }));
       menu->addChild(createMenuLabel("Advanced"));
       menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {

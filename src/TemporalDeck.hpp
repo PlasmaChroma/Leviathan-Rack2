@@ -18,11 +18,6 @@ struct TemporalDeck final : Module {
   static constexpr int CARTRIDGE_LOFI = 5;
   static constexpr int CARTRIDGE_COUNT = 6;
 
-  static constexpr int SCRATCH_MODEL_LEGACY = 0;
-  static constexpr int SCRATCH_MODEL_HYBRID = 1;
-  static constexpr int SCRATCH_MODEL_SCRATCH3 = 2;
-  static constexpr int SCRATCH_MODEL_COUNT = 3;
-
   static constexpr int SCRATCH_INTERP_CUBIC = 0;
   static constexpr int SCRATCH_INTERP_LAGRANGE6 = 1;
   static constexpr int SCRATCH_INTERP_SINC = 2;
@@ -84,7 +79,6 @@ struct TemporalDeck final : Module {
 
   static const char *cartridgeLabelFor(int index);
   static CartridgeVisualStyle cartridgeVisualStyleFor(int index);
-  static const char *scratchModelLabelFor(int index);
   static const char *scratchInterpolationLabelFor(int index);
   static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
@@ -108,9 +102,6 @@ struct TemporalDeck final : Module {
 
   bool isSlipLatched() const;
   int getCartridgeCharacter() const;
-
-  int getScratchModel() const;
-  void setScratchModel(int mode);
 
   int getBufferDurationMode() const;
 
