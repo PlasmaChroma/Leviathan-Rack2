@@ -123,20 +123,6 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
   if (APP && APP->window && APP->window->uiFont) {
-    /*
-    const char* mouseText = module->platterTouched.load() ? "mDown" : "mUp";
-    const char* motionText = module->platterMotionFreshSamples.load() > 0 ?
-    "drag" : "still"; Vec debugPos = centerMm.plus(Vec(-platterRadiusPx * 0.92f,
-    -platterRadiusPx * 0.98f));
-
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgFontSize(args.vg, 10.0f);
-    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 210));
-    nvgText(args.vg, debugPos.x, debugPos.y, mouseText, nullptr);
-    nvgText(args.vg, debugPos.x, debugPos.y + 11.5f, motionText, nullptr);
-    */
-
     double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
     char text[32];
     std::snprintf(text, sizeof(text), "%.0f ms", lagMs);

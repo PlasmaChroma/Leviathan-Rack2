@@ -14,11 +14,12 @@ namespace {
 
 static float realBufferSecondsForMode(int index) {
   switch (index) {
+  case 0:
+    return 9.f;
   case 1:
     return 17.f;
   case 2:
     return 481.f;
-  case 0:
   default:
     return 9.f;
   }
@@ -1191,53 +1192,52 @@ struct TemporalDeckEngine {
         slipReturning = false;
         slipFinalCatchActive = false;
       } else {
-      // Return to NOW (lag = 0)
-      double currentLagSamples = currentLagFromNewest(newestPos);
-      float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
+        // Return to NOW (lag = 0)
+        double currentLagSamples = currentLagFromNewest(newestPos);
+        float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
 
-      if (currentLagSamples <= nowSnapThresholdSamples) {
-        startNowCatch(currentLagSamples);
-        slipReturning = false;
-        slipFinalCatchActive = false;
-      } else
-
-        if (!slipFinalCatchActive) {
-        // Exponential-like approach to zero lag.
-        // We target a specific lag value that decreases over time.
-        float alpha = dt / std::max(slipReturnTime, 1e-6f);
-        double targetLag = currentLagSamples * double(1.f - alpha);
-
-        // Ensure we actually move towards zero even if alpha is tiny.
-        if (targetLag > currentLagSamples - 0.5f) {
-          targetLag = currentLagSamples - 0.5f;
-        }
-        if (targetLag < 0.f)
-          targetLag = 0.f;
-
-        readHead = buffer.wrapPosition(newestPos - targetLag);
-        keepSlipLagAligned = true;
-
-        if (targetLag <= finalCatchThresholdSamples) {
-          slipFinalCatchActive = true;
-          slipReturnRemaining = kSlipFinalCatchTime;
-          slipReturnStartLag = targetLag;
-        }
-      } else {
-        // Final catch phase: smooth snap to live input.
-        slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
-        float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
-        float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
-        double targetLag = slipReturnStartLag * double(1.f - shapedProgress);
-
-        readHead = buffer.wrapPosition(newestPos - targetLag);
-        keepSlipLagAligned = true;
-
-        if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
-          readHead = newestPos;
+        if (currentLagSamples <= nowSnapThresholdSamples) {
+          startNowCatch(currentLagSamples);
           slipReturning = false;
           slipFinalCatchActive = false;
+        } else if (!slipFinalCatchActive) {
+          // Exponential-like approach to zero lag.
+          // We target a specific lag value that decreases over time.
+          float alpha = dt / std::max(slipReturnTime, 1e-6f);
+          double targetLag = currentLagSamples * double(1.f - alpha);
+
+          // Ensure we actually move towards zero even if alpha is tiny.
+          if (targetLag > currentLagSamples - 0.5f) {
+            targetLag = currentLagSamples - 0.5f;
+          }
+          if (targetLag < 0.f) {
+            targetLag = 0.f;
+          }
+
+          readHead = buffer.wrapPosition(newestPos - targetLag);
+          keepSlipLagAligned = true;
+
+          if (targetLag <= finalCatchThresholdSamples) {
+            slipFinalCatchActive = true;
+            slipReturnRemaining = kSlipFinalCatchTime;
+            slipReturnStartLag = targetLag;
+          }
+        } else {
+          // Final catch phase: smooth snap to live input.
+          slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
+          float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
+          float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
+          double targetLag = slipReturnStartLag * double(1.f - shapedProgress);
+
+          readHead = buffer.wrapPosition(newestPos - targetLag);
+          keepSlipLagAligned = true;
+
+          if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
+            readHead = newestPos;
+            slipReturning = false;
+            slipFinalCatchActive = false;
+          }
         }
-      }
       }
     } else if (positionFollow && !externalScratch) {
       // Absolute Position CV
