@@ -14,8 +14,9 @@ struct TemporalDeck final : Module {
   static constexpr int CARTRIDGE_M44_7 = 1;
   static constexpr int CARTRIDGE_ORTOFON_SCRATCH = 2;
   static constexpr int CARTRIDGE_STANTON_680HP = 3;
-  static constexpr int CARTRIDGE_LOFI = 4;
-  static constexpr int CARTRIDGE_COUNT = 5;
+  static constexpr int CARTRIDGE_QBERT = 4;
+  static constexpr int CARTRIDGE_LOFI = 5;
+  static constexpr int CARTRIDGE_COUNT = 6;
 
   static constexpr int SCRATCH_MODEL_LEGACY = 0;
   static constexpr int SCRATCH_MODEL_HYBRID = 1;

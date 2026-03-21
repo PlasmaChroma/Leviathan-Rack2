@@ -26,6 +26,24 @@ static float realBufferSecondsForMode(int index) {
 
 static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
 
+static int nextCartridgeCharacter(int current) {
+  switch (current) {
+  case TemporalDeck::CARTRIDGE_CLEAN:
+    return TemporalDeck::CARTRIDGE_M44_7;
+  case TemporalDeck::CARTRIDGE_M44_7:
+    return TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH;
+  case TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH:
+    return TemporalDeck::CARTRIDGE_STANTON_680HP;
+  case TemporalDeck::CARTRIDGE_STANTON_680HP:
+    return TemporalDeck::CARTRIDGE_QBERT;
+  case TemporalDeck::CARTRIDGE_QBERT:
+    return TemporalDeck::CARTRIDGE_LOFI;
+  case TemporalDeck::CARTRIDGE_LOFI:
+  default:
+    return TemporalDeck::CARTRIDGE_CLEAN;
+  }
+}
+
 struct TemporalDeckBuffer {
   std::vector<float> left;
   std::vector<float> right;
@@ -232,6 +250,7 @@ struct TemporalDeckEngine {
     CARTRIDGE_M44_7,
     CARTRIDGE_CONCORDE_SCRATCH,
     CARTRIDGE_680_HP,
+    CARTRIDGE_QBERT,
     CARTRIDGE_LOFI,
     CARTRIDGE_COUNT
   };
@@ -243,6 +262,7 @@ struct TemporalDeckEngine {
                 "Cartridge enum mismatch: Ortofon Scratch");
   static_assert(CARTRIDGE_680_HP == TemporalDeck::CARTRIDGE_STANTON_680HP,
                 "Cartridge enum mismatch: Stanton 680HP");
+  static_assert(CARTRIDGE_QBERT == TemporalDeck::CARTRIDGE_QBERT, "Cartridge enum mismatch: Q.Bert");
   static_assert(CARTRIDGE_LOFI == TemporalDeck::CARTRIDGE_LOFI, "Cartridge enum mismatch: Lo-Fi");
   static_assert(CARTRIDGE_COUNT == TemporalDeck::CARTRIDGE_COUNT, "Cartridge enum mismatch: count");
   static_assert(SCRATCH_MODEL_LEGACY == TemporalDeck::SCRATCH_MODEL_LEGACY, "Scratch model enum mismatch: Legacy");
@@ -464,6 +484,9 @@ struct TemporalDeckEngine {
     case CARTRIDGE_680_HP:
       // Stanton 680 HP: silky highs + low-mid bloom with strong stereo separation.
       return {18.f, 350.f, 19500.f, 17000.f, 0.13f, -0.01f, 0.002f, 1.018f, 0.010f, 0.30f, 0.35f};
+    case CARTRIDGE_QBERT:
+      // Q.Bert: hot output, mid-forward scratch articulation, softer top.
+      return {24.f, 2500.f, 16500.f, 13500.f, 0.04f, 0.21f, 0.003f, 1.06f, 0.006f, 0.90f, 0.40f};
     case CARTRIDGE_LOFI:
       // Lo-Fi: intentionally veiled, smeared, and dirty.
       return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
@@ -481,6 +504,8 @@ struct TemporalDeckEngine {
       return 1.08f;
     case CARTRIDGE_680_HP:
       return 1.07f;
+    case CARTRIDGE_QBERT:
+      return 1.14f;
     case CARTRIDGE_LOFI:
       return 1.36f;
     case CARTRIDGE_CLEAN:
@@ -1484,6 +1509,8 @@ const char *TemporalDeck::cartridgeLabelFor(int index) {
     return "C.MKII S";
   case CARTRIDGE_STANTON_680HP:
     return "680 HP";
+  case CARTRIDGE_QBERT:
+    return "Q.Bert";
   case CARTRIDGE_LOFI:
     return "Lo-Fi";
   case CARTRIDGE_CLEAN:
@@ -1500,6 +1527,8 @@ CartridgeVisualStyle TemporalDeck::cartridgeVisualStyleFor(int index) {
     return {nvgRGBA(242, 242, 242, 240), nvgRGBA(26, 26, 26, 210), nvgRGBA(18, 18, 18, 228)};
   case CARTRIDGE_STANTON_680HP:
     return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(24, 24, 28, 230)};
+  case CARTRIDGE_QBERT:
+    return {nvgRGBA(34, 35, 40, 240), nvgRGBA(240, 242, 246, 210), nvgRGBA(248, 200, 58, 235)};
   case CARTRIDGE_LOFI:
     return {nvgRGBA(56, 51, 44, 238), nvgRGBA(98, 84, 70, 190), nvgRGBA(186, 170, 138, 210)};
   case CARTRIDGE_CLEAN:
@@ -1585,7 +1614,14 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterCursorLock", json_boolean(impl->platterCursorLock));
-  json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
+  json_object_set_new(root, "cartridgeCharacterV2", json_integer(impl->cartridgeCharacter));
+  int legacyCartridgeCharacter = impl->cartridgeCharacter;
+  if (legacyCartridgeCharacter == CARTRIDGE_QBERT) {
+    legacyCartridgeCharacter = CARTRIDGE_ORTOFON_SCRATCH;
+  } else if (legacyCartridgeCharacter == CARTRIDGE_LOFI) {
+    legacyCartridgeCharacter = 4;
+  }
+  json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
   json_object_set_new(root, "scratchModel", json_integer(impl->scratchModel));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode));
   return root;
@@ -1601,6 +1637,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
   json_t *platterCursorLockJ = json_object_get(root, "platterCursorLock");
+  json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *scratchModelJ = json_object_get(root, "scratchModel");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
@@ -1624,8 +1661,17 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (platterCursorLockJ) {
     impl->platterCursorLock = json_boolean_value(platterCursorLockJ);
   }
-  if (cartridgeJ) {
-    impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, CARTRIDGE_COUNT - 1);
+  if (cartridgeV2J) {
+    impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeV2J), 0, CARTRIDGE_COUNT - 1);
+  } else if (cartridgeJ) {
+    int legacy = (int)json_integer_value(cartridgeJ);
+    // Legacy mapping before Q.Bert existed:
+    // 0 Clean, 1 M44-7, 2 Concorde, 3 680 HP, 4 Lo-Fi
+    if (legacy == 4) {
+      impl->cartridgeCharacter = CARTRIDGE_LOFI;
+    } else {
+      impl->cartridgeCharacter = clamp(legacy, 0, CARTRIDGE_COUNT - 1);
+    }
   }
   if (scratchModelJ) {
     impl->scratchModel = clamp((int)json_integer_value(scratchModelJ), 0, SCRATCH_MODEL_COUNT - 1);
@@ -1669,7 +1715,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     }
   }
   if (impl->cartridgeCycleTrigger.process(params[CARTRIDGE_CYCLE_PARAM].getValue())) {
-    impl->cartridgeCharacter = (impl->cartridgeCharacter + 1) % CARTRIDGE_COUNT;
+    impl->cartridgeCharacter = nextCartridgeCharacter(impl->cartridgeCharacter);
   }
 
   float inL = inputs[INPUT_L_INPUT].getVoltage();
