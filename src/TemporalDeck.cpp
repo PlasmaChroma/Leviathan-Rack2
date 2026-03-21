@@ -210,6 +210,7 @@ struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
   static constexpr float kSlipReturnTime = 0.12f;
+  static constexpr float kSlipReturnSlowMultiplier = 1.85f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kSlipFinalCatchThresholdMs = 120.f;
   static constexpr float kSlipFinalCatchTime = 0.035f;
@@ -332,6 +333,7 @@ struct TemporalDeckEngine {
   bool reverseState = false;
   bool slipState = false;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
+  int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   bool scratchActive = false;
   bool slipReturning = false;
   bool slipFinalCatchActive = false;
@@ -458,6 +460,16 @@ struct TemporalDeckEngine {
       speed *= -1.f;
     }
     return speed;
+  }
+
+  float configuredSlipReturnTime() const {
+    if (slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
+      return 0.f;
+    }
+    if (slipReturnMode == TemporalDeck::SLIP_RETURN_SLOW) {
+      return kSlipReturnTime * kSlipReturnSlowMultiplier;
+    }
+    return kSlipReturnTime;
   }
 
   double lagForPositionCv(float cv, double limit) const {
@@ -1121,7 +1133,8 @@ struct TemporalDeckEngine {
 
         float lagError = scratchLagTargetSamples - scratchLagSamples;
         bool movingTowardNow = lagError < 0.f;
-        float wheelFollowTime = movingTowardNow ? (kSlipReturnTime * 0.5f) : kSlipReturnTime;
+        float configuredSlipTime = std::max(configuredSlipReturnTime(), 1e-6f);
+        float wheelFollowTime = movingTowardNow ? (configuredSlipTime * 0.5f) : configuredSlipTime;
         float wheelMotionNorm =
           clamp(std::fabs(wheelDeltaShaped) / std::max(sampleRate * 0.01f * kWheelScratchTravelScale, 1e-6f), 0.f, 1.f);
         wheelFollowTime *= (1.f - 0.35f * wheelMotionNorm);
@@ -1156,6 +1169,13 @@ struct TemporalDeckEngine {
       scratchLagTargetSamples = scratchLagSamples;
       readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
     } else if (slipReturning) {
+      float slipReturnTime = configuredSlipReturnTime();
+      if (slipReturnTime <= 0.f) {
+        readHead = newestPos;
+        keepSlipLagAligned = true;
+        slipReturning = false;
+        slipFinalCatchActive = false;
+      } else {
       // Return to NOW (lag = 0)
       double currentLagSamples = currentLagFromNewest(newestPos);
       float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
@@ -1169,7 +1189,7 @@ struct TemporalDeckEngine {
         if (!slipFinalCatchActive) {
         // Exponential-like approach to zero lag.
         // We target a specific lag value that decreases over time.
-        float alpha = dt / std::max(kSlipReturnTime, 1e-6f);
+        float alpha = dt / std::max(slipReturnTime, 1e-6f);
         double targetLag = currentLagSamples * double(1.f - alpha);
 
         // Ensure we actually move towards zero even if alpha is tiny.
@@ -1202,6 +1222,7 @@ struct TemporalDeckEngine {
           slipReturning = false;
           slipFinalCatchActive = false;
         }
+      }
       }
     } else if (positionFollow && !externalScratch) {
       // Absolute Position CV
@@ -1472,6 +1493,7 @@ struct TemporalDeck::Impl {
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   int scratchModel = TemporalDeck::SCRATCH_MODEL_HYBRID;
   int bufferDurationMode = TemporalDeck::BUFFER_DURATION_8S;
+  int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
 };
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
@@ -1561,6 +1583,18 @@ const char *TemporalDeck::scratchInterpolationLabelFor(int index) {
   }
 }
 
+const char *TemporalDeck::slipReturnLabelFor(int index) {
+  switch (index) {
+  case SLIP_RETURN_SLOW:
+    return "Slow";
+  case SLIP_RETURN_INSTANT:
+    return "Instant";
+  case SLIP_RETURN_NORMAL:
+  default:
+    return "Normal";
+  }
+}
+
 const char *TemporalDeck::bufferDurationLabelFor(int index) {
   switch (index) {
   case BUFFER_DURATION_16S:
@@ -1614,6 +1648,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterCursorLock", json_boolean(impl->platterCursorLock));
+  json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
   json_object_set_new(root, "cartridgeCharacterV2", json_integer(impl->cartridgeCharacter));
   int legacyCartridgeCharacter = impl->cartridgeCharacter;
   if (legacyCartridgeCharacter == CARTRIDGE_QBERT) {
@@ -1637,6 +1672,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
   json_t *platterCursorLockJ = json_object_get(root, "platterCursorLock");
+  json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *scratchModelJ = json_object_get(root, "scratchModel");
@@ -1660,6 +1696,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (platterCursorLockJ) {
     impl->platterCursorLock = json_boolean_value(platterCursorLockJ);
+  }
+  if (slipReturnModeJ) {
+    impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
   }
   if (cartridgeV2J) {
     impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeV2J), 0, CARTRIDGE_COUNT - 1);
@@ -1707,11 +1746,21 @@ void TemporalDeck::process(const ProcessArgs &args) {
     }
   }
   if (impl->slipTrigger.process(params[SLIP_PARAM].getValue())) {
-    bool next = !impl->slipLatched;
-    impl->slipLatched = next;
-    if (next) {
+    if (!impl->slipLatched) {
+      impl->slipLatched = true;
+      impl->slipReturnMode = SLIP_RETURN_SLOW;
       impl->freezeLatched = false;
       impl->reverseLatched = false;
+    } else if (impl->slipReturnMode == SLIP_RETURN_SLOW) {
+      impl->slipReturnMode = SLIP_RETURN_NORMAL;
+      impl->freezeLatched = false;
+      impl->reverseLatched = false;
+    } else if (impl->slipReturnMode == SLIP_RETURN_NORMAL) {
+      impl->slipReturnMode = SLIP_RETURN_INSTANT;
+      impl->freezeLatched = false;
+      impl->reverseLatched = false;
+    } else {
+      impl->slipLatched = false;
     }
   }
   if (impl->cartridgeCycleTrigger.process(params[CARTRIDGE_CYCLE_PARAM].getValue())) {
@@ -1724,6 +1773,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
+  impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.scratchModel = impl->scratchModel;
   int scratchHold = impl->platterScratchHoldSamples.load();
@@ -1753,7 +1803,20 @@ void TemporalDeck::process(const ProcessArgs &args) {
   outputs[OUTPUT_R_OUTPUT].setVoltage(frame.outR);
   lights[FREEZE_LIGHT].setBrightness(impl->freezeLatched ? 1.f : 0.f);
   lights[REVERSE_LIGHT].setBrightness(impl->reverseLatched ? 1.f : 0.f);
-  lights[SLIP_LIGHT].setBrightness(impl->slipLatched ? 1.f : 0.f);
+  if (!impl->slipLatched) {
+    lights[SLIP_SLOW_LIGHT].setBrightness(0.f);
+    lights[SLIP_LIGHT].setBrightness(0.f);
+    lights[SLIP_FAST_LIGHT].setBrightness(0.f);
+  } else {
+    float selectedModeBrightness = 1.f;
+    float unselectedModeBrightness = 0.03f;
+    lights[SLIP_SLOW_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_SLOW ? selectedModeBrightness
+                                                                                    : unselectedModeBrightness);
+    lights[SLIP_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_NORMAL ? selectedModeBrightness
+                                                                                 : unselectedModeBrightness);
+    lights[SLIP_FAST_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_INSTANT ? selectedModeBrightness
+                                                                                        : unselectedModeBrightness);
+  }
   impl->uiPlatterAngle.store(frame.platterAngle);
   impl->uiLagSamples.store(frame.lag);
   impl->uiAccessibleLagSamples.store(frame.accessibleLag);
@@ -1868,4 +1931,12 @@ int TemporalDeck::getScratchInterpolationMode() const {
 
 void TemporalDeck::setScratchInterpolationMode(int mode) {
   impl->scratchInterpolationMode = clamp(mode, SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
+}
+
+int TemporalDeck::getSlipReturnMode() const {
+  return impl->slipReturnMode;
+}
+
+void TemporalDeck::setSlipReturnMode(int mode) {
+  impl->slipReturnMode = clamp(mode, SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
 }

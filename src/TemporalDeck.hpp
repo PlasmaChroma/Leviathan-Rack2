@@ -28,6 +28,11 @@ struct TemporalDeck final : Module {
   static constexpr int SCRATCH_INTERP_SINC = 2;
   static constexpr int SCRATCH_INTERP_COUNT = 3;
 
+  static constexpr int SLIP_RETURN_SLOW = 0;
+  static constexpr int SLIP_RETURN_NORMAL = 1;
+  static constexpr int SLIP_RETURN_INSTANT = 2;
+  static constexpr int SLIP_RETURN_COUNT = 3;
+
   static constexpr int BUFFER_DURATION_8S = 0;
   static constexpr int BUFFER_DURATION_16S = 1;
   static constexpr int BUFFER_DURATION_8M = 2;
@@ -66,7 +71,9 @@ struct TemporalDeck final : Module {
   enum LightId {
     FREEZE_LIGHT,
     REVERSE_LIGHT,
+    SLIP_SLOW_LIGHT,
     SLIP_LIGHT,
+    SLIP_FAST_LIGHT,
     ARC_LIGHT_START,
     ARC_MAX_LIGHT_START = ARC_LIGHT_START + kArcLightCount,
     LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount
@@ -79,6 +86,7 @@ struct TemporalDeck final : Module {
   static CartridgeVisualStyle cartridgeVisualStyleFor(int index);
   static const char *scratchModelLabelFor(int index);
   static const char *scratchInterpolationLabelFor(int index);
+  static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
 
   void onSampleRateChange() override;
@@ -113,6 +121,8 @@ struct TemporalDeck final : Module {
   void setHighQualityScratchInterpolationEnabled(bool enabled);
   int getScratchInterpolationMode() const;
   void setScratchInterpolationMode(int mode);
+  int getSlipReturnMode() const;
+  void setSlipReturnMode(int mode);
 
 private:
   void applySampleRateChange(float sampleRate);

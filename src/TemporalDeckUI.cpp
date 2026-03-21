@@ -588,7 +588,9 @@ struct TemporalDeckWidget : ModuleWidget {
 
     addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(62.1, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
     addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(50.2, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.4, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(40.2, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
 
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
@@ -651,6 +653,13 @@ struct TemporalDeckWidget : ModuleWidget {
           submenu->addChild(createCheckMenuItem(TemporalDeck::bufferDurationLabelFor(i), "",
                                                 [=]() { return module->getBufferDurationMode() == i; },
                                                 [=]() { module->applyBufferDurationMode(i); }));
+        }
+      }));
+      menu->addChild(createSubmenuItem("Slip return speed", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeck::SLIP_RETURN_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::slipReturnLabelFor(i), "", [=]() { return module->getSlipReturnMode() == i; },
+            [=]() { module->setSlipReturnMode(i); }));
         }
       }));
       menu->addChild(createCheckMenuItem("Cursor lock on platter drag", "",
