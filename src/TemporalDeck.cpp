@@ -966,12 +966,13 @@ struct TemporalDeckEngine {
           scratchMotionVelocity = 0.f;
         } else {
           float targetReadVelocity = 0.f;
-          if (hasFreshPlatterGesture || platterMotionActive) {
+          if (platter_interaction::hasActiveManualMotion(hasFreshPlatterGesture, platterMotionActive)) {
             // While motion is fresh, gesture velocity is relative to the write
             // head. Convert it into absolute read velocity by adding the write
             // baseline (except in freeze, where write head is stationary).
             targetReadVelocity = platterGestureVelocity;
-            if (!freezeState) {
+            if (platter_interaction::shouldApplyWriteHeadCompensation(freezeState, hasFreshPlatterGesture,
+                                                                      platterMotionActive)) {
               targetReadVelocity += sampleRate;
             }
           }
@@ -983,11 +984,6 @@ struct TemporalDeckEngine {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
-        if (wheelDeltaShaped < 0.f) {
-          // Toward-NOW wheel strokes need extra help to overcome the live
-          // write head, especially now that Hybrid is the only wheel path.
-          wheelDeltaShaped *= 2.6f;
-        }
         if (std::fabs(wheelDelta) > 1e-6f) {
           scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
           float wheelNowSnapThreshold = sampleRate * 0.012f;

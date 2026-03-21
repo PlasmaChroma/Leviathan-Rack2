@@ -1,20 +1,17 @@
 #include "platter_spec_cases.hpp"
+#include "../src/PlatterInteractionMath.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 namespace spec {
 
-constexpr double kPi = 3.14159265358979323846;
-constexpr double kNominalRpm = 33.333333;
-constexpr double kSecondsPerRevolution = 60.0 / kNominalRpm; // 1.8s
-
-double samplesPerRevolution(double sampleRate) {
-  return sampleRate * kSecondsPerRevolution;
-}
+constexpr double kPi = platter_interaction::kPi;
+constexpr double kMouseScratchTravelScale = 1.0;
 
 double lagDeltaFromAngle(double deltaAngleRad, double sampleRate, double sensitivity) {
-  return (-deltaAngleRad / (2.0 * kPi)) * samplesPerRevolution(sampleRate) * sensitivity;
+  return platter_interaction::lagDeltaFromAngle(float(deltaAngleRad), float(sampleRate), float(sensitivity),
+                                                float(kMouseScratchTravelScale));
 }
 
 bool approxEqual(double a, double b, double absTol) {
@@ -27,13 +24,7 @@ struct Vec2 {
 };
 
 double wrapSignedAngle(double a) {
-  while (a > kPi) {
-    a -= 2.0 * kPi;
-  }
-  while (a < -kPi) {
-    a += 2.0 * kPi;
-  }
-  return a;
+  return platter_interaction::wrapSignedAngle(float(a));
 }
 
 double angleOf(const Vec2 &p) {
@@ -72,7 +63,7 @@ double applyMouseSequenceToLag(const std::vector<Vec2> &seq, double startLagSamp
   for (size_t i = 1; i < seq.size(); ++i) {
     double angle = angleOf(seq[i]);
     double deltaAngle = wrapSignedAngle(angle - prevAngle);
-    lag += lagDeltaFromAngle(deltaAngle, sampleRate, sensitivity);
+    lag -= lagDeltaFromAngle(deltaAngle, sampleRate, sensitivity);
     prevAngle = angle;
   }
   return lag;
@@ -82,7 +73,7 @@ TestResult testFreezeOneRev() {
   constexpr double sr = 48000.0;
   constexpr double sens = 1.0;
   double startLag = 2.0 * sr;
-  double endLag = startLag + lagDeltaFromAngle(2.0 * kPi, sr, sens);
+  double endLag = startLag - lagDeltaFromAngle(2.0 * kPi, sr, sens);
   double expected = (2.0 - 1.8) * sr;
   bool ok = approxEqual(endLag, expected, sr * 0.05); // +/- 5%
   return {"Freeze 1-rev calibration", ok, "endLag=" + std::to_string(endLag / sr) + "s expected~" +
@@ -93,9 +84,9 @@ TestResult testFreezeHalfRevLinearity() {
   constexpr double sr = 48000.0;
   constexpr double sens = 1.0;
   double startLag = 3.0 * sr;
-  double lagA = startLag + lagDeltaFromAngle(kPi, sr, sens);
-  double lagB = lagA + lagDeltaFromAngle(kPi, sr, sens);
-  double lagFull = startLag + lagDeltaFromAngle(2.0 * kPi, sr, sens);
+  double lagA = startLag - lagDeltaFromAngle(kPi, sr, sens);
+  double lagB = lagA - lagDeltaFromAngle(kPi, sr, sens);
+  double lagFull = startLag - lagDeltaFromAngle(2.0 * kPi, sr, sens);
   bool ok = approxEqual(lagB, lagFull, sr * 0.01);
   return {"Freeze half-rev linearity", ok,
           "lag(two half) vs lag(full): " + std::to_string(lagB / sr) + "s vs " + std::to_string(lagFull / sr) + "s"};
@@ -110,13 +101,36 @@ TestResult testDirectionSymmetry() {
   return {"Direction symmetry", ok, "deltaFwd+deltaBack=" + std::to_string((deltaFwd + deltaBack) / sr) + "s"};
 }
 
+TestResult testRebaseDirectionAware() {
+  float liveLag = 4200.f;
+  float targetLag = 5000.f;
+  float towardNowDelta = 120.f;
+  float awayFromNowDelta = -120.f;
+  float towardBase = platter_interaction::rebaseLagTarget(targetLag, liveLag, towardNowDelta);
+  float awayBase = platter_interaction::rebaseLagTarget(targetLag, liveLag, awayFromNowDelta);
+  bool ok = (towardBase == liveLag) && (awayBase == targetLag);
+  return {"Direction-aware rebase", ok,
+          "towardBase=" + std::to_string(towardBase) + " awayBase=" + std::to_string(awayBase)};
+}
+
+TestResult testWriteHeadCompensationPolicy() {
+  bool liveMotion = platter_interaction::shouldApplyWriteHeadCompensation(false, true, false);
+  bool liveFresh = platter_interaction::shouldApplyWriteHeadCompensation(false, false, true);
+  bool freeze = platter_interaction::shouldApplyWriteHeadCompensation(true, true, true);
+  bool idle = platter_interaction::shouldApplyWriteHeadCompensation(false, false, false);
+  bool ok = liveMotion && liveFresh && !freeze && !idle;
+  return {"Write-head compensation policy", ok,
+          "liveMotion=" + std::to_string(liveMotion) + " liveFresh=" + std::to_string(liveFresh) +
+            " freeze=" + std::to_string(freeze) + " idle=" + std::to_string(idle)};
+}
+
 TestResult testLiveForwardCompensated() {
   // Contract-level model: while motion is active, write-head baseline
   // compensation keeps forward drag from being penalized by elapsed wall time.
   constexpr double sr = 48000.0;
   constexpr double sens = 1.0;
   double startLag = 2.0 * sr;
-  double endLag = startLag + lagDeltaFromAngle(2.0 * kPi, sr, sens);
+  double endLag = startLag - lagDeltaFromAngle(2.0 * kPi, sr, sens);
   bool ok = (endLag <= 0.4 * sr);
   return {"Live forward non-resistance (compensated model)", ok,
           "endLag=" + std::to_string(endLag / sr) + "s from start 2.0s"};
@@ -151,7 +165,7 @@ TestResult testMouseSeqHalfThenHalfFreeze() {
   std::vector<Vec2> half2 = makeSweepSequence(kPi, 2.0 * kPi, 360, 130.0, false);
   double lagAfterHalf = applyMouseSequenceToLag(half1, startLag, sr, sens);
   double lagAfterFullByHalves = applyMouseSequenceToLag(half2, lagAfterHalf, sr, sens);
-  double lagAfterOneFull = startLag + lagDeltaFromAngle(2.0 * kPi, sr, sens);
+  double lagAfterOneFull = startLag - lagDeltaFromAngle(2.0 * kPi, sr, sens);
   bool ok = approxEqual(lagAfterFullByHalves, lagAfterOneFull, sr * 0.01);
   return {"Mouse sequence: half+half linearity", ok,
           "half+half=" + std::to_string(lagAfterFullByHalves / sr) + "s full=" + std::to_string(lagAfterOneFull / sr) +
@@ -189,6 +203,8 @@ std::vector<TestResult> collectTests() {
   tests.push_back(testFreezeOneRev());
   tests.push_back(testFreezeHalfRevLinearity());
   tests.push_back(testDirectionSymmetry());
+  tests.push_back(testRebaseDirectionAware());
+  tests.push_back(testWriteHeadCompensationPolicy());
   tests.push_back(testLiveForwardCompensated());
   tests.push_back(testStationaryHoldNoDrift());
   tests.push_back(testMouseSeqFullRevolutionFreeze());

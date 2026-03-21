@@ -364,13 +364,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   float deltaAngle = 0.f;
   if (useCursorAngle) {
     float localAngle = std::atan2(local.y, local.x);
-    deltaAngle = localAngle - contactAngle;
-    while (deltaAngle > float(M_PI)) {
-      deltaAngle -= 2.f * float(M_PI);
-    }
-    while (deltaAngle < -float(M_PI)) {
-      deltaAngle += 2.f * float(M_PI);
-    }
+    deltaAngle = platter_interaction::wrapSignedAngle(localAngle - contactAngle);
     float minAngleMotion = kScratchMoveThresholdPx / std::max(effectiveRadius, 1e-3f);
     if (std::fabs(deltaAngle) < minAngleMotion) {
       float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
@@ -406,19 +400,10 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
   float sensitivity = module->scratchSensitivity();
-  float samplesPerRadian = 60.f * module->getUiSampleRate() /
-                           (2.f * float(M_PI) * TemporalDeck::kNominalPlatterRpm) *
-                           TemporalDeck::kMouseScratchTravelScale * sensitivity;
-  float lagDelta = deltaAngle * samplesPerRadian;
-  if (lagDelta > 0.f) {
-    // Toward NOW: keep the more-forward target.
-    localLagSamples = std::min(localLagSamples, liveLag);
-  } else if (lagDelta < 0.f) {
-    // Away from NOW: keep the farther-behind target.
-    localLagSamples = std::max(localLagSamples, liveLag);
-  } else {
-    localLagSamples = liveLag;
-  }
+  float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
+                                                          TemporalDeck::kMouseScratchTravelScale,
+                                                          TemporalDeck::kNominalPlatterRpm);
+  localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
   localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
 
   float measuredVelocity = lagDelta / float(dtSec);
