@@ -312,15 +312,16 @@ struct TemporalDeckEngine {
     float stereoTilt = 0.f;
     float saturationMix = 1.f;
     float motionDulling = 1.f;
+    float scratchCompensation = 0.f;
 
     CartridgeParams() {}
 
     CartridgeParams(float hpHz, float bodyHz, float lpHz, float lpMotionHz, float bodyGain, float presenceGain,
                     float crossfeed, float drive, float stereoTilt, float saturationMix = 1.f,
-                    float motionDulling = 1.f)
+                    float motionDulling = 1.f, float scratchCompensation = 0.f)
         : hpHz(hpHz), bodyHz(bodyHz), lpHz(lpHz), lpMotionHz(lpMotionHz), bodyGain(bodyGain),
           presenceGain(presenceGain), crossfeed(crossfeed), drive(drive), stereoTilt(stereoTilt),
-          saturationMix(saturationMix), motionDulling(motionDulling) {}
+          saturationMix(saturationMix), motionDulling(motionDulling), scratchCompensation(scratchCompensation) {}
   };
 
   TemporalDeckBuffer buffer;
@@ -355,6 +356,7 @@ struct TemporalDeckEngine {
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   int scratchModel = SCRATCH_MODEL_HYBRID;
   int bufferDurationMode = BUFFER_DURATION_8S;
+  int lastSlipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   CartridgeChannelState cartridgeLeft;
   CartridgeChannelState cartridgeRight;
   float lofiWowPhaseA = 0.f;
@@ -369,6 +371,7 @@ struct TemporalDeckEngine {
   float cachedBodyCoeff = 0.f;
   float cachedDriveNorm = 1.f;
   float cachedMakeupGain = 1.f;
+  float cachedScratchCompensation = 0.f;
   float prevScratchReadDelta = 0.f;
   int prevScratchDeltaSign = 0;
   float scratchFlipTransientEnv = 0.f;
@@ -420,6 +423,8 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = 0.f;
     cachedDriveNorm = 1.f;
     cachedMakeupGain = 1.f;
+    cachedScratchCompensation = 0.f;
+    lastSlipReturnMode = slipReturnMode;
     prevScratchReadDelta = 0.f;
     prevScratchDeltaSign = 0;
     scratchFlipTransientEnv = 0.f;
@@ -489,19 +494,19 @@ struct TemporalDeckEngine {
     switch (mode) {
     case CARTRIDGE_M44_7:
       // M44-7: warm/fat, slight high roll-off, moderate output saturation.
-      return {20.f, 140.f, 17000.f, 15000.f, 0.20f, -0.08f, 0.004f, 1.035f, 0.004f, 0.85f, 0.40f};
+      return {20.f, 140.f, 17000.f, 15000.f, 0.20f, -0.08f, 0.004f, 1.035f, 0.004f, 0.85f, 0.40f, 0.06f};
     case CARTRIDGE_CONCORDE_SCRATCH:
       // Concorde MKII Scratch: energetic, crisp transients, 5k-10k bite region.
-      return {28.f, 2600.f, 18200.f, 16300.f, 0.03f, 0.16f, 0.003f, 1.03f, 0.008f, 0.55f, 0.35f};
+      return {28.f, 2600.f, 18200.f, 16300.f, 0.03f, 0.16f, 0.003f, 1.03f, 0.008f, 0.55f, 0.35f, 0.05f};
     case CARTRIDGE_680_HP:
       // Stanton 680 HP: silky highs + low-mid bloom with strong stereo separation.
-      return {18.f, 350.f, 19500.f, 17000.f, 0.13f, -0.01f, 0.002f, 1.018f, 0.010f, 0.30f, 0.35f};
+      return {18.f, 350.f, 19500.f, 17000.f, 0.13f, -0.01f, 0.002f, 1.018f, 0.010f, 0.30f, 0.35f, 0.07f};
     case CARTRIDGE_QBERT:
       // Q.Bert: hot output, mid-forward scratch articulation, softer top.
-      return {24.f, 2500.f, 16500.f, 13500.f, 0.04f, 0.21f, 0.003f, 1.06f, 0.006f, 0.90f, 0.40f};
+      return {24.f, 2500.f, 16500.f, 13500.f, 0.04f, 0.21f, 0.003f, 1.06f, 0.006f, 0.90f, 0.40f, 0.05f};
     case CARTRIDGE_LOFI:
       // Lo-Fi: intentionally veiled, smeared, and dirty.
-      return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f};
+      return {130.f, 980.f, 4300.f, 2100.f, 0.30f, -0.22f, 0.085f, 1.33f, 0.12f, 1.f, 1.f, 0.f};
     case CARTRIDGE_CLEAN:
     default:
       return {};
@@ -544,6 +549,7 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
     cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
+    cachedScratchCompensation = std::max(cachedCartridgeParams.scratchCompensation, 0.f);
   }
 
   float lofiRandUnit() {
@@ -857,6 +863,8 @@ struct TemporalDeckEngine {
     reverseState = reverseButton;
     bool prevSlipState = slipState;
     slipState = slipButton;
+    bool slipModeChanged = slipReturnMode != lastSlipReturnMode;
+    lastSlipReturnMode = slipReturnMode;
 
     double limit = accessibleLag(bufferKnob);
     double minLag = 0.0;
@@ -914,6 +922,13 @@ struct TemporalDeckEngine {
         slipReturning = true;
         slipFinalCatchActive = false;
       }
+    }
+
+    // If slip speed mode changes while Slip is active and we are behind NOW,
+    // immediately engage a return so the new mode takes audible effect.
+    if (slipModeChanged && slipState && !anyScratch && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
+      slipReturning = true;
+      slipFinalCatchActive = false;
     }
 
     if (anyScratch) {
@@ -1376,6 +1391,15 @@ struct TemporalDeckEngine {
       scratchDcInR = wet.second;
       scratchDcOutL = 0.f;
       scratchDcOutR = 0.f;
+    }
+    if (anyScratch && cachedScratchCompensation > 0.f) {
+      // Small per-cartridge gain recovery during active scratch motion.
+      // This compensates perceived loudness dip from interpolation + de-click
+      // smoothing without flattening the cartridge tone differences.
+      float warpAmount = clamp(float(std::fabs(readDeltaForTone) / 3.0), 0.f, 1.f);
+      float comp = 1.f + cachedScratchCompensation * (0.35f + 0.65f * warpAmount);
+      wet.first *= comp;
+      wet.second *= comp;
     }
     prevScratchReadDelta = readDeltaForTone;
     prevWetL = wet.first;
