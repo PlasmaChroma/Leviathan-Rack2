@@ -656,9 +656,14 @@ struct TemporalDeckWidget : ModuleWidget {
                                          [=]() { module->setPlatterCursorLockEnabled(!module->isPlatterCursorLockEnabled()); }));
     }
     if (module) {
-      menu->addChild(createCheckMenuItem("High-quality scratch interpolation", "",
-                                         [=]() { return module->isHighQualityScratchInterpolationEnabled(); },
-                                         [=]() { module->setHighQualityScratchInterpolationEnabled(!module->isHighQualityScratchInterpolationEnabled()); }));
+      menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeck::SCRATCH_INTERP_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::scratchInterpolationLabelFor(i), "",
+            [=]() { return module->getScratchInterpolationMode() == i; },
+            [=]() { module->setScratchInterpolationMode(i); }));
+        }
+      }));
     }
   }
 };

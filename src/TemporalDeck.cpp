@@ -101,6 +101,22 @@ struct TemporalDeckBuffer {
     return sum;
   }
 
+  static float windowedSinc(float x, float radius) {
+    float ax = std::fabs(x);
+    if (ax > radius) {
+      return 0.f;
+    }
+    constexpr float kPi = float(M_PI);
+    if (ax < 1e-5f) {
+      return 1.f;
+    }
+    // Blackman-windowed sinc for smooth, low-ripple scratch resampling.
+    float sinc = std::sin(kPi * x) / (kPi * x);
+    float windowPhase = (ax / radius);
+    float blackman = 0.42f + 0.5f * std::cos(kPi * windowPhase) + 0.08f * std::cos(2.f * kPi * windowPhase);
+    return sinc * blackman;
+  }
+
   std::pair<float, float> readCubic(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
@@ -141,6 +157,34 @@ struct TemporalDeckBuffer {
     std::array<float, 6> l = {left[i0], left[i1], left[i2], left[i3], left[i4], left[i5]};
     std::array<float, 6> r = {right[i0], right[i1], right[i2], right[i3], right[i4], right[i5]};
     return {lagrange6Sample(l, t), lagrange6Sample(r, t)};
+  }
+
+  std::pair<float, float> readSinc(double pos) const {
+    if (size <= 0 || filled <= 0) {
+      return {0.f, 0.f};
+    }
+    pos = wrapPosition(pos);
+    int center = int(std::floor(pos));
+    float frac = float(pos - double(center));
+
+    constexpr int kRadius = 8;
+    float accL = 0.f;
+    float accR = 0.f;
+    float weightSum = 0.f;
+    for (int k = -kRadius + 1; k <= kRadius; ++k) {
+      int idx = wrapIndex(center + k);
+      float dist = float(k) - frac;
+      float w = windowedSinc(dist, float(kRadius));
+      accL += left[idx] * w;
+      accR += right[idx] * w;
+      weightSum += w;
+    }
+    if (std::fabs(weightSum) > 1e-6f) {
+      float inv = 1.f / weightSum;
+      accL *= inv;
+      accR *= inv;
+    }
+    return {accL, accR};
   }
 };
 
@@ -267,7 +311,7 @@ struct TemporalDeckEngine {
   bool freezeState = false;
   bool reverseState = false;
   bool slipState = false;
-  bool highQualityScratchInterpolation = true;
+  int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool scratchActive = false;
   bool slipReturning = false;
   bool slipFinalCatchActive = false;
@@ -1174,7 +1218,8 @@ struct TemporalDeckEngine {
     bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
     bool scratchReadPath = anyScratch || positionFollow;
-    bool useLinearInterpolation = !highQualityScratchInterpolation && scratchReadPath;
+    int effectiveScratchInterpolation = clamp(scratchInterpolationMode, TemporalDeck::SCRATCH_INTERP_CUBIC,
+                                              TemporalDeck::SCRATCH_INTERP_COUNT - 1);
     double readDeltaForTone = readHead - prevReadHead;
     if (buffer.size > 0) {
       double halfSize = double(buffer.size) * 0.5;
@@ -1191,9 +1236,16 @@ struct TemporalDeckEngine {
       // cartridge darkening.
       motionAmount *= 0.4f;
     }
-    auto wet = useLinearInterpolation                                 ? buffer.readLinear(readHead)
-               : (highQualityScratchInterpolation && scratchReadPath) ? buffer.readHighQuality(readHead)
-                                                                      : buffer.readCubic(readHead);
+    auto wet = buffer.readCubic(readHead);
+    if (scratchReadPath) {
+      if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
+        wet = buffer.readHighQuality(readHead);
+      } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
+        wet = buffer.readSinc(readHead);
+      } else {
+        wet = buffer.readCubic(readHead);
+      }
+    }
     wet = applyCartridgeCharacter(wet, motionAmount);
     if (scratchReadPath) {
       if (hybridManualScratch || scratch3ManualScratch) {
@@ -1390,7 +1442,7 @@ struct TemporalDeck::Impl {
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<float> uiPlatterAngle{0.f};
   float uiPublishTimerSec = 0.f;
-  bool highQualityScratchInterpolation = true;
+  int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterCursorLock = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   int scratchModel = TemporalDeck::SCRATCH_MODEL_HYBRID;
@@ -1468,6 +1520,18 @@ const char *TemporalDeck::scratchModelLabelFor(int index) {
   }
 }
 
+const char *TemporalDeck::scratchInterpolationLabelFor(int index) {
+  switch (index) {
+  case SCRATCH_INTERP_LAGRANGE6:
+    return "6-point Lagrange";
+  case SCRATCH_INTERP_SINC:
+    return "Sinc";
+  case SCRATCH_INTERP_CUBIC:
+  default:
+    return "Cubic";
+  }
+}
+
 const char *TemporalDeck::bufferDurationLabelFor(int index) {
   switch (index) {
   case BUFFER_DURATION_16S:
@@ -1519,7 +1583,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "freezeLatched", json_boolean(impl->freezeLatched));
   json_object_set_new(root, "reverseLatched", json_boolean(impl->reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
-  json_object_set_new(root, "highQualityScratchInterpolation", json_boolean(impl->highQualityScratchInterpolation));
+  json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterCursorLock", json_boolean(impl->platterCursorLock));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "scratchModel", json_integer(impl->scratchModel));
@@ -1534,6 +1598,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *freezeJ = json_object_get(root, "freezeLatched");
   json_t *reverseJ = json_object_get(root, "reverseLatched");
   json_t *slipJ = json_object_get(root, "slipLatched");
+  json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
   json_t *platterCursorLockJ = json_object_get(root, "platterCursorLock");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
@@ -1548,8 +1613,13 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (slipJ) {
     impl->slipLatched = json_boolean_value(slipJ);
   }
-  if (scratchInterpJ) {
-    impl->highQualityScratchInterpolation = json_boolean_value(scratchInterpJ);
+  if (scratchInterpModeJ) {
+    impl->scratchInterpolationMode =
+      clamp((int)json_integer_value(scratchInterpModeJ), SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
+  } else if (scratchInterpJ) {
+    // Backward compatibility with older saves.
+    impl->scratchInterpolationMode =
+      json_boolean_value(scratchInterpJ) ? SCRATCH_INTERP_LAGRANGE6 : SCRATCH_INTERP_CUBIC;
   }
   if (platterCursorLockJ) {
     impl->platterCursorLock = json_boolean_value(platterCursorLockJ);
@@ -1607,7 +1677,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   float positionCv = inputs[POSITION_CV_INPUT].getVoltage();
   float rateCv = inputs[RATE_CV_INPUT].getVoltage();
 
-  impl->engine.highQualityScratchInterpolation = impl->highQualityScratchInterpolation;
+  impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.scratchModel = impl->scratchModel;
   int scratchHold = impl->platterScratchHoldSamples.load();
@@ -1739,9 +1809,17 @@ void TemporalDeck::setPlatterCursorLockEnabled(bool enabled) {
 }
 
 bool TemporalDeck::isHighQualityScratchInterpolationEnabled() const {
-  return impl->highQualityScratchInterpolation;
+  return impl->scratchInterpolationMode != SCRATCH_INTERP_CUBIC;
 }
 
 void TemporalDeck::setHighQualityScratchInterpolationEnabled(bool enabled) {
-  impl->highQualityScratchInterpolation = enabled;
+  impl->scratchInterpolationMode = enabled ? SCRATCH_INTERP_LAGRANGE6 : SCRATCH_INTERP_CUBIC;
+}
+
+int TemporalDeck::getScratchInterpolationMode() const {
+  return impl->scratchInterpolationMode;
+}
+
+void TemporalDeck::setScratchInterpolationMode(int mode) {
+  impl->scratchInterpolationMode = clamp(mode, SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
 }
