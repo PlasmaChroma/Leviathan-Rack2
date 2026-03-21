@@ -112,6 +112,7 @@ struct TemporalDeck final : Module {
   void setHighQualityScratchInterpolationEnabled(bool enabled);
   int getScratchInterpolationMode() const;
   void setScratchInterpolationMode(int mode);
+  void setSlipLatched(bool enabled);
   int getSlipReturnMode() const;
   void setSlipReturnMode(int mode);
 

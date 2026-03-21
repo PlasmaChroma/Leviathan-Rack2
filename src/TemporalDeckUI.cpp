@@ -634,10 +634,16 @@ struct TemporalDeckWidget : ModuleWidget {
         }
       }));
       menu->addChild(createSubmenuItem("Slip return speed", "", [=](Menu *submenu) {
+        submenu->addChild(createCheckMenuItem("None", "", [=]() { return !module->isSlipLatched(); },
+                                              [=]() { module->setSlipLatched(false); }));
         for (int i = 0; i < TemporalDeck::SLIP_RETURN_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(
-            TemporalDeck::slipReturnLabelFor(i), "", [=]() { return module->getSlipReturnMode() == i; },
-            [=]() { module->setSlipReturnMode(i); }));
+            TemporalDeck::slipReturnLabelFor(i), "",
+            [=]() { return module->isSlipLatched() && module->getSlipReturnMode() == i; },
+            [=]() {
+              module->setSlipReturnMode(i);
+              module->setSlipLatched(true);
+            }));
         }
       }));
       menu->addChild(createCheckMenuItem("Cursor lock on platter drag", "",

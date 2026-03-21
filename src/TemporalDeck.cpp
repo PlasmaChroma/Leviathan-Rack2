@@ -1780,6 +1780,14 @@ void TemporalDeck::setScratchInterpolationMode(int mode) {
   impl->scratchInterpolationMode = clamp(mode, SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
 }
 
+void TemporalDeck::setSlipLatched(bool enabled) {
+  impl->slipLatched = enabled;
+  if (enabled) {
+    impl->freezeLatched = false;
+    impl->reverseLatched = false;
+  }
+}
+
 int TemporalDeck::getSlipReturnMode() const {
   return impl->slipReturnMode;
 }
