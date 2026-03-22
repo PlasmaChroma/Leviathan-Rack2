@@ -38,9 +38,10 @@
     {
       "slug": "TemporalDeck",
       "name": "Temporal Deck",
-      "description": "",
+      "description": "Like a turntable with modern hybrid control.",
       "tags": [
-        "Delay"
+        "Delay",
+        "Distortion"
       ]
     }
   ]

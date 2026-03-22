@@ -258,6 +258,10 @@ struct TemporalDeckEngine {
   static constexpr float kScratch3VelocityDecayHz = 30.f;
   static constexpr float kScratch3VelocityDeadband = 10.f;
   static constexpr float kScratch3MaxLagVelocity = 96000.f;
+  static constexpr float kExternalCvMaxTurnsPerSec = 2.0f;
+  static constexpr float kExternalCvMaxTurnAccelPerSec2 = 18.0f;
+  static constexpr float kExternalCvCorrectionHz = 22.f;
+  static constexpr float kExternalCvVelocityDampingHz = 8.f;
   static constexpr float kScratchInertiaFollowHz = 950.f;
   static constexpr float kScratchInertiaDampingHz = 380.f;
   static constexpr float kInertiaBlend = 0.25f;
@@ -382,6 +386,7 @@ struct TemporalDeckEngine {
   float cachedBodyCoeff = 0.f;
   float cachedDriveNorm = 1.f;
   float cachedMakeupGain = 1.f;
+  float cachedPlaybackColorMix = 1.f;
   float cachedScratchCompensation = 0.f;
   float prevScratchReadDelta = 0.f;
   int prevScratchDeltaSign = 0;
@@ -435,6 +440,7 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = 0.f;
     cachedDriveNorm = 1.f;
     cachedMakeupGain = 1.f;
+    cachedPlaybackColorMix = 1.f;
     cachedScratchCompensation = 0.f;
     lastSlipReturnMode = slipReturnMode;
     prevScratchReadDelta = 0.f;
@@ -550,6 +556,23 @@ struct TemporalDeckEngine {
     }
   }
 
+  static float playbackColorMixForCartridge(int mode) {
+    switch (mode) {
+    case CARTRIDGE_M44_7:
+      return 0.74f;
+    case CARTRIDGE_CONCORDE_SCRATCH:
+      return 0.72f;
+    case CARTRIDGE_680_HP:
+      return 0.70f;
+    case CARTRIDGE_QBERT:
+      return 0.76f;
+    case CARTRIDGE_LOFI:
+    case CARTRIDGE_CLEAN:
+    default:
+      return 1.f;
+    }
+  }
+
   static float fastTanh(float x) {
     x = clamp(x, -3.f, 3.f);
     float x2 = x * x;
@@ -568,6 +591,7 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
     cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
+    cachedPlaybackColorMix = playbackColorMixForCartridge(cartridgeCharacter);
     cachedScratchCompensation = std::max(cachedCartridgeParams.scratchCompensation, 0.f);
   }
 
@@ -581,7 +605,7 @@ struct TemporalDeckEngine {
 
   float lofiRandSigned() { return lofiRandUnit() * 2.f - 1.f; }
 
-  std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in, float motionAmount) {
+  std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in, float motionAmount, bool scratchReadPath) {
     if (cartridgeCharacter == CARTRIDGE_CLEAN) {
       return in;
     }
@@ -671,6 +695,14 @@ struct TemporalDeckEngine {
     }
     left *= cachedMakeupGain;
     right *= cachedMakeupGain;
+    if (!scratchReadPath && cartridgeCharacter != CARTRIDGE_LOFI) {
+      // Keep cartridge level while reducing non-scratch coloration intensity.
+      float dryL = in.first * cachedMakeupGain;
+      float dryR = in.second * cachedMakeupGain;
+      float playbackMix = clamp(cachedPlaybackColorMix, 0.f, 1.f);
+      left = crossfade(dryL, left, playbackMix);
+      right = crossfade(dryR, right, playbackMix);
+    }
     return {left, right};
   }
 
@@ -795,6 +827,50 @@ struct TemporalDeckEngine {
       scratchWheelVelocityBurst = 0.f;
       readHead = newestPos;
     }
+  }
+
+  void integrateExternalCvScratch(float dt, double limit, double newestPos, double targetLag,
+                                  float nowSnapThresholdSamples) {
+    // External CV scratch follows a physically limited lag trajectory instead of
+    // teleporting the read head. Limits are set to roughly upper-end
+    // turntablist hand speed.
+    scratchHandVelocity = 0.f;
+    scratchMotionVelocity = 0.f;
+    scratchWheelVelocityBurst = 0.f;
+    platterVelocity = 0.f;
+
+    scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+    scratchLagTargetSamples = clampLag(targetLag, limit);
+
+    float samplesPerRev = platter_interaction::samplesPerRevolution(sampleRate, kNominalPlatterRpm);
+    float maxLagVelocity = samplesPerRev * kExternalCvMaxTurnsPerSec;
+    float maxLagAccel = samplesPerRev * kExternalCvMaxTurnAccelPerSec2;
+
+    float lagError = float(scratchLagTargetSamples - scratchLagSamples);
+    float desiredLagVelocity = clamp(lagError * kExternalCvCorrectionHz, -maxLagVelocity, maxLagVelocity);
+    float maxVelStep = maxLagAccel * dt;
+    scratch3LagVelocity += clamp(desiredLagVelocity - scratch3LagVelocity, -maxVelStep, maxVelStep);
+
+    float damping = clamp(1.f - dt * kExternalCvVelocityDampingHz, 0.f, 1.f);
+    scratch3LagVelocity *= damping;
+
+    double lagEstimate = clampLag(scratchLagSamples + double(scratch3LagVelocity) * double(dt), limit);
+    if ((lagError > 0.f && lagEstimate > scratchLagTargetSamples) || (lagError < 0.f && lagEstimate < scratchLagTargetSamples)) {
+      lagEstimate = scratchLagTargetSamples;
+      scratch3LagVelocity = 0.f;
+    }
+    if ((lagEstimate <= 0.0 && scratch3LagVelocity < 0.f) ||
+        (lagEstimate >= limit && scratch3LagVelocity > 0.f)) {
+      scratch3LagVelocity = 0.f;
+    }
+    if (scratchLagTargetSamples <= nowSnapThresholdSamples && lagEstimate <= nowSnapThresholdSamples &&
+        scratch3LagVelocity <= 0.f) {
+      lagEstimate = 0.0;
+      scratch3LagVelocity = 0.f;
+    }
+
+    scratchLagSamples = lagEstimate;
+    readHead = buffer.wrapPosition(newestPos - lagEstimate);
   }
 
   void integrateScratch3Touch(float dt, double limit, double newestPos, double prevReadHead,
@@ -1038,9 +1114,8 @@ struct TemporalDeckEngine {
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {
-      scratchLagSamples = lagForPositionCv(positionCv, limit);
-      scratchLagTargetSamples = scratchLagSamples;
-      readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+      double targetLag = lagForPositionCv(positionCv, limit);
+      integrateExternalCvScratch(dt, limit, newestPos, targetLag, nowSnapThresholdSamples);
     } else if (slipReturning) {
       float slipReturnTime = configuredSlipReturnTime();
       if (slipReturnTime <= 0.f) {
@@ -1167,7 +1242,7 @@ struct TemporalDeckEngine {
         wet = buffer.readCubic(readHead);
       }
     }
-    wet = applyCartridgeCharacter(wet, motionAmount);
+    wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
     if (scratchReadPath) {
       if (manualScratch) {
         // The hybrid motion model is meant to stand on its own, so keep only a
