@@ -49,6 +49,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   float filteredGestureVelocity = 0.f;
   double lastMoveTimeSec = 0.0;
   double recentGestureDtSec = kDefaultGestureDtSec;
+  bool middleQuickSlipDown = false;
   InteractionTraceRecorder traceRecorder;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
@@ -60,6 +61,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   }
 
   void updateScratchFromLocal(Vec local, Vec mouseDelta);
+  void pollMiddleQuickSlipTrigger();
   void syncTraceCaptureState();
   void startTraceCapture();
   void stopTraceCapture();
@@ -128,6 +130,28 @@ static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
 static bool isLeftMouseDown() {
   return APP && APP->window && APP->window->win &&
          glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+}
+
+static bool isMiddleMouseDown() {
+  return APP && APP->window && APP->window->win &&
+         glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+}
+
+void TemporalDeckPlatterWidget::pollMiddleQuickSlipTrigger() {
+  bool middleDown = isMiddleMouseDown();
+  if (!middleDown) {
+    middleQuickSlipDown = false;
+    return;
+  }
+  if (middleQuickSlipDown || !module || !parent || !APP || !APP->scene || !APP->scene->rack) {
+    return;
+  }
+
+  Vec panelPos = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
+  if (isWithinPlatter(panelPos)) {
+    module->triggerQuickSlipReturn();
+    middleQuickSlipDown = true;
+  }
 }
 
 void TemporalDeckPlatterWidget::syncTraceCaptureState() {
@@ -333,6 +357,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
 
 void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   syncTraceCaptureState();
+  pollMiddleQuickSlipTrigger();
   nvgSave(args.vg);
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
@@ -531,6 +556,9 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
   if (e.button == GLFW_MOUSE_BUTTON_MIDDLE && isWithinPlatter(e.pos)) {
     if (e.action == GLFW_PRESS && module) {
       module->triggerQuickSlipReturn();
+      middleQuickSlipDown = true;
+    } else if (e.action == GLFW_RELEASE) {
+      middleQuickSlipDown = false;
     }
     e.consume(this);
     return;
