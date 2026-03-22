@@ -1290,13 +1290,9 @@ struct TemporalDeckEngine {
       if (readDelta < -halfSize) {
         readDelta += double(buffer.size);
       }
+      // Drive the platter UI from actual read-head movement so the visual stays
+      // synchronized when transport is causality-limited near NOW.
       double visualDelta = readDelta;
-      bool normalTransportVisual = !anyScratch && !positionFollow && !slipReturning;
-      if (normalTransportVisual) {
-        // Keep platter animation responsive to RATE even when readHead is near
-        // NOW and constrained by buffer causality.
-        visualDelta = double(speed);
-      }
       platterPhase += float(visualDelta) * platterRadiansPerSample();
       if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
         platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
