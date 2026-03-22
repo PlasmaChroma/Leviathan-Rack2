@@ -528,6 +528,13 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
   syncTraceCaptureState();
   onButtonPos = e.pos;
+  if (e.button == GLFW_MOUSE_BUTTON_MIDDLE && isWithinPlatter(e.pos)) {
+    if (e.action == GLFW_PRESS && module) {
+      module->triggerQuickSlipReturn();
+    }
+    e.consume(this);
+    return;
+  }
   if (e.button == GLFW_MOUSE_BUTTON_LEFT && isWithinPlatter(e.pos)) {
     Vec local = e.pos.minus(localCenter());
     if (e.action == GLFW_PRESS) {
@@ -583,7 +590,9 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   float samplesPerNotch =
     sampleRate * 0.018f * TemporalDeck::kWheelScratchTravelScale * module->scratchSensitivity();
   float lagDelta = scrollShaped * samplesPerNotch;
-  float holdSeconds = module->isSlipLatched() ? 0.16f : 0.03f;
+  // Keep wheel scratch active long enough for Hybrid wheel impulses to settle,
+  // otherwise small forward ticks can drop out before they noticeably reduce lag.
+  float holdSeconds = module->isSlipLatched() ? 0.16f : 0.09f;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
   module->addPlatterWheelDelta(lagDelta, holdSamples);

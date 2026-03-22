@@ -1,7 +1,6 @@
 #include "TemporalDeck.hpp"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -104,20 +103,33 @@ struct TemporalDeckBuffer {
     return ((a0 * t + a1) * t + a2) * t + a3;
   }
 
-  static float lagrange6Sample(const std::array<float, 6> &y, float t) {
-    static constexpr float kNodes[6] = {-2.f, -1.f, 0.f, 1.f, 2.f, 3.f};
-    float sum = 0.f;
-    for (int j = 0; j < 6; ++j) {
-      float weight = 1.f;
-      for (int m = 0; m < 6; ++m) {
-        if (m == j) {
-          continue;
-        }
-        weight *= (t - kNodes[m]) / (kNodes[j] - kNodes[m]);
-      }
-      sum += y[j] * weight;
-    }
-    return sum;
+  struct Lagrange6Weights {
+    float w0 = 0.f;
+    float w1 = 0.f;
+    float w2 = 0.f;
+    float w3 = 0.f;
+    float w4 = 0.f;
+    float w5 = 0.f;
+  };
+
+  static Lagrange6Weights lagrange6Weights(float t) {
+    float tP2 = t + 2.f;
+    float tP1 = t + 1.f;
+    float tM1 = t - 1.f;
+    float tM2 = t - 2.f;
+    float tM3 = t - 3.f;
+
+    // Uniform nodes x = {-2, -1, 0, 1, 2, 3}
+    // with precomputed inverse denominator products:
+    // {-1/120, 1/24, -1/12, 1/12, -1/24, 1/120}
+    Lagrange6Weights w;
+    w.w0 = (-1.f / 120.f) * (tP1 * t * tM1 * tM2 * tM3);
+    w.w1 = (1.f / 24.f) * (tP2 * t * tM1 * tM2 * tM3);
+    w.w2 = (-1.f / 12.f) * (tP2 * tP1 * tM1 * tM2 * tM3);
+    w.w3 = (1.f / 12.f) * (tP2 * tP1 * t * tM2 * tM3);
+    w.w4 = (-1.f / 24.f) * (tP2 * tP1 * t * tM1 * tM3);
+    w.w5 = (1.f / 120.f) * (tP2 * tP1 * t * tM1 * tM2);
+    return w;
   }
 
   static float windowedSinc(float x, float radius) {
@@ -173,9 +185,12 @@ struct TemporalDeckBuffer {
     int i3 = wrapIndex(i2 + 1);
     int i4 = wrapIndex(i2 + 2);
     int i5 = wrapIndex(i2 + 3);
-    std::array<float, 6> l = {left[i0], left[i1], left[i2], left[i3], left[i4], left[i5]};
-    std::array<float, 6> r = {right[i0], right[i1], right[i2], right[i3], right[i4], right[i5]};
-    return {lagrange6Sample(l, t), lagrange6Sample(r, t)};
+    Lagrange6Weights w = lagrange6Weights(t);
+    float outL = left[i0] * w.w0 + left[i1] * w.w1 + left[i2] * w.w2 + left[i3] * w.w3 + left[i4] * w.w4 +
+                 left[i5] * w.w5;
+    float outR = right[i0] * w.w0 + right[i1] * w.w1 + right[i2] * w.w2 + right[i3] * w.w3 + right[i4] * w.w4 +
+                 right[i5] * w.w5;
+    return {outL, outR};
   }
 
   std::pair<float, float> readSinc(double pos) const {
@@ -211,6 +226,7 @@ struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
   static constexpr float kSlipReturnTime = 0.12f;
+  static constexpr float kSlipReturnQuickTime = 0.06f;
   static constexpr float kSlipReturnSlowMultiplier = 1.85f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kSlipFinalCatchThresholdMs = 120.f;
@@ -336,6 +352,7 @@ struct TemporalDeckEngine {
   bool nowCatchActive = false;
   float slipReturnRemaining = 0.f;
   float slipReturnStartLag = 0.f;
+  float slipReturnOverrideTime = -1.f;
   float nowCatchRemaining = 0.f;
   float nowCatchStartLag = 0.f;
   double scratchLagSamples = 0.0;
@@ -391,6 +408,7 @@ struct TemporalDeckEngine {
     nowCatchActive = false;
     slipReturnRemaining = 0.f;
     slipReturnStartLag = 0.f;
+    slipReturnOverrideTime = -1.f;
     nowCatchRemaining = 0.f;
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
@@ -466,6 +484,9 @@ struct TemporalDeckEngine {
   }
 
   float configuredSlipReturnTime() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return slipReturnOverrideTime;
+    }
     if (slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
       return 0.f;
     }
@@ -846,9 +867,9 @@ struct TemporalDeckEngine {
   };
 
   FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
-                      float feedbackKnob, bool freezeButton, bool reverseButton, bool slipButton, bool freezeGate,
-                      bool scratchGate, bool scratchGateConnected, bool positionConnected, float positionCv,
-                      float rateCv, bool rateCvConnected, bool platterTouched, bool wheelScratchHeld,
+                      float feedbackKnob, bool freezeButton, bool reverseButton, bool slipButton, bool quickSlipTrigger,
+                      bool freezeGate, bool scratchGate, bool scratchGateConnected, bool positionConnected,
+                      float positionCv, float rateCv, bool rateCvConnected, bool platterTouched, bool wheelScratchHeld,
                       bool platterMotionActive,
                       uint32_t platterGestureRevision, float platterLagTarget, float platterGestureVelocity,
                       float wheelDelta) {
@@ -897,7 +918,8 @@ struct TemporalDeckEngine {
     }
     scratchActive = anyScratch;
 
-    if (!slipState) {
+    bool quickSlipActive = slipReturnOverrideTime >= 0.f;
+    if (!slipState && !quickSlipActive) {
       slipReturning = false;
       slipFinalCatchActive = false;
     }
@@ -928,9 +950,16 @@ struct TemporalDeckEngine {
       slipFinalCatchActive = false;
     }
 
+    if (quickSlipTrigger && !anyScratch && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
+      slipReturning = true;
+      slipFinalCatchActive = false;
+      slipReturnOverrideTime = kSlipReturnQuickTime;
+    }
+
     if (anyScratch) {
       slipReturning = false;
       slipFinalCatchActive = false;
+      slipReturnOverrideTime = -1.f;
     }
 
     // 3. Determine actual playhead (readHead)
@@ -984,6 +1013,11 @@ struct TemporalDeckEngine {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
+        if (!freezeState && wheelDeltaShaped < 0.f) {
+          // In live circular mode, small toward-NOW wheel nudges must overcome
+          // moving write-head drift. Give forward wheel ticks a slight assist.
+          wheelDeltaShaped *= 1.35f;
+        }
         if (std::fabs(wheelDelta) > 1e-6f) {
           scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
           float wheelNowSnapThreshold = sampleRate * 0.012f;
@@ -995,7 +1029,12 @@ struct TemporalDeckEngine {
             clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
         }
         decayHybridWheelBurst(dt);
-        integrateHybridScratch(dt, limit, newestPos, 0.f, 0.92f, 1.0f, 1.05f, nowSnapThresholdSamples);
+        // Wheel mode nudges lag around a moving write head in live playback.
+        // Use write-head baseline velocity so small forward wheel gestures don't
+        // get overwhelmed by natural lag growth when not frozen.
+        float wheelTargetReadVelocity = freezeState ? 0.f : sampleRate;
+        integrateHybridScratch(dt, limit, newestPos, wheelTargetReadVelocity, 1.25f, 0.95f, 1.20f,
+                               nowSnapThresholdSamples);
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {
@@ -1073,6 +1112,9 @@ struct TemporalDeckEngine {
       slipFinalCatchActive = false;
       slipReturnRemaining = 0.f;
       slipReturnStartLag = 0.f;
+      slipReturnOverrideTime = -1.f;
+    } else if (!slipReturning) {
+      slipReturnOverrideTime = -1.f;
     }
 
     if (nowCatchActive) {
@@ -1320,6 +1362,7 @@ struct TemporalDeck::Impl {
   std::atomic<float> platterWheelDelta{0.f};
   std::atomic<int> platterScratchHoldSamples{0};
   std::atomic<int> platterMotionFreshSamples{0};
+  std::atomic<bool> quickSlipTrigger{false};
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
@@ -1618,7 +1661,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   auto frame =
     impl->engine.process(args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(), params[RATE_PARAM].getValue(),
                        params[MIX_PARAM].getValue(), params[FEEDBACK_PARAM].getValue(), impl->freezeLatched,
-                       impl->reverseLatched, impl->slipLatched,
+                       impl->reverseLatched, impl->slipLatched, impl->quickSlipTrigger.exchange(false),
                        inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold,
                        inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold,
                        inputs[SCRATCH_GATE_INPUT].isConnected(), inputs[POSITION_CV_INPUT].isConnected(), positionCv,
@@ -1699,6 +1742,10 @@ void TemporalDeck::addPlatterWheelDelta(float delta, int holdSamples) {
                                                          std::memory_order_relaxed)) {
   }
   impl->platterScratchHoldSamples.store(std::max(0, holdSamples));
+}
+
+void TemporalDeck::triggerQuickSlipReturn() {
+  impl->quickSlipTrigger.store(true);
 }
 
 double TemporalDeck::getUiLagSamples() const {

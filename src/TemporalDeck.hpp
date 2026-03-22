@@ -95,6 +95,7 @@ struct TemporalDeck final : Module {
   void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0);
   void setPlatterMotionFreshSamples(int motionFreshSamples);
   void addPlatterWheelDelta(float delta, int holdSamples);
+  void triggerQuickSlipReturn();
 
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
