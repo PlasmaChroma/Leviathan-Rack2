@@ -14,17 +14,21 @@ namespace {
 static float realBufferSecondsForMode(int index) {
   switch (index) {
   case 0:
-    return 9.f;
+    return 11.f;
   case 1:
-    return 17.f;
+    return 21.f;
   case 2:
-    return 481.f;
+    return 601.f;
+  case 3:
+    return 601.f;
   default:
-    return 9.f;
+    return 11.f;
   }
 }
 
 static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
+
+static bool isMonoBufferMode(int index) { return index == TemporalDeck::BUFFER_DURATION_10M_MONO; }
 
 static int nextCartridgeCharacter(int current) {
   switch (current) {
@@ -51,14 +55,20 @@ struct TemporalDeckBuffer {
   int writeHead = 0;
   int filled = 0;
   float sampleRate = 44100.f;
-  float durationSeconds = 9.f;
+  float durationSeconds = 11.f;
+  bool monoStorage = false;
 
-  void reset(float sr, float seconds = 9.f) {
+  void reset(float sr, float seconds = 11.f, bool mono = false) {
     sampleRate = sr;
     durationSeconds = std::max(1.f, seconds);
+    monoStorage = mono;
     size = std::max(1, int(std::round(sampleRate * durationSeconds)));
     left.assign(size, 0.f);
-    right.assign(size, 0.f);
+    if (monoStorage) {
+      std::vector<float>().swap(right);
+    } else {
+      right.assign(size, 0.f);
+    }
     writeHead = 0;
     filled = 0;
   }
@@ -89,11 +99,17 @@ struct TemporalDeckBuffer {
     if (size <= 0) {
       return;
     }
-    left[writeHead] = inL;
-    right[writeHead] = inR;
+    if (monoStorage) {
+      left[writeHead] = 0.5f * (inL + inR);
+    } else {
+      left[writeHead] = inL;
+      right[writeHead] = inR;
+    }
     writeHead = wrapIndex(writeHead + 1);
     filled = std::min(filled + 1, size);
   }
+
+  float rightSample(int idx) const { return monoStorage ? left[idx] : right[idx]; }
 
   static float cubicSample(float y0, float y1, float y2, float y3, float t) {
     float a0 = y3 - y2 - y0 + y1;
@@ -159,7 +175,7 @@ struct TemporalDeckBuffer {
     int i2 = wrapIndex(i1 + 1);
     int i3 = wrapIndex(i1 + 2);
     return {cubicSample(left[i0], left[i1], left[i2], left[i3], t),
-            cubicSample(right[i0], right[i1], right[i2], right[i3], t)};
+            cubicSample(rightSample(i0), rightSample(i1), rightSample(i2), rightSample(i3), t)};
   }
 
   std::pair<float, float> readLinear(double pos) const {
@@ -170,7 +186,7 @@ struct TemporalDeckBuffer {
     int i0 = int(pos);
     int i1 = wrapIndex(i0 + 1);
     float t = float(pos - double(i0));
-    return {crossfade(left[i0], left[i1], t), crossfade(right[i0], right[i1], t)};
+    return {crossfade(left[i0], left[i1], t), crossfade(rightSample(i0), rightSample(i1), t)};
   }
 
   std::pair<float, float> readHighQuality(double pos) const {
@@ -188,8 +204,8 @@ struct TemporalDeckBuffer {
     Lagrange6Weights w = lagrange6Weights(t);
     float outL = left[i0] * w.w0 + left[i1] * w.w1 + left[i2] * w.w2 + left[i3] * w.w3 + left[i4] * w.w4 +
                  left[i5] * w.w5;
-    float outR = right[i0] * w.w0 + right[i1] * w.w1 + right[i2] * w.w2 + right[i3] * w.w3 + right[i4] * w.w4 +
-                 right[i5] * w.w5;
+    float outR = rightSample(i0) * w.w0 + rightSample(i1) * w.w1 + rightSample(i2) * w.w2 + rightSample(i3) * w.w3 +
+                 rightSample(i4) * w.w4 + rightSample(i5) * w.w5;
     return {outL, outR};
   }
 
@@ -210,7 +226,7 @@ struct TemporalDeckBuffer {
       float dist = float(k) - frac;
       float w = windowedSinc(dist, float(kRadius));
       accL += left[idx] * w;
-      accR += right[idx] * w;
+      accR += rightSample(idx) * w;
       weightSum += w;
     }
     if (std::fabs(weightSum) > 1e-6f) {
@@ -276,7 +292,13 @@ struct TemporalDeckEngine {
     CARTRIDGE_LOFI,
     CARTRIDGE_COUNT
   };
-  enum BufferDurationMode { BUFFER_DURATION_8S, BUFFER_DURATION_16S, BUFFER_DURATION_8MIN, BUFFER_DURATION_COUNT };
+  enum BufferDurationMode {
+    BUFFER_DURATION_8S,
+    BUFFER_DURATION_16S,
+    BUFFER_DURATION_8MIN,
+    BUFFER_DURATION_10MIN_MONO,
+    BUFFER_DURATION_COUNT
+  };
   static_assert(CARTRIDGE_CLEAN == TemporalDeck::CARTRIDGE_CLEAN, "Cartridge enum mismatch: CLEAN");
   static_assert(CARTRIDGE_M44_7 == TemporalDeck::CARTRIDGE_M44_7, "Cartridge enum mismatch: M44-7");
   static_assert(CARTRIDGE_CONCORDE_SCRATCH == TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH,
@@ -289,6 +311,8 @@ struct TemporalDeckEngine {
   static_assert(BUFFER_DURATION_8S == TemporalDeck::BUFFER_DURATION_8S, "Buffer duration enum mismatch: 8s");
   static_assert(BUFFER_DURATION_16S == TemporalDeck::BUFFER_DURATION_16S, "Buffer duration enum mismatch: 16s");
   static_assert(BUFFER_DURATION_8MIN == TemporalDeck::BUFFER_DURATION_8M, "Buffer duration enum mismatch: 8m");
+  static_assert(BUFFER_DURATION_10MIN_MONO == TemporalDeck::BUFFER_DURATION_10M_MONO,
+                "Buffer duration enum mismatch: 10m mono");
   static_assert(BUFFER_DURATION_COUNT == TemporalDeck::BUFFER_DURATION_COUNT,
                 "Buffer duration enum mismatch: count");
 
@@ -399,10 +423,12 @@ struct TemporalDeckEngine {
   float scratchDcInR = 0.f;
   float scratchDcOutL = 0.f;
   float scratchDcOutR = 0.f;
+  bool externalCvGateHigh = false;
+  double externalCvAnchorLagSamples = 0.0;
 
   void reset(float sr) {
     sampleRate = sr;
-    buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode));
+    buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
     readHead = 0.f;
     timelineHead = 0.f;
     platterPhase = 0.f;
@@ -454,6 +480,8 @@ struct TemporalDeckEngine {
     scratchDcInR = 0.f;
     scratchDcOutL = 0.f;
     scratchDcOutR = 0.f;
+    externalCvGateHigh = false;
+    externalCvAnchorLagSamples = 0.0;
   }
 
   double maxLagFromKnob(float knob) const {
@@ -505,6 +533,11 @@ struct TemporalDeckEngine {
   double lagForPositionCv(float cv, double limit) const {
     double normalized = double(clamp(std::fabs(cv) / 10.f, 0.f, 1.f));
     return normalized * limit;
+  }
+
+  double lagOffsetForPositionCv(float cv) const {
+    float clampedCv = clamp(cv, -10.f, 10.f);
+    return double(clampedCv) * double(sampleRate);
   }
 
   float onePoleCoeff(float hz) const {
@@ -967,7 +1000,8 @@ struct TemporalDeckEngine {
     double maxLag = std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
     float speed = baseSpeed;
-    bool externalScratch = scratchGateConnected && scratchGate && positionConnected;
+    bool scratchGateHigh = scratchGateConnected && scratchGate;
+    bool externalScratch = scratchGateHigh && positionConnected;
     bool positionFollow = positionConnected && !scratchGateConnected;
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
@@ -992,6 +1026,12 @@ struct TemporalDeckEngine {
       lastPlatterGestureRevision = platterGestureRevision;
       clearScratchMotionState();
     }
+
+    if (scratchGateHigh && !externalCvGateHigh) {
+      externalCvAnchorLagSamples = currentLagFromNewest(newestPos);
+    }
+    externalCvGateHigh = scratchGateHigh;
+
     scratchActive = anyScratch;
 
     bool quickSlipActive = slipReturnOverrideTime >= 0.f;
@@ -1114,7 +1154,11 @@ struct TemporalDeckEngine {
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {
-      double targetLag = lagForPositionCv(positionCv, limit);
+      // POSITION CV is interpreted as signed time offset around a lag anchor
+      // latched on gate rise. While gate is held, the anchor naturally drifts
+      // deeper into the buffer with write-head progression.
+      double targetLag = externalCvAnchorLagSamples + lagOffsetForPositionCv(positionCv);
+      targetLag = clampLag(targetLag, limit);
       integrateExternalCvScratch(dt, limit, newestPos, targetLag, nowSnapThresholdSamples);
     } else if (slipReturning) {
       float slipReturnTime = configuredSlipReturnTime();
@@ -1345,15 +1389,21 @@ struct TemporalDeckEngine {
     float outL = inL * (1.f - mix) + wet.first * mix;
     float outR = inR * (1.f - mix) + wet.second * mix;
 
+    bool writeAdvanced = false;
     if (!freezeState && !holdAtBufferEdge) {
       float feedback = clamp(feedbackKnob, 0.f, 1.f);
       buffer.write(inL + outL * feedback, inR + outR * feedback);
+      writeAdvanced = true;
       newestPos = newestReadablePos();
       if (pinToNow) {
         readHead = newestPos;
       } else if (keepSlipLagAligned || keepNowCatchLagAligned) {
         readHead = buffer.wrapPosition(readHead + 1.f);
       }
+    }
+    if (externalCvGateHigh && writeAdvanced) {
+      // Keep anchored POS reference in write-head time while gate is held.
+      externalCvAnchorLagSamples += 1.0;
     }
 
     if (buffer.size > 0) {
@@ -1444,13 +1494,13 @@ struct TemporalDeck::Impl {
   bool platterCursorLock = false;
   bool freezeTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
-  int bufferDurationMode = TemporalDeck::BUFFER_DURATION_8S;
+  std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_8S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
 };
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-  configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 8.f);
+  configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 10.f);
   configParam<DeckRateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
   configParam<ScratchSensitivityQuantity>(SCRATCH_SENSITIVITY_PARAM, 0.f, 1.f, 0.5f, "Scratch sensitivity");
   configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix");
@@ -1468,9 +1518,10 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configOutput(OUTPUT_L_OUTPUT, "Left audio");
   configOutput(OUTPUT_R_OUTPUT, "Right audio");
   if (paramQuantities[BUFFER_PARAM]) {
-    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(impl->bufferDurationMode);
+    int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
-  onSampleRateChange();
+  applySampleRateChange(APP->engine->getSampleRate());
 }
 
 TemporalDeck::~TemporalDeck() = default;
@@ -1538,12 +1589,14 @@ const char *TemporalDeck::slipReturnLabelFor(int index) {
 const char *TemporalDeck::bufferDurationLabelFor(int index) {
   switch (index) {
   case BUFFER_DURATION_16S:
-    return "16 s";
+    return "20 s";
   case BUFFER_DURATION_8M:
-    return "8 min";
+    return "10 min stereo";
+  case BUFFER_DURATION_10M_MONO:
+    return "10 min mono";
   case BUFFER_DURATION_8S:
   default:
-    return "8 s";
+    return "10 s";
   }
 }
 
@@ -1552,17 +1605,17 @@ float TemporalDeck::scratchSensitivity() {
 }
 
 void TemporalDeck::applyBufferDurationMode(int mode) {
-  impl->bufferDurationMode = clamp(mode, 0, BUFFER_DURATION_COUNT - 1);
-  impl->engine.bufferDurationMode = impl->bufferDurationMode;
+  int clamped = clamp(mode, 0, BUFFER_DURATION_COUNT - 1);
+  impl->bufferDurationMode.store(clamped);
   if (paramQuantities[BUFFER_PARAM]) {
-    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(impl->bufferDurationMode);
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(clamped);
   }
-  onSampleRateChange();
 }
 
 void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->cachedSampleRate = sampleRate;
-  impl->engine.bufferDurationMode = impl->bufferDurationMode;
+  int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
+  impl->engine.bufferDurationMode = mode;
   impl->engine.reset(impl->cachedSampleRate);
   impl->uiSampleRate.store(impl->cachedSampleRate);
   impl->uiLagSamples.store(0.0);
@@ -1579,7 +1632,8 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
 }
 
 void TemporalDeck::onSampleRateChange() {
-  applySampleRateChange(APP->engine->getSampleRate());
+  // Reconfiguration is applied on the audio thread from process() to avoid
+  // cross-thread buffer reallocations.
 }
 
 json_t *TemporalDeck::dataToJson() {
@@ -1599,7 +1653,7 @@ json_t *TemporalDeck::dataToJson() {
     legacyCartridgeCharacter = 4;
   }
   json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
-  json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode));
+  json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   return root;
 }
 
@@ -1657,16 +1711,19 @@ void TemporalDeck::dataFromJson(json_t *root) {
     }
   }
   if (bufferDurationJ) {
-    impl->bufferDurationMode = clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1);
+    impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
   }
-  impl->engine.bufferDurationMode = impl->bufferDurationMode;
+  int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
+  impl->engine.bufferDurationMode = mode;
   if (paramQuantities[BUFFER_PARAM]) {
-    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(impl->bufferDurationMode);
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
 }
 
 void TemporalDeck::process(const ProcessArgs &args) {
-  if (args.sampleRate != impl->cachedSampleRate) {
+  int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
+  bool bufferModeChanged = requestedBufferMode != impl->engine.bufferDurationMode;
+  if (bufferModeChanged || args.sampleRate != impl->cachedSampleRate) {
     applySampleRateChange(args.sampleRate);
   }
 
@@ -1767,7 +1824,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
-    float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(impl->bufferDurationMode));
+    int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
+    float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(mode));
     float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
     float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
     float lagLed = lagRatio * float(kArcLightCount - 1);
@@ -1848,7 +1906,11 @@ int TemporalDeck::getCartridgeCharacter() const {
 }
 
 int TemporalDeck::getBufferDurationMode() const {
-  return impl->bufferDurationMode;
+  return clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
+}
+
+bool TemporalDeck::isBufferModeMono() const {
+  return isMonoBufferMode(clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1));
 }
 
 bool TemporalDeck::isPlatterCursorLockEnabled() const {

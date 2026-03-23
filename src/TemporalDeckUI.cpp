@@ -14,6 +14,13 @@ struct TemporalDeckDisplayWidget : Widget {
   void draw(const DrawArgs &args) override;
 };
 
+struct TemporalDeckBufferModeWidget : Widget {
+  TemporalDeck *module = nullptr;
+  Vec labelPosPx;
+
+  void draw(const DrawArgs &args) override;
+};
+
 struct TemporalDeckTonearmWidget : Widget {
   TemporalDeck *module = nullptr;
   Vec centerPx = mm2px(Vec(50.8f, 72.f));
@@ -250,6 +257,22 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
     nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
   }
+  nvgRestore(args.vg);
+}
+
+void TemporalDeckBufferModeWidget::draw(const DrawArgs &args) {
+  if (!module || !module->isBufferModeMono()) {
+    return;
+  }
+  if (!APP || !APP->window || !APP->window->uiFont) {
+    return;
+  }
+  nvgSave(args.vg);
+  nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+  nvgFontSize(args.vg, 10.0f);
+  nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+  nvgFillColor(args.vg, nvgRGBA(206, 86, 255, 245));
+  nvgText(args.vg, labelPosPx.x, labelPosPx.y, "mono", nullptr);
   nvgRestore(args.vg);
 }
 
@@ -720,7 +743,8 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8.408, 17.086)), module, TemporalDeck::BUFFER_PARAM));
+    Vec bufferKnobPos = mm2px(Vec(8.408f, 17.086f));
+    addParam(createParamCentered<RoundBlackKnob>(bufferKnobPos, module, TemporalDeck::BUFFER_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
@@ -745,6 +769,13 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.4, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(40.2, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+
+    auto *bufferMode = new TemporalDeckBufferModeWidget;
+    bufferMode->module = module;
+    bufferMode->box.pos = Vec(0.f, 0.f);
+    bufferMode->box.size = box.size;
+    bufferMode->labelPosPx = bufferKnobPos.plus(Vec(mm2px(Vec(10.4f, 0.f)).x, 0.f));
+    addChild(bufferMode);
 
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
@@ -795,8 +826,20 @@ struct TemporalDeckWidget : ModuleWidget {
     if (module) {
       menu->addChild(createMenuLabel("Advanced"));
       menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
+        auto bufferModeMenuLabel = [=](int mode) {
+          std::string label = TemporalDeck::bufferDurationLabelFor(mode);
+          if (mode != TemporalDeck::BUFFER_DURATION_8M && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
+            return label;
+          }
+          // 10-minute modes use 601s internal allocation (extra 1s headroom).
+          float sr = std::max(module->getUiSampleRate(), 1.f);
+          float channels = (mode == TemporalDeck::BUFFER_DURATION_10M_MONO) ? 1.f : 2.f;
+          double bytes = double(sr) * 601.0 * double(channels) * double(sizeof(float));
+          double mib = bytes / (1024.0 * 1024.0);
+          return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
+        };
         for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {
-          submenu->addChild(createCheckMenuItem(TemporalDeck::bufferDurationLabelFor(i), "",
+          submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(i), "",
                                                 [=]() { return module->getBufferDurationMode() == i; },
                                                 [=]() { module->applyBufferDurationMode(i); }));
         }

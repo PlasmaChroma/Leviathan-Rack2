@@ -32,7 +32,8 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_8S = 0;
   static constexpr int BUFFER_DURATION_16S = 1;
   static constexpr int BUFFER_DURATION_8M = 2;
-  static constexpr int BUFFER_DURATION_COUNT = 3;
+  static constexpr int BUFFER_DURATION_10M_MONO = 3;
+  static constexpr int BUFFER_DURATION_COUNT = 4;
 
   static constexpr float kNominalPlatterRpm = 33.3333f;
   static constexpr float kMouseScratchTravelScale = 1.00f;
@@ -107,6 +108,7 @@ struct TemporalDeck final : Module {
   int getCartridgeCharacter() const;
 
   int getBufferDurationMode() const;
+  bool isBufferModeMono() const;
 
   bool isPlatterCursorLockEnabled() const;
   void setPlatterCursorLockEnabled(bool enabled);
