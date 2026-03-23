@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -29,6 +32,202 @@ static float realBufferSecondsForMode(int index) {
 static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
 
 static bool isMonoBufferMode(int index) { return index == TemporalDeck::BUFFER_DURATION_10M_MONO; }
+
+
+struct DecodedSampleFile {
+  std::vector<float> left;
+  std::vector<float> right;
+  int channels = 0;
+  int frames = 0;
+  float sampleRate = 0.f;
+  bool truncated = false;
+};
+
+static uint16_t readLe16(const uint8_t *data) {
+  return uint16_t(data[0]) | (uint16_t(data[1]) << 8);
+}
+
+static uint32_t readLe32(const uint8_t *data) {
+  return uint32_t(data[0]) | (uint32_t(data[1]) << 8) | (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
+}
+
+static int32_t signExtend24(uint32_t x) {
+  return (x & 0x00800000u) ? int32_t(x | 0xFF000000u) : int32_t(x);
+}
+
+static float decodePcmSample(const uint8_t *src, int bitsPerSample, bool isFloat) {
+  if (isFloat && bitsPerSample == 32) {
+    float value = 0.f;
+    std::memcpy(&value, src, sizeof(float));
+    return clamp(value, -1.f, 1.f);
+  }
+
+  switch (bitsPerSample) {
+  case 8:
+    return (float(src[0]) - 128.f) / 128.f;
+  case 16:
+    return clamp(float(int16_t(readLe16(src))) / 32768.f, -1.f, 1.f);
+  case 24:
+    return clamp(float(signExtend24(readLe32(src) & 0x00FFFFFFu)) / 8388608.f, -1.f, 1.f);
+  case 32:
+    return clamp(float(int32_t(readLe32(src))) / 2147483648.f, -1.f, 1.f);
+  default:
+    return 0.f;
+  }
+}
+
+static bool decodeWaveFile(const std::string &path, DecodedSampleFile *out, std::string *errorOut) {
+  if (!out) {
+    return false;
+  }
+
+  auto fail = [&](const char *message) {
+    if (errorOut) {
+      *errorOut = message;
+    }
+    return false;
+  };
+
+  std::vector<uint8_t> data;
+  try {
+    data = system::readFile(path);
+  } catch (const std::exception &e) {
+    if (errorOut) {
+      *errorOut = e.what();
+    }
+    return false;
+  }
+
+  if (data.size() < 44) {
+    return fail("File is too small to be a WAV file");
+  }
+  if (std::memcmp(data.data(), "RIFF", 4) != 0 || std::memcmp(data.data() + 8, "WAVE", 4) != 0) {
+    return fail("Only RIFF/WAVE files are supported in this build");
+  }
+
+  const uint8_t *fmtChunk = nullptr;
+  size_t fmtSize = 0;
+  const uint8_t *dataChunk = nullptr;
+  size_t dataSize = 0;
+  size_t offset = 12;
+  while (offset + 8 <= data.size()) {
+    const uint8_t *chunk = data.data() + offset;
+    uint32_t chunkSize = readLe32(chunk + 4);
+    size_t payloadOffset = offset + 8;
+    size_t paddedChunkSize = (size_t(chunkSize) + 1u) & ~size_t(1u);
+    if (payloadOffset + size_t(chunkSize) > data.size()) {
+      return fail("WAV file has a truncated chunk");
+    }
+    if (std::memcmp(chunk, "fmt ", 4) == 0) {
+      fmtChunk = data.data() + payloadOffset;
+      fmtSize = chunkSize;
+    } else if (std::memcmp(chunk, "data", 4) == 0) {
+      dataChunk = data.data() + payloadOffset;
+      dataSize = chunkSize;
+    }
+    offset = payloadOffset + paddedChunkSize;
+  }
+
+  if (!fmtChunk || fmtSize < 16 || !dataChunk || dataSize == 0) {
+    return fail("WAV file is missing fmt or data chunk");
+  }
+
+  uint16_t formatTag = readLe16(fmtChunk + 0);
+  uint16_t channels = readLe16(fmtChunk + 2);
+  uint32_t sampleRate = readLe32(fmtChunk + 4);
+  uint16_t blockAlign = readLe16(fmtChunk + 12);
+  uint16_t bitsPerSample = readLe16(fmtChunk + 14);
+  bool isFloat = false;
+  if (formatTag == 3) {
+    isFloat = true;
+  } else if (formatTag != 1) {
+    return fail("Only PCM and 32-bit float WAV files are supported in this build");
+  }
+
+  if (channels < 1 || channels > 2) {
+    return fail("Only mono and stereo WAV files are supported in this build");
+  }
+  if (sampleRate == 0 || blockAlign == 0 || bitsPerSample == 0) {
+    return fail("WAV format chunk is invalid");
+  }
+
+  int bytesPerSample = (bitsPerSample + 7) / 8;
+  if (blockAlign < channels * bytesPerSample) {
+    return fail("WAV block alignment is invalid");
+  }
+  int frames = int(dataSize / blockAlign);
+  if (frames <= 0) {
+    return fail("WAV file contains no sample frames");
+  }
+
+  out->left.assign(frames, 0.f);
+  if (channels > 1) {
+    out->right.assign(frames, 0.f);
+  } else {
+    out->right.clear();
+  }
+
+  for (int i = 0; i < frames; ++i) {
+    const uint8_t *frame = dataChunk + size_t(i) * blockAlign;
+    out->left[i] = decodePcmSample(frame, bitsPerSample, isFloat);
+    if (channels > 1) {
+      out->right[i] = decodePcmSample(frame + bytesPerSample, bitsPerSample, isFloat);
+    }
+  }
+
+  out->channels = channels;
+  out->frames = frames;
+  out->sampleRate = float(sampleRate);
+  out->truncated = false;
+  return true;
+}
+
+static int chooseSampleBufferMode(const DecodedSampleFile &sample) {
+  if (sample.channels <= 1) {
+    return TemporalDeck::BUFFER_DURATION_10M_MONO;
+  }
+  return TemporalDeck::BUFFER_DURATION_8M;
+}
+
+static int maxFramesForModeAtSampleRate(int mode, float sampleRate) {
+  return std::max(1, int(std::floor(usableBufferSecondsForMode(mode) * std::max(sampleRate, 1.f))));
+}
+
+static int resampledFrameCount(int sourceFrames, float sourceRate, float targetRate) {
+  if (sourceFrames <= 0 || sourceRate <= 1.f || targetRate <= 1.f) {
+    return 0;
+  }
+  double seconds = double(sourceFrames) / double(sourceRate);
+  return std::max(1, int(std::round(seconds * double(targetRate))));
+}
+
+static double clampd(double x, double a, double b) {
+  return std::max(a, std::min(x, b));
+}
+
+static void resampleSampleChannel(const std::vector<float> &src, float sourceRate, float targetRate, int outFrames,
+                                  std::vector<float> *dst) {
+  dst->assign(std::max(outFrames, 0), 0.f);
+  if (src.empty() || outFrames <= 0) {
+    return;
+  }
+  if (src.size() == 1 || std::fabs(sourceRate - targetRate) < 1e-3f) {
+    for (int i = 0; i < outFrames; ++i) {
+      int srcIndex = std::min<int>(i, src.size() - 1);
+      (*dst)[i] = src[srcIndex];
+    }
+    return;
+  }
+
+  double ratio = double(sourceRate) / double(targetRate);
+  for (int i = 0; i < outFrames; ++i) {
+    double srcPos = double(i) * ratio;
+    int i0 = clamp(int(std::floor(srcPos)), 0, int(src.size()) - 1);
+    int i1 = clamp(i0 + 1, 0, int(src.size()) - 1);
+    float t = float(srcPos - double(i0));
+    (*dst)[i] = crossfade(src[i0], src[i1], t);
+  }
+}
 
 static int nextCartridgeCharacter(int current) {
   switch (current) {
@@ -365,6 +564,12 @@ struct TemporalDeckEngine {
 
   TemporalDeckBuffer buffer;
   float sampleRate = 44100.f;
+  bool sampleModeEnabled = false;
+  bool sampleLoaded = false;
+  bool sampleTransportPlaying = false;
+  bool sampleTruncated = false;
+  int sampleFrames = 0;
+  double samplePlayhead = 0.0;
   double readHead = 0.0;
   double timelineHead = 0.0;
   float platterPhase = 0.f;
@@ -429,6 +634,11 @@ struct TemporalDeckEngine {
   void reset(float sr) {
     sampleRate = sr;
     buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
+    sampleLoaded = false;
+    sampleTransportPlaying = false;
+    sampleTruncated = false;
+    sampleFrames = 0;
+    samplePlayhead = 0.f;
     readHead = 0.f;
     timelineHead = 0.f;
     platterPhase = 0.f;
@@ -743,6 +953,9 @@ struct TemporalDeckEngine {
     if (buffer.size <= 0) {
       return 0.0;
     }
+    if (sampleModeEnabled && sampleLoaded) {
+      return clampd(samplePlayhead - readHead, 0.0, std::max(0.0, samplePlayhead));
+    }
     double lag = newestReadablePos() - readHead;
     if (lag < 0.0) {
       lag += double(buffer.size);
@@ -751,6 +964,9 @@ struct TemporalDeckEngine {
   }
 
   double newestReadablePos() const {
+    if (sampleModeEnabled && sampleLoaded) {
+      return clampd(samplePlayhead, 0.0, std::max(0.0, double(sampleFrames - 1)));
+    }
     if (buffer.size <= 0 || buffer.filled <= 0) {
       return 0.0;
     }
@@ -771,6 +987,9 @@ struct TemporalDeckEngine {
     if (buffer.size <= 0) {
       return 0.0;
     }
+    if (sampleModeEnabled && sampleLoaded) {
+      return clampd(newestPos - readHead, 0.0, std::max(0.0, newestPos));
+    }
     double lag = newestPos - readHead;
     if (lag < 0.0) {
       lag += double(buffer.size);
@@ -779,6 +998,9 @@ struct TemporalDeckEngine {
   }
 
   double unwrapReadNearWrite(double readPos, double writePos) const {
+    if (sampleModeEnabled && sampleLoaded) {
+      return clampd(readPos, 0.0, std::max(0.0, double(sampleFrames - 1)));
+    }
     if (buffer.size <= 0) {
       return readPos;
     }
@@ -790,6 +1012,98 @@ struct TemporalDeckEngine {
       readPos += sizeF;
     }
     return readPos;
+  }
+
+
+  static int clampSampleIndex(int idx, int maxIndex) {
+    return clamp(idx, 0, std::max(0, maxIndex));
+  }
+
+  std::pair<float, float> readSampleBounded(double pos, int interpolationMode) const {
+    int maxIndex = std::max(0, sampleFrames - 1);
+    if (!sampleLoaded || sampleFrames <= 0 || maxIndex < 0) {
+      return {0.f, 0.f};
+    }
+    pos = clampd(pos, 0.0, double(maxIndex));
+    int i1 = int(std::floor(pos));
+    float t = float(pos - double(i1));
+    auto leftAt = [&](int idx) { return buffer.left[clampSampleIndex(idx, maxIndex)]; };
+    auto rightAt = [&](int idx) {
+      int clamped = clampSampleIndex(idx, maxIndex);
+      return buffer.monoStorage ? buffer.left[clamped] : buffer.right[clamped];
+    };
+
+    if (interpolationMode == TemporalDeck::SCRATCH_INTERP_SINC) {
+      constexpr int kRadius = 8;
+      float accL = 0.f;
+      float accR = 0.f;
+      float weightSum = 0.f;
+      for (int k = -kRadius + 1; k <= kRadius; ++k) {
+        int idx = clampSampleIndex(i1 + k, maxIndex);
+        float dist = float(k) - t;
+        float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+        accL += buffer.left[idx] * w;
+        accR += rightAt(idx) * w;
+        weightSum += w;
+      }
+      if (std::fabs(weightSum) > 1e-6f) {
+        float inv = 1.f / weightSum;
+        accL *= inv;
+        accR *= inv;
+      }
+      return {accL, accR};
+    }
+
+    if (interpolationMode == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
+      auto w = TemporalDeckBuffer::lagrange6Weights(t);
+      int i0 = clampSampleIndex(i1 - 2, maxIndex);
+      int iA = clampSampleIndex(i1 - 1, maxIndex);
+      int iB = clampSampleIndex(i1 + 1, maxIndex);
+      int iC = clampSampleIndex(i1 + 2, maxIndex);
+      int iD = clampSampleIndex(i1 + 3, maxIndex);
+      float outL = leftAt(i0) * w.w0 + leftAt(iA) * w.w1 + leftAt(i1) * w.w2 + leftAt(iB) * w.w3 +
+                   leftAt(iC) * w.w4 + leftAt(iD) * w.w5;
+      float outR = rightAt(i0) * w.w0 + rightAt(iA) * w.w1 + rightAt(i1) * w.w2 + rightAt(iB) * w.w3 +
+                   rightAt(iC) * w.w4 + rightAt(iD) * w.w5;
+      return {outL, outR};
+    }
+
+    int i0 = clampSampleIndex(i1 - 1, maxIndex);
+    int i2 = clampSampleIndex(i1 + 1, maxIndex);
+    int i3 = clampSampleIndex(i1 + 2, maxIndex);
+    return {TemporalDeckBuffer::cubicSample(leftAt(i0), leftAt(i1), leftAt(i2), leftAt(i3), t),
+            TemporalDeckBuffer::cubicSample(rightAt(i0), rightAt(i1), rightAt(i2), rightAt(i3), t)};
+  }
+
+  void installSample(const std::vector<float> &left, const std::vector<float> &right, int frames, bool autoplay,
+                     bool truncated) {
+    sampleLoaded = frames > 0 && !left.empty();
+    sampleModeEnabled = sampleLoaded || sampleModeEnabled;
+    sampleTransportPlaying = sampleLoaded && autoplay;
+    sampleTruncated = truncated;
+    sampleFrames = std::max(0, std::min(frames, buffer.size));
+    samplePlayhead = 0.0;
+    readHead = 0.0;
+    timelineHead = 0.0;
+    buffer.filled = sampleFrames;
+    buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    if (sampleFrames <= 0) {
+      return;
+    }
+    std::fill(buffer.left.begin(), buffer.left.end(), 0.f);
+    if (!buffer.monoStorage) {
+      std::fill(buffer.right.begin(), buffer.right.end(), 0.f);
+    }
+    for (int i = 0; i < sampleFrames; ++i) {
+      float l = left[i];
+      float r = right.empty() ? l : right[i];
+      if (buffer.monoStorage) {
+        buffer.left[i] = 0.5f * (l + r);
+      } else {
+        buffer.left[i] = l;
+        buffer.right[i] = r;
+      }
+    }
   }
 
   void clearScratchMotionState() {
@@ -973,6 +1287,12 @@ struct TemporalDeckEngine {
     double lag = 0.0;
     double accessibleLag = 0.0;
     float platterAngle = 0.f;
+    double samplePlayhead = 0.0;
+    double sampleDuration = 0.0;
+    double sampleProgress = 0.0;
+    bool sampleMode = false;
+    bool sampleLoaded = false;
+    bool sampleTransportPlaying = false;
   };
 
   FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
@@ -985,6 +1305,7 @@ struct TemporalDeckEngine {
     FrameResult result;
     double prevReadHead = readHead;
     float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
+    bool sampleModeActive = sampleModeEnabled && sampleLoaded && sampleFrames > 0;
     bool pinToNow = false;
     bool keepSlipLagAligned = false;
     bool keepNowCatchLagAligned = false;
@@ -995,9 +1316,9 @@ struct TemporalDeckEngine {
     bool slipModeChanged = slipReturnMode != lastSlipReturnMode;
     lastSlipReturnMode = slipReturnMode;
 
-    double limit = accessibleLag(bufferKnob);
+    double limit = sampleModeActive ? std::max(0.0, newestReadablePos()) : accessibleLag(bufferKnob);
     double minLag = 0.0;
-    double maxLag = std::max(limit, 0.0);
+    double maxLag = sampleModeActive ? std::max(0.0, newestReadablePos()) : std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
     float speed = baseSpeed;
     bool scratchGateHigh = scratchGateConnected && scratchGate;
@@ -1078,11 +1399,27 @@ struct TemporalDeckEngine {
       slipReturnOverrideTime = -1.f;
     }
 
+    if (sampleModeActive) {
+      if (!sampleTransportPlaying || freezeState) {
+        speed = 0.f;
+      }
+      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, std::max(0.0, double(sampleFrames - 1)));
+      if (samplePlayhead >= std::max(0.0, double(sampleFrames - 1)) && speed > 0.f) {
+        samplePlayhead = std::max(0.0, double(sampleFrames - 1));
+        sampleTransportPlaying = false;
+      }
+      if (samplePlayhead <= 0.0 && speed < 0.f) {
+        samplePlayhead = 0.0;
+        sampleTransportPlaying = false;
+      }
+    }
+
     // 3. Determine actual playhead (readHead)
     if (freezeState) {
       speed = 0.f;
     }
 
+    newestPos = newestReadablePos();
     float lagNow = currentLagFromNewest(newestPos);
     bool reverseAtOldestEdge =
       !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
@@ -1221,9 +1558,13 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(newestPos - targetLag);
     } else {
       // Normal Transport
-      double candidate = unwrapReadNearWrite(readHead, newestPos) + double(speed);
-      candidate = std::max(newestPos - maxLag, std::min(candidate, newestPos - minLag));
-      readHead = buffer.wrapPosition(candidate);
+      if (sampleModeActive) {
+        readHead = newestPos;
+      } else {
+        double candidate = unwrapReadNearWrite(readHead, newestPos) + double(speed);
+        candidate = std::max(newestPos - maxLag, std::min(candidate, newestPos - minLag));
+        readHead = buffer.wrapPosition(candidate);
+      }
     }
 
     if (anyScratch) {
@@ -1276,8 +1617,8 @@ struct TemporalDeckEngine {
       // cartridge darkening.
       motionAmount *= 0.4f;
     }
-    auto wet = buffer.readCubic(readHead);
-    if (scratchReadPath) {
+    auto wet = sampleModeActive ? readSampleBounded(readHead, effectiveScratchInterpolation) : buffer.readCubic(readHead);
+    if (scratchReadPath && !sampleModeActive) {
       if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
         wet = buffer.readHighQuality(readHead);
       } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
@@ -1390,7 +1731,7 @@ struct TemporalDeckEngine {
     float outR = inR * (1.f - mix) + wet.second * mix;
 
     bool writeAdvanced = false;
-    if (!freezeState && !holdAtBufferEdge) {
+    if (!sampleModeActive && !freezeState && !holdAtBufferEdge) {
       float feedback = clamp(feedbackKnob, 0.f, 1.f);
       buffer.write(inL + outL * feedback, inR + outR * feedback);
       writeAdvanced = true;
@@ -1429,6 +1770,12 @@ struct TemporalDeckEngine {
     result.lag = currentLagFromNewest(newestPos);
     result.accessibleLag = limit;
     result.platterAngle = platterPhase;
+    result.sampleMode = sampleModeActive;
+    result.sampleLoaded = sampleLoaded;
+    result.sampleTransportPlaying = sampleTransportPlaying;
+    result.samplePlayhead = sampleModeActive ? std::max(0.0, samplePlayhead / std::max(sampleRate, 1.f)) : 0.0;
+    result.sampleDuration = sampleModeActive ? std::max(0.0, double(sampleFrames) / std::max(sampleRate, 1.f)) : 0.0;
+    result.sampleProgress = sampleModeActive && sampleFrames > 1 ? clampd(samplePlayhead / double(sampleFrames - 1), 0.0, 1.0) : 0.0;
     return result;
   }
 };
@@ -1476,6 +1823,11 @@ struct TemporalDeck::Impl {
   bool freezeLatched = false;
   bool reverseLatched = false;
   bool slipLatched = false;
+  bool sampleModeEnabled = false;
+  bool sampleAutoPlayOnLoad = true;
+  std::string samplePath;
+  std::string sampleDisplayName;
+  DecodedSampleFile decodedSample;
   std::atomic<bool> platterTouched{false};
   std::atomic<uint32_t> platterGestureRevision{0};
   std::atomic<float> platterLagTarget{0.f};
@@ -1489,6 +1841,12 @@ struct TemporalDeck::Impl {
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<float> uiPlatterAngle{0.f};
   std::atomic<bool> uiFreezeLatched{false};
+  std::atomic<bool> uiSampleModeEnabled{false};
+  std::atomic<bool> uiSampleLoaded{false};
+  std::atomic<bool> uiSampleTransportPlaying{false};
+  std::atomic<double> uiSamplePlayheadSeconds{0.0};
+  std::atomic<double> uiSampleDurationSeconds{0.0};
+  std::atomic<double> uiSampleProgress{0.0};
   float uiPublishTimerSec = 0.f;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterCursorLock = false;
@@ -1497,6 +1855,7 @@ struct TemporalDeck::Impl {
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_8S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
 };
+
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -1617,11 +1976,35 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   impl->engine.bufferDurationMode = mode;
   impl->engine.reset(impl->cachedSampleRate);
+  impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
+  if (impl->decodedSample.frames > 0 && !impl->decodedSample.left.empty()) {
+    int outFrames = resampledFrameCount(impl->decodedSample.frames, impl->decodedSample.sampleRate, impl->cachedSampleRate);
+    int maxFrames = maxFramesForModeAtSampleRate(impl->engine.bufferDurationMode, impl->cachedSampleRate);
+    bool truncated = false;
+    if (outFrames > maxFrames) {
+      outFrames = maxFrames;
+      truncated = true;
+    }
+    std::vector<float> left;
+    std::vector<float> right;
+    resampleSampleChannel(impl->decodedSample.left, impl->decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left);
+    if (impl->decodedSample.channels > 1) {
+      resampleSampleChannel(impl->decodedSample.right, impl->decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right);
+    }
+    impl->engine.installSample(left, right, outFrames, impl->sampleAutoPlayOnLoad, truncated || impl->decodedSample.truncated);
+    impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
+  }
   impl->uiSampleRate.store(impl->cachedSampleRate);
   impl->uiLagSamples.store(0.0);
   impl->uiAccessibleLagSamples.store(0.0);
   impl->uiPlatterAngle.store(0.f);
   impl->uiFreezeLatched.store(false);
+  impl->uiSampleModeEnabled.store(impl->engine.sampleModeEnabled);
+  impl->uiSampleLoaded.store(impl->engine.sampleLoaded);
+  impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying);
+  impl->uiSamplePlayheadSeconds.store(0.0);
+  impl->uiSampleDurationSeconds.store(impl->engine.sampleLoaded ? double(impl->engine.sampleFrames) / std::max(double(impl->cachedSampleRate), 1.0) : 0.0);
+  impl->uiSampleProgress.store(0.0);
   impl->uiPublishTimerSec = 0.f;
   impl->platterScratchHoldSamples.store(0);
   impl->platterMotionFreshSamples.store(0);
@@ -1654,6 +2037,11 @@ json_t *TemporalDeck::dataToJson() {
   }
   json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
+  json_object_set_new(root, "sampleModeEnabled", json_boolean(impl->sampleModeEnabled));
+  json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(impl->sampleAutoPlayOnLoad));
+  if (!impl->samplePath.empty()) {
+    json_object_set_new(root, "samplePath", json_string(impl->samplePath.c_str()));
+  }
   return root;
 }
 
@@ -1672,6 +2060,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
+  json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
+  json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
+  json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
     impl->freezeLatched = json_boolean_value(freezeJ);
   }
@@ -1713,10 +2104,20 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (bufferDurationJ) {
     impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
   }
+  if (sampleModeEnabledJ) {
+    impl->sampleModeEnabled = json_boolean_value(sampleModeEnabledJ);
+  }
+  if (sampleAutoPlayOnLoadJ) {
+    impl->sampleAutoPlayOnLoad = json_boolean_value(sampleAutoPlayOnLoadJ);
+  }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   impl->engine.bufferDurationMode = mode;
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
+  }
+  if (samplePathJ && json_is_string(samplePathJ)) {
+    std::string error;
+    loadSampleFromPath(json_string_value(samplePathJ), &error);
   }
 }
 
@@ -1774,6 +2175,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
+  impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
   int scratchHold = impl->platterScratchHoldSamples.load();
   bool wheelScratchHeld = scratchHold > 0;
   if (wheelScratchHeld) {
@@ -1820,32 +2222,51 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiAccessibleLagSamples.store(frame.accessibleLag);
   impl->uiSampleRate.store(args.sampleRate);
   impl->uiFreezeLatched.store(impl->freezeLatched);
+  impl->uiSampleModeEnabled.store(frame.sampleMode);
+  impl->uiSampleLoaded.store(frame.sampleLoaded);
+  impl->uiSampleTransportPlaying.store(frame.sampleTransportPlaying);
+  impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead);
+  impl->uiSampleDurationSeconds.store(frame.sampleDuration);
+  impl->uiSampleProgress.store(frame.sampleProgress);
 
+  impl->sampleModeEnabled = impl->engine.sampleModeEnabled;
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
-    int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
-    float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(mode));
-    float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
-    float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
-    float lagLed = lagRatio * float(kArcLightCount - 1);
-    float limitLed = limitRatio * float(kArcLightCount - 1);
-    for (int i = 0; i < kArcLightCount; ++i) {
-      float brightness = 0.f;
-      if (i == 0) {
-        brightness = clamp(lagLed, 0.f, 1.f);
-      } else {
-        brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
+    if (frame.sampleMode && frame.sampleLoaded) {
+      float progressLed = float(frame.sampleProgress) * float(kArcLightCount - 1);
+      for (int i = 0; i < kArcLightCount; ++i) {
+        float brightness = (float(i) <= progressLed + 0.001f) ? 0.85f : 0.08f;
+        if (std::fabs(float(i) - progressLed) < 0.6f) {
+          brightness = 1.f;
+        }
+        lights[ARC_LIGHT_START + i].setBrightness(brightness);
+        lights[ARC_MAX_LIGHT_START + i].setBrightness(i == (kArcLightCount - 1) ? 0.65f : 0.f);
       }
-      if (limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f) {
-        brightness = std::max(brightness, 0.28f);
+    } else {
+      int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
+      float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(mode));
+      float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
+      float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
+      float lagLed = lagRatio * float(kArcLightCount - 1);
+      float limitLed = limitRatio * float(kArcLightCount - 1);
+      for (int i = 0; i < kArcLightCount; ++i) {
+        float brightness = 0.f;
+        if (i == 0) {
+          brightness = clamp(lagLed, 0.f, 1.f);
+        } else {
+          brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
+        }
+        if (limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f) {
+          brightness = std::max(brightness, 0.28f);
+        }
+        if (float(i) > limitLed + 0.5f) {
+          brightness = 0.f;
+        }
+        lights[ARC_LIGHT_START + i].setBrightness(brightness);
+        bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
+        lights[ARC_MAX_LIGHT_START + i].setBrightness(isLimitLed ? 1.f : 0.f);
       }
-      if (float(i) > limitLed + 0.5f) {
-        brightness = 0.f;
-      }
-      lights[ARC_LIGHT_START + i].setBrightness(brightness);
-      bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
-      lights[ARC_MAX_LIGHT_START + i].setBrightness(isLimitLed ? 1.f : 0.f);
     }
   }
 }
@@ -1895,6 +2316,102 @@ float TemporalDeck::getUiPlatterAngle() const {
 
 bool TemporalDeck::isUiFreezeLatched() const {
   return impl->uiFreezeLatched.load();
+}
+
+
+bool TemporalDeck::isSampleModeEnabled() const {
+  return impl->uiSampleModeEnabled.load();
+}
+
+bool TemporalDeck::hasLoadedSample() const {
+  return impl->uiSampleLoaded.load();
+}
+
+bool TemporalDeck::isSampleAutoPlayOnLoadEnabled() const {
+  return impl->sampleAutoPlayOnLoad;
+}
+
+void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
+  impl->sampleAutoPlayOnLoad = enabled;
+}
+
+void TemporalDeck::setSampleModeEnabled(bool enabled) {
+  impl->sampleModeEnabled = enabled;
+  impl->engine.sampleModeEnabled = enabled;
+  impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded);
+}
+
+bool TemporalDeck::isSampleTransportPlaying() const {
+  return impl->uiSampleTransportPlaying.load();
+}
+
+void TemporalDeck::setSampleTransportPlaying(bool enabled) {
+  impl->engine.sampleTransportPlaying = enabled && impl->engine.sampleLoaded;
+  impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying);
+}
+
+void TemporalDeck::stopSampleTransport() {
+  impl->engine.sampleTransportPlaying = false;
+  if (impl->engine.sampleLoaded) {
+    impl->engine.samplePlayhead = 0.0;
+    impl->engine.readHead = 0.0;
+  }
+  impl->uiSampleTransportPlaying.store(false);
+  impl->uiSamplePlayheadSeconds.store(0.0);
+  impl->uiSampleProgress.store(0.0);
+}
+
+void TemporalDeck::clearLoadedSample() {
+  impl->samplePath.clear();
+  impl->sampleDisplayName.clear();
+  impl->decodedSample = DecodedSampleFile();
+  impl->sampleModeEnabled = false;
+  applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
+}
+
+bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
+  DecodedSampleFile decoded;
+  if (!decodeWaveFile(path, &decoded, errorOut)) {
+    return false;
+  }
+
+  int targetMode = chooseSampleBufferMode(decoded);
+  impl->bufferDurationMode.store(targetMode);
+  if (paramQuantities[BUFFER_PARAM]) {
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(targetMode);
+  }
+  impl->samplePath = path;
+  impl->sampleDisplayName = system::getFilename(path);
+  impl->decodedSample = std::move(decoded);
+  impl->sampleModeEnabled = true;
+  applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
+  if (!impl->engine.sampleLoaded) {
+    if (errorOut) {
+      *errorOut = "Loaded WAV could not be installed into the current sample-rate buffer";
+    }
+    return false;
+  }
+  return true;
+}
+
+double TemporalDeck::getUiSamplePlayheadSeconds() const {
+  return impl->uiSamplePlayheadSeconds.load();
+}
+
+double TemporalDeck::getUiSampleDurationSeconds() const {
+  return impl->uiSampleDurationSeconds.load();
+}
+
+double TemporalDeck::getUiSampleProgress() const {
+  return impl->uiSampleProgress.load();
+}
+
+std::string TemporalDeck::getLoadedSampleDisplayName() const {
+  return impl->sampleDisplayName;
+}
+
+bool TemporalDeck::wasLoadedSampleTruncated() const {
+  return impl->engine.sampleTruncated;
 }
 
 bool TemporalDeck::isSlipLatched() const {

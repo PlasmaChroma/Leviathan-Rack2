@@ -1,10 +1,13 @@
 #include "TemporalDeck.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <regex>
 #include <sstream>
+
+#include <osdialog.h>
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -236,6 +239,14 @@ void TemporalDeckPlatterWidget::logTraceEvent(const char *eventName, Vec local, 
                      << module->getUiSampleRate() << "\n";
 }
 
+static std::string formatClockTime(double seconds) {
+  seconds = std::max(0.0, seconds);
+  int total = int(std::floor(seconds + 0.5));
+  int mins = total / 60;
+  int secs = total % 60;
+  return string::f("%02d:%02d", mins, secs);
+}
+
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   if (!module) {
     return;
@@ -246,16 +257,28 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
   if (APP && APP->window && APP->window->uiFont) {
-    double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
-    char text[32];
-    std::snprintf(text, sizeof(text), "%.0f ms", lagMs);
+    std::string displayText;
+    if (module->isSampleModeEnabled() && module->hasLoadedSample()) {
+      displayText = formatClockTime(module->getUiSamplePlayheadSeconds()) + " / " +
+                    formatClockTime(module->getUiSampleDurationSeconds());
+    } else {
+      double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
+      displayText = string::f("%.0f ms", lagMs);
+    }
     Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
 
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFontSize(args.vg, 11.5f);
     nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-    nvgText(args.vg, textPos.x, textPos.y, text, nullptr);
+    nvgText(args.vg, textPos.x, textPos.y, displayText.c_str(), nullptr);
+
+    if (module->isSampleModeEnabled() && module->hasLoadedSample()) {
+      std::string status = module->isSampleTransportPlaying() ? "sample play" : "sample pause";
+      nvgFontSize(args.vg, 9.5f);
+      nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 230));
+      nvgText(args.vg, textPos.x, textPos.y + 11.f, status.c_str(), nullptr);
+    }
   }
   nvgRestore(args.vg);
 }
@@ -824,6 +847,43 @@ struct TemporalDeckWidget : ModuleWidget {
     assert(menu);
     menu->addChild(new MenuSeparator());
     if (module) {
+      menu->addChild(createMenuLabel("Sample"));
+      std::string loadedSampleName = module->getLoadedSampleDisplayName();
+      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV only" : loadedSampleName;
+      menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
+        osdialog_filters *filters = osdialog_filters_parse("WAV:wav,WAV");
+        char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+        osdialog_filters_free(filters);
+        if (!pathC) {
+          return;
+        }
+        std::string path = pathC;
+        std::free(pathC);
+        std::string error;
+        if (!module->loadSampleFromPath(path, &error)) {
+          std::string message = error.empty() ? "Sample load failed" : error;
+          osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+        }
+      }));
+      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
+      menu->addChild(createCheckMenuItem("Enable sample mode", "", [=]() { return module->isSampleModeEnabled(); },
+                                         [=]() { module->setSampleModeEnabled(!module->isSampleModeEnabled()); }));
+      menu->addChild(createCheckMenuItem("Auto-play on load", "",
+                                         [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
+                                         [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
+      menu->addChild(createMenuItem(module->isSampleTransportPlaying() ? "Pause sample" : "Play sample", "",
+                                    [=]() { module->setSampleTransportPlaying(!module->isSampleTransportPlaying()); },
+                                    !module->hasLoadedSample()));
+      menu->addChild(createMenuItem("Stop sample", "", [=]() { module->stopSampleTransport(); },
+                                    !module->hasLoadedSample()));
+      if (module->hasLoadedSample()) {
+        std::string info = loadedSampleName;
+        if (module->wasLoadedSampleTruncated()) {
+          info += " (truncated)";
+        }
+        menu->addChild(createMenuLabel(info));
+      }
+      menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Advanced"));
       menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
         auto bufferModeMenuLabel = [=](int mode) {

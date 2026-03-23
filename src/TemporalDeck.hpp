@@ -3,6 +3,7 @@
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
 #include <memory>
+#include <string>
 
 struct CartridgeVisualStyle {
   NVGcolor shellFill;
@@ -34,6 +35,9 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_8M = 2;
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
   static constexpr int BUFFER_DURATION_COUNT = 4;
+
+  static constexpr int SAMPLE_SOURCE_LIVE = 0;
+  static constexpr int SAMPLE_SOURCE_FILE = 1;
 
   static constexpr float kNominalPlatterRpm = 33.3333f;
   static constexpr float kMouseScratchTravelScale = 1.00f;
@@ -103,6 +107,21 @@ struct TemporalDeck final : Module {
   float getUiSampleRate() const;
   float getUiPlatterAngle() const;
   bool isUiFreezeLatched() const;
+  bool isSampleModeEnabled() const;
+  bool hasLoadedSample() const;
+  bool isSampleAutoPlayOnLoadEnabled() const;
+  void setSampleAutoPlayOnLoadEnabled(bool enabled);
+  void setSampleModeEnabled(bool enabled);
+  bool isSampleTransportPlaying() const;
+  void setSampleTransportPlaying(bool enabled);
+  void stopSampleTransport();
+  void clearLoadedSample();
+  bool loadSampleFromPath(const std::string &path, std::string *errorOut = nullptr);
+  double getUiSamplePlayheadSeconds() const;
+  double getUiSampleDurationSeconds() const;
+  double getUiSampleProgress() const;
+  std::string getLoadedSampleDisplayName() const;
+  bool wasLoadedSampleTruncated() const;
 
   bool isSlipLatched() const;
   int getCartridgeCharacter() const;

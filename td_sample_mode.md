@@ -9,11 +9,11 @@ This mode should support:
 - loading a sample from the module context menu
 - copying decoded sample data into the scratch buffer
 - truncating oversized files to a hard maximum duration
-- basic transport behavior (`play`, `pause`, `stop`/`return-to-start`)
-- visible timeline feedback on the platter arc
-- interactive seeking from the UI
+- basic transport behavior (`play`, `pause` (could re-use freeze UI?), `return-to-start`)
+- visible timeline feedback on the platter arc (drawn over LEDs display)
+- interactive seeking from the UI (interactive arc drawn over LEDs)
 
-This mode should explicitly avoid trying to solve everything at once. Time-stretching, non-destructive editing, file saving, multi-sample management, waveform rendering, and advanced metadata handling can wait.
+This mode should explicitly avoid trying to solve everything at once. Time-stretching (the rate knob should actually be pretty easy I think), non-destructive editing, file saving, multi-sample management, waveform rendering, and advanced metadata handling can wait.
 
 ## Current State
 
@@ -42,16 +42,14 @@ The module has two source modes:
 
 2. `Sample`
    The scratch buffer is populated from a decoded audio file. Playback reads from that loaded material instead of requiring live input.
+   In sample mode we have some indicator that a sample is loaded in the UI (although the UI will also have to change a bit anyway so it should be obvious)
 
 ### Initial UX
 
 Context menu actions:
 
 - `Load sample...`
-- `Clear sample`
-- `Sample mode`
-  - `Off`
-  - `On when sample loaded`
+- `Clear sample (Return to Live mode)`
 
 Likely behavior:
 
@@ -64,9 +62,9 @@ Likely behavior:
 ### In scope
 
 - file picker from context menu
-- decode common audio file formats supported by Rack helpers/libs we already have available
+- decode common audio file formats supported by Rack helpers/libs we already have available (I know we can do WAV but can we do more than that?)
 - copy decoded audio into the scratch buffer
-- truncate at a hard limit @ 10 minutes (otherwise buffer is equal to length of sample)
+- truncate at a hard limit @ 10 minutes (otherwise buffer is == length of sample)
 - transport state
 - seek/timeline UI
 - disabling or redefining live-only behaviors that do not make sense in sample mode
@@ -74,8 +72,8 @@ Likely behavior:
 
 ### Out of scope
 
-- background streaming from disk
-- preserving loaded audio inside patch JSON
+- background streaming from disk (file will be loaded to RAM)
+- preserving loaded audio inside patch JSON (if file still exists we could reload it)
 - waveform overviews
 - loop region editing
 - pitch-locked time stretch
@@ -271,6 +269,7 @@ Looping can be added later as a separate option.
 - `SLIP`
   - current semantics are tied to live-audio slip return
   - this may still be useful as “return to transport anchor after scratching”, but it needs an explicit definition in sample mode
+  - we may want to paste over this UI with some play/pause mechanism
 
 - `FEEDBACK`
   - if the buffer is read-only in sample mode, feedback cannot mean destructive recirculation into the sample buffer
@@ -281,7 +280,7 @@ Looping can be added later as a separate option.
 Recommended v1 policy:
 
 - map `FREEZE` to transport `pause` when sample mode is active
-- keep `SLIP` as “return to transport position after scratch release”
+- `SLIP` will likely become something else or simply be replaced with a new UI
 - leave `FEEDBACK` at 0 or visually de-emphasize it in sample mode until a clean semantic is designed
 
 ## UI Changes
@@ -293,10 +292,6 @@ Add menu items under a new section:
 - `Sample`
   - `Load sample...`
   - `Clear sample`
-  - separator
-  - `Enable sample mode`
-  - `Auto-play on load`
-  - `Truncate oversized files`
 
 Possibly also:
 
@@ -311,13 +306,12 @@ Possibly also:
 We need at least two visible controls on the panel in sample mode:
 
 - `Play/Pause`
-- `Stop`
+- `Stop` (I'm not sure we need stop though?)
 
 Implementation options:
 
 1. Reuse existing buttons conditionally.
 2. Add small on-panel icon buttons near the platter.
-3. Put transport only in the context menu for the first code pass.
 
 Recommended path:
 
@@ -332,9 +326,8 @@ The top half-ring is the right place for sample position.
 
 Recommended display mapping in sample mode:
 
-- dim background arc = full loaded sample extent
+- new element to cover up LEDs?
 - bright segment or pointer = current playhead
-- optional secondary marker = scratch/drag target when interacting
 
 Interaction:
 
@@ -370,7 +363,7 @@ Possible cues:
 - different center label color when sample loaded
 - small `SAMPLE` badge
 - play/pause indicator near the platter
-- different arc styling from live mode
+- different arc styling from live mode (we could switch color to purples, maybe the ARC too)
 
 ## Serialization
 
