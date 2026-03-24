@@ -1317,9 +1317,11 @@ struct TemporalDeckEngine {
     bool slipModeChanged = slipReturnMode != lastSlipReturnMode;
     lastSlipReturnMode = slipReturnMode;
 
-    double limit = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : accessibleLag(bufferKnob);
+    double sampleEndPos = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : 0.0;
+    double sampleWindowEndPos = sampleModeActive ? clampLag(accessibleLag(bufferKnob), sampleEndPos) : 0.0;
+    double limit = sampleModeActive ? sampleWindowEndPos : accessibleLag(bufferKnob);
     double minLag = 0.0;
-    double maxLag = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : std::max(limit, 0.0);
+    double maxLag = sampleModeActive ? sampleWindowEndPos : std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
     float speed = baseSpeed;
     bool scratchGateHigh = scratchGateConnected && scratchGate;
@@ -1334,7 +1336,7 @@ struct TemporalDeckEngine {
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
     bool slipJustEnabled = slipState && !prevSlipState;
-    double newestPos = newestReadablePos();
+    double newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     auto startNowCatch = [&](float startLag) {
       nowCatchActive = true;
@@ -1408,16 +1410,16 @@ struct TemporalDeckEngine {
         // In sample mode, release should continue from where the scratch
         // gesture landed rather than snapping back to the prior transport
         // anchor.
-        samplePlayhead = clampd(readHead, 0.0, std::max(0.0, double(sampleFrames - 1)));
+        samplePlayhead = clampd(readHead, 0.0, sampleWindowEndPos);
         scratchLagSamples = 0.0;
         scratchLagTargetSamples = 0.0;
       }
       if (!sampleTransportPlaying || freezeForScratchModel) {
         speed = 0.f;
       }
-      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, std::max(0.0, double(sampleFrames - 1)));
-      if (samplePlayhead >= std::max(0.0, double(sampleFrames - 1)) && speed > 0.f) {
-        samplePlayhead = std::max(0.0, double(sampleFrames - 1));
+      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
+      if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
+        samplePlayhead = sampleWindowEndPos;
         sampleTransportPlaying = false;
       }
       if (samplePlayhead <= 0.0 && speed < 0.f) {
@@ -1431,7 +1433,7 @@ struct TemporalDeckEngine {
       speed = 0.f;
     }
 
-    newestPos = newestReadablePos();
+    newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
     float lagNow = currentLagFromNewest(newestPos);
     bool reverseAtOldestEdge =
       !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
@@ -1787,9 +1789,11 @@ struct TemporalDeckEngine {
     result.sampleMode = sampleModeActive;
     result.sampleLoaded = sampleLoaded;
     result.sampleTransportPlaying = sampleTransportPlaying;
-    result.samplePlayhead = sampleModeActive ? std::max(0.0, samplePlayhead / std::max(sampleRate, 1.f)) : 0.0;
-    result.sampleDuration = sampleModeActive ? std::max(0.0, double(sampleFrames) / std::max(sampleRate, 1.f)) : 0.0;
-    result.sampleProgress = sampleModeActive && sampleFrames > 1 ? clampd(samplePlayhead / double(sampleFrames - 1), 0.0, 1.0) : 0.0;
+    double sampleUiEndFrame = sampleModeActive ? sampleWindowEndPos : 0.0;
+    double sampleUiFrame = sampleModeActive ? clampd(readHead, 0.0, sampleUiEndFrame) : 0.0;
+    result.samplePlayhead = sampleModeActive ? std::max(0.0, sampleUiFrame / std::max(sampleRate, 1.f)) : 0.0;
+    result.sampleDuration = sampleModeActive ? std::max(0.0, (sampleUiEndFrame + 1.0) / std::max(sampleRate, 1.f)) : 0.0;
+    result.sampleProgress = sampleModeActive && sampleUiEndFrame > 0.0 ? clampd(sampleUiFrame / sampleUiEndFrame, 0.0, 1.0) : 0.0;
     return result;
   }
 };
@@ -1850,6 +1854,9 @@ struct TemporalDeck::Impl {
   std::atomic<int> platterScratchHoldSamples{0};
   std::atomic<int> platterMotionFreshSamples{0};
   std::atomic<bool> quickSlipTrigger{false};
+  std::atomic<float> pendingSampleSeekNormalized{0.f};
+  std::atomic<uint32_t> pendingSampleSeekRevision{0};
+  uint32_t appliedSampleSeekRevision = 0;
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
@@ -2190,6 +2197,23 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
+  uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
+  if (pendingSeekRevision != impl->appliedSampleSeekRevision) {
+    float seekNorm = clamp(impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed), 0.f, 1.f);
+    if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
+      double sampleEndPos = std::max(0.0, double(impl->engine.sampleFrames - 1));
+      double sampleWindowEndPos = clampd(impl->engine.accessibleLag(params[BUFFER_PARAM].getValue()), 0.0, sampleEndPos);
+      double targetFrame = clampd(double(seekNorm) * sampleWindowEndPos, 0.0, sampleWindowEndPos);
+      impl->engine.samplePlayhead = targetFrame;
+      impl->engine.readHead = targetFrame;
+      impl->engine.scratchLagSamples = 0.0;
+      impl->engine.scratchLagTargetSamples = 0.0;
+      impl->engine.nowCatchActive = false;
+      impl->engine.slipReturning = false;
+      impl->engine.slipFinalCatchActive = false;
+    }
+    impl->appliedSampleSeekRevision = pendingSeekRevision;
+  }
   int scratchHold = impl->platterScratchHoldSamples.load();
   bool wheelScratchHeld = scratchHold > 0;
   if (wheelScratchHeld) {
@@ -2248,14 +2272,25 @@ void TemporalDeck::process(const ProcessArgs &args) {
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
     if (frame.sampleMode && frame.sampleLoaded) {
-      float progressLed = float(frame.sampleProgress) * float(kArcLightCount - 1);
+      // Sample mode fills from left->right. The red limit marker indicates the
+      // effective playback end (full sample end or knob-limited end).
+      float leftLed = float(kArcLightCount - 1);
+      float sampleNewest = std::max(1.f, float(impl->engine.sampleFrames - 1));
+      float limitRatio = clamp(float(frame.accessibleLag / sampleNewest), 0.f, 1.f);
+      float sampleEndLed = (1.f - limitRatio) * leftLed;
+      float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
+      float progressLed = leftLed + (sampleEndLed - leftLed) * progressNorm;
       for (int i = 0; i < kArcLightCount; ++i) {
-        float brightness = (float(i) <= progressLed + 0.001f) ? 0.85f : 0.08f;
+        float brightness = (float(i) + 0.001f >= progressLed) ? 0.85f : 0.08f;
+        if (float(i) < sampleEndLed - 0.5f) {
+          brightness = 0.f;
+        }
         if (std::fabs(float(i) - progressLed) < 0.6f) {
           brightness = 1.f;
         }
         lights[ARC_LIGHT_START + i].setBrightness(brightness);
-        lights[ARC_MAX_LIGHT_START + i].setBrightness(i == (kArcLightCount - 1) ? 0.65f : 0.f);
+        bool isEndLed = std::fabs(float(i) - sampleEndLed) < 0.5f;
+        lights[ARC_MAX_LIGHT_START + i].setBrightness(isEndLed ? 0.65f : 0.f);
       }
     } else {
       int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
@@ -2406,6 +2441,11 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     return false;
   }
   return true;
+}
+
+void TemporalDeck::seekSampleByNormalizedPosition(double normalized) {
+  impl->pendingSampleSeekNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
+  impl->pendingSampleSeekRevision.fetch_add(1, std::memory_order_relaxed);
 }
 
 double TemporalDeck::getUiSamplePlayheadSeconds() const {

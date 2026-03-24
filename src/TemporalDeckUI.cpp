@@ -14,7 +14,11 @@ struct TemporalDeckDisplayWidget : Widget {
   Vec centerMm = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 
+  bool isWithinSampleSeekArc(Vec panelPos) const;
+  void seekSampleFromArcPosition(Vec panelPos);
+
   void draw(const DrawArgs &args) override;
+  void onButton(const event::Button &e) override;
 };
 
 struct TemporalDeckBufferModeWidget : Widget {
@@ -247,6 +251,29 @@ static std::string formatClockTime(double seconds) {
   return string::f("%02d:%02d", mins, secs);
 }
 
+bool TemporalDeckDisplayWidget::isWithinSampleSeekArc(Vec panelPos) const {
+  Vec local = panelPos.minus(centerMm);
+  float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
+  float arcHalfWidth = mm2px(Vec(3.2f, 0.f)).x;
+  float r = local.norm();
+  if (std::fabs(r - arcRadius) > arcHalfWidth) {
+    return false;
+  }
+  float angle = std::atan2(local.y, local.x);
+  return angle <= 0.f && angle >= -float(M_PI);
+}
+
+void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
+  if (!module || !module->isSampleModeEnabled() || !module->hasLoadedSample()) {
+    return;
+  }
+  Vec local = panelPos.minus(centerMm);
+  float angle = std::atan2(local.y, local.x);
+  float arcT = clamp(-angle / float(M_PI), 0.f, 1.f); // right->left along top arc
+  float seekNorm = 1.f - arcT;                         // sample mode maps left->right as start->end
+  module->seekSampleByNormalizedPosition(seekNorm);
+}
+
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   if (!module) {
     return;
@@ -265,7 +292,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
       displayText = string::f("%.0f ms", lagMs);
     }
-    Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 0.86f));
+    // Keep readouts above the arc LED strip so they don't visually collide.
+    Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 1.02f));
 
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFontSize(args.vg, 11.5f);
@@ -281,6 +309,16 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
     }
   }
   nvgRestore(args.vg);
+}
+
+void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module &&
+      module->isSampleModeEnabled() && module->hasLoadedSample() && isWithinSampleSeekArc(e.pos)) {
+    seekSampleFromArcPosition(e.pos);
+    e.consume(this);
+    return;
+  }
+  Widget::onButton(e);
 }
 
 void TemporalDeckBufferModeWidget::draw(const DrawArgs &args) {
