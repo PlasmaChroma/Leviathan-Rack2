@@ -2,6 +2,7 @@
 #include "codec.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -58,6 +60,18 @@ static int resampledFrameCount(int sourceFrames, float sourceRate, float targetR
 
 static double clampd(double x, double a, double b) {
   return std::max(a, std::min(x, b));
+}
+
+template <size_t N>
+static void smoothLedBrightness(std::array<float, N> &values, float sideWeight = 0.22f) {
+  sideWeight = clamp(sideWeight, 0.f, 0.49f);
+  float centerWeight = 1.f - 2.f * sideWeight;
+  std::array<float, N> src = values;
+  for (size_t i = 0; i < N; ++i) {
+    float prev = src[i > 0 ? i - 1 : i];
+    float next = src[i + 1 < N ? i + 1 : i];
+    values[i] = clamp(prev * sideWeight + src[i] * centerWeight + next * sideWeight, 0.f, 1.f);
+  }
 }
 
 static void resampleSampleChannel(const std::vector<float> &src, float sourceRate, float targetRate, int outFrames,
@@ -1716,6 +1730,8 @@ struct TemporalDeck::Impl {
   bool slipLatched = false;
   bool sampleModeEnabled = false;
   bool sampleAutoPlayOnLoad = true;
+  std::mutex sampleStateMutex;
+  std::atomic<bool> pendingSampleStateApply{false};
   std::string samplePath;
   std::string sampleDisplayName;
   DecodedSampleFile decodedSample;
@@ -1868,11 +1884,20 @@ void TemporalDeck::applyBufferDurationMode(int mode) {
 void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->cachedSampleRate = sampleRate;
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
+  DecodedSampleFile decodedSample;
+  bool sampleModeEnabled = false;
+  bool sampleAutoPlayOnLoad = true;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    decodedSample = impl->decodedSample;
+    sampleModeEnabled = impl->sampleModeEnabled;
+    sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
+  }
   impl->engine.bufferDurationMode = mode;
   impl->engine.reset(impl->cachedSampleRate);
-  impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
-  if (impl->decodedSample.frames > 0 && !impl->decodedSample.left.empty()) {
-    int outFrames = resampledFrameCount(impl->decodedSample.frames, impl->decodedSample.sampleRate, impl->cachedSampleRate);
+  impl->engine.sampleModeEnabled = sampleModeEnabled;
+  if (decodedSample.frames > 0 && !decodedSample.left.empty()) {
+    int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, impl->cachedSampleRate);
     int maxFrames = maxFramesForModeAtSampleRate(impl->engine.bufferDurationMode, impl->cachedSampleRate);
     bool truncated = false;
     if (outFrames > maxFrames) {
@@ -1888,12 +1913,12 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
     }
     std::vector<float> left;
     std::vector<float> right;
-    resampleSampleChannel(impl->decodedSample.left, impl->decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left);
-    if (impl->decodedSample.channels > 1) {
-      resampleSampleChannel(impl->decodedSample.right, impl->decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right);
+    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left);
+    if (decodedSample.channels > 1) {
+      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right);
     }
-    impl->engine.installSample(left, right, outFrames, impl->sampleAutoPlayOnLoad, truncated || impl->decodedSample.truncated);
-    impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
+    impl->engine.installSample(left, right, outFrames, sampleAutoPlayOnLoad, truncated || decodedSample.truncated);
+    impl->engine.sampleModeEnabled = sampleModeEnabled;
   }
   impl->uiSampleRate.store(impl->cachedSampleRate);
   impl->uiLagSamples.store(0.0);
@@ -1929,6 +1954,15 @@ void TemporalDeck::onSampleRateChange() {
 
 json_t *TemporalDeck::dataToJson() {
   json_t *root = json_object();
+  bool sampleModeEnabled = false;
+  bool sampleAutoPlayOnLoad = true;
+  std::string samplePath;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    sampleModeEnabled = impl->sampleModeEnabled;
+    sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
+    samplePath = impl->samplePath;
+  }
   json_object_set_new(root, "freezeLatched", json_boolean(impl->freezeLatched));
   json_object_set_new(root, "reverseLatched", json_boolean(impl->reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
@@ -1945,10 +1979,10 @@ json_t *TemporalDeck::dataToJson() {
   }
   json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
-  json_object_set_new(root, "sampleModeEnabled", json_boolean(impl->sampleModeEnabled));
-  json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(impl->sampleAutoPlayOnLoad));
-  if (!impl->samplePath.empty()) {
-    json_object_set_new(root, "samplePath", json_string(impl->samplePath.c_str()));
+  json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
+  json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(sampleAutoPlayOnLoad));
+  if (!samplePath.empty()) {
+    json_object_set_new(root, "samplePath", json_string(samplePath.c_str()));
   }
   return root;
 }
@@ -2013,9 +2047,11 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
   }
   if (sampleModeEnabledJ) {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     impl->sampleModeEnabled = json_boolean_value(sampleModeEnabledJ);
   }
   if (sampleAutoPlayOnLoadJ) {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     impl->sampleAutoPlayOnLoad = json_boolean_value(sampleAutoPlayOnLoadJ);
   }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
@@ -2032,8 +2068,14 @@ void TemporalDeck::dataFromJson(json_t *root) {
 void TemporalDeck::process(const ProcessArgs &args) {
   int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
   bool bufferModeChanged = requestedBufferMode != impl->engine.bufferDurationMode;
-  if (bufferModeChanged || args.sampleRate != impl->cachedSampleRate) {
+  bool sampleStateApplyRequested = impl->pendingSampleStateApply.exchange(false);
+  if (bufferModeChanged || args.sampleRate != impl->cachedSampleRate || sampleStateApplyRequested) {
     applySampleRateChange(args.sampleRate);
+  }
+  bool desiredSampleModeEnabled = false;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    desiredSampleModeEnabled = impl->sampleModeEnabled;
   }
 
   if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
@@ -2050,7 +2092,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (next) {
       impl->freezeLatched = false;
       impl->slipLatched = false;
-      if (impl->sampleModeEnabled && impl->engine.sampleLoaded) {
+      if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
         // In sample mode, REV should have immediate transport effect.
         impl->engine.sampleTransportPlaying = true;
         impl->uiSampleTransportPlaying.store(true);
@@ -2092,7 +2134,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
-  impl->engine.sampleModeEnabled = impl->sampleModeEnabled;
+  impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
   uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
   if (pendingSeekRevision != impl->appliedSampleSeekRevision) {
     float seekNorm = clamp(impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed), 0.f, 1.f);
@@ -2170,10 +2212,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSampleDurationSeconds.store(frame.sampleDuration);
   impl->uiSampleProgress.store(frame.sampleProgress);
 
-  impl->sampleModeEnabled = impl->engine.sampleModeEnabled;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    impl->sampleModeEnabled = impl->engine.sampleModeEnabled;
+  }
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
+    std::array<float, kArcLightCount> arcYellow{};
+    std::array<float, kArcLightCount> arcRed{};
     if (frame.sampleMode && frame.sampleLoaded) {
       // Sample mode fills from left->right. The red limit marker indicates the
       // effective playback end (full sample end or knob-limited end).
@@ -2199,8 +2246,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // Keep endpoint marker visually red-only (no yellow overlap/orange).
           brightness = 0.f;
         }
-        lights[ARC_LIGHT_START + i].setBrightness(brightness);
-        lights[ARC_MAX_LIGHT_START + i].setBrightness(isEndLed ? 0.65f : 0.f);
+        arcYellow[i] = brightness;
+        arcRed[i] = isEndLed ? 0.65f : 0.f;
       }
     } else {
       int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
@@ -2222,10 +2269,25 @@ void TemporalDeck::process(const ProcessArgs &args) {
         if (float(i) > limitLed + 0.5f) {
           brightness = 0.f;
         }
-        lights[ARC_LIGHT_START + i].setBrightness(brightness);
+        arcYellow[i] = brightness;
         bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
-        lights[ARC_MAX_LIGHT_START + i].setBrightness(isLimitLed ? 1.f : 0.f);
+        arcRed[i] = isLimitLed ? 1.f : 0.f;
       }
+    }
+
+    // Small spatial blend to remove visible dead-zones between LEDs while
+    // preserving endpoint markers.
+    smoothLedBrightness(arcYellow);
+    if (frame.sampleMode && frame.sampleLoaded) {
+      for (int i = 0; i < kArcLightCount; ++i) {
+        if (arcRed[i] > 0.f) {
+          arcYellow[i] = 0.f;
+        }
+      }
+    }
+    for (int i = 0; i < kArcLightCount; ++i) {
+      lights[ARC_LIGHT_START + i].setBrightness(arcYellow[i]);
+      lights[ARC_MAX_LIGHT_START + i].setBrightness(arcRed[i]);
     }
   }
 }
@@ -2287,16 +2349,24 @@ bool TemporalDeck::hasLoadedSample() const {
 }
 
 bool TemporalDeck::isSampleAutoPlayOnLoadEnabled() const {
+  std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
   return impl->sampleAutoPlayOnLoad;
 }
 
 void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
-  impl->sampleAutoPlayOnLoad = enabled;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    impl->sampleAutoPlayOnLoad = enabled;
+  }
+  impl->pendingSampleStateApply.store(true);
 }
 
 void TemporalDeck::setSampleModeEnabled(bool enabled) {
-  impl->sampleModeEnabled = enabled;
-  impl->engine.sampleModeEnabled = enabled;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    impl->sampleModeEnabled = enabled;
+  }
+  impl->pendingSampleStateApply.store(true);
   impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded);
 }
 
@@ -2321,15 +2391,18 @@ void TemporalDeck::stopSampleTransport() {
 }
 
 void TemporalDeck::clearLoadedSample() {
-  impl->samplePath.clear();
-  impl->sampleDisplayName.clear();
-  impl->decodedSample = DecodedSampleFile();
-  impl->sampleModeEnabled = false;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    impl->samplePath.clear();
+    impl->sampleDisplayName.clear();
+    impl->decodedSample = DecodedSampleFile();
+    impl->sampleModeEnabled = false;
+  }
   impl->bufferDurationMode.store(BUFFER_DURATION_10S);
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(BUFFER_DURATION_10S);
   }
-  applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
+  impl->pendingSampleStateApply.store(true);
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
@@ -2343,17 +2416,14 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(targetMode);
   }
-  impl->samplePath = path;
-  impl->sampleDisplayName = system::getFilename(path);
-  impl->decodedSample = std::move(decoded);
-  impl->sampleModeEnabled = true;
-  applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
-  if (!impl->engine.sampleLoaded) {
-    if (errorOut) {
-      *errorOut = "Loaded sample could not be installed into the current sample-rate buffer";
-    }
-    return false;
+  {
+    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+    impl->samplePath = path;
+    impl->sampleDisplayName = system::getFilename(path);
+    impl->decodedSample = std::move(decoded);
+    impl->sampleModeEnabled = true;
   }
+  impl->pendingSampleStateApply.store(true);
   return true;
 }
 
@@ -2375,6 +2445,7 @@ double TemporalDeck::getUiSampleProgress() const {
 }
 
 std::string TemporalDeck::getLoadedSampleDisplayName() const {
+  std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
   return impl->sampleDisplayName;
 }
 

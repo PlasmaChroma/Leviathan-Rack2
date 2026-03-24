@@ -956,7 +956,7 @@ struct TemporalDeckWidget : ModuleWidget {
     if (module) {
       menu->addChild(createMenuLabel("Sample"));
       std::string loadedSampleName = module->getLoadedSampleDisplayName();
-      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : loadedSampleName;
+      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
       menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
         osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
         char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
@@ -973,17 +973,18 @@ struct TemporalDeckWidget : ModuleWidget {
         }
       }));
       menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
-      menu->addChild(createCheckMenuItem("Enable sample mode", "", [=]() { return module->isSampleModeEnabled(); },
-                                         [=]() { module->setSampleModeEnabled(!module->isSampleModeEnabled()); }));
       menu->addChild(createCheckMenuItem("Auto-play on load", "",
                                          [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
                                          [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
       if (module->hasLoadedSample()) {
-        std::string info = loadedSampleName;
-        if (module->wasLoadedSampleTruncated()) {
-          info += " (truncated)";
-        }
-        menu->addChild(createMenuLabel(info));
+        menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
+          submenu->addChild(createMenuLabel(loadedSampleName));
+          submenu->addChild(createMenuLabel(
+            string::f("Length: %.2f s", std::max(0.0, module->getUiSampleDurationSeconds()))));
+          if (module->wasLoadedSampleTruncated()) {
+            submenu->addChild(createMenuLabel("Truncated to current buffer limit"));
+          }
+        }));
       }
       menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Advanced"));
