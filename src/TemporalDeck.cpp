@@ -1294,6 +1294,7 @@ struct TemporalDeckEngine {
     bool sampleMode = false;
     bool sampleLoaded = false;
     bool sampleTransportPlaying = false;
+    bool autoFreezeRequested = false;
   };
 
   FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
@@ -1307,6 +1308,7 @@ struct TemporalDeckEngine {
     double prevReadHead = readHead;
     float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
     bool sampleModeActive = sampleModeEnabled && sampleLoaded && sampleFrames > 0;
+    bool autoFreezeRequested = false;
     bool pinToNow = false;
     bool keepSlipLagAligned = false;
     bool keepNowCatchLagAligned = false;
@@ -1318,7 +1320,7 @@ struct TemporalDeckEngine {
     lastSlipReturnMode = slipReturnMode;
 
     double sampleEndPos = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : 0.0;
-    double sampleWindowEndPos = sampleModeActive ? clampLag(accessibleLag(bufferKnob), sampleEndPos) : 0.0;
+    double sampleWindowEndPos = sampleModeActive ? sampleEndPos * double(clamp(bufferKnob, 0.f, 1.f)) : 0.0;
     double limit = sampleModeActive ? sampleWindowEndPos : accessibleLag(bufferKnob);
     double minLag = 0.0;
     double maxLag = sampleModeActive ? sampleWindowEndPos : std::max(limit, 0.0);
@@ -1420,11 +1422,15 @@ struct TemporalDeckEngine {
       samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
       if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
         samplePlayhead = sampleWindowEndPos;
-        sampleTransportPlaying = false;
+        if (!freezeForScratchModel) {
+          autoFreezeRequested = true;
+        }
       }
       if (samplePlayhead <= 0.0 && speed < 0.f) {
         samplePlayhead = 0.0;
-        sampleTransportPlaying = false;
+        if (!freezeForScratchModel) {
+          autoFreezeRequested = true;
+        }
       }
     }
 
@@ -1439,6 +1445,9 @@ struct TemporalDeckEngine {
       !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
     if (reverseAtOldestEdge && speed < 0.f) {
       speed = 0.f;
+      if (!freezeForScratchModel) {
+        autoFreezeRequested = true;
+      }
     }
 
     if (manualScratch) {
@@ -1633,14 +1642,21 @@ struct TemporalDeckEngine {
       // cartridge darkening.
       motionAmount *= 0.4f;
     }
-    auto wet = sampleModeActive ? readSampleBounded(readHead, effectiveScratchInterpolation) : buffer.readCubic(readHead);
-    if (scratchReadPath && !sampleModeActive) {
-      if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
-        wet = buffer.readHighQuality(readHead);
-      } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
-        wet = buffer.readSinc(readHead);
-      } else {
-        wet = buffer.readCubic(readHead);
+    std::pair<float, float> wet;
+    if (sampleModeActive) {
+      // Match live-mode behavior: normal transport playback uses cubic.
+      int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : TemporalDeck::SCRATCH_INTERP_CUBIC;
+      wet = readSampleBounded(readHead, sampleInterp);
+    } else {
+      wet = buffer.readCubic(readHead);
+      if (scratchReadPath) {
+        if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
+          wet = buffer.readHighQuality(readHead);
+        } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
+          wet = buffer.readSinc(readHead);
+        } else {
+          wet = buffer.readCubic(readHead);
+        }
       }
     }
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
@@ -1789,6 +1805,7 @@ struct TemporalDeckEngine {
     result.sampleMode = sampleModeActive;
     result.sampleLoaded = sampleLoaded;
     result.sampleTransportPlaying = sampleTransportPlaying;
+    result.autoFreezeRequested = autoFreezeRequested;
     double sampleUiEndFrame = sampleModeActive ? sampleWindowEndPos : 0.0;
     double sampleUiFrame = sampleModeActive ? clampd(readHead, 0.0, sampleUiEndFrame) : 0.0;
     result.samplePlayhead = sampleModeActive ? std::max(0.0, sampleUiFrame / std::max(sampleRate, 1.f)) : 0.0;
@@ -2006,6 +2023,13 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
       outFrames = maxFrames;
       truncated = true;
     }
+    if (outFrames > 0) {
+      float sr = std::max(impl->cachedSampleRate, 1.f);
+      float sampleSeconds = std::max(float(outFrames) / sr, 1.f / sr);
+      // In sample mode, allocate only as much buffer as needed for the loaded
+      // material instead of always reserving the full mode capacity.
+      impl->engine.buffer.reset(impl->cachedSampleRate, sampleSeconds, isMonoBufferMode(mode));
+    }
     std::vector<float> left;
     std::vector<float> right;
     resampleSampleChannel(impl->decodedSample.left, impl->decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left);
@@ -2026,6 +2050,13 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->uiSamplePlayheadSeconds.store(0.0);
   impl->uiSampleDurationSeconds.store(impl->engine.sampleLoaded ? double(impl->engine.sampleFrames) / std::max(double(impl->cachedSampleRate), 1.0) : 0.0);
   impl->uiSampleProgress.store(0.0);
+  if (paramQuantities[BUFFER_PARAM]) {
+    float displaySeconds = usableBufferSecondsForMode(mode);
+    if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
+      displaySeconds = float(impl->engine.sampleFrames) / std::max(impl->cachedSampleRate, 1.f);
+    }
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = displaySeconds;
+  }
   impl->uiPublishTimerSec = 0.f;
   impl->platterScratchHoldSamples.store(0);
   impl->platterMotionFreshSamples.store(0);
@@ -2163,6 +2194,11 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (next) {
       impl->freezeLatched = false;
       impl->slipLatched = false;
+      if (impl->sampleModeEnabled && impl->engine.sampleLoaded) {
+        // In sample mode, REV should have immediate transport effect.
+        impl->engine.sampleTransportPlaying = true;
+        impl->uiSampleTransportPlaying.store(true);
+      }
     }
   }
   if (impl->slipTrigger.process(params[SLIP_PARAM].getValue())) {
@@ -2192,6 +2228,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
   float positionCv = inputs[POSITION_CV_INPUT].getVoltage();
   float rateCv = inputs[RATE_CV_INPUT].getVoltage();
   bool rateCvConnected = inputs[RATE_CV_INPUT].isConnected();
+  bool freezeGateHigh = inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
+  bool scratchGateHigh = inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold;
+  bool scratchGateConnected = inputs[SCRATCH_GATE_INPUT].isConnected();
+  bool positionConnected = inputs[POSITION_CV_INPUT].isConnected();
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
@@ -2202,8 +2242,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
     float seekNorm = clamp(impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed), 0.f, 1.f);
     if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
       double sampleEndPos = std::max(0.0, double(impl->engine.sampleFrames - 1));
-      double sampleWindowEndPos = clampd(impl->engine.accessibleLag(params[BUFFER_PARAM].getValue()), 0.0, sampleEndPos);
-      double targetFrame = clampd(double(seekNorm) * sampleWindowEndPos, 0.0, sampleWindowEndPos);
+      double sampleWindowEndPos = sampleEndPos * double(clamp(params[BUFFER_PARAM].getValue(), 0.f, 1.f));
+      // Arc seek maps to absolute sample time over the full arc; window limit
+      // then clamps that target if it lies past the current playback cap.
+      double targetFrame = clampd(double(seekNorm) * sampleEndPos, 0.0, sampleWindowEndPos);
       impl->engine.samplePlayhead = targetFrame;
       impl->engine.readHead = targetFrame;
       impl->engine.scratchLagSamples = 0.0;
@@ -2230,12 +2272,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine.process(args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(), params[RATE_PARAM].getValue(),
                        params[MIX_PARAM].getValue(), params[FEEDBACK_PARAM].getValue(), impl->freezeLatched,
                        impl->reverseLatched, impl->slipLatched, impl->quickSlipTrigger.exchange(false),
-                       inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold,
-                       inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold,
-                       inputs[SCRATCH_GATE_INPUT].isConnected(), inputs[POSITION_CV_INPUT].isConnected(), positionCv,
+                       freezeGateHigh, scratchGateHigh,
+                       scratchGateConnected, positionConnected, positionCv,
                        rateCv, rateCvConnected, impl->platterTouched.load(), wheelScratchHeld, platterMotionActive,
                        impl->platterGestureRevision.load(), impl->platterLagTarget.load(),
                        impl->platterGestureVelocity.load(), wheelDelta);
+
+  if (frame.autoFreezeRequested && !impl->freezeLatched && !freezeGateHigh) {
+    impl->freezeLatched = true;
+    impl->reverseLatched = false;
+    impl->slipLatched = false;
+  }
 
   outputs[OUTPUT_L_OUTPUT].setVoltage(frame.outL);
   outputs[OUTPUT_R_OUTPUT].setVoltage(frame.outR);
@@ -2279,14 +2326,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
       float limitRatio = clamp(float(frame.accessibleLag / sampleNewest), 0.f, 1.f);
       float sampleEndLed = (1.f - limitRatio) * leftLed;
       float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
-      float progressLed = leftLed + (sampleEndLed - leftLed) * progressNorm;
+      float ledSpan = std::max(0.f, leftLed - sampleEndLed);
+      float progressLedUnits = progressNorm * ledSpan;
       for (int i = 0; i < kArcLightCount; ++i) {
-        float brightness = (float(i) + 0.001f >= progressLed) ? 0.85f : 0.08f;
-        if (float(i) < sampleEndLed - 0.5f) {
+        // Progressive fill from left to right with fractional leading LED.
+        // At start, all LEDs are off; the leading LED ramps in proportionally.
+        float ledFromStart = leftLed - float(i);
+        float fill = clamp(progressLedUnits - ledFromStart, 0.f, 1.f);
+        float brightness = 0.92f * fill;
+        // Keep anything beyond the effective sample end dark.
+        if (float(i) + 0.5f < sampleEndLed) {
           brightness = 0.f;
-        }
-        if (std::fabs(float(i) - progressLed) < 0.6f) {
-          brightness = 1.f;
         }
         lights[ARC_LIGHT_START + i].setBrightness(brightness);
         bool isEndLed = std::fabs(float(i) - sampleEndLed) < 0.5f;

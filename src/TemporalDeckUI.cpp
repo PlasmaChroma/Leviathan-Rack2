@@ -13,12 +13,17 @@ struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
   Vec centerMm = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
+  bool arcScrubbing = false;
 
   bool isWithinSampleSeekArc(Vec panelPos) const;
   void seekSampleFromArcPosition(Vec panelPos);
+  Vec currentPanelMousePos() const;
 
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
+  void onDragStart(const event::DragStart &e) override;
+  void onDragMove(const event::DragMove &e) override;
+  void onDragEnd(const event::DragEnd &e) override;
 };
 
 struct TemporalDeckBufferModeWidget : Widget {
@@ -251,6 +256,25 @@ static std::string formatClockTime(double seconds) {
   return string::f("%02d:%02d", mins, secs);
 }
 
+static bool topArcAngleFromLocal(Vec local, float *angleOut) {
+  float angle = std::atan2(local.y, local.x);
+  constexpr float kEndpointEpsilon = 0.10f;
+  if (angle > 0.f) {
+    // atan2 can report near +pi / +0 at endpoints depending on tiny y jitter.
+    if (angle >= float(M_PI) - kEndpointEpsilon) {
+      angle = -float(M_PI);
+    } else if (angle <= kEndpointEpsilon) {
+      angle = 0.f;
+    } else {
+      return false;
+    }
+  }
+  if (angleOut) {
+    *angleOut = angle;
+  }
+  return angle <= 0.f && angle >= -float(M_PI);
+}
+
 bool TemporalDeckDisplayWidget::isWithinSampleSeekArc(Vec panelPos) const {
   Vec local = panelPos.minus(centerMm);
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
@@ -259,8 +283,8 @@ bool TemporalDeckDisplayWidget::isWithinSampleSeekArc(Vec panelPos) const {
   if (std::fabs(r - arcRadius) > arcHalfWidth) {
     return false;
   }
-  float angle = std::atan2(local.y, local.x);
-  return angle <= 0.f && angle >= -float(M_PI);
+  float angle = 0.f;
+  return topArcAngleFromLocal(local, &angle);
 }
 
 void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
@@ -268,10 +292,20 @@ void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
     return;
   }
   Vec local = panelPos.minus(centerMm);
-  float angle = std::atan2(local.y, local.x);
+  float angle = 0.f;
+  if (!topArcAngleFromLocal(local, &angle)) {
+    return;
+  }
   float arcT = clamp(-angle / float(M_PI), 0.f, 1.f); // right->left along top arc
   float seekNorm = 1.f - arcT;                         // sample mode maps left->right as start->end
   module->seekSampleByNormalizedPosition(seekNorm);
+}
+
+Vec TemporalDeckDisplayWidget::currentPanelMousePos() const {
+  if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+    return Vec();
+  }
+  return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
@@ -312,13 +346,48 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
 }
 
 void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
-  if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module &&
-      module->isSampleModeEnabled() && module->hasLoadedSample() && isWithinSampleSeekArc(e.pos)) {
-    seekSampleFromArcPosition(e.pos);
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
+        isWithinSampleSeekArc(e.pos)) {
+      arcScrubbing = true;
+      seekSampleFromArcPosition(e.pos);
+      e.consume(this);
+      return;
+    }
+    if (e.action == GLFW_RELEASE && arcScrubbing) {
+      arcScrubbing = false;
+      e.consume(this);
+      return;
+    }
+  }
+  Widget::onButton(e);
+}
+
+void TemporalDeckDisplayWidget::onDragStart(const event::DragStart &e) {
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && arcScrubbing) {
+    seekSampleFromArcPosition(currentPanelMousePos());
     e.consume(this);
     return;
   }
-  Widget::onButton(e);
+  Widget::onDragStart(e);
+}
+
+void TemporalDeckDisplayWidget::onDragMove(const event::DragMove &e) {
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && arcScrubbing) {
+    seekSampleFromArcPosition(currentPanelMousePos());
+    e.consume(this);
+    return;
+  }
+  Widget::onDragMove(e);
+}
+
+void TemporalDeckDisplayWidget::onDragEnd(const event::DragEnd &e) {
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && arcScrubbing) {
+    arcScrubbing = false;
+    e.consume(this);
+    return;
+  }
+  Widget::onDragEnd(e);
 }
 
 void TemporalDeckBufferModeWidget::draw(const DrawArgs &args) {
