@@ -30,9 +30,9 @@ struct TemporalDeck final : Module {
   static constexpr int SLIP_RETURN_INSTANT = 2;
   static constexpr int SLIP_RETURN_COUNT = 3;
 
-  static constexpr int BUFFER_DURATION_8S = 0;
-  static constexpr int BUFFER_DURATION_16S = 1;
-  static constexpr int BUFFER_DURATION_8M = 2;
+  static constexpr int BUFFER_DURATION_10S = 0;
+  static constexpr int BUFFER_DURATION_20S = 1;
+  static constexpr int BUFFER_DURATION_10M_STEREO = 2;
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
   static constexpr int BUFFER_DURATION_COUNT = 4;
 

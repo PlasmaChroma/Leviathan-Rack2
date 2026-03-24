@@ -956,9 +956,9 @@ struct TemporalDeckWidget : ModuleWidget {
     if (module) {
       menu->addChild(createMenuLabel("Sample"));
       std::string loadedSampleName = module->getLoadedSampleDisplayName();
-      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV only" : loadedSampleName;
+      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : loadedSampleName;
       menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
-        osdialog_filters *filters = osdialog_filters_parse("WAV:wav,WAV");
+        osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
         char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
         osdialog_filters_free(filters);
         if (!pathC) {
@@ -978,11 +978,6 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createCheckMenuItem("Auto-play on load", "",
                                          [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
                                          [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
-      menu->addChild(createMenuItem(module->isSampleTransportPlaying() ? "Pause sample" : "Play sample", "",
-                                    [=]() { module->setSampleTransportPlaying(!module->isSampleTransportPlaying()); },
-                                    !module->hasLoadedSample()));
-      menu->addChild(createMenuItem("Stop sample", "", [=]() { module->stopSampleTransport(); },
-                                    !module->hasLoadedSample()));
       if (module->hasLoadedSample()) {
         std::string info = loadedSampleName;
         if (module->wasLoadedSampleTruncated()) {
@@ -995,7 +990,7 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
         auto bufferModeMenuLabel = [=](int mode) {
           std::string label = TemporalDeck::bufferDurationLabelFor(mode);
-          if (mode != TemporalDeck::BUFFER_DURATION_8M && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
+          if (mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
             return label;
           }
           // 10-minute modes use 601s internal allocation (extra 1s headroom).

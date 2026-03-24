@@ -1,4 +1,5 @@
 #include "TemporalDeck.hpp"
+#include "codec.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -33,160 +34,14 @@ static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBu
 
 static bool isMonoBufferMode(int index) { return index == TemporalDeck::BUFFER_DURATION_10M_MONO; }
 
-
-struct DecodedSampleFile {
-  std::vector<float> left;
-  std::vector<float> right;
-  int channels = 0;
-  int frames = 0;
-  float sampleRate = 0.f;
-  bool truncated = false;
-};
-
-static uint16_t readLe16(const uint8_t *data) {
-  return uint16_t(data[0]) | (uint16_t(data[1]) << 8);
-}
-
-static uint32_t readLe32(const uint8_t *data) {
-  return uint32_t(data[0]) | (uint32_t(data[1]) << 8) | (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
-}
-
-static int32_t signExtend24(uint32_t x) {
-  return (x & 0x00800000u) ? int32_t(x | 0xFF000000u) : int32_t(x);
-}
-
-static float decodePcmSample(const uint8_t *src, int bitsPerSample, bool isFloat) {
-  if (isFloat && bitsPerSample == 32) {
-    float value = 0.f;
-    std::memcpy(&value, src, sizeof(float));
-    return clamp(value, -1.f, 1.f);
-  }
-
-  switch (bitsPerSample) {
-  case 8:
-    return (float(src[0]) - 128.f) / 128.f;
-  case 16:
-    return clamp(float(int16_t(readLe16(src))) / 32768.f, -1.f, 1.f);
-  case 24:
-    return clamp(float(signExtend24(readLe32(src) & 0x00FFFFFFu)) / 8388608.f, -1.f, 1.f);
-  case 32:
-    return clamp(float(int32_t(readLe32(src))) / 2147483648.f, -1.f, 1.f);
-  default:
-    return 0.f;
-  }
-}
-
-static bool decodeWaveFile(const std::string &path, DecodedSampleFile *out, std::string *errorOut) {
-  if (!out) {
-    return false;
-  }
-
-  auto fail = [&](const char *message) {
-    if (errorOut) {
-      *errorOut = message;
-    }
-    return false;
-  };
-
-  std::vector<uint8_t> data;
-  try {
-    data = system::readFile(path);
-  } catch (const std::exception &e) {
-    if (errorOut) {
-      *errorOut = e.what();
-    }
-    return false;
-  }
-
-  if (data.size() < 44) {
-    return fail("File is too small to be a WAV file");
-  }
-  if (std::memcmp(data.data(), "RIFF", 4) != 0 || std::memcmp(data.data() + 8, "WAVE", 4) != 0) {
-    return fail("Only RIFF/WAVE files are supported in this build");
-  }
-
-  const uint8_t *fmtChunk = nullptr;
-  size_t fmtSize = 0;
-  const uint8_t *dataChunk = nullptr;
-  size_t dataSize = 0;
-  size_t offset = 12;
-  while (offset + 8 <= data.size()) {
-    const uint8_t *chunk = data.data() + offset;
-    uint32_t chunkSize = readLe32(chunk + 4);
-    size_t payloadOffset = offset + 8;
-    size_t paddedChunkSize = (size_t(chunkSize) + 1u) & ~size_t(1u);
-    if (payloadOffset + size_t(chunkSize) > data.size()) {
-      return fail("WAV file has a truncated chunk");
-    }
-    if (std::memcmp(chunk, "fmt ", 4) == 0) {
-      fmtChunk = data.data() + payloadOffset;
-      fmtSize = chunkSize;
-    } else if (std::memcmp(chunk, "data", 4) == 0) {
-      dataChunk = data.data() + payloadOffset;
-      dataSize = chunkSize;
-    }
-    offset = payloadOffset + paddedChunkSize;
-  }
-
-  if (!fmtChunk || fmtSize < 16 || !dataChunk || dataSize == 0) {
-    return fail("WAV file is missing fmt or data chunk");
-  }
-
-  uint16_t formatTag = readLe16(fmtChunk + 0);
-  uint16_t channels = readLe16(fmtChunk + 2);
-  uint32_t sampleRate = readLe32(fmtChunk + 4);
-  uint16_t blockAlign = readLe16(fmtChunk + 12);
-  uint16_t bitsPerSample = readLe16(fmtChunk + 14);
-  bool isFloat = false;
-  if (formatTag == 3) {
-    isFloat = true;
-  } else if (formatTag != 1) {
-    return fail("Only PCM and 32-bit float WAV files are supported in this build");
-  }
-
-  if (channels < 1 || channels > 2) {
-    return fail("Only mono and stereo WAV files are supported in this build");
-  }
-  if (sampleRate == 0 || blockAlign == 0 || bitsPerSample == 0) {
-    return fail("WAV format chunk is invalid");
-  }
-
-  int bytesPerSample = (bitsPerSample + 7) / 8;
-  if (blockAlign < channels * bytesPerSample) {
-    return fail("WAV block alignment is invalid");
-  }
-  int frames = int(dataSize / blockAlign);
-  if (frames <= 0) {
-    return fail("WAV file contains no sample frames");
-  }
-
-  out->left.assign(frames, 0.f);
-  if (channels > 1) {
-    out->right.assign(frames, 0.f);
-  } else {
-    out->right.clear();
-  }
-
-  for (int i = 0; i < frames; ++i) {
-    const uint8_t *frame = dataChunk + size_t(i) * blockAlign;
-    out->left[i] = decodePcmSample(frame, bitsPerSample, isFloat);
-    if (channels > 1) {
-      out->right[i] = decodePcmSample(frame + bytesPerSample, bitsPerSample, isFloat);
-    }
-  }
-
-  out->channels = channels;
-  out->frames = frames;
-  out->sampleRate = float(sampleRate);
-  out->truncated = false;
-  return true;
-}
+using temporaldeck::DecodedSampleFile;
+using temporaldeck::decodeSampleFile;
 
 static int chooseSampleBufferMode(const DecodedSampleFile &sample) {
   if (sample.channels <= 1) {
     return TemporalDeck::BUFFER_DURATION_10M_MONO;
   }
-  return TemporalDeck::BUFFER_DURATION_8M;
+  return TemporalDeck::BUFFER_DURATION_10M_STEREO;
 }
 
 static int maxFramesForModeAtSampleRate(int mode, float sampleRate) {
@@ -492,9 +347,9 @@ struct TemporalDeckEngine {
     CARTRIDGE_COUNT
   };
   enum BufferDurationMode {
-    BUFFER_DURATION_8S,
-    BUFFER_DURATION_16S,
-    BUFFER_DURATION_8MIN,
+    BUFFER_DURATION_10S,
+    BUFFER_DURATION_20S,
+    BUFFER_DURATION_10MIN_STEREO,
     BUFFER_DURATION_10MIN_MONO,
     BUFFER_DURATION_COUNT
   };
@@ -507,9 +362,10 @@ struct TemporalDeckEngine {
   static_assert(CARTRIDGE_QBERT == TemporalDeck::CARTRIDGE_QBERT, "Cartridge enum mismatch: Q.Bert");
   static_assert(CARTRIDGE_LOFI == TemporalDeck::CARTRIDGE_LOFI, "Cartridge enum mismatch: Lo-Fi");
   static_assert(CARTRIDGE_COUNT == TemporalDeck::CARTRIDGE_COUNT, "Cartridge enum mismatch: count");
-  static_assert(BUFFER_DURATION_8S == TemporalDeck::BUFFER_DURATION_8S, "Buffer duration enum mismatch: 8s");
-  static_assert(BUFFER_DURATION_16S == TemporalDeck::BUFFER_DURATION_16S, "Buffer duration enum mismatch: 16s");
-  static_assert(BUFFER_DURATION_8MIN == TemporalDeck::BUFFER_DURATION_8M, "Buffer duration enum mismatch: 8m");
+  static_assert(BUFFER_DURATION_10S == TemporalDeck::BUFFER_DURATION_10S, "Buffer duration enum mismatch: 10s");
+  static_assert(BUFFER_DURATION_20S == TemporalDeck::BUFFER_DURATION_20S, "Buffer duration enum mismatch: 20s");
+  static_assert(BUFFER_DURATION_10MIN_STEREO == TemporalDeck::BUFFER_DURATION_10M_STEREO,
+                "Buffer duration enum mismatch: 10m stereo");
   static_assert(BUFFER_DURATION_10MIN_MONO == TemporalDeck::BUFFER_DURATION_10M_MONO,
                 "Buffer duration enum mismatch: 10m mono");
   static_assert(BUFFER_DURATION_COUNT == TemporalDeck::BUFFER_DURATION_COUNT,
@@ -599,7 +455,7 @@ struct TemporalDeckEngine {
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
-  int bufferDurationMode = BUFFER_DURATION_8S;
+  int bufferDurationMode = BUFFER_DURATION_10S;
   int lastSlipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   CartridgeChannelState cartridgeLeft;
   CartridgeChannelState cartridgeRight;
@@ -1890,7 +1746,7 @@ struct TemporalDeck::Impl {
   bool platterCursorLock = false;
   bool freezeTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
-  std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_8S};
+  std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
 };
 
@@ -1985,13 +1841,13 @@ const char *TemporalDeck::slipReturnLabelFor(int index) {
 
 const char *TemporalDeck::bufferDurationLabelFor(int index) {
   switch (index) {
-  case BUFFER_DURATION_16S:
+  case BUFFER_DURATION_20S:
     return "20 s";
-  case BUFFER_DURATION_8M:
+  case BUFFER_DURATION_10M_STEREO:
     return "10 min stereo";
   case BUFFER_DURATION_10M_MONO:
     return "10 min mono";
-  case BUFFER_DURATION_8S:
+  case BUFFER_DURATION_10S:
   default:
     return "10 s";
   }
@@ -2338,8 +2194,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
         if (float(i) + 0.5f < sampleEndLed) {
           brightness = 0.f;
         }
-        lights[ARC_LIGHT_START + i].setBrightness(brightness);
         bool isEndLed = std::fabs(float(i) - sampleEndLed) < 0.5f;
+        if (isEndLed) {
+          // Keep endpoint marker visually red-only (no yellow overlap/orange).
+          brightness = 0.f;
+        }
+        lights[ARC_LIGHT_START + i].setBrightness(brightness);
         lights[ARC_MAX_LIGHT_START + i].setBrightness(isEndLed ? 0.65f : 0.f);
       }
     } else {
@@ -2465,12 +2325,16 @@ void TemporalDeck::clearLoadedSample() {
   impl->sampleDisplayName.clear();
   impl->decodedSample = DecodedSampleFile();
   impl->sampleModeEnabled = false;
+  impl->bufferDurationMode.store(BUFFER_DURATION_10S);
+  if (paramQuantities[BUFFER_PARAM]) {
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(BUFFER_DURATION_10S);
+  }
   applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
   DecodedSampleFile decoded;
-  if (!decodeWaveFile(path, &decoded, errorOut)) {
+  if (!decodeSampleFile(path, &decoded, errorOut)) {
     return false;
   }
 
@@ -2486,7 +2350,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   applySampleRateChange(impl->cachedSampleRate > 1.f ? impl->cachedSampleRate : APP->engine->getSampleRate());
   if (!impl->engine.sampleLoaded) {
     if (errorOut) {
-      *errorOut = "Loaded WAV could not be installed into the current sample-rate buffer";
+      *errorOut = "Loaded sample could not be installed into the current sample-rate buffer";
     }
     return false;
   }
