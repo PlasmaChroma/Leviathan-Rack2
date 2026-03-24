@@ -954,7 +954,8 @@ struct TemporalDeckEngine {
       return 0.0;
     }
     if (sampleModeEnabled && sampleLoaded) {
-      return clampd(samplePlayhead - readHead, 0.0, std::max(0.0, samplePlayhead));
+      double sampleNewest = std::max(0.0, double(sampleFrames - 1));
+      return clampd(sampleNewest - readHead, 0.0, sampleNewest);
     }
     double lag = newestReadablePos() - readHead;
     if (lag < 0.0) {
@@ -965,7 +966,7 @@ struct TemporalDeckEngine {
 
   double newestReadablePos() const {
     if (sampleModeEnabled && sampleLoaded) {
-      return clampd(samplePlayhead, 0.0, std::max(0.0, double(sampleFrames - 1)));
+      return std::max(0.0, double(sampleFrames - 1));
     }
     if (buffer.size <= 0 || buffer.filled <= 0) {
       return 0.0;
@@ -1316,9 +1317,9 @@ struct TemporalDeckEngine {
     bool slipModeChanged = slipReturnMode != lastSlipReturnMode;
     lastSlipReturnMode = slipReturnMode;
 
-    double limit = sampleModeActive ? std::max(0.0, newestReadablePos()) : accessibleLag(bufferKnob);
+    double limit = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : accessibleLag(bufferKnob);
     double minLag = 0.0;
-    double maxLag = sampleModeActive ? std::max(0.0, newestReadablePos()) : std::max(limit, 0.0);
+    double maxLag = sampleModeActive ? std::max(0.0, double(sampleFrames - 1)) : std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
     float speed = baseSpeed;
     bool scratchGateHigh = scratchGateConnected && scratchGate;
@@ -1327,6 +1328,8 @@ struct TemporalDeckEngine {
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
+    bool sampleManualFreezeBehavior = sampleModeActive && manualTouchScratch;
+    bool freezeForScratchModel = freezeState || sampleManualFreezeBehavior;
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -1361,19 +1364,19 @@ struct TemporalDeckEngine {
       slipFinalCatchActive = false;
     }
 
-    if (releasedFromScratch && slipState) {
+    if (releasedFromScratch && slipState && !sampleModeActive) {
       slipReturning = true;
       slipFinalCatchActive = false;
       slipReturnRemaining = 0.f;
     }
 
-    if (releasedFromScratch && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
+    if (releasedFromScratch && !sampleModeActive && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
       startNowCatch(currentLagFromNewest(newestPos));
       slipReturning = false;
       slipFinalCatchActive = false;
     }
 
-    if (slipJustEnabled && !anyScratch) {
+    if (slipJustEnabled && !anyScratch && !sampleModeActive) {
       if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
         slipReturning = true;
         slipFinalCatchActive = false;
@@ -1382,12 +1385,13 @@ struct TemporalDeckEngine {
 
     // If slip speed mode changes while Slip is active and we are behind NOW,
     // immediately engage a return so the new mode takes audible effect.
-    if (slipModeChanged && slipState && !anyScratch && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
+    if (slipModeChanged && slipState && !anyScratch && !sampleModeActive &&
+        currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
       slipReturning = true;
       slipFinalCatchActive = false;
     }
 
-    if (quickSlipTrigger && !anyScratch && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
+    if (quickSlipTrigger && !anyScratch && !sampleModeActive && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
       slipReturning = true;
       slipFinalCatchActive = false;
       slipReturnOverrideTime = kSlipReturnQuickTime;
@@ -1400,7 +1404,15 @@ struct TemporalDeckEngine {
     }
 
     if (sampleModeActive) {
-      if (!sampleTransportPlaying || freezeState) {
+      if (releasedFromScratch) {
+        // In sample mode, release should continue from where the scratch
+        // gesture landed rather than snapping back to the prior transport
+        // anchor.
+        samplePlayhead = clampd(readHead, 0.0, std::max(0.0, double(sampleFrames - 1)));
+        scratchLagSamples = 0.0;
+        scratchLagTargetSamples = 0.0;
+      }
+      if (!sampleTransportPlaying || freezeForScratchModel) {
         speed = 0.f;
       }
       samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, std::max(0.0, double(sampleFrames - 1)));
@@ -1415,7 +1427,7 @@ struct TemporalDeckEngine {
     }
 
     // 3. Determine actual playhead (readHead)
-    if (freezeState) {
+    if (freezeForScratchModel) {
       speed = 0.f;
     }
 
@@ -1453,7 +1465,7 @@ struct TemporalDeckEngine {
             // head. Convert it into absolute read velocity by adding the write
             // baseline (except in freeze, where write head is stationary).
             targetReadVelocity = platterGestureVelocity;
-            if (platter_interaction::shouldApplyWriteHeadCompensation(freezeState, hasFreshPlatterGesture,
+            if (platter_interaction::shouldApplyWriteHeadCompensation(freezeForScratchModel, hasFreshPlatterGesture,
                                                                       platterMotionActive)) {
               targetReadVelocity += sampleRate;
             }
@@ -1466,7 +1478,7 @@ struct TemporalDeckEngine {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
-        if (!freezeState && wheelDeltaShaped < 0.f) {
+        if (!freezeForScratchModel && wheelDeltaShaped < 0.f) {
           // In live circular mode, small toward-NOW wheel nudges must overcome
           // moving write-head drift. Give forward wheel ticks a slight assist.
           wheelDeltaShaped *= 1.35f;
@@ -1485,7 +1497,7 @@ struct TemporalDeckEngine {
         // Wheel mode nudges lag around a moving write head in live playback.
         // Use write-head baseline velocity so small forward wheel gestures don't
         // get overwhelmed by natural lag growth when not frozen.
-        float wheelTargetReadVelocity = freezeState ? 0.f : sampleRate;
+        float wheelTargetReadVelocity = freezeForScratchModel ? 0.f : sampleRate;
         integrateHybridScratch(dt, limit, newestPos, wheelTargetReadVelocity, 1.25f, 0.95f, 1.20f,
                                nowSnapThresholdSamples);
       }
@@ -1497,7 +1509,7 @@ struct TemporalDeckEngine {
       double targetLag = externalCvAnchorLagSamples + lagOffsetForPositionCv(positionCv);
       targetLag = clampLag(targetLag, limit);
       integrateExternalCvScratch(dt, limit, newestPos, targetLag, nowSnapThresholdSamples);
-    } else if (slipReturning) {
+    } else if (slipReturning && !sampleModeActive) {
       float slipReturnTime = configuredSlipReturnTime();
       if (slipReturnTime <= 0.f) {
         readHead = newestPos;
@@ -1559,7 +1571,9 @@ struct TemporalDeckEngine {
     } else {
       // Normal Transport
       if (sampleModeActive) {
-        readHead = newestPos;
+        // In sample mode, transport playback follows the bounded transport
+        // cursor, not the scratch lag reference frame.
+        readHead = samplePlayhead;
       } else {
         double candidate = unwrapReadNearWrite(readHead, newestPos) + double(speed);
         candidate = std::max(newestPos - maxLag, std::min(candidate, newestPos - minLag));
@@ -1577,7 +1591,7 @@ struct TemporalDeckEngine {
       slipReturnOverrideTime = -1.f;
     }
 
-    if (nowCatchActive) {
+    if (nowCatchActive && !sampleModeActive) {
       nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
       float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
       float shapedProgress = progress * (2.f - progress);
