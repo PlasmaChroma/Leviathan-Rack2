@@ -500,6 +500,14 @@ struct TemporalDeckEngine {
   float cachedLpCoeffBase = 0.f;
   float cachedLpCoeffMotion = 0.f;
   float cachedDriveNorm = 1.f;
+  bool cachedDriveEnabled = false;
+  float cachedSaturationMix = 1.f;
+  float cachedCrossfeed = 0.f;
+  float cachedStereoTilt = 0.f;
+  float cachedTiltLeftGain = 1.f;
+  float cachedTiltRightGain = 1.f;
+  float cachedAirMixGain = 1.f;
+  float cachedBodyMixGain = 0.f;
   float cachedMakeupGain = 1.f;
   float cachedPlaybackColorMix = 1.f;
   float cachedScratchCompensation = 0.f;
@@ -561,7 +569,17 @@ struct TemporalDeckEngine {
     cachedCartridgeParams = CartridgeParams();
     cachedHpCoeff = 0.f;
     cachedBodyCoeff = 0.f;
+    cachedLpCoeffBase = 0.f;
+    cachedLpCoeffMotion = 0.f;
     cachedDriveNorm = 1.f;
+    cachedDriveEnabled = false;
+    cachedSaturationMix = 1.f;
+    cachedCrossfeed = 0.f;
+    cachedStereoTilt = 0.f;
+    cachedTiltLeftGain = 1.f;
+    cachedTiltRightGain = 1.f;
+    cachedAirMixGain = 1.f;
+    cachedBodyMixGain = 0.f;
     cachedMakeupGain = 1.f;
     cachedPlaybackColorMix = 1.f;
     cachedScratchCompensation = 0.f;
@@ -722,6 +740,14 @@ struct TemporalDeckEngine {
     cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
     cachedLpCoeffBase = onePoleCoeff(cachedCartridgeParams.lpHz);
     cachedLpCoeffMotion = onePoleCoeff(cachedCartridgeParams.lpMotionHz);
+    cachedSaturationMix = clamp(cachedCartridgeParams.saturationMix, 0.f, 1.f);
+    cachedDriveEnabled = cachedCartridgeParams.drive > 1.f && cachedSaturationMix > 1e-6f;
+    cachedCrossfeed = clamp(cachedCartridgeParams.crossfeed, 0.f, 0.45f);
+    cachedStereoTilt = clamp(cachedCartridgeParams.stereoTilt, -0.2f, 0.2f);
+    cachedTiltLeftGain = 1.f - cachedStereoTilt * 0.5f;
+    cachedTiltRightGain = 1.f + cachedStereoTilt * 0.5f;
+    cachedAirMixGain = 1.f + cachedCartridgeParams.presenceGain;
+    cachedBodyMixGain = cachedCartridgeParams.bodyGain - cachedCartridgeParams.presenceGain;
     cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
     cachedPlaybackColorMix = playbackColorMixForCartridge(cartridgeCharacter);
@@ -756,28 +782,25 @@ struct TemporalDeckEngine {
       float hp = x - rumble;
       float body = state.body.lowpass(hp, cachedBodyCoeff);
       float air = state.air.lowpass(hp, lpCoeff);
-      float presence = air - body;
-      float voiced = air + p.bodyGain * body + p.presenceGain * presence;
-      if (p.drive > 1.f) {
+      float voiced = air * cachedAirMixGain + body * cachedBodyMixGain;
+      if (cachedDriveEnabled) {
         float dry = voiced;
         float sat = fastTanh(voiced * p.drive) / cachedDriveNorm;
-        voiced = crossfade(dry, sat, clamp(p.saturationMix, 0.f, 1.f));
+        voiced = crossfade(dry, sat, cachedSaturationMix);
       }
       return voiced;
     };
 
     float left = processChannel(in.first, cartridgeLeft, lpCoeff);
     float right = processChannel(in.second, cartridgeRight, lpCoeff);
-    if (p.stereoTilt != 0.f) {
+    if (cachedStereoTilt != 0.f) {
       // Lightweight stereo mismatch emulation (channel imbalance/azimuth-ish).
-      float tilt = clamp(p.stereoTilt, -0.2f, 0.2f);
-      left *= 1.f - tilt * 0.5f;
-      right *= 1.f + tilt * 0.5f;
+      left *= cachedTiltLeftGain;
+      right *= cachedTiltRightGain;
     }
-    float xfeed = clamp(p.crossfeed, 0.f, 0.45f);
-    if (xfeed > 0.f) {
-      float mixedL = left * (1.f - xfeed) + right * xfeed;
-      float mixedR = right * (1.f - xfeed) + left * xfeed;
+    if (cachedCrossfeed > 0.f) {
+      float mixedL = left * (1.f - cachedCrossfeed) + right * cachedCrossfeed;
+      float mixedR = right * (1.f - cachedCrossfeed) + left * cachedCrossfeed;
       left = mixedL;
       right = mixedR;
     }
@@ -1260,9 +1283,12 @@ struct TemporalDeckEngine {
     float prevBaseSpeedLocal = prevBaseSpeed;
     prevBaseSpeed = baseSpeed;
     float speed = baseSpeed;
+    float mix = clamp(mixKnob, 0.f, 1.f);
+    float feedback = clamp(feedbackKnob, 0.f, 1.f);
+    bool fullyWet = (mix == 1.f);
+    bool noFeedback = (feedback == 0.f);
     bool scratchGateHigh = scratchGateConnected && scratchGate;
     bool externalScratch = scratchGateHigh && positionConnected;
-    bool positionFollow = positionConnected && !scratchGateConnected;
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
@@ -1302,7 +1328,7 @@ struct TemporalDeckEngine {
     }
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     bool fastSampleTransportPath =
-      sampleModeActive && !anyScratch && !positionFollow && !wasScratchActive && !slipState && !prevSlipState &&
+      sampleModeActive && !anyScratch && !wasScratchActive && !slipState && !prevSlipState &&
       !slipReturning && !slipFinalCatchActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh;
     if (fastSampleTransportPath) {
       if (!sampleTransportPlaying || freezeState) {
@@ -1341,9 +1367,13 @@ struct TemporalDeckEngine {
       prevScratchOutL = wet.first;
       prevScratchOutR = wet.second;
 
-      float mix = clamp(mixKnob, 0.f, 1.f);
-      result.outL = inL * (1.f - mix) + wet.first * mix;
-      result.outR = inR * (1.f - mix) + wet.second * mix;
+      if (fullyWet) {
+        result.outL = wet.first;
+        result.outR = wet.second;
+      } else {
+        result.outL = inL * (1.f - mix) + wet.first * mix;
+        result.outR = inR * (1.f - mix) + wet.second * mix;
+      }
 
       double visualDelta = readHead - prevReadHead;
       platterPhase += float(visualDelta) * platterRadiansPerSample();
@@ -1602,10 +1632,6 @@ struct TemporalDeckEngine {
           }
         }
       }
-    } else if (positionFollow && !externalScratch) {
-      // Absolute Position CV
-      double targetLag = lagForPositionCv(positionCv, limit);
-      readHead = buffer.wrapPosition(newestPos - targetLag);
     } else {
       // Normal Transport
       if (sampleModeActive) {
@@ -1650,7 +1676,7 @@ struct TemporalDeckEngine {
     bool holdAtReverseEdge = reverseAtOldestEdge;
     bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
-    bool scratchReadPath = anyScratch || positionFollow;
+    bool scratchReadPath = anyScratch;
     int effectiveScratchInterpolation = clamp(scratchInterpolationMode, TemporalDeck::SCRATCH_INTERP_CUBIC,
                                               TemporalDeck::SCRATCH_INTERP_COUNT - 1);
     double readDeltaForTone = readHead - prevReadHead;
@@ -1784,14 +1810,23 @@ struct TemporalDeckEngine {
     prevWetR = wet.second;
     prevScratchOutL = wet.first;
     prevScratchOutR = wet.second;
-    float mix = clamp(mixKnob, 0.f, 1.f);
-    float outL = inL * (1.f - mix) + wet.first * mix;
-    float outR = inR * (1.f - mix) + wet.second * mix;
+    float outL = 0.f;
+    float outR = 0.f;
+    if (fullyWet) {
+      outL = wet.first;
+      outR = wet.second;
+    } else {
+      outL = inL * (1.f - mix) + wet.first * mix;
+      outR = inR * (1.f - mix) + wet.second * mix;
+    }
 
     bool writeAdvanced = false;
     if (!sampleModeActive && !freezeState && !holdAtBufferEdge) {
-      float feedback = clamp(feedbackKnob, 0.f, 1.f);
-      buffer.write(inL + outL * feedback, inR + outR * feedback);
+      if (noFeedback) {
+        buffer.write(inL, inR);
+      } else {
+        buffer.write(inL + outL * feedback, inR + outR * feedback);
+      }
       writeAdvanced = true;
       newestPos = newestReadablePos();
       if (pinToNow) {
