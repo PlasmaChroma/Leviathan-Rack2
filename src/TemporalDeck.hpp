@@ -114,6 +114,8 @@ struct TemporalDeck final : Module {
   void setSampleModeEnabled(bool enabled);
   bool isSampleTransportPlaying() const;
   void setSampleTransportPlaying(bool enabled);
+  bool isSampleLoopEnabled() const;
+  void setSampleLoopEnabled(bool enabled);
   void stopSampleTransport();
   void clearLoadedSample();
   bool loadSampleFromPath(const std::string &path, std::string *errorOut = nullptr);

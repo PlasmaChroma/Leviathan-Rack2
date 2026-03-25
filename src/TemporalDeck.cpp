@@ -62,6 +62,17 @@ static double clampd(double x, double a, double b) {
   return std::max(a, std::min(x, b));
 }
 
+static double wrapd(double x, double length) {
+  if (length <= 0.0) {
+    return 0.0;
+  }
+  x = std::fmod(x, length);
+  if (x < 0.0) {
+    x += length;
+  }
+  return x;
+}
+
 template <size_t N>
 static void smoothLedBrightness(std::array<float, N> &values, float sideWeight = 0.22f) {
   sideWeight = clamp(sideWeight, 0.f, 0.49f);
@@ -450,6 +461,7 @@ struct TemporalDeckEngine {
   TemporalDeckBuffer buffer;
   float sampleRate = 44100.f;
   std::atomic<bool> sampleModeEnabled{false};
+  bool sampleLoopEnabled = false;
   bool sampleLoaded = false;
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
@@ -613,7 +625,12 @@ struct TemporalDeckEngine {
 
   double accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), double(buffer.filled)); }
 
-  double clampLag(double lag, double limit) const { return std::max(0.0, std::min(lag, std::max(0.0, limit))); }
+  double clampLag(double lag, double limit) const {
+    if (isSampleLoopActive()) {
+      return wrapd(lag, sampleLoopLength(limit));
+    }
+    return std::max(0.0, std::min(lag, std::max(0.0, limit)));
+  }
 
   static float baseSpeedFromKnob(float rateKnob) {
     rateKnob = clamp(rateKnob, 0.f, 1.f);
@@ -929,7 +946,7 @@ struct TemporalDeckEngine {
       return 0.0;
     }
     if (sampleModeEnabled && sampleLoaded) {
-      return clampd(newestPos - readHead, 0.0, std::max(0.0, newestPos));
+      return sampleLagFromNewest(newestPos, readHead);
     }
     double lag = newestPos - readHead;
     if (lag < 0.0) {
@@ -938,8 +955,52 @@ struct TemporalDeckEngine {
     return lag;
   }
 
+  int sampleLoopMaxIndex(double newestPos) const {
+    return clamp(int(std::floor(std::max(0.0, newestPos))), 0, std::max(0, sampleFrames - 1));
+  }
+
+  double sampleLoopLength(double newestPos) const {
+    return std::max(1.0, double(sampleLoopMaxIndex(newestPos)) + 1.0);
+  }
+
+  bool isSampleLoopActive() const {
+    return sampleModeEnabled && sampleLoaded && sampleLoopEnabled;
+  }
+
+  double normalizeSamplePosition(double pos, double newestPos) const {
+    if (isSampleLoopActive()) {
+      return wrapd(pos, sampleLoopLength(newestPos));
+    }
+    return clampd(pos, 0.0, std::max(0.0, newestPos));
+  }
+
+  double normalizeSampleLag(double lag, double newestPos) const {
+    if (isSampleLoopActive()) {
+      return wrapd(lag, sampleLoopLength(newestPos));
+    }
+    return clampd(lag, 0.0, std::max(0.0, newestPos));
+  }
+
+  double sampleLagFromNewest(double newestPos, double readPos) const {
+    if (isSampleLoopActive()) {
+      return wrapd(newestPos - readPos, sampleLoopLength(newestPos));
+    }
+    return clampd(newestPos - readPos, 0.0, std::max(0.0, newestPos));
+  }
+
   double unwrapReadNearWrite(double readPos, double writePos) const {
     if (sampleModeEnabled && sampleLoaded) {
+      if (isSampleLoopActive()) {
+        double length = sampleLoopLength(writePos);
+        readPos = wrapd(readPos, length);
+        while (readPos > writePos) {
+          readPos -= length;
+        }
+        while (readPos <= writePos - length) {
+          readPos += length;
+        }
+        return readPos;
+      }
       return clampd(readPos, 0.0, std::max(0.0, double(sampleFrames - 1)));
     }
     if (buffer.size <= 0) {
@@ -960,18 +1021,31 @@ struct TemporalDeckEngine {
     return clamp(idx, 0, std::max(0, maxIndex));
   }
 
-  std::pair<float, float> readSampleBounded(double pos, int interpolationMode) const {
+  std::pair<float, float> readSampleBounded(double pos, int interpolationMode, double newestPos) const {
     int maxIndex = std::max(0, sampleFrames - 1);
     if (!sampleLoaded || sampleFrames <= 0 || maxIndex < 0) {
       return {0.f, 0.f};
     }
-    pos = clampd(pos, 0.0, double(maxIndex));
+    bool loopActive = isSampleLoopActive();
+    int readMaxIndex = loopActive ? sampleLoopMaxIndex(newestPos) : maxIndex;
+    pos = loopActive ? normalizeSamplePosition(pos, newestPos) : clampd(pos, 0.0, double(readMaxIndex));
     int i1 = int(std::floor(pos));
     float t = float(pos - double(i1));
     const float *leftData = buffer.left.data();
     const float *rightData = buffer.monoStorage ? buffer.left.data() : buffer.right.data();
-    auto leftAt = [&](int idx) { return leftData[clampSampleIndex(idx, maxIndex)]; };
-    auto rightAt = [&](int idx) { return rightData[clampSampleIndex(idx, maxIndex)]; };
+    auto wrappedIndex = [&](int idx) {
+      if (!loopActive) {
+        return clampSampleIndex(idx, readMaxIndex);
+      }
+      int length = std::max(1, readMaxIndex + 1);
+      int wrapped = idx % length;
+      if (wrapped < 0) {
+        wrapped += length;
+      }
+      return wrapped;
+    };
+    auto leftAt = [&](int idx) { return leftData[wrappedIndex(idx)]; };
+    auto rightAt = [&](int idx) { return rightData[wrappedIndex(idx)]; };
 
     // Exact/near-exact sample-center reads are common in transport playback.
     // Skip interpolation math when the phase is effectively integral.
@@ -985,7 +1059,7 @@ struct TemporalDeckEngine {
       float accL = 0.f;
       float accR = 0.f;
       float weightSum = 0.f;
-      bool interior = (i1 - (kRadius - 1) >= 0) && (i1 + kRadius <= maxIndex);
+      bool interior = !loopActive && (i1 - (kRadius - 1) >= 0) && (i1 + kRadius <= readMaxIndex);
       if (interior) {
         for (int k = -kRadius + 1; k <= kRadius; ++k) {
           int idx = i1 + k;
@@ -1199,7 +1273,7 @@ struct TemporalDeckEngine {
     }
 
     scratchLagSamples = lagEstimate;
-    readHead = buffer.wrapPosition(newestPos - lagEstimate);
+    readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos) : buffer.wrapPosition(newestPos - lagEstimate);
   }
 
   void integrateScratch3Touch(float dt, double limit, double newestPos, double prevReadHead,
@@ -1360,19 +1434,23 @@ struct TemporalDeckEngine {
       if (!sampleTransportPlaying || freezeState) {
         speed = 0.f;
       }
-      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
-      if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
-        samplePlayhead = sampleWindowEndPos;
-        autoFreezeRequested = true;
-      }
-      if (samplePlayhead <= 0.0 && speed < 0.f) {
-        samplePlayhead = 0.0;
-        autoFreezeRequested = true;
+      if (sampleLoopEnabled) {
+        samplePlayhead = normalizeSamplePosition(samplePlayhead + double(speed), sampleWindowEndPos);
+      } else {
+        samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
+        if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
+          samplePlayhead = sampleWindowEndPos;
+          autoFreezeRequested = true;
+        }
+        if (samplePlayhead <= 0.0 && speed < 0.f) {
+          samplePlayhead = 0.0;
+          autoFreezeRequested = true;
+        }
       }
       readHead = samplePlayhead;
       newestPos = sampleWindowEndPos;
 
-      std::pair<float, float> wet = readSampleBounded(readHead, TemporalDeck::SCRATCH_INTERP_CUBIC);
+      std::pair<float, float> wet = readSampleBounded(readHead, TemporalDeck::SCRATCH_INTERP_CUBIC, sampleWindowEndPos);
       float readDeltaForTone = float(readHead - prevReadHead);
       float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
       wet = applyCartridgeCharacter(wet, motionAmount, false);
@@ -1495,24 +1573,28 @@ struct TemporalDeckEngine {
         // In sample mode, release should continue from where the scratch
         // gesture landed rather than snapping back to the prior transport
         // anchor.
-        samplePlayhead = clampd(readHead, 0.0, sampleWindowEndPos);
+        samplePlayhead = normalizeSamplePosition(readHead, sampleWindowEndPos);
         scratchLagSamples = 0.0;
         scratchLagTargetSamples = 0.0;
       }
       if (!sampleTransportPlaying || freezeForScratchModel) {
         speed = 0.f;
       }
-      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
-      if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
-        samplePlayhead = sampleWindowEndPos;
-        if (!freezeForScratchModel) {
-          autoFreezeRequested = true;
+      if (sampleLoopEnabled) {
+        samplePlayhead = normalizeSamplePosition(samplePlayhead + double(speed), sampleWindowEndPos);
+      } else {
+        samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
+        if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
+          samplePlayhead = sampleWindowEndPos;
+          if (!freezeForScratchModel) {
+            autoFreezeRequested = true;
+          }
         }
-      }
-      if (samplePlayhead <= 0.0 && speed < 0.f) {
-        samplePlayhead = 0.0;
-        if (!freezeForScratchModel) {
-          autoFreezeRequested = true;
+        if (samplePlayhead <= 0.0 && speed < 0.f) {
+          samplePlayhead = 0.0;
+          if (!freezeForScratchModel) {
+            autoFreezeRequested = true;
+          }
         }
       }
     }
@@ -1525,7 +1607,7 @@ struct TemporalDeckEngine {
     newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
     float lagNow = currentLagFromNewest(newestPos);
     bool reverseAtOldestEdge =
-      !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
+      !sampleLoopEnabled && !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
     if (reverseAtOldestEdge && speed < 0.f) {
       speed = 0.f;
       if (!freezeForScratchModel) {
@@ -1725,7 +1807,7 @@ struct TemporalDeckEngine {
     if (sampleModeActive) {
       // Match live-mode behavior: normal transport playback uses cubic.
       int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : TemporalDeck::SCRATCH_INTERP_CUBIC;
-      wet = readSampleBounded(readHead, sampleInterp);
+      wet = readSampleBounded(readHead, sampleInterp, sampleWindowEndPos);
     } else if (scratchReadPath) {
       if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
         wet = buffer.readHighQuality(readHead);
@@ -1946,6 +2028,7 @@ struct TemporalDeck::Impl {
   bool reverseLatched = false;
   bool slipLatched = false;
   std::atomic<bool> sampleModeEnabled{false};
+  std::atomic<bool> sampleLoopEnabled{false};
   bool sampleAutoPlayOnLoad = true;
   std::mutex sampleStateMutex;
   std::atomic<bool> pendingSampleStateApply{false};
@@ -2103,6 +2186,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   DecodedSampleFile decodedSample;
   bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
+  bool sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
   bool sampleAutoPlayOnLoad = true;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
@@ -2112,6 +2196,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->engine.bufferDurationMode = mode;
   impl->engine.reset(impl->cachedSampleRate);
   impl->engine.sampleModeEnabled = sampleModeEnabled;
+  impl->engine.sampleLoopEnabled = sampleLoopEnabled;
   if (decodedSample.frames > 0 && !decodedSample.left.empty()) {
     int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, impl->cachedSampleRate);
     int maxFrames = maxFramesForModeAtSampleRate(impl->engine.bufferDurationMode, impl->cachedSampleRate);
@@ -2195,6 +2280,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
+  json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(sampleAutoPlayOnLoad));
   if (!samplePath.empty()) {
     json_object_set_new(root, "samplePath", json_string(samplePath.c_str()));
@@ -2218,6 +2304,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
+  json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
   json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
   json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
@@ -2263,6 +2350,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (sampleModeEnabledJ) {
     impl->sampleModeEnabled.store(json_boolean_value(sampleModeEnabledJ), std::memory_order_relaxed);
+  }
+  if (sampleLoopEnabledJ) {
+    impl->sampleLoopEnabled.store(json_boolean_value(sampleLoopEnabledJ), std::memory_order_relaxed);
   }
   if (sampleAutoPlayOnLoadJ) {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
@@ -2345,6 +2435,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
+  impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
   uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
   if (pendingSeekRevision != impl->appliedSampleSeekRevision) {
     float seekNorm = clamp(impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed), 0.f, 1.f);
@@ -2582,6 +2673,15 @@ void TemporalDeck::setSampleModeEnabled(bool enabled) {
 
 bool TemporalDeck::isSampleTransportPlaying() const {
   return impl->uiSampleTransportPlaying.load();
+}
+
+bool TemporalDeck::isSampleLoopEnabled() const {
+  return impl->sampleLoopEnabled.load(std::memory_order_relaxed);
+}
+
+void TemporalDeck::setSampleLoopEnabled(bool enabled) {
+  impl->sampleLoopEnabled.store(enabled, std::memory_order_relaxed);
+  impl->engine.sampleLoopEnabled = enabled;
 }
 
 void TemporalDeck::setSampleTransportPlaying(bool enabled) {

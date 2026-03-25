@@ -20,6 +20,8 @@ struct TemporalDeckDisplayWidget : Widget {
   bool isWithinSampleSeekArc(Vec panelPos) const;
   void seekSampleFromArcPosition(Vec panelPos);
   Vec currentPanelMousePos() const;
+  Vec sampleLoopIconCenter() const;
+  bool isWithinSampleLoopIcon(Vec panelPos) const;
 
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
@@ -421,6 +423,19 @@ Vec TemporalDeckDisplayWidget::currentPanelMousePos() const {
   return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 }
 
+Vec TemporalDeckDisplayWidget::sampleLoopIconCenter() const {
+  float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
+  float textX = centerMm.x + arcRadius + mm2px(Vec(8.0f, 0.f)).x;
+  float topY = centerMm.y - arcRadius * 1.02f;
+  float bottomY = topY + 12.4f;
+  return Vec(textX - 4.3f, bottomY + 10.4f);
+}
+
+bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
+  Vec c = sampleLoopIconCenter();
+  return std::fabs(panelPos.x - c.x) <= 7.2f && std::fabs(panelPos.y - c.y) <= 4.8f;
+}
+
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   if (!module) {
     return;
@@ -472,6 +487,28 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       nvgStrokeWidth(args.vg, 1.0f);
       nvgStroke(args.vg);
 
+      bool loopEnabled = module->isSampleLoopEnabled();
+      NVGcolor loopColor = loopEnabled ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(120, 120, 120, 255);
+      Vec loopCenter = sampleLoopIconCenter();
+      float loopHalfW = 4.25f;
+      float loopHalfH = 2.55f;
+      float neck = 1.7f;
+      nvgStrokeColor(args.vg, loopColor);
+      nvgStrokeWidth(args.vg, 1.2f);
+      nvgLineCap(args.vg, NVG_ROUND);
+      nvgLineJoin(args.vg, NVG_ROUND);
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, loopCenter.x - loopHalfW, loopCenter.y);
+      nvgBezierTo(args.vg, loopCenter.x - loopHalfW, loopCenter.y - loopHalfH, loopCenter.x - neck, loopCenter.y - loopHalfH,
+                  loopCenter.x, loopCenter.y);
+      nvgBezierTo(args.vg, loopCenter.x + neck, loopCenter.y + loopHalfH, loopCenter.x + loopHalfW, loopCenter.y + loopHalfH,
+                  loopCenter.x + loopHalfW, loopCenter.y);
+      nvgBezierTo(args.vg, loopCenter.x + loopHalfW, loopCenter.y - loopHalfH, loopCenter.x + neck, loopCenter.y - loopHalfH,
+                  loopCenter.x, loopCenter.y);
+      nvgBezierTo(args.vg, loopCenter.x - neck, loopCenter.y + loopHalfH, loopCenter.x - loopHalfW, loopCenter.y + loopHalfH,
+                  loopCenter.x - loopHalfW, loopCenter.y);
+      nvgStroke(args.vg);
+
     }
   }
   nvgRestore(args.vg);
@@ -479,6 +516,12 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
 
 void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
   if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
+        isWithinSampleLoopIcon(e.pos)) {
+      module->setSampleLoopEnabled(!module->isSampleLoopEnabled());
+      e.consume(this);
+      return;
+    }
     if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
         isWithinSampleSeekArc(e.pos)) {
       arcScrubbing = true;
@@ -870,7 +913,15 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!freezeLatched) {
     localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
   }
-  localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
+  if (module->isSampleModeEnabled() && module->hasLoadedSample() && module->isSampleLoopEnabled() && accessibleLag > 0.0) {
+    double wrappedLag = std::fmod(double(localLagSamples - lagDelta), accessibleLag + 1.0);
+    if (wrappedLag < 0.0) {
+      wrappedLag += accessibleLag + 1.0;
+    }
+    localLagSamples = float(wrappedLag);
+  } else {
+    localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
+  }
 
   float measuredVelocity = lagDelta / float(dtSec);
   float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
@@ -1163,6 +1214,9 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createCheckMenuItem("Auto-play on load", "",
                                          [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
                                          [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
+      menu->addChild(createCheckMenuItem("Loop sample", "", [=]() { return module->isSampleLoopEnabled(); },
+                                         [=]() { module->setSampleLoopEnabled(!module->isSampleLoopEnabled()); },
+                                         !module->hasLoadedSample()));
       if (module->hasLoadedSample()) {
         menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
           submenu->addChild(createMenuLabel(loadedSampleName));
