@@ -957,7 +957,9 @@ struct TemporalDeckEngine {
                      bool truncated) {
     sampleLoaded = frames > 0 && !left.empty();
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
-    sampleTransportPlaying = sampleLoaded && autoplay;
+    // Transport run-state is freeze-driven in sample mode. Keep transport
+    // armed when a sample is loaded so unfreezing always resumes playback.
+    sampleTransportPlaying = sampleLoaded;
     sampleTruncated = truncated;
     sampleFrames = std::max(0, std::min(frames, buffer.size));
     samplePlayhead = 0.0;
@@ -2495,13 +2497,18 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(targetMode);
   }
+  bool autoPlayOnLoad = true;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     impl->samplePath = path;
     impl->sampleDisplayName = system::getFilename(path);
     impl->decodedSample = std::move(decoded);
     impl->sampleModeEnabled = true;
+    autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
+  impl->freezeLatched = !autoPlayOnLoad;
+  impl->reverseLatched = false;
+  impl->slipLatched = false;
   impl->pendingSampleStateApply.store(true);
   return true;
 }

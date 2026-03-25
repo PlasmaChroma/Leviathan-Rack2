@@ -1,5 +1,7 @@
 #include "TemporalDeck.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -253,6 +255,106 @@ static std::string formatSecondsPrecise(double seconds) {
   return string::f("%.3f s", seconds);
 }
 
+static bool writePlatterSvgSnapshot(const std::string &path, float platterRadiusPx, float rotationRad,
+                                    std::string *errorOut) {
+  std::ofstream out(path.c_str(), std::ios::out | std::ios::trunc);
+  if (!out.good()) {
+    if (errorOut) {
+      *errorOut = "Failed to open output file for writing";
+    }
+    return false;
+  }
+  out.setf(std::ios::fixed);
+  out << std::setprecision(3);
+
+  float margin = 2.0f;
+  float width = platterRadiusPx * 2.f + margin * 2.f;
+  float height = width;
+  float cx = width * 0.5f;
+  float cy = height * 0.5f;
+  float labelRadius = platterRadiusPx * 0.33f;
+  float rotationDeg = rotationRad * (180.f / float(M_PI));
+
+  out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+  out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << width << "\" height=\"" << height
+      << "\" viewBox=\"0 0 " << width << " " << height << "\">\n";
+  out << "  <defs>\n";
+  out << "    <radialGradient id=\"vinylGrad\" gradientUnits=\"userSpaceOnUse\" cx=\"" << (cx - platterRadiusPx * 0.18f)
+      << "\" cy=\"" << (cy - platterRadiusPx * 0.22f) << "\" r=\"" << (platterRadiusPx * 1.05f)
+      << "\" fx=\"" << (cx - platterRadiusPx * 0.18f) << "\" fy=\"" << (cy - platterRadiusPx * 0.22f) << "\">\n";
+  out << "      <stop offset=\"0%\" stop-color=\"rgb(52,56,64)\" stop-opacity=\"" << (220.f / 255.f) << "\"/>\n";
+  out << "      <stop offset=\"100%\" stop-color=\"rgb(20,22,26)\" stop-opacity=\"1\"/>\n";
+  out << "    </radialGradient>\n";
+  out << "  </defs>\n";
+
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << platterRadiusPx << "\" fill=\"url(#vinylGrad)\"/>\n";
+
+  out << "  <g transform=\"translate(" << cx << " " << cy << ") rotate(" << rotationDeg << ")\">\n";
+  for (int i = 0; i < 16; ++i) {
+    float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
+    float alpha = (i % 2 == 0) ? 34.f : 18.f;
+    float wobbleAmp = 0.55f + 0.05f * float(i % 4);
+    float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
+    float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
+    float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
+    out << "    <path d=\"";
+    constexpr int kSteps = 64;
+    for (int step = 0; step <= kSteps; ++step) {
+      float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
+      float wobble = std::sin(t * wobbleFreq + wobblePhase);
+      float radius = grooveRadius + wobbleAmp * wobble;
+      float x = std::cos(t) * radius;
+      float y = std::sin(t) * radius;
+      out << (step == 0 ? "M " : " L ") << x << " " << y;
+    }
+    out << "\" fill=\"none\" stroke=\"rgb(210,218,228)\" stroke-opacity=\"" << (alpha / 255.f)
+        << "\" stroke-width=\"0.7\"/>\n";
+  }
+  out << "  </g>\n";
+
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << labelRadius
+      << "\" fill=\"rgb(90,178,187)\"/>\n";
+
+  out << "  <g transform=\"translate(" << cx << " " << cy << ") rotate(" << rotationDeg << ")\">\n";
+  out << "    <circle cx=\"0\" cy=\"0\" r=\"" << (labelRadius * 0.74f) << "\" fill=\"rgb(12,41,45)\"/>\n";
+  for (int i = 0; i < 3; ++i) {
+    float angle = 2.f * float(M_PI) * float(i) / 3.f;
+    float ax = std::cos(angle) * labelRadius * 0.22f;
+    float ay = std::sin(angle) * labelRadius * 0.22f;
+    float bx = std::cos(angle) * labelRadius * 0.62f;
+    float by = std::sin(angle) * labelRadius * 0.62f;
+    out << "    <line x1=\"" << ax << "\" y1=\"" << ay << "\" x2=\"" << bx << "\" y2=\"" << by
+        << "\" stroke=\"rgb(90,178,187)\" stroke-width=\"1.2\"/>\n";
+  }
+  out << "    <rect x=\"" << (-labelRadius * 0.42f) << "\" y=\"" << (-labelRadius * 0.055f) << "\" width=\""
+      << (labelRadius * 0.84f) << "\" height=\"" << (labelRadius * 0.11f)
+      << "\" rx=\"1.2\" ry=\"1.2\" fill=\"rgb(90,178,187)\" fill-opacity=\"" << (120.f / 255.f) << "\"/>\n";
+  out << "  </g>\n";
+
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << (labelRadius * 0.12f)
+      << "\" fill=\"rgb(222,228,235)\"/>\n";
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << platterRadiusPx
+      << "\" fill=\"none\" stroke=\"rgb(255,255,255)\" stroke-opacity=\"" << (32.f / 255.f)
+      << "\" stroke-width=\"1.1\"/>\n";
+  out << "</svg>\n";
+  if (!out.good()) {
+    if (errorOut) {
+      *errorOut = "Failed while writing SVG data";
+    }
+    return false;
+  }
+  return true;
+}
+
+static std::string ensureSvgExtension(std::string path) {
+  std::string ext = system::getExtension(path);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+  if (ext != ".svg") {
+    path += ".svg";
+  }
+  return path;
+}
+
 static bool topArcAngleFromLocal(Vec local, float *angleOut) {
   float angle = std::atan2(local.y, local.x);
   constexpr float kEndpointEpsilon = 0.10f;
@@ -356,7 +458,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       nvgStrokeWidth(args.vg, 1.0f);
       nvgStroke(args.vg);
 
-      std::string status = module->isSampleTransportPlaying() ? "sample play" : "sample pause";
+      std::string status = module->isUiFreezeLatched() ? "sample freeze" : "sample play";
       nvgFontSize(args.vg, 9.5f);
       nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 230));
       nvgText(args.vg, textX, bottomY + 10.2f, status.c_str(), nullptr);
@@ -1046,6 +1148,29 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createCheckMenuItem("Debug trace on freeze", "",
                                          [=]() { return module->isFreezeTraceLoggingEnabled(); },
                                          [=]() { module->setFreezeTraceLoggingEnabled(!module->isFreezeTraceLoggingEnabled()); }));
+      menu->addChild(createMenuItem("Export platter SVG...", "", [=]() {
+        Vec platterCenter = mm2px(Vec(50.8f, 72.f));
+        float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
+        loadPlatterAnchor(platterCenter, platterRadius);
+        std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+        system::createDirectories(defaultDir);
+        osdialog_filters *filters = osdialog_filters_parse("SVG:svg,SVG");
+        char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "temporaldeck_platter.svg", filters);
+        osdialog_filters_free(filters);
+        if (!pathC) {
+          return;
+        }
+        std::string path = ensureSvgExtension(pathC);
+        std::free(pathC);
+
+        std::string error;
+        if (!writePlatterSvgSnapshot(path, platterRadius, module->getUiPlatterAngle(), &error)) {
+          std::string message = error.empty() ? "Platter SVG export failed" : error;
+          osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+          return;
+        }
+        osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, string::f("Saved platter SVG:\n%s", path.c_str()).c_str());
+      }));
     }
     if (module) {
       menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
