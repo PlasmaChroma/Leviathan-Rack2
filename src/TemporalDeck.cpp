@@ -239,6 +239,12 @@ struct TemporalDeckBuffer {
     pos = wrapPosition(pos);
     int i1 = int(std::floor(pos));
     float t = float(pos - double(i1));
+    // Exact/near-exact sample-center reads are common during transport playback.
+    // Skip cubic math when phase is effectively integral.
+    if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
+      int idx = wrapIndex(int(std::round(pos)));
+      return {left[idx], rightSample(idx)};
+    }
     int i0 = wrapIndex(i1 - 1);
     int i2 = wrapIndex(i1 + 1);
     int i3 = wrapIndex(i1 + 2);
@@ -264,6 +270,10 @@ struct TemporalDeckBuffer {
     pos = wrapPosition(pos);
     int i2 = int(std::floor(pos));
     float t = float(pos - double(i2));
+    if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
+      int idx = wrapIndex(int(std::round(pos)));
+      return {left[idx], rightSample(idx)};
+    }
     int i0 = wrapIndex(i2 - 2);
     int i1 = wrapIndex(i2 - 1);
     int i3 = wrapIndex(i2 + 1);
@@ -284,6 +294,10 @@ struct TemporalDeckBuffer {
     pos = wrapPosition(pos);
     int center = int(std::floor(pos));
     float frac = float(pos - double(center));
+    if (std::fabs(frac) <= 1e-6f || std::fabs(1.f - frac) <= 1e-6f) {
+      int idx = wrapIndex(int(std::round(pos)));
+      return {left[idx], rightSample(idx)};
+    }
 
     constexpr int kRadius = 8;
     float accL = 0.f;
@@ -500,6 +514,7 @@ struct TemporalDeckEngine {
   float scratchDcOutR = 0.f;
   bool externalCvGateHigh = false;
   double externalCvAnchorLagSamples = 0.0;
+  float prevBaseSpeed = 1.f;
 
   void reset(float sr) {
     sampleRate = sr;
@@ -562,6 +577,7 @@ struct TemporalDeckEngine {
     scratchDcOutR = 0.f;
     externalCvGateHigh = false;
     externalCvAnchorLagSamples = 0.0;
+    prevBaseSpeed = 1.f;
   }
 
   double maxLagFromKnob(float knob) const {
@@ -898,17 +914,16 @@ struct TemporalDeckEngine {
     pos = clampd(pos, 0.0, double(maxIndex));
     int i1 = int(std::floor(pos));
     float t = float(pos - double(i1));
-    auto leftAt = [&](int idx) { return buffer.left[clampSampleIndex(idx, maxIndex)]; };
-    auto rightAt = [&](int idx) {
-      int clamped = clampSampleIndex(idx, maxIndex);
-      return buffer.monoStorage ? buffer.left[clamped] : buffer.right[clamped];
-    };
+    const float *leftData = buffer.left.data();
+    const float *rightData = buffer.monoStorage ? buffer.left.data() : buffer.right.data();
+    auto leftAt = [&](int idx) { return leftData[clampSampleIndex(idx, maxIndex)]; };
+    auto rightAt = [&](int idx) { return rightData[clampSampleIndex(idx, maxIndex)]; };
 
     // Exact/near-exact sample-center reads are common in transport playback.
     // Skip interpolation math when the phase is effectively integral.
     if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
       int idx = clampSampleIndex(int(std::round(pos)), maxIndex);
-      return {buffer.left[idx], rightAt(idx)};
+      return {leftData[idx], rightData[idx]};
     }
 
     if (interpolationMode == TemporalDeck::SCRATCH_INTERP_SINC) {
@@ -916,13 +931,25 @@ struct TemporalDeckEngine {
       float accL = 0.f;
       float accR = 0.f;
       float weightSum = 0.f;
-      for (int k = -kRadius + 1; k <= kRadius; ++k) {
-        int idx = clampSampleIndex(i1 + k, maxIndex);
-        float dist = float(k) - t;
-        float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
-        accL += buffer.left[idx] * w;
-        accR += rightAt(idx) * w;
-        weightSum += w;
+      bool interior = (i1 - (kRadius - 1) >= 0) && (i1 + kRadius <= maxIndex);
+      if (interior) {
+        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+          int idx = i1 + k;
+          float dist = float(k) - t;
+          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          accL += leftData[idx] * w;
+          accR += rightData[idx] * w;
+          weightSum += w;
+        }
+      } else {
+        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+          int idx = clampSampleIndex(i1 + k, maxIndex);
+          float dist = float(k) - t;
+          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          accL += leftData[idx] * w;
+          accR += rightData[idx] * w;
+          weightSum += w;
+        }
       }
       if (std::fabs(weightSum) > 1e-6f) {
         float inv = 1.f / weightSum;
@@ -934,18 +961,39 @@ struct TemporalDeckEngine {
 
     if (interpolationMode == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
       auto w = TemporalDeckBuffer::lagrange6Weights(t);
+      bool interior = (i1 >= 2) && (i1 + 3 <= maxIndex);
+      if (interior) {
+        int i0 = i1 - 2;
+        int iA = i1 - 1;
+        int iB = i1 + 1;
+        int iC = i1 + 2;
+        int iD = i1 + 3;
+        float outL = leftData[i0] * w.w0 + leftData[iA] * w.w1 + leftData[i1] * w.w2 + leftData[iB] * w.w3 +
+                     leftData[iC] * w.w4 + leftData[iD] * w.w5;
+        float outR = rightData[i0] * w.w0 + rightData[iA] * w.w1 + rightData[i1] * w.w2 + rightData[iB] * w.w3 +
+                     rightData[iC] * w.w4 + rightData[iD] * w.w5;
+        return {outL, outR};
+      }
       int i0 = clampSampleIndex(i1 - 2, maxIndex);
       int iA = clampSampleIndex(i1 - 1, maxIndex);
       int iB = clampSampleIndex(i1 + 1, maxIndex);
       int iC = clampSampleIndex(i1 + 2, maxIndex);
       int iD = clampSampleIndex(i1 + 3, maxIndex);
-      float outL = leftAt(i0) * w.w0 + leftAt(iA) * w.w1 + leftAt(i1) * w.w2 + leftAt(iB) * w.w3 +
-                   leftAt(iC) * w.w4 + leftAt(iD) * w.w5;
-      float outR = rightAt(i0) * w.w0 + rightAt(iA) * w.w1 + rightAt(i1) * w.w2 + rightAt(iB) * w.w3 +
-                   rightAt(iC) * w.w4 + rightAt(iD) * w.w5;
+      float outL = leftData[i0] * w.w0 + leftData[iA] * w.w1 + leftData[i1] * w.w2 + leftData[iB] * w.w3 +
+                   leftData[iC] * w.w4 + leftData[iD] * w.w5;
+      float outR = rightData[i0] * w.w0 + rightData[iA] * w.w1 + rightData[i1] * w.w2 + rightData[iB] * w.w3 +
+                   rightData[iC] * w.w4 + rightData[iD] * w.w5;
       return {outL, outR};
     }
 
+    bool interior = (i1 >= 1) && (i1 + 2 <= maxIndex);
+    if (interior) {
+      int i0 = i1 - 1;
+      int i2 = i1 + 1;
+      int i3 = i1 + 2;
+      return {TemporalDeckBuffer::cubicSample(leftData[i0], leftData[i1], leftData[i2], leftData[i3], t),
+              TemporalDeckBuffer::cubicSample(rightData[i0], rightData[i1], rightData[i2], rightData[i3], t)};
+    }
     int i0 = clampSampleIndex(i1 - 1, maxIndex);
     int i2 = clampSampleIndex(i1 + 1, maxIndex);
     int i3 = clampSampleIndex(i1 + 2, maxIndex);
@@ -1204,6 +1252,8 @@ struct TemporalDeckEngine {
     double minLag = 0.0;
     double maxLag = sampleModeActive ? sampleWindowEndPos : std::max(limit, 0.0);
     float baseSpeed = computeBaseSpeed(rateKnob, rateCv, rateCvConnected, reverseState);
+    float prevBaseSpeedLocal = prevBaseSpeed;
+    prevBaseSpeed = baseSpeed;
     float speed = baseSpeed;
     bool scratchGateHigh = scratchGateConnected && scratchGate;
     bool externalScratch = scratchGateHigh && positionConnected;
@@ -1216,8 +1266,35 @@ struct TemporalDeckEngine {
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
+    constexpr float kUnityRateSnapEps = 1e-4f;
+    bool enteredUnityRateFromKnob = !rateCvConnected && !reverseState && std::fabs(baseSpeed - 1.f) <= kUnityRateSnapEps &&
+                                    std::fabs(prevBaseSpeedLocal - 1.f) > kUnityRateSnapEps;
     bool slipJustEnabled = slipState && !prevSlipState;
     double newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
+    auto snapReadHeadToSampleCenter = [&](double p) {
+      double snapped = std::round(p);
+      if (sampleModeActive) {
+        return clampd(snapped, 0.0, sampleWindowEndPos);
+      }
+      return buffer.wrapPosition(snapped);
+    };
+    if (releasedFromScratch) {
+      // One-shot post-scratch phase quantization: at most 0.5-sample movement,
+      // but it returns transport to exact sample centers so interpolation fast
+      // paths can engage immediately after release.
+      readHead = snapReadHeadToSampleCenter(readHead);
+      if (sampleModeActive) {
+        samplePlayhead = readHead;
+      }
+    }
+    if (enteredUnityRateFromKnob && !anyScratch) {
+      // One-shot re-quantization when the knob returns to exact 1.0x.
+      // This avoids carrying long-lived fractional phase after non-unity travel.
+      readHead = snapReadHeadToSampleCenter(readHead);
+      if (sampleModeActive) {
+        samplePlayhead = readHead;
+      }
+    }
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     bool fastSampleTransportPath =
       sampleModeActive && !anyScratch && !positionFollow && !wasScratchActive && !slipState && !prevSlipState &&
@@ -1592,17 +1669,16 @@ struct TemporalDeckEngine {
       // Match live-mode behavior: normal transport playback uses cubic.
       int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : TemporalDeck::SCRATCH_INTERP_CUBIC;
       wet = readSampleBounded(readHead, sampleInterp);
+    } else if (scratchReadPath) {
+      if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
+        wet = buffer.readHighQuality(readHead);
+      } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
+        wet = buffer.readSinc(readHead);
+      } else {
+        wet = buffer.readCubic(readHead);
+      }
     } else {
       wet = buffer.readCubic(readHead);
-      if (scratchReadPath) {
-        if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
-          wet = buffer.readHighQuality(readHead);
-        } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
-          wet = buffer.readSinc(readHead);
-        } else {
-          wet = buffer.readCubic(readHead);
-        }
-      }
     }
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
     if (scratchReadPath) {

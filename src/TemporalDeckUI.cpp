@@ -273,33 +273,42 @@ static bool writePlatterSvgSnapshot(const std::string &path, float platterRadius
   float cx = width * 0.5f;
   float cy = height * 0.5f;
   float labelRadius = platterRadiusPx * 0.33f;
+  float postRadius = labelRadius * 0.12f;
   float rotationDeg = rotationRad * (180.f / float(M_PI));
 
   out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
   out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << width << "\" height=\"" << height
       << "\" viewBox=\"0 0 " << width << " " << height << "\">\n";
   out << "  <defs>\n";
-  out << "    <radialGradient id=\"vinylGrad\" gradientUnits=\"userSpaceOnUse\" cx=\"" << (cx - platterRadiusPx * 0.18f)
-      << "\" cy=\"" << (cy - platterRadiusPx * 0.22f) << "\" r=\"" << (platterRadiusPx * 1.05f)
-      << "\" fx=\"" << (cx - platterRadiusPx * 0.18f) << "\" fy=\"" << (cy - platterRadiusPx * 0.22f) << "\">\n";
-  out << "      <stop offset=\"0%\" stop-color=\"rgb(52,56,64)\" stop-opacity=\"" << (220.f / 255.f) << "\"/>\n";
-  out << "      <stop offset=\"100%\" stop-color=\"rgb(20,22,26)\" stop-opacity=\"1\"/>\n";
+  out << "    <radialGradient id=\"vinylGrad\" gradientUnits=\"userSpaceOnUse\" cx=\"" << (cx - platterRadiusPx * 0.08f)
+      << "\" cy=\"" << (cy - platterRadiusPx * 0.10f) << "\" r=\"" << (platterRadiusPx * 1.02f)
+      << "\" fx=\"" << (cx - platterRadiusPx * 0.08f) << "\" fy=\"" << (cy - platterRadiusPx * 0.10f) << "\">\n";
+  out << "      <stop offset=\"0%\" stop-color=\"rgb(38,41,46)\" stop-opacity=\"" << (208.f / 255.f) << "\"/>\n";
+  out << "      <stop offset=\"100%\" stop-color=\"rgb(24,26,30)\" stop-opacity=\"1\"/>\n";
   out << "    </radialGradient>\n";
+  out << "    <linearGradient id=\"spindleGrad\" gradientUnits=\"userSpaceOnUse\" x1=\"" << cx << "\" y1=\""
+      << (cy - postRadius) << "\" x2=\"" << cx << "\" y2=\"" << (cy + postRadius) << "\">\n";
+  out << "      <stop offset=\"0%\" stop-color=\"rgb(218,223,229)\"/>\n";
+  out << "      <stop offset=\"45%\" stop-color=\"rgb(168,174,183)\"/>\n";
+  out << "      <stop offset=\"100%\" stop-color=\"rgb(92,98,107)\"/>\n";
+  out << "    </linearGradient>\n";
   out << "  </defs>\n";
 
   out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << platterRadiusPx << "\" fill=\"url(#vinylGrad)\"/>\n";
 
   out << "  <g transform=\"translate(" << cx << " " << cy << ") rotate(" << rotationDeg << ")\">\n";
-  for (int i = 0; i < 16; ++i) {
-    float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
+  constexpr int kGrooveCount = 20;
+  for (int i = 0; i < kGrooveCount; ++i) {
+    float tNorm = float(i) / float(kGrooveCount - 1);
+    float grooveRadius = platterRadiusPx * (0.24f + 0.705f * tNorm);
     float alpha = (i % 2 == 0) ? 34.f : 18.f;
     float wobbleAmp = 0.55f + 0.05f * float(i % 4);
     float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
-    float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
+    float wobbleFreq = float(3 + ((i * 2 + 1) % 5)); // Integer harmonic for seamless closure.
     float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
     out << "    <path d=\"";
     constexpr int kSteps = 64;
-    for (int step = 0; step <= kSteps; ++step) {
+    for (int step = 0; step < kSteps; ++step) {
       float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
       float wobble = std::sin(t * wobbleFreq + wobblePhase);
       float radius = grooveRadius + wobbleAmp * wobble;
@@ -307,8 +316,8 @@ static bool writePlatterSvgSnapshot(const std::string &path, float platterRadius
       float y = std::sin(t) * radius;
       out << (step == 0 ? "M " : " L ") << x << " " << y;
     }
-    out << "\" fill=\"none\" stroke=\"rgb(210,218,228)\" stroke-opacity=\"" << (alpha / 255.f)
-        << "\" stroke-width=\"0.7\"/>\n";
+    out << " Z\" fill=\"none\" stroke=\"rgb(210,218,228)\" stroke-opacity=\"" << (alpha / 255.f)
+        << "\" stroke-width=\"0.7\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>\n";
   }
   out << "  </g>\n";
 
@@ -331,8 +340,13 @@ static bool writePlatterSvgSnapshot(const std::string &path, float platterRadius
       << "\" rx=\"1.2\" ry=\"1.2\" fill=\"rgb(90,178,187)\" fill-opacity=\"" << (120.f / 255.f) << "\"/>\n";
   out << "  </g>\n";
 
-  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << (labelRadius * 0.12f)
-      << "\" fill=\"rgb(222,228,235)\"/>\n";
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << postRadius
+      << "\" fill=\"url(#spindleGrad)\" stroke=\"rgb(56,61,68)\" stroke-opacity=\"" << (220.f / 255.f)
+      << "\" stroke-width=\"0.9\"/>\n";
+  out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << (postRadius * 0.62f)
+      << "\" fill=\"rgb(236,241,246)\" fill-opacity=\"" << (92.f / 255.f) << "\"/>\n";
+  out << "  <circle cx=\"" << (cx - postRadius * 0.32f) << "\" cy=\"" << (cy - postRadius * 0.34f) << "\" r=\""
+      << (postRadius * 0.20f) << "\" fill=\"rgb(255,255,255)\" fill-opacity=\"" << (132.f / 255.f) << "\"/>\n";
   out << "  <circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << platterRadiusPx
       << "\" fill=\"none\" stroke=\"rgb(255,255,255)\" stroke-opacity=\"" << (32.f / 255.f)
       << "\" stroke-width=\"1.1\"/>\n";
@@ -458,10 +472,6 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       nvgStrokeWidth(args.vg, 1.0f);
       nvgStroke(args.vg);
 
-      std::string status = module->isUiFreezeLatched() ? "sample freeze" : "sample play";
-      nvgFontSize(args.vg, 9.5f);
-      nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 230));
-      nvgText(args.vg, textX, bottomY + 10.2f, status.c_str(), nullptr);
     }
   }
   nvgRestore(args.vg);
@@ -637,6 +647,40 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
 
+  // Primary platter render path: static SVG asset rotated at runtime.
+  // Keep the procedural code below as a fallback for safety.
+  static std::shared_ptr<window::Svg> platterSvg;
+  static bool platterSvgLoadAttempted = false;
+  if (!platterSvgLoadAttempted) {
+    platterSvgLoadAttempted = true;
+    try {
+      platterSvg = Svg::load(asset::plugin(pluginInstance, "res/temporaldeck_platter.svg"));
+    } catch (const std::exception &e) {
+      WARN("TemporalDeck: failed to load platter SVG asset: %s", e.what());
+      platterSvg.reset();
+    }
+  }
+  if (platterSvg) {
+    Vec svgSize = platterSvg->getSize();
+    if (svgSize.x > 1.f && svgSize.y > 1.f) {
+      // Exported platter SVG keeps a small outer margin, so scale using the
+      // effective vinyl radius rather than half the full viewBox.
+      constexpr float kPlatterSvgMarginPx = 2.0f;
+      float sourceRadius = std::max(1.f, 0.5f * std::min(svgSize.x, svgSize.y) - kPlatterSvgMarginPx);
+      float scale = platterRadiusPx / sourceRadius;
+
+      nvgTranslate(args.vg, center.x, center.y);
+      nvgRotate(args.vg, rotation);
+      nvgScale(args.vg, scale, scale);
+      nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+      platterSvg->draw(args.vg);
+
+      nvgRestore(args.vg);
+      Widget::draw(args);
+      return;
+    }
+  }
+
   NVGcolor outerDark = nvgRGB(20, 22, 26);
   NVGpaint vinylGrad =
     nvgRadialGradient(args.vg, center.x - platterRadiusPx * 0.18f, center.y - platterRadiusPx * 0.22f,
@@ -654,19 +698,20 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
     nvgTranslate(args.vg, center.x, center.y);
     nvgRotate(args.vg, rotation);
 
-    for (int i = 0; i < 16; ++i) {
-      float grooveRadius = platterRadiusPx * (0.24f + 0.047f * i);
+    constexpr int kGrooveCount = 20;
+    for (int i = 0; i < kGrooveCount; ++i) {
+      float tNorm = float(i) / float(kGrooveCount - 1);
+      float grooveRadius = platterRadiusPx * (0.24f + 0.705f * tNorm);
       float alpha = (i % 2 == 0) ? 34.f : 18.f;
       float wobbleAmp = 0.55f + 0.05f * float(i % 4);
       float wobblePhase = 0.47f * float(i) + 0.061f * float(i * i);
-      float wobbleFreq = 3.1f + 0.23f * float((i * 2 + 1) % 5);
+      float wobbleFreq = float(3 + ((i * 2 + 1) % 5)); // Integer harmonic for seamless closure.
       float ringRotation = 0.19f * float(i) + 0.043f * float(i * i);
 
       nvgBeginPath(args.vg);
-      constexpr int kSteps = 64; // Reduced from 96 for performance
-      for (int step = 0; step <= kSteps; ++step) {
+      constexpr int kSteps = 64;
+      for (int step = 0; step < kSteps; ++step) {
         float t = 2.f * float(M_PI) * float(step) / float(kSteps) + ringRotation;
-        // Simplified wobble: removed expensive pow and copysign
         float wobble = std::sin(t * wobbleFreq + wobblePhase);
         float radius = grooveRadius + wobbleAmp * wobble;
         float x = std::cos(t) * radius;
@@ -676,14 +721,19 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
         else
           nvgLineTo(args.vg, x, y);
       }
+      nvgClosePath(args.vg);
+      nvgLineJoin(args.vg, NVG_ROUND);
+      nvgLineCap(args.vg, NVG_ROUND);
       nvgStrokeColor(args.vg, nvgRGBA(210, 218, 228, (unsigned char)alpha));
       nvgStrokeWidth(args.vg, 0.7f);
       nvgStroke(args.vg);
     }
+
     nvgRestore(args.vg);
   }
 
   float labelRadius = platterRadiusPx * 0.33f;
+  float postRadius = labelRadius * 0.12f;
   nvgBeginPath(args.vg);
   nvgCircle(args.vg, center.x, center.y, labelRadius);
   nvgFillColor(args.vg, nvgRGB(90, 178, 187));
@@ -717,9 +767,24 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
 
   nvgRestore(args.vg);
 
+  NVGpaint postPaint = nvgLinearGradient(args.vg, center.x, center.y - postRadius, center.x, center.y + postRadius,
+                                         nvgRGB(218, 223, 229), nvgRGB(92, 98, 107));
   nvgBeginPath(args.vg);
-  nvgCircle(args.vg, center.x, center.y, labelRadius * 0.12f);
-  nvgFillColor(args.vg, nvgRGB(222, 228, 235));
+  nvgCircle(args.vg, center.x, center.y, postRadius);
+  nvgFillPaint(args.vg, postPaint);
+  nvgFill(args.vg);
+  nvgStrokeColor(args.vg, nvgRGBA(56, 61, 68, 220));
+  nvgStrokeWidth(args.vg, 0.9f);
+  nvgStroke(args.vg);
+
+  nvgBeginPath(args.vg);
+  nvgCircle(args.vg, center.x, center.y, postRadius * 0.62f);
+  nvgFillColor(args.vg, nvgRGBA(236, 241, 246, 92));
+  nvgFill(args.vg);
+
+  nvgBeginPath(args.vg);
+  nvgCircle(args.vg, center.x - postRadius * 0.32f, center.y - postRadius * 0.34f, postRadius * 0.20f);
+  nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 132));
   nvgFill(args.vg);
 
   nvgBeginPath(args.vg);
