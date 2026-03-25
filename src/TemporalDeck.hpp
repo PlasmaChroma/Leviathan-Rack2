@@ -132,8 +132,6 @@ struct TemporalDeck final : Module {
   int getBufferDurationMode() const;
   bool isBufferModeMono() const;
 
-  bool isPlatterCursorLockEnabled() const;
-  void setPlatterCursorLockEnabled(bool enabled);
   bool isFreezeTraceLoggingEnabled() const;
   void setFreezeTraceLoggingEnabled(bool enabled);
 

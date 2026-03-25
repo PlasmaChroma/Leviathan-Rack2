@@ -64,7 +64,6 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   float deadZonePx = 0.f;
   bool dragging = false;
   bool dragHasTiming = false;
-  bool cursorLocked = false;
   Vec onButtonPos;
   float contactAngle = 0.f;
   float contactRadiusPx = 0.f;
@@ -214,7 +213,7 @@ void TemporalDeckPlatterWidget::startTraceCapture() {
   traceRecorder.file << "# TemporalDeck platter interaction trace v1\n";
   traceRecorder.file << "# Start when freeze latch turns on, stop when freeze latch turns off\n";
   traceRecorder.file
-    << "seq,t_sec,event,freeze,dragging,cursor_locked,x,y,dx,dy,scroll,delta_angle,lag_delta,live_lag,local_lag,"
+    << "seq,t_sec,event,freeze,dragging,x,y,dx,dy,scroll,delta_angle,lag_delta,live_lag,local_lag,"
        "velocity,sensitivity,sample_rate\n";
   traceRecorder.startTimeSec = system::getTime();
   traceRecorder.sequence = 0;
@@ -246,7 +245,7 @@ void TemporalDeckPlatterWidget::logTraceEvent(const char *eventName, Vec local, 
   double tSec = std::max(0.0, system::getTime() - traceRecorder.startTimeSec);
   traceRecorder.file << traceRecorder.sequence++ << "," << tSec << "," << eventName << ","
                      << (module->isUiFreezeLatched() ? 1 : 0) << "," << (dragging ? 1 : 0) << ","
-                     << (cursorLocked ? 1 : 0) << "," << local.x << "," << local.y << "," << mouseDelta.x << ","
+                     << local.x << "," << local.y << "," << mouseDelta.x << ","
                      << mouseDelta.y << "," << scroll << "," << deltaAngle << "," << lagDelta << "," << liveLag
                      << "," << localLag << "," << velocity << "," << module->scratchSensitivity() << ","
                      << module->getUiSampleRate() << "\n";
@@ -862,7 +861,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   dragHasTiming = true;
 
   float localRadius = local.norm();
-  bool useCursorAngle = !cursorLocked && localRadius > std::max(deadZonePx, platterRadiusPx * 0.16f);
+  bool useCursorAngle = localRadius > std::max(deadZonePx, platterRadiusPx * 0.16f);
   float deltaAngle = 0.f;
   if (useCursorAngle) {
     float localAngle = std::atan2(local.y, local.x);
@@ -1038,10 +1037,6 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
   logTraceEvent("DRAG_START", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, localLagSamples, localLagSamples, 0.f);
-  if (!cursorLocked && module->isPlatterCursorLockEnabled() && settings::allowCursorLock && APP && APP->window) {
-    APP->window->cursorLock();
-    cursorLocked = true;
-  }
   e.consume(this);
 }
 
@@ -1058,10 +1053,6 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
     }
     logTraceEvent("DRAG_CANCEL", Vec(0.f, 0.f), e.mouseDelta, 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
                   localLagSamples, filteredGestureVelocity);
-    if (cursorLocked && APP && APP->window) {
-      APP->window->cursorUnlock();
-      cursorLocked = false;
-    }
     dragHasTiming = false;
     filteredGestureVelocity = 0.f;
     return;
@@ -1087,10 +1078,6 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
     }
     logTraceEvent("DRAG_END", Vec(0.f, 0.f), Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
                   localLagSamples, filteredGestureVelocity);
-    if (cursorLocked && APP && APP->window) {
-      APP->window->cursorUnlock();
-      cursorLocked = false;
-    }
     dragHasTiming = false;
     filteredGestureVelocity = 0.f;
     e.consume(this);
@@ -1261,9 +1248,6 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createCheckMenuItem("Cursor lock on platter drag", "",
-                                         [=]() { return module->isPlatterCursorLockEnabled(); },
-                                         [=]() { module->setPlatterCursorLockEnabled(!module->isPlatterCursorLockEnabled()); }));
       menu->addChild(createCheckMenuItem("Debug trace on freeze", "",
                                          [=]() { return module->isFreezeTraceLoggingEnabled(); },
                                          [=]() { module->setFreezeTraceLoggingEnabled(!module->isFreezeTraceLoggingEnabled()); }));
