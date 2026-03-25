@@ -1050,10 +1050,8 @@ struct WavePreviewWidget : Widget {
 
 	void step() override {
 		Widget::step();
-		Proc* modulePtr = nullptr;
-		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
-			modulePtr = moduleWidget->getModule<Proc>();
-		}
+		ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
+		Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1161,6 +1159,7 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 }
 
 struct AmpVoltageReadoutWidget : Widget {
+	Proc* module = nullptr;
 	int paramId = -1;
 
 	void draw(const DrawArgs& args) override {
@@ -1168,15 +1167,11 @@ struct AmpVoltageReadoutWidget : Widget {
 		if (paramId < 0 || !APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
-		Proc* modulePtr = nullptr;
-		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
-			modulePtr = moduleWidget->getModule<Proc>();
-		}
-		if (!modulePtr) {
+		if (!module) {
 			return;
 		}
 		char ampText[16];
-		std::snprintf(ampText, sizeof(ampText), "%.1fV", modulePtr->params[paramId].getValue());
+		std::snprintf(ampText, sizeof(ampText), "%.1fV", module->params[paramId].getValue());
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFontSize(args.vg, 10.0f);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
@@ -1203,6 +1198,7 @@ struct ProcWidget : ModuleWidget {
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(7.246, 28.71)), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
+			ampReadout->module = module;
 			ampReadout->paramId = Proc::AMP_PARAM;
 			ampReadout->box.pos = mm2px(Vec(2.5, 32.15));
 			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
