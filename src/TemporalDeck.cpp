@@ -364,6 +364,7 @@ struct TemporalDeckEngine {
   static constexpr float kScratchInertiaDampingHz = 380.f;
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
+  static constexpr float kLofiModControlRateHz = 3000.f;
 
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
@@ -490,6 +491,9 @@ struct TemporalDeckEngine {
   float lofiWowPhaseA = 0.f;
   float lofiWowPhaseB = 0.f;
   float lofiFlutterPhase = 0.f;
+  float lofiWowFlutterCached = 0.f;
+  int lofiModUpdateCountdown = 0;
+  int lofiModUpdateIntervalSamples = 1;
   float lofiCrackleEnv = 0.f;
   float lofiCracklePolarity = 1.f;
   uint32_t lofiRng = 0x5A17C3E1u;
@@ -562,6 +566,9 @@ struct TemporalDeckEngine {
     lofiWowPhaseA = 0.f;
     lofiWowPhaseB = 0.f;
     lofiFlutterPhase = 0.f;
+    lofiWowFlutterCached = 0.f;
+    lofiModUpdateCountdown = 0;
+    lofiModUpdateIntervalSamples = 1;
     lofiCrackleEnv = 0.f;
     lofiCracklePolarity = 1.f;
     lofiRng = 0x5A17C3E1u;
@@ -690,15 +697,15 @@ struct TemporalDeckEngine {
   static float makeupGainForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      return 1.12f;
+      return 0.971f;
     case CARTRIDGE_CONCORDE_SCRATCH:
-      return 1.08f;
+      return 0.891f;
     case CARTRIDGE_680_HP:
-      return 1.07f;
+      return 0.995f;
     case CARTRIDGE_QBERT:
-      return 1.14f;
+      return 0.820f;
     case CARTRIDGE_LOFI:
-      return 1.36f;
+      return 1.187f;
     case CARTRIDGE_CLEAN:
     default:
       return 1.f;
@@ -764,6 +771,40 @@ struct TemporalDeckEngine {
 
   float lofiRandSigned() { return lofiRandUnit() * 2.f - 1.f; }
 
+  float updateLofiWowFlutter() {
+    float sr = std::max(sampleRate, 1.f);
+    int desiredInterval = clamp(int(std::round(sr / kLofiModControlRateHz)), 1, 64);
+    if (desiredInterval != lofiModUpdateIntervalSamples) {
+      lofiModUpdateIntervalSamples = desiredInterval;
+      if (lofiModUpdateCountdown > lofiModUpdateIntervalSamples) {
+        lofiModUpdateCountdown = lofiModUpdateIntervalSamples;
+      }
+    }
+    if (lofiModUpdateCountdown <= 0) {
+      float dt = float(lofiModUpdateIntervalSamples) / sr;
+      constexpr float kTau = 2.f * float(M_PI);
+      lofiWowPhaseA += kTau * 0.33f * dt;
+      lofiWowPhaseB += kTau * 0.57f * dt;
+      lofiFlutterPhase += kTau * 7.6f * dt;
+      auto wrapPhase = [&](float &phase) {
+        if (phase > kTau || phase < 0.f) {
+          phase = std::fmod(phase, kTau);
+          if (phase < 0.f) {
+            phase += kTau;
+          }
+        }
+      };
+      wrapPhase(lofiWowPhaseA);
+      wrapPhase(lofiWowPhaseB);
+      wrapPhase(lofiFlutterPhase);
+      lofiWowFlutterCached = 0.0064f * std::sin(lofiWowPhaseA) + 0.0041f * std::sin(lofiWowPhaseB + 0.7f) +
+                             0.0022f * std::sin(lofiFlutterPhase + 1.4f);
+      lofiModUpdateCountdown = lofiModUpdateIntervalSamples;
+    }
+    lofiModUpdateCountdown -= 1;
+    return lofiWowFlutterCached;
+  }
+
   std::pair<float, float> applyCartridgeCharacter(std::pair<float, float> in, float motionAmount, bool scratchReadPath) {
     if (cartridgeCharacter == CARTRIDGE_CLEAN) {
       return in;
@@ -806,23 +847,8 @@ struct TemporalDeckEngine {
     }
 
     if (cartridgeCharacter == CARTRIDGE_LOFI) {
-      float sr = std::max(sampleRate, 1.f);
-      float dt = 1.f / sr;
-      constexpr float kTau = 2.f * float(M_PI);
-
-      lofiWowPhaseA += kTau * 0.33f * dt;
-      lofiWowPhaseB += kTau * 0.57f * dt;
-      lofiFlutterPhase += kTau * 7.6f * dt;
-      if (lofiWowPhaseA > kTau)
-        lofiWowPhaseA -= kTau;
-      if (lofiWowPhaseB > kTau)
-        lofiWowPhaseB -= kTau;
-      if (lofiFlutterPhase > kTau)
-        lofiFlutterPhase -= kTau;
-
       // Sum of slow wow + quicker flutter components (deterministic, low cost).
-      float wowFlutter = 0.0064f * std::sin(lofiWowPhaseA) + 0.0041f * std::sin(lofiWowPhaseB + 0.7f) +
-                         0.0022f * std::sin(lofiFlutterPhase + 1.4f);
+      float wowFlutter = updateLofiWowFlutter();
       float wearTilt = 1.f + wowFlutter;
 
       // Semi-worn character: gentle high smearing + channel mismatch.
