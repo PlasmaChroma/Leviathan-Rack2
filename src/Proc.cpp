@@ -1204,7 +1204,7 @@ struct ProcWidget : ModuleWidget {
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->paramId = Proc::AMP_PARAM;
-			ampReadout->box.pos = mm2px(Vec(2.5, 31.9));
+			ampReadout->box.pos = mm2px(Vec(2.5, 32.15));
 			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
 			addChild(ampReadout);
 		}
