@@ -1216,25 +1216,27 @@ struct TemporalDeckWidget : ModuleWidget {
       }
       menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Advanced"));
-      menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
-        auto bufferModeMenuLabel = [=](int mode) {
-          std::string label = TemporalDeck::bufferDurationLabelFor(mode);
-          if (mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
-            return label;
+      if (!module->isSampleModeEnabled()) {
+        menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
+          auto bufferModeMenuLabel = [=](int mode) {
+            std::string label = TemporalDeck::bufferDurationLabelFor(mode);
+            if (mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
+              return label;
+            }
+            // 10-minute modes use 601s internal allocation (extra 1s headroom).
+            float sr = std::max(module->getUiSampleRate(), 1.f);
+            float channels = (mode == TemporalDeck::BUFFER_DURATION_10M_MONO) ? 1.f : 2.f;
+            double bytes = double(sr) * 601.0 * double(channels) * double(sizeof(float));
+            double mib = bytes / (1024.0 * 1024.0);
+            return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
+          };
+          for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {
+            submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(i), "",
+                                                  [=]() { return module->getBufferDurationMode() == i; },
+                                                  [=]() { module->applyBufferDurationMode(i); }));
           }
-          // 10-minute modes use 601s internal allocation (extra 1s headroom).
-          float sr = std::max(module->getUiSampleRate(), 1.f);
-          float channels = (mode == TemporalDeck::BUFFER_DURATION_10M_MONO) ? 1.f : 2.f;
-          double bytes = double(sr) * 601.0 * double(channels) * double(sizeof(float));
-          double mib = bytes / (1024.0 * 1024.0);
-          return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
-        };
-        for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {
-          submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(i), "",
-                                                [=]() { return module->getBufferDurationMode() == i; },
-                                                [=]() { module->applyBufferDurationMode(i); }));
-        }
-      }));
+        }));
+      }
       menu->addChild(createSubmenuItem("Slip return speed", "", [=](Menu *submenu) {
         submenu->addChild(createCheckMenuItem("None", "", [=]() { return !module->isSlipLatched(); },
                                               [=]() { module->setSlipLatched(false); }));
