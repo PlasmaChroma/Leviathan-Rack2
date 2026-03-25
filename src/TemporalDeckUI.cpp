@@ -248,12 +248,9 @@ void TemporalDeckPlatterWidget::logTraceEvent(const char *eventName, Vec local, 
                      << module->getUiSampleRate() << "\n";
 }
 
-static std::string formatClockTime(double seconds) {
+static std::string formatSecondsPrecise(double seconds) {
   seconds = std::max(0.0, seconds);
-  int total = int(std::floor(seconds + 0.5));
-  int mins = total / 60;
-  int secs = total % 60;
-  return string::f("%02d:%02d", mins, secs);
+  return string::f("%.3f s", seconds);
 }
 
 static bool topArcAngleFromLocal(Vec local, float *angleOut) {
@@ -318,28 +315,51 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
   if (APP && APP->window && APP->window->uiFont) {
-    std::string displayText;
-    if (module->isSampleModeEnabled() && module->hasLoadedSample()) {
-      displayText = formatClockTime(module->getUiSamplePlayheadSeconds()) + " / " +
-                    formatClockTime(module->getUiSampleDurationSeconds());
-    } else {
+    bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+    if (!sampleDisplay) {
+      std::string displayText;
       double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
       displayText = string::f("%.0f ms", lagMs);
-    }
-    // Keep readouts above the arc LED strip so they don't visually collide.
-    Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 1.02f));
+      // Keep readouts above the arc LED strip so they don't visually collide.
+      Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 1.02f));
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 11.5f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+      nvgText(args.vg, textPos.x, textPos.y, displayText.c_str(), nullptr);
+    } else {
+      // Sample mode: show current/total as a stacked fraction in seconds.
+      float textX = centerMm.x + arcRadius + mm2px(Vec(8.0f, 0.f)).x;
+      // Align "current" to the same baseline as live-mode millisecond readout.
+      float topY = centerMm.y - arcRadius * 1.02f;
+      float dividerY = topY + 6.2f;
+      float bottomY = dividerY + 6.2f;
+      std::string currentText = formatSecondsPrecise(module->getUiSamplePlayheadSeconds());
+      std::string totalText = formatSecondsPrecise(module->getUiSampleDurationSeconds());
 
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgFontSize(args.vg, 11.5f);
-    nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-    nvgText(args.vg, textPos.x, textPos.y, displayText.c_str(), nullptr);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 10.4f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+      nvgText(args.vg, textX, topY, currentText.c_str(), nullptr);
+      nvgText(args.vg, textX, bottomY, totalText.c_str(), nullptr);
 
-    if (module->isSampleModeEnabled() && module->hasLoadedSample()) {
+      float boundsTop[4] = {};
+      float boundsBottom[4] = {};
+      float widthTop = nvgTextBounds(args.vg, textX, topY, currentText.c_str(), nullptr, boundsTop);
+      float widthBottom = nvgTextBounds(args.vg, textX, bottomY, totalText.c_str(), nullptr, boundsBottom);
+      float lineWidth = std::max(widthTop, widthBottom) + 2.0f;
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, textX - lineWidth, dividerY);
+      nvgLineTo(args.vg, textX + 0.8f, dividerY);
+      nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 210));
+      nvgStrokeWidth(args.vg, 1.0f);
+      nvgStroke(args.vg);
+
       std::string status = module->isSampleTransportPlaying() ? "sample play" : "sample pause";
       nvgFontSize(args.vg, 9.5f);
       nvgFillColor(args.vg, nvgRGBA(90, 178, 187, 230));
-      nvgText(args.vg, textPos.x, textPos.y + 11.f, status.c_str(), nullptr);
+      nvgText(args.vg, textX, bottomY + 10.2f, status.c_str(), nullptr);
     }
   }
   nvgRestore(args.vg);

@@ -904,6 +904,13 @@ struct TemporalDeckEngine {
       return buffer.monoStorage ? buffer.left[clamped] : buffer.right[clamped];
     };
 
+    // Exact/near-exact sample-center reads are common in transport playback.
+    // Skip interpolation math when the phase is effectively integral.
+    if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
+      int idx = clampSampleIndex(int(std::round(pos)), maxIndex);
+      return {buffer.left[idx], rightAt(idx)};
+    }
+
     if (interpolationMode == TemporalDeck::SCRATCH_INTERP_SINC) {
       constexpr int kRadius = 8;
       float accL = 0.f;
@@ -1210,6 +1217,72 @@ struct TemporalDeckEngine {
     bool slipJustEnabled = slipState && !prevSlipState;
     double newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
+    bool fastSampleTransportPath =
+      sampleModeActive && !anyScratch && !positionFollow && !wasScratchActive && !slipState && !prevSlipState &&
+      !slipReturning && !slipFinalCatchActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh;
+    if (fastSampleTransportPath) {
+      if (!sampleTransportPlaying || freezeState) {
+        speed = 0.f;
+      }
+      samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
+      if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
+        samplePlayhead = sampleWindowEndPos;
+        autoFreezeRequested = true;
+      }
+      if (samplePlayhead <= 0.0 && speed < 0.f) {
+        samplePlayhead = 0.0;
+        autoFreezeRequested = true;
+      }
+      readHead = samplePlayhead;
+      newestPos = sampleWindowEndPos;
+
+      std::pair<float, float> wet = readSampleBounded(readHead, TemporalDeck::SCRATCH_INTERP_CUBIC);
+      float readDeltaForTone = float(readHead - prevReadHead);
+      float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
+      wet = applyCartridgeCharacter(wet, motionAmount, false);
+
+      scratchFlipTransientEnv *= 0.92f;
+      if (scratchFlipTransientEnv < 1e-4f) {
+        scratchFlipTransientEnv = 0.f;
+        prevScratchDeltaSign = 0;
+      }
+      scratchDcInL = wet.first;
+      scratchDcInR = wet.second;
+      scratchDcOutL = 0.f;
+      scratchDcOutR = 0.f;
+
+      prevScratchReadDelta = readDeltaForTone;
+      prevWetL = wet.first;
+      prevWetR = wet.second;
+      prevScratchOutL = wet.first;
+      prevScratchOutR = wet.second;
+
+      float mix = clamp(mixKnob, 0.f, 1.f);
+      result.outL = inL * (1.f - mix) + wet.first * mix;
+      result.outR = inR * (1.f - mix) + wet.second * mix;
+
+      double visualDelta = readHead - prevReadHead;
+      platterPhase += float(visualDelta) * platterRadiansPerSample();
+      if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
+        platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
+      }
+
+      scratchActive = false;
+      externalCvGateHigh = false;
+      result.lag = currentLagFromNewest(newestPos);
+      result.accessibleLag = sampleWindowEndPos;
+      result.platterAngle = platterPhase;
+      result.sampleMode = true;
+      result.sampleLoaded = sampleLoaded;
+      result.sampleTransportPlaying = sampleTransportPlaying;
+      result.autoFreezeRequested = autoFreezeRequested;
+      double sampleUiEndFrame = sampleWindowEndPos;
+      double sampleUiFrame = clampd(readHead, 0.0, sampleUiEndFrame);
+      result.samplePlayhead = std::max(0.0, sampleUiFrame / std::max(sampleRate, 1.f));
+      result.sampleDuration = std::max(0.0, (sampleUiEndFrame + 1.0) / std::max(sampleRate, 1.f));
+      result.sampleProgress = sampleUiEndFrame > 0.0 ? clampd(sampleUiFrame / sampleUiEndFrame, 0.0, 1.0) : 0.0;
+      return result;
+    }
     auto startNowCatch = [&](float startLag) {
       nowCatchActive = true;
       nowCatchRemaining = kNowCatchTime;
@@ -2221,6 +2294,20 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
     std::array<float, kArcLightCount> arcYellow{};
     std::array<float, kArcLightCount> arcRed{};
+    std::array<float, kArcLightCount> limitYellowBlendAllowed{};
+    const float limitIndicatorRedBrightness = 0.9f;
+    const float limitApproachWindowLeds = 2.0f;
+    auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
+      bool isLimitLed = std::fabs(float(i) - limitLed) < 0.5f;
+      if (isLimitLed) {
+        limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
+        if (allowYellowBlend) {
+          float approach = clamp(1.f - std::fabs(playheadLed - limitLed) / limitApproachWindowLeds, 0.f, 1.f);
+          *brightness = std::max(*brightness, 0.42f * approach);
+        }
+      }
+      arcRed[i] = isLimitLed ? limitIndicatorRedBrightness : 0.f;
+    };
     if (frame.sampleMode && frame.sampleLoaded) {
       // Sample mode fills from left->right. The red limit marker indicates the
       // effective playback end (full sample end or knob-limited end).
@@ -2231,6 +2318,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
       float ledSpan = std::max(0.f, leftLed - sampleEndLed);
       float progressLedUnits = progressNorm * ledSpan;
+      float playheadLed = leftLed - progressLedUnits;
       for (int i = 0; i < kArcLightCount; ++i) {
         // Progressive fill from left to right with fractional leading LED.
         // At start, all LEDs are off; the leading LED ramps in proportionally.
@@ -2241,13 +2329,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
         if (float(i) + 0.5f < sampleEndLed) {
           brightness = 0.f;
         }
-        bool isEndLed = std::fabs(float(i) - sampleEndLed) < 0.5f;
-        if (isEndLed) {
-          // Keep endpoint marker visually red-only (no yellow overlap/orange).
-          brightness = 0.f;
-        }
+        bool allowYellowBlend = brightness > 1e-4f;
+        applyLimitMarker(i, playheadLed, sampleEndLed, &brightness, allowYellowBlend);
         arcYellow[i] = brightness;
-        arcRed[i] = isEndLed ? 0.65f : 0.f;
       }
     } else {
       int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
@@ -2263,26 +2347,21 @@ void TemporalDeck::process(const ProcessArgs &args) {
         } else {
           brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
         }
-        if (limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f) {
-          brightness = std::max(brightness, 0.28f);
-        }
         if (float(i) > limitLed + 0.5f) {
           brightness = 0.f;
         }
+        bool allowYellowBlend = brightness > 1e-4f;
+        applyLimitMarker(i, lagLed, limitLed, &brightness, allowYellowBlend);
         arcYellow[i] = brightness;
-        bool isLimitLed = limitRatio > 0.f && std::fabs(float(i) - limitLed) < 0.5f;
-        arcRed[i] = isLimitLed ? 1.f : 0.f;
       }
     }
 
     // Small spatial blend to remove visible dead-zones between LEDs while
     // preserving endpoint markers.
     smoothLedBrightness(arcYellow);
-    if (frame.sampleMode && frame.sampleLoaded) {
-      for (int i = 0; i < kArcLightCount; ++i) {
-        if (arcRed[i] > 0.f) {
-          arcYellow[i] = 0.f;
-        }
+    for (int i = 0; i < kArcLightCount; ++i) {
+      if (arcRed[i] > 0.f && limitYellowBlendAllowed[i] < 0.5f) {
+        arcYellow[i] = 0.f;
       }
     }
     for (int i = 0; i < kArcLightCount; ++i) {
