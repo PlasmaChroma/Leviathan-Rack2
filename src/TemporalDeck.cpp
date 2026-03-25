@@ -323,9 +323,9 @@ struct TemporalDeckBuffer {
 struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
-  static constexpr float kSlipReturnTime = 0.12f;
+  static constexpr float kSlipReturnTime = 0.09f;
   static constexpr float kSlipReturnQuickTime = 0.06f;
-  static constexpr float kSlipReturnSlowMultiplier = 1.85f;
+  static constexpr float kSlipReturnSlowMultiplier = 1.5f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kSlipFinalCatchThresholdMs = 120.f;
   static constexpr float kSlipFinalCatchTime = 0.035f;
