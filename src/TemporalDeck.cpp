@@ -448,7 +448,7 @@ struct TemporalDeckEngine {
 
   TemporalDeckBuffer buffer;
   float sampleRate = 44100.f;
-  bool sampleModeEnabled = false;
+  std::atomic<bool> sampleModeEnabled{false};
   bool sampleLoaded = false;
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
@@ -497,6 +497,8 @@ struct TemporalDeckEngine {
   CartridgeParams cachedCartridgeParams;
   float cachedHpCoeff = 0.f;
   float cachedBodyCoeff = 0.f;
+  float cachedLpCoeffBase = 0.f;
+  float cachedLpCoeffMotion = 0.f;
   float cachedDriveNorm = 1.f;
   float cachedMakeupGain = 1.f;
   float cachedPlaybackColorMix = 1.f;
@@ -718,6 +720,8 @@ struct TemporalDeckEngine {
     cachedCartridgeParams = paramsForCartridge(cartridgeCharacter);
     cachedHpCoeff = onePoleCoeff(cachedCartridgeParams.hpHz);
     cachedBodyCoeff = onePoleCoeff(cachedCartridgeParams.bodyHz);
+    cachedLpCoeffBase = onePoleCoeff(cachedCartridgeParams.lpHz);
+    cachedLpCoeffMotion = onePoleCoeff(cachedCartridgeParams.lpMotionHz);
     cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
     cachedPlaybackColorMix = playbackColorMixForCartridge(cartridgeCharacter);
@@ -743,8 +747,9 @@ struct TemporalDeckEngine {
     motionAmount = clamp(motionAmount, 0.f, 1.f);
 
     // Motion amount modulates LP corner for "stylus under motion" dulling.
-    float lpHz = p.lpHz + (p.lpMotionHz - p.lpHz) * (motionAmount * p.motionDulling);
-    float lpCoeff = onePoleCoeff(lpHz);
+    // Use cached endpoint coefficients to avoid per-sample exp() in onePoleCoeff().
+    float lpMotionMix = clamp(motionAmount * p.motionDulling, 0.f, 1.f);
+    float lpCoeff = crossfade(cachedLpCoeffBase, cachedLpCoeffMotion, lpMotionMix);
 
     auto processChannel = [&](float x, CartridgeChannelState &state, float lpCoeff) {
       float rumble = state.rumble.lowpass(x, cachedHpCoeff);
@@ -1879,7 +1884,7 @@ struct TemporalDeck::Impl {
   bool freezeLatched = false;
   bool reverseLatched = false;
   bool slipLatched = false;
-  bool sampleModeEnabled = false;
+  std::atomic<bool> sampleModeEnabled{false};
   bool sampleAutoPlayOnLoad = true;
   std::mutex sampleStateMutex;
   std::atomic<bool> pendingSampleStateApply{false};
@@ -2036,12 +2041,11 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->cachedSampleRate = sampleRate;
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   DecodedSampleFile decodedSample;
-  bool sampleModeEnabled = false;
+  bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   bool sampleAutoPlayOnLoad = true;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     decodedSample = impl->decodedSample;
-    sampleModeEnabled = impl->sampleModeEnabled;
     sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
   impl->engine.bufferDurationMode = mode;
@@ -2105,12 +2109,11 @@ void TemporalDeck::onSampleRateChange() {
 
 json_t *TemporalDeck::dataToJson() {
   json_t *root = json_object();
-  bool sampleModeEnabled = false;
+  bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   bool sampleAutoPlayOnLoad = true;
   std::string samplePath;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    sampleModeEnabled = impl->sampleModeEnabled;
     sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
     samplePath = impl->samplePath;
   }
@@ -2198,8 +2201,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
   }
   if (sampleModeEnabledJ) {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleModeEnabled = json_boolean_value(sampleModeEnabledJ);
+    impl->sampleModeEnabled.store(json_boolean_value(sampleModeEnabledJ), std::memory_order_relaxed);
   }
   if (sampleAutoPlayOnLoadJ) {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
@@ -2223,11 +2225,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   if (bufferModeChanged || args.sampleRate != impl->cachedSampleRate || sampleStateApplyRequested) {
     applySampleRateChange(args.sampleRate);
   }
-  bool desiredSampleModeEnabled = false;
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    desiredSampleModeEnabled = impl->sampleModeEnabled;
-  }
+  bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
 
   if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
     bool next = !impl->freezeLatched;
@@ -2363,10 +2361,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSampleDurationSeconds.store(frame.sampleDuration);
   impl->uiSampleProgress.store(frame.sampleProgress);
 
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleModeEnabled = impl->engine.sampleModeEnabled;
-  }
+  impl->sampleModeEnabled.store(impl->engine.sampleModeEnabled, std::memory_order_relaxed);
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
@@ -2519,10 +2514,7 @@ void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
 }
 
 void TemporalDeck::setSampleModeEnabled(bool enabled) {
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleModeEnabled = enabled;
-  }
+  impl->sampleModeEnabled.store(enabled, std::memory_order_relaxed);
   impl->pendingSampleStateApply.store(true);
   impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded);
 }
@@ -2553,8 +2545,8 @@ void TemporalDeck::clearLoadedSample() {
     impl->samplePath.clear();
     impl->sampleDisplayName.clear();
     impl->decodedSample = DecodedSampleFile();
-    impl->sampleModeEnabled = false;
   }
+  impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
   impl->bufferDurationMode.store(BUFFER_DURATION_10S);
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(BUFFER_DURATION_10S);
@@ -2579,9 +2571,9 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     impl->samplePath = path;
     impl->sampleDisplayName = system::getFilename(path);
     impl->decodedSample = std::move(decoded);
-    impl->sampleModeEnabled = true;
     autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
+  impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
   impl->freezeLatched = !autoPlayOnLoad;
   impl->reverseLatched = false;
   impl->slipLatched = false;
