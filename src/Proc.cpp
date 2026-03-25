@@ -15,6 +15,7 @@ struct Proc : Module {
 		RISE_PARAM,
 		FALL_PARAM,
 		SHAPE_PARAM,
+		AMP_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -93,6 +94,7 @@ struct Proc : Module {
 		float riseTimeStep = 0.f;
 		float fallTimeStep = 0.f;
 		int timeInterpSamplesLeft = 0;
+		float signalOutputGain = 1.f;
 	};
 
 	struct ChannelConfig {
@@ -178,6 +180,7 @@ struct Proc : Module {
 	static constexpr float SIGNAL_INJECT_GAIN = 0.55f;
 	// One-pole attraction time constant for FG input perturbation.
 	static constexpr float SIGNAL_INJECT_TAU = 0.0015f;
+	static constexpr float DEFAULT_FUNCTION_AMP = 8.f;
 	// Empirical BOTH CV response fit (hardware-calibrated saturating model).
 	static constexpr float BOTH_F_OFF_HZ = 1.93157058f;
 	static constexpr float BOTH_F_MAX_HZ = 986.84629918f;
@@ -377,7 +380,7 @@ struct Proc : Module {
 		}
 		float f = clamp(fraction01, 1e-6f, 1.f);
 		float p = f - 1.f;
-		ch.signalBlep.insertDiscontinuity(p, step);
+		ch.signalBlep.insertDiscontinuity(p, step * ch.signalOutputGain);
 	}
 
 	void setTimingUpdateDiv(int div) {
@@ -678,12 +681,15 @@ struct Proc : Module {
 		}
 		float scale = ch.cachedWarpScale;
 
+		float functionAmp = params[AMP_PARAM].getValue();
+		float functionAmpScale = functionAmp / FG_V_MAX;
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
 		if (!haltHigh && ch.phase == CHANNEL_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
 			triggerFunction(ch);
 		}
+		ch.signalOutputGain = (ch.phase != CHANNEL_IDLE) ? functionAmpScale : 1.f;
 		if (haltHigh) {
 			ChannelResult result;
 			result.cycleOn = cycleOn;
@@ -701,6 +707,7 @@ struct Proc : Module {
 
 		if (ch.phase != CHANNEL_IDLE) {
 			// Function-generator integration path.
+			ch.signalOutputGain = functionAmpScale;
 			float s = shapeSigned;
 			float range = FG_V_MAX - FUNCTION_V_MIN;
 			float xIn = 0.f;
@@ -766,6 +773,7 @@ struct Proc : Module {
 		}
 		else if (signalPatched) {
 			// Use the same curve-warp family as the function generator path.
+			ch.signalOutputGain = 1.f;
 			SlewStepResult slewStep = processUnifiedShapedSlew(
 				ch,
 				signalIn,
@@ -781,6 +789,7 @@ struct Proc : Module {
 			updateGateOutputs(eorGateIsHigh, eocGateIsHigh, 1e-6f);
 		}
 		else {
+			ch.signalOutputGain = 1.f;
 			ch.slewDir = 0;
 			ch.out = 0.f;
 		}
@@ -797,6 +806,7 @@ struct Proc : Module {
 		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
 		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
 		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+		configParam(AMP_PARAM, 1.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
 		configInput(SIGNAL_INPUT, "Signal");
 		configInput(TRIGGER_INPUT, "Trigger");
 		configInput(HALT_INPUT, "Halt CV");
@@ -888,7 +898,8 @@ struct Proc : Module {
 		}
 
 		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
-		float outRendered = channel.out + (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+		float outRendered = channel.out * channel.signalOutputGain
+			+ (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
 		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
 		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
 		float negOut = -outRendered;
@@ -1149,6 +1160,31 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
+struct AmpVoltageReadoutWidget : Widget {
+	int paramId = -1;
+
+	void draw(const DrawArgs& args) override {
+		Widget::draw(args);
+		if (paramId < 0 || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		Proc* modulePtr = nullptr;
+		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
+			modulePtr = moduleWidget->getModule<Proc>();
+		}
+		if (!modulePtr) {
+			return;
+		}
+		char ampText[16];
+		std::snprintf(ampText, sizeof(ampText), "%.1fV", modulePtr->params[paramId].getValue());
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.0f);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		nvgText(args.vg, box.size.x * 0.5f, 0.f, ampText, nullptr);
+	}
+};
+
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
@@ -1164,6 +1200,14 @@ struct ProcWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(7.246, 28.71)), module, Proc::AMP_PARAM));
+		{
+			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
+			ampReadout->paramId = Proc::AMP_PARAM;
+			ampReadout->box.pos = mm2px(Vec(2.5, 31.9));
+			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
+			addChild(ampReadout);
+		}
 		{
 			WavePreviewWidget* previewWidget = new WavePreviewWidget();
 			math::Rect previewRectMm;
@@ -1182,7 +1226,7 @@ struct ProcWidget : ModuleWidget {
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 40.367)), module, Proc::HALT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::FALL_CV_INPUT));
