@@ -1217,8 +1217,14 @@ struct TemporalDeckEngine {
     }
 
     double candidate = unwrapReadNearWrite(readHead, newestPos) + double(scratchMotionVelocity) * double(dt);
-    candidate = std::max(newestPos - std::max(limit, 0.0), std::min(candidate, newestPos));
-    readHead = buffer.wrapPosition(candidate);
+    if (isSampleLoopActive()) {
+      // In sample loop mode, manual scratch motion should be continuous across
+      // the loop boundary rather than clamping at the window edges.
+      readHead = normalizeSamplePosition(candidate, newestPos);
+    } else {
+      candidate = std::max(newestPos - std::max(limit, 0.0), std::min(candidate, newestPos));
+      readHead = buffer.wrapPosition(candidate);
+    }
     scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
 
     if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
