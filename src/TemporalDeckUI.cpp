@@ -75,6 +75,9 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   InteractionTraceRecorder traceRecorder;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
+  Vec currentLocalMousePos() const;
+  float wheelRadiusGainForLocal(Vec local) const;
+  float normalizeWheelScrollDelta(float rawScroll) const;
 
   bool isWithinPlatter(Vec panelPos) const {
     Vec local = panelPos.minus(localCenter());
@@ -159,6 +162,30 @@ static bool isMiddleMouseDown() {
          glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
 }
 
+Vec TemporalDeckPlatterWidget::currentLocalMousePos() const {
+  if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+    return Vec(0.f, 0.f);
+  }
+  return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
+}
+
+float TemporalDeckPlatterWidget::wheelRadiusGainForLocal(Vec local) const {
+  float radiusNorm = clamp(local.norm() / std::max(platterRadiusPx, 1e-3f), 0.f, 1.f);
+  constexpr float kWheelCenterGain = 1.75f;
+  constexpr float kWheelEdgeGain = 0.72f;
+  return crossfade(kWheelCenterGain, kWheelEdgeGain, std::sqrt(radiusNorm));
+}
+
+float TemporalDeckPlatterWidget::normalizeWheelScrollDelta(float rawScroll) const {
+  float absRaw = std::fabs(rawScroll);
+  if (absRaw >= 8.f) {
+    // Some OS/device combinations deliver wheel motion in coarse line-based
+    // units (e.g. +/-50 per notch) instead of notch-like +/-1 steps.
+    rawScroll /= 50.f;
+  }
+  return clamp(rawScroll, -4.f, 4.f);
+}
+
 void TemporalDeckPlatterWidget::pollMiddleQuickSlipTrigger() {
   bool middleDown = isMiddleMouseDown();
   if (!middleDown) {
@@ -181,16 +208,11 @@ void TemporalDeckPlatterWidget::syncTraceCaptureState() {
     stopTraceCapture();
     return;
   }
-  if (!module->isFreezeTraceLoggingEnabled()) {
+  if (!module->isPlatterTraceLoggingEnabled()) {
     stopTraceCapture();
     return;
   }
-  bool freezeLatched = module->isUiFreezeLatched();
-  if (freezeLatched) {
-    startTraceCapture();
-  } else {
-    stopTraceCapture();
-  }
+  startTraceCapture();
 }
 
 void TemporalDeckPlatterWidget::startTraceCapture() {
@@ -210,11 +232,12 @@ void TemporalDeckPlatterWidget::startTraceCapture() {
   }
   traceRecorder.file.setf(std::ios::fixed);
   traceRecorder.file << std::setprecision(6);
-  traceRecorder.file << "# TemporalDeck platter interaction trace v1\n";
-  traceRecorder.file << "# Start when freeze latch turns on, stop when freeze latch turns off\n";
+  traceRecorder.file << "# TemporalDeck platter interaction trace v2\n";
+  traceRecorder.file << "# Start when platter trace logging is enabled, stop when it is disabled\n";
   traceRecorder.file
-    << "seq,t_sec,event,freeze,dragging,x,y,dx,dy,scroll,delta_angle,lag_delta,live_lag,local_lag,"
-       "velocity,sensitivity,sample_rate\n";
+    << "seq,t_sec,event,freeze,sample_mode,sample_loop,sample_playing,dragging,x,y,radius_px,radius_norm,"
+       "mouse_angle,radius_gain,dx,dy,scroll,delta_angle,lag_delta,live_lag,local_lag,accessible_lag,velocity,"
+       "sample_playhead_sec,sample_progress,ui_platter_angle,sensitivity,sample_rate\n";
   traceRecorder.startTimeSec = system::getTime();
   traceRecorder.sequence = 0;
   traceRecorder.active = true;
@@ -242,12 +265,22 @@ void TemporalDeckPlatterWidget::logTraceEvent(const char *eventName, Vec local, 
   if (!module || !traceRecorder.active || !traceRecorder.file.good()) {
     return;
   }
+  float radiusPx = local.norm();
+  float radiusNorm = clamp(radiusPx / std::max(platterRadiusPx, 1e-3f), 0.f, 1.f);
+  float mouseAngle = (radiusPx > 1e-4f) ? std::atan2(local.y, local.x) : 0.f;
+  bool sampleMode = module->isSampleModeEnabled() && module->hasLoadedSample();
+  float radiusGain = wheelRadiusGainForLocal(local);
   double tSec = std::max(0.0, system::getTime() - traceRecorder.startTimeSec);
   traceRecorder.file << traceRecorder.sequence++ << "," << tSec << "," << eventName << ","
-                     << (module->isUiFreezeLatched() ? 1 : 0) << "," << (dragging ? 1 : 0) << ","
-                     << local.x << "," << local.y << "," << mouseDelta.x << ","
-                     << mouseDelta.y << "," << scroll << "," << deltaAngle << "," << lagDelta << "," << liveLag
-                     << "," << localLag << "," << velocity << "," << module->scratchSensitivity() << ","
+                     << (module->isUiFreezeLatched() ? 1 : 0) << "," << (sampleMode ? 1 : 0) << ","
+                     << (module->isSampleLoopEnabled() ? 1 : 0) << ","
+                     << (module->isSampleTransportPlaying() ? 1 : 0) << "," << (dragging ? 1 : 0) << ","
+                     << local.x << "," << local.y << "," << radiusPx << "," << radiusNorm << "," << mouseAngle
+                     << "," << radiusGain << "," << mouseDelta.x << "," << mouseDelta.y << "," << scroll << ","
+                     << deltaAngle << "," << lagDelta << "," << liveLag << "," << localLag << ","
+                     << module->getUiAccessibleLagSamples() << "," << velocity << ","
+                     << module->getUiSamplePlayheadSeconds() << "," << module->getUiSampleProgress() << ","
+                     << module->getUiPlatterAngle() << "," << module->scratchSensitivity() << ","
                      << module->getUiSampleRate() << "\n";
 }
 
@@ -905,11 +938,12 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
   bool freezeLatched = module->isUiFreezeLatched();
+  bool freezeLikeDrag = freezeLatched || !module->isSampleModeEnabled();
   float sensitivity = module->scratchSensitivity();
   float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
                                                           TemporalDeck::kMouseScratchTravelScale,
                                                           TemporalDeck::kNominalPlatterRpm);
-  if (!freezeLatched) {
+  if (!freezeLikeDrag) {
     localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
   }
   if (module->isSampleModeEnabled() && module->hasLoadedSample() && module->isSampleLoopEnabled() && accessibleLag > 0.0) {
@@ -989,9 +1023,15 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
     OpaqueWidget::onHoverScroll(e);
     return;
   }
+  int mods = (APP && APP->window) ? APP->window->getMods() : 0;
+  if ((mods & RACK_MOD_CTRL) != 0) {
+    // Let Rack handle Ctrl/Cmd+wheel (e.g. zoom) when hovering the platter.
+    OpaqueWidget::onHoverScroll(e);
+    return;
+  }
 
-  float scroll = -e.scrollDelta.y;
-  if (std::fabs(scroll) < 1e-4f) {
+  float rawScroll = -e.scrollDelta.y;
+  if (std::fabs(rawScroll) < 1e-4f) {
     OpaqueWidget::onHoverScroll(e);
     return;
   }
@@ -1003,20 +1043,22 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   }
 
   float sampleRate = module->getUiSampleRate();
+  Vec local = e.pos.minus(localCenter());
+  float radiusGain = wheelRadiusGainForLocal(local);
+  float scroll = normalizeWheelScrollDelta(rawScroll);
   float scrollAbs = std::fabs(scroll);
   float scrollShaped = (scroll >= 0.f ? 1.f : -1.f) * (scrollAbs + 0.65f * scrollAbs * scrollAbs);
   float samplesPerNotch =
     sampleRate * 0.018f * TemporalDeck::kWheelScratchTravelScale * module->scratchSensitivity();
-  float lagDelta = scrollShaped * samplesPerNotch;
+  float lagDelta = scrollShaped * samplesPerNotch * radiusGain;
   // Keep wheel scratch active long enough for Hybrid wheel impulses to settle,
   // otherwise small forward ticks can drop out before they noticeably reduce lag.
   float holdSeconds = module->isSlipLatched() ? 0.16f : 0.09f;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
   module->addPlatterWheelDelta(lagDelta, holdSamples);
-  Vec local = e.pos.minus(localCenter());
-  logTraceEvent("WHEEL", local, Vec(0.f, 0.f), scroll, 0.f, lagDelta, float(module->getUiLagSamples()), localLagSamples,
-                filteredGestureVelocity);
+  logTraceEvent("WHEEL", local, Vec(0.f, 0.f), rawScroll, 0.f, lagDelta, float(module->getUiLagSamples()),
+                localLagSamples, filteredGestureVelocity);
   e.consume(this);
 }
 
@@ -1051,13 +1093,14 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
-    logTraceEvent("DRAG_CANCEL", Vec(0.f, 0.f), e.mouseDelta, 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
+    Vec local = currentLocalMousePos();
+    logTraceEvent("DRAG_CANCEL", local, e.mouseDelta, 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
                   localLagSamples, filteredGestureVelocity);
     dragHasTiming = false;
     filteredGestureVelocity = 0.f;
     return;
   }
-  Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos).minus(localCenter());
+  Vec local = currentLocalMousePos();
   logTraceEvent("DRAG_MOVE", local, e.mouseDelta, 0.f, 0.f, 0.f, float(module->getUiLagSamples()), localLagSamples,
                 filteredGestureVelocity);
   updateScratchFromLocal(local, e.mouseDelta);
@@ -1076,7 +1119,8 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
     }
-    logTraceEvent("DRAG_END", Vec(0.f, 0.f), Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
+    Vec local = currentLocalMousePos();
+    logTraceEvent("DRAG_END", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
                   localLagSamples, filteredGestureVelocity);
     dragHasTiming = false;
     filteredGestureVelocity = 0.f;
@@ -1250,9 +1294,9 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createCheckMenuItem("Debug trace on freeze", "",
-                                         [=]() { return module->isFreezeTraceLoggingEnabled(); },
-                                         [=]() { module->setFreezeTraceLoggingEnabled(!module->isFreezeTraceLoggingEnabled()); }));
+      menu->addChild(createCheckMenuItem("Log platter mouse events", "",
+                                         [=]() { return module->isPlatterTraceLoggingEnabled(); },
+                                         [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
       menu->addChild(createMenuItem("Export platter SVG...", "", [=]() {
         Vec platterCenter = mm2px(Vec(50.8f, 72.f));
         float platterRadius = mm2px(Vec(29.5f, 0.f)).x;

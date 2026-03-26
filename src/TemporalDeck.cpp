@@ -34,6 +34,8 @@ static float realBufferSecondsForMode(int index) {
 
 static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
 
+static constexpr float kSampleFileVoltageScale = 5.f;
+
 static bool isMonoBufferMode(int index) { return index == TemporalDeck::BUFFER_DURATION_10M_MONO; }
 
 using temporaldeck::DecodedSampleFile;
@@ -86,7 +88,7 @@ static void smoothLedBrightness(std::array<float, N> &values, float sideWeight =
 }
 
 static void resampleSampleChannel(const std::vector<float> &src, float sourceRate, float targetRate, int outFrames,
-                                  std::vector<float> *dst) {
+                                  std::vector<float> *dst, float outputGain = 1.f) {
   dst->assign(std::max(outFrames, 0), 0.f);
   if (src.empty() || outFrames <= 0) {
     return;
@@ -94,7 +96,7 @@ static void resampleSampleChannel(const std::vector<float> &src, float sourceRat
   if (src.size() == 1 || std::fabs(sourceRate - targetRate) < 1e-3f) {
     for (int i = 0; i < outFrames; ++i) {
       int srcIndex = std::min<int>(i, src.size() - 1);
-      (*dst)[i] = src[srcIndex];
+      (*dst)[i] = src[srcIndex] * outputGain;
     }
     return;
   }
@@ -105,7 +107,7 @@ static void resampleSampleChannel(const std::vector<float> &src, float sourceRat
     int i0 = clamp(int(std::floor(srcPos)), 0, int(src.size()) - 1);
     int i1 = clamp(i0 + 1, 0, int(src.size()) - 1);
     float t = float(srcPos - double(i0));
-    (*dst)[i] = crossfade(src[i0], src[i1], t);
+    (*dst)[i] = crossfade(src[i0], src[i1], t) * outputGain;
   }
 }
 
@@ -358,6 +360,7 @@ struct TemporalDeckEngine {
   static constexpr float kHybridScratchCorrectionHz = 70.f;
   static constexpr float kHybridScratchWheelBurstDecayHz = 24.f;
   static constexpr float kHybridScratchWheelImpulseTime = 0.03f;
+  static constexpr float kSampleWheelForwardBurstFloorRatio = 1.10f;
   static constexpr float kHybridScratchMaxVelocity = 96000.f;
   static constexpr float kHybridScratchMaxAccel = 1200000.f;
   static constexpr float kHybridScratchVelocityDeadband = 8.f;
@@ -632,6 +635,22 @@ struct TemporalDeckEngine {
     return std::max(0.0, std::min(lag, std::max(0.0, limit)));
   }
 
+  float lagErrorToTarget(double targetLag, double currentLag, double newestPos) const {
+    double error = targetLag - currentLag;
+    if (isSampleLoopActive()) {
+      double length = sampleLoopLength(newestPos);
+      if (length > 1e-6) {
+        while (error > 0.5 * length) {
+          error -= length;
+        }
+        while (error < -0.5 * length) {
+          error += length;
+        }
+      }
+    }
+    return float(error);
+  }
+
   static float baseSpeedFromKnob(float rateKnob) {
     rateKnob = clamp(rateKnob, 0.f, 1.f);
     // Knob-only range is 0.5x .. 2.0x, centered at 1.0x.
@@ -732,13 +751,13 @@ struct TemporalDeckEngine {
   static float playbackColorMixForCartridge(int mode) {
     switch (mode) {
     case CARTRIDGE_M44_7:
-      return 0.74f;
+      return 0.60f;
     case CARTRIDGE_CONCORDE_SCRATCH:
-      return 0.72f;
+      return 0.58f;
     case CARTRIDGE_680_HP:
-      return 0.70f;
+      return 0.56f;
     case CARTRIDGE_QBERT:
-      return 0.76f;
+      return 0.62f;
     case CARTRIDGE_LOFI:
     case CARTRIDGE_CLEAN:
     default:
@@ -1180,7 +1199,8 @@ struct TemporalDeckEngine {
   }
 
   void integrateHybridScratch(float dt, double limit, double newestPos, float targetReadVelocity, float followScale,
-                              float dampingScale, float correctionScale, float nowSnapThresholdSamples) {
+                              float dampingScale, float correctionScale, float nowSnapThresholdSamples,
+                              bool clampOvershootToTarget = false) {
     // Hybrid scratch is velocity-first internally. We still keep lag as the
     // module-facing state, but we integrate the read head in buffer space and
     // derive lag from that position so "zero hand velocity" naturally means a
@@ -1188,7 +1208,7 @@ struct TemporalDeckEngine {
     scratchLagTargetSamples = clampLag(scratchLagTargetSamples, limit);
     scratchLagSamples = clampLag(scratchLagSamples, limit);
 
-    float lagError = scratchLagTargetSamples - scratchLagSamples;
+    float lagError = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
     float correctionVelocity = clamp(-lagError * (kHybridScratchCorrectionHz * correctionScale),
                                      -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
     float handFollowHz = kHybridScratchHandFollowHz * followScale;
@@ -1226,6 +1246,20 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(candidate);
     }
     scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+
+    if (clampOvershootToTarget) {
+      float lagErrorAfter = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
+      bool crossedTarget =
+        (lagError > 0.f && lagErrorAfter < 0.f) || (lagError < 0.f && lagErrorAfter > 0.f);
+      if (crossedTarget) {
+        scratchLagSamples = clampLag(scratchLagTargetSamples, limit);
+        scratchHandVelocity = 0.f;
+        scratchMotionVelocity = 0.f;
+        scratchWheelVelocityBurst = 0.f;
+        double targetRead = newestPos - scratchLagSamples;
+        readHead = isSampleLoopActive() ? normalizeSamplePosition(targetRead, newestPos) : buffer.wrapPosition(targetRead);
+      }
+    }
 
     if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
         scratchMotionVelocity >= 0.f) {
@@ -1399,7 +1433,8 @@ struct TemporalDeckEngine {
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
     bool sampleManualFreezeBehavior = sampleModeActive && manualTouchScratch;
-    bool freezeForScratchModel = freezeState || sampleManualFreezeBehavior;
+    bool liveManualFreezeLikeBehavior = !sampleModeActive && manualTouchScratch;
+    bool freezeForScratchModel = freezeState || sampleManualFreezeBehavior || liveManualFreezeLikeBehavior;
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -1660,7 +1695,7 @@ struct TemporalDeckEngine {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
-        if (!freezeForScratchModel && wheelDeltaShaped < 0.f) {
+        if (!sampleModeActive && !freezeForScratchModel && wheelDeltaShaped < 0.f) {
           // In live circular mode, small toward-NOW wheel nudges must overcome
           // moving write-head drift. Give forward wheel ticks a slight assist.
           wheelDeltaShaped *= 1.35f;
@@ -1676,12 +1711,23 @@ struct TemporalDeckEngine {
             clamp(scratchWheelVelocityBurst, -kHybridScratchMaxVelocity, kHybridScratchMaxVelocity);
         }
         decayHybridWheelBurst(dt);
-        // Wheel mode nudges lag around a moving write head in live playback.
-        // Use write-head baseline velocity so small forward wheel gestures don't
-        // get overwhelmed by natural lag growth when not frozen.
-        float wheelTargetReadVelocity = freezeForScratchModel ? 0.f : sampleRate;
+        bool freshForwardWheelImpulse = std::fabs(wheelDelta) > 1e-6f && wheelDeltaShaped < 0.f;
+        if (sampleModeActive && freshForwardWheelImpulse) {
+          float wheelLagError = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
+          if (wheelLagError < -0.5f) {
+            // In sample mode, a forward wheel nudge should read as an actual
+            // scratch gesture, not just barely keep pace with 1.0x transport.
+            float minForwardBurst = sampleRate * kSampleWheelForwardBurstFloorRatio;
+            scratchWheelVelocityBurst = std::max(scratchWheelVelocityBurst, minForwardBurst);
+          }
+        }
+        // In live circular mode, wheel scratch nudges lag around a moving write
+        // head. In sample mode there is no moving write head, so keep this
+        // neutral to preserve forward/back symmetry.
+        float wheelTargetReadVelocity = (sampleModeActive || freezeForScratchModel) ? 0.f : sampleRate;
+        bool clampWheelOvershoot = sampleModeActive;
         integrateHybridScratch(dt, limit, newestPos, wheelTargetReadVelocity, 1.25f, 0.95f, 1.20f,
-                               nowSnapThresholdSamples);
+                               nowSnapThresholdSamples, clampWheelOvershoot);
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {
@@ -2065,7 +2111,7 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiSampleProgress{0.0};
   float uiPublishTimerSec = 0.f;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
-  bool freezeTraceLoggingEnabled = false;
+  bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
@@ -2219,9 +2265,11 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
     }
     std::vector<float> left;
     std::vector<float> right;
-    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left);
+    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left,
+                          kSampleFileVoltageScale);
     if (decodedSample.channels > 1) {
-      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right);
+      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right,
+                            kSampleFileVoltageScale);
     }
     impl->engine.installSample(left, right, outFrames, sampleAutoPlayOnLoad, truncated || decodedSample.truncated);
     impl->engine.sampleModeEnabled = sampleModeEnabled;
@@ -2272,7 +2320,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "reverseLatched", json_boolean(impl->reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
-  json_object_set_new(root, "freezeTraceLoggingEnabled", json_boolean(impl->freezeTraceLoggingEnabled));
+  json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
   json_object_set_new(root, "cartridgeCharacterV2", json_integer(impl->cartridgeCharacter));
   int legacyCartridgeCharacter = impl->cartridgeCharacter;
@@ -2301,6 +2349,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *slipJ = json_object_get(root, "slipLatched");
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
+  json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
   json_t *freezeTraceLoggingJ = json_object_get(root, "freezeTraceLoggingEnabled");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
@@ -2327,8 +2376,11 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->scratchInterpolationMode =
       json_boolean_value(scratchInterpJ) ? SCRATCH_INTERP_LAGRANGE6 : SCRATCH_INTERP_CUBIC;
   }
-  if (freezeTraceLoggingJ) {
-    impl->freezeTraceLoggingEnabled = json_boolean_value(freezeTraceLoggingJ);
+  if (platterTraceLoggingJ) {
+    impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
+  } else if (freezeTraceLoggingJ) {
+    // Backward compatibility with earlier freeze-gated trace capture.
+    impl->platterTraceLoggingEnabled = json_boolean_value(freezeTraceLoggingJ);
   }
   if (slipReturnModeJ) {
     impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
@@ -2784,12 +2836,12 @@ bool TemporalDeck::isBufferModeMono() const {
   return isMonoBufferMode(clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1));
 }
 
-bool TemporalDeck::isFreezeTraceLoggingEnabled() const {
-  return impl->freezeTraceLoggingEnabled;
+bool TemporalDeck::isPlatterTraceLoggingEnabled() const {
+  return impl->platterTraceLoggingEnabled;
 }
 
-void TemporalDeck::setFreezeTraceLoggingEnabled(bool enabled) {
-  impl->freezeTraceLoggingEnabled = enabled;
+void TemporalDeck::setPlatterTraceLoggingEnabled(bool enabled) {
+  impl->platterTraceLoggingEnabled = enabled;
 }
 
 bool TemporalDeck::isHighQualityScratchInterpolationEnabled() const {
