@@ -714,11 +714,10 @@ struct Proc : Module {
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// During active cycling, shape toward the patched signal's
-				// actual output-domain amplitude, limited only by the selected
-				// FG amplitude ceiling.
-				float shapedTarget = clamp(signalIn, FUNCTION_V_MIN, functionAmp);
-				float targetNorm = (functionAmp > FUNCTION_V_MIN)
-					? clamp((shapedTarget - FUNCTION_V_MIN) / (functionAmp - FUNCTION_V_MIN), 0.f, 1.f)
+				// fixed FG-domain amplitude so AMP does not alter Signal IN influence.
+				float shapedTarget = clamp(signalIn, FUNCTION_V_MIN, FG_V_MAX);
+				float targetNorm = (FG_V_MAX > FUNCTION_V_MIN)
+					? clamp((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
 					: 0.f;
 				xIn = targetNorm;
 				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
