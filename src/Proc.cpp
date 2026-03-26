@@ -157,8 +157,8 @@ struct Proc : Module {
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float FUNCTION_V_MIN = 0.f;
-	// Proc's free-running FG mode spans 0-8 V, while slew mode keeps the wider reference range.
-	static constexpr float FG_V_MAX = 8.f;
+	// Proc's free-running FG mode spans 0-10 V, while slew mode keeps the wider reference range.
+	static constexpr float FG_V_MAX = 10.f;
 	static constexpr float SLEW_REF_V_MAX = 10.2f;
 	static constexpr float WARP_K_MAX = 40.f;
 	static constexpr int WARP_SCALE_SAMPLES = 16;
@@ -713,9 +713,14 @@ struct Proc : Module {
 			float xIn = 0.f;
 			float injectAlpha = 0.f;
 			if (signalPatched) {
-				// Map patched input into the same normalized domain as the internal integrator state.
-				float inSoft = softClamp8(signalIn);
-				xIn = clamp((inSoft - FUNCTION_V_MIN) / range, 0.f, 1.f);
+				// During active cycling, shape toward the patched signal's
+				// actual output-domain amplitude, limited only by the selected
+				// FG amplitude ceiling.
+				float shapedTarget = clamp(signalIn, FUNCTION_V_MIN, functionAmp);
+				float targetNorm = (functionAmp > FUNCTION_V_MIN)
+					? clamp((shapedTarget - FUNCTION_V_MIN) / (functionAmp - FUNCTION_V_MIN), 0.f, 1.f)
+					: 0.f;
+				xIn = targetNorm;
 				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
 				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
 			}
@@ -806,7 +811,7 @@ struct Proc : Module {
 		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
 		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
 		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
-		configParam(AMP_PARAM, 1.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
+		configParam(AMP_PARAM, 0.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
 		configInput(SIGNAL_INPUT, "Signal");
 		configInput(TRIGGER_INPUT, "Trigger");
 		configInput(HALT_INPUT, "Halt CV");
