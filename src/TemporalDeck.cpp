@@ -336,12 +336,21 @@ struct TemporalDeckBuffer {
 struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
-  static constexpr float kSlipReturnTime = 0.09f;
   static constexpr float kSlipReturnQuickTime = 0.06f;
-  static constexpr float kSlipReturnSlowMultiplier = 1.5f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
-  static constexpr float kSlipFinalCatchThresholdMs = 120.f;
-  static constexpr float kSlipFinalCatchTime = 0.035f;
+  static constexpr float kSlipBlendTime = 0.010f;
+  static constexpr float kSlipNearNowBlendThresholdMs = 18.f;
+  static constexpr float kSlipCatchLagReferenceSec = 0.12f;
+  static constexpr float kSlipCatchMaxExtraRatioQuick = 2.40f;
+  static constexpr float kSlipCatchMaxExtraRatioSlow = 1.10f;
+  static constexpr float kSlipCatchMaxExtraRatioNormal = 1.65f;
+  static constexpr float kSlipCatchMaxExtraRatioInstant = 3.50f;
+  static constexpr float kSlipCatchAccelQuick = 16.0f;
+  static constexpr float kSlipCatchAccelSlow = 7.5f;
+  static constexpr float kSlipCatchAccelNormal = 11.0f;
+  static constexpr float kSlipCatchAccelInstant = 22.0f;
+  static constexpr float kSlipCatchBrakeMultiplier = 1.6f;
+  static constexpr float kSlipCatchDoneVelocityRatio = 0.20f;
   static constexpr float kScratchFollowTime = 0.012f;
   static constexpr float kScratchSoftLagStepMin = 6.0f;
   static constexpr float kScratchSoftLagStepMax = 28.0f;
@@ -481,11 +490,13 @@ struct TemporalDeckEngine {
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   bool scratchActive = false;
   bool slipReturning = false;
-  bool slipFinalCatchActive = false;
+  bool slipBlendActive = false;
   bool nowCatchActive = false;
-  float slipReturnRemaining = 0.f;
-  float slipReturnStartLag = 0.f;
   float slipReturnOverrideTime = -1.f;
+  float slipCatchVelocity = 0.f;
+  float slipBlendRemaining = 0.f;
+  double slipBlendStartReadHead = 0.0;
+  double slipBlendStartLag = 0.0;
   float nowCatchRemaining = 0.f;
   float nowCatchStartLag = 0.f;
   double scratchLagSamples = 0.0;
@@ -559,11 +570,13 @@ struct TemporalDeckEngine {
     platterVelocity = 0.f;
     scratchActive = false;
     slipReturning = false;
-    slipFinalCatchActive = false;
+    slipBlendActive = false;
     nowCatchActive = false;
-    slipReturnRemaining = 0.f;
-    slipReturnStartLag = 0.f;
     slipReturnOverrideTime = -1.f;
+    slipCatchVelocity = 0.f;
+    slipBlendRemaining = 0.f;
+    slipBlendStartReadHead = 0.0;
+    slipBlendStartLag = 0.0;
     nowCatchRemaining = 0.f;
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
@@ -676,17 +689,98 @@ struct TemporalDeckEngine {
     return speed;
   }
 
-  float configuredSlipReturnTime() const {
+  float slipCatchMaxExtraRatio() const {
     if (slipReturnOverrideTime >= 0.f) {
-      return slipReturnOverrideTime;
+      return kSlipCatchMaxExtraRatioQuick;
     }
-    if (slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
-      return 0.f;
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return kSlipCatchMaxExtraRatioSlow;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return kSlipCatchMaxExtraRatioInstant;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return kSlipCatchMaxExtraRatioNormal;
     }
-    if (slipReturnMode == TemporalDeck::SLIP_RETURN_SLOW) {
-      return kSlipReturnTime * kSlipReturnSlowMultiplier;
+  }
+
+  float slipCatchAccelRatio() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return kSlipCatchAccelQuick;
     }
-    return kSlipReturnTime;
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return kSlipCatchAccelSlow;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return kSlipCatchAccelInstant;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return kSlipCatchAccelNormal;
+    }
+  }
+
+  void cancelSlipReturnState() {
+    slipReturning = false;
+    slipBlendActive = false;
+    slipCatchVelocity = 0.f;
+    slipBlendRemaining = 0.f;
+    slipBlendStartReadHead = readHead;
+    slipBlendStartLag = 0.0;
+    slipReturnOverrideTime = -1.f;
+  }
+
+  void startSlipBlend(double lagNow) {
+    slipBlendActive = true;
+    slipBlendRemaining = kSlipBlendTime;
+    slipBlendStartReadHead = readHead;
+    slipBlendStartLag = lagNow;
+  }
+
+  bool integrateSlipCatchup(double newestPos, double maxLag, float baseSpeed, float dt) {
+    double lagNow = currentLagFromNewest(newestPos);
+    float sr = std::max(sampleRate, 1.f);
+
+    if (slipReturnOverrideTime < 0.f && slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
+      readHead = newestPos;
+      cancelSlipReturnState();
+      return true;
+    }
+
+    if (!slipBlendActive && lagNow <= 0.5) {
+      readHead = newestPos;
+      cancelSlipReturnState();
+      return true;
+    }
+
+    float lagSec = float(lagNow / sr);
+    float lagNorm = clamp(lagSec / kSlipCatchLagReferenceSec, 0.f, 1.f);
+    float desiredExtraRatio = slipCatchMaxExtraRatio() * std::sqrt(lagNorm);
+
+    float blendThresholdSec = kSlipNearNowBlendThresholdMs * 0.001f;
+    float nearNowGain = clamp(lagSec / blendThresholdSec, 0.f, 1.f);
+    desiredExtraRatio *= nearNowGain;
+
+    float desiredExtraVel = desiredExtraRatio * sr;
+    float accelBase = slipCatchAccelRatio() * sr;
+    float brakeBase = accelBase * kSlipCatchBrakeMultiplier;
+    float dv = desiredExtraVel - slipCatchVelocity;
+    float maxDv = (dv >= 0.f ? accelBase : brakeBase) * dt;
+    slipCatchVelocity += clamp(dv, -maxDv, maxDv);
+    slipCatchVelocity = std::max(0.f, slipCatchVelocity);
+
+    float transportVel = std::max(baseSpeed, 0.f) * sr;
+    double unwrappedRead = unwrapReadNearWrite(readHead, newestPos);
+    double candidate = unwrappedRead + double(transportVel + slipCatchVelocity) * double(dt);
+    candidate = std::max(newestPos - std::max(maxLag, 0.0), std::min(candidate, newestPos));
+    readHead = buffer.wrapPosition(candidate);
+
+    lagNow = currentLagFromNewest(newestPos);
+    lagSec = float(lagNow / sr);
+    if (!slipBlendActive && lagSec <= blendThresholdSec &&
+        slipCatchVelocity <= (kSlipCatchDoneVelocityRatio * sr)) {
+      startSlipBlend(lagNow);
+    }
+    return false;
   }
 
   double lagForPositionCv(float cv, double limit) const {
@@ -1148,6 +1242,16 @@ struct TemporalDeckEngine {
             TemporalDeckBuffer::cubicSample(rightAt(i0), rightAt(i1), rightAt(i2), rightAt(i3), t)};
   }
 
+  std::pair<float, float> readLiveInterpolatedAt(double pos, int interpolationMode) const {
+    if (interpolationMode == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
+      return buffer.readHighQuality(pos);
+    }
+    if (interpolationMode == TemporalDeck::SCRATCH_INTERP_SINC) {
+      return buffer.readSinc(pos);
+    }
+    return buffer.readCubic(pos);
+  }
+
   void installSample(const std::vector<float> &left, const std::vector<float> &right, int frames, bool autoplay,
                      bool truncated) {
     sampleLoaded = frames > 0 && !left.empty();
@@ -1470,7 +1574,7 @@ struct TemporalDeckEngine {
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
     bool fastSampleTransportPath =
       sampleModeActive && !anyScratch && !wasScratchActive && !slipState && !prevSlipState &&
-      !slipReturning && !slipFinalCatchActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh;
+      !slipReturning && !slipBlendActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh;
     if (fastSampleTransportPath) {
       if (!sampleTransportPlaying || freezeState) {
         speed = 0.f;
@@ -1566,26 +1670,32 @@ struct TemporalDeckEngine {
 
     bool quickSlipActive = slipReturnOverrideTime >= 0.f;
     if (!slipState && !quickSlipActive) {
-      slipReturning = false;
-      slipFinalCatchActive = false;
+      cancelSlipReturnState();
     }
+
+    auto beginSlipReturn = [&]() {
+      slipReturning = true;
+      slipBlendActive = false;
+      slipCatchVelocity = 0.f;
+      slipBlendRemaining = 0.f;
+      slipBlendStartReadHead = readHead;
+      slipBlendStartLag = currentLagFromNewest(newestPos);
+      nowCatchActive = false;
+    };
 
     if (releasedFromScratch && slipState && !sampleModeActive) {
-      slipReturning = true;
-      slipFinalCatchActive = false;
-      slipReturnRemaining = 0.f;
+      beginSlipReturn();
     }
 
-    if (releasedFromScratch && !sampleModeActive && currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
+    if (releasedFromScratch && !sampleModeActive && !slipReturning && !slipBlendActive &&
+        currentLagFromNewest(newestPos) <= nowSnapThresholdSamples) {
       startNowCatch(currentLagFromNewest(newestPos));
-      slipReturning = false;
-      slipFinalCatchActive = false;
+      cancelSlipReturnState();
     }
 
     if (slipJustEnabled && !anyScratch && !sampleModeActive) {
       if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
-        slipReturning = true;
-        slipFinalCatchActive = false;
+        beginSlipReturn();
       }
     }
 
@@ -1593,20 +1703,16 @@ struct TemporalDeckEngine {
     // immediately engage a return so the new mode takes audible effect.
     if (slipModeChanged && slipState && !anyScratch && !sampleModeActive &&
         currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
-      slipReturning = true;
-      slipFinalCatchActive = false;
+      beginSlipReturn();
     }
 
     if (quickSlipTrigger && !anyScratch && !sampleModeActive && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
-      slipReturning = true;
-      slipFinalCatchActive = false;
       slipReturnOverrideTime = kSlipReturnQuickTime;
+      beginSlipReturn();
     }
 
-    if (anyScratch) {
-      slipReturning = false;
-      slipFinalCatchActive = false;
-      slipReturnOverrideTime = -1.f;
+    if (anyScratch || sampleModeActive || freezeForScratchModel) {
+      cancelSlipReturnState();
     }
 
     if (sampleModeActive) {
@@ -1648,7 +1754,8 @@ struct TemporalDeckEngine {
     newestPos = sampleModeActive ? sampleWindowEndPos : newestReadablePos();
     float lagNow = currentLagFromNewest(newestPos);
     bool reverseAtOldestEdge =
-      !sampleLoopEnabled && !scratchActive && !slipReturning && reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
+      !sampleLoopEnabled && !scratchActive && !slipReturning && !slipBlendActive &&
+      reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
     if (reverseAtOldestEdge && speed < 0.f) {
       speed = 0.f;
       if (!freezeForScratchModel) {
@@ -1737,60 +1844,9 @@ struct TemporalDeckEngine {
       double targetLag = externalCvAnchorLagSamples + lagOffsetForPositionCv(positionCv);
       targetLag = clampLag(targetLag, limit);
       integrateExternalCvScratch(dt, limit, newestPos, targetLag, nowSnapThresholdSamples);
-    } else if (slipReturning && !sampleModeActive) {
-      float slipReturnTime = configuredSlipReturnTime();
-      if (slipReturnTime <= 0.f) {
-        readHead = newestPos;
-        keepSlipLagAligned = true;
-        slipReturning = false;
-        slipFinalCatchActive = false;
-      } else {
-        // Return to NOW (lag = 0)
-        double currentLagSamples = currentLagFromNewest(newestPos);
-        float finalCatchThresholdSamples = sampleRate * (kSlipFinalCatchThresholdMs / 1000.f);
-
-        if (currentLagSamples <= nowSnapThresholdSamples) {
-          startNowCatch(currentLagSamples);
-          slipReturning = false;
-          slipFinalCatchActive = false;
-        } else if (!slipFinalCatchActive) {
-          // Exponential-like approach to zero lag.
-          // We target a specific lag value that decreases over time.
-          float alpha = dt / std::max(slipReturnTime, 1e-6f);
-          double targetLag = currentLagSamples * double(1.f - alpha);
-
-          // Ensure we actually move towards zero even if alpha is tiny.
-          if (targetLag > currentLagSamples - 0.5f) {
-            targetLag = currentLagSamples - 0.5f;
-          }
-          if (targetLag < 0.f) {
-            targetLag = 0.f;
-          }
-
-          readHead = buffer.wrapPosition(newestPos - targetLag);
-          keepSlipLagAligned = true;
-
-          if (targetLag <= finalCatchThresholdSamples) {
-            slipFinalCatchActive = true;
-            slipReturnRemaining = kSlipFinalCatchTime;
-            slipReturnStartLag = targetLag;
-          }
-        } else {
-          // Final catch phase: smooth snap to live input.
-          slipReturnRemaining = std::max(0.f, slipReturnRemaining - dt);
-          float progress = 1.f - clamp(slipReturnRemaining / std::max(kSlipFinalCatchTime, 1e-6f), 0.f, 1.f);
-          float shapedProgress = 1.f - std::pow(1.f - progress, 2.5f);
-          double targetLag = slipReturnStartLag * double(1.f - shapedProgress);
-
-          readHead = buffer.wrapPosition(newestPos - targetLag);
-          keepSlipLagAligned = true;
-
-          if (slipReturnRemaining <= 0.f || targetLag < 0.5f) {
-            readHead = newestPos;
-            slipReturning = false;
-            slipFinalCatchActive = false;
-          }
-        }
+    } else if ((slipReturning || slipBlendActive) && !sampleModeActive && !freezeForScratchModel) {
+      if (integrateSlipCatchup(newestPos, maxLag, speed, dt)) {
+        pinToNow = true;
       }
     } else {
       // Normal Transport
@@ -1805,17 +1861,11 @@ struct TemporalDeckEngine {
       }
     }
 
-    if (anyScratch) {
-      slipReturning = false;
-      slipFinalCatchActive = false;
-      slipReturnRemaining = 0.f;
-      slipReturnStartLag = 0.f;
-      slipReturnOverrideTime = -1.f;
-    } else if (!slipReturning) {
+    if (!slipReturning && !slipBlendActive) {
       slipReturnOverrideTime = -1.f;
     }
 
-    if (nowCatchActive && !sampleModeActive) {
+    if (nowCatchActive && !sampleModeActive && !slipReturning && !slipBlendActive) {
       nowCatchRemaining = std::max(0.f, nowCatchRemaining - dt);
       float progress = 1.f - clamp(nowCatchRemaining / std::max(kNowCatchTime, 1e-6f), 0.f, 1.f);
       float shapedProgress = progress * (2.f - progress);
@@ -1837,6 +1887,8 @@ struct TemporalDeckEngine {
     bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
 
     bool scratchReadPath = anyScratch;
+    bool slipReadPath = !sampleModeActive && (slipReturning || slipBlendActive);
+    bool variableRateReadPath = scratchReadPath || slipReadPath;
     int effectiveScratchInterpolation = clamp(scratchInterpolationMode, TemporalDeck::SCRATCH_INTERP_CUBIC,
                                               TemporalDeck::SCRATCH_INTERP_COUNT - 1);
     double readDeltaForTone = readHead - prevReadHead;
@@ -1860,14 +1912,23 @@ struct TemporalDeckEngine {
       // Match live-mode behavior: normal transport playback uses cubic.
       int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : TemporalDeck::SCRATCH_INTERP_CUBIC;
       wet = readSampleBounded(readHead, sampleInterp, sampleWindowEndPos);
-    } else if (scratchReadPath) {
-      if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_LAGRANGE6) {
-        wet = buffer.readHighQuality(readHead);
-      } else if (effectiveScratchInterpolation == TemporalDeck::SCRATCH_INTERP_SINC) {
-        wet = buffer.readSinc(readHead);
-      } else {
-        wet = buffer.readCubic(readHead);
+    } else if (slipBlendActive) {
+      std::pair<float, float> catchWet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);
+      std::pair<float, float> liveWet = readLiveInterpolatedAt(newestPos, effectiveScratchInterpolation);
+      float blendProgress = 1.f - clamp(slipBlendRemaining / std::max(kSlipBlendTime, 1e-6f), 0.f, 1.f);
+      float theta = blendProgress * 0.5f * float(M_PI);
+      float catchGain = std::cos(theta);
+      float liveGain = std::sin(theta);
+      wet.first = catchWet.first * catchGain + liveWet.first * liveGain;
+      wet.second = catchWet.second * catchGain + liveWet.second * liveGain;
+      slipBlendRemaining = std::max(0.f, slipBlendRemaining - dt);
+      if (slipBlendRemaining <= 0.f) {
+        readHead = newestPos;
+        cancelSlipReturnState();
+        pinToNow = true;
       }
+    } else if (variableRateReadPath) {
+      wet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);
     } else {
       wet = buffer.readCubic(readHead);
     }
@@ -2502,8 +2563,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       impl->engine.scratchLagSamples = 0.0;
       impl->engine.scratchLagTargetSamples = 0.0;
       impl->engine.nowCatchActive = false;
-      impl->engine.slipReturning = false;
-      impl->engine.slipFinalCatchActive = false;
+      impl->engine.cancelSlipReturnState();
     }
     impl->appliedSampleSeekRevision = pendingSeekRevision;
   }
