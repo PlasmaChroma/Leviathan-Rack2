@@ -2567,27 +2567,41 @@ void TemporalDeck::process(const ProcessArgs &args) {
     }
     impl->appliedSampleSeekRevision = pendingSeekRevision;
   }
-  int scratchHold = impl->platterScratchHoldSamples.load();
+  int scratchHold = impl->platterScratchHoldSamples.load(std::memory_order_relaxed);
   bool wheelScratchHeld = scratchHold > 0;
   if (wheelScratchHeld) {
-    impl->platterScratchHoldSamples.store(std::max(0, scratchHold - 1));
+    impl->platterScratchHoldSamples.store(std::max(0, scratchHold - 1), std::memory_order_relaxed);
   }
-  int motionFresh = impl->platterMotionFreshSamples.load();
+  int motionFresh = impl->platterMotionFreshSamples.load(std::memory_order_relaxed);
   bool platterMotionActive = motionFresh > 0;
   if (platterMotionActive) {
-    impl->platterMotionFreshSamples.store(std::max(0, motionFresh - 1));
+    impl->platterMotionFreshSamples.store(std::max(0, motionFresh - 1), std::memory_order_relaxed);
   }
-  float wheelDelta = impl->platterWheelDelta.exchange(0.f);
+  float wheelDelta = impl->platterWheelDelta.load(std::memory_order_relaxed);
+  if (std::fabs(wheelDelta) > 1e-9f) {
+    wheelDelta = impl->platterWheelDelta.exchange(0.f, std::memory_order_relaxed);
+  } else {
+    wheelDelta = 0.f;
+  }
+  bool platterTouched = impl->platterTouched.load(std::memory_order_relaxed);
+  uint32_t platterGestureRevision = 0;
+  float platterLagTarget = 0.f;
+  float platterGestureVelocity = 0.f;
+  if (platterTouched || wheelScratchHeld || platterMotionActive) {
+    platterGestureRevision = impl->platterGestureRevision.load(std::memory_order_relaxed);
+    platterLagTarget = impl->platterLagTarget.load(std::memory_order_relaxed);
+    platterGestureVelocity = impl->platterGestureVelocity.load(std::memory_order_relaxed);
+  }
+  bool quickSlipTrigger = impl->quickSlipTrigger.exchange(false, std::memory_order_relaxed);
 
   auto frame =
     impl->engine.process(args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(), params[RATE_PARAM].getValue(),
                        params[MIX_PARAM].getValue(), params[FEEDBACK_PARAM].getValue(), impl->freezeLatched,
-                       impl->reverseLatched, impl->slipLatched, impl->quickSlipTrigger.exchange(false),
+                       impl->reverseLatched, impl->slipLatched, quickSlipTrigger,
                        freezeGateHigh, scratchGateHigh,
                        scratchGateConnected, positionConnected, positionCv,
-                       rateCv, rateCvConnected, impl->platterTouched.load(), wheelScratchHeld, platterMotionActive,
-                       impl->platterGestureRevision.load(), impl->platterLagTarget.load(),
-                       impl->platterGestureVelocity.load(), wheelDelta);
+                       rateCv, rateCvConnected, platterTouched, wheelScratchHeld, platterMotionActive,
+                       platterGestureRevision, platterLagTarget, platterGestureVelocity, wheelDelta);
 
   if (frame.autoFreezeRequested && !impl->freezeLatched && !freezeGateHigh) {
     impl->freezeLatched = true;
@@ -2613,17 +2627,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
     lights[SLIP_FAST_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_INSTANT ? selectedModeBrightness
                                                                                         : unselectedModeBrightness);
   }
-  impl->uiPlatterAngle.store(frame.platterAngle);
-  impl->uiLagSamples.store(frame.lag);
-  impl->uiAccessibleLagSamples.store(frame.accessibleLag);
-  impl->uiSampleRate.store(args.sampleRate);
-  impl->uiFreezeLatched.store(impl->freezeLatched);
-  impl->uiSampleModeEnabled.store(frame.sampleMode);
-  impl->uiSampleLoaded.store(frame.sampleLoaded);
-  impl->uiSampleTransportPlaying.store(frame.sampleTransportPlaying);
-  impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead);
-  impl->uiSampleDurationSeconds.store(frame.sampleDuration);
-  impl->uiSampleProgress.store(frame.sampleProgress);
+  impl->uiPlatterAngle.store(frame.platterAngle, std::memory_order_relaxed);
+  impl->uiLagSamples.store(frame.lag, std::memory_order_relaxed);
+  impl->uiAccessibleLagSamples.store(frame.accessibleLag, std::memory_order_relaxed);
+  impl->uiSampleRate.store(args.sampleRate, std::memory_order_relaxed);
+  impl->uiFreezeLatched.store(impl->freezeLatched, std::memory_order_relaxed);
+  impl->uiSampleModeEnabled.store(frame.sampleMode, std::memory_order_relaxed);
+  impl->uiSampleLoaded.store(frame.sampleLoaded, std::memory_order_relaxed);
+  impl->uiSampleTransportPlaying.store(frame.sampleTransportPlaying, std::memory_order_relaxed);
+  impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead, std::memory_order_relaxed);
+  impl->uiSampleDurationSeconds.store(frame.sampleDuration, std::memory_order_relaxed);
+  impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
 
   impl->sampleModeEnabled.store(impl->engine.sampleModeEnabled, std::memory_order_relaxed);
   impl->uiPublishTimerSec += args.sampleTime;
@@ -2709,18 +2723,18 @@ void TemporalDeck::process(const ProcessArgs &args) {
 }
 
 void TemporalDeck::setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples) {
-  impl->platterTouched.store(touched);
-  impl->platterGestureRevision.fetch_add(1);
-  impl->platterLagTarget.store(lagSamples);
-  impl->platterGestureVelocity.store(velocitySamples);
-  impl->platterScratchHoldSamples.store(std::max(0, holdSamples));
+  impl->platterTouched.store(touched, std::memory_order_relaxed);
+  impl->platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
+  impl->platterLagTarget.store(lagSamples, std::memory_order_relaxed);
+  impl->platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
+  impl->platterScratchHoldSamples.store(std::max(0, holdSamples), std::memory_order_relaxed);
   if (touched || holdSamples == 0) {
-    impl->platterWheelDelta.store(0.f);
+    impl->platterWheelDelta.store(0.f, std::memory_order_relaxed);
   }
 }
 
 void TemporalDeck::setPlatterMotionFreshSamples(int motionFreshSamples) {
-  impl->platterMotionFreshSamples.store(std::max(0, motionFreshSamples));
+  impl->platterMotionFreshSamples.store(std::max(0, motionFreshSamples), std::memory_order_relaxed);
 }
 
 void TemporalDeck::addPlatterWheelDelta(float delta, int holdSamples) {
@@ -2728,40 +2742,40 @@ void TemporalDeck::addPlatterWheelDelta(float delta, int holdSamples) {
   while (!impl->platterWheelDelta.compare_exchange_weak(expected, expected + delta, std::memory_order_relaxed,
                                                          std::memory_order_relaxed)) {
   }
-  impl->platterScratchHoldSamples.store(std::max(0, holdSamples));
+  impl->platterScratchHoldSamples.store(std::max(0, holdSamples), std::memory_order_relaxed);
 }
 
 void TemporalDeck::triggerQuickSlipReturn() {
-  impl->quickSlipTrigger.store(true);
+  impl->quickSlipTrigger.store(true, std::memory_order_relaxed);
 }
 
 double TemporalDeck::getUiLagSamples() const {
-  return impl->uiLagSamples.load();
+  return impl->uiLagSamples.load(std::memory_order_relaxed);
 }
 
 double TemporalDeck::getUiAccessibleLagSamples() const {
-  return impl->uiAccessibleLagSamples.load();
+  return impl->uiAccessibleLagSamples.load(std::memory_order_relaxed);
 }
 
 float TemporalDeck::getUiSampleRate() const {
-  return impl->uiSampleRate.load();
+  return impl->uiSampleRate.load(std::memory_order_relaxed);
 }
 
 float TemporalDeck::getUiPlatterAngle() const {
-  return impl->uiPlatterAngle.load();
+  return impl->uiPlatterAngle.load(std::memory_order_relaxed);
 }
 
 bool TemporalDeck::isUiFreezeLatched() const {
-  return impl->uiFreezeLatched.load();
+  return impl->uiFreezeLatched.load(std::memory_order_relaxed);
 }
 
 
 bool TemporalDeck::isSampleModeEnabled() const {
-  return impl->uiSampleModeEnabled.load();
+  return impl->uiSampleModeEnabled.load(std::memory_order_relaxed);
 }
 
 bool TemporalDeck::hasLoadedSample() const {
-  return impl->uiSampleLoaded.load();
+  return impl->uiSampleLoaded.load(std::memory_order_relaxed);
 }
 
 bool TemporalDeck::isSampleAutoPlayOnLoadEnabled() const {
@@ -2780,11 +2794,11 @@ void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
 void TemporalDeck::setSampleModeEnabled(bool enabled) {
   impl->sampleModeEnabled.store(enabled, std::memory_order_relaxed);
   impl->pendingSampleStateApply.store(true);
-  impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded);
+  impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded, std::memory_order_relaxed);
 }
 
 bool TemporalDeck::isSampleTransportPlaying() const {
-  return impl->uiSampleTransportPlaying.load();
+  return impl->uiSampleTransportPlaying.load(std::memory_order_relaxed);
 }
 
 bool TemporalDeck::isSampleLoopEnabled() const {
@@ -2798,7 +2812,7 @@ void TemporalDeck::setSampleLoopEnabled(bool enabled) {
 
 void TemporalDeck::setSampleTransportPlaying(bool enabled) {
   impl->engine.sampleTransportPlaying = enabled && impl->engine.sampleLoaded;
-  impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying);
+  impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying, std::memory_order_relaxed);
 }
 
 void TemporalDeck::stopSampleTransport() {
@@ -2807,9 +2821,9 @@ void TemporalDeck::stopSampleTransport() {
     impl->engine.samplePlayhead = 0.0;
     impl->engine.readHead = 0.0;
   }
-  impl->uiSampleTransportPlaying.store(false);
-  impl->uiSamplePlayheadSeconds.store(0.0);
-  impl->uiSampleProgress.store(0.0);
+  impl->uiSampleTransportPlaying.store(false, std::memory_order_relaxed);
+  impl->uiSamplePlayheadSeconds.store(0.0, std::memory_order_relaxed);
+  impl->uiSampleProgress.store(0.0, std::memory_order_relaxed);
 }
 
 void TemporalDeck::clearLoadedSample() {

@@ -194,7 +194,7 @@ struct Proc : Module {
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
-	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
+	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
