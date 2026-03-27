@@ -346,7 +346,7 @@ struct TemporalDeckEngine {
   static constexpr float kSlipNearNowVelocityCapSlope = 40.f;
   static constexpr float kSlipNearNowVelocityCapFloorRatio = 0.12f;
   static constexpr float kSlipCatchLagReferenceSec = 0.12f;
-  static constexpr float kSlipDynamicLpCutoffLowHz = 3800.f;
+  static constexpr float kSlipDynamicLpCutoffLowHz = 1800.f;
   static constexpr float kSlipDynamicLpCutoffHighHz = 17000.f;
   static constexpr float kSlipDynamicLpMixLow = 0.22f;
   static constexpr float kSlipDynamicLpMixHigh = 0.82f;
@@ -2032,7 +2032,8 @@ struct TemporalDeckEngine {
     if (slipReadPath) {
       float slipSpeedNorm =
         clamp(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
-      float cutoffHz = crossfade(kSlipDynamicLpCutoffHighHz, kSlipDynamicLpCutoffLowHz, slipSpeedNorm);
+      float slipSpeedToneNorm = std::pow(slipSpeedNorm, 1.25f);
+      float cutoffHz = crossfade(kSlipDynamicLpCutoffHighHz, kSlipDynamicLpCutoffLowHz, slipSpeedToneNorm);
       float lpCoeff = onePoleCoeff(cutoffHz);
       if (!slipDynLpPrimed) {
         slipDynLpStateL = wet.first;
@@ -2041,7 +2042,7 @@ struct TemporalDeckEngine {
       }
       slipDynLpStateL += (wet.first - slipDynLpStateL) * lpCoeff;
       slipDynLpStateR += (wet.second - slipDynLpStateR) * lpCoeff;
-      float lpMix = crossfade(kSlipDynamicLpMixLow, kSlipDynamicLpMixHigh, slipSpeedNorm);
+      float lpMix = crossfade(kSlipDynamicLpMixLow, kSlipDynamicLpMixHigh, slipSpeedToneNorm);
       wet.first = crossfade(wet.first, slipDynLpStateL, lpMix);
       wet.second = crossfade(wet.second, slipDynLpStateR, lpMix);
     } else {
