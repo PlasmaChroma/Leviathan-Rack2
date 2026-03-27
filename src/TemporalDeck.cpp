@@ -339,8 +339,17 @@ struct TemporalDeckEngine {
   static constexpr float kSlipReturnQuickTime = 0.06f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kSlipBlendTime = 0.010f;
+  static constexpr float kSlipBlendTimeMin = 0.004f;
+  static constexpr float kSlipBlendTimeMax = 0.012f;
   static constexpr float kSlipNearNowBlendThresholdMs = 18.f;
+  static constexpr float kSlipNearNowDampingThresholdMs = 24.f;
+  static constexpr float kSlipNearNowVelocityCapSlope = 40.f;
+  static constexpr float kSlipNearNowVelocityCapFloorRatio = 0.12f;
   static constexpr float kSlipCatchLagReferenceSec = 0.12f;
+  static constexpr float kSlipDynamicLpCutoffLowHz = 3800.f;
+  static constexpr float kSlipDynamicLpCutoffHighHz = 17000.f;
+  static constexpr float kSlipDynamicLpMixLow = 0.22f;
+  static constexpr float kSlipDynamicLpMixHigh = 0.82f;
   static constexpr float kSlipCatchMaxExtraRatioQuick = 2.40f;
   static constexpr float kSlipCatchMaxExtraRatioSlow = 1.10f;
   static constexpr float kSlipCatchMaxExtraRatioNormal = 1.65f;
@@ -350,7 +359,7 @@ struct TemporalDeckEngine {
   static constexpr float kSlipCatchAccelNormal = 11.0f;
   static constexpr float kSlipCatchAccelInstant = 22.0f;
   static constexpr float kSlipCatchBrakeMultiplier = 1.6f;
-  static constexpr float kSlipCatchDoneVelocityRatio = 0.20f;
+  static constexpr float kSlipCatchDoneVelocityRatio = 0.35f;
   static constexpr float kScratchFollowTime = 0.012f;
   static constexpr float kScratchSoftLagStepMin = 6.0f;
   static constexpr float kScratchSoftLagStepMax = 28.0f;
@@ -552,6 +561,9 @@ struct TemporalDeckEngine {
   float scratchDcInR = 0.f;
   float scratchDcOutL = 0.f;
   float scratchDcOutR = 0.f;
+  float slipDynLpStateL = 0.f;
+  float slipDynLpStateR = 0.f;
+  bool slipDynLpPrimed = false;
   bool externalCvGateHigh = false;
   double externalCvAnchorLagSamples = 0.0;
   float prevBaseSpeed = 1.f;
@@ -719,6 +731,66 @@ struct TemporalDeckEngine {
     }
   }
 
+  float slipCatchLagCurveExponent() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return 0.78f;
+    }
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 1.18f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 0.70f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 0.92f;
+    }
+  }
+
+  float slipCatchDoneVelocityRatioForMode() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return 0.45f;
+    }
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 0.35f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 0.70f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 0.55f;
+    }
+  }
+
+  float slipNearNowDampingFloor() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return 0.80f;
+    }
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 0.72f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 0.92f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 0.88f;
+    }
+  }
+
+  float slipNearNowCapBoost() const {
+    if (slipReturnOverrideTime >= 0.f) {
+      return 1.25f;
+    }
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 1.0f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 1.85f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 1.55f;
+    }
+  }
+
   void cancelSlipReturnState() {
     slipReturning = false;
     slipBlendActive = false;
@@ -729,9 +801,13 @@ struct TemporalDeckEngine {
     slipReturnOverrideTime = -1.f;
   }
 
-  void startSlipBlend(double lagNow) {
+  void startSlipBlend(double lagNow, float sr) {
     slipBlendActive = true;
-    slipBlendRemaining = kSlipBlendTime;
+    float lagSec = float(std::max(0.0, lagNow) / std::max(sr, 1.f));
+    float lagNorm = clamp(lagSec / (kSlipNearNowBlendThresholdMs * 0.001f), 0.f, 1.f);
+    float speedNorm = clamp(slipCatchVelocity / std::max(sr * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
+    float blendVoicing = clamp(0.65f * speedNorm + 0.35f * lagNorm, 0.f, 1.f);
+    slipBlendRemaining = crossfade(kSlipBlendTimeMin, kSlipBlendTimeMax, blendVoicing);
     slipBlendStartReadHead = readHead;
     slipBlendStartLag = lagNow;
   }
@@ -754,9 +830,18 @@ struct TemporalDeckEngine {
 
     float lagSec = float(lagNow / sr);
     float lagNorm = clamp(lagSec / kSlipCatchLagReferenceSec, 0.f, 1.f);
-    float desiredExtraRatio = slipCatchMaxExtraRatio() * std::sqrt(lagNorm);
+    float desiredExtraRatio = slipCatchMaxExtraRatio() * std::pow(lagNorm, slipCatchLagCurveExponent());
 
     float blendThresholdSec = kSlipNearNowBlendThresholdMs * 0.001f;
+    if (slipReturnOverrideTime >= 0.f) {
+      blendThresholdSec *= 0.90f;
+    } else if (slipReturnMode == TemporalDeck::SLIP_RETURN_SLOW) {
+      blendThresholdSec *= 1.30f;
+    } else if (slipReturnMode == TemporalDeck::SLIP_RETURN_NORMAL) {
+      blendThresholdSec *= 1.15f;
+    } else if (slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
+      blendThresholdSec *= 0.85f;
+    }
     float nearNowGain = clamp(lagSec / blendThresholdSec, 0.f, 1.f);
     desiredExtraRatio *= nearNowGain;
 
@@ -767,6 +852,17 @@ struct TemporalDeckEngine {
     float maxDv = (dv >= 0.f ? accelBase : brakeBase) * dt;
     slipCatchVelocity += clamp(dv, -maxDv, maxDv);
     slipCatchVelocity = std::max(0.f, slipCatchVelocity);
+    float dampingThresholdSec = kSlipNearNowDampingThresholdMs * 0.001f;
+    if (lagSec < dampingThresholdSec) {
+      float nearNowNorm = clamp(lagSec / dampingThresholdSec, 0.f, 1.f);
+      float dampingFloor = slipNearNowDampingFloor();
+      float damping = dampingFloor + (1.f - dampingFloor) * nearNowNorm;
+      slipCatchVelocity *= damping;
+      float velocityCap =
+        std::max(sr * kSlipNearNowVelocityCapFloorRatio,
+                 lagSec * sr * kSlipNearNowVelocityCapSlope * slipNearNowCapBoost());
+      slipCatchVelocity = std::min(slipCatchVelocity, velocityCap);
+    }
 
     float transportVel = std::max(baseSpeed, 0.f) * sr;
     double unwrappedRead = unwrapReadNearWrite(readHead, newestPos);
@@ -777,8 +873,8 @@ struct TemporalDeckEngine {
     lagNow = currentLagFromNewest(newestPos);
     lagSec = float(lagNow / sr);
     if (!slipBlendActive && lagSec <= blendThresholdSec &&
-        slipCatchVelocity <= (kSlipCatchDoneVelocityRatio * sr)) {
-      startSlipBlend(lagNow);
+        slipCatchVelocity <= (slipCatchDoneVelocityRatioForMode() * sr)) {
+      startSlipBlend(lagNow, sr);
     }
     return false;
   }
@@ -1933,6 +2029,26 @@ struct TemporalDeckEngine {
       wet = buffer.readCubic(readHead);
     }
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
+    if (slipReadPath) {
+      float slipSpeedNorm =
+        clamp(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
+      float cutoffHz = crossfade(kSlipDynamicLpCutoffHighHz, kSlipDynamicLpCutoffLowHz, slipSpeedNorm);
+      float lpCoeff = onePoleCoeff(cutoffHz);
+      if (!slipDynLpPrimed) {
+        slipDynLpStateL = wet.first;
+        slipDynLpStateR = wet.second;
+        slipDynLpPrimed = true;
+      }
+      slipDynLpStateL += (wet.first - slipDynLpStateL) * lpCoeff;
+      slipDynLpStateR += (wet.second - slipDynLpStateR) * lpCoeff;
+      float lpMix = crossfade(kSlipDynamicLpMixLow, kSlipDynamicLpMixHigh, slipSpeedNorm);
+      wet.first = crossfade(wet.first, slipDynLpStateL, lpMix);
+      wet.second = crossfade(wet.second, slipDynLpStateR, lpMix);
+    } else {
+      slipDynLpPrimed = false;
+      slipDynLpStateL = wet.first;
+      slipDynLpStateR = wet.second;
+    }
     if (scratchReadPath) {
       if (manualScratch) {
         // The hybrid motion model is meant to stand on its own, so keep only a
