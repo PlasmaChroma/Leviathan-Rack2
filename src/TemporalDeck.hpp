@@ -68,7 +68,7 @@ struct TemporalDeck final : Module {
     FREEZE_GATE_INPUT,
     INPUTS_LEN
   };
-  enum OutputId { OUTPUT_L_OUTPUT, OUTPUT_R_OUTPUT, OUTPUTS_LEN };
+  enum OutputId { OUTPUT_L_OUTPUT, S_GATE_O_OUTPUT, OUTPUT_R_OUTPUT, S_POS_O_OUTPUT, OUTPUTS_LEN };
   enum LightId {
     FREEZE_LIGHT,
     REVERSE_LIGHT,

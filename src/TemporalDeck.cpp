@@ -566,6 +566,8 @@ struct TemporalDeckEngine {
   bool slipDynLpPrimed = false;
   bool externalCvGateHigh = false;
   double externalCvAnchorLagSamples = 0.0;
+  bool scratchOutGateHigh = false;
+  double scratchOutAnchorLagSamples = 0.0;
   float prevBaseSpeed = 1.f;
 
   void reset(float sr) {
@@ -644,6 +646,8 @@ struct TemporalDeckEngine {
     scratchDcOutR = 0.f;
     externalCvGateHigh = false;
     externalCvAnchorLagSamples = 0.0;
+    scratchOutGateHigh = false;
+    scratchOutAnchorLagSamples = 0.0;
     prevBaseSpeed = 1.f;
   }
 
@@ -1580,6 +1584,8 @@ struct TemporalDeckEngine {
   struct FrameResult {
     float outL = 0.f;
     float outR = 0.f;
+    float scratchGateOut = 0.f;
+    float scratchPosOut = 0.f;
     double lag = 0.0;
     double accessibleLag = 0.0;
     float platterAngle = 0.f;
@@ -1668,6 +1674,22 @@ struct TemporalDeckEngine {
       }
     }
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
+    auto updateScratchControlOutputs = [&](bool gateHigh, double lagNow) {
+      if (gateHigh && !scratchOutGateHigh) {
+        // New scratch gesture starts from a fresh zero-offset anchor.
+        scratchOutAnchorLagSamples = lagNow;
+      }
+      scratchOutGateHigh = gateHigh;
+      result.scratchGateOut = gateHigh ? 10.f : 0.f;
+      if (!gateHigh) {
+        // Keep S_POS at 0 whenever S_GATE is low.
+        result.scratchPosOut = 0.f;
+        scratchOutAnchorLagSamples = lagNow;
+      } else {
+        float posSec = float((lagNow - scratchOutAnchorLagSamples) / std::max(sampleRate, 1.f));
+        result.scratchPosOut = clamp(posSec, -10.f, 10.f);
+      }
+    };
     bool fastSampleTransportPath =
       sampleModeActive && !anyScratch && !wasScratchActive && !slipState && !prevSlipState &&
       !slipReturning && !slipBlendActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh;
@@ -1730,6 +1752,7 @@ struct TemporalDeckEngine {
       externalCvGateHigh = false;
       result.lag = currentLagFromNewest(newestPos);
       result.accessibleLag = sampleWindowEndPos;
+      updateScratchControlOutputs(anyScratch, result.lag);
       result.platterAngle = platterPhase;
       result.sampleMode = true;
       result.sampleLoaded = sampleLoaded;
@@ -2200,6 +2223,7 @@ struct TemporalDeckEngine {
     result.outR = outR;
     result.lag = currentLagFromNewest(newestPos);
     result.accessibleLag = limit;
+    updateScratchControlOutputs(anyScratch, result.lag);
     result.platterAngle = platterPhase;
     result.sampleMode = sampleModeActive;
     result.sampleLoaded = sampleLoaded;
@@ -2314,7 +2338,9 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configInput(SCRATCH_GATE_INPUT, "Scratch gate");
   configInput(FREEZE_GATE_INPUT, "Freeze gate");
   configOutput(OUTPUT_L_OUTPUT, "Left audio");
+  configOutput(S_GATE_O_OUTPUT, "Scratch gate");
   configOutput(OUTPUT_R_OUTPUT, "Right audio");
+  configOutput(S_POS_O_OUTPUT, "Scratch position");
   if (paramQuantities[BUFFER_PARAM]) {
     int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
@@ -2727,7 +2753,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
 
   outputs[OUTPUT_L_OUTPUT].setVoltage(frame.outL);
+  outputs[S_GATE_O_OUTPUT].setVoltage(frame.scratchGateOut);
   outputs[OUTPUT_R_OUTPUT].setVoltage(frame.outR);
+  outputs[S_POS_O_OUTPUT].setVoltage(frame.scratchPosOut);
   lights[FREEZE_LIGHT].setBrightness(impl->freezeLatched ? 1.f : 0.f);
   lights[REVERSE_LIGHT].setBrightness(impl->reverseLatched ? 1.f : 0.f);
   if (!impl->slipLatched) {

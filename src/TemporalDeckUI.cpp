@@ -1144,30 +1144,32 @@ struct TemporalDeckWidget : ModuleWidget {
 
     Vec bufferKnobPos = mm2px(Vec(8.408f, 17.086f));
     addParam(createParamCentered<RoundBlackKnob>(bufferKnobPos, module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.39, 99.026)), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 98.872)), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(78.482, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(20.889, 99.226)), module, TemporalDeck::RATE_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 98.872)), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module,
                                                  TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(62.1, 101.1)), module, TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(50.2, 101.1)), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(37.8, 101.1)), module, TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(57.5, 101.1)), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(45.6, 101.1)), module, TemporalDeck::REVERSE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(Vec(33.2, 101.1)), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(49.965, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(24.405, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.837, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.878, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(37.703, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.1, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(45.665, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.905, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.437, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.478, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(33.403, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(57.5, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
 
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.041, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.0, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.241, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(83.037, 99.135)), module, TemporalDeck::S_GATE_O_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.2, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(82.996, 113.269)), module, TemporalDeck::S_POS_O_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(62.1, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(50.2, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.4, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(37.8, 95.3)), module, TemporalDeck::SLIP_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(40.2, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(57.5, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(45.6, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.8, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(33.2, 95.3)), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.6, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
