@@ -346,6 +346,7 @@ struct TemporalDeckEngine {
   static constexpr float kSlipNearNowVelocityCapSlope = 40.f;
   static constexpr float kSlipNearNowVelocityCapFloorRatio = 0.12f;
   static constexpr float kSlipCatchLagReferenceSec = 0.12f;
+  static constexpr float kSampleSlipResumeSnapMs = 9.0f;
   static constexpr float kSlipDynamicLpCutoffLowHz = 1800.f;
   static constexpr float kSlipDynamicLpCutoffHighHz = 17000.f;
   static constexpr float kSlipDynamicLpMixLow = 0.22f;
@@ -503,9 +504,11 @@ struct TemporalDeckEngine {
   bool nowCatchActive = false;
   float slipReturnOverrideTime = -1.f;
   float slipCatchVelocity = 0.f;
+  float sampleSlipVelocity = 0.f;
   float slipBlendRemaining = 0.f;
   double slipBlendStartReadHead = 0.0;
   double slipBlendStartLag = 0.0;
+  double sampleSlipAnchorPos = 0.0;
   float nowCatchRemaining = 0.f;
   float nowCatchStartLag = 0.f;
   double scratchLagSamples = 0.0;
@@ -588,9 +591,11 @@ struct TemporalDeckEngine {
     nowCatchActive = false;
     slipReturnOverrideTime = -1.f;
     slipCatchVelocity = 0.f;
+    sampleSlipVelocity = 0.f;
     slipBlendRemaining = 0.f;
     slipBlendStartReadHead = 0.0;
     slipBlendStartLag = 0.0;
+    sampleSlipAnchorPos = 0.0;
     nowCatchRemaining = 0.f;
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
@@ -799,10 +804,95 @@ struct TemporalDeckEngine {
     slipReturning = false;
     slipBlendActive = false;
     slipCatchVelocity = 0.f;
+    sampleSlipVelocity = 0.f;
     slipBlendRemaining = 0.f;
     slipBlendStartReadHead = readHead;
     slipBlendStartLag = 0.0;
     slipReturnOverrideTime = -1.f;
+  }
+
+  float sampleSlipCatchSpeedRatio() const {
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 3.5f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 1e6f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 6.0f;
+    }
+  }
+
+  float sampleSlipCatchAccelRatio() const {
+    switch (slipReturnMode) {
+    case TemporalDeck::SLIP_RETURN_SLOW:
+      return 18.0f;
+    case TemporalDeck::SLIP_RETURN_INSTANT:
+      return 1e6f;
+    case TemporalDeck::SLIP_RETURN_NORMAL:
+    default:
+      return 34.0f;
+    }
+  }
+
+  double sampleDeltaToTarget(double currentPos, double targetPos, double newestPos) const {
+    double delta = targetPos - currentPos;
+    if (isSampleLoopActive()) {
+      double length = sampleLoopLength(newestPos);
+      if (length > 1e-6) {
+        while (delta > 0.5 * length) {
+          delta -= length;
+        }
+        while (delta < -0.5 * length) {
+          delta += length;
+        }
+      }
+    }
+    return delta;
+  }
+
+  bool integrateSampleSlipReturn(double newestPos, float dt) {
+    float snapThresholdSamples = std::max(sampleRate * (kSampleSlipResumeSnapMs * 0.001f), 0.5f);
+    if (slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
+      samplePlayhead = normalizeSamplePosition(sampleSlipAnchorPos, newestPos);
+      readHead = samplePlayhead;
+      cancelSlipReturnState();
+      return true;
+    }
+
+    double currentPos = normalizeSamplePosition(readHead, newestPos);
+    double targetPos = normalizeSamplePosition(sampleSlipAnchorPos, newestPos);
+    double delta = sampleDeltaToTarget(currentPos, targetPos, newestPos);
+    if (std::fabs(delta) <= snapThresholdSamples) {
+      samplePlayhead = targetPos;
+      readHead = targetPos;
+      cancelSlipReturnState();
+      return true;
+    }
+
+    float sr = std::max(sampleRate, 1.f);
+    float desiredVelocity = clamp(float(delta) * 18.0f, -sampleSlipCatchSpeedRatio() * sr,
+                                  sampleSlipCatchSpeedRatio() * sr);
+    float maxDv = sampleSlipCatchAccelRatio() * sr * dt;
+    sampleSlipVelocity += clamp(desiredVelocity - sampleSlipVelocity, -maxDv, maxDv);
+    sampleSlipVelocity *= clamp(1.f - dt * 10.f, 0.f, 1.f);
+
+    double nextPos = currentPos + double(sampleSlipVelocity) * double(dt);
+    double nextDelta = sampleDeltaToTarget(nextPos, targetPos, newestPos);
+    if ((delta > 0.0 && nextDelta < 0.0) || (delta < 0.0 && nextDelta > 0.0) || std::fabs(nextDelta) <= 0.5) {
+      nextPos = targetPos;
+      sampleSlipVelocity = 0.f;
+    }
+
+    samplePlayhead = normalizeSamplePosition(nextPos, newestPos);
+    readHead = samplePlayhead;
+    if (std::fabs(sampleDeltaToTarget(samplePlayhead, targetPos, newestPos)) <= snapThresholdSamples) {
+      samplePlayhead = targetPos;
+      readHead = targetPos;
+      cancelSlipReturnState();
+      return true;
+    }
+    return false;
   }
 
   void startSlipBlend(double lagNow, float sr) {
@@ -1789,6 +1879,9 @@ struct TemporalDeckEngine {
       filteredManualLagTargetSamples = scratchLagSamples;
       lastPlatterLagTarget = platterLagTarget;
       lastPlatterGestureRevision = platterGestureRevision;
+      if (sampleModeActive) {
+        sampleSlipAnchorPos = normalizeSamplePosition(readHead, sampleWindowEndPos);
+      }
       clearScratchMotionState();
     }
 
@@ -1814,8 +1907,15 @@ struct TemporalDeckEngine {
       nowCatchActive = false;
     };
 
-    if (releasedFromScratch && slipState && !sampleModeActive) {
-      beginSlipReturn();
+    if (releasedFromScratch && slipState) {
+      if (sampleModeActive) {
+        slipReturning = true;
+        slipBlendActive = false;
+        sampleSlipVelocity = 0.f;
+        nowCatchActive = false;
+      } else {
+        beginSlipReturn();
+      }
     }
 
     if (releasedFromScratch && !sampleModeActive && !slipReturning && !slipBlendActive &&
@@ -1824,17 +1924,21 @@ struct TemporalDeckEngine {
       cancelSlipReturnState();
     }
 
-    if (slipJustEnabled && !anyScratch && !sampleModeActive) {
-      if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
+    if (slipJustEnabled && !anyScratch) {
+      if (sampleModeActive) {
+        sampleSlipAnchorPos = normalizeSamplePosition(readHead, sampleWindowEndPos);
+      } else if (currentLagFromNewest(newestPos) > kSlipEnableReturnThreshold) {
         beginSlipReturn();
       }
     }
 
     // If slip speed mode changes while Slip is active and we are behind NOW,
     // immediately engage a return so the new mode takes audible effect.
-    if (slipModeChanged && slipState && !anyScratch && !sampleModeActive &&
-        currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
-      beginSlipReturn();
+    if (slipModeChanged && slipState && !anyScratch &&
+        (!sampleModeActive ? currentLagFromNewest(newestPos) > nowSnapThresholdSamples : slipReturning)) {
+      if (!sampleModeActive) {
+        beginSlipReturn();
+      }
     }
 
     if (quickSlipTrigger && !anyScratch && !sampleModeActive && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
@@ -1842,25 +1946,27 @@ struct TemporalDeckEngine {
       beginSlipReturn();
     }
 
-    if (anyScratch || sampleModeActive || freezeForScratchModel) {
+    if (anyScratch || freezeForScratchModel) {
       cancelSlipReturnState();
     }
 
     if (sampleModeActive) {
       if (releasedFromScratch) {
-        // In sample mode, release should continue from where the scratch
-        // gesture landed rather than snapping back to the prior transport
-        // anchor.
         samplePlayhead = normalizeSamplePosition(readHead, sampleWindowEndPos);
         scratchLagSamples = 0.0;
         scratchLagTargetSamples = 0.0;
       }
+      bool sampleSlipJustCompleted = false;
+      if (slipReturning || slipBlendActive) {
+        speed = 0.f;
+        sampleSlipJustCompleted = integrateSampleSlipReturn(sampleWindowEndPos, dt);
+      }
       if (!sampleTransportPlaying || freezeForScratchModel) {
         speed = 0.f;
       }
-      if (sampleLoopEnabled) {
+      if ((!(slipReturning || slipBlendActive) || sampleSlipJustCompleted) && sampleLoopEnabled) {
         samplePlayhead = normalizeSamplePosition(samplePlayhead + double(speed), sampleWindowEndPos);
-      } else {
+      } else if ((!(slipReturning || slipBlendActive) || sampleSlipJustCompleted)) {
         samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
         if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
           samplePlayhead = sampleWindowEndPos;
