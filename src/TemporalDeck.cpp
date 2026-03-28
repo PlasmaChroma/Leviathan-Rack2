@@ -1486,6 +1486,7 @@ struct TemporalDeckEngine {
     scratchWheelVelocityBurst = 0.f;
     platterVelocity = 0.f;
 
+    bool loopActive = isSampleLoopActive();
     scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
     scratchLagTargetSamples = clampLag(targetLag, limit);
 
@@ -1493,7 +1494,7 @@ struct TemporalDeckEngine {
     float maxLagVelocity = samplesPerRev * kExternalCvMaxTurnsPerSec;
     float maxLagAccel = samplesPerRev * kExternalCvMaxTurnAccelPerSec2;
 
-    float lagError = float(scratchLagTargetSamples - scratchLagSamples);
+    float lagError = lagErrorToTarget(scratchLagTargetSamples, scratchLagSamples, newestPos);
     float desiredLagVelocity = clamp(lagError * kExternalCvCorrectionHz, -maxLagVelocity, maxLagVelocity);
     float maxVelStep = maxLagAccel * dt;
     scratch3LagVelocity += clamp(desiredLagVelocity - scratch3LagVelocity, -maxVelStep, maxVelStep);
@@ -1502,18 +1503,23 @@ struct TemporalDeckEngine {
     scratch3LagVelocity *= damping;
 
     double lagEstimate = clampLag(scratchLagSamples + double(scratch3LagVelocity) * double(dt), limit);
-    if ((lagError > 0.f && lagEstimate > scratchLagTargetSamples) || (lagError < 0.f && lagEstimate < scratchLagTargetSamples)) {
-      lagEstimate = scratchLagTargetSamples;
-      scratch3LagVelocity = 0.f;
+    if (!loopActive) {
+      if ((lagError > 0.f && lagEstimate > scratchLagTargetSamples) ||
+          (lagError < 0.f && lagEstimate < scratchLagTargetSamples)) {
+        lagEstimate = scratchLagTargetSamples;
+        scratch3LagVelocity = 0.f;
+      }
     }
-    if ((lagEstimate <= 0.0 && scratch3LagVelocity < 0.f) ||
-        (lagEstimate >= limit && scratch3LagVelocity > 0.f)) {
-      scratch3LagVelocity = 0.f;
-    }
-    if (scratchLagTargetSamples <= nowSnapThresholdSamples && lagEstimate <= nowSnapThresholdSamples &&
-        scratch3LagVelocity <= 0.f) {
-      lagEstimate = 0.0;
-      scratch3LagVelocity = 0.f;
+    if (!loopActive) {
+      if ((lagEstimate <= 0.0 && scratch3LagVelocity < 0.f) ||
+          (lagEstimate >= limit && scratch3LagVelocity > 0.f)) {
+        scratch3LagVelocity = 0.f;
+      }
+      if (scratchLagTargetSamples <= nowSnapThresholdSamples && lagEstimate <= nowSnapThresholdSamples &&
+          scratch3LagVelocity <= 0.f) {
+        lagEstimate = 0.0;
+        scratch3LagVelocity = 0.f;
+      }
     }
 
     scratchLagSamples = lagEstimate;
