@@ -752,7 +752,7 @@ struct TemporalDeckEngine {
 
   float slipCatchDoneVelocityRatioForMode() const {
     if (slipReturnOverrideTime >= 0.f) {
-      return 0.45f;
+      return 0.62f;
     }
     switch (slipReturnMode) {
     case TemporalDeck::SLIP_RETURN_SLOW:
@@ -767,7 +767,7 @@ struct TemporalDeckEngine {
 
   float slipNearNowDampingFloor() const {
     if (slipReturnOverrideTime >= 0.f) {
-      return 0.80f;
+      return 0.90f;
     }
     switch (slipReturnMode) {
     case TemporalDeck::SLIP_RETURN_SLOW:
@@ -782,7 +782,7 @@ struct TemporalDeckEngine {
 
   float slipNearNowCapBoost() const {
     if (slipReturnOverrideTime >= 0.f) {
-      return 1.25f;
+      return 1.65f;
     }
     switch (slipReturnMode) {
     case TemporalDeck::SLIP_RETURN_SLOW:
@@ -812,6 +812,9 @@ struct TemporalDeckEngine {
     float speedNorm = clamp(slipCatchVelocity / std::max(sr * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);
     float blendVoicing = clamp(0.65f * speedNorm + 0.35f * lagNorm, 0.f, 1.f);
     slipBlendRemaining = crossfade(kSlipBlendTimeMin, kSlipBlendTimeMax, blendVoicing);
+    if (slipReturnOverrideTime >= 0.f) {
+      slipBlendRemaining *= 0.55f;
+    }
     slipBlendStartReadHead = readHead;
     slipBlendStartLag = lagNow;
   }
@@ -838,7 +841,7 @@ struct TemporalDeckEngine {
 
     float blendThresholdSec = kSlipNearNowBlendThresholdMs * 0.001f;
     if (slipReturnOverrideTime >= 0.f) {
-      blendThresholdSec *= 0.90f;
+      blendThresholdSec *= 0.72f;
     } else if (slipReturnMode == TemporalDeck::SLIP_RETURN_SLOW) {
       blendThresholdSec *= 1.30f;
     } else if (slipReturnMode == TemporalDeck::SLIP_RETURN_NORMAL) {
@@ -857,6 +860,9 @@ struct TemporalDeckEngine {
     slipCatchVelocity += clamp(dv, -maxDv, maxDv);
     slipCatchVelocity = std::max(0.f, slipCatchVelocity);
     float dampingThresholdSec = kSlipNearNowDampingThresholdMs * 0.001f;
+    if (slipReturnOverrideTime >= 0.f) {
+      dampingThresholdSec *= 0.58f;
+    }
     if (lagSec < dampingThresholdSec) {
       float nearNowNorm = clamp(lagSec / dampingThresholdSec, 0.f, 1.f);
       float dampingFloor = slipNearNowDampingFloor();
