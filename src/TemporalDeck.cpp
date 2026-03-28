@@ -697,8 +697,13 @@ struct TemporalDeckEngine {
   }
 
   static float baseSpeedFromCv(float rateCv) {
-    float t = clamp((rateCv + 10.f) / 20.f, 0.f, 1.f);
-    return 0.5f + 1.5f * t;
+    rateCv = clamp(rateCv, -10.f, 10.f);
+    if (rateCv <= 0.f) {
+      float t = (rateCv + 10.f) / 10.f;
+      return 0.5f + 0.5f * t;
+    }
+    float t = rateCv / 10.f;
+    return 1.f + t;
   }
 
   float computeBaseSpeed(float rateKnob, float rateCv, bool rateCvConnected, bool reverse) const {
