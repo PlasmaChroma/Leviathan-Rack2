@@ -1296,9 +1296,11 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createCheckMenuItem("Log platter mouse events", "",
-                                         [=]() { return module->isPlatterTraceLoggingEnabled(); },
-                                         [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
+      // Hidden for now, but keep the trace plumbing available in code in case
+      // we need to bring back platter interaction logging for debugging.
+      // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
+      //                                    [=]() { return module->isPlatterTraceLoggingEnabled(); },
+      //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
       menu->addChild(createMenuItem("Export platter SVG...", "", [=]() {
         Vec platterCenter = mm2px(Vec(50.8f, 72.f));
         float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
