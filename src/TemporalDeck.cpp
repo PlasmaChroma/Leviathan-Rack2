@@ -2884,7 +2884,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->customPlatterArtPath = json_string_value(customPlatterArtPathJ);
   }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
-  impl->engine.bufferDurationMode = mode;
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
@@ -2892,6 +2891,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
     std::string error;
     loadSampleFromPath(json_string_value(samplePathJ), &error);
   }
+  // Ensure restored patch state (buffer mode, sample state, etc.) is applied
+  // to the runtime buffer allocation on the first audio process callback.
+  impl->pendingSampleStateApply.store(true);
 }
 
 void TemporalDeck::process(const ProcessArgs &args) {
