@@ -49,6 +49,12 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   static constexpr double kDefaultGestureDtSec = 1.0 / 60.0;
   static constexpr double kMinGestureDtSec = 1.0 / 240.0;
   static constexpr double kMaxGestureDtSec = 1.0 / 20.0;
+  static constexpr float kLowFpsCompStartHz = 90.f;
+  static constexpr float kLowFpsCompFullHz = 45.f;
+  static constexpr float kLowFpsWarningOnHz = 55.f;
+  static constexpr float kLowFpsWarningOffHz = 60.f;
+  static constexpr float kLowFpsWarningSettleSec = 0.35f;
+  static constexpr float kLowFpsWarningClearSec = 0.25f;
 
   struct InteractionTraceRecorder {
     bool active = false;
@@ -72,12 +78,22 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   double lastMoveTimeSec = 0.0;
   double recentGestureDtSec = kDefaultGestureDtSec;
   bool middleQuickSlipDown = false;
+  float uiFpsEstimateHz = kLowFpsCompStartHz;
+  float uiFpsDisplayHz = kLowFpsCompStartHz;
+  bool lowFpsWarningActive = false;
+  float lowFpsWarningLowAccumSec = 0.f;
+  float lowFpsWarningHighAccumSec = 0.f;
+  float uiFpsDisplayAccumSec = 0.f;
+  double lastUiFpsUpdateSec = 0.0;
   InteractionTraceRecorder traceRecorder;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
   Vec currentLocalMousePos() const;
   float wheelRadiusGainForLocal(Vec local) const;
   float normalizeWheelScrollDelta(float rawScroll) const;
+  void updateUiFpsTracking();
+  float lowFpsCompensationFactor() const;
+  void drawLowFpsWarning(const DrawArgs &args, Vec center) const;
 
   bool isWithinPlatter(Vec panelPos) const {
     Vec local = panelPos.minus(localCenter());
@@ -184,6 +200,69 @@ float TemporalDeckPlatterWidget::normalizeWheelScrollDelta(float rawScroll) cons
     rawScroll /= 50.f;
   }
   return clamp(rawScroll, -4.f, 4.f);
+}
+
+void TemporalDeckPlatterWidget::updateUiFpsTracking() {
+  double nowSec = system::getTime();
+  double dtSec = 0.0;
+  if (lastUiFpsUpdateSec > 0.0) {
+    dtSec = nowSec - lastUiFpsUpdateSec;
+  }
+  lastUiFpsUpdateSec = nowSec;
+  dtSec = std::max(0.0, std::min(dtSec, 0.25));
+
+  double frameDuration = (APP && APP->window) ? APP->window->getLastFrameDuration() : NAN;
+  if (std::isfinite(frameDuration) && frameDuration > 1e-4) {
+    float instFps = clamp(float(1.0 / frameDuration), 1.f, 480.f);
+    constexpr float kFpsEmaAlpha = 0.18f;
+    uiFpsEstimateHz += (instFps - uiFpsEstimateHz) * kFpsEmaAlpha;
+  }
+
+  if (dtSec > 0.0) {
+    uiFpsDisplayAccumSec += float(dtSec);
+    if (uiFpsDisplayAccumSec >= 1.f) {
+      uiFpsDisplayHz = uiFpsEstimateHz;
+      uiFpsDisplayAccumSec = 0.f;
+    }
+  }
+
+  float fps = std::max(uiFpsEstimateHz, 1.f);
+  if (dtSec > 0.0) {
+    if (fps < kLowFpsWarningOnHz) {
+      lowFpsWarningLowAccumSec += float(dtSec);
+      lowFpsWarningHighAccumSec = 0.f;
+      if (lowFpsWarningLowAccumSec >= kLowFpsWarningSettleSec) {
+        lowFpsWarningActive = true;
+      }
+    } else if (fps > kLowFpsWarningOffHz) {
+      lowFpsWarningHighAccumSec += float(dtSec);
+      lowFpsWarningLowAccumSec = 0.f;
+      if (lowFpsWarningHighAccumSec >= kLowFpsWarningClearSec) {
+        lowFpsWarningActive = false;
+      }
+    }
+  }
+}
+
+float TemporalDeckPlatterWidget::lowFpsCompensationFactor() const {
+  float denom = std::max(kLowFpsCompStartHz - kLowFpsCompFullHz, 1.f);
+  return clamp((kLowFpsCompStartHz - uiFpsEstimateHz) / denom, 0.f, 1.f);
+}
+
+void TemporalDeckPlatterWidget::drawLowFpsWarning(const DrawArgs &args, Vec center) const {
+  if (!lowFpsWarningActive || !APP || !APP->window || !APP->window->uiFont) {
+    return;
+  }
+  (void)center;
+  // Place warning above S.GATE, in the gap between platter edge and jack row.
+  Vec warningPos = mm2px(Vec(73.0f, 70.0f));
+  nvgSave(args.vg);
+  nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+  nvgFontSize(args.vg, 10.f);
+  nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+  nvgFillColor(args.vg, nvgRGBA(255, 178, 82, 240));
+  nvgText(args.vg, warningPos.x, warningPos.y, string::f("LOW UI FPS: %.0f", uiFpsDisplayHz).c_str(), nullptr);
+  nvgRestore(args.vg);
 }
 
 void TemporalDeckPlatterWidget::pollMiddleQuickSlipTrigger() {
@@ -809,6 +888,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
 void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   syncTraceCaptureState();
   pollMiddleQuickSlipTrigger();
+  updateUiFpsTracking();
   nvgSave(args.vg);
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
@@ -849,6 +929,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
     }
     if (drewArt) {
       drawPlatterDimmingOverlay(args, center, platterRadiusPx, platterDimAlpha);
+      drawLowFpsWarning(args, center);
       nvgRestore(args.vg);
       Widget::draw(args);
       return;
@@ -969,6 +1050,8 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   nvgStrokeWidth(args.vg, 1.1f);
   nvgStroke(args.vg);
 
+  drawLowFpsWarning(args, center);
+
   nvgRestore(args.vg);
   Widget::draw(args);
 }
@@ -1039,6 +1122,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
   bool freezeLikeDrag = true;
+  float lowFpsComp = lowFpsCompensationFactor();
   float sensitivity = module->scratchSensitivity();
   float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
                                                           TemporalDeck::kMouseScratchTravelScale,
@@ -1046,25 +1130,33 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   if (!freezeLikeDrag) {
     localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
   }
-  if (module->isSampleModeEnabled() && module->hasLoadedSample() && module->isSampleLoopEnabled() && accessibleLag > 0.0) {
-    double wrappedLag = std::fmod(double(localLagSamples - lagDelta), accessibleLag + 1.0);
-    if (wrappedLag < 0.0) {
-      wrappedLag += accessibleLag + 1.0;
+  int substeps = clamp(1 + int(std::round(lowFpsComp * 6.f)), 1, 7);
+  float lagDeltaStep = lagDelta / float(substeps);
+  double stepDtSec = std::max(kMinGestureDtSec, dtSec / double(substeps));
+  for (int i = 0; i < substeps; ++i) {
+    if (module->isSampleModeEnabled() && module->hasLoadedSample() && module->isSampleLoopEnabled() && accessibleLag > 0.0) {
+      double wrappedLag = std::fmod(double(localLagSamples - lagDeltaStep), accessibleLag + 1.0);
+      if (wrappedLag < 0.0) {
+        wrappedLag += accessibleLag + 1.0;
+      }
+      localLagSamples = float(wrappedLag);
+    } else {
+      localLagSamples = clamp(localLagSamples - lagDeltaStep, 0.f, accessibleLag);
     }
-    localLagSamples = float(wrappedLag);
-  } else {
-    localLagSamples = clamp(localLagSamples - lagDelta, 0.f, accessibleLag);
-  }
 
-  float measuredVelocity = lagDelta / float(dtSec);
-  float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
-  filteredGestureVelocity += (measuredVelocity - filteredGestureVelocity) * velocityAlpha;
+    float measuredVelocity = lagDeltaStep / float(stepDtSec);
+    float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(stepDtSec));
+    filteredGestureVelocity += (measuredVelocity - filteredGestureVelocity) * velocityAlpha;
+  }
   module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
   logTraceEvent("SCRATCH_APPLY", local, mouseDelta, 0.f, deltaAngle, lagDelta, liveLag, localLagSamples,
                 filteredGestureVelocity);
 
   int motionFreshSamples = int(std::round(module->getUiSampleRate() * float(dtSec) * 1.35f));
-  motionFreshSamples = clamp(motionFreshSamples, 1, int(std::round(module->getUiSampleRate() * 0.025f)));
+  int minHoldSamples = int(std::round(module->getUiSampleRate() * crossfade(0.022f, 0.080f, lowFpsComp)));
+  int maxHoldSamples = int(std::round(module->getUiSampleRate() * 0.090f));
+  motionFreshSamples = std::max(motionFreshSamples, minHoldSamples);
+  motionFreshSamples = clamp(motionFreshSamples, 1, maxHoldSamples);
   module->setPlatterMotionFreshSamples(motionFreshSamples);
   if (contactAngle > M_PI) {
     contactAngle -= 2.f * M_PI;
@@ -1145,15 +1237,18 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   float sampleRate = module->getUiSampleRate();
   Vec local = e.pos.minus(localCenter());
   float radiusGain = wheelRadiusGainForLocal(local);
+  float lowFpsComp = lowFpsCompensationFactor();
   float scroll = normalizeWheelScrollDelta(rawScroll);
   float scrollAbs = std::fabs(scroll);
   float scrollShaped = (scroll >= 0.f ? 1.f : -1.f) * (scrollAbs + 0.65f * scrollAbs * scrollAbs);
   float samplesPerNotch =
     sampleRate * 0.018f * TemporalDeck::kWheelScratchTravelScale * module->scratchSensitivity();
-  float lagDelta = scrollShaped * samplesPerNotch * radiusGain;
+  float wheelGain = 1.f + 0.50f * lowFpsComp;
+  float lagDelta = scrollShaped * samplesPerNotch * radiusGain * wheelGain;
   // Keep wheel scratch active long enough for Hybrid wheel impulses to settle,
   // otherwise small forward ticks can drop out before they noticeably reduce lag.
   float holdSeconds = module->isSlipLatched() ? 0.16f : 0.09f;
+  holdSeconds += 0.06f * lowFpsComp;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
   module->addPlatterWheelDelta(lagDelta, holdSamples);
