@@ -2515,6 +2515,7 @@ struct TemporalDeck::Impl {
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
+  int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
 };
 
@@ -2578,10 +2579,13 @@ CartridgeVisualStyle TemporalDeck::cartridgeVisualStyleFor(int index) {
   case CARTRIDGE_QBERT:
     return {nvgRGBA(34, 35, 40, 240), nvgRGBA(240, 242, 246, 210), nvgRGBA(248, 200, 58, 235)};
   case CARTRIDGE_LOFI:
-    return {nvgRGBA(56, 51, 44, 238), nvgRGBA(98, 84, 70, 190), nvgRGBA(186, 170, 138, 210)};
+    // Brand purple palette from HSV:
+    // bright = overridden to RGB (87, 64, 191)
+    // dim    = overridden to RGB (35, 28, 74)
+    return {nvgRGBA(35, 28, 74, 238), nvgRGBA(87, 64, 191, 205), nvgRGBA(87, 64, 191, 224)};
   case CARTRIDGE_CLEAN:
   default:
-    return {nvgRGBA(90, 178, 187, 236), nvgRGBA(12, 41, 45, 190), nvgRGBA(18, 18, 18, 230)};
+    return {nvgRGBA(90, 178, 187, 236), nvgRGBA(12, 41, 45, 190), nvgRGBA(0, 0, 0, 235)};
   }
 }
 
@@ -2634,6 +2638,18 @@ const char *TemporalDeck::platterArtModeLabelFor(int index) {
   case PLATTER_ART_BUILTIN_SVG:
   default:
     return "Built-in SVG";
+  }
+}
+
+const char *TemporalDeck::platterBrightnessLabelFor(int index) {
+  switch (index) {
+  case PLATTER_BRIGHTNESS_LOW:
+    return "Low";
+  case PLATTER_BRIGHTNESS_MEDIUM:
+    return "Medium";
+  case PLATTER_BRIGHTNESS_FULL:
+  default:
+    return "Full";
   }
 }
 
@@ -2752,6 +2768,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(sampleAutoPlayOnLoad));
   json_object_set_new(root, "platterArtMode", json_integer(impl->platterArtMode));
+  json_object_set_new(root, "platterBrightnessMode", json_integer(impl->platterBrightnessMode));
   if (!impl->customPlatterArtPath.empty()) {
     json_object_set_new(root, "customPlatterArtPath", json_string(impl->customPlatterArtPath.c_str()));
   }
@@ -2780,6 +2797,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
   json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
   json_t *platterArtModeJ = json_object_get(root, "platterArtMode");
+  json_t *platterBrightnessModeJ = json_object_get(root, "platterBrightnessMode");
   json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
   json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
@@ -2836,6 +2854,10 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (platterArtModeJ) {
     impl->platterArtMode =
       clamp((int)json_integer_value(platterArtModeJ), PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
+  }
+  if (platterBrightnessModeJ) {
+    impl->platterBrightnessMode =
+      clamp((int)json_integer_value(platterBrightnessModeJ), PLATTER_BRIGHTNESS_FULL, PLATTER_BRIGHTNESS_COUNT - 1);
   }
   if (customPlatterArtPathJ && json_is_string(customPlatterArtPathJ)) {
     impl->customPlatterArtPath = json_string_value(customPlatterArtPathJ);
@@ -3292,6 +3314,14 @@ int TemporalDeck::getPlatterArtMode() const {
 
 void TemporalDeck::setPlatterArtMode(int mode) {
   impl->platterArtMode = clamp(mode, PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
+}
+
+int TemporalDeck::getPlatterBrightnessMode() const {
+  return clamp(impl->platterBrightnessMode, PLATTER_BRIGHTNESS_FULL, PLATTER_BRIGHTNESS_COUNT - 1);
+}
+
+void TemporalDeck::setPlatterBrightnessMode(int mode) {
+  impl->platterBrightnessMode = clamp(mode, PLATTER_BRIGHTNESS_FULL, PLATTER_BRIGHTNESS_COUNT - 1);
 }
 
 std::string TemporalDeck::getCustomPlatterArtPath() const {

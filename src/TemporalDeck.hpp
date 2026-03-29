@@ -43,6 +43,10 @@ struct TemporalDeck final : Module {
   static constexpr int PLATTER_ART_PROCEDURAL = 2;
   static constexpr int PLATTER_ART_CUSTOM = 3;
   static constexpr int PLATTER_ART_MODE_COUNT = 4;
+  static constexpr int PLATTER_BRIGHTNESS_FULL = 0;
+  static constexpr int PLATTER_BRIGHTNESS_MEDIUM = 1;
+  static constexpr int PLATTER_BRIGHTNESS_LOW = 2;
+  static constexpr int PLATTER_BRIGHTNESS_COUNT = 3;
 
   static constexpr float kNominalPlatterRpm = 33.3333f;
   static constexpr float kMouseScratchTravelScale = 1.00f;
@@ -94,6 +98,7 @@ struct TemporalDeck final : Module {
   static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
   static const char *platterArtModeLabelFor(int index);
+  static const char *platterBrightnessLabelFor(int index);
 
   void onSampleRateChange() override;
   json_t *dataToJson() override;
@@ -139,6 +144,8 @@ struct TemporalDeck final : Module {
   bool isBufferModeMono() const;
   int getPlatterArtMode() const;
   void setPlatterArtMode(int mode);
+  int getPlatterBrightnessMode() const;
+  void setPlatterBrightnessMode(int mode);
   std::string getCustomPlatterArtPath() const;
   bool setCustomPlatterArtPath(const std::string &path);
   void clearCustomPlatterArtPath();

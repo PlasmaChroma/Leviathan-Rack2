@@ -414,6 +414,18 @@ static bool isSupportedPlatterArtPath(const std::string &path) {
   return ext == ".svg" || ext == ".png";
 }
 
+static float platterDimmingOverlayAlphaForMode(int mode) {
+  switch (mode) {
+  case TemporalDeck::PLATTER_BRIGHTNESS_LOW:
+    return 0.46f;
+  case TemporalDeck::PLATTER_BRIGHTNESS_MEDIUM:
+    return 0.28f;
+  case TemporalDeck::PLATTER_BRIGHTNESS_FULL:
+  default:
+    return 0.f;
+  }
+}
+
 static bool drawPlatterSvg(const Widget::DrawArgs &args, std::shared_ptr<window::Svg> svg, Vec center,
                            float platterRadiusPx, float rotation) {
   if (!svg) {
@@ -427,11 +439,13 @@ static bool drawPlatterSvg(const Widget::DrawArgs &args, std::shared_ptr<window:
   float sourceRadius = std::max(1.f, 0.5f * std::min(svgSize.x, svgSize.y) - kPlatterSvgMarginPx);
   float scale = platterRadiusPx / sourceRadius;
 
+  nvgSave(args.vg);
   nvgTranslate(args.vg, center.x, center.y);
   nvgRotate(args.vg, rotation);
   nvgScale(args.vg, scale, scale);
   nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
   svg->draw(args.vg);
+  nvgRestore(args.vg);
   return true;
 }
 
@@ -461,6 +475,23 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   nvgFill(args.vg);
   nvgRestore(args.vg);
   return true;
+}
+
+static void drawPlatterDimmingOverlay(const Widget::DrawArgs &args, Vec center, float platterRadiusPx, float overlayAlpha) {
+  overlayAlpha = clamp(overlayAlpha, 0.f, 1.f);
+  if (overlayAlpha <= 1e-4f) {
+    return;
+  }
+  unsigned char innerA = (unsigned char)std::round(clamp(overlayAlpha * 0.80f, 0.f, 1.f) * 255.f);
+  unsigned char outerA = (unsigned char)std::round(clamp(overlayAlpha * 1.05f, 0.f, 1.f) * 255.f);
+  NVGpaint dimPaint =
+    nvgRadialGradient(args.vg, center.x - platterRadiusPx * 0.08f, center.y - platterRadiusPx * 0.10f,
+                      platterRadiusPx * 0.10f, platterRadiusPx * 1.04f, nvgRGBA(0, 0, 0, innerA),
+                      nvgRGBA(0, 0, 0, outerA));
+  nvgBeginPath(args.vg);
+  nvgCircle(args.vg, center.x, center.y, platterRadiusPx);
+  nvgFillPaint(args.vg, dimPaint);
+  nvgFill(args.vg);
 }
 
 static bool topArcAngleFromLocal(Vec local, float *angleOut) {
@@ -785,8 +816,10 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   // Primary platter render path is selectable: built-in SVG, custom file, or
   // procedural fallback.
   bool drewArt = false;
+  float platterDimAlpha = 0.f;
   if (module && APP && APP->window) {
     int artMode = module->getPlatterArtMode();
+    platterDimAlpha = platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode());
     if (artMode == TemporalDeck::PLATTER_ART_BUILTIN_SVG) {
       try {
         drewArt = drawPlatterSvg(args, APP->window->loadSvg(asset::plugin(pluginInstance, "res/Vinyl/Static.svg")),
@@ -815,6 +848,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       }
     }
     if (drewArt) {
+      drawPlatterDimmingOverlay(args, center, platterRadiusPx, platterDimAlpha);
       nvgRestore(args.vg);
       Widget::draw(args);
       return;
@@ -926,6 +960,8 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   nvgCircle(args.vg, center.x - postRadius * 0.32f, center.y - postRadius * 0.34f, postRadius * 0.20f);
   nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 132));
   nvgFill(args.vg);
+
+  drawPlatterDimmingOverlay(args, center, platterRadiusPx, platterDimAlpha);
 
   nvgBeginPath(args.vg);
   nvgCircle(args.vg, center.x, center.y, platterRadiusPx);
@@ -1384,6 +1420,14 @@ struct TemporalDeckWidget : ModuleWidget {
             }
           },
           customPath.empty()));
+        submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
+          for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
+            brightnessMenu->addChild(createCheckMenuItem(
+              TemporalDeck::platterBrightnessLabelFor(i), "",
+              [=]() { return module->getPlatterBrightnessMode() == i; },
+              [=]() { module->setPlatterBrightnessMode(i); }));
+          }
+        }));
         submenu->addChild(new MenuSeparator());
         if (!customPath.empty()) {
           submenu->addChild(createMenuLabel(system::getFilename(customPath)));
