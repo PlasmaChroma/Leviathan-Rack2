@@ -897,9 +897,11 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   // procedural fallback.
   bool drewArt = false;
   float platterDimAlpha = 0.f;
-  if (module && APP && APP->window) {
-    int artMode = module->getPlatterArtMode();
-    platterDimAlpha = platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode());
+  if (APP && APP->window) {
+    // In module-browser preview there is no backing module instance, so pick a
+    // deterministic default art instead of falling through to procedural.
+    int artMode = module ? module->getPlatterArtMode() : TemporalDeck::PLATTER_ART_DRAGON_KING;
+    platterDimAlpha = module ? platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode()) : 0.f;
     if (artMode == TemporalDeck::PLATTER_ART_BUILTIN_SVG) {
       try {
         drewArt = drawPlatterSvg(args, APP->window->loadSvg(asset::plugin(pluginInstance, "res/Vinyl/Static.svg")),
@@ -915,16 +917,18 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
         WARN("TemporalDeck: failed to load Dragon King platter PNG asset: %s", e.what());
       }
     } else if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
-      std::string customPath = module->getCustomPlatterArtPath();
-      std::string ext = lowercaseExtension(customPath);
-      try {
-        if (ext == ".svg") {
-          drewArt = drawPlatterSvg(args, APP->window->loadSvg(customPath), center, platterRadiusPx, rotation);
-        } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-          drewArt = drawPlatterImage(args, APP->window->loadImage(customPath), center, platterRadiusPx, rotation);
+      if (module) {
+        std::string customPath = module->getCustomPlatterArtPath();
+        std::string ext = lowercaseExtension(customPath);
+        try {
+          if (ext == ".svg") {
+            drewArt = drawPlatterSvg(args, APP->window->loadSvg(customPath), center, platterRadiusPx, rotation);
+          } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
+            drewArt = drawPlatterImage(args, APP->window->loadImage(customPath), center, platterRadiusPx, rotation);
+          }
+        } catch (const std::exception &e) {
+          WARN("TemporalDeck: failed to load custom platter art '%s': %s", customPath.c_str(), e.what());
         }
-      } catch (const std::exception &e) {
-        WARN("TemporalDeck: failed to load custom platter art '%s': %s", customPath.c_str(), e.what());
       }
     }
     if (drewArt) {
