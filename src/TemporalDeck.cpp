@@ -2566,6 +2566,88 @@ struct TemporalDeck::Impl {
   std::string customPlatterArtPath;
 };
 
+static void publishArcLights(TemporalDeck *module, int sampleFrames, int bufferDurationMode, float sampleRate,
+                             const TemporalDeckEngine::FrameResult &frame) {
+  std::array<float, TemporalDeck::kArcLightCount> arcYellow{};
+  std::array<float, TemporalDeck::kArcLightCount> arcRed{};
+  std::array<float, TemporalDeck::kArcLightCount> limitYellowBlendAllowed{};
+  const float limitIndicatorRedBrightness = 0.9f;
+  const float limitApproachWindowLeds = 2.0f;
+  auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
+    int limitLedIndex = clamp(int(std::round(limitLed)), 0, TemporalDeck::kArcLightCount - 1);
+    bool isLimitLed = i == limitLedIndex;
+    if (isLimitLed) {
+      limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
+      if (allowYellowBlend) {
+        float approach = clamp(1.f - std::fabs(playheadLed - limitLed) / limitApproachWindowLeds, 0.f, 1.f);
+        *brightness = std::max(*brightness, 0.42f * approach);
+      }
+    }
+    arcRed[i] = isLimitLed ? limitIndicatorRedBrightness : 0.f;
+  };
+
+  if (frame.sampleMode && frame.sampleLoaded) {
+    // Sample mode fills from left->right. The red limit marker indicates the
+    // effective playback end (full sample end or knob-limited end).
+    float leftLed = float(TemporalDeck::kArcLightCount - 1);
+    float sampleNewest = std::max(1.f, float(sampleFrames - 1));
+    float limitRatio = clamp(float(frame.accessibleLag / sampleNewest), 0.f, 1.f);
+    float sampleEndLed = (1.f - limitRatio) * leftLed;
+    float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
+    float ledSpan = std::max(0.f, leftLed - sampleEndLed);
+    float progressLedUnits = progressNorm * ledSpan;
+    float playheadLed = leftLed - progressLedUnits;
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      // Progressive fill from left to right with fractional leading LED.
+      // At start, all LEDs are off; the leading LED ramps in proportionally.
+      float ledFromStart = leftLed - float(i);
+      float fill = clamp(progressLedUnits - ledFromStart, 0.f, 1.f);
+      float brightness = 0.92f * fill;
+      // Keep anything beyond the effective sample end dark.
+      if (float(i) + 0.5f < sampleEndLed) {
+        brightness = 0.f;
+      }
+      bool allowYellowBlend = brightness > 1e-4f;
+      applyLimitMarker(i, playheadLed, sampleEndLed, &brightness, allowYellowBlend);
+      arcYellow[i] = brightness;
+    }
+  } else {
+    int mode = clamp(bufferDurationMode, 0, TemporalDeck::BUFFER_DURATION_COUNT - 1);
+    float maxLag = std::max(1.f, sampleRate * usableBufferSecondsForMode(mode));
+    float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
+    float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
+    float lagLed = lagRatio * float(TemporalDeck::kArcLightCount - 1);
+    float limitLed = limitRatio * float(TemporalDeck::kArcLightCount - 1);
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      float brightness = 0.f;
+      if (i == 0) {
+        brightness = clamp(lagLed, 0.f, 1.f);
+      } else {
+        brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
+      }
+      if (float(i) > limitLed + 0.5f) {
+        brightness = 0.f;
+      }
+      bool allowYellowBlend = brightness > 1e-4f;
+      applyLimitMarker(i, lagLed, limitLed, &brightness, allowYellowBlend);
+      arcYellow[i] = brightness;
+    }
+  }
+
+  // Small spatial blend to remove visible dead-zones between LEDs while
+  // preserving endpoint markers.
+  smoothLedBrightness(arcYellow);
+  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+    if (arcRed[i] > 0.f && limitYellowBlendAllowed[i] < 0.5f) {
+      arcYellow[i] = 0.f;
+    }
+  }
+  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+    module->lights[TemporalDeck::ARC_LIGHT_START + i].setBrightness(arcYellow[i]);
+    module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].setBrightness(arcRed[i]);
+  }
+}
+
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -2596,111 +2678,6 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
 }
 
 TemporalDeck::~TemporalDeck() = default;
-
-const char *TemporalDeck::cartridgeLabelFor(int index) {
-  switch (index) {
-  case CARTRIDGE_M44_7:
-    return "M44-7";
-  case CARTRIDGE_ORTOFON_SCRATCH:
-    return "C.MKII S";
-  case CARTRIDGE_STANTON_680HP:
-    return "680 HP";
-  case CARTRIDGE_QBERT:
-    return "Q.Bert";
-  case CARTRIDGE_LOFI:
-    return "Lo-Fi";
-  case CARTRIDGE_CLEAN:
-  default:
-    return "Clean";
-  }
-}
-
-CartridgeVisualStyle TemporalDeck::cartridgeVisualStyleFor(int index) {
-  switch (index) {
-  case CARTRIDGE_M44_7:
-    return {nvgRGBA(26, 26, 26, 238), nvgRGBA(110, 110, 118, 190), nvgRGBA(252, 252, 252, 235)};
-  case CARTRIDGE_ORTOFON_SCRATCH:
-    return {nvgRGBA(242, 242, 242, 240), nvgRGBA(26, 26, 26, 210), nvgRGBA(18, 18, 18, 228)};
-  case CARTRIDGE_STANTON_680HP:
-    return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(24, 24, 28, 230)};
-  case CARTRIDGE_QBERT:
-    return {nvgRGBA(34, 35, 40, 240), nvgRGBA(240, 242, 246, 210), nvgRGBA(248, 200, 58, 235)};
-  case CARTRIDGE_LOFI:
-    // Brand purple palette from HSV:
-    // bright = overridden to RGB (87, 64, 191)
-    // dim    = overridden to RGB (35, 28, 74)
-    return {nvgRGBA(35, 28, 74, 238), nvgRGBA(87, 64, 191, 205), nvgRGBA(87, 64, 191, 224)};
-  case CARTRIDGE_CLEAN:
-  default:
-    return {nvgRGBA(90, 178, 187, 236), nvgRGBA(12, 41, 45, 190), nvgRGBA(0, 0, 0, 235)};
-  }
-}
-
-const char *TemporalDeck::scratchInterpolationLabelFor(int index) {
-  switch (index) {
-  case SCRATCH_INTERP_LAGRANGE6:
-    return "6-point Lagrange";
-  case SCRATCH_INTERP_SINC:
-    return "Sinc (CPU heavy)";
-  case SCRATCH_INTERP_CUBIC:
-  default:
-    return "Cubic";
-  }
-}
-
-const char *TemporalDeck::slipReturnLabelFor(int index) {
-  switch (index) {
-  case SLIP_RETURN_SLOW:
-    return "Slow";
-  case SLIP_RETURN_INSTANT:
-    return "Instant";
-  case SLIP_RETURN_NORMAL:
-  default:
-    return "Normal";
-  }
-}
-
-const char *TemporalDeck::bufferDurationLabelFor(int index) {
-  switch (index) {
-  case BUFFER_DURATION_20S:
-    return "20 s";
-  case BUFFER_DURATION_10M_STEREO:
-    return "10 min stereo";
-  case BUFFER_DURATION_10M_MONO:
-    return "10 min mono";
-  case BUFFER_DURATION_10S:
-  default:
-    return "10 s";
-  }
-}
-
-const char *TemporalDeck::platterArtModeLabelFor(int index) {
-  switch (index) {
-  case PLATTER_ART_DRAGON_KING:
-    return "Dragon King";
-  case PLATTER_ART_BLANK:
-    return "Blank";
-  case PLATTER_ART_PROCEDURAL:
-    return "Procedural";
-  case PLATTER_ART_CUSTOM:
-    return "Custom file";
-  case PLATTER_ART_BUILTIN_SVG:
-  default:
-    return "Built-in SVG";
-  }
-}
-
-const char *TemporalDeck::platterBrightnessLabelFor(int index) {
-  switch (index) {
-  case PLATTER_BRIGHTNESS_LOW:
-    return "Low";
-  case PLATTER_BRIGHTNESS_MEDIUM:
-    return "Medium";
-  case PLATTER_BRIGHTNESS_FULL:
-  default:
-    return "Full";
-  }
-}
 
 float TemporalDeck::scratchSensitivity() {
   return ScratchSensitivityQuantity::sensitivityForValue(params[SCRATCH_SENSITIVITY_PARAM].getValue());
@@ -3087,83 +3064,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiPublishTimerSec += args.sampleTime;
   if (impl->uiPublishTimerSec >= kUiPublishIntervalSec) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
-    std::array<float, kArcLightCount> arcYellow{};
-    std::array<float, kArcLightCount> arcRed{};
-    std::array<float, kArcLightCount> limitYellowBlendAllowed{};
-    const float limitIndicatorRedBrightness = 0.9f;
-    const float limitApproachWindowLeds = 2.0f;
-    auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
-      int limitLedIndex = clamp(int(std::round(limitLed)), 0, kArcLightCount - 1);
-      bool isLimitLed = i == limitLedIndex;
-      if (isLimitLed) {
-        limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
-        if (allowYellowBlend) {
-          float approach = clamp(1.f - std::fabs(playheadLed - limitLed) / limitApproachWindowLeds, 0.f, 1.f);
-          *brightness = std::max(*brightness, 0.42f * approach);
-        }
-      }
-      arcRed[i] = isLimitLed ? limitIndicatorRedBrightness : 0.f;
-    };
-    if (frame.sampleMode && frame.sampleLoaded) {
-      // Sample mode fills from left->right. The red limit marker indicates the
-      // effective playback end (full sample end or knob-limited end).
-      float leftLed = float(kArcLightCount - 1);
-      float sampleNewest = std::max(1.f, float(impl->engine.sampleFrames - 1));
-      float limitRatio = clamp(float(frame.accessibleLag / sampleNewest), 0.f, 1.f);
-      float sampleEndLed = (1.f - limitRatio) * leftLed;
-      float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
-      float ledSpan = std::max(0.f, leftLed - sampleEndLed);
-      float progressLedUnits = progressNorm * ledSpan;
-      float playheadLed = leftLed - progressLedUnits;
-      for (int i = 0; i < kArcLightCount; ++i) {
-        // Progressive fill from left to right with fractional leading LED.
-        // At start, all LEDs are off; the leading LED ramps in proportionally.
-        float ledFromStart = leftLed - float(i);
-        float fill = clamp(progressLedUnits - ledFromStart, 0.f, 1.f);
-        float brightness = 0.92f * fill;
-        // Keep anything beyond the effective sample end dark.
-        if (float(i) + 0.5f < sampleEndLed) {
-          brightness = 0.f;
-        }
-        bool allowYellowBlend = brightness > 1e-4f;
-        applyLimitMarker(i, playheadLed, sampleEndLed, &brightness, allowYellowBlend);
-        arcYellow[i] = brightness;
-      }
-    } else {
-      int mode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
-      float maxLag = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(mode));
-      float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
-      float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
-      float lagLed = lagRatio * float(kArcLightCount - 1);
-      float limitLed = limitRatio * float(kArcLightCount - 1);
-      for (int i = 0; i < kArcLightCount; ++i) {
-        float brightness = 0.f;
-        if (i == 0) {
-          brightness = clamp(lagLed, 0.f, 1.f);
-        } else {
-          brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
-        }
-        if (float(i) > limitLed + 0.5f) {
-          brightness = 0.f;
-        }
-        bool allowYellowBlend = brightness > 1e-4f;
-        applyLimitMarker(i, lagLed, limitLed, &brightness, allowYellowBlend);
-        arcYellow[i] = brightness;
-      }
-    }
-
-    // Small spatial blend to remove visible dead-zones between LEDs while
-    // preserving endpoint markers.
-    smoothLedBrightness(arcYellow);
-    for (int i = 0; i < kArcLightCount; ++i) {
-      if (arcRed[i] > 0.f && limitYellowBlendAllowed[i] < 0.5f) {
-        arcYellow[i] = 0.f;
-      }
-    }
-    for (int i = 0; i < kArcLightCount; ++i) {
-      lights[ARC_LIGHT_START + i].setBrightness(arcYellow[i]);
-      lights[ARC_MAX_LIGHT_START + i].setBrightness(arcRed[i]);
-    }
+    int sampleFrames = impl->engine.sampleFrames;
+    int bufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
+    publishArcLights(this, sampleFrames, bufferMode, args.sampleRate, frame);
   }
 }
 
