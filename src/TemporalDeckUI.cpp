@@ -490,7 +490,7 @@ static std::string lowercaseExtension(const std::string &path) {
 
 static bool isSupportedPlatterArtPath(const std::string &path) {
   std::string ext = lowercaseExtension(path);
-  return ext == ".svg" || ext == ".png";
+  return ext == ".svg" || ext == ".png" || ext == ".jpg" || ext == ".jpeg";
 }
 
 static float platterDimmingOverlayAlphaForMode(int mode) {
@@ -920,7 +920,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       try {
         if (ext == ".svg") {
           drewArt = drawPlatterSvg(args, APP->window->loadSvg(customPath), center, platterRadiusPx, rotation);
-        } else if (ext == ".png") {
+        } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
           drewArt = drawPlatterImage(args, APP->window->loadImage(customPath), center, platterRadiusPx, rotation);
         }
       } catch (const std::exception &e) {
@@ -1528,7 +1528,7 @@ struct TemporalDeckWidget : ModuleWidget {
           submenu->addChild(createMenuLabel(system::getFilename(customPath)));
         }
         submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
-          osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG");
+          osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG,jpg,JPG,jpeg,JPEG");
           char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
           osdialog_filters_free(filters);
           if (!pathC) {
@@ -1537,7 +1537,7 @@ struct TemporalDeckWidget : ModuleWidget {
           std::string path = pathC;
           std::free(pathC);
           if (!isSupportedPlatterArtPath(path)) {
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG and PNG.");
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG, PNG, and JPG/JPEG.");
             return;
           }
           module->setCustomPlatterArtPath(path);
