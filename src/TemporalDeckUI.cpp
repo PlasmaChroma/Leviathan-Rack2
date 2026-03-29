@@ -1496,8 +1496,7 @@ struct TemporalDeckWidget : ModuleWidget {
         }
       }));
       menu->addChild(createSubmenuItem("Platter art", "", [=](Menu *submenu) {
-        int currentMode = module->getPlatterArtMode();
-        std::string customPath = module->getCustomPlatterArtPath();
+        bool dragonKingDebug = isDragonKingDebugEnabled();
         submenu->addChild(createCheckMenuItem(
           TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_BUILTIN_SVG), "",
           [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_BUILTIN_SVG; },
@@ -1510,15 +1509,6 @@ struct TemporalDeckWidget : ModuleWidget {
           TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_PROCEDURAL), "",
           [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_PROCEDURAL; },
           [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL); }));
-        submenu->addChild(createCheckMenuItem(
-          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_CUSTOM), customPath.empty() ? "No file" : "Loaded",
-          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM; },
-          [=]() {
-            if (!module->getCustomPlatterArtPath().empty()) {
-              module->setPlatterArtMode(TemporalDeck::PLATTER_ART_CUSTOM);
-            }
-          },
-          customPath.empty()));
         submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
           for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
             brightnessMenu->addChild(createCheckMenuItem(
@@ -1527,56 +1517,72 @@ struct TemporalDeckWidget : ModuleWidget {
               [=]() { module->setPlatterBrightnessMode(i); }));
           }
         }));
-        submenu->addChild(new MenuSeparator());
-        if (!customPath.empty()) {
-          submenu->addChild(createMenuLabel(system::getFilename(customPath)));
+        if (dragonKingDebug) {
+          int currentMode = module->getPlatterArtMode();
+          std::string customPath = module->getCustomPlatterArtPath();
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_CUSTOM),
+            customPath.empty() ? "No file" : "Loaded",
+            [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM; },
+            [=]() {
+              if (!module->getCustomPlatterArtPath().empty()) {
+                module->setPlatterArtMode(TemporalDeck::PLATTER_ART_CUSTOM);
+              }
+            },
+            customPath.empty()));
+          submenu->addChild(new MenuSeparator());
+          if (!customPath.empty()) {
+            submenu->addChild(createMenuLabel(system::getFilename(customPath)));
+          }
+          submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
+            osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG,jpg,JPG,jpeg,JPEG");
+            char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+            osdialog_filters_free(filters);
+            if (!pathC) {
+              return;
+            }
+            std::string path = pathC;
+            std::free(pathC);
+            if (!isSupportedPlatterArtPath(path)) {
+              osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG, PNG, and JPG/JPEG.");
+              return;
+            }
+            module->setCustomPlatterArtPath(path);
+          }));
+          submenu->addChild(createMenuItem("Clear custom art", "", [=]() { module->clearCustomPlatterArtPath(); },
+                                           customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
         }
-        submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
-          osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG,jpg,JPG,jpeg,JPEG");
-          char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
-          osdialog_filters_free(filters);
-          if (!pathC) {
-            return;
-          }
-          std::string path = pathC;
-          std::free(pathC);
-          if (!isSupportedPlatterArtPath(path)) {
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG, PNG, and JPG/JPEG.");
-            return;
-          }
-          module->setCustomPlatterArtPath(path);
-        }));
-        submenu->addChild(createMenuItem("Clear custom art", "", [=]() { module->clearCustomPlatterArtPath(); },
-                                         customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
       }));
       // Hidden for now, but keep the trace plumbing available in code in case
       // we need to bring back platter interaction logging for debugging.
       // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
       //                                    [=]() { return module->isPlatterTraceLoggingEnabled(); },
       //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
-      menu->addChild(createMenuItem("Export platter SVG...", "", [=]() {
-        Vec platterCenter = mm2px(Vec(50.8f, 72.f));
-        float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
-        loadPlatterAnchor(platterCenter, platterRadius);
-        std::string defaultDir = system::join(asset::user(), "TemporalDeck");
-        system::createDirectories(defaultDir);
-        osdialog_filters *filters = osdialog_filters_parse("SVG:svg,SVG");
-        char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "temporaldeck_platter.svg", filters);
-        osdialog_filters_free(filters);
-        if (!pathC) {
-          return;
-        }
-        std::string path = ensureSvgExtension(pathC);
-        std::free(pathC);
+      if (isDragonKingDebugEnabled()) {
+        menu->addChild(createMenuItem("Export platter SVG...", "", [=]() {
+          Vec platterCenter = mm2px(Vec(50.8f, 72.f));
+          float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
+          loadPlatterAnchor(platterCenter, platterRadius);
+          std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+          system::createDirectories(defaultDir);
+          osdialog_filters *filters = osdialog_filters_parse("SVG:svg,SVG");
+          char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "temporaldeck_platter.svg", filters);
+          osdialog_filters_free(filters);
+          if (!pathC) {
+            return;
+          }
+          std::string path = ensureSvgExtension(pathC);
+          std::free(pathC);
 
-        std::string error;
-        if (!writePlatterSvgSnapshot(path, platterRadius, module->getUiPlatterAngle(), &error)) {
-          std::string message = error.empty() ? "Platter SVG export failed" : error;
-          osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
-          return;
-        }
-        osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, string::f("Saved platter SVG:\n%s", path.c_str()).c_str());
-      }));
+          std::string error;
+          if (!writePlatterSvgSnapshot(path, platterRadius, module->getUiPlatterAngle(), &error)) {
+            std::string message = error.empty() ? "Platter SVG export failed" : error;
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+            return;
+          }
+          osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, string::f("Saved platter SVG:\n%s", path.c_str()).c_str());
+        }));
+      }
     }
     if (module) {
       menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
