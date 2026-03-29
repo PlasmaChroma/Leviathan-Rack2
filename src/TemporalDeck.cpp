@@ -660,7 +660,14 @@ struct TemporalDeckEngine {
     return double(clamp(knob, 0.f, 1.f)) * double(sampleRate) * double(usableBufferSecondsForMode(bufferDurationMode));
   }
 
-  double accessibleLag(float knob) const { return std::min(maxLagFromKnob(knob), double(buffer.filled)); }
+  double accessibleLag(float knob) const {
+    // The newest readable sample sits at writeHead - 1, so the oldest valid
+    // lag is filled - 1 samples behind that. Using `filled` overstates the live
+    // range by one sample and can wrap the read head into unwritten space at
+    // the oldest edge.
+    double maxReadableLag = std::max(0, buffer.filled - 1);
+    return std::min(maxLagFromKnob(knob), maxReadableLag);
+  }
 
   double clampLag(double lag, double limit) const {
     if (isSampleLoopActive()) {
@@ -2440,6 +2447,8 @@ struct TemporalDeck::Impl {
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
+  int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
+  std::string customPlatterArtPath;
 };
 
 
@@ -2544,6 +2553,20 @@ const char *TemporalDeck::bufferDurationLabelFor(int index) {
   case BUFFER_DURATION_10S:
   default:
     return "10 s";
+  }
+}
+
+const char *TemporalDeck::platterArtModeLabelFor(int index) {
+  switch (index) {
+  case PLATTER_ART_DRAGON_KING:
+    return "Dragon King";
+  case PLATTER_ART_PROCEDURAL:
+    return "Procedural";
+  case PLATTER_ART_CUSTOM:
+    return "Custom file";
+  case PLATTER_ART_BUILTIN_SVG:
+  default:
+    return "Built-in SVG";
   }
 }
 
@@ -2661,6 +2684,10 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
   json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(sampleAutoPlayOnLoad));
+  json_object_set_new(root, "platterArtMode", json_integer(impl->platterArtMode));
+  if (!impl->customPlatterArtPath.empty()) {
+    json_object_set_new(root, "customPlatterArtPath", json_string(impl->customPlatterArtPath.c_str()));
+  }
   if (!samplePath.empty()) {
     json_object_set_new(root, "samplePath", json_string(samplePath.c_str()));
   }
@@ -2685,6 +2712,8 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
   json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
+  json_t *platterArtModeJ = json_object_get(root, "platterArtMode");
+  json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
   json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
     impl->freezeLatched = json_boolean_value(freezeJ);
@@ -2736,6 +2765,17 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (sampleAutoPlayOnLoadJ) {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     impl->sampleAutoPlayOnLoad = json_boolean_value(sampleAutoPlayOnLoadJ);
+  }
+  if (platterArtModeJ) {
+    impl->platterArtMode =
+      clamp((int)json_integer_value(platterArtModeJ), PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
+  }
+  if (customPlatterArtPathJ && json_is_string(customPlatterArtPathJ)) {
+    impl->customPlatterArtPath = json_string_value(customPlatterArtPathJ);
+  }
+  if (!platterArtModeJ) {
+    // New default for older patches that predate platter-art persistence.
+    impl->platterArtMode = PLATTER_ART_DRAGON_KING;
   }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   impl->engine.bufferDurationMode = mode;
@@ -2917,7 +2957,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
     const float limitIndicatorRedBrightness = 0.9f;
     const float limitApproachWindowLeds = 2.0f;
     auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
-      bool isLimitLed = std::fabs(float(i) - limitLed) < 0.5f;
+      int limitLedIndex = clamp(int(std::round(limitLed)), 0, kArcLightCount - 1);
+      bool isLimitLed = i == limitLedIndex;
       if (isLimitLed) {
         limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
         if (allowYellowBlend) {
@@ -3176,6 +3217,34 @@ int TemporalDeck::getBufferDurationMode() const {
 
 bool TemporalDeck::isBufferModeMono() const {
   return isMonoBufferMode(clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1));
+}
+
+int TemporalDeck::getPlatterArtMode() const {
+  return clamp(impl->platterArtMode, PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
+}
+
+void TemporalDeck::setPlatterArtMode(int mode) {
+  impl->platterArtMode = clamp(mode, PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
+}
+
+std::string TemporalDeck::getCustomPlatterArtPath() const {
+  return impl->customPlatterArtPath;
+}
+
+bool TemporalDeck::setCustomPlatterArtPath(const std::string &path) {
+  if (path.empty()) {
+    return false;
+  }
+  impl->customPlatterArtPath = path;
+  impl->platterArtMode = PLATTER_ART_CUSTOM;
+  return true;
+}
+
+void TemporalDeck::clearCustomPlatterArtPath() {
+  impl->customPlatterArtPath.clear();
+  if (impl->platterArtMode == PLATTER_ART_CUSTOM) {
+    impl->platterArtMode = PLATTER_ART_BUILTIN_SVG;
+  }
 }
 
 bool TemporalDeck::isPlatterTraceLoggingEnabled() const {

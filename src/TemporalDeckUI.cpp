@@ -403,6 +403,66 @@ static std::string ensureSvgExtension(std::string path) {
   return path;
 }
 
+static std::string lowercaseExtension(const std::string &path) {
+  std::string ext = system::getExtension(path);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+  return ext;
+}
+
+static bool isSupportedPlatterArtPath(const std::string &path) {
+  std::string ext = lowercaseExtension(path);
+  return ext == ".svg" || ext == ".png";
+}
+
+static bool drawPlatterSvg(const Widget::DrawArgs &args, std::shared_ptr<window::Svg> svg, Vec center,
+                           float platterRadiusPx, float rotation) {
+  if (!svg) {
+    return false;
+  }
+  Vec svgSize = svg->getSize();
+  if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
+    return false;
+  }
+  constexpr float kPlatterSvgMarginPx = 2.0f;
+  float sourceRadius = std::max(1.f, 0.5f * std::min(svgSize.x, svgSize.y) - kPlatterSvgMarginPx);
+  float scale = platterRadiusPx / sourceRadius;
+
+  nvgTranslate(args.vg, center.x, center.y);
+  nvgRotate(args.vg, rotation);
+  nvgScale(args.vg, scale, scale);
+  nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+  svg->draw(args.vg);
+  return true;
+}
+
+static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<window::Image> image, Vec center,
+                             float platterRadiusPx, float rotation) {
+  if (!image || image->handle < 0) {
+    return false;
+  }
+  int imageW = 0;
+  int imageH = 0;
+  nvgImageSize(args.vg, image->handle, &imageW, &imageH);
+  if (imageW <= 0 || imageH <= 0) {
+    return false;
+  }
+  float diameter = platterRadiusPx * 2.f;
+  float scale = diameter / std::max(1.f, float(std::min(imageW, imageH)));
+  float drawW = float(imageW) * scale;
+  float drawH = float(imageH) * scale;
+
+  nvgSave(args.vg);
+  nvgTranslate(args.vg, center.x, center.y);
+  nvgRotate(args.vg, rotation);
+  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, image->handle, 1.0f);
+  nvgBeginPath(args.vg);
+  nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
+  nvgFillPaint(args.vg, imgPaint);
+  nvgFill(args.vg);
+  nvgRestore(args.vg);
+  return true;
+}
+
 static bool topArcAngleFromLocal(Vec local, float *angleOut) {
   float angle = std::atan2(local.y, local.x);
   constexpr float kEndpointEpsilon = 0.10f;
@@ -722,34 +782,39 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
 
-  // Primary platter render path: static SVG asset rotated at runtime.
-  // Keep the procedural code below as a fallback for safety.
-  static std::shared_ptr<window::Svg> platterSvg;
-  static bool platterSvgLoadAttempted = false;
-  if (!platterSvgLoadAttempted) {
-    platterSvgLoadAttempted = true;
-    try {
-      platterSvg = Svg::load(asset::plugin(pluginInstance, "res/temporaldeck_platter.svg"));
-    } catch (const std::exception &e) {
-      WARN("TemporalDeck: failed to load platter SVG asset: %s", e.what());
-      platterSvg.reset();
+  // Primary platter render path is selectable: built-in SVG, custom file, or
+  // procedural fallback.
+  bool drewArt = false;
+  if (module && APP && APP->window) {
+    int artMode = module->getPlatterArtMode();
+    if (artMode == TemporalDeck::PLATTER_ART_BUILTIN_SVG) {
+      try {
+        drewArt = drawPlatterSvg(args, APP->window->loadSvg(asset::plugin(pluginInstance, "res/Vinyl/Static.svg")),
+                                 center, platterRadiusPx, rotation);
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load built-in platter SVG asset: %s", e.what());
+      }
+    } else if (artMode == TemporalDeck::PLATTER_ART_DRAGON_KING) {
+      try {
+        drewArt = drawPlatterImage(args, APP->window->loadImage(asset::plugin(pluginInstance, "res/Vinyl/DragonKingPlatter.png")),
+                                   center, platterRadiusPx, rotation);
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load Dragon King platter PNG asset: %s", e.what());
+      }
+    } else if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+      std::string customPath = module->getCustomPlatterArtPath();
+      std::string ext = lowercaseExtension(customPath);
+      try {
+        if (ext == ".svg") {
+          drewArt = drawPlatterSvg(args, APP->window->loadSvg(customPath), center, platterRadiusPx, rotation);
+        } else if (ext == ".png") {
+          drewArt = drawPlatterImage(args, APP->window->loadImage(customPath), center, platterRadiusPx, rotation);
+        }
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load custom platter art '%s': %s", customPath.c_str(), e.what());
+      }
     }
-  }
-  if (platterSvg) {
-    Vec svgSize = platterSvg->getSize();
-    if (svgSize.x > 1.f && svgSize.y > 1.f) {
-      // Exported platter SVG keeps a small outer margin, so scale using the
-      // effective vinyl radius rather than half the full viewBox.
-      constexpr float kPlatterSvgMarginPx = 2.0f;
-      float sourceRadius = std::max(1.f, 0.5f * std::min(svgSize.x, svgSize.y) - kPlatterSvgMarginPx);
-      float scale = platterRadiusPx / sourceRadius;
-
-      nvgTranslate(args.vg, center.x, center.y);
-      nvgRotate(args.vg, rotation);
-      nvgScale(args.vg, scale, scale);
-      nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
-      platterSvg->draw(args.vg);
-
+    if (drewArt) {
       nvgRestore(args.vg);
       Widget::draw(args);
       return;
@@ -1295,6 +1360,52 @@ struct TemporalDeckWidget : ModuleWidget {
               module->setSlipLatched(true);
             }));
         }
+      }));
+      menu->addChild(createSubmenuItem("Platter art", "", [=](Menu *submenu) {
+        int currentMode = module->getPlatterArtMode();
+        std::string customPath = module->getCustomPlatterArtPath();
+        submenu->addChild(createCheckMenuItem(
+          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_BUILTIN_SVG), "",
+          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_BUILTIN_SVG; },
+          [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_BUILTIN_SVG); }));
+        submenu->addChild(createCheckMenuItem(
+          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_DRAGON_KING), "",
+          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_DRAGON_KING; },
+          [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_DRAGON_KING); }));
+        submenu->addChild(createCheckMenuItem(
+          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_PROCEDURAL), "",
+          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_PROCEDURAL; },
+          [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL); }));
+        submenu->addChild(createCheckMenuItem(
+          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_CUSTOM), customPath.empty() ? "No file" : "Loaded",
+          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM; },
+          [=]() {
+            if (!module->getCustomPlatterArtPath().empty()) {
+              module->setPlatterArtMode(TemporalDeck::PLATTER_ART_CUSTOM);
+            }
+          },
+          customPath.empty()));
+        submenu->addChild(new MenuSeparator());
+        if (!customPath.empty()) {
+          submenu->addChild(createMenuLabel(system::getFilename(customPath)));
+        }
+        submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
+          osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG");
+          char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+          osdialog_filters_free(filters);
+          if (!pathC) {
+            return;
+          }
+          std::string path = pathC;
+          std::free(pathC);
+          if (!isSupportedPlatterArtPath(path)) {
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG and PNG.");
+            return;
+          }
+          module->setCustomPlatterArtPath(path);
+        }));
+        submenu->addChild(createMenuItem("Clear custom art", "", [=]() { module->clearCustomPlatterArtPath(); },
+                                         customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
       }));
       // Hidden for now, but keep the trace plumbing available in code in case
       // we need to bring back platter interaction logging for debugging.
