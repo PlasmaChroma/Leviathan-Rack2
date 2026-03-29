@@ -2678,6 +2678,8 @@ const char *TemporalDeck::platterArtModeLabelFor(int index) {
   switch (index) {
   case PLATTER_ART_DRAGON_KING:
     return "Dragon King";
+  case PLATTER_ART_BLANK:
+    return "Blank";
   case PLATTER_ART_PROCEDURAL:
     return "Procedural";
   case PLATTER_ART_CUSTOM:

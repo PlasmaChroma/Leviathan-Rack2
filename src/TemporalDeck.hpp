@@ -42,7 +42,8 @@ struct TemporalDeck final : Module {
   static constexpr int PLATTER_ART_DRAGON_KING = 1;
   static constexpr int PLATTER_ART_PROCEDURAL = 2;
   static constexpr int PLATTER_ART_CUSTOM = 3;
-  static constexpr int PLATTER_ART_MODE_COUNT = 4;
+  static constexpr int PLATTER_ART_BLANK = 4;
+  static constexpr int PLATTER_ART_MODE_COUNT = 5;
   static constexpr int PLATTER_BRIGHTNESS_FULL = 0;
   static constexpr int PLATTER_BRIGHTNESS_MEDIUM = 1;
   static constexpr int PLATTER_BRIGHTNESS_LOW = 2;

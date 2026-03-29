@@ -432,7 +432,7 @@
        r="37.031235"
        stroke="#ffffff"
        stroke-width="0.251045"
-       style="fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1" />
+       style="display:none;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1" />
   </g>
   <g
      id="Labels"
