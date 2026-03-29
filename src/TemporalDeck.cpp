@@ -336,7 +336,8 @@ struct TemporalDeckBuffer {
 struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
-  static constexpr float kSlipReturnQuickTime = 0.06f;
+  static constexpr float kQuickSlipMaxReturnTime = 1.0f;
+  static constexpr float kQuickSlipVelocityCapRatio = 64.0f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
   static constexpr float kSlipBlendTime = 0.010f;
   static constexpr float kSlipBlendTimeMin = 0.004f;
@@ -513,6 +514,8 @@ struct TemporalDeckEngine {
   float nowCatchStartLag = 0.f;
   double scratchLagSamples = 0.0;
   double scratchLagTargetSamples = 0.0;
+  double liveManualScratchAnchorNewestPos = 0.0;
+  double liveManualScratchAnchorLagSamples = 0.0;
   float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
   float scratch3LagVelocity = 0.f;
@@ -600,6 +603,8 @@ struct TemporalDeckEngine {
     nowCatchStartLag = 0.f;
     scratchLagSamples = 0.f;
     scratchLagTargetSamples = 0.f;
+    liveManualScratchAnchorNewestPos = 0.0;
+    liveManualScratchAnchorLagSamples = 0.0;
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratch3LagVelocity = 0.f;
@@ -922,8 +927,13 @@ struct TemporalDeckEngine {
   }
 
   bool integrateSlipCatchup(double newestPos, double maxLag, float baseSpeed, float dt) {
+    if (slipReturnOverrideTime >= 0.f) {
+      slipReturnOverrideTime = std::max(0.f, slipReturnOverrideTime - dt);
+    }
+
     double lagNow = currentLagFromNewest(newestPos);
     float sr = std::max(sampleRate, 1.f);
+    float transportVel = std::max(baseSpeed, 0.f) * sr;
 
     if (slipReturnOverrideTime < 0.f && slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT) {
       readHead = newestPos;
@@ -955,28 +965,36 @@ struct TemporalDeckEngine {
     desiredExtraRatio *= nearNowGain;
 
     float desiredExtraVel = desiredExtraRatio * sr;
-    float accelBase = slipCatchAccelRatio() * sr;
-    float brakeBase = accelBase * kSlipCatchBrakeMultiplier;
-    float dv = desiredExtraVel - slipCatchVelocity;
-    float maxDv = (dv >= 0.f ? accelBase : brakeBase) * dt;
-    slipCatchVelocity += clamp(dv, -maxDv, maxDv);
-    slipCatchVelocity = std::max(0.f, slipCatchVelocity);
-    float dampingThresholdSec = kSlipNearNowDampingThresholdMs * 0.001f;
     if (slipReturnOverrideTime >= 0.f) {
-      dampingThresholdSec *= 0.58f;
-    }
-    if (lagSec < dampingThresholdSec) {
-      float nearNowNorm = clamp(lagSec / dampingThresholdSec, 0.f, 1.f);
-      float dampingFloor = slipNearNowDampingFloor();
-      float damping = dampingFloor + (1.f - dampingFloor) * nearNowNorm;
-      slipCatchVelocity *= damping;
-      float velocityCap =
-        std::max(sr * kSlipNearNowVelocityCapFloorRatio,
-                 lagSec * sr * kSlipNearNowVelocityCapSlope * slipNearNowCapBoost());
-      slipCatchVelocity = std::min(slipCatchVelocity, velocityCap);
+      // Time-bounded quick-slip: dynamically schedule velocity to land back at
+      // NOW within the remaining window rather than hard-snapping on timeout.
+      float remaining = std::max(slipReturnOverrideTime, std::max(dt, 1e-4f));
+      float requiredTotalVel = float(lagNow) / remaining;
+      float requiredExtraVel = std::max(0.f, requiredTotalVel - transportVel);
+      float quickCap = sr * kQuickSlipVelocityCapRatio;
+      requiredExtraVel = clamp(requiredExtraVel, 0.f, quickCap);
+      desiredExtraVel = std::max(desiredExtraVel, requiredExtraVel);
+      slipCatchVelocity = desiredExtraVel;
+    } else {
+      float accelBase = slipCatchAccelRatio() * sr;
+      float brakeBase = accelBase * kSlipCatchBrakeMultiplier;
+      float dv = desiredExtraVel - slipCatchVelocity;
+      float maxDv = (dv >= 0.f ? accelBase : brakeBase) * dt;
+      slipCatchVelocity += clamp(dv, -maxDv, maxDv);
+      slipCatchVelocity = std::max(0.f, slipCatchVelocity);
+      float dampingThresholdSec = kSlipNearNowDampingThresholdMs * 0.001f;
+      if (lagSec < dampingThresholdSec) {
+        float nearNowNorm = clamp(lagSec / dampingThresholdSec, 0.f, 1.f);
+        float dampingFloor = slipNearNowDampingFloor();
+        float damping = dampingFloor + (1.f - dampingFloor) * nearNowNorm;
+        slipCatchVelocity *= damping;
+        float velocityCap =
+          std::max(sr * kSlipNearNowVelocityCapFloorRatio,
+                   lagSec * sr * kSlipNearNowVelocityCapSlope * slipNearNowCapBoost());
+        slipCatchVelocity = std::min(slipCatchVelocity, velocityCap);
+      }
     }
 
-    float transportVel = std::max(baseSpeed, 0.f) * sr;
     double unwrappedRead = unwrapReadNearWrite(readHead, newestPos);
     double candidate = unwrappedRead + double(transportVel + slipCatchVelocity) * double(dt);
     candidate = std::max(newestPos - std::max(maxLag, 0.0), std::min(candidate, newestPos));
@@ -1512,7 +1530,7 @@ struct TemporalDeckEngine {
 
   void integrateHybridScratch(float dt, double limit, double newestPos, float targetReadVelocity, float followScale,
                               float dampingScale, float correctionScale, float nowSnapThresholdSamples,
-                              bool clampOvershootToTarget = false) {
+                              bool clampOvershootToTarget = false, bool allowNowSnap = true) {
     // Hybrid scratch is velocity-first internally. We still keep lag as the
     // module-facing state, but we integrate the read head in buffer space and
     // derive lag from that position so "zero hand velocity" naturally means a
@@ -1573,7 +1591,7 @@ struct TemporalDeckEngine {
       }
     }
 
-    if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
+    if (allowNowSnap && scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
         scratchMotionVelocity >= 0.f) {
       scratchLagSamples = 0.f;
       scratchLagTargetSamples = 0.f;
@@ -1891,6 +1909,10 @@ struct TemporalDeckEngine {
       filteredManualLagTargetSamples = scratchLagSamples;
       lastPlatterLagTarget = platterLagTarget;
       lastPlatterGestureRevision = platterGestureRevision;
+      if (!sampleModeActive && manualTouchScratch) {
+        liveManualScratchAnchorNewestPos = newestPos;
+        liveManualScratchAnchorLagSamples = scratchLagSamples;
+      }
       if (sampleModeActive) {
         sampleSlipAnchorPos = normalizeSamplePosition(readHead, sampleWindowEndPos);
       }
@@ -1954,7 +1976,9 @@ struct TemporalDeckEngine {
     }
 
     if (quickSlipTrigger && !anyScratch && !sampleModeActive && currentLagFromNewest(newestPos) > nowSnapThresholdSamples) {
-      slipReturnOverrideTime = kSlipReturnQuickTime;
+      // Quick slip uses quick voicing but has a hard timeout so it cannot drag
+      // on indefinitely for long return distances.
+      slipReturnOverrideTime = kQuickSlipMaxReturnTime;
       beginSlipReturn();
     }
 
@@ -2022,7 +2046,22 @@ struct TemporalDeckEngine {
           if (nowCatchActive && platterLagTarget > nowSnapThresholdSamples) {
             nowCatchActive = false;
           }
-          scratchLagTargetSamples = clampLag(platterLagTarget, limit);
+          double targetLag = clampLag(platterLagTarget, limit);
+          if (!sampleModeActive) {
+            // Mouse drag in live mode should feel freeze-like while held, but
+            // the forward edge still needs to reach the real current NOW rather
+            // than the scratch-start anchor. Keep full drift compensation
+            // across most of the range so sensitivity stays stable, then only
+            // taper it out in a small near-NOW window.
+            double driftLag = std::max(0.0, newestPos - liveManualScratchAnchorNewestPos);
+            double nearNowWindow = std::max(1.0, double(sampleRate) * 0.060);
+            double driftMix = 1.0;
+            if (targetLag < nearNowWindow) {
+              driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
+            }
+            targetLag += driftLag * driftMix;
+          }
+          scratchLagTargetSamples = clampLag(targetLag, limit);
           lastPlatterGestureRevision = platterGestureRevision;
         }
 
@@ -2032,8 +2071,9 @@ struct TemporalDeckEngine {
           scratchHandVelocity = 0.f;
           scratchMotionVelocity = 0.f;
         } else {
+          bool manualMotionActive = platter_interaction::hasActiveManualMotion(hasFreshPlatterGesture, platterMotionActive);
           float targetReadVelocity = 0.f;
-          if (platter_interaction::hasActiveManualMotion(hasFreshPlatterGesture, platterMotionActive)) {
+          if (manualMotionActive) {
             // While motion is fresh, gesture velocity is relative to the write
             // head. Convert it into absolute read velocity by adding the write
             // baseline (except in freeze, where write head is stationary).
@@ -2043,9 +2083,36 @@ struct TemporalDeckEngine {
               targetReadVelocity += sampleRate;
             }
           }
+          float gestureDirection = 0.f;
+          if (hasFreshPlatterGesture) {
+            float lagDeltaSinceLastGesture = platterLagTarget - float(lastPlatterLagTarget);
+            if (std::fabs(lagDeltaSinceLastGesture) > 1e-4f) {
+              // Lag increasing means moving farther from NOW (backward read);
+              // lag decreasing means moving toward NOW (forward read).
+              gestureDirection = (lagDeltaSinceLastGesture > 0.f) ? -1.f : 1.f;
+            }
+          }
+          if (gestureDirection == 0.f && std::fabs(targetReadVelocity) > kHybridScratchVelocityDeadband) {
+            gestureDirection = (targetReadVelocity > 0.f) ? 1.f : -1.f;
+          }
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
+          bool allowNowSnap = !manualTouchScratch;
+          double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
           integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
-                                 0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples);
+                                 0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples, false, allowNowSnap);
+          if (!sampleModeActive && manualMotionActive && gestureDirection != 0.f) {
+            double postIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
+            double deltaRead = postIntegrateReadHead - preIntegrateReadHead;
+            // During active live drag, never allow motion opposite to gesture
+            // direction. This prevents sporadic forward steps while dragging
+            // backward (and vice versa) when lag-correction terms disagree.
+            bool oppositeMotion =
+              (gestureDirection > 0.f && deltaRead < 0.0) || (gestureDirection < 0.f && deltaRead > 0.0);
+            if (oppositeMotion) {
+              readHead = buffer.wrapPosition(preIntegrateReadHead);
+              scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+            }
+          }
         }
       } else {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
@@ -2083,7 +2150,7 @@ struct TemporalDeckEngine {
         float wheelTargetReadVelocity = (sampleModeActive || freezeForScratchModel) ? 0.f : sampleRate;
         bool clampWheelOvershoot = sampleModeActive;
         integrateHybridScratch(dt, limit, newestPos, wheelTargetReadVelocity, 1.25f, 0.95f, 1.20f,
-                               nowSnapThresholdSamples, clampWheelOvershoot);
+                               nowSnapThresholdSamples, clampWheelOvershoot, true);
       }
       lastPlatterLagTarget = platterLagTarget;
     } else if (externalScratch) {

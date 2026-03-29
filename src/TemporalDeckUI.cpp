@@ -1002,8 +1002,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   // accumulated hand motion when DSP smoothing lags behind dense UI events.
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
-  bool freezeLatched = module->isUiFreezeLatched();
-  bool freezeLikeDrag = freezeLatched || !module->isSampleModeEnabled();
+  bool freezeLikeDrag = true;
   float sensitivity = module->scratchSensitivity();
   float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
                                                           TemporalDeck::kMouseScratchTravelScale,
