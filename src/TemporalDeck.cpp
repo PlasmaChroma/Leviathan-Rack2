@@ -1,8 +1,9 @@
 #include "TemporalDeck.hpp"
+#include "TemporalDeckBufferModes.hpp"
+#include "TemporalDeckUiPublish.hpp"
 #include "codec.hpp"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -16,27 +17,11 @@
 #include <vector>
 
 namespace {
-
-static float realBufferSecondsForMode(int index) {
-  switch (index) {
-  case 0:
-    return 11.f;
-  case 1:
-    return 21.f;
-  case 2:
-    return 601.f;
-  case 3:
-    return 601.f;
-  default:
-    return 11.f;
-  }
-}
-
-static float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
+using temporaldeck_modes::isMonoBufferMode;
+using temporaldeck_modes::realBufferSecondsForMode;
+using temporaldeck_modes::usableBufferSecondsForMode;
 
 static constexpr float kSampleFileVoltageScale = 5.f;
-
-static bool isMonoBufferMode(int index) { return index == TemporalDeck::BUFFER_DURATION_10M_MONO; }
 
 using temporaldeck::DecodedSampleFile;
 using temporaldeck::decodeSampleFile;
@@ -73,18 +58,6 @@ static double wrapd(double x, double length) {
     x += length;
   }
   return x;
-}
-
-template <size_t N>
-static void smoothLedBrightness(std::array<float, N> &values, float sideWeight = 0.22f) {
-  sideWeight = clamp(sideWeight, 0.f, 0.49f);
-  float centerWeight = 1.f - 2.f * sideWeight;
-  std::array<float, N> src = values;
-  for (size_t i = 0; i < N; ++i) {
-    float prev = src[i > 0 ? i - 1 : i];
-    float next = src[i + 1 < N ? i + 1 : i];
-    values[i] = clamp(prev * sideWeight + src[i] * centerWeight + next * sideWeight, 0.f, 1.f);
-  }
 }
 
 static void resampleSampleChannel(const std::vector<float> &src, float sourceRate, float targetRate, int outFrames,
@@ -2566,89 +2539,6 @@ struct TemporalDeck::Impl {
   std::string customPlatterArtPath;
 };
 
-static void publishArcLights(TemporalDeck *module, int sampleFrames, int bufferDurationMode, float sampleRate,
-                             const TemporalDeckEngine::FrameResult &frame) {
-  std::array<float, TemporalDeck::kArcLightCount> arcYellow{};
-  std::array<float, TemporalDeck::kArcLightCount> arcRed{};
-  std::array<float, TemporalDeck::kArcLightCount> limitYellowBlendAllowed{};
-  const float limitIndicatorRedBrightness = 0.9f;
-  const float limitApproachWindowLeds = 2.0f;
-  auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
-    int limitLedIndex = clamp(int(std::round(limitLed)), 0, TemporalDeck::kArcLightCount - 1);
-    bool isLimitLed = i == limitLedIndex;
-    if (isLimitLed) {
-      limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
-      if (allowYellowBlend) {
-        float approach = clamp(1.f - std::fabs(playheadLed - limitLed) / limitApproachWindowLeds, 0.f, 1.f);
-        *brightness = std::max(*brightness, 0.42f * approach);
-      }
-    }
-    arcRed[i] = isLimitLed ? limitIndicatorRedBrightness : 0.f;
-  };
-
-  if (frame.sampleMode && frame.sampleLoaded) {
-    // Sample mode fills from left->right. The red limit marker indicates the
-    // effective playback end (full sample end or knob-limited end).
-    float leftLed = float(TemporalDeck::kArcLightCount - 1);
-    float sampleNewest = std::max(1.f, float(sampleFrames - 1));
-    float limitRatio = clamp(float(frame.accessibleLag / sampleNewest), 0.f, 1.f);
-    float sampleEndLed = (1.f - limitRatio) * leftLed;
-    float progressNorm = clamp(float(frame.sampleProgress), 0.f, 1.f);
-    float ledSpan = std::max(0.f, leftLed - sampleEndLed);
-    float progressLedUnits = progressNorm * ledSpan;
-    float playheadLed = leftLed - progressLedUnits;
-    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      // Progressive fill from left to right with fractional leading LED.
-      // At start, all LEDs are off; the leading LED ramps in proportionally.
-      float ledFromStart = leftLed - float(i);
-      float fill = clamp(progressLedUnits - ledFromStart, 0.f, 1.f);
-      float brightness = 0.92f * fill;
-      // Keep anything beyond the effective sample end dark.
-      if (float(i) + 0.5f < sampleEndLed) {
-        brightness = 0.f;
-      }
-      bool allowYellowBlend = brightness > 1e-4f;
-      applyLimitMarker(i, playheadLed, sampleEndLed, &brightness, allowYellowBlend);
-      arcYellow[i] = brightness;
-    }
-  } else {
-    int mode = clamp(bufferDurationMode, 0, TemporalDeck::BUFFER_DURATION_COUNT - 1);
-    float maxLag = std::max(1.f, sampleRate * usableBufferSecondsForMode(mode));
-    float lagRatio = clamp(frame.lag / maxLag, 0.f, 1.f);
-    float limitRatio = clamp(frame.accessibleLag / maxLag, 0.f, 1.f);
-    float lagLed = lagRatio * float(TemporalDeck::kArcLightCount - 1);
-    float limitLed = limitRatio * float(TemporalDeck::kArcLightCount - 1);
-    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      float brightness = 0.f;
-      if (i == 0) {
-        brightness = clamp(lagLed, 0.f, 1.f);
-      } else {
-        brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
-      }
-      if (float(i) > limitLed + 0.5f) {
-        brightness = 0.f;
-      }
-      bool allowYellowBlend = brightness > 1e-4f;
-      applyLimitMarker(i, lagLed, limitLed, &brightness, allowYellowBlend);
-      arcYellow[i] = brightness;
-    }
-  }
-
-  // Small spatial blend to remove visible dead-zones between LEDs while
-  // preserving endpoint markers.
-  smoothLedBrightness(arcYellow);
-  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-    if (arcRed[i] > 0.f && limitYellowBlendAllowed[i] < 0.5f) {
-      arcYellow[i] = 0.f;
-    }
-  }
-  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-    module->lights[TemporalDeck::ARC_LIGHT_START + i].setBrightness(arcYellow[i]);
-    module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].setBrightness(arcRed[i]);
-  }
-}
-
-
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 10.f);
@@ -3066,7 +2956,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->uiPublishTimerSec = std::fmod(impl->uiPublishTimerSec, kUiPublishIntervalSec);
     int sampleFrames = impl->engine.sampleFrames;
     int bufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
-    publishArcLights(this, sampleFrames, bufferMode, args.sampleRate, frame);
+    float maxLagSamples = std::max(1.f, args.sampleRate * usableBufferSecondsForMode(bufferMode));
+    temporaldeck_ui::publishArcLights(this, sampleFrames, maxLagSamples, frame.sampleMode, frame.sampleLoaded,
+                                      frame.lag, frame.accessibleLag, frame.sampleProgress);
   }
 }
 
