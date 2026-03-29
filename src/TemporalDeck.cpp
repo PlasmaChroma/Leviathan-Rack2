@@ -118,10 +118,10 @@ static int nextCartridgeCharacter(int current) {
   case TemporalDeck::CARTRIDGE_M44_7:
     return TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH;
   case TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH:
-    return TemporalDeck::CARTRIDGE_STANTON_680HP;
-  case TemporalDeck::CARTRIDGE_STANTON_680HP:
     return TemporalDeck::CARTRIDGE_QBERT;
   case TemporalDeck::CARTRIDGE_QBERT:
+    return TemporalDeck::CARTRIDGE_STANTON_680HP;
+  case TemporalDeck::CARTRIDGE_STANTON_680HP:
     return TemporalDeck::CARTRIDGE_LOFI;
   case TemporalDeck::CARTRIDGE_LOFI:
   default:
