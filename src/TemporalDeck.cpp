@@ -1061,7 +1061,7 @@ struct TemporalDeckEngine {
     case CARTRIDGE_QBERT:
       return 0.820f;
     case CARTRIDGE_LOFI:
-      return 1.187f;
+      return 1.300f;
     case CARTRIDGE_CLEAN:
     default:
       return 1.f;
@@ -1730,13 +1730,60 @@ struct TemporalDeckEngine {
     bool autoFreezeRequested = false;
   };
 
-  FrameResult process(float dt, float inL, float inR, float bufferKnob, float rateKnob, float mixKnob,
-                      float feedbackKnob, bool freezeButton, bool reverseButton, bool slipButton, bool quickSlipTrigger,
-                      bool freezeGate, bool scratchGate, bool scratchGateConnected, bool positionConnected,
-                      float positionCv, float rateCv, bool rateCvConnected, bool platterTouched, bool wheelScratchHeld,
-                      bool platterMotionActive,
-                      uint32_t platterGestureRevision, float platterLagTarget, float platterGestureVelocity,
-                      float wheelDelta) {
+  struct FrameInput {
+    float dt = 0.f;
+    float inL = 0.f;
+    float inR = 0.f;
+    float bufferKnob = 0.f;
+    float rateKnob = 0.f;
+    float mixKnob = 0.f;
+    float feedbackKnob = 0.f;
+    bool freezeButton = false;
+    bool reverseButton = false;
+    bool slipButton = false;
+    bool quickSlipTrigger = false;
+    bool freezeGate = false;
+    bool scratchGate = false;
+    bool scratchGateConnected = false;
+    bool positionConnected = false;
+    float positionCv = 0.f;
+    float rateCv = 0.f;
+    bool rateCvConnected = false;
+    bool platterTouched = false;
+    bool wheelScratchHeld = false;
+    bool platterMotionActive = false;
+    uint32_t platterGestureRevision = 0;
+    float platterLagTarget = 0.f;
+    float platterGestureVelocity = 0.f;
+    float wheelDelta = 0.f;
+  };
+
+  FrameResult process(const FrameInput &input) {
+    const float dt = input.dt;
+    const float inL = input.inL;
+    const float inR = input.inR;
+    const float bufferKnob = input.bufferKnob;
+    const float rateKnob = input.rateKnob;
+    const float mixKnob = input.mixKnob;
+    const float feedbackKnob = input.feedbackKnob;
+    const bool freezeButton = input.freezeButton;
+    const bool reverseButton = input.reverseButton;
+    const bool slipButton = input.slipButton;
+    const bool quickSlipTrigger = input.quickSlipTrigger;
+    const bool freezeGate = input.freezeGate;
+    const bool scratchGate = input.scratchGate;
+    const bool scratchGateConnected = input.scratchGateConnected;
+    const bool positionConnected = input.positionConnected;
+    const float positionCv = input.positionCv;
+    const float rateCv = input.rateCv;
+    const bool rateCvConnected = input.rateCvConnected;
+    const bool platterTouched = input.platterTouched;
+    const bool wheelScratchHeld = input.wheelScratchHeld;
+    const bool platterMotionActive = input.platterMotionActive;
+    const uint32_t platterGestureRevision = input.platterGestureRevision;
+    const float platterLagTarget = input.platterLagTarget;
+    const float platterGestureVelocity = input.platterGestureVelocity;
+    const float wheelDelta = input.wheelDelta;
     FrameResult result;
     double prevReadHead = readHead;
     float nowSnapThresholdSamples = sampleRate * (kNowSnapThresholdMs / 1000.f);
@@ -2755,14 +2802,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
-  json_object_set_new(root, "cartridgeCharacterV2", json_integer(impl->cartridgeCharacter));
-  int legacyCartridgeCharacter = impl->cartridgeCharacter;
-  if (legacyCartridgeCharacter == CARTRIDGE_QBERT) {
-    legacyCartridgeCharacter = CARTRIDGE_ORTOFON_SCRATCH;
-  } else if (legacyCartridgeCharacter == CARTRIDGE_LOFI) {
-    legacyCartridgeCharacter = 4;
-  }
-  json_object_set_new(root, "cartridgeCharacter", json_integer(legacyCartridgeCharacter));
+  json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
   json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
@@ -2786,11 +2826,8 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *reverseJ = json_object_get(root, "reverseLatched");
   json_t *slipJ = json_object_get(root, "slipLatched");
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
-  json_t *scratchInterpJ = json_object_get(root, "highQualityScratchInterpolation");
   json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
-  json_t *freezeTraceLoggingJ = json_object_get(root, "freezeTraceLoggingEnabled");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
-  json_t *cartridgeV2J = json_object_get(root, "cartridgeCharacterV2");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
@@ -2812,31 +2849,15 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (scratchInterpModeJ) {
     impl->scratchInterpolationMode =
       clamp((int)json_integer_value(scratchInterpModeJ), SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
-  } else if (scratchInterpJ) {
-    // Backward compatibility with older saves.
-    impl->scratchInterpolationMode =
-      json_boolean_value(scratchInterpJ) ? SCRATCH_INTERP_LAGRANGE6 : SCRATCH_INTERP_CUBIC;
   }
   if (platterTraceLoggingJ) {
     impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
-  } else if (freezeTraceLoggingJ) {
-    // Backward compatibility with earlier freeze-gated trace capture.
-    impl->platterTraceLoggingEnabled = json_boolean_value(freezeTraceLoggingJ);
   }
   if (slipReturnModeJ) {
     impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
   }
-  if (cartridgeV2J) {
-    impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeV2J), 0, CARTRIDGE_COUNT - 1);
-  } else if (cartridgeJ) {
-    int legacy = (int)json_integer_value(cartridgeJ);
-    // Legacy mapping before Q.Bert existed:
-    // 0 Clean, 1 M44-7, 2 Concorde, 3 680 HP, 4 Lo-Fi
-    if (legacy == 4) {
-      impl->cartridgeCharacter = CARTRIDGE_LOFI;
-    } else {
-      impl->cartridgeCharacter = clamp(legacy, 0, CARTRIDGE_COUNT - 1);
-    }
+  if (cartridgeJ) {
+    impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, CARTRIDGE_COUNT - 1);
   }
   if (bufferDurationJ) {
     impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
@@ -2861,10 +2882,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (customPlatterArtPathJ && json_is_string(customPlatterArtPathJ)) {
     impl->customPlatterArtPath = json_string_value(customPlatterArtPathJ);
-  }
-  if (!platterArtModeJ) {
-    // New default for older patches that predate platter-art persistence.
-    impl->platterArtMode = PLATTER_ART_DRAGON_KING;
   }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   impl->engine.bufferDurationMode = mode;
@@ -2989,14 +3006,34 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
   bool quickSlipTrigger = impl->quickSlipTrigger.exchange(false, std::memory_order_relaxed);
 
-  auto frame =
-    impl->engine.process(args.sampleTime, inL, inR, params[BUFFER_PARAM].getValue(), params[RATE_PARAM].getValue(),
-                       params[MIX_PARAM].getValue(), params[FEEDBACK_PARAM].getValue(), impl->freezeLatched,
-                       impl->reverseLatched, impl->slipLatched, quickSlipTrigger,
-                       freezeGateHigh, scratchGateHigh,
-                       scratchGateConnected, positionConnected, positionCv,
-                       rateCv, rateCvConnected, platterTouched, wheelScratchHeld, platterMotionActive,
-                       platterGestureRevision, platterLagTarget, platterGestureVelocity, wheelDelta);
+  TemporalDeckEngine::FrameInput frameInput;
+  frameInput.dt = args.sampleTime;
+  frameInput.inL = inL;
+  frameInput.inR = inR;
+  frameInput.bufferKnob = params[BUFFER_PARAM].getValue();
+  frameInput.rateKnob = params[RATE_PARAM].getValue();
+  frameInput.mixKnob = params[MIX_PARAM].getValue();
+  frameInput.feedbackKnob = params[FEEDBACK_PARAM].getValue();
+  frameInput.freezeButton = impl->freezeLatched;
+  frameInput.reverseButton = impl->reverseLatched;
+  frameInput.slipButton = impl->slipLatched;
+  frameInput.quickSlipTrigger = quickSlipTrigger;
+  frameInput.freezeGate = freezeGateHigh;
+  frameInput.scratchGate = scratchGateHigh;
+  frameInput.scratchGateConnected = scratchGateConnected;
+  frameInput.positionConnected = positionConnected;
+  frameInput.positionCv = positionCv;
+  frameInput.rateCv = rateCv;
+  frameInput.rateCvConnected = rateCvConnected;
+  frameInput.platterTouched = platterTouched;
+  frameInput.wheelScratchHeld = wheelScratchHeld;
+  frameInput.platterMotionActive = platterMotionActive;
+  frameInput.platterGestureRevision = platterGestureRevision;
+  frameInput.platterLagTarget = platterLagTarget;
+  frameInput.platterGestureVelocity = platterGestureVelocity;
+  frameInput.wheelDelta = wheelDelta;
+
+  auto frame = impl->engine.process(frameInput);
 
   if (frame.autoFreezeRequested && !impl->freezeLatched && !freezeGateHigh) {
     impl->freezeLatched = true;
