@@ -457,6 +457,8 @@ struct VinylInventoryEntry {
   std::string label;
   std::string file;
   bool menuVisible = true;
+  bool signatureVerified = false;
+  std::string signatureError;
 };
 
 struct VinylInventoryState {
@@ -466,8 +468,20 @@ struct VinylInventoryState {
   bool signatureVerified = false;
   std::string signatureError;
   std::string basePath = "res/Vinyl";
+  int verifiedEntryCount = 0;
   std::vector<VinylInventoryEntry> entries;
 };
+
+static void markVinylEntriesUnverified(VinylInventoryState *state, const std::string &reason) {
+  if (!state) {
+    return;
+  }
+  state->verifiedEntryCount = 0;
+  for (VinylInventoryEntry &entry : state->entries) {
+    entry.signatureVerified = false;
+    entry.signatureError = reason;
+  }
+}
 
 static bool hashFileFnv64(const std::string &path, uint64_t *hashOut, uint64_t *sizeOut, std::string *errorOut);
 
@@ -490,10 +504,6 @@ static bool parseHexU64(const std::string &text, uint64_t *valueOut) {
   } catch (...) {
     return false;
   }
-}
-
-static bool isVinylInventoryArtTrusted(const VinylInventoryState &state) {
-  return state.valid && state.signaturePresent && state.signatureVerified;
 }
 
 static bool isSafeVinylFileName(const std::string &fileName) {
@@ -669,6 +679,7 @@ static VinylInventoryState loadVinylInventoryState() {
     state.signaturePresent = false;
     state.signatureVerified = false;
     state.signatureError = "Missing signed block in inventory.json (run Export signed inventory.json...)";
+    markVinylEntriesUnverified(&state, "Missing signed block");
     json_decref(root);
     return state;
   }
@@ -680,6 +691,7 @@ static VinylInventoryState loadVinylInventoryState() {
   if (!json_is_string(algorithmJ) || !json_is_string(signatureJ) || !json_is_array(filesJ)) {
     state.signatureVerified = false;
     state.signatureError = "Signed block missing required fields (algorithm/signature/files)";
+    markVinylEntriesUnverified(&state, "Signed block missing required fields");
     json_decref(root);
     return state;
   }
@@ -698,6 +710,7 @@ static VinylInventoryState loadVinylInventoryState() {
     if (!json_is_object(fileJ)) {
       state.signatureVerified = false;
       state.signatureError = string::f("signed.files[%zu] must be an object", fileIndex);
+      markVinylEntriesUnverified(&state, state.signatureError);
       json_decref(root);
       return state;
     }
@@ -708,6 +721,7 @@ static VinylInventoryState loadVinylInventoryState() {
     if (!json_is_string(idJ) || !json_is_string(fileNameJ) || !json_is_integer(sizeJ) || !json_is_string(hashJ)) {
       state.signatureVerified = false;
       state.signatureError = string::f("signed.files[%zu] missing id/file/size/hash", fileIndex);
+      markVinylEntriesUnverified(&state, state.signatureError);
       json_decref(root);
       return state;
     }
@@ -718,59 +732,65 @@ static VinylInventoryState loadVinylInventoryState() {
     if (info.id.empty() || !isSafeVinylFileName(info.file) || !parseHexU64(json_string_value(hashJ), &info.hash)) {
       state.signatureVerified = false;
       state.signatureError = string::f("signed.files[%zu] has invalid id/file/hash", fileIndex);
+      markVinylEntriesUnverified(&state, state.signatureError);
       json_decref(root);
       return state;
     }
     if (!signedById.emplace(info.id, info).second) {
       state.signatureVerified = false;
       state.signatureError = string::f("signed.files has duplicate id '%s'", info.id.c_str());
+      markVinylEntriesUnverified(&state, state.signatureError);
       json_decref(root);
       return state;
     }
   }
 
-  if (signedById.size() != state.entries.size()) {
-    state.signatureVerified = false;
-    state.signatureError = "Signed file count does not match vinyl inventory";
-    json_decref(root);
-    return state;
-  }
+  state.verifiedEntryCount = 0;
+  for (VinylInventoryEntry &entry : state.entries) {
+    entry.signatureVerified = false;
+    entry.signatureError.clear();
 
-  for (const VinylInventoryEntry &entry : state.entries) {
     auto it = signedById.find(entry.id);
     if (it == signedById.end()) {
-      state.signatureVerified = false;
-      state.signatureError = string::f("Missing signed entry for '%s'", entry.id.c_str());
-      json_decref(root);
-      return state;
+      entry.signatureError = "Missing signed entry";
+      continue;
     }
+
     const SignedFileInfo &signedFile = it->second;
     if (signedFile.file != entry.file) {
-      state.signatureVerified = false;
-      state.signatureError = string::f("Signed file mismatch for '%s'", entry.id.c_str());
-      json_decref(root);
-      return state;
+      entry.signatureError = "Signed file mismatch";
+      continue;
     }
-    std::string expectedPath = joinInventoryRelativePath(state.basePath, entry.file);
 
+    std::string expectedPath = joinInventoryRelativePath(state.basePath, entry.file);
     uint64_t actualHash = 0;
     uint64_t actualSize = 0;
     std::string hashError;
     if (!hashFileFnv64(asset::plugin(pluginInstance, expectedPath), &actualHash, &actualSize, &hashError)) {
-      state.signatureVerified = false;
-      state.signatureError = hashError.empty() ? string::f("Failed to hash '%s'", expectedPath.c_str()) : hashError;
-      json_decref(root);
-      return state;
+      entry.signatureError = hashError.empty() ? "Failed to read file for signature check" : hashError;
+      continue;
     }
     if (actualSize != signedFile.size || actualHash != signedFile.hash) {
-      state.signatureVerified = false;
-      state.signatureError = string::f("Signature mismatch for '%s'", entry.file.c_str());
-      json_decref(root);
-      return state;
+      entry.signatureError = "Signature mismatch";
+      continue;
     }
+
+    entry.signatureVerified = true;
+    ++state.verifiedEntryCount;
   }
 
-  state.signatureVerified = true;
+  state.signatureVerified = (state.verifiedEntryCount == int(state.entries.size()));
+  if (!state.signatureVerified) {
+    if (state.verifiedEntryCount <= 0) {
+      state.signatureError = "No signed vinyl entries verified";
+    } else {
+      state.signatureError = string::f("Only %d/%d vinyl entries verified", state.verifiedEntryCount,
+                                       int(state.entries.size()));
+    }
+  } else {
+    state.signatureError.clear();
+  }
+
   json_decref(root);
   return state;
 }
@@ -798,13 +818,28 @@ static std::string vinylInventoryTrustStatusLabel(const VinylInventoryState &sta
   if (!state.valid) {
     return "Inventory invalid";
   }
+  int total = 0;
+  int verified = 0;
+  for (const VinylInventoryEntry &entry : state.entries) {
+    if (!entry.menuVisible) {
+      continue;
+    }
+    ++total;
+    if (entry.signatureVerified) {
+      ++verified;
+    }
+  }
+  if (total <= 0) {
+    total = int(state.entries.size());
+    verified = state.verifiedEntryCount;
+  }
   if (!state.signaturePresent) {
-    return "Inventory unsigned";
+    return string::f("Inventory unsigned (%d/%d verified)", verified, total);
   }
-  if (!state.signatureVerified) {
-    return "Signature mismatch";
+  if (verified == total) {
+    return string::f("Inventory verified (%d/%d)", verified, total);
   }
-  return "Inventory verified";
+  return string::f("Inventory partial (%d/%d verified)", verified, total);
 }
 
 static const VinylInventoryEntry *findVinylInventoryEntryById(const std::string &id) {
@@ -820,13 +855,39 @@ static const VinylInventoryEntry *findVinylInventoryEntryById(const std::string 
   return nullptr;
 }
 
-static std::string vinylRelativePathForPlatterArtMode(int mode) {
+static const VinylInventoryEntry *findVinylInventoryEntryForPlatterArtMode(int mode) {
   const char *inventoryId = inventoryIdForPlatterArtMode(mode);
-  if (inventoryId) {
-    if (const VinylInventoryEntry *entry = findVinylInventoryEntryById(inventoryId)) {
-      const VinylInventoryState &state = getVinylInventoryState();
-      return joinInventoryRelativePath(state.basePath, entry->file);
+  if (!inventoryId) {
+    return nullptr;
+  }
+  return findVinylInventoryEntryById(inventoryId);
+}
+
+static bool isInventoryPlatterArtModeVerified(int mode, std::string *errorOut = nullptr) {
+  const VinylInventoryState &state = getVinylInventoryState();
+  if (!state.valid) {
+    if (errorOut) {
+      *errorOut = state.error;
     }
+    return false;
+  }
+  const VinylInventoryEntry *entry = findVinylInventoryEntryForPlatterArtMode(mode);
+  if (!entry) {
+    if (errorOut) {
+      *errorOut = "No matching inventory entry";
+    }
+    return false;
+  }
+  if (!entry->signatureVerified && errorOut) {
+    *errorOut = entry->signatureError;
+  }
+  return entry->signatureVerified;
+}
+
+static std::string vinylRelativePathForPlatterArtMode(int mode) {
+  if (const VinylInventoryEntry *entry = findVinylInventoryEntryForPlatterArtMode(mode)) {
+    const VinylInventoryState &state = getVinylInventoryState();
+    return joinInventoryRelativePath(state.basePath, entry->file);
   }
   return fallbackVinylRelativePathForPlatterArtMode(mode);
 }
@@ -847,7 +908,7 @@ static std::vector<int> visiblePlatterArtModesFromInventory() {
   std::vector<int> modes;
   std::set<int> seenModes;
   const VinylInventoryState &state = getVinylInventoryState();
-  if (!isVinylInventoryArtTrusted(state)) {
+  if (!state.valid) {
     return modes;
   }
   for (const VinylInventoryEntry &entry : state.entries) {
@@ -1619,20 +1680,20 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
-  const VinylInventoryState &inventoryState = getVinylInventoryState();
-  bool inventoryArtTrusted = isVinylInventoryArtTrusted(inventoryState);
-  if (!inventoryArtTrusted && module && module->getPlatterArtMode() != TemporalDeck::PLATTER_ART_PROCEDURAL) {
+  int artMode = module ? module->getPlatterArtMode() : TemporalDeck::PLATTER_ART_DRAGON_KING;
+  if (module && artMode != TemporalDeck::PLATTER_ART_PROCEDURAL && artMode != TemporalDeck::PLATTER_ART_CUSTOM &&
+      !isInventoryPlatterArtModeVerified(artMode)) {
     module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+    artMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
   }
 
   // Primary platter render path is selectable: built-in SVG, custom file, or
   // procedural fallback.
   bool drewArt = false;
   float platterDimAlpha = 0.f;
-  if (APP && APP->window && inventoryArtTrusted) {
+  if (APP && APP->window) {
     // In module-browser preview there is no backing module instance, so pick a
     // deterministic default art instead of falling through to procedural.
-    int artMode = module ? module->getPlatterArtMode() : TemporalDeck::PLATTER_ART_DRAGON_KING;
     platterDimAlpha = module ? platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode()) : 0.f;
     if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
       if (module) {
@@ -1649,18 +1710,20 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
         }
       }
     } else if (artMode != TemporalDeck::PLATTER_ART_PROCEDURAL) {
-      std::string relativePath = vinylRelativePathForPlatterArtMode(artMode);
-      std::string ext = lowercaseExtension(relativePath);
-      if (!relativePath.empty() && isSupportedPlatterArtPath(relativePath)) {
-        std::string absolutePath = asset::plugin(pluginInstance, relativePath);
-        try {
-          if (ext == ".svg") {
-            drewArt = drawPlatterSvg(args, APP->window->loadSvg(absolutePath), center, platterRadiusPx, rotation);
-          } else {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
+      if (isInventoryPlatterArtModeVerified(artMode)) {
+        std::string relativePath = vinylRelativePathForPlatterArtMode(artMode);
+        std::string ext = lowercaseExtension(relativePath);
+        if (!relativePath.empty() && isSupportedPlatterArtPath(relativePath)) {
+          std::string absolutePath = asset::plugin(pluginInstance, relativePath);
+          try {
+            if (ext == ".svg") {
+              drewArt = drawPlatterSvg(args, APP->window->loadSvg(absolutePath), center, platterRadiusPx, rotation);
+            } else {
+              drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
+            }
+          } catch (const std::exception &e) {
+            WARN("TemporalDeck: failed to load platter art '%s': %s", relativePath.c_str(), e.what());
           }
-        } catch (const std::exception &e) {
-          WARN("TemporalDeck: failed to load platter art '%s': %s", relativePath.c_str(), e.what());
         }
       }
     }
@@ -2231,15 +2294,21 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createSubmenuItem("Platter art", "", [=](Menu *submenu) {
         bool dragonKingDebug = isDragonKingDebugEnabled();
         const VinylInventoryState &inventoryState = getVinylInventoryState();
-        bool inventoryTrusted = isVinylInventoryArtTrusted(inventoryState);
         submenu->addChild(createMenuLabel(vinylInventoryTrustStatusLabel(inventoryState)));
-        if (!inventoryTrusted) {
+        if (!inventoryState.valid) {
           module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
-          std::string reason = inventoryState.valid ? inventoryState.signatureError : inventoryState.error;
-          if (!reason.empty()) {
-            submenu->addChild(createMenuLabel(reason));
+          if (!inventoryState.error.empty()) {
+            submenu->addChild(createMenuLabel(inventoryState.error));
           }
           submenu->addChild(createMenuLabel("Platter art locked to Procedural"));
+          submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
+            for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
+              brightnessMenu->addChild(createCheckMenuItem(
+                TemporalDeck::platterBrightnessLabelFor(i), "",
+                [=]() { return module->getPlatterBrightnessMode() == i; },
+                [=]() { module->setPlatterBrightnessMode(i); }));
+            }
+          }));
           return;
         }
 
@@ -2249,9 +2318,26 @@ struct TemporalDeckWidget : ModuleWidget {
         } else {
           for (int mode : visibleModes) {
             std::string modeLabel = vinylLabelForPlatterArtMode(mode);
-            submenu->addChild(createCheckMenuItem(modeLabel, "", [=]() { return module->getPlatterArtMode() == mode; },
-                                                  [=]() { module->setPlatterArtMode(mode); }));
+            std::string modeError;
+            bool modeVerified = isInventoryPlatterArtModeVerified(mode, &modeError);
+            std::string rightText = modeVerified ? "" : "Unverified";
+            submenu->addChild(createCheckMenuItem(
+              modeLabel, rightText, [=]() { return module->getPlatterArtMode() == mode; },
+              [=]() {
+                if (isInventoryPlatterArtModeVerified(mode)) {
+                  module->setPlatterArtMode(mode);
+                } else {
+                  module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+                }
+              },
+              !modeVerified));
+            if (!modeVerified && !modeError.empty()) {
+              submenu->addChild(createMenuLabel(string::f("  %s", modeError.c_str())));
+            }
           }
+        }
+        if (!inventoryState.signatureVerified && !inventoryState.signatureError.empty()) {
+          submenu->addChild(createMenuLabel(inventoryState.signatureError));
         }
         submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
           for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
