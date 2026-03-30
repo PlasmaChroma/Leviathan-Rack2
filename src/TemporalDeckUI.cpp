@@ -446,7 +446,7 @@ struct VinylSignatureRecord {
   std::string label;
   std::string file;
   bool menuVisible = true;
-  std::string relativePath;
+  std::string basePath;
   std::string absolutePath;
   uint64_t sizeBytes = 0;
   uint64_t contentHash = 0;
@@ -465,6 +465,7 @@ struct VinylInventoryState {
   bool signaturePresent = false;
   bool signatureVerified = false;
   std::string signatureError;
+  std::string basePath = "res/Vinyl";
   std::vector<VinylInventoryEntry> entries;
 };
 
@@ -503,36 +504,33 @@ static bool isSafeVinylFileName(const std::string &fileName) {
          fileName.find('\\') == std::string::npos;
 }
 
-static bool defaultVinylEntryForKnownFileName(const std::string &fileName, VinylInventoryEntry *entryOut) {
-  if (!entryOut) {
+static std::string normalizeInventoryBasePath(std::string path) {
+  path = trimAsciiWhitespace(path);
+  std::replace(path.begin(), path.end(), '\\', '/');
+  while (!path.empty() && path.back() == '/') {
+    path.pop_back();
+  }
+  return path;
+}
+
+static bool isSafeInventoryBasePath(const std::string &basePath) {
+  if (basePath.empty()) {
     return false;
   }
-  VinylInventoryEntry entry;
-  if (fileName == "DragonKingLeviathan.png") {
-    entry.id = "dragon_king";
-    entry.label = "Dragon King";
-    entry.file = fileName;
-    entry.menuVisible = true;
-  } else if (fileName == "Blank.png") {
-    entry.id = "blank";
-    entry.label = "Blank";
-    entry.file = fileName;
-    entry.menuVisible = true;
-  } else if (fileName == "TemporalDeck.png") {
-    entry.id = "temporal_deck";
-    entry.label = "Temporal Deck";
-    entry.file = fileName;
-    entry.menuVisible = true;
-  } else if (fileName == "Static.svg") {
-    entry.id = "static_svg";
-    entry.label = "Built-in SVG";
-    entry.file = fileName;
-    entry.menuVisible = false;
-  } else {
+  if (basePath.find("..") != std::string::npos) {
     return false;
   }
-  *entryOut = entry;
+  if (basePath[0] == '/' || basePath[0] == '\\') {
+    return false;
+  }
   return true;
+}
+
+static std::string joinInventoryRelativePath(const std::string &basePath, const std::string &fileName) {
+  if (basePath.empty()) {
+    return fileName;
+  }
+  return basePath + "/" + fileName;
 }
 
 static const char *inventoryIdForPlatterArtMode(int mode) {
@@ -598,85 +596,65 @@ static VinylInventoryState loadVinylInventoryState() {
     json_decref(root);
     return state;
   }
+
+  json_t *basePathJ = json_object_get(root, "basePath");
+  if (json_is_string(basePathJ)) {
+    state.basePath = normalizeInventoryBasePath(json_string_value(basePathJ));
+  } else {
+    state.basePath = "res/Vinyl";
+  }
+  if (!isSafeInventoryBasePath(state.basePath)) {
+    state.error = "inventory.json has invalid basePath";
+    json_decref(root);
+    return state;
+  }
+
   json_t *vinylJ = json_object_get(root, "vinyl");
   std::set<std::string> seenIds;
-  if (json_is_array(vinylJ)) {
-    size_t i = 0;
-    json_t *itemJ = nullptr;
-    json_array_foreach(vinylJ, i, itemJ) {
-      if (!json_is_object(itemJ)) {
-        state.error = string::f("vinyl[%zu] must be an object", i);
-        state.entries.clear();
-        json_decref(root);
-        return state;
-      }
-      json_t *idJ = json_object_get(itemJ, "id");
-      json_t *labelJ = json_object_get(itemJ, "label");
-      json_t *fileJ = json_object_get(itemJ, "file");
-      json_t *menuVisibleJ = json_object_get(itemJ, "menuVisible");
-      if (!json_is_string(idJ) || !json_is_string(fileJ)) {
-        state.error = string::f("vinyl[%zu] requires string id and file", i);
-        state.entries.clear();
-        json_decref(root);
-        return state;
-      }
-
-      VinylInventoryEntry entry;
-      entry.id = trimAsciiWhitespace(json_string_value(idJ));
-      entry.file = trimAsciiWhitespace(json_string_value(fileJ));
-      entry.label = json_is_string(labelJ) ? trimAsciiWhitespace(json_string_value(labelJ)) : "";
-      entry.menuVisible = !menuVisibleJ || json_is_true(menuVisibleJ);
-
-      if (entry.id.empty() || !isSafeVinylFileName(entry.file)) {
-        state.error = string::f("vinyl[%zu] has invalid id/file", i);
-        state.entries.clear();
-        json_decref(root);
-        return state;
-      }
-      if (!seenIds.insert(entry.id).second) {
-        state.error = string::f("Duplicate vinyl id in inventory.json: %s", entry.id.c_str());
-        state.entries.clear();
-        json_decref(root);
-        return state;
-      }
-      state.entries.push_back(entry);
+  if (!json_is_array(vinylJ)) {
+    state.error = "inventory.json must contain a vinyl[] array";
+    json_decref(root);
+    return state;
+  }
+  size_t i = 0;
+  json_t *itemJ = nullptr;
+  json_array_foreach(vinylJ, i, itemJ) {
+    if (!json_is_object(itemJ)) {
+      state.error = string::f("vinyl[%zu] must be an object", i);
+      state.entries.clear();
+      json_decref(root);
+      return state;
     }
-  } else {
-    // Backward compatibility: older "signed key" artifact format emitted a
-    // root-level files[] array instead of inventory-compatible vinyl[].
-    json_t *filesJ = json_object_get(root, "files");
-    if (!json_is_array(filesJ)) {
-      state.error = "inventory.json must contain a vinyl[] array";
+    json_t *idJ = json_object_get(itemJ, "id");
+    json_t *labelJ = json_object_get(itemJ, "label");
+    json_t *fileJ = json_object_get(itemJ, "file");
+    json_t *menuVisibleJ = json_object_get(itemJ, "menuVisible");
+    if (!json_is_string(idJ) || !json_is_string(fileJ)) {
+      state.error = string::f("vinyl[%zu] requires string id and file", i);
+      state.entries.clear();
       json_decref(root);
       return state;
     }
 
-    size_t i = 0;
-    json_t *itemJ = nullptr;
-    json_array_foreach(filesJ, i, itemJ) {
-      if (!json_is_object(itemJ)) {
-        continue;
-      }
-      json_t *pathJ = json_object_get(itemJ, "path");
-      if (!json_is_string(pathJ)) {
-        continue;
-      }
-      std::string pathStr = trimAsciiWhitespace(json_string_value(pathJ));
-      std::string fileName = system::getFilename(pathStr);
-      VinylInventoryEntry entry;
-      if (!defaultVinylEntryForKnownFileName(fileName, &entry)) {
-        continue;
-      }
-      if (!seenIds.insert(entry.id).second) {
-        continue;
-      }
-      state.entries.push_back(entry);
-    }
-    if (state.entries.empty()) {
-      state.error = "Legacy signed inventory has no recognized vinyl files";
+    VinylInventoryEntry entry;
+    entry.id = trimAsciiWhitespace(json_string_value(idJ));
+    entry.file = trimAsciiWhitespace(json_string_value(fileJ));
+    entry.label = json_is_string(labelJ) ? trimAsciiWhitespace(json_string_value(labelJ)) : "";
+    entry.menuVisible = !menuVisibleJ || json_is_true(menuVisibleJ);
+
+    if (entry.id.empty() || !isSafeVinylFileName(entry.file)) {
+      state.error = string::f("vinyl[%zu] has invalid id/file", i);
+      state.entries.clear();
       json_decref(root);
       return state;
     }
+    if (!seenIds.insert(entry.id).second) {
+      state.error = string::f("Duplicate vinyl id in inventory.json: %s", entry.id.c_str());
+      state.entries.clear();
+      json_decref(root);
+      return state;
+    }
+    state.entries.push_back(entry);
   }
 
   if (state.entries.empty()) {
@@ -708,7 +686,7 @@ static VinylInventoryState loadVinylInventoryState() {
 
   struct SignedFileInfo {
     std::string id;
-    std::string path;
+    std::string file;
     uint64_t size = 0;
     uint64_t hash = 0;
   };
@@ -724,22 +702,22 @@ static VinylInventoryState loadVinylInventoryState() {
       return state;
     }
     json_t *idJ = json_object_get(fileJ, "id");
-    json_t *pathJ = json_object_get(fileJ, "path");
+    json_t *fileNameJ = json_object_get(fileJ, "file");
     json_t *sizeJ = json_object_get(fileJ, "size");
     json_t *hashJ = json_object_get(fileJ, "hash");
-    if (!json_is_string(idJ) || !json_is_string(pathJ) || !json_is_integer(sizeJ) || !json_is_string(hashJ)) {
+    if (!json_is_string(idJ) || !json_is_string(fileNameJ) || !json_is_integer(sizeJ) || !json_is_string(hashJ)) {
       state.signatureVerified = false;
-      state.signatureError = string::f("signed.files[%zu] missing id/path/size/hash", fileIndex);
+      state.signatureError = string::f("signed.files[%zu] missing id/file/size/hash", fileIndex);
       json_decref(root);
       return state;
     }
     SignedFileInfo info;
     info.id = trimAsciiWhitespace(json_string_value(idJ));
-    info.path = trimAsciiWhitespace(json_string_value(pathJ));
+    info.file = trimAsciiWhitespace(json_string_value(fileNameJ));
     info.size = uint64_t(std::max<json_int_t>(0, json_integer_value(sizeJ)));
-    if (info.id.empty() || info.path.empty() || !parseHexU64(json_string_value(hashJ), &info.hash)) {
+    if (info.id.empty() || !isSafeVinylFileName(info.file) || !parseHexU64(json_string_value(hashJ), &info.hash)) {
       state.signatureVerified = false;
-      state.signatureError = string::f("signed.files[%zu] has invalid id/path/hash", fileIndex);
+      state.signatureError = string::f("signed.files[%zu] has invalid id/file/hash", fileIndex);
       json_decref(root);
       return state;
     }
@@ -767,13 +745,13 @@ static VinylInventoryState loadVinylInventoryState() {
       return state;
     }
     const SignedFileInfo &signedFile = it->second;
-    std::string expectedPath = "res/Vinyl/" + entry.file;
-    if (signedFile.path != expectedPath) {
+    if (signedFile.file != entry.file) {
       state.signatureVerified = false;
-      state.signatureError = string::f("Signed path mismatch for '%s'", entry.id.c_str());
+      state.signatureError = string::f("Signed file mismatch for '%s'", entry.id.c_str());
       json_decref(root);
       return state;
     }
+    std::string expectedPath = joinInventoryRelativePath(state.basePath, entry.file);
 
     uint64_t actualHash = 0;
     uint64_t actualSize = 0;
@@ -846,7 +824,8 @@ static std::string vinylRelativePathForPlatterArtMode(int mode) {
   const char *inventoryId = inventoryIdForPlatterArtMode(mode);
   if (inventoryId) {
     if (const VinylInventoryEntry *entry = findVinylInventoryEntryById(inventoryId)) {
-      return "res/Vinyl/" + entry->file;
+      const VinylInventoryState &state = getVinylInventoryState();
+      return joinInventoryRelativePath(state.basePath, entry->file);
     }
   }
   return fallbackVinylRelativePathForPlatterArtMode(mode);
@@ -942,8 +921,9 @@ static bool collectVinylSignatureRecords(std::vector<VinylSignatureRecord> *reco
     rec.label = entry.label;
     rec.file = entry.file;
     rec.menuVisible = entry.menuVisible;
-    rec.relativePath = "res/Vinyl/" + entry.file;
-    rec.absolutePath = asset::plugin(pluginInstance, rec.relativePath);
+    rec.basePath = inventory.basePath;
+    std::string relativePath = joinInventoryRelativePath(rec.basePath, entry.file);
+    rec.absolutePath = asset::plugin(pluginInstance, relativePath);
     records.push_back(rec);
   }
   if (records.empty()) {
@@ -1012,10 +992,20 @@ static bool writeSignedVinylManifest(const std::string &path, std::string *error
     }
   }
 
+  std::string basePath = records.front().basePath;
+  if (!isSafeInventoryBasePath(basePath)) {
+    if (errorOut) {
+      *errorOut = "Invalid inventory basePath";
+    }
+    return false;
+  }
+
   uint64_t keyId = fnv1aUpdate64String(fnv1aInit64(), secret);
   uint64_t signature = fnv1aUpdate64String(fnv1aInit64(), "TemporalDeckVinylInventorySigned-v1");
   signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
   signature = fnv1aUpdate64String(signature, secret);
+  signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+  signature = fnv1aUpdate64String(signature, basePath);
   signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
   for (const VinylSignatureRecord &record : records) {
     signature = fnv1aUpdate64String(signature, record.id);
@@ -1025,8 +1015,6 @@ static bool writeSignedVinylManifest(const std::string &path, std::string *error
     signature = fnv1aUpdate64String(signature, record.file);
     signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
     signature = fnv1aUpdate64String(signature, record.menuVisible ? "1" : "0");
-    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
-    signature = fnv1aUpdate64String(signature, record.relativePath);
     signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
     signature = fnv1aUpdate64String(signature, std::to_string(record.sizeBytes));
     signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
@@ -1046,7 +1034,7 @@ static bool writeSignedVinylManifest(const std::string &path, std::string *error
   out << "{\n";
   out << "  \"type\": \"TemporalDeckVinylInventory\",\n";
   out << "  \"version\": 1,\n";
-  out << "  \"basePath\": \"res/Vinyl\",\n";
+  out << "  \"basePath\": \"" << jsonEscape(basePath) << "\",\n";
   out << "  \"vinyl\": [\n";
   for (size_t i = 0; i < records.size(); ++i) {
     const VinylSignatureRecord &record = records[i];
@@ -1078,7 +1066,7 @@ static bool writeSignedVinylManifest(const std::string &path, std::string *error
     const VinylSignatureRecord &record = records[i];
     out << "      {\n";
     out << "        \"id\": \"" << jsonEscape(record.id) << "\",\n";
-    out << "        \"path\": \"" << jsonEscape(record.relativePath) << "\",\n";
+    out << "        \"file\": \"" << jsonEscape(record.file) << "\",\n";
     out << "        \"size\": " << record.sizeBytes << ",\n";
     out << "        \"hash\": \"" << hexU64(record.contentHash) << "\"\n";
     out << "      }";

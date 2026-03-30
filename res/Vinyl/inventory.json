@@ -40,25 +40,25 @@
     "files": [
       {
         "id": "blank",
-        "path": "res/Vinyl/Blank.png",
+        "file": "Blank.png",
         "size": 268693,
         "hash": "4f74d11669369e1e"
       },
       {
         "id": "dragon_king",
-        "path": "res/Vinyl/DragonKingLeviathan.png",
+        "file": "DragonKingLeviathan.png",
         "size": 372366,
         "hash": "caabaccf9e0ad0e6"
       },
       {
         "id": "static_svg",
-        "path": "res/Vinyl/Static.svg",
+        "file": "Static.svg",
         "size": 26442,
         "hash": "288f967cfb02138d"
       },
       {
         "id": "temporal_deck",
-        "path": "res/Vinyl/TemporalDeck.png",
+        "file": "TemporalDeck.png",
         "size": 537560,
         "hash": "5ac733ac8ee72d32"
       }
