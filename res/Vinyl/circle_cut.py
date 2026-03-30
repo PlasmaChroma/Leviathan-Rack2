@@ -8,6 +8,8 @@ def circular_alpha_cut(
     input_path: str,
     output_path: str | None = None,
     extra_cut: int = 0,
+    indexed: bool = False,
+    palette_colors: int = 256,
 ) -> Path:
     in_path = Path(input_path)
     img = Image.open(in_path).convert("RGBA")
@@ -18,6 +20,9 @@ def circular_alpha_cut(
 
     if extra_cut < 0:
         raise ValueError("extra_cut must be >= 0.")
+
+    if not (1 <= palette_colors <= 256):
+        raise ValueError("palette_colors must be between 1 and 256.")
 
     size = w
 
@@ -43,21 +48,45 @@ def circular_alpha_cut(
     out = Image.merge("RGBA", (r, g, b, new_alpha))
 
     if output_path is None:
-        output_path = in_path.with_name(f"{in_path.stem}_circle_cut.png")
+        suffix = "_circle_cut_indexed.png" if indexed else "_circle_cut.png"
+        output_path = in_path.with_name(f"{in_path.stem}{suffix}")
 
     out_path = Path(output_path)
-    out.save(out_path)
+
+    if indexed:
+        # Quantize to paletted PNG while preserving transparency reasonably well
+        # Pillow handles transparency best when quantizing RGBA directly.
+        pal = out.quantize(colors=palette_colors, method=Image.Quantize.FASTOCTREE)
+
+        # Save optimized indexed PNG
+        pal.save(out_path, format="PNG", optimize=True)
+    else:
+        out.save(out_path, format="PNG")
+
     return out_path
+
+
+def parse_bool(value: str) -> bool:
+    value = value.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean value: {value}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python circle_cut.py input_image [output_image] [extra_cut_pixels]")
+        print(
+            "Usage: python circle_cut.py input_image [output_image] [extra_cut_pixels] [indexed:true|false] [palette_colors]"
+        )
         sys.exit(1)
 
     input_file = sys.argv[1]
     output_file = None
     extra_cut = 0
+    indexed = False
+    palette_colors = 256
 
     if len(sys.argv) >= 3:
         output_file = sys.argv[2]
@@ -65,8 +94,20 @@ if __name__ == "__main__":
     if len(sys.argv) >= 4:
         extra_cut = int(sys.argv[3])
 
+    if len(sys.argv) >= 5:
+        indexed = parse_bool(sys.argv[4])
+
+    if len(sys.argv) >= 6:
+        palette_colors = int(sys.argv[5])
+
     try:
-        result = circular_alpha_cut(input_file, output_file, extra_cut)
+        result = circular_alpha_cut(
+            input_file,
+            output_file,
+            extra_cut,
+            indexed,
+            palette_colors,
+        )
         print(f"Saved: {result}")
     except Exception as e:
         print(f"Error: {e}")

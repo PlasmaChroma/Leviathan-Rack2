@@ -2539,6 +2539,63 @@ struct TemporalDeck::Impl {
   std::string customPlatterArtPath;
 };
 
+struct ProcessSignalInputs {
+  float inL = 0.f;
+  float inR = 0.f;
+  float positionCv = 0.f;
+  float rateCv = 0.f;
+  bool rateCvConnected = false;
+  bool freezeGateHigh = false;
+  bool scratchGateHigh = false;
+  bool scratchGateConnected = false;
+  bool positionConnected = false;
+};
+
+static ProcessSignalInputs readProcessSignalInputs(TemporalDeck &module) {
+  ProcessSignalInputs in;
+  in.inL = module.inputs[TemporalDeck::INPUT_L_INPUT].getVoltage();
+  in.inR = module.inputs[TemporalDeck::INPUT_R_INPUT].isConnected()
+             ? module.inputs[TemporalDeck::INPUT_R_INPUT].getVoltage()
+             : in.inL;
+  in.positionCv = module.inputs[TemporalDeck::POSITION_CV_INPUT].getVoltage();
+  in.rateCv = module.inputs[TemporalDeck::RATE_CV_INPUT].getVoltage();
+  in.rateCvConnected = module.inputs[TemporalDeck::RATE_CV_INPUT].isConnected();
+  in.freezeGateHigh =
+    module.inputs[TemporalDeck::FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
+  in.scratchGateHigh =
+    module.inputs[TemporalDeck::SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold;
+  in.scratchGateConnected = module.inputs[TemporalDeck::SCRATCH_GATE_INPUT].isConnected();
+  in.positionConnected = module.inputs[TemporalDeck::POSITION_CV_INPUT].isConnected();
+  return in;
+}
+
+static void writeFrameOutputs(TemporalDeck &module, const TemporalDeckEngine::FrameResult &frame) {
+  module.outputs[TemporalDeck::OUTPUT_L_OUTPUT].setVoltage(frame.outL);
+  module.outputs[TemporalDeck::S_GATE_O_OUTPUT].setVoltage(frame.scratchGateOut);
+  module.outputs[TemporalDeck::OUTPUT_R_OUTPUT].setVoltage(frame.outR);
+  module.outputs[TemporalDeck::S_POS_O_OUTPUT].setVoltage(frame.scratchPosOut);
+}
+
+static void updateTransportModeLights(TemporalDeck &module, bool freezeLatched, bool reverseLatched, bool slipLatched,
+                                      int slipReturnMode) {
+  module.lights[TemporalDeck::FREEZE_LIGHT].setBrightness(freezeLatched ? 1.f : 0.f);
+  module.lights[TemporalDeck::REVERSE_LIGHT].setBrightness(reverseLatched ? 1.f : 0.f);
+  if (!slipLatched) {
+    module.lights[TemporalDeck::SLIP_SLOW_LIGHT].setBrightness(0.f);
+    module.lights[TemporalDeck::SLIP_LIGHT].setBrightness(0.f);
+    module.lights[TemporalDeck::SLIP_FAST_LIGHT].setBrightness(0.f);
+    return;
+  }
+  float selectedModeBrightness = 1.f;
+  float unselectedModeBrightness = 0.03f;
+  module.lights[TemporalDeck::SLIP_SLOW_LIGHT].setBrightness(
+    slipReturnMode == TemporalDeck::SLIP_RETURN_SLOW ? selectedModeBrightness : unselectedModeBrightness);
+  module.lights[TemporalDeck::SLIP_LIGHT].setBrightness(
+    slipReturnMode == TemporalDeck::SLIP_RETURN_NORMAL ? selectedModeBrightness : unselectedModeBrightness);
+  module.lights[TemporalDeck::SLIP_FAST_LIGHT].setBrightness(
+    slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT ? selectedModeBrightness : unselectedModeBrightness);
+}
+
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 10.f);
@@ -2823,15 +2880,16 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->cartridgeCharacter = nextCartridgeCharacter(impl->cartridgeCharacter);
   }
 
-  float inL = inputs[INPUT_L_INPUT].getVoltage();
-  float inR = inputs[INPUT_R_INPUT].isConnected() ? inputs[INPUT_R_INPUT].getVoltage() : inL;
-  float positionCv = inputs[POSITION_CV_INPUT].getVoltage();
-  float rateCv = inputs[RATE_CV_INPUT].getVoltage();
-  bool rateCvConnected = inputs[RATE_CV_INPUT].isConnected();
-  bool freezeGateHigh = inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
-  bool scratchGateHigh = inputs[SCRATCH_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kScratchGateThreshold;
-  bool scratchGateConnected = inputs[SCRATCH_GATE_INPUT].isConnected();
-  bool positionConnected = inputs[POSITION_CV_INPUT].isConnected();
+  ProcessSignalInputs signalIn = readProcessSignalInputs(*this);
+  float inL = signalIn.inL;
+  float inR = signalIn.inR;
+  float positionCv = signalIn.positionCv;
+  float rateCv = signalIn.rateCv;
+  bool rateCvConnected = signalIn.rateCvConnected;
+  bool freezeGateHigh = signalIn.freezeGateHigh;
+  bool scratchGateHigh = signalIn.scratchGateHigh;
+  bool scratchGateConnected = signalIn.scratchGateConnected;
+  bool positionConnected = signalIn.positionConnected;
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
@@ -2918,26 +2976,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->slipLatched = false;
   }
 
-  outputs[OUTPUT_L_OUTPUT].setVoltage(frame.outL);
-  outputs[S_GATE_O_OUTPUT].setVoltage(frame.scratchGateOut);
-  outputs[OUTPUT_R_OUTPUT].setVoltage(frame.outR);
-  outputs[S_POS_O_OUTPUT].setVoltage(frame.scratchPosOut);
-  lights[FREEZE_LIGHT].setBrightness(impl->freezeLatched ? 1.f : 0.f);
-  lights[REVERSE_LIGHT].setBrightness(impl->reverseLatched ? 1.f : 0.f);
-  if (!impl->slipLatched) {
-    lights[SLIP_SLOW_LIGHT].setBrightness(0.f);
-    lights[SLIP_LIGHT].setBrightness(0.f);
-    lights[SLIP_FAST_LIGHT].setBrightness(0.f);
-  } else {
-    float selectedModeBrightness = 1.f;
-    float unselectedModeBrightness = 0.03f;
-    lights[SLIP_SLOW_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_SLOW ? selectedModeBrightness
-                                                                                    : unselectedModeBrightness);
-    lights[SLIP_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_NORMAL ? selectedModeBrightness
-                                                                                 : unselectedModeBrightness);
-    lights[SLIP_FAST_LIGHT].setBrightness(impl->slipReturnMode == SLIP_RETURN_INSTANT ? selectedModeBrightness
-                                                                                        : unselectedModeBrightness);
-  }
+  writeFrameOutputs(*this, frame);
+  updateTransportModeLights(*this, impl->freezeLatched, impl->reverseLatched, impl->slipLatched,
+                            impl->slipReturnMode);
   impl->uiPlatterAngle.store(frame.platterAngle, std::memory_order_relaxed);
   impl->uiLagSamples.store(frame.lag, std::memory_order_relaxed);
   impl->uiAccessibleLagSamples.store(frame.accessibleLag, std::memory_order_relaxed);

@@ -923,6 +923,13 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load Blank platter PNG asset: %s", e.what());
       }
+    } else if (artMode == TemporalDeck::PLATTER_ART_TEMPORAL_DECK) {
+      try {
+        drewArt = drawPlatterImage(args, APP->window->loadImage(asset::plugin(pluginInstance, "res/Vinyl/TemporalDeck.png")),
+                                   center, platterRadiusPx, rotation);
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load Temporal Deck platter PNG asset: %s", e.what());
+      }
     } else if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
       if (module) {
         std::string customPath = module->getCustomPlatterArtPath();
@@ -1516,6 +1523,10 @@ struct TemporalDeckWidget : ModuleWidget {
           TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_BLANK), "",
           [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_BLANK; },
           [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_BLANK); }));
+        submenu->addChild(createCheckMenuItem(
+          TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_TEMPORAL_DECK), "",
+          [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_TEMPORAL_DECK; },
+          [=]() { module->setPlatterArtMode(TemporalDeck::PLATTER_ART_TEMPORAL_DECK); }));
         submenu->addChild(createCheckMenuItem(
           TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_PROCEDURAL), "",
           [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_PROCEDURAL; },
