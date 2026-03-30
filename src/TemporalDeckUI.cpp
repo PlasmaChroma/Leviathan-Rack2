@@ -1995,9 +1995,9 @@ void TemporalDeckPlatterWidget::onHoverScroll(const event::HoverScroll &e) {
   float wheelGain = 1.f + 0.50f * lowFpsComp;
   float lagDelta = scrollShaped * samplesPerNotch * radiusGain * wheelGain;
   // Keep wheel scratch active long enough for Hybrid wheel impulses to settle,
-  // otherwise small forward ticks can drop out before they noticeably reduce lag.
-  float holdSeconds = module->isSlipLatched() ? 0.16f : 0.09f;
-  holdSeconds += 0.06f * lowFpsComp;
+  // but use a tighter dwell so wheel gestures release sooner.
+  float holdSeconds = module->isSlipLatched() ? 0.14f : 0.075f;
+  holdSeconds += 0.045f * lowFpsComp;
   int holdSamples = std::max(1, int(std::round(sampleRate * holdSeconds)));
 
   module->addPlatterWheelDelta(lagDelta, holdSamples);
