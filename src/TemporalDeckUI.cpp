@@ -448,9 +448,15 @@ struct VinylSignatureRecord {
   bool menuVisible = true;
   int menuId = -1;
   std::string basePath;
+  std::string sourceRootPath;
   std::string absolutePath;
   uint64_t sizeBytes = 0;
   uint64_t contentHash = 0;
+};
+
+enum VinylInventorySource {
+  VINYL_SOURCE_BUILTIN = 0,
+  VINYL_SOURCE_EXPANDED = 1,
 };
 
 struct VinylInventoryEntry {
@@ -459,6 +465,10 @@ struct VinylInventoryEntry {
   std::string file;
   bool menuVisible = true;
   int menuId = -1;
+  int source = VINYL_SOURCE_BUILTIN;
+  std::string sourceRootPath;
+  std::string basePath;
+  std::string absolutePath;
   bool signatureVerified = false;
   std::string signatureError;
 };
@@ -469,6 +479,9 @@ struct VinylInventoryState {
   bool signaturePresent = false;
   bool signatureVerified = false;
   std::string signatureError;
+  int source = VINYL_SOURCE_BUILTIN;
+  std::string sourceRootPath;
+  std::string sourceLabel;
   std::string basePath = "res/Vinyl";
   int verifiedEntryCount = 0;
   std::vector<VinylInventoryEntry> entries;
@@ -545,6 +558,20 @@ static std::string joinInventoryRelativePath(const std::string &basePath, const 
   return basePath + "/" + fileName;
 }
 
+static constexpr int kExpandedMenuIdOffset = 10000;
+static const char *kVinylExpansionBaseUrl =
+  "https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/main/Vinyl";
+
+static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
+
+static std::string expandedVinylRootPath() { return system::join(asset::user(), "TemporalDeck/expanded_vinyl"); }
+
+static std::string expandedVinylInventoryPath() { return system::join(expandedVinylRootPath(), "inventory.json"); }
+
+static std::string inventoryAbsolutePath(const VinylInventoryEntry &entry) {
+  return system::join(entry.sourceRootPath, joinInventoryRelativePath(entry.basePath, entry.file));
+}
+
 static const char *inventoryIdForPlatterArtMode(int mode) {
   switch (mode) {
   case TemporalDeck::PLATTER_ART_BUILTIN_SVG:
@@ -594,9 +621,13 @@ static std::string fallbackVinylRelativePathForPlatterArtMode(int mode) {
   }
 }
 
-static VinylInventoryState loadVinylInventoryState() {
+static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &path, const std::string &sourceRootPath,
+                                                           const std::string &defaultBasePath, int source,
+                                                           const std::string &sourceLabel, bool useFileBasePath = true) {
   VinylInventoryState state;
-  const std::string path = asset::plugin(pluginInstance, "res/Vinyl/inventory.json");
+  state.source = source;
+  state.sourceRootPath = sourceRootPath;
+  state.sourceLabel = sourceLabel;
   json_error_t error;
   json_t *root = json_load_file(path.c_str(), 0, &error);
   if (!root) {
@@ -610,10 +641,10 @@ static VinylInventoryState loadVinylInventoryState() {
   }
 
   json_t *basePathJ = json_object_get(root, "basePath");
-  if (json_is_string(basePathJ)) {
+  if (useFileBasePath && json_is_string(basePathJ)) {
     state.basePath = normalizeInventoryBasePath(json_string_value(basePathJ));
   } else {
-    state.basePath = "res/Vinyl";
+    state.basePath = defaultBasePath;
   }
   if (!isSafeInventoryBasePath(state.basePath)) {
     state.error = "inventory.json has invalid basePath";
@@ -691,6 +722,10 @@ static VinylInventoryState loadVinylInventoryState() {
       json_decref(root);
       return state;
     }
+    entry.source = source;
+    entry.sourceRootPath = sourceRootPath;
+    entry.basePath = state.basePath;
+    entry.absolutePath = inventoryAbsolutePath(entry);
     state.entries.push_back(entry);
   }
 
@@ -802,7 +837,7 @@ static VinylInventoryState loadVinylInventoryState() {
     uint64_t actualHash = 0;
     uint64_t actualSize = 0;
     std::string hashError;
-    if (!hashFileFnv64(asset::plugin(pluginInstance, expectedPath), &actualHash, &actualSize, &hashError)) {
+    if (!hashFileFnv64(system::join(sourceRootPath, expectedPath), &actualHash, &actualSize, &hashError)) {
       entry.signatureError = hashError.empty() ? "Failed to read file for signature check" : hashError;
       continue;
     }
@@ -831,8 +866,133 @@ static VinylInventoryState loadVinylInventoryState() {
   return state;
 }
 
+static VinylInventoryState loadBuiltInVinylInventoryState() {
+  const std::string sourceRootPath = asset::plugin(pluginInstance, "");
+  return loadVinylInventoryStateFromPath(builtInVinylInventoryPath(), sourceRootPath, "res/Vinyl", VINYL_SOURCE_BUILTIN,
+                                         "Built-in");
+}
+
+static VinylInventoryState loadExpandedVinylInventoryState() {
+  const std::string sourceRootPath = expandedVinylRootPath();
+  const std::string path = expandedVinylInventoryPath();
+  if (!system::exists(path)) {
+    VinylInventoryState state;
+    state.valid = true;
+    state.source = VINYL_SOURCE_EXPANDED;
+    state.sourceRootPath = sourceRootPath;
+    state.sourceLabel = "Expanded";
+    state.basePath = ".";
+    state.signaturePresent = false;
+    state.signatureVerified = false;
+    return state;
+  }
+  return loadVinylInventoryStateFromPath(path, sourceRootPath, ".", VINYL_SOURCE_EXPANDED, "Expanded", false);
+}
+
+static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &builtIn, const VinylInventoryState &expanded) {
+  VinylInventoryState merged;
+  merged.source = VINYL_SOURCE_BUILTIN;
+  merged.sourceLabel = "Merged";
+  merged.basePath = "merged";
+  merged.valid = builtIn.valid || expanded.valid;
+  if (!merged.valid) {
+    merged.error = "Both built-in and expanded inventories are invalid";
+    return merged;
+  }
+
+  std::set<std::string> seenIds;
+  std::set<int> seenMenuIds;
+  auto appendEntries = [&](const VinylInventoryState &state, bool offsetExpandedMenuIds) {
+    if (!state.valid) {
+      return;
+    }
+    for (const VinylInventoryEntry &srcEntry : state.entries) {
+      VinylInventoryEntry entry = srcEntry;
+      if (!seenIds.insert(entry.id).second) {
+        if (entry.source == VINYL_SOURCE_EXPANDED) {
+          std::string fallbackId = "expanded/" + entry.id;
+          int suffix = 1;
+          while (!seenIds.insert(fallbackId).second) {
+            fallbackId = string::f("expanded/%s_%d", entry.id.c_str(), suffix++);
+          }
+          entry.id = fallbackId;
+        } else {
+          continue;
+        }
+      }
+      if (entry.menuVisible) {
+        int candidateMenuId = entry.menuId;
+        if (offsetExpandedMenuIds) {
+          candidateMenuId = std::max(kExpandedMenuIdOffset, candidateMenuId + kExpandedMenuIdOffset);
+        }
+        while (!seenMenuIds.insert(candidateMenuId).second) {
+          ++candidateMenuId;
+        }
+        entry.menuId = candidateMenuId;
+      }
+      merged.entries.push_back(entry);
+      if (entry.signatureVerified) {
+        ++merged.verifiedEntryCount;
+      }
+    }
+  };
+
+  appendEntries(builtIn, false);
+  appendEntries(expanded, true);
+
+  merged.signaturePresent = builtIn.signaturePresent || expanded.signaturePresent;
+  merged.signatureVerified = true;
+  std::vector<std::string> signatureErrors;
+  if (builtIn.valid && builtIn.signaturePresent && !builtIn.signatureVerified) {
+    merged.signatureVerified = false;
+    signatureErrors.push_back("Built-in: " + builtIn.signatureError);
+  }
+  if (expanded.valid && !expanded.entries.empty() && expanded.signaturePresent && !expanded.signatureVerified) {
+    merged.signatureVerified = false;
+    signatureErrors.push_back("Expanded: " + expanded.signatureError);
+  }
+  if (!signatureErrors.empty()) {
+    merged.signatureError = signatureErrors.front();
+  }
+  if (!builtIn.valid) {
+    merged.error = builtIn.error;
+  } else if (!expanded.valid) {
+    merged.error = expanded.error;
+  }
+  return merged;
+}
+
+static int gVinylInventoryCacheSerial = 0;
+
+static void invalidateVinylInventoryCache() { ++gVinylInventoryCacheSerial; }
+
+static const VinylInventoryState &getBuiltInVinylInventoryState() {
+  static int cachedSerial = -1;
+  static VinylInventoryState state;
+  if (cachedSerial != gVinylInventoryCacheSerial) {
+    state = loadBuiltInVinylInventoryState();
+    cachedSerial = gVinylInventoryCacheSerial;
+  }
+  return state;
+}
+
+static const VinylInventoryState &getExpandedVinylInventoryState() {
+  static int cachedSerial = -1;
+  static VinylInventoryState state;
+  if (cachedSerial != gVinylInventoryCacheSerial) {
+    state = loadExpandedVinylInventoryState();
+    cachedSerial = gVinylInventoryCacheSerial;
+  }
+  return state;
+}
+
 static const VinylInventoryState &getVinylInventoryState() {
-  static VinylInventoryState state = loadVinylInventoryState();
+  static int cachedSerial = -1;
+  static VinylInventoryState state;
+  if (cachedSerial != gVinylInventoryCacheSerial) {
+    state = mergeVinylInventoryStates(getBuiltInVinylInventoryState(), getExpandedVinylInventoryState());
+    cachedSerial = gVinylInventoryCacheSerial;
+  }
   static bool warned = false;
   if (warned) {
     return state;
@@ -938,12 +1098,15 @@ static int defaultPlatterArtModeFromInventory() {
   return firstMode;
 }
 
-static std::string vinylRelativePathForPlatterArtMode(int mode) {
+static std::string vinylAbsolutePathForPlatterArtMode(int mode) {
   if (const VinylInventoryEntry *entry = findVinylInventoryEntryForPlatterArtMode(mode)) {
-    const VinylInventoryState &state = getVinylInventoryState();
-    return joinInventoryRelativePath(state.basePath, entry->file);
+    return inventoryAbsolutePath(*entry);
   }
-  return fallbackVinylRelativePathForPlatterArtMode(mode);
+  std::string fallbackRelative = fallbackVinylRelativePathForPlatterArtMode(mode);
+  if (fallbackRelative.empty()) {
+    return "";
+  }
+  return asset::plugin(pluginInstance, fallbackRelative);
 }
 
 static std::string vinylLabelForPlatterArtMode(int mode) {
@@ -989,6 +1152,27 @@ static std::vector<int> visiblePlatterArtModesFromInventory() {
   return modes;
 }
 
+static std::vector<const VinylInventoryEntry *> visibleExpandedVinylEntriesFromInventory() {
+  const VinylInventoryState &state = getVinylInventoryState();
+  if (!state.valid) {
+    return {};
+  }
+  std::vector<const VinylInventoryEntry *> entries;
+  for (const VinylInventoryEntry &entry : state.entries) {
+    if (entry.source != VINYL_SOURCE_EXPANDED || !entry.menuVisible) {
+      continue;
+    }
+    entries.push_back(&entry);
+  }
+  std::sort(entries.begin(), entries.end(), [](const VinylInventoryEntry *a, const VinylInventoryEntry *b) {
+    if (a->menuId != b->menuId) {
+      return a->menuId < b->menuId;
+    }
+    return a->label < b->label;
+  });
+  return entries;
+}
+
 static bool hashFileFnv64(const std::string &path, uint64_t *hashOut, uint64_t *sizeOut, std::string *errorOut) {
   std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
   if (!in.good()) {
@@ -1020,22 +1204,25 @@ static bool hashFileFnv64(const std::string &path, uint64_t *hashOut, uint64_t *
   return true;
 }
 
-static bool collectVinylSignatureRecords(std::vector<VinylSignatureRecord> *recordsOut, std::string *errorOut) {
+static bool collectVinylSignatureRecords(const VinylInventoryState &inventory, int sourceFilter,
+                                         std::vector<VinylSignatureRecord> *recordsOut, std::string *errorOut) {
   if (!recordsOut) {
     return false;
   }
   std::vector<VinylSignatureRecord> records;
   std::set<std::string> seenIds;
-
-  const VinylInventoryState &inventory = getVinylInventoryState();
   if (!inventory.valid) {
     if (errorOut) {
-      *errorOut = inventory.error.empty() ? "Failed to load res/Vinyl/inventory.json" : inventory.error;
+      *errorOut = inventory.error.empty() ? "Failed to load inventory.json" : inventory.error;
     }
     return false;
   }
 
+  std::string commonBasePath;
   for (const VinylInventoryEntry &entry : inventory.entries) {
+    if (sourceFilter >= 0 && entry.source != sourceFilter) {
+      continue;
+    }
     if (!seenIds.insert(entry.id).second) {
       continue;
     }
@@ -1045,9 +1232,17 @@ static bool collectVinylSignatureRecords(std::vector<VinylSignatureRecord> *reco
     rec.file = entry.file;
     rec.menuVisible = entry.menuVisible;
     rec.menuId = entry.menuId;
-    rec.basePath = inventory.basePath;
-    std::string relativePath = joinInventoryRelativePath(rec.basePath, entry.file);
-    rec.absolutePath = asset::plugin(pluginInstance, relativePath);
+    rec.basePath = entry.basePath;
+    rec.sourceRootPath = entry.sourceRootPath;
+    rec.absolutePath = inventoryAbsolutePath(entry);
+    if (commonBasePath.empty()) {
+      commonBasePath = rec.basePath;
+    } else if (commonBasePath != rec.basePath) {
+      if (errorOut) {
+        *errorOut = "Cannot sign mixed inventories with different basePath values";
+      }
+      return false;
+    }
     records.push_back(rec);
   }
   if (records.empty()) {
@@ -1099,15 +1294,139 @@ static std::string ensureJsonExtension(std::string path) {
 
 static std::string lowercaseExtension(const std::string &path);
 
-static bool writeSignedVinylManifest(const std::string &path, std::string *errorOut, std::string *signatureOut,
-                                     int *fileCountOut) {
+struct VinylDownloadPlan {
+  std::vector<std::string> files;
+};
+
+static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloadPlan *planOut, std::string *errorOut) {
+  if (!planOut) {
+    return false;
+  }
+  json_error_t error;
+  json_t *root = json_load_file(inventoryPath.c_str(), 0, &error);
+  if (!root) {
+    if (errorOut) {
+      *errorOut = string::f("Failed to parse downloaded inventory.json (line %d): %s", error.line, error.text);
+    }
+    return false;
+  }
+  if (!json_is_object(root)) {
+    if (errorOut) {
+      *errorOut = "Downloaded inventory.json root must be an object";
+    }
+    json_decref(root);
+    return false;
+  }
+
+  VinylDownloadPlan plan;
+  json_t *vinylJ = json_object_get(root, "vinyl");
+  if (!json_is_array(vinylJ)) {
+    if (errorOut) {
+      *errorOut = "Downloaded inventory.json must contain a vinyl[] array";
+    }
+    json_decref(root);
+    return false;
+  }
+
+  std::set<std::string> seenFiles;
+  size_t i = 0;
+  json_t *itemJ = nullptr;
+  json_array_foreach(vinylJ, i, itemJ) {
+    if (!json_is_object(itemJ)) {
+      continue;
+    }
+    json_t *fileJ = json_object_get(itemJ, "file");
+    if (!json_is_string(fileJ)) {
+      continue;
+    }
+    std::string file = trimAsciiWhitespace(json_string_value(fileJ));
+    if (!isSafeVinylFileName(file)) {
+      continue;
+    }
+    if (!seenFiles.insert(file).second) {
+      continue;
+    }
+    plan.files.push_back(file);
+  }
+  json_decref(root);
+  if (plan.files.empty()) {
+    if (errorOut) {
+      *errorOut = "Downloaded inventory contains no usable file entries";
+    }
+    return false;
+  }
+
+  *planOut = std::move(plan);
+  return true;
+}
+
+static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCountOut) {
+  const std::string finalRoot = expandedVinylRootPath();
+  const std::string tempRoot = finalRoot + ".tmp";
+  system::removeRecursively(tempRoot);
+  if (!system::createDirectories(tempRoot)) {
+    if (errorOut) {
+      *errorOut = "Failed to create temporary expansion directory";
+    }
+    return false;
+  }
+
+  const std::string inventoryPath = system::join(tempRoot, "inventory.json");
+  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/inventory.json";
+  if (!network::requestDownload(inventoryUrl, inventoryPath)) {
+    system::removeRecursively(tempRoot);
+    if (errorOut) {
+      *errorOut = "Failed to download expanded inventory.json";
+    }
+    return false;
+  }
+
+  VinylDownloadPlan plan;
+  if (!loadVinylDownloadPlan(inventoryPath, &plan, errorOut)) {
+    system::removeRecursively(tempRoot);
+    return false;
+  }
+  for (const std::string &fileName : plan.files) {
+    std::string encodedFile = network::encodeUrl(fileName);
+    std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile;
+    std::string filePath = system::join(tempRoot, fileName);
+    if (!network::requestDownload(fileUrl, filePath)) {
+      system::removeRecursively(tempRoot);
+      if (errorOut) {
+        *errorOut = string::f("Failed to download vinyl file: %s", fileName.c_str());
+      }
+      return false;
+    }
+  }
+
+  system::removeRecursively(finalRoot);
+  if (!system::rename(tempRoot, finalRoot)) {
+    if (!system::copy(tempRoot, finalRoot)) {
+      system::removeRecursively(tempRoot);
+      if (errorOut) {
+        *errorOut = "Failed to install expanded vinyl files into user folder";
+      }
+      return false;
+    }
+    system::removeRecursively(tempRoot);
+  }
+
+  if (fileCountOut) {
+    *fileCountOut = int(plan.files.size());
+  }
+  invalidateVinylInventoryCache();
+  return true;
+}
+
+static bool writeSignedVinylManifest(const std::string &path, const VinylInventoryState &inventory, int sourceFilter,
+                                     std::string *errorOut, std::string *signatureOut, int *fileCountOut) {
   std::string secret;
   if (!loadDragonKingSigningSecret(&secret, errorOut)) {
     return false;
   }
 
   std::vector<VinylSignatureRecord> records;
-  if (!collectVinylSignatureRecords(&records, errorOut)) {
+  if (!collectVinylSignatureRecords(inventory, sourceFilter, &records, errorOut)) {
     return false;
   }
   for (VinylSignatureRecord &record : records) {
@@ -1783,10 +2102,9 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       }
     } else if (artMode != TemporalDeck::PLATTER_ART_PROCEDURAL) {
       if (isInventoryPlatterArtModeVerified(artMode)) {
-        std::string relativePath = vinylRelativePathForPlatterArtMode(artMode);
-        std::string ext = lowercaseExtension(relativePath);
-        if (!relativePath.empty() && isSupportedPlatterArtPath(relativePath)) {
-          std::string absolutePath = asset::plugin(pluginInstance, relativePath);
+        std::string absolutePath = vinylAbsolutePathForPlatterArtMode(artMode);
+        std::string ext = lowercaseExtension(absolutePath);
+        if (!absolutePath.empty() && isSupportedPlatterArtPath(absolutePath)) {
           try {
             if (ext == ".svg") {
               drewArt = drawPlatterSvg(args, APP->window->loadSvg(absolutePath), center, platterRadiusPx, rotation);
@@ -1794,7 +2112,7 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
               drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
             }
           } catch (const std::exception &e) {
-            WARN("TemporalDeck: failed to load platter art '%s': %s", relativePath.c_str(), e.what());
+            WARN("TemporalDeck: failed to load platter art '%s': %s", absolutePath.c_str(), e.what());
           }
         }
       }
@@ -2363,10 +2681,25 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createSubmenuItem("Platter art", "", [=](Menu *submenu) {
+      menu->addChild(createSubmenuItem("Vinyl", "", [=](Menu *submenu) {
         bool dragonKingDebug = isDragonKingDebugEnabled();
         const VinylInventoryState &inventoryState = getVinylInventoryState();
         submenu->addChild(createMenuLabel(vinylInventoryTrustStatusLabel(inventoryState)));
+        submenu->addChild(createMenuItem("Download Vinyl Expansion", "", [=]() {
+          std::string error;
+          int fileCount = 0;
+          if (!downloadExpandedVinylInventory(&error, &fileCount)) {
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+                             error.empty() ? "Failed to download Vinyl expansion" : error.c_str());
+            return;
+          }
+          const VinylInventoryState &expandedState = getExpandedVinylInventoryState();
+          osdialog_message(
+            OSDIALOG_INFO, OSDIALOG_OK,
+            string::f("Downloaded Vinyl expansion to:\n%s\n\nFiles: %d\nStatus: %s", expandedVinylRootPath().c_str(),
+                      fileCount, vinylInventoryTrustStatusLabel(expandedState).c_str())
+              .c_str());
+        }));
         if (!inventoryState.valid) {
           module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
           if (!inventoryState.error.empty()) {
@@ -2406,6 +2739,30 @@ struct TemporalDeckWidget : ModuleWidget {
             if (!modeVerified && !modeError.empty()) {
               submenu->addChild(createMenuLabel(string::f("  %s", modeError.c_str())));
             }
+          }
+        }
+        std::vector<const VinylInventoryEntry *> expandedEntries = visibleExpandedVinylEntriesFromInventory();
+        if (!expandedEntries.empty()) {
+          submenu->addChild(new MenuSeparator());
+          submenu->addChild(createMenuLabel("Expanded Vinyl"));
+          std::string currentCustomPath = module->getCustomPlatterArtPath();
+          for (const VinylInventoryEntry *entry : expandedEntries) {
+            if (!entry) {
+              continue;
+            }
+            std::string absolutePath = inventoryAbsolutePath(*entry);
+            std::string rightText;
+            if (!entry->signatureVerified) {
+              rightText = inventoryState.signaturePresent ? "Unverified" : "Unsigned";
+            }
+            submenu->addChild(createCheckMenuItem(
+              entry->label.empty() ? entry->id : entry->label, rightText,
+              [=]() {
+                return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM &&
+                       module->getCustomPlatterArtPath() == absolutePath;
+              },
+              [=]() { module->setCustomPlatterArtPath(absolutePath); },
+              !system::isFile(absolutePath)));
           }
         }
         if (!inventoryState.signatureVerified && !inventoryState.signatureError.empty()) {
@@ -2476,13 +2833,47 @@ struct TemporalDeckWidget : ModuleWidget {
           std::string error;
           std::string signature;
           int fileCount = 0;
-          if (!writeSignedVinylManifest(path, &error, &signature, &fileCount)) {
+          if (!writeSignedVinylManifest(path, getBuiltInVinylInventoryState(), VINYL_SOURCE_BUILTIN, &error, &signature,
+                                        &fileCount)) {
             std::string message = error.empty() ? "Signed inventory export failed" : error;
             osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
             return;
           }
           osdialog_message(OSDIALOG_INFO, OSDIALOG_OK,
                            string::f("Saved signed inventory:\n%s\n\nSignature: %s\nFiles: %d",
+                                     path.c_str(), signature.c_str(), fileCount)
+                             .c_str());
+        }));
+        menu->addChild(createMenuItem("Export signed expanded inventory.json...", "", [=]() {
+          const VinylInventoryState &expandedState = getExpandedVinylInventoryState();
+          if (!expandedState.valid || expandedState.entries.empty()) {
+            std::string msg = expandedState.valid ? "No expanded vinyl inventory entries to export"
+                                                  : (expandedState.error.empty() ? "Expanded vinyl inventory is invalid"
+                                                                                 : expandedState.error);
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, msg.c_str());
+            return;
+          }
+          std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+          system::createDirectories(defaultDir);
+          osdialog_filters *filters = osdialog_filters_parse("JSON:json,JSON");
+          char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "inventory.expanded.signed.json", filters);
+          osdialog_filters_free(filters);
+          if (!pathC) {
+            return;
+          }
+          std::string path = ensureJsonExtension(pathC);
+          std::free(pathC);
+
+          std::string error;
+          std::string signature;
+          int fileCount = 0;
+          if (!writeSignedVinylManifest(path, expandedState, VINYL_SOURCE_EXPANDED, &error, &signature, &fileCount)) {
+            std::string message = error.empty() ? "Expanded inventory signing failed" : error;
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+            return;
+          }
+          osdialog_message(OSDIALOG_INFO, OSDIALOG_OK,
+                           string::f("Saved signed expanded inventory:\n%s\n\nSignature: %s\nFiles: %d",
                                      path.c_str(), signature.c_str(), fileCount)
                              .c_str());
         }));

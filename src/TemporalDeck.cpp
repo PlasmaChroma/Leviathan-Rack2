@@ -3273,9 +3273,6 @@ int TemporalDeck::getPlatterArtMode() const {
 
 void TemporalDeck::setPlatterArtMode(int mode) {
   int clamped = clamp(mode, PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
-  if (!isDragonKingDebugEnabled() && clamped == PLATTER_ART_CUSTOM) {
-    clamped = PLATTER_ART_DRAGON_KING;
-  }
   impl->platterArtMode = clamped;
 }
 
@@ -3292,7 +3289,7 @@ std::string TemporalDeck::getCustomPlatterArtPath() const {
 }
 
 bool TemporalDeck::setCustomPlatterArtPath(const std::string &path) {
-  if (path.empty() || !isDragonKingDebugEnabled()) {
+  if (path.empty()) {
     return false;
   }
   impl->customPlatterArtPath = path;
@@ -3301,9 +3298,6 @@ bool TemporalDeck::setCustomPlatterArtPath(const std::string &path) {
 }
 
 void TemporalDeck::clearCustomPlatterArtPath() {
-  if (!isDragonKingDebugEnabled()) {
-    return;
-  }
   impl->customPlatterArtPath.clear();
   if (impl->platterArtMode == PLATTER_ART_CUSTOM) {
     impl->platterArtMode = PLATTER_ART_BUILTIN_SVG;
