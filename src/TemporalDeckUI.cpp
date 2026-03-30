@@ -899,6 +899,8 @@ static const VinylInventoryEntry *findVinylInventoryEntryForPlatterArtMode(int m
   return findVinylInventoryEntryById(inventoryId);
 }
 
+static std::vector<int> visiblePlatterArtModesFromInventory();
+
 static bool isInventoryPlatterArtModeVerified(int mode, std::string *errorOut = nullptr) {
   const VinylInventoryState &state = getVinylInventoryState();
   if (!state.valid) {
@@ -918,6 +920,22 @@ static bool isInventoryPlatterArtModeVerified(int mode, std::string *errorOut = 
     *errorOut = entry->signatureError;
   }
   return entry->signatureVerified;
+}
+
+static int defaultPlatterArtModeFromInventory() {
+  const VinylInventoryState &inventoryState = getVinylInventoryState();
+  if (!inventoryState.valid) {
+    return TemporalDeck::PLATTER_ART_PROCEDURAL;
+  }
+  std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
+  if (visibleModes.empty()) {
+    return TemporalDeck::PLATTER_ART_PROCEDURAL;
+  }
+  int firstMode = visibleModes.front();
+  if (!isInventoryPlatterArtModeVerified(firstMode)) {
+    return TemporalDeck::PLATTER_ART_PROCEDURAL;
+  }
+  return firstMode;
 }
 
 static std::string vinylRelativePathForPlatterArtMode(int mode) {
@@ -1731,21 +1749,10 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   Vec center = localCenter();
 
   if (module && module->consumePendingInitialPlatterArtSelection()) {
-    int initialMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
-    const VinylInventoryState &inventoryState = getVinylInventoryState();
-    if (inventoryState.valid) {
-      std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
-      if (!visibleModes.empty()) {
-        int firstMode = visibleModes.front();
-        if (isInventoryPlatterArtModeVerified(firstMode)) {
-          initialMode = firstMode;
-        }
-      }
-    }
-    module->setPlatterArtMode(initialMode);
+    module->setPlatterArtMode(defaultPlatterArtModeFromInventory());
   }
 
-  int artMode = module ? module->getPlatterArtMode() : TemporalDeck::PLATTER_ART_DRAGON_KING;
+  int artMode = module ? module->getPlatterArtMode() : defaultPlatterArtModeFromInventory();
   if (module && artMode != TemporalDeck::PLATTER_ART_PROCEDURAL && artMode != TemporalDeck::PLATTER_ART_CUSTOM &&
       !isInventoryPlatterArtModeVerified(artMode)) {
     module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
