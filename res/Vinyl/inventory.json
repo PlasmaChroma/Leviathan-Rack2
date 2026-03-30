@@ -4,32 +4,36 @@
   "basePath": "res/Vinyl",
   "vinyl": [
     {
-      "id": "blank",
-      "label": "Blank",
-      "file": "Blank.png",
+      "id": "temporal_deck",
+      "label": "Temporal Deck",
+      "file": "TemporalDeck.png",
       "format": "png",
-      "menuVisible": true
+      "menuVisible": true,
+      "menuId": 1
     },
     {
       "id": "dragon_king",
       "label": "Dragon King",
       "file": "DragonKingLeviathan.png",
       "format": "png",
-      "menuVisible": true
+      "menuVisible": true,
+      "menuId": 2
+    },    
+    {
+      "id": "blank",
+      "label": "Blank",
+      "file": "Blank.png",
+      "format": "png",
+      "menuVisible": true,
+      "menuId": 3
     },
     {
       "id": "static_svg",
       "label": "Built-in SVG",
       "file": "Static.svg",
       "format": "svg",
-      "menuVisible": false
-    },
-    {
-      "id": "temporal_deck",
-      "label": "Temporal Deck",
-      "file": "TemporalDeck.png",
-      "format": "png",
-      "menuVisible": true
+      "menuVisible": false,
+      "menuId": 900
     }
   ],
   "signed": {
@@ -39,28 +43,32 @@
     "signature": "42b715fc30059d6a",
     "files": [
       {
-        "id": "blank",
-        "file": "Blank.png",
-        "size": 268693,
-        "hash": "4f74d11669369e1e"
-      },
+        "id": "temporal_deck",
+        "file": "TemporalDeck.png",
+        "menuId": 1,
+        "size": 537560,
+        "hash": "5ac733ac8ee72d32"
+      },     
       {
         "id": "dragon_king",
         "file": "DragonKingLeviathan.png",
+        "menuId": 2,
         "size": 372366,
         "hash": "caabaccf9e0ad0e6"
       },
       {
+        "id": "blank",
+        "file": "Blank.png",
+        "menuId": 3,
+        "size": 268693,
+        "hash": "4f74d11669369e1e"
+      },      
+      {
         "id": "static_svg",
         "file": "Static.svg",
+        "menuId": 900,
         "size": 26442,
         "hash": "288f967cfb02138d"
-      },
-      {
-        "id": "temporal_deck",
-        "file": "TemporalDeck.png",
-        "size": 537560,
-        "hash": "5ac733ac8ee72d32"
       }
     ]
   }

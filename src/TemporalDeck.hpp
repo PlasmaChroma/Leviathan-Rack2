@@ -144,6 +144,7 @@ struct TemporalDeck final : Module {
 
   int getBufferDurationMode() const;
   bool isBufferModeMono() const;
+  bool consumePendingInitialPlatterArtSelection();
   int getPlatterArtMode() const;
   void setPlatterArtMode(int mode);
   int getPlatterBrightnessMode() const;

@@ -2588,6 +2588,7 @@ struct TemporalDeck::Impl {
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
+  bool pendingInitialPlatterArtSelection = true;
 };
 
 struct ProcessSignalInputs {
@@ -2799,6 +2800,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (!root) {
     return;
   }
+  impl->pendingInitialPlatterArtSelection = false;
   json_t *freezeJ = json_object_get(root, "freezeLatched");
   json_t *reverseJ = json_object_get(root, "reverseLatched");
   json_t *slipJ = json_object_get(root, "slipLatched");
@@ -3255,6 +3257,14 @@ int TemporalDeck::getBufferDurationMode() const {
 
 bool TemporalDeck::isBufferModeMono() const {
   return isMonoBufferMode(clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1));
+}
+
+bool TemporalDeck::consumePendingInitialPlatterArtSelection() {
+  if (!impl->pendingInitialPlatterArtSelection) {
+    return false;
+  }
+  impl->pendingInitialPlatterArtSelection = false;
+  return true;
 }
 
 int TemporalDeck::getPlatterArtMode() const {
