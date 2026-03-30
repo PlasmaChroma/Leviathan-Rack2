@@ -564,9 +564,9 @@ static const char *kVinylExpansionBaseUrl =
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
 
-static std::string expandedVinylRootPath() { return system::join(asset::user(), "TemporalDeck/expanded_vinyl"); }
+static std::string expandedVinylRootPath() { return system::join(asset::user(), "TemporalDeck/Vinyl"); }
 
-static std::string expandedVinylInventoryPath() { return system::join(expandedVinylRootPath(), "inventory.json"); }
+static std::string expandedVinylInventoryPath() { return system::join(expandedVinylRootPath(), "expanded.json"); }
 
 static std::string inventoryAbsolutePath(const VinylInventoryEntry &entry) {
   return system::join(entry.sourceRootPath, joinInventoryRelativePath(entry.basePath, entry.file));
@@ -1306,13 +1306,13 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
   json_t *root = json_load_file(inventoryPath.c_str(), 0, &error);
   if (!root) {
     if (errorOut) {
-      *errorOut = string::f("Failed to parse downloaded inventory.json (line %d): %s", error.line, error.text);
+      *errorOut = string::f("Failed to parse downloaded expanded.json (line %d): %s", error.line, error.text);
     }
     return false;
   }
   if (!json_is_object(root)) {
     if (errorOut) {
-      *errorOut = "Downloaded inventory.json root must be an object";
+      *errorOut = "Downloaded expanded.json root must be an object";
     }
     json_decref(root);
     return false;
@@ -1322,7 +1322,7 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
   json_t *vinylJ = json_object_get(root, "vinyl");
   if (!json_is_array(vinylJ)) {
     if (errorOut) {
-      *errorOut = "Downloaded inventory.json must contain a vinyl[] array";
+      *errorOut = "Downloaded expanded.json must contain a vinyl[] array";
     }
     json_decref(root);
     return false;
@@ -1371,12 +1371,12 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     return false;
   }
 
-  const std::string inventoryPath = system::join(tempRoot, "inventory.json");
-  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/inventory.json";
+  const std::string inventoryPath = system::join(tempRoot, "expanded.json");
+  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/expanded.json";
   if (!network::requestDownload(inventoryUrl, inventoryPath)) {
     system::removeRecursively(tempRoot);
     if (errorOut) {
-      *errorOut = "Failed to download expanded inventory.json";
+      *errorOut = "Failed to download expanded.json";
     }
     return false;
   }
@@ -2610,42 +2610,6 @@ struct TemporalDeckWidget : ModuleWidget {
     assert(menu);
     menu->addChild(new MenuSeparator());
     if (module) {
-      menu->addChild(createMenuLabel("Sample"));
-      std::string loadedSampleName = module->getLoadedSampleDisplayName();
-      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
-      menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
-        osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
-        char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
-        osdialog_filters_free(filters);
-        if (!pathC) {
-          return;
-        }
-        std::string path = pathC;
-        std::free(pathC);
-        std::string error;
-        if (!module->loadSampleFromPath(path, &error)) {
-          std::string message = error.empty() ? "Sample load failed" : error;
-          osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
-        }
-      }));
-      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
-      menu->addChild(createCheckMenuItem("Auto-play on load", "",
-                                         [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
-                                         [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
-      menu->addChild(createCheckMenuItem("Loop sample", "", [=]() { return module->isSampleLoopEnabled(); },
-                                         [=]() { module->setSampleLoopEnabled(!module->isSampleLoopEnabled()); },
-                                         !module->hasLoadedSample()));
-      if (module->hasLoadedSample()) {
-        menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
-          submenu->addChild(createMenuLabel(loadedSampleName));
-          submenu->addChild(createMenuLabel(
-            string::f("Length: %.2f s", std::max(0.0, module->getUiSampleDurationSeconds()))));
-          if (module->wasLoadedSampleTruncated()) {
-            submenu->addChild(createMenuLabel("Truncated to current buffer limit"));
-          }
-        }));
-      }
-      menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Advanced"));
       if (!module->isSampleModeEnabled()) {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
@@ -2899,6 +2863,43 @@ struct TemporalDeckWidget : ModuleWidget {
             return;
           }
           osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, string::f("Saved platter SVG:\n%s", path.c_str()).c_str());
+        }));
+      }
+
+      menu->addChild(new MenuSeparator());
+      menu->addChild(createMenuLabel("Sample"));
+      std::string loadedSampleName = module->getLoadedSampleDisplayName();
+      std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
+      menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
+        osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
+        char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+        osdialog_filters_free(filters);
+        if (!pathC) {
+          return;
+        }
+        std::string path = pathC;
+        std::free(pathC);
+        std::string error;
+        if (!module->loadSampleFromPath(path, &error)) {
+          std::string message = error.empty() ? "Sample load failed" : error;
+          osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+        }
+      }));
+      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
+      menu->addChild(createCheckMenuItem("Auto-play on load", "",
+                                         [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
+                                         [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
+      menu->addChild(createCheckMenuItem("Loop sample", "", [=]() { return module->isSampleLoopEnabled(); },
+                                         [=]() { module->setSampleLoopEnabled(!module->isSampleLoopEnabled()); },
+                                         !module->hasLoadedSample()));
+      if (module->hasLoadedSample()) {
+        menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
+          submenu->addChild(createMenuLabel(loadedSampleName));
+          submenu->addChild(
+            createMenuLabel(string::f("Length: %.2f s", std::max(0.0, module->getUiSampleDurationSeconds()))));
+          if (module->wasLoadedSampleTruncated()) {
+            submenu->addChild(createMenuLabel("Truncated to current buffer limit"));
+          }
         }));
       }
     }
