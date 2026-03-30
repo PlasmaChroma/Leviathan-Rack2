@@ -1,0 +1,67 @@
+{
+  "type": "TemporalDeckVinylInventory",
+  "version": 1,
+  "basePath": "res/Vinyl",
+  "vinyl": [
+    {
+      "id": "blank",
+      "label": "Blank",
+      "file": "Blank.png",
+      "format": "png",
+      "menuVisible": true
+    },
+    {
+      "id": "dragon_king",
+      "label": "Dragon King",
+      "file": "DragonKingLeviathan.png",
+      "format": "png",
+      "menuVisible": true
+    },
+    {
+      "id": "static_svg",
+      "label": "Built-in SVG",
+      "file": "Static.svg",
+      "format": "svg",
+      "menuVisible": false
+    },
+    {
+      "id": "temporal_deck",
+      "label": "Temporal Deck",
+      "file": "TemporalDeck.png",
+      "format": "png",
+      "menuVisible": true
+    }
+  ],
+  "signed": {
+    "algorithm": "fnv1a64-keyed-v1",
+    "generatedUnix": 1774838953,
+    "keyId": "634a89de67ed723a",
+    "signature": "42b715fc30059d6a",
+    "files": [
+      {
+        "id": "blank",
+        "path": "res/Vinyl/Blank.png",
+        "size": 268693,
+        "hash": "4f74d11669369e1e"
+      },
+      {
+        "id": "dragon_king",
+        "path": "res/Vinyl/DragonKingLeviathan.png",
+        "size": 372366,
+        "hash": "caabaccf9e0ad0e6"
+      },
+      {
+        "id": "static_svg",
+        "path": "res/Vinyl/Static.svg",
+        "size": 26442,
+        "hash": "288f967cfb02138d"
+      },
+      {
+        "id": "temporal_deck",
+        "path": "res/Vinyl/TemporalDeck.png",
+        "size": 537560,
+        "hash": "5ac733ac8ee72d32"
+      }
+    ]
+  }
+}

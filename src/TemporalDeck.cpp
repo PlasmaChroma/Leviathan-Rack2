@@ -16,6 +16,55 @@
 #include <utility>
 #include <vector>
 
+// C++11/MinGW can require out-of-class definitions for constexpr static members
+// when they are ODR-used.
+constexpr int TemporalDeck::CARTRIDGE_CLEAN;
+constexpr int TemporalDeck::CARTRIDGE_M44_7;
+constexpr int TemporalDeck::CARTRIDGE_ORTOFON_SCRATCH;
+constexpr int TemporalDeck::CARTRIDGE_STANTON_680HP;
+constexpr int TemporalDeck::CARTRIDGE_QBERT;
+constexpr int TemporalDeck::CARTRIDGE_LOFI;
+constexpr int TemporalDeck::CARTRIDGE_COUNT;
+
+constexpr int TemporalDeck::SCRATCH_INTERP_CUBIC;
+constexpr int TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
+constexpr int TemporalDeck::SCRATCH_INTERP_SINC;
+constexpr int TemporalDeck::SCRATCH_INTERP_COUNT;
+
+constexpr int TemporalDeck::SLIP_RETURN_SLOW;
+constexpr int TemporalDeck::SLIP_RETURN_NORMAL;
+constexpr int TemporalDeck::SLIP_RETURN_INSTANT;
+constexpr int TemporalDeck::SLIP_RETURN_COUNT;
+
+constexpr int TemporalDeck::BUFFER_DURATION_10S;
+constexpr int TemporalDeck::BUFFER_DURATION_20S;
+constexpr int TemporalDeck::BUFFER_DURATION_10M_STEREO;
+constexpr int TemporalDeck::BUFFER_DURATION_10M_MONO;
+constexpr int TemporalDeck::BUFFER_DURATION_COUNT;
+
+constexpr int TemporalDeck::SAMPLE_SOURCE_LIVE;
+constexpr int TemporalDeck::SAMPLE_SOURCE_FILE;
+
+constexpr int TemporalDeck::PLATTER_ART_BUILTIN_SVG;
+constexpr int TemporalDeck::PLATTER_ART_DRAGON_KING;
+constexpr int TemporalDeck::PLATTER_ART_PROCEDURAL;
+constexpr int TemporalDeck::PLATTER_ART_CUSTOM;
+constexpr int TemporalDeck::PLATTER_ART_BLANK;
+constexpr int TemporalDeck::PLATTER_ART_TEMPORAL_DECK;
+constexpr int TemporalDeck::PLATTER_ART_MODE_COUNT;
+
+constexpr int TemporalDeck::PLATTER_BRIGHTNESS_FULL;
+constexpr int TemporalDeck::PLATTER_BRIGHTNESS_MEDIUM;
+constexpr int TemporalDeck::PLATTER_BRIGHTNESS_LOW;
+constexpr int TemporalDeck::PLATTER_BRIGHTNESS_COUNT;
+
+constexpr float TemporalDeck::kNominalPlatterRpm;
+constexpr float TemporalDeck::kMouseScratchTravelScale;
+constexpr float TemporalDeck::kWheelScratchTravelScale;
+constexpr float TemporalDeck::kUiPublishRateHz;
+constexpr float TemporalDeck::kUiPublishIntervalSec;
+constexpr int TemporalDeck::kArcLightCount;
+
 namespace {
 using temporaldeck_modes::isMonoBufferMode;
 using temporaldeck_modes::realBufferSecondsForMode;
@@ -2496,8 +2545,10 @@ struct TemporalDeck::Impl {
   dsp::SchmittTrigger cartridgeCycleTrigger;
   float cachedSampleRate = 0.f;
   bool freezeLatched = false;
+  bool freezeLatchedByButton = false;
   bool reverseLatched = false;
   bool slipLatched = false;
+  bool prevFreezeGateHigh = false;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
   bool sampleAutoPlayOnLoad = true;
@@ -2576,9 +2627,9 @@ static void writeFrameOutputs(TemporalDeck &module, const TemporalDeckEngine::Fr
   module.outputs[TemporalDeck::S_POS_O_OUTPUT].setVoltage(frame.scratchPosOut);
 }
 
-static void updateTransportModeLights(TemporalDeck &module, bool freezeLatched, bool reverseLatched, bool slipLatched,
+static void updateTransportModeLights(TemporalDeck &module, bool freezeActive, bool reverseLatched, bool slipLatched,
                                       int slipReturnMode) {
-  module.lights[TemporalDeck::FREEZE_LIGHT].setBrightness(freezeLatched ? 1.f : 0.f);
+  module.lights[TemporalDeck::FREEZE_LIGHT].setBrightness(freezeActive ? 1.f : 0.f);
   module.lights[TemporalDeck::REVERSE_LIGHT].setBrightness(reverseLatched ? 1.f : 0.f);
   if (!slipLatched) {
     module.lights[TemporalDeck::SLIP_SLOW_LIGHT].setBrightness(0.f);
@@ -2765,6 +2816,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
     impl->freezeLatched = json_boolean_value(freezeJ);
+    impl->freezeLatchedByButton = impl->freezeLatched;
   }
   if (reverseJ) {
     impl->reverseLatched = json_boolean_value(reverseJ);
@@ -2840,6 +2892,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
     bool next = !impl->freezeLatched;
     impl->freezeLatched = next;
+    impl->freezeLatchedByButton = next;
     if (next) {
       impl->reverseLatched = false;
       impl->slipLatched = false;
@@ -2850,6 +2903,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->reverseLatched = next;
     if (next) {
       impl->freezeLatched = false;
+      impl->freezeLatchedByButton = false;
       impl->slipLatched = false;
       if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
         // In sample mode, REV should have immediate transport effect.
@@ -2863,14 +2917,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
       impl->slipLatched = true;
       impl->slipReturnMode = SLIP_RETURN_SLOW;
       impl->freezeLatched = false;
+      impl->freezeLatchedByButton = false;
       impl->reverseLatched = false;
     } else if (impl->slipReturnMode == SLIP_RETURN_SLOW) {
       impl->slipReturnMode = SLIP_RETURN_NORMAL;
       impl->freezeLatched = false;
+      impl->freezeLatchedByButton = false;
       impl->reverseLatched = false;
     } else if (impl->slipReturnMode == SLIP_RETURN_NORMAL) {
       impl->slipReturnMode = SLIP_RETURN_INSTANT;
       impl->freezeLatched = false;
+      impl->freezeLatchedByButton = false;
       impl->reverseLatched = false;
     } else {
       impl->slipLatched = false;
@@ -2890,6 +2947,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool scratchGateHigh = signalIn.scratchGateHigh;
   bool scratchGateConnected = signalIn.scratchGateConnected;
   bool positionConnected = signalIn.positionConnected;
+  bool freezeGateFallingEdge = impl->prevFreezeGateHigh && !freezeGateHigh;
+  impl->prevFreezeGateHigh = freezeGateHigh;
+  if (freezeGateFallingEdge && impl->freezeLatched && impl->freezeLatchedByButton) {
+    impl->freezeLatched = false;
+    impl->freezeLatchedByButton = false;
+  }
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
@@ -2972,18 +3035,20 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   if (frame.autoFreezeRequested && !impl->freezeLatched && !freezeGateHigh) {
     impl->freezeLatched = true;
+    impl->freezeLatchedByButton = false;
     impl->reverseLatched = false;
     impl->slipLatched = false;
   }
 
   writeFrameOutputs(*this, frame);
-  updateTransportModeLights(*this, impl->freezeLatched, impl->reverseLatched, impl->slipLatched,
+  bool freezeActive = impl->freezeLatched || freezeGateHigh;
+  updateTransportModeLights(*this, freezeActive, impl->reverseLatched, impl->slipLatched,
                             impl->slipReturnMode);
   impl->uiPlatterAngle.store(frame.platterAngle, std::memory_order_relaxed);
   impl->uiLagSamples.store(frame.lag, std::memory_order_relaxed);
   impl->uiAccessibleLagSamples.store(frame.accessibleLag, std::memory_order_relaxed);
   impl->uiSampleRate.store(args.sampleRate, std::memory_order_relaxed);
-  impl->uiFreezeLatched.store(impl->freezeLatched, std::memory_order_relaxed);
+  impl->uiFreezeLatched.store(freezeActive, std::memory_order_relaxed);
   impl->uiSampleModeEnabled.store(frame.sampleMode, std::memory_order_relaxed);
   impl->uiSampleLoaded.store(frame.sampleLoaded, std::memory_order_relaxed);
   impl->uiSampleTransportPlaying.store(frame.sampleTransportPlaying, std::memory_order_relaxed);
@@ -3143,6 +3208,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   }
   impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
   impl->freezeLatched = !autoPlayOnLoad;
+  impl->freezeLatchedByButton = false;
   impl->reverseLatched = false;
   impl->slipLatched = false;
   impl->pendingSampleStateApply.store(true);
@@ -3262,6 +3328,7 @@ void TemporalDeck::setSlipLatched(bool enabled) {
   impl->slipLatched = enabled;
   if (enabled) {
     impl->freezeLatched = false;
+    impl->freezeLatchedByButton = false;
     impl->reverseLatched = false;
   }
 }
