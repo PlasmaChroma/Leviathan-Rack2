@@ -580,6 +580,7 @@ static std::atomic<bool> gExpandedVinylDownloadRunning {false};
 static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
 static std::mutex gExpandedVinylDownloadResultMutex;
 static std::string gExpandedVinylDownloadResultError;
+static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
 
 static bool isExpandedVinylSyncActive() {
   return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
@@ -1422,6 +1423,9 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
 
   const std::string finalRoot = expandedVinylRootPath();
   const std::string tempRoot = finalRoot + ".tmp";
+  long long syncMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+  uint64_t syncSeq = gExpandedVinylSyncNonceSeq.fetch_add(1, std::memory_order_relaxed);
+  const std::string cacheBuster = string::f("tdcb=%lld_%llu", syncMs, (unsigned long long)syncSeq);
   system::removeRecursively(tempRoot);
   if (!system::createDirectories(tempRoot)) {
     if (errorOut) {
@@ -1431,7 +1435,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
 
   const std::string inventoryPath = system::join(tempRoot, "expanded.json");
-  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/expanded.json";
+  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/expanded.json?" + cacheBuster;
   if (!network::requestDownload(inventoryUrl, inventoryPath)) {
     system::removeRecursively(tempRoot);
     if (errorOut) {
@@ -1447,7 +1451,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
   for (const std::string &fileName : plan.files) {
     std::string encodedFile = network::encodeUrl(fileName);
-    std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile;
+    std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
     std::string filePath = system::join(tempRoot, fileName);
     if (!network::requestDownload(fileUrl, filePath)) {
       system::removeRecursively(tempRoot);
@@ -1515,7 +1519,7 @@ static void pumpExpandedVinylDownloadNotifications() {
     gExpandedVinylDownloadResultError.clear();
   }
   if (!error.empty()) {
-    osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+    WARN("TemporalDeck: Vinyl library sync failed: %s", error.c_str());
   }
 }
 
@@ -2724,10 +2728,12 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createMenuLabel("Advanced"));
       menu->addChild(createSubmenuItem("Vinyl", "", [=](Menu *submenu) {
         bool dragonKingDebug = isDragonKingDebugEnabled();
-        const VinylInventoryState &coreInventoryState = getBuiltInVinylInventoryState();
-        const VinylInventoryState &expandedInventoryState = getExpandedVinylInventoryState();
         const VinylInventoryState &inventoryState = getVinylInventoryState();
-        submenu->addChild(createMenuLabel(string::f("Core: %s", vinylInventoryTrustStatusLabel(coreInventoryState).c_str())));
+        bool downloadRunning = isExpandedVinylDownloadRunning();
+        submenu->addChild(createMenuItem("Sync Vinyl Library", downloadRunning ? "Syncing..." : "", [=]() {
+          startExpandedVinylDownloadAsync(nullptr);
+        }, downloadRunning));
+        submenu->addChild(createMenuLabel(string::f("Library: %s", vinylInventoryTrustStatusLabel(inventoryState).c_str())));
         if (!inventoryState.valid) {
           module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
           if (!inventoryState.error.empty()) {
@@ -2766,9 +2772,6 @@ struct TemporalDeckWidget : ModuleWidget {
           }
         }
         std::vector<const VinylInventoryEntry *> expandedEntries = visibleExpandedVinylEntriesFromInventory();
-        submenu->addChild(new MenuSeparator());
-        submenu->addChild(
-          createMenuLabel(string::f("Expanded: %s", vinylInventoryTrustStatusLabel(expandedInventoryState).c_str())));
         if (!expandedEntries.empty()) {
           for (const VinylInventoryEntry *entry : expandedEntries) {
             if (!entry) {
@@ -2796,15 +2799,6 @@ struct TemporalDeckWidget : ModuleWidget {
           }
         }
         submenu->addChild(new MenuSeparator());
-        bool downloadRunning = isExpandedVinylDownloadRunning();
-        submenu->addChild(createMenuItem("Sync Vinyl Library", downloadRunning ? "Syncing..." : "", [=]() {
-          std::string error;
-          if (!startExpandedVinylDownloadAsync(&error)) {
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
-                             error.empty() ? "Failed to download Vinyl expansion" : error.c_str());
-            return;
-          }
-        }, downloadRunning));
         submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
           for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
             brightnessMenu->addChild(createCheckMenuItem(
