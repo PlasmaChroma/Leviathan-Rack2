@@ -1,18 +1,26 @@
 #include "TemporalDeck.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <mutex>
 #include <regex>
 #include <set>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #include <osdialog.h>
+
+static bool isExpandedVinylSyncActive();
+static bool isExpandedVinylDownloadRunning();
+static bool startExpandedVinylDownloadAsync(std::string *errorOut);
+static void pumpExpandedVinylDownloadNotifications();
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -253,7 +261,8 @@ float TemporalDeckPlatterWidget::lowFpsCompensationFactor() const {
 }
 
 void TemporalDeckPlatterWidget::drawLowFpsWarning(const DrawArgs &args, Vec center) const {
-  if (!lowFpsWarningActive || !APP || !APP->window || !APP->window->uiFont) {
+  bool showSync = isExpandedVinylSyncActive();
+  if ((!showSync && !lowFpsWarningActive) || !APP || !APP->window || !APP->window->uiFont) {
     return;
   }
   (void)center;
@@ -263,8 +272,13 @@ void TemporalDeckPlatterWidget::drawLowFpsWarning(const DrawArgs &args, Vec cent
   nvgFontFaceId(args.vg, APP->window->uiFont->handle);
   nvgFontSize(args.vg, 10.f);
   nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-  nvgFillColor(args.vg, nvgRGBA(255, 178, 82, 240));
-  nvgText(args.vg, warningPos.x, warningPos.y, string::f("LOW UI FPS: %.0f", uiFpsDisplayHz).c_str(), nullptr);
+  if (showSync) {
+    nvgFillColor(args.vg, nvgRGBA(120, 220, 255, 245));
+    nvgText(args.vg, warningPos.x, warningPos.y, "SYNC", nullptr);
+  } else {
+    nvgFillColor(args.vg, nvgRGBA(255, 178, 82, 240));
+    nvgText(args.vg, warningPos.x, warningPos.y, string::f("LOW UI FPS: %.0f", uiFpsDisplayHz).c_str(), nullptr);
+  }
   nvgRestore(args.vg);
 }
 
@@ -561,6 +575,19 @@ static std::string joinInventoryRelativePath(const std::string &basePath, const 
 static constexpr int kExpandedMenuIdOffset = 10000;
 static const char *kVinylExpansionBaseUrl =
   "https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/main/Vinyl";
+static std::atomic<int> gExpandedVinylSyncDepth {0};
+static std::atomic<bool> gExpandedVinylDownloadRunning {false};
+static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
+static std::mutex gExpandedVinylDownloadResultMutex;
+static std::string gExpandedVinylDownloadResultError;
+
+static bool isExpandedVinylSyncActive() {
+  return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
+}
+
+static bool isExpandedVinylDownloadRunning() {
+  return gExpandedVinylDownloadRunning.load(std::memory_order_relaxed);
+}
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
 
@@ -941,18 +968,19 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
   appendEntries(expanded, true);
 
   merged.signaturePresent = builtIn.signaturePresent || expanded.signaturePresent;
-  merged.signatureVerified = true;
+  merged.signatureVerified = (merged.verifiedEntryCount == int(merged.entries.size()));
   std::vector<std::string> signatureErrors;
-  if (builtIn.valid && builtIn.signaturePresent && !builtIn.signatureVerified) {
-    merged.signatureVerified = false;
+  if (builtIn.valid && !builtIn.signatureVerified) {
     signatureErrors.push_back("Built-in: " + builtIn.signatureError);
   }
-  if (expanded.valid && !expanded.entries.empty() && expanded.signaturePresent && !expanded.signatureVerified) {
-    merged.signatureVerified = false;
+  if (expanded.valid && !expanded.entries.empty() && !expanded.signatureVerified) {
     signatureErrors.push_back("Expanded: " + expanded.signatureError);
   }
   if (!signatureErrors.empty()) {
     merged.signatureError = signatureErrors.front();
+  } else if (!merged.signatureVerified) {
+    merged.signatureError = string::f("Only %d/%d vinyl entries verified", merged.verifiedEntryCount,
+                                      int(merged.entries.size()));
   }
   if (!builtIn.valid) {
     merged.error = builtIn.error;
@@ -962,16 +990,17 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
   return merged;
 }
 
-static int gVinylInventoryCacheSerial = 0;
+static std::atomic<int> gVinylInventoryCacheSerial {0};
 
-static void invalidateVinylInventoryCache() { ++gVinylInventoryCacheSerial; }
+static void invalidateVinylInventoryCache() { gVinylInventoryCacheSerial.fetch_add(1, std::memory_order_relaxed); }
 
 static const VinylInventoryState &getBuiltInVinylInventoryState() {
   static int cachedSerial = -1;
   static VinylInventoryState state;
-  if (cachedSerial != gVinylInventoryCacheSerial) {
+  int serial = gVinylInventoryCacheSerial.load(std::memory_order_relaxed);
+  if (cachedSerial != serial) {
     state = loadBuiltInVinylInventoryState();
-    cachedSerial = gVinylInventoryCacheSerial;
+    cachedSerial = serial;
   }
   return state;
 }
@@ -979,9 +1008,10 @@ static const VinylInventoryState &getBuiltInVinylInventoryState() {
 static const VinylInventoryState &getExpandedVinylInventoryState() {
   static int cachedSerial = -1;
   static VinylInventoryState state;
-  if (cachedSerial != gVinylInventoryCacheSerial) {
+  int serial = gVinylInventoryCacheSerial.load(std::memory_order_relaxed);
+  if (cachedSerial != serial) {
     state = loadExpandedVinylInventoryState();
-    cachedSerial = gVinylInventoryCacheSerial;
+    cachedSerial = serial;
   }
   return state;
 }
@@ -989,9 +1019,10 @@ static const VinylInventoryState &getExpandedVinylInventoryState() {
 static const VinylInventoryState &getVinylInventoryState() {
   static int cachedSerial = -1;
   static VinylInventoryState state;
-  if (cachedSerial != gVinylInventoryCacheSerial) {
+  int serial = gVinylInventoryCacheSerial.load(std::memory_order_relaxed);
+  if (cachedSerial != serial) {
     state = mergeVinylInventoryStates(getBuiltInVinylInventoryState(), getExpandedVinylInventoryState());
-    cachedSerial = gVinylInventoryCacheSerial;
+    cachedSerial = serial;
   }
   static bool warned = false;
   if (warned) {
@@ -1011,31 +1042,29 @@ static const VinylInventoryState &getVinylInventoryState() {
 }
 
 static std::string vinylInventoryTrustStatusLabel(const VinylInventoryState &state) {
-  if (!state.valid) {
-    return "Inventory invalid";
-  }
   int total = 0;
   int verified = 0;
-  for (const VinylInventoryEntry &entry : state.entries) {
-    if (!entry.menuVisible) {
-      continue;
+  if (state.valid) {
+    for (const VinylInventoryEntry &entry : state.entries) {
+      if (!entry.menuVisible) {
+        continue;
+      }
+      ++total;
+      if (entry.signatureVerified) {
+        ++verified;
+      }
     }
-    ++total;
-    if (entry.signatureVerified) {
-      ++verified;
+    if (total <= 0) {
+      total = int(state.entries.size());
+      verified = state.verifiedEntryCount;
     }
-  }
-  if (total <= 0) {
+  } else {
     total = int(state.entries.size());
     verified = state.verifiedEntryCount;
   }
-  if (!state.signaturePresent) {
-    return string::f("Inventory unsigned (%d/%d verified)", verified, total);
-  }
-  if (verified == total) {
-    return string::f("Inventory verified (%d/%d)", verified, total);
-  }
-  return string::f("Inventory partial (%d/%d verified)", verified, total);
+  total = std::max(total, 0);
+  verified = clamp(verified, 0, total);
+  return string::f("(%d/%d verified)", verified, total);
 }
 
 static const VinylInventoryEntry *findVinylInventoryEntryById(const std::string &id) {
@@ -1171,6 +1200,31 @@ static std::vector<const VinylInventoryEntry *> visibleExpandedVinylEntriesFromI
     return a->label < b->label;
   });
   return entries;
+}
+
+static std::string normalizedPathForCompare(std::string path) {
+  std::replace(path.begin(), path.end(), '\\', '/');
+#if defined ARCH_WIN
+  std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+#endif
+  return path;
+}
+
+static const VinylInventoryEntry *findExpandedVinylEntryByAbsolutePath(const std::string &absolutePath) {
+  const VinylInventoryState &state = getVinylInventoryState();
+  if (!state.valid) {
+    return nullptr;
+  }
+  std::string needle = normalizedPathForCompare(absolutePath);
+  for (const VinylInventoryEntry &entry : state.entries) {
+    if (entry.source != VINYL_SOURCE_EXPANDED) {
+      continue;
+    }
+    if (normalizedPathForCompare(entry.absolutePath) == needle) {
+      return &entry;
+    }
+  }
+  return nullptr;
 }
 
 static bool hashFileFnv64(const std::string &path, uint64_t *hashOut, uint64_t *sizeOut, std::string *errorOut) {
@@ -1361,6 +1415,11 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
 }
 
 static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCountOut) {
+  struct ScopedExpandedVinylSync {
+    ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_add(1, std::memory_order_relaxed); }
+    ~ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_sub(1, std::memory_order_relaxed); }
+  } scopedExpandedVinylSync;
+
   const std::string finalRoot = expandedVinylRootPath();
   const std::string tempRoot = finalRoot + ".tmp";
   system::removeRecursively(tempRoot);
@@ -1416,6 +1475,48 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
   invalidateVinylInventoryCache();
   return true;
+}
+
+static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
+  bool expected = false;
+  if (!gExpandedVinylDownloadRunning.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+    if (errorOut) {
+      *errorOut = "Vinyl expansion sync already in progress";
+    }
+    return false;
+  }
+  gExpandedVinylDownloadResultPending.store(false, std::memory_order_relaxed);
+  {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
+    gExpandedVinylDownloadResultError.clear();
+  }
+  std::thread([]() {
+    std::string error;
+    int fileCount = 0;
+    bool ok = downloadExpandedVinylInventory(&error, &fileCount);
+    {
+      std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
+      gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+    }
+    gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
+    gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
+  }).detach();
+  return true;
+}
+
+static void pumpExpandedVinylDownloadNotifications() {
+  if (!gExpandedVinylDownloadResultPending.exchange(false, std::memory_order_relaxed)) {
+    return;
+  }
+  std::string error;
+  {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
+    error = gExpandedVinylDownloadResultError;
+    gExpandedVinylDownloadResultError.clear();
+  }
+  if (!error.empty()) {
+    osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+  }
 }
 
 static bool writeSignedVinylManifest(const std::string &path, const VinylInventoryState &inventory, int sourceFilter,
@@ -1809,7 +1910,8 @@ Vec TemporalDeckDisplayWidget::sampleLoopIconCenter() const {
 
 bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
   Vec c = sampleLoopIconCenter();
-  return std::fabs(panelPos.x - c.x) <= 7.2f && std::fabs(panelPos.y - c.y) <= 4.8f;
+  constexpr float kLoopIconScale = 1.35f;
+  return std::fabs(panelPos.x - c.x) <= 7.2f * kLoopIconScale && std::fabs(panelPos.y - c.y) <= 4.8f * kLoopIconScale;
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
@@ -1866,11 +1968,12 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       bool loopEnabled = module->isSampleLoopEnabled();
       NVGcolor loopColor = loopEnabled ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(120, 120, 120, 255);
       Vec loopCenter = sampleLoopIconCenter();
-      float loopHalfW = 4.25f;
-      float loopHalfH = 2.55f;
-      float neck = 1.7f;
+      constexpr float kLoopIconScale = 1.35f;
+      float loopHalfW = 4.25f * kLoopIconScale;
+      float loopHalfH = 2.55f * kLoopIconScale;
+      float neck = 1.7f * kLoopIconScale;
       nvgStrokeColor(args.vg, loopColor);
-      nvgStrokeWidth(args.vg, 1.2f);
+      nvgStrokeWidth(args.vg, 1.2f * kLoopIconScale);
       nvgLineCap(args.vg, NVG_ROUND);
       nvgLineJoin(args.vg, NVG_ROUND);
       nvgBeginPath(args.vg);
@@ -2060,6 +2163,7 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
 }
 
 void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
+  pumpExpandedVinylDownloadNotifications();
   syncTraceCaptureState();
   pollMiddleQuickSlipTrigger();
   updateUiFpsTracking();
@@ -2076,6 +2180,13 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
       !isInventoryPlatterArtModeVerified(artMode)) {
     module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
     artMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
+  }
+  if (module && artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+    const VinylInventoryEntry *expandedEntry = findExpandedVinylEntryByAbsolutePath(module->getCustomPlatterArtPath());
+    if (expandedEntry && !expandedEntry->signatureVerified) {
+      module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+      artMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
+    }
   }
 
   // Primary platter render path is selectable: built-in SVG, custom file, or
@@ -2611,6 +2722,140 @@ struct TemporalDeckWidget : ModuleWidget {
     menu->addChild(new MenuSeparator());
     if (module) {
       menu->addChild(createMenuLabel("Advanced"));
+      menu->addChild(createSubmenuItem("Vinyl", "", [=](Menu *submenu) {
+        bool dragonKingDebug = isDragonKingDebugEnabled();
+        const VinylInventoryState &coreInventoryState = getBuiltInVinylInventoryState();
+        const VinylInventoryState &expandedInventoryState = getExpandedVinylInventoryState();
+        const VinylInventoryState &inventoryState = getVinylInventoryState();
+        submenu->addChild(createMenuLabel(string::f("Core: %s", vinylInventoryTrustStatusLabel(coreInventoryState).c_str())));
+        if (!inventoryState.valid) {
+          module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+          if (!inventoryState.error.empty()) {
+            submenu->addChild(createMenuLabel(inventoryState.error));
+          }
+          submenu->addChild(createMenuLabel("Platter art locked to Procedural"));
+          submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
+            for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
+              brightnessMenu->addChild(createCheckMenuItem(
+                TemporalDeck::platterBrightnessLabelFor(i), "",
+                [=]() { return module->getPlatterBrightnessMode() == i; },
+                [=]() { module->setPlatterBrightnessMode(i); }));
+            }
+          }));
+          return;
+        }
+
+        std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
+        if (visibleModes.empty()) {
+          submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
+        } else {
+          for (int mode : visibleModes) {
+            std::string modeLabel = vinylLabelForPlatterArtMode(mode);
+            bool modeVerified = isInventoryPlatterArtModeVerified(mode);
+            std::string rightText = modeVerified ? "" : "Signiture error";
+            submenu->addChild(createCheckMenuItem(
+              modeLabel, rightText, [=]() { return module->getPlatterArtMode() == mode; },
+              [=]() {
+                if (isInventoryPlatterArtModeVerified(mode)) {
+                  module->setPlatterArtMode(mode);
+                } else {
+                  module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+                }
+              },
+              !modeVerified));
+          }
+        }
+        std::vector<const VinylInventoryEntry *> expandedEntries = visibleExpandedVinylEntriesFromInventory();
+        submenu->addChild(new MenuSeparator());
+        submenu->addChild(
+          createMenuLabel(string::f("Expanded: %s", vinylInventoryTrustStatusLabel(expandedInventoryState).c_str())));
+        if (!expandedEntries.empty()) {
+          for (const VinylInventoryEntry *entry : expandedEntries) {
+            if (!entry) {
+              continue;
+            }
+            std::string absolutePath = inventoryAbsolutePath(*entry);
+            std::string rightText;
+            if (!entry->signatureVerified) {
+              rightText = "Signiture error";
+            }
+            submenu->addChild(createCheckMenuItem(
+              entry->label.empty() ? entry->id : entry->label, rightText,
+              [=]() {
+                return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM &&
+                       module->getCustomPlatterArtPath() == absolutePath;
+              },
+              [=]() {
+                if (entry->signatureVerified) {
+                  module->setCustomPlatterArtPath(absolutePath);
+                } else {
+                  module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+                }
+              },
+              !entry->signatureVerified || !system::isFile(absolutePath)));
+          }
+        }
+        submenu->addChild(new MenuSeparator());
+        bool downloadRunning = isExpandedVinylDownloadRunning();
+        submenu->addChild(createMenuItem("Sync Vinyl Library", downloadRunning ? "Syncing..." : "", [=]() {
+          std::string error;
+          if (!startExpandedVinylDownloadAsync(&error)) {
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+                             error.empty() ? "Failed to download Vinyl expansion" : error.c_str());
+            return;
+          }
+        }, downloadRunning));
+        submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
+          for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
+            brightnessMenu->addChild(createCheckMenuItem(
+              TemporalDeck::platterBrightnessLabelFor(i), "",
+              [=]() { return module->getPlatterBrightnessMode() == i; },
+              [=]() { module->setPlatterBrightnessMode(i); }));
+          }
+        }));
+        if (dragonKingDebug) {
+          int currentMode = module->getPlatterArtMode();
+          std::string customPath = module->getCustomPlatterArtPath();
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_CUSTOM),
+            customPath.empty() ? "No file" : "Loaded",
+            [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM; },
+            [=]() {
+              if (!module->getCustomPlatterArtPath().empty()) {
+                module->setPlatterArtMode(TemporalDeck::PLATTER_ART_CUSTOM);
+              }
+            },
+            customPath.empty()));
+          if (!customPath.empty()) {
+            submenu->addChild(createMenuLabel(system::getFilename(customPath)));
+          }
+          submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
+            osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG,jpg,JPG,jpeg,JPEG");
+            char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+            osdialog_filters_free(filters);
+            if (!pathC) {
+              return;
+            }
+            std::string path = pathC;
+            std::free(pathC);
+            if (!isSupportedPlatterArtPath(path)) {
+              osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG, PNG, and JPG/JPEG.");
+              return;
+            }
+            module->setCustomPlatterArtPath(path);
+          }));
+          submenu->addChild(createMenuItem("Clear custom art", "", [=]() { module->clearCustomPlatterArtPath(); },
+                                           customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
+        }
+      }));
+      menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeck::SCRATCH_INTERP_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::scratchInterpolationLabelFor(i), "",
+            [=]() { return module->getScratchInterpolationMode() == i; },
+            [=]() { module->setScratchInterpolationMode(i); }));
+        }
+      }));
       if (!module->isSampleModeEnabled()) {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
           auto bufferModeMenuLabel = [=](int mode) {
@@ -2645,137 +2890,6 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createSubmenuItem("Vinyl", "", [=](Menu *submenu) {
-        bool dragonKingDebug = isDragonKingDebugEnabled();
-        const VinylInventoryState &inventoryState = getVinylInventoryState();
-        submenu->addChild(createMenuLabel(vinylInventoryTrustStatusLabel(inventoryState)));
-        submenu->addChild(createMenuItem("Download Vinyl Expansion", "", [=]() {
-          std::string error;
-          int fileCount = 0;
-          if (!downloadExpandedVinylInventory(&error, &fileCount)) {
-            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
-                             error.empty() ? "Failed to download Vinyl expansion" : error.c_str());
-            return;
-          }
-          const VinylInventoryState &expandedState = getExpandedVinylInventoryState();
-          osdialog_message(
-            OSDIALOG_INFO, OSDIALOG_OK,
-            string::f("Downloaded Vinyl expansion to:\n%s\n\nFiles: %d\nStatus: %s", expandedVinylRootPath().c_str(),
-                      fileCount, vinylInventoryTrustStatusLabel(expandedState).c_str())
-              .c_str());
-        }));
-        if (!inventoryState.valid) {
-          module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
-          if (!inventoryState.error.empty()) {
-            submenu->addChild(createMenuLabel(inventoryState.error));
-          }
-          submenu->addChild(createMenuLabel("Platter art locked to Procedural"));
-          submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
-            for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
-              brightnessMenu->addChild(createCheckMenuItem(
-                TemporalDeck::platterBrightnessLabelFor(i), "",
-                [=]() { return module->getPlatterBrightnessMode() == i; },
-                [=]() { module->setPlatterBrightnessMode(i); }));
-            }
-          }));
-          return;
-        }
-
-        std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
-        if (visibleModes.empty()) {
-          submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
-        } else {
-          for (int mode : visibleModes) {
-            std::string modeLabel = vinylLabelForPlatterArtMode(mode);
-            std::string modeError;
-            bool modeVerified = isInventoryPlatterArtModeVerified(mode, &modeError);
-            std::string rightText = modeVerified ? "" : "Unverified";
-            submenu->addChild(createCheckMenuItem(
-              modeLabel, rightText, [=]() { return module->getPlatterArtMode() == mode; },
-              [=]() {
-                if (isInventoryPlatterArtModeVerified(mode)) {
-                  module->setPlatterArtMode(mode);
-                } else {
-                  module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
-                }
-              },
-              !modeVerified));
-            if (!modeVerified && !modeError.empty()) {
-              submenu->addChild(createMenuLabel(string::f("  %s", modeError.c_str())));
-            }
-          }
-        }
-        std::vector<const VinylInventoryEntry *> expandedEntries = visibleExpandedVinylEntriesFromInventory();
-        if (!expandedEntries.empty()) {
-          submenu->addChild(new MenuSeparator());
-          submenu->addChild(createMenuLabel("Expanded Vinyl"));
-          std::string currentCustomPath = module->getCustomPlatterArtPath();
-          for (const VinylInventoryEntry *entry : expandedEntries) {
-            if (!entry) {
-              continue;
-            }
-            std::string absolutePath = inventoryAbsolutePath(*entry);
-            std::string rightText;
-            if (!entry->signatureVerified) {
-              rightText = inventoryState.signaturePresent ? "Unverified" : "Unsigned";
-            }
-            submenu->addChild(createCheckMenuItem(
-              entry->label.empty() ? entry->id : entry->label, rightText,
-              [=]() {
-                return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM &&
-                       module->getCustomPlatterArtPath() == absolutePath;
-              },
-              [=]() { module->setCustomPlatterArtPath(absolutePath); },
-              !system::isFile(absolutePath)));
-          }
-        }
-        if (!inventoryState.signatureVerified && !inventoryState.signatureError.empty()) {
-          submenu->addChild(createMenuLabel(inventoryState.signatureError));
-        }
-        submenu->addChild(createSubmenuItem("Brightness", "", [=](Menu *brightnessMenu) {
-          for (int i = 0; i < TemporalDeck::PLATTER_BRIGHTNESS_COUNT; ++i) {
-            brightnessMenu->addChild(createCheckMenuItem(
-              TemporalDeck::platterBrightnessLabelFor(i), "",
-              [=]() { return module->getPlatterBrightnessMode() == i; },
-              [=]() { module->setPlatterBrightnessMode(i); }));
-          }
-        }));
-        if (dragonKingDebug) {
-          int currentMode = module->getPlatterArtMode();
-          std::string customPath = module->getCustomPlatterArtPath();
-          submenu->addChild(createCheckMenuItem(
-            TemporalDeck::platterArtModeLabelFor(TemporalDeck::PLATTER_ART_CUSTOM),
-            customPath.empty() ? "No file" : "Loaded",
-            [=]() { return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM; },
-            [=]() {
-              if (!module->getCustomPlatterArtPath().empty()) {
-                module->setPlatterArtMode(TemporalDeck::PLATTER_ART_CUSTOM);
-              }
-            },
-            customPath.empty()));
-          submenu->addChild(new MenuSeparator());
-          if (!customPath.empty()) {
-            submenu->addChild(createMenuLabel(system::getFilename(customPath)));
-          }
-          submenu->addChild(createMenuItem("Load custom art...", "", [=]() {
-            osdialog_filters *filters = osdialog_filters_parse("Image:svg,SVG,png,PNG,jpg,JPG,jpeg,JPEG");
-            char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
-            osdialog_filters_free(filters);
-            if (!pathC) {
-              return;
-            }
-            std::string path = pathC;
-            std::free(pathC);
-            if (!isSupportedPlatterArtPath(path)) {
-              osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Supported platter art formats are SVG, PNG, and JPG/JPEG.");
-              return;
-            }
-            module->setCustomPlatterArtPath(path);
-          }));
-          submenu->addChild(createMenuItem("Clear custom art", "", [=]() { module->clearCustomPlatterArtPath(); },
-                                           customPath.empty() && currentMode != TemporalDeck::PLATTER_ART_CUSTOM));
-        }
-      }));
       // Hidden for now, but keep the trace plumbing available in code in case
       // we need to bring back platter interaction logging for debugging.
       // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
@@ -2808,7 +2922,7 @@ struct TemporalDeckWidget : ModuleWidget {
                                      path.c_str(), signature.c_str(), fileCount)
                              .c_str());
         }));
-        menu->addChild(createMenuItem("Export signed expanded inventory.json...", "", [=]() {
+        menu->addChild(createMenuItem("Export signed expanded.json...", "", [=]() {
           const VinylInventoryState &expandedState = getExpandedVinylInventoryState();
           if (!expandedState.valid || expandedState.entries.empty()) {
             std::string msg = expandedState.valid ? "No expanded vinyl inventory entries to export"
@@ -2889,9 +3003,6 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createCheckMenuItem("Auto-play on load", "",
                                          [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
                                          [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
-      menu->addChild(createCheckMenuItem("Loop sample", "", [=]() { return module->isSampleLoopEnabled(); },
-                                         [=]() { module->setSampleLoopEnabled(!module->isSampleLoopEnabled()); },
-                                         !module->hasLoadedSample()));
       if (module->hasLoadedSample()) {
         menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
           submenu->addChild(createMenuLabel(loadedSampleName));
@@ -2902,16 +3013,6 @@ struct TemporalDeckWidget : ModuleWidget {
           }
         }));
       }
-    }
-    if (module) {
-      menu->addChild(createSubmenuItem("Scratch interpolation", "", [=](Menu *submenu) {
-        for (int i = 0; i < TemporalDeck::SCRATCH_INTERP_COUNT; ++i) {
-          submenu->addChild(createCheckMenuItem(
-            TemporalDeck::scratchInterpolationLabelFor(i), "",
-            [=]() { return module->getScratchInterpolationMode() == i; },
-            [=]() { module->setScratchInterpolationMode(i); }));
-        }
-      }));
     }
   }
 };
