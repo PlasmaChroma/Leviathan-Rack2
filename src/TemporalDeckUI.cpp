@@ -581,6 +581,7 @@ static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
 static std::mutex gExpandedVinylDownloadResultMutex;
 static std::string gExpandedVinylDownloadResultError;
 static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
+static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
 
 static bool isExpandedVinylSyncActive() {
   return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
@@ -1217,15 +1218,51 @@ static const VinylInventoryEntry *findExpandedVinylEntryByAbsolutePath(const std
     return nullptr;
   }
   std::string needle = normalizedPathForCompare(absolutePath);
+  const VinylInventoryEntry *firstMatch = nullptr;
   for (const VinylInventoryEntry &entry : state.entries) {
     if (entry.source != VINYL_SOURCE_EXPANDED) {
       continue;
     }
     if (normalizedPathForCompare(entry.absolutePath) == needle) {
-      return &entry;
+      if (!firstMatch) {
+        firstMatch = &entry;
+      }
+      if (entry.signatureVerified) {
+        return &entry;
+      }
     }
   }
-  return nullptr;
+  return firstMatch;
+}
+
+static std::string expandedArtLoadPath(const std::string &absolutePath) {
+  const VinylInventoryEntry *entry = findExpandedVinylEntryByAbsolutePath(absolutePath);
+  if (!entry) {
+    return absolutePath;
+  }
+  uint64_t salt = gExpandedVinylLoadSalt.load(std::memory_order_relaxed);
+  if (salt == 0) {
+    return absolutePath;
+  }
+  std::string normalized = absolutePath;
+  std::replace(normalized.begin(), normalized.end(), '\\', '/');
+  size_t slash = normalized.find_last_of('/');
+  if (slash == std::string::npos || slash + 1 >= normalized.size()) {
+    return absolutePath;
+  }
+  std::string dir = normalized.substr(0, slash);
+  std::string file = normalized.substr(slash + 1);
+  std::string alias = dir;
+  std::string saltDigits = std::to_string(salt);
+  for (char c : saltDigits) {
+    int reps = 1 + (c - '0');
+    for (int i = 0; i < reps; ++i) {
+      alias += "/.";
+    }
+  }
+  alias += "/";
+  alias += file;
+  return alias;
 }
 
 static bool hashFileFnv64(const std::string &path, uint64_t *hashOut, uint64_t *sizeOut, std::string *errorOut) {
@@ -1350,7 +1387,13 @@ static std::string ensureJsonExtension(std::string path) {
 static std::string lowercaseExtension(const std::string &path);
 
 struct VinylDownloadPlan {
-  std::vector<std::string> files;
+  struct FileItem {
+    std::string file;
+    bool hasSignature = false;
+    uint64_t signedSize = 0;
+    uint64_t signedHash = 0;
+  };
+  std::vector<FileItem> files;
 };
 
 static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloadPlan *planOut, std::string *errorOut) {
@@ -1386,6 +1429,7 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
   std::set<std::string> seenFiles;
   size_t i = 0;
   json_t *itemJ = nullptr;
+  std::vector<std::string> listedFiles;
   json_array_foreach(vinylJ, i, itemJ) {
     if (!json_is_object(itemJ)) {
       continue;
@@ -1401,7 +1445,56 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
     if (!seenFiles.insert(file).second) {
       continue;
     }
-    plan.files.push_back(file);
+    listedFiles.push_back(file);
+  }
+
+  struct SignedFileMeta {
+    uint64_t size = 0;
+    uint64_t hash = 0;
+  };
+  std::map<std::string, SignedFileMeta> signedByFile;
+  json_t *signedJ = json_object_get(root, "signed");
+  if (json_is_object(signedJ)) {
+    json_t *filesJ = json_object_get(signedJ, "files");
+    if (json_is_array(filesJ)) {
+      size_t fileIndex = 0;
+      json_t *fileJ = nullptr;
+      json_array_foreach(filesJ, fileIndex, fileJ) {
+        if (!json_is_object(fileJ)) {
+          continue;
+        }
+        json_t *fileNameJ = json_object_get(fileJ, "file");
+        json_t *sizeJ = json_object_get(fileJ, "size");
+        json_t *hashJ = json_object_get(fileJ, "hash");
+        if (!json_is_string(fileNameJ) || !json_is_integer(sizeJ) || !json_is_string(hashJ)) {
+          continue;
+        }
+        std::string file = trimAsciiWhitespace(json_string_value(fileNameJ));
+        if (!isSafeVinylFileName(file)) {
+          continue;
+        }
+        uint64_t parsedHash = 0;
+        if (!parseHexU64(json_string_value(hashJ), &parsedHash)) {
+          continue;
+        }
+        SignedFileMeta meta;
+        meta.size = uint64_t(std::max<json_int_t>(0, json_integer_value(sizeJ)));
+        meta.hash = parsedHash;
+        signedByFile[file] = meta;
+      }
+    }
+  }
+
+  for (const std::string &file : listedFiles) {
+    VinylDownloadPlan::FileItem item;
+    item.file = file;
+    auto it = signedByFile.find(file);
+    if (it != signedByFile.end()) {
+      item.hasSignature = true;
+      item.signedSize = it->second.size;
+      item.signedHash = it->second.hash;
+    }
+    plan.files.push_back(item);
   }
   json_decref(root);
   if (plan.files.empty()) {
@@ -1449,17 +1542,63 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     system::removeRecursively(tempRoot);
     return false;
   }
-  for (const std::string &fileName : plan.files) {
-    std::string encodedFile = network::encodeUrl(fileName);
-    std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
-    std::string filePath = system::join(tempRoot, fileName);
-    if (!network::requestDownload(fileUrl, filePath)) {
-      system::removeRecursively(tempRoot);
-      if (errorOut) {
-        *errorOut = string::f("Failed to download vinyl file: %s", fileName.c_str());
+  std::vector<const VinylDownloadPlan::FileItem *> missingFiles;
+  std::vector<const VinylDownloadPlan::FileItem *> staleFiles;
+  auto queueOrReuse = [&](const VinylDownloadPlan::FileItem &item) -> bool {
+    std::string existingPath = system::join(finalRoot, item.file);
+    bool exists = system::isFile(existingPath);
+    if (item.hasSignature && exists) {
+      uint64_t actualHash = 0;
+      uint64_t actualSize = 0;
+      std::string hashError;
+      if (hashFileFnv64(existingPath, &actualHash, &actualSize, &hashError) && actualSize == item.signedSize &&
+          actualHash == item.signedHash) {
+        std::string dstPath = system::join(tempRoot, item.file);
+        if (!system::copy(existingPath, dstPath)) {
+          if (errorOut) {
+            *errorOut = string::f("Failed to stage cached vinyl file: %s", item.file.c_str());
+          }
+          return false;
+        }
+        return true;
       }
+    }
+    if (!exists) {
+      missingFiles.push_back(&item);
+    } else {
+      staleFiles.push_back(&item);
+    }
+    return true;
+  };
+
+  for (const VinylDownloadPlan::FileItem &item : plan.files) {
+    if (!queueOrReuse(item)) {
+      system::removeRecursively(tempRoot);
       return false;
     }
+  }
+
+  auto downloadQueued = [&](const std::vector<const VinylDownloadPlan::FileItem *> &queue) -> bool {
+    for (const VinylDownloadPlan::FileItem *item : queue) {
+      if (!item) {
+        continue;
+      }
+      std::string encodedFile = network::encodeUrl(item->file);
+      std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
+      std::string filePath = system::join(tempRoot, item->file);
+      if (!network::requestDownload(fileUrl, filePath)) {
+        if (errorOut) {
+          *errorOut = string::f("Failed to download vinyl file: %s", item->file.c_str());
+        }
+        return false;
+      }
+    }
+    return true;
+  };
+
+  if (!downloadQueued(missingFiles) || !downloadQueued(staleFiles)) {
+    system::removeRecursively(tempRoot);
+    return false;
   }
 
   system::removeRecursively(finalRoot);
@@ -1477,6 +1616,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   if (fileCountOut) {
     *fileCountOut = int(plan.files.size());
   }
+  gExpandedVinylLoadSalt.fetch_add(1, std::memory_order_relaxed);
   invalidateVinylInventoryCache();
   return true;
 }
@@ -2204,15 +2344,17 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
     if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
       if (module) {
         std::string customPath = module->getCustomPlatterArtPath();
+        std::string loadPath = expandedArtLoadPath(customPath);
         std::string ext = lowercaseExtension(customPath);
         try {
           if (ext == ".svg") {
-            drewArt = drawPlatterSvg(args, APP->window->loadSvg(customPath), center, platterRadiusPx, rotation);
+            drewArt = drawPlatterSvg(args, APP->window->loadSvg(loadPath), center, platterRadiusPx, rotation);
           } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(customPath), center, platterRadiusPx, rotation);
+            drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
           }
         } catch (const std::exception &e) {
-          WARN("TemporalDeck: failed to load custom platter art '%s': %s", customPath.c_str(), e.what());
+          WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
+               customPath.c_str(), loadPath.c_str(), e.what());
         }
       }
     } else if (artMode != TemporalDeck::PLATTER_ART_PROCEDURAL) {
@@ -2778,24 +2920,26 @@ struct TemporalDeckWidget : ModuleWidget {
               continue;
             }
             std::string absolutePath = inventoryAbsolutePath(*entry);
+            bool entryVerified = entry->signatureVerified;
+            std::string entryLabel = entry->label.empty() ? entry->id : entry->label;
             std::string rightText;
-            if (!entry->signatureVerified) {
+            if (!entryVerified) {
               rightText = "Signiture error";
             }
             submenu->addChild(createCheckMenuItem(
-              entry->label.empty() ? entry->id : entry->label, rightText,
+              entryLabel, rightText,
               [=]() {
                 return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM &&
                        module->getCustomPlatterArtPath() == absolutePath;
               },
               [=]() {
-                if (entry->signatureVerified) {
+                if (entryVerified) {
                   module->setCustomPlatterArtPath(absolutePath);
                 } else {
                   module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
                 }
               },
-              !entry->signatureVerified || !system::isFile(absolutePath)));
+              !entryVerified || !system::isFile(absolutePath)));
           }
         }
         submenu->addChild(new MenuSeparator());
@@ -2994,9 +3138,6 @@ struct TemporalDeckWidget : ModuleWidget {
         }
       }));
       menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
-      menu->addChild(createCheckMenuItem("Auto-play on load", "",
-                                         [=]() { return module->isSampleAutoPlayOnLoadEnabled(); },
-                                         [=]() { module->setSampleAutoPlayOnLoadEnabled(!module->isSampleAutoPlayOnLoadEnabled()); }));
       if (module->hasLoadedSample()) {
         menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
           submenu->addChild(createMenuLabel(loadedSampleName));

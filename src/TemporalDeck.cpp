@@ -2811,7 +2811,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
-  json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
   json_t *platterArtModeJ = json_object_get(root, "platterArtMode");
   json_t *platterBrightnessModeJ = json_object_get(root, "platterBrightnessMode");
   json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
@@ -2848,9 +2847,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (sampleLoopEnabledJ) {
     impl->sampleLoopEnabled.store(json_boolean_value(sampleLoopEnabledJ), std::memory_order_relaxed);
   }
-  if (sampleAutoPlayOnLoadJ) {
+  {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleAutoPlayOnLoad = json_boolean_value(sampleAutoPlayOnLoadJ);
+    impl->sampleAutoPlayOnLoad = true;
   }
   if (platterArtModeJ) {
     impl->platterArtMode =
@@ -3201,6 +3200,8 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(targetMode);
   }
   bool autoPlayOnLoad = true;
+  bool wasFreezeLatched = impl->freezeLatched;
+  bool wasFreezeLatchedByButton = impl->freezeLatchedByButton;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     impl->samplePath = path;
@@ -3209,8 +3210,8 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
   impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
-  impl->freezeLatched = !autoPlayOnLoad;
-  impl->freezeLatchedByButton = false;
+  impl->freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
+  impl->freezeLatchedByButton = impl->freezeLatched ? wasFreezeLatchedByButton : false;
   impl->reverseLatched = false;
   impl->slipLatched = false;
   impl->pendingSampleStateApply.store(true);
