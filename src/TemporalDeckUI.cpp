@@ -13,6 +13,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <osdialog.h>
@@ -931,13 +932,38 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
 
   std::set<std::string> seenIds;
   std::set<int> seenMenuIds;
+  std::map<std::string, size_t> indexById;
+
+  auto assignMenuId = [&](VinylInventoryEntry *entry, bool offsetExpandedMenuIds) {
+    if (!entry || !entry->menuVisible) {
+      return;
+    }
+    int candidateMenuId = entry->menuId;
+    if (offsetExpandedMenuIds) {
+      candidateMenuId = std::max(kExpandedMenuIdOffset, candidateMenuId + kExpandedMenuIdOffset);
+    }
+    while (!seenMenuIds.insert(candidateMenuId).second) {
+      ++candidateMenuId;
+    }
+    entry->menuId = candidateMenuId;
+  };
+
   auto appendEntries = [&](const VinylInventoryState &state, bool offsetExpandedMenuIds) {
     if (!state.valid) {
       return;
     }
     for (const VinylInventoryEntry &srcEntry : state.entries) {
       VinylInventoryEntry entry = srcEntry;
-      if (!seenIds.insert(entry.id).second) {
+      auto existingIt = indexById.find(entry.id);
+      if (existingIt != indexById.end()) {
+        if (entry.source == VINYL_SOURCE_EXPANDED && entry.signatureVerified) {
+          // Signed expanded entries can override built-in IDs in-place.
+          VinylInventoryEntry &existing = merged.entries[existingIt->second];
+          entry.menuVisible = existing.menuVisible;
+          entry.menuId = existing.menuId;
+          existing = entry;
+          continue;
+        }
         if (entry.source == VINYL_SOURCE_EXPANDED) {
           std::string fallbackId = "expanded/" + entry.id;
           int suffix = 1;
@@ -948,26 +974,24 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
         } else {
           continue;
         }
+      } else {
+        seenIds.insert(entry.id);
       }
-      if (entry.menuVisible) {
-        int candidateMenuId = entry.menuId;
-        if (offsetExpandedMenuIds) {
-          candidateMenuId = std::max(kExpandedMenuIdOffset, candidateMenuId + kExpandedMenuIdOffset);
-        }
-        while (!seenMenuIds.insert(candidateMenuId).second) {
-          ++candidateMenuId;
-        }
-        entry.menuId = candidateMenuId;
-      }
+      assignMenuId(&entry, offsetExpandedMenuIds);
+      indexById[entry.id] = merged.entries.size();
       merged.entries.push_back(entry);
-      if (entry.signatureVerified) {
-        ++merged.verifiedEntryCount;
-      }
     }
   };
 
   appendEntries(builtIn, false);
   appendEntries(expanded, true);
+
+  merged.verifiedEntryCount = 0;
+  for (const VinylInventoryEntry &entry : merged.entries) {
+    if (entry.signatureVerified) {
+      ++merged.verifiedEntryCount;
+    }
+  }
 
   merged.signaturePresent = builtIn.signaturePresent || expanded.signaturePresent;
   merged.signatureVerified = (merged.verifiedEntryCount == int(merged.entries.size()));
@@ -1113,20 +1137,25 @@ static bool isInventoryPlatterArtModeVerified(int mode, std::string *errorOut = 
   return entry->signatureVerified;
 }
 
-static int defaultPlatterArtModeFromInventory() {
+static const VinylInventoryEntry *defaultPreviewVinylEntryFromInventory() {
   const VinylInventoryState &inventoryState = getVinylInventoryState();
   if (!inventoryState.valid) {
-    return TemporalDeck::PLATTER_ART_PROCEDURAL;
+    return nullptr;
   }
-  std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
-  if (visibleModes.empty()) {
-    return TemporalDeck::PLATTER_ART_PROCEDURAL;
+
+  const VinylInventoryEntry *firstMatch = nullptr;
+  for (const VinylInventoryEntry &entry : inventoryState.entries) {
+    if (!entry.menuVisible || entry.menuId != 1) {
+      continue;
+    }
+    if (!firstMatch) {
+      firstMatch = &entry;
+    }
+    if (entry.signatureVerified) {
+      return &entry;
+    }
   }
-  int firstMode = visibleModes.front();
-  if (!isInventoryPlatterArtModeVerified(firstMode)) {
-    return TemporalDeck::PLATTER_ART_PROCEDURAL;
-  }
-  return firstMode;
+  return firstMatch;
 }
 
 static std::string vinylAbsolutePathForPlatterArtMode(int mode) {
@@ -1183,14 +1212,18 @@ static std::vector<int> visiblePlatterArtModesFromInventory() {
   return modes;
 }
 
-static std::vector<const VinylInventoryEntry *> visibleExpandedVinylEntriesFromInventory() {
+static std::vector<const VinylInventoryEntry *> visibleCustomVinylEntriesFromInventory() {
   const VinylInventoryState &state = getVinylInventoryState();
   if (!state.valid) {
     return {};
   }
   std::vector<const VinylInventoryEntry *> entries;
   for (const VinylInventoryEntry &entry : state.entries) {
-    if (entry.source != VINYL_SOURCE_EXPANDED || !entry.menuVisible) {
+    if (!entry.menuVisible) {
+      continue;
+    }
+    int mappedMode = -1;
+    if (platterArtModeForInventoryId(entry.id, &mappedMode)) {
       continue;
     }
     entries.push_back(&entry);
@@ -1223,6 +1256,26 @@ static const VinylInventoryEntry *findExpandedVinylEntryByAbsolutePath(const std
     if (entry.source != VINYL_SOURCE_EXPANDED) {
       continue;
     }
+    if (normalizedPathForCompare(entry.absolutePath) == needle) {
+      if (!firstMatch) {
+        firstMatch = &entry;
+      }
+      if (entry.signatureVerified) {
+        return &entry;
+      }
+    }
+  }
+  return firstMatch;
+}
+
+static const VinylInventoryEntry *findVinylInventoryEntryByAbsolutePath(const std::string &absolutePath) {
+  const VinylInventoryState &state = getVinylInventoryState();
+  if (!state.valid) {
+    return nullptr;
+  }
+  std::string needle = normalizedPathForCompare(absolutePath);
+  const VinylInventoryEntry *firstMatch = nullptr;
+  for (const VinylInventoryEntry &entry : state.entries) {
     if (normalizedPathForCompare(entry.absolutePath) == needle) {
       if (!firstMatch) {
         firstMatch = &entry;
@@ -1975,6 +2028,62 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   return true;
 }
 
+static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path) {
+  struct MipmapCache {
+    NVGcontext *vg = nullptr;
+    std::unordered_map<std::string, int> handles;
+  };
+  static MipmapCache cache;
+
+  if (!vg || path.empty()) {
+    return -1;
+  }
+  if (cache.vg != vg) {
+    cache.vg = vg;
+    cache.handles.clear();
+  }
+  auto it = cache.handles.find(path);
+  if (it != cache.handles.end()) {
+    return it->second;
+  }
+
+  int handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+  if (handle >= 0) {
+    cache.handles.emplace(path, handle);
+  }
+  return handle;
+}
+
+static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string &path, Vec center,
+                                 float platterRadiusPx, float rotation) {
+  int handle = loadPlatterMipmapImageHandle(args.vg, path);
+  if (handle < 0) {
+    return false;
+  }
+  int imageW = 0;
+  int imageH = 0;
+  nvgImageSize(args.vg, handle, &imageW, &imageH);
+  if (imageW <= 0 || imageH <= 0) {
+    return false;
+  }
+
+  float diameter = platterRadiusPx * 2.f;
+  float scale = diameter / std::max(1.f, float(std::min(imageW, imageH)));
+  float drawW = float(imageW) * scale;
+  float drawH = float(imageH) * scale;
+
+  nvgSave(args.vg);
+  nvgTranslate(args.vg, center.x, center.y);
+  nvgRotate(args.vg, rotation);
+  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, handle, 1.0f);
+  nvgBeginPath(args.vg);
+  nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
+  nvgFillPaint(args.vg, imgPaint);
+  nvgFill(args.vg);
+  nvgRestore(args.vg);
+  return true;
+}
+
 static void drawPlatterDimmingOverlay(const Widget::DrawArgs &args, Vec center, float platterRadiusPx, float overlayAlpha) {
   overlayAlpha = clamp(overlayAlpha, 0.f, 1.f);
   if (overlayAlpha <= 1e-4f) {
@@ -2314,20 +2423,30 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   nvgSave(args.vg);
   float rotation = module ? module->getUiPlatterAngle() : 0.f;
   Vec center = localCenter();
+  const VinylInventoryEntry *defaultPreviewEntry = defaultPreviewVinylEntryFromInventory();
 
   if (module && module->consumePendingInitialPlatterArtSelection()) {
-    module->setPlatterArtMode(defaultPlatterArtModeFromInventory());
+    if (defaultPreviewEntry && defaultPreviewEntry->signatureVerified) {
+      int mappedMode = -1;
+      if (platterArtModeForInventoryId(defaultPreviewEntry->id, &mappedMode)) {
+        module->setPlatterArtMode(mappedMode);
+      } else {
+        module->setCustomPlatterArtPath(inventoryAbsolutePath(*defaultPreviewEntry));
+      }
+    } else {
+      module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
+    }
   }
 
-  int artMode = module ? module->getPlatterArtMode() : defaultPlatterArtModeFromInventory();
+  int artMode = module ? module->getPlatterArtMode() : TemporalDeck::PLATTER_ART_PROCEDURAL;
   if (module && artMode != TemporalDeck::PLATTER_ART_PROCEDURAL && artMode != TemporalDeck::PLATTER_ART_CUSTOM &&
       !isInventoryPlatterArtModeVerified(artMode)) {
     module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
     artMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
   }
   if (module && artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
-    const VinylInventoryEntry *expandedEntry = findExpandedVinylEntryByAbsolutePath(module->getCustomPlatterArtPath());
-    if (expandedEntry && !expandedEntry->signatureVerified) {
+    const VinylInventoryEntry *inventoryEntry = findVinylInventoryEntryByAbsolutePath(module->getCustomPlatterArtPath());
+    if (inventoryEntry && !inventoryEntry->signatureVerified) {
       module->setPlatterArtMode(TemporalDeck::PLATTER_ART_PROCEDURAL);
       artMode = TemporalDeck::PLATTER_ART_PROCEDURAL;
     }
@@ -2341,7 +2460,23 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
     // In module-browser preview there is no backing module instance, so pick a
     // deterministic default art instead of falling through to procedural.
     platterDimAlpha = module ? platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode()) : 0.f;
-    if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+    if (!module && defaultPreviewEntry && defaultPreviewEntry->signatureVerified) {
+      std::string absolutePath = inventoryAbsolutePath(*defaultPreviewEntry);
+      std::string loadPath = expandedArtLoadPath(absolutePath);
+      std::string ext = lowercaseExtension(absolutePath);
+      try {
+        if (ext == ".svg") {
+          drewArt = drawPlatterSvg(args, APP->window->loadSvg(loadPath), center, platterRadiusPx, rotation);
+        } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
+          drewArt = drawPlatterImagePath(args, loadPath, center, platterRadiusPx, rotation);
+          if (!drewArt) {
+            drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
+          }
+        }
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load default preview platter art '%s': %s", absolutePath.c_str(), e.what());
+      }
+    } else if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
       if (module) {
         std::string customPath = module->getCustomPlatterArtPath();
         std::string loadPath = expandedArtLoadPath(customPath);
@@ -2350,7 +2485,10 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
           if (ext == ".svg") {
             drewArt = drawPlatterSvg(args, APP->window->loadSvg(loadPath), center, platterRadiusPx, rotation);
           } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
+            drewArt = drawPlatterImagePath(args, loadPath, center, platterRadiusPx, rotation);
+            if (!drewArt) {
+              drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
+            }
           }
         } catch (const std::exception &e) {
           WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
@@ -2366,7 +2504,10 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
             if (ext == ".svg") {
               drewArt = drawPlatterSvg(args, APP->window->loadSvg(absolutePath), center, platterRadiusPx, rotation);
             } else {
-              drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
+              drewArt = drawPlatterImagePath(args, absolutePath, center, platterRadiusPx, rotation);
+              if (!drewArt) {
+                drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
+              }
             }
           } catch (const std::exception &e) {
             WARN("TemporalDeck: failed to load platter art '%s': %s", absolutePath.c_str(), e.what());
@@ -2913,9 +3054,9 @@ struct TemporalDeckWidget : ModuleWidget {
               !modeVerified));
           }
         }
-        std::vector<const VinylInventoryEntry *> expandedEntries = visibleExpandedVinylEntriesFromInventory();
-        if (!expandedEntries.empty()) {
-          for (const VinylInventoryEntry *entry : expandedEntries) {
+        std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
+        if (!customEntries.empty()) {
+          for (const VinylInventoryEntry *entry : customEntries) {
             if (!entry) {
               continue;
             }
