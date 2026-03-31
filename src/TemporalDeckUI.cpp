@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <map>
 #include <mutex>
+#include <limits>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -98,6 +99,13 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   float uiFpsDisplayAccumSec = 0.f;
   double lastUiFpsUpdateSec = 0.0;
   InteractionTraceRecorder traceRecorder;
+  int cachedRenderArtMode = std::numeric_limits<int>::min();
+  int cachedRenderInventorySerial = std::numeric_limits<int>::min();
+  std::string cachedRenderPath;
+  bool cachedRenderValid = false;
+  bool cachedRenderSvg = false;
+  std::string cachedRenderAbsolutePath;
+  std::string cachedRenderLoadPath;
 
   Vec localCenter() const { return centerPx.minus(box.pos); }
   Vec currentLocalMousePos() const;
@@ -2030,26 +2038,49 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
 
 static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path) {
   struct MipmapCache {
+    struct Entry {
+      int handle = -1;
+      uint64_t lastUse = 0;
+    };
     NVGcontext *vg = nullptr;
-    std::unordered_map<std::string, int> handles;
+    std::unordered_map<std::string, Entry> entries;
+    uint64_t useCounter = 0;
   };
   static MipmapCache cache;
+  constexpr size_t kMaxMipmapImageCacheEntries = 16;
 
   if (!vg || path.empty()) {
     return -1;
   }
   if (cache.vg != vg) {
     cache.vg = vg;
-    cache.handles.clear();
+    cache.entries.clear();
+    cache.useCounter = 0;
   }
-  auto it = cache.handles.find(path);
-  if (it != cache.handles.end()) {
-    return it->second;
+  auto it = cache.entries.find(path);
+  if (it != cache.entries.end()) {
+    it->second.lastUse = ++cache.useCounter;
+    return it->second.handle;
   }
 
   int handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
   if (handle >= 0) {
-    cache.handles.emplace(path, handle);
+    MipmapCache::Entry entry;
+    entry.handle = handle;
+    entry.lastUse = ++cache.useCounter;
+    cache.entries[path] = entry;
+    if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
+      auto evictIt = cache.entries.begin();
+      for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
+        if (iter->second.lastUse < evictIt->second.lastUse) {
+          evictIt = iter;
+        }
+      }
+      if (evictIt != cache.entries.end()) {
+        nvgDeleteImage(vg, evictIt->second.handle);
+        cache.entries.erase(evictIt);
+      }
+    }
   }
   return handle;
 }
@@ -2457,62 +2488,94 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
   bool drewArt = false;
   float platterDimAlpha = 0.f;
   if (APP && APP->window) {
+    int inventorySerial = gVinylInventoryCacheSerial.load(std::memory_order_relaxed);
+    std::string currentPath;
+    if (!module && defaultPreviewEntry && defaultPreviewEntry->signatureVerified) {
+      currentPath = inventoryAbsolutePath(*defaultPreviewEntry);
+    } else if (module && artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+      currentPath = module->getCustomPlatterArtPath();
+    }
+    bool renderKeyChanged = (cachedRenderArtMode != artMode || cachedRenderInventorySerial != inventorySerial ||
+                             cachedRenderPath != currentPath);
+    if (renderKeyChanged) {
+      cachedRenderArtMode = artMode;
+      cachedRenderInventorySerial = inventorySerial;
+      cachedRenderPath = currentPath;
+      cachedRenderValid = false;
+      cachedRenderSvg = false;
+      cachedRenderAbsolutePath.clear();
+      cachedRenderLoadPath.clear();
+
+      auto setCachedPath = [&](const std::string &absolutePath) {
+        if (absolutePath.empty()) {
+          return;
+        }
+        std::string ext = lowercaseExtension(absolutePath);
+        if (ext != ".svg" && ext != ".png" && ext != ".jpg" && ext != ".jpeg") {
+          return;
+        }
+        cachedRenderValid = true;
+        cachedRenderSvg = (ext == ".svg");
+        cachedRenderAbsolutePath = absolutePath;
+        cachedRenderLoadPath = expandedArtLoadPath(absolutePath);
+      };
+
+      if (!module && defaultPreviewEntry && defaultPreviewEntry->signatureVerified) {
+        setCachedPath(inventoryAbsolutePath(*defaultPreviewEntry));
+      } else if (module && artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+        setCachedPath(currentPath);
+      } else if (artMode != TemporalDeck::PLATTER_ART_PROCEDURAL && isInventoryPlatterArtModeVerified(artMode)) {
+        setCachedPath(vinylAbsolutePathForPlatterArtMode(artMode));
+      }
+    }
+
     // In module-browser preview there is no backing module instance, so pick a
     // deterministic default art instead of falling through to procedural.
     platterDimAlpha = module ? platterDimmingOverlayAlphaForMode(module->getPlatterBrightnessMode()) : 0.f;
-    if (!module && defaultPreviewEntry && defaultPreviewEntry->signatureVerified) {
-      std::string absolutePath = inventoryAbsolutePath(*defaultPreviewEntry);
-      std::string loadPath = expandedArtLoadPath(absolutePath);
-      std::string ext = lowercaseExtension(absolutePath);
+    if (cachedRenderValid && !module) {
       try {
-        if (ext == ".svg") {
-          drewArt = drawPlatterSvg(args, APP->window->loadSvg(loadPath), center, platterRadiusPx, rotation);
-        } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-          drewArt = drawPlatterImagePath(args, loadPath, center, platterRadiusPx, rotation);
+        if (cachedRenderSvg) {
+          drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
+        } else {
+          drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
           if (!drewArt) {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
+            drewArt =
+              drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx, rotation);
           }
         }
       } catch (const std::exception &e) {
-        WARN("TemporalDeck: failed to load default preview platter art '%s': %s", absolutePath.c_str(), e.what());
+        WARN("TemporalDeck: failed to load default preview platter art '%s': %s", cachedRenderAbsolutePath.c_str(),
+             e.what());
       }
-    } else if (artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
-      if (module) {
-        std::string customPath = module->getCustomPlatterArtPath();
-        std::string loadPath = expandedArtLoadPath(customPath);
-        std::string ext = lowercaseExtension(customPath);
-        try {
-          if (ext == ".svg") {
-            drewArt = drawPlatterSvg(args, APP->window->loadSvg(loadPath), center, platterRadiusPx, rotation);
-          } else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-            drewArt = drawPlatterImagePath(args, loadPath, center, platterRadiusPx, rotation);
-            if (!drewArt) {
-              drewArt = drawPlatterImage(args, APP->window->loadImage(loadPath), center, platterRadiusPx, rotation);
-            }
-          }
-        } catch (const std::exception &e) {
-          WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
-               customPath.c_str(), loadPath.c_str(), e.what());
-        }
-      }
-    } else if (artMode != TemporalDeck::PLATTER_ART_PROCEDURAL) {
-      if (isInventoryPlatterArtModeVerified(artMode)) {
-        std::string absolutePath = vinylAbsolutePathForPlatterArtMode(artMode);
-        std::string ext = lowercaseExtension(absolutePath);
-        if (!absolutePath.empty() && isSupportedPlatterArtPath(absolutePath)) {
-          try {
-            if (ext == ".svg") {
-              drewArt = drawPlatterSvg(args, APP->window->loadSvg(absolutePath), center, platterRadiusPx, rotation);
-            } else {
-              drewArt = drawPlatterImagePath(args, absolutePath, center, platterRadiusPx, rotation);
-              if (!drewArt) {
-                drewArt = drawPlatterImage(args, APP->window->loadImage(absolutePath), center, platterRadiusPx, rotation);
-              }
-            }
-          } catch (const std::exception &e) {
-            WARN("TemporalDeck: failed to load platter art '%s': %s", absolutePath.c_str(), e.what());
+    } else if (cachedRenderValid && artMode == TemporalDeck::PLATTER_ART_CUSTOM) {
+      try {
+        if (cachedRenderSvg) {
+          drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
+        } else {
+          drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
+          if (!drewArt) {
+            drewArt = drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx,
+                                       rotation);
           }
         }
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
+             cachedRenderAbsolutePath.c_str(), cachedRenderLoadPath.c_str(), e.what());
+      }
+    } else if (cachedRenderValid && artMode != TemporalDeck::PLATTER_ART_PROCEDURAL) {
+      try {
+        if (cachedRenderSvg) {
+          drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderAbsolutePath), center, platterRadiusPx,
+                                   rotation);
+        } else {
+          drewArt = drawPlatterImagePath(args, cachedRenderAbsolutePath, center, platterRadiusPx, rotation);
+          if (!drewArt) {
+            drewArt =
+              drawPlatterImage(args, APP->window->loadImage(cachedRenderAbsolutePath), center, platterRadiusPx, rotation);
+          }
+        }
+      } catch (const std::exception &e) {
+        WARN("TemporalDeck: failed to load platter art '%s': %s", cachedRenderAbsolutePath.c_str(), e.what());
       }
     }
     if (drewArt) {
