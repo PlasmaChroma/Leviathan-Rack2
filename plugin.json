@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.2.6",
+  "version": "2.3.6",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -33,6 +33,16 @@
         "Function Generator",
         "Slew Limiter",
         "Envelope Follower"
+      ]
+    },
+    {
+      "slug": "TemporalDeck",
+      "name": "Temporal Deck",
+      "description": "Virtual turntable with modern hybrid control.",
+      "tags": [
+        "Delay",
+        "Distortion",
+        "Sampler"
       ]
     }
   ]
