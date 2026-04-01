@@ -941,8 +941,7 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
   }
 
   // Top-level signature verification:
-  // Use whichever known signing secret matches keyId. If we do not know the
-  // keyId, continue with per-file verification (legacy compatibility).
+  // A known keyId and matching signature are both required.
   bool topLevelSignatureChecked = false;
   bool topLevelSignatureValid = false;
   for (const std::string &secret : vinylManifestVerificationSecrets()) {
@@ -958,6 +957,13 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
       topLevelSignatureValid = true;
       break;
     }
+  }
+  if (!topLevelSignatureChecked) {
+    state.signatureVerified = false;
+    state.signatureError = "Unknown signing keyId";
+    markVinylEntriesUnverified(&state, "Unknown signing keyId");
+    json_decref(root);
+    return state;
   }
   if (topLevelSignatureChecked && !topLevelSignatureValid) {
     state.signatureVerified = false;
