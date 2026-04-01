@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.8]
+
+### Temporal Deck
+- Allow for inertial or sync modes on gate+pos input
+- Add status for sync download images
+
 ## [v2.3.7]
 
 ### Temporal Deck
