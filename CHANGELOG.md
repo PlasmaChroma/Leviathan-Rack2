@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.6]
+
+### Temporal Deck
+- Lots of rework in Temporal Deck module
+- Vinyl library features
+- Many tweaks to other functionality
+
 ## [v2.3.2]
 
 - Added Temporal Deck module
