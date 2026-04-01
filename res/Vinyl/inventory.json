@@ -12,20 +12,12 @@
       "menuId": 1
     },
     {
-      "id": "dragon_king",
-      "label": "Dragon King",
-      "file": "DragonKingLeviathan.png",
-      "format": "png",
-      "menuVisible": true,
-      "menuId": 2
-    },
-    {
       "id": "blank",
       "label": "Blank",
       "file": "Blank.png",
       "format": "png",
       "menuVisible": true,
-      "menuId": 3
+      "menuId": 2
     },
     {
       "id": "static_svg",
@@ -33,7 +25,7 @@
       "file": "Static.svg",
       "format": "svg",
       "menuVisible": false,
-      "menuId": 900
+      "menuId": 100
     }
   ],
   "signed": {
@@ -50,23 +42,16 @@
         "hash": "5ac733ac8ee72d32"
       },
       {
-        "id": "dragon_king",
-        "file": "DragonKingLeviathan.png",
-        "menuId": 2,
-        "size": 426418,
-        "hash": "efae06fde4377586"
-      },
-      {
         "id": "blank",
         "file": "Blank.png",
-        "menuId": 3,
+        "menuId": 2,
         "size": 268693,
         "hash": "4f74d11669369e1e"
       },
       {
         "id": "static_svg",
         "file": "Static.svg",
-        "menuId": 900,
+        "menuId": 100,
         "size": 26442,
         "hash": "288f967cfb02138d"
       }

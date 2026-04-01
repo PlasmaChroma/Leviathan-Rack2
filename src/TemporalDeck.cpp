@@ -412,9 +412,9 @@ struct TemporalDeckEngine {
   static constexpr float kScratch3VelocityDecayHz = 30.f;
   static constexpr float kScratch3VelocityDeadband = 10.f;
   static constexpr float kScratch3MaxLagVelocity = 96000.f;
-  static constexpr float kExternalCvMaxTurnsPerSec = 2.0f;
-  static constexpr float kExternalCvMaxTurnAccelPerSec2 = 18.0f;
-  static constexpr float kExternalCvCorrectionHz = 22.f;
+  static constexpr float kExternalCvMaxTurnsPerSec = 5.5f;
+  static constexpr float kExternalCvMaxTurnAccelPerSec2 = 55.0f;
+  static constexpr float kExternalCvCorrectionHz = 28.f;
   static constexpr float kExternalCvVelocityDampingHz = 8.f;
   static constexpr float kScratchInertiaFollowHz = 950.f;
   static constexpr float kScratchInertiaDampingHz = 380.f;
@@ -1038,7 +1038,9 @@ struct TemporalDeckEngine {
 
   double lagOffsetForPositionCv(float cv) const {
     float clampedCv = clamp(cv, -10.f, 10.f);
-    return double(clampedCv) * double(sampleRate);
+    // POS polarity: +V moves forward (toward NOW), -V moves backward.
+    // Lag is defined as distance behind NOW, so forward motion is negative lag.
+    return -double(clampedCv) * double(sampleRate);
   }
 
   float onePoleCoeff(float hz) const {
@@ -1887,7 +1889,9 @@ struct TemporalDeckEngine {
         result.scratchPosOut = 0.f;
         scratchOutAnchorLagSamples = lagNow;
       } else {
-        float posSec = float((lagNow - scratchOutAnchorLagSamples) / std::max(sampleRate, 1.f));
+        // Keep S_POS polarity consistent with POS input:
+        // +V = forward/toward NOW, -V = backward/deeper lag.
+        float posSec = float((scratchOutAnchorLagSamples - lagNow) / std::max(sampleRate, 1.f));
         result.scratchPosOut = clamp(posSec, -10.f, 10.f);
       }
     };
@@ -1990,6 +1994,16 @@ struct TemporalDeckEngine {
 
     if (scratchGateHigh && !externalCvGateHigh) {
       externalCvAnchorLagSamples = currentLagFromNewest(newestPos);
+      if (positionConnected) {
+        // Gate-rise latches an anchor and applies the current POS offset
+        // immediately, so held non-zero POS does not glide into place.
+        double targetLag = clampLag(externalCvAnchorLagSamples + lagOffsetForPositionCv(positionCv), limit);
+        scratchLagSamples = targetLag;
+        scratchLagTargetSamples = targetLag;
+        scratch3LagVelocity = 0.f;
+        double targetRead = newestPos - targetLag;
+        readHead = isSampleLoopActive() ? normalizeSamplePosition(targetRead, newestPos) : buffer.wrapPosition(targetRead);
+      }
     }
     externalCvGateHigh = scratchGateHigh;
 
