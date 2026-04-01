@@ -23,7 +23,6 @@ static bool isExpandedVinylSyncActive();
 static bool isExpandedVinylDownloadRunning();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
-static bool loadDragonKingSigningSecret(std::string *secretOut, std::string *errorOut);
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -551,22 +550,7 @@ static bool computeVinylManifestSignature(const std::string &secret, const std::
 }
 
 static std::vector<std::string> vinylManifestVerificationSecrets() {
-  std::vector<std::string> secrets;
-  std::string dragonSecret;
-  if (loadDragonKingSigningSecret(&dragonSecret, nullptr) && !dragonSecret.empty()) {
-    secrets.push_back(dragonSecret);
-  }
-  bool hasFallback = false;
-  for (const std::string &secret : secrets) {
-    if (secret == kVinylManifestFallbackSecret) {
-      hasFallback = true;
-      break;
-    }
-  }
-  if (!hasFallback) {
-    secrets.push_back(kVinylManifestFallbackSecret);
-  }
-  return secrets;
+  return {kVinylManifestFallbackSecret};
 }
 
 struct VinylInventoryState {
@@ -1532,33 +1516,6 @@ static bool collectVinylSignatureRecords(const VinylInventoryState &inventory, i
   return true;
 }
 
-static bool loadDragonKingSigningSecret(std::string *secretOut, std::string *errorOut) {
-  if (!secretOut) {
-    return false;
-  }
-  const std::string secretPath = asset::plugin(pluginInstance, "res/dragonking.txt");
-  std::ifstream in(secretPath.c_str(), std::ios::in);
-  if (!in.good()) {
-    if (errorOut) {
-      *errorOut = "DragonKing signing flag is missing";
-    }
-    return false;
-  }
-  std::string line;
-  while (std::getline(in, line)) {
-    std::string secret = trimAsciiWhitespace(line);
-    if (secret.empty() || secret[0] == '#') {
-      continue;
-    }
-    *secretOut = secret;
-    return true;
-  }
-  if (errorOut) {
-    *errorOut = "res/dragonking.txt must contain a non-empty signing secret";
-  }
-  return false;
-}
-
 static std::string ensureJsonExtension(std::string path) {
   std::string ext = system::getExtension(path);
   std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -1849,10 +1806,7 @@ static void pumpExpandedVinylDownloadNotifications() {
 
 static bool writeSignedVinylManifest(const std::string &path, const VinylInventoryState &inventory, int sourceFilter,
                                      std::string *errorOut, std::string *signatureOut, int *fileCountOut) {
-  std::string secret;
-  if (!loadDragonKingSigningSecret(&secret, errorOut)) {
-    return false;
-  }
+  const std::string secret = kVinylManifestFallbackSecret;
 
   std::vector<VinylSignatureRecord> records;
   if (!collectVinylSignatureRecords(inventory, sourceFilter, &records, errorOut)) {

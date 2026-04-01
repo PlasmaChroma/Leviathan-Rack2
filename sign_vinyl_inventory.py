@@ -11,6 +11,7 @@ FNV64_OFFSET_BASIS = 1469598103934665603
 FNV64_PRIME = 1099511628211
 ALGORITHM = "fnv1a64-keyed-v1"
 DOMAIN = "TemporalDeckVinylInventorySigned-v1"
+INTERNAL_SIGNING_SECRET = "TemporalDeckLocalSigningKey"
 
 
 def fnv1a64_update(h: int, data: bytes) -> int:
@@ -26,16 +27,6 @@ def fnv1a64_string(h: int, text: str) -> int:
 
 def hex_u64(value: int) -> str:
     return f"{value & 0xFFFFFFFFFFFFFFFF:016x}"
-
-
-def read_signing_secret(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            return line
-    raise ValueError(f"{path} must contain a non-empty signing secret")
 
 
 def is_safe_filename(name: str) -> bool:
@@ -217,29 +208,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sign a TemporalDeck vinyl inventory JSON file.")
     parser.add_argument("inventory", help="Path to inventory JSON (e.g. res/Vinyl/inventory.json)")
     parser.add_argument("--root", default="", help="Source root used to resolve basePath/file (default: auto-detect)")
-    parser.add_argument("--secret-file", default="", help="Optional signing secret file path")
-    parser.add_argument(
-        "--secret",
-        default="",
-        help="Inline signing secret (overrides --secret-file). If omitted, uses TD_VINYL_SIGNING_SECRET or an internal default.",
-    )
     parser.add_argument("--output", default="", help="Output path (default: in-place)")
     parser.add_argument("--generated-unix", type=int, default=0, help="Override generatedUnix timestamp")
     args = parser.parse_args()
 
     try:
         inventory_path = os.path.abspath(args.inventory)
-        if args.secret:
-            secret = args.secret.strip()
-            if not secret:
-                raise ValueError("empty --secret is not allowed")
-        elif os.getenv("TD_VINYL_SIGNING_SECRET", "").strip():
-            secret = os.getenv("TD_VINYL_SIGNING_SECRET", "").strip()
-        elif args.secret_file:
-            secret = read_signing_secret(args.secret_file)
-        else:
-            # Keep utility usable without any local plugin-only file.
-            secret = "TemporalDeckLocalSigningKey"
+        secret = INTERNAL_SIGNING_SECRET
 
         inventory = parse_inventory(inventory_path)
         if args.root:
