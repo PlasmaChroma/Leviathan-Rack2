@@ -23,6 +23,7 @@ static bool isExpandedVinylSyncActive();
 static bool isExpandedVinylDownloadRunning();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
+static bool loadDragonKingSigningSecret(std::string *secretOut, std::string *errorOut);
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -421,6 +422,10 @@ static uint64_t fnv1aUpdate64String(uint64_t hash, const std::string &text) {
   return fnv1aUpdate64(hash, reinterpret_cast<const uint8_t *>(text.data()), text.size());
 }
 
+static const char *kVinylManifestAlgorithm = "fnv1a64-keyed-v1";
+static const char *kVinylManifestDomain = "TemporalDeckVinylInventorySigned-v1";
+static const char *kVinylManifestFallbackSecret = "TemporalDeckLocalSigningKey";
+
 static std::string hexU64(uint64_t value) {
   std::ostringstream out;
   out << std::hex << std::setfill('0') << std::setw(16) << value;
@@ -495,6 +500,74 @@ struct VinylInventoryEntry {
   bool signatureVerified = false;
   std::string signatureError;
 };
+
+struct SignedFileInfo {
+  std::string id;
+  std::string file;
+  int menuId = -1;
+  uint64_t size = 0;
+  uint64_t hash = 0;
+};
+
+static uint64_t computeVinylManifestKeyId(const std::string &secret) {
+  return fnv1aUpdate64String(fnv1aInit64(), secret);
+}
+
+static bool computeVinylManifestSignature(const std::string &secret, const std::string &basePath,
+                                          const std::vector<VinylInventoryEntry> &entries,
+                                          const std::map<std::string, SignedFileInfo> &signedById, uint64_t *signatureOut) {
+  if (!signatureOut) {
+    return false;
+  }
+  uint64_t signature = fnv1aUpdate64String(fnv1aInit64(), kVinylManifestDomain);
+  signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+  signature = fnv1aUpdate64String(signature, secret);
+  signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+  signature = fnv1aUpdate64String(signature, basePath);
+  signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+  for (const VinylInventoryEntry &entry : entries) {
+    auto it = signedById.find(entry.id);
+    if (it == signedById.end()) {
+      return false;
+    }
+    const SignedFileInfo &signedFile = it->second;
+    signature = fnv1aUpdate64String(signature, entry.id);
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, entry.label);
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, entry.file);
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, entry.menuVisible ? "1" : "0");
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, std::to_string(entry.menuId));
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, std::to_string(signedFile.size));
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+    signature = fnv1aUpdate64String(signature, hexU64(signedFile.hash));
+    signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
+  }
+  *signatureOut = signature;
+  return true;
+}
+
+static std::vector<std::string> vinylManifestVerificationSecrets() {
+  std::vector<std::string> secrets;
+  std::string dragonSecret;
+  if (loadDragonKingSigningSecret(&dragonSecret, nullptr) && !dragonSecret.empty()) {
+    secrets.push_back(dragonSecret);
+  }
+  bool hasFallback = false;
+  for (const std::string &secret : secrets) {
+    if (secret == kVinylManifestFallbackSecret) {
+      hasFallback = true;
+      break;
+    }
+  }
+  if (!hasFallback) {
+    secrets.push_back(kVinylManifestFallbackSecret);
+  }
+  return secrets;
+}
 
 struct VinylInventoryState {
   bool valid = false;
@@ -786,23 +859,40 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
   state.signaturePresent = true;
 
   json_t *algorithmJ = json_object_get(signedJ, "algorithm");
+  json_t *keyIdJ = json_object_get(signedJ, "keyId");
   json_t *signatureJ = json_object_get(signedJ, "signature");
   json_t *filesJ = json_object_get(signedJ, "files");
-  if (!json_is_string(algorithmJ) || !json_is_string(signatureJ) || !json_is_array(filesJ)) {
+  if (!json_is_string(algorithmJ) || !json_is_string(keyIdJ) || !json_is_string(signatureJ) || !json_is_array(filesJ)) {
     state.signatureVerified = false;
-    state.signatureError = "Signed block missing required fields (algorithm/signature/files)";
+    state.signatureError = "Signed block missing required fields (algorithm/keyId/signature/files)";
     markVinylEntriesUnverified(&state, "Signed block missing required fields");
     json_decref(root);
     return state;
   }
-
-  struct SignedFileInfo {
-    std::string id;
-    std::string file;
-    int menuId = -1;
-    uint64_t size = 0;
-    uint64_t hash = 0;
-  };
+  std::string algorithm = trimAsciiWhitespace(json_string_value(algorithmJ));
+  if (algorithm != kVinylManifestAlgorithm) {
+    state.signatureVerified = false;
+    state.signatureError = string::f("Unsupported signature algorithm '%s'", algorithm.c_str());
+    markVinylEntriesUnverified(&state, "Unsupported signature algorithm");
+    json_decref(root);
+    return state;
+  }
+  uint64_t signedKeyId = 0;
+  if (!parseHexU64(json_string_value(keyIdJ), &signedKeyId)) {
+    state.signatureVerified = false;
+    state.signatureError = "Signed keyId is invalid";
+    markVinylEntriesUnverified(&state, "Signed keyId invalid");
+    json_decref(root);
+    return state;
+  }
+  uint64_t signedManifestSignature = 0;
+  if (!parseHexU64(json_string_value(signatureJ), &signedManifestSignature)) {
+    state.signatureVerified = false;
+    state.signatureError = "Signed signature is invalid";
+    markVinylEntriesUnverified(&state, "Signed signature invalid");
+    json_decref(root);
+    return state;
+  }
 
   std::map<std::string, SignedFileInfo> signedById;
   size_t fileIndex = 0;
@@ -848,6 +938,33 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
       json_decref(root);
       return state;
     }
+  }
+
+  // Top-level signature verification:
+  // Use whichever known signing secret matches keyId. If we do not know the
+  // keyId, continue with per-file verification (legacy compatibility).
+  bool topLevelSignatureChecked = false;
+  bool topLevelSignatureValid = false;
+  for (const std::string &secret : vinylManifestVerificationSecrets()) {
+    if (computeVinylManifestKeyId(secret) != signedKeyId) {
+      continue;
+    }
+    topLevelSignatureChecked = true;
+    uint64_t expectedSignature = 0;
+    if (!computeVinylManifestSignature(secret, state.basePath, state.entries, signedById, &expectedSignature)) {
+      break;
+    }
+    if (expectedSignature == signedManifestSignature) {
+      topLevelSignatureValid = true;
+      break;
+    }
+  }
+  if (topLevelSignatureChecked && !topLevelSignatureValid) {
+    state.signatureVerified = false;
+    state.signatureError = "Top-level signature mismatch";
+    markVinylEntriesUnverified(&state, "Top-level signature mismatch");
+    json_decref(root);
+    return state;
   }
 
   state.verifiedEntryCount = 0;
@@ -1749,8 +1866,8 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
     return false;
   }
 
-  uint64_t keyId = fnv1aUpdate64String(fnv1aInit64(), secret);
-  uint64_t signature = fnv1aUpdate64String(fnv1aInit64(), "TemporalDeckVinylInventorySigned-v1");
+  uint64_t keyId = computeVinylManifestKeyId(secret);
+  uint64_t signature = fnv1aUpdate64String(fnv1aInit64(), kVinylManifestDomain);
   signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
   signature = fnv1aUpdate64String(signature, secret);
   signature = fnv1aUpdate64(signature, reinterpret_cast<const uint8_t *>("\0"), 1);
@@ -1809,7 +1926,7 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
   }
   out << "  ],\n";
   out << "  \"signed\": {\n";
-  out << "    \"algorithm\": \"fnv1a64-keyed-v1\",\n";
+  out << "    \"algorithm\": \"" << kVinylManifestAlgorithm << "\",\n";
   out << "    \"generatedUnix\": " << unixTime << ",\n";
   out << "    \"keyId\": \"" << hexU64(keyId) << "\",\n";
   out << "    \"signature\": \"" << hexU64(signature) << "\",\n";

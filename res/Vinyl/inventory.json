@@ -30,9 +30,9 @@
   ],
   "signed": {
     "algorithm": "fnv1a64-keyed-v1",
-    "generatedUnix": 1774920544,
-    "keyId": "634a89de67ed723a",
-    "signature": "f49ca84dcd7fb17c",
+    "generatedUnix": 1775008315,
+    "keyId": "f2f64a74e0dd68c5",
+    "signature": "7c1df9cf72d89e64",
     "files": [
       {
         "id": "temporal_deck",

@@ -77,6 +77,29 @@ def parse_inventory(path: str) -> Dict:
         return json.load(f)
 
 
+def infer_source_root(inventory_path: str, base_path: str) -> str:
+    inventory_path = os.path.abspath(inventory_path)
+    inv_dir = os.path.dirname(inventory_path)
+    base_path = normalize_base_path(base_path)
+    if base_path in ("", "."):
+        return inv_dir
+
+    base_parts = [p for p in base_path.split("/") if p and p != "."]
+    if not base_parts:
+        return inv_dir
+
+    inv_dir_norm = os.path.normpath(inv_dir)
+    inv_parts = inv_dir_norm.split(os.sep)
+    if len(inv_parts) >= len(base_parts):
+        tail = inv_parts[-len(base_parts) :]
+        if [p.lower() for p in tail] == [p.lower() for p in base_parts]:
+            root = inv_dir_norm
+            for _ in base_parts:
+                root = os.path.dirname(root)
+            return root if root else os.path.abspath(os.sep)
+    return os.getcwd()
+
+
 def collect_records(inventory: Dict) -> Tuple[str, List[Dict]]:
     base_path = normalize_base_path(str(inventory.get("basePath", "") or ""))
     if not is_safe_base_path(base_path):
@@ -193,7 +216,7 @@ def sign_inventory(inventory: Dict, source_root: str, secret: str, generated_uni
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sign a TemporalDeck vinyl inventory JSON file.")
     parser.add_argument("inventory", help="Path to inventory JSON (e.g. res/Vinyl/inventory.json)")
-    parser.add_argument("--root", default=".", help="Source root used to resolve basePath/file (default: current dir)")
+    parser.add_argument("--root", default="", help="Source root used to resolve basePath/file (default: auto-detect)")
     parser.add_argument("--secret-file", default="", help="Optional signing secret file path")
     parser.add_argument(
         "--secret",
@@ -206,7 +229,6 @@ def main() -> int:
 
     try:
         inventory_path = os.path.abspath(args.inventory)
-        source_root = os.path.abspath(args.root)
         if args.secret:
             secret = args.secret.strip()
             if not secret:
@@ -220,6 +242,11 @@ def main() -> int:
             secret = "TemporalDeckLocalSigningKey"
 
         inventory = parse_inventory(inventory_path)
+        if args.root:
+            source_root = os.path.abspath(args.root)
+        else:
+            base_path = normalize_base_path(str(inventory.get("basePath", "") or ""))
+            source_root = infer_source_root(inventory_path, base_path)
         generated_unix = args.generated_unix if args.generated_unix > 0 else int(round(time.time()))
         signed_inventory, signature, file_count = sign_inventory(inventory, source_root, secret, generated_unix)
 
