@@ -94,6 +94,38 @@ static int resampledFrameCount(int sourceFrames, float sourceRate, float targetR
   return std::max(1, int(std::round(seconds * double(targetRate))));
 }
 
+static std::string normalizePathForPrefixCompare(std::string path) {
+  std::replace(path.begin(), path.end(), '\\', '/');
+  while (path.size() > 1 && path.back() == '/') {
+    path.pop_back();
+  }
+  return path;
+}
+
+static bool hasPathPrefix(const std::string &path, const std::string &prefix) {
+  if (path.empty() || prefix.empty() || path.size() < prefix.size()) {
+    return false;
+  }
+  if (path.compare(0, prefix.size(), prefix) != 0) {
+    return false;
+  }
+  if (path.size() == prefix.size()) {
+    return true;
+  }
+  char next = path[prefix.size()];
+  return next == '/' || next == '\\';
+}
+
+static bool isManagedVinylArtPath(const std::string &path) {
+  if (path.empty() || !pluginInstance) {
+    return false;
+  }
+  std::string normalizedPath = normalizePathForPrefixCompare(path);
+  std::string builtInRoot = normalizePathForPrefixCompare(asset::plugin(pluginInstance, "res/Vinyl"));
+  std::string expandedRoot = normalizePathForPrefixCompare(system::join(asset::user(), "TemporalDeck/Vinyl"));
+  return hasPathPrefix(normalizedPath, builtInRoot) || hasPathPrefix(normalizedPath, expandedRoot);
+}
+
 static double clampd(double x, double a, double b) {
   return std::max(a, std::min(x, b));
 }
@@ -2877,10 +2909,14 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->customPlatterArtPath = json_string_value(customPlatterArtPathJ);
   }
   if (!isDragonKingDebugEnabled()) {
-    if (impl->platterArtMode == PLATTER_ART_CUSTOM) {
+    bool preserveManagedCustom =
+      (impl->platterArtMode == PLATTER_ART_CUSTOM) && isManagedVinylArtPath(impl->customPlatterArtPath);
+    if (impl->platterArtMode == PLATTER_ART_CUSTOM && !preserveManagedCustom) {
       impl->platterArtMode = PLATTER_ART_DRAGON_KING;
     }
-    impl->customPlatterArtPath.clear();
+    if (!preserveManagedCustom) {
+      impl->customPlatterArtPath.clear();
+    }
   }
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
   if (paramQuantities[BUFFER_PARAM]) {
