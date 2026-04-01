@@ -21,6 +21,7 @@
 
 static bool isExpandedVinylSyncActive();
 static bool isExpandedVinylDownloadRunning();
+static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 
@@ -283,7 +284,8 @@ void TemporalDeckPlatterWidget::drawLowFpsWarning(const DrawArgs &args, Vec cent
   nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
   if (showSync) {
     nvgFillColor(args.vg, nvgRGBA(120, 220, 255, 245));
-    nvgText(args.vg, warningPos.x, warningPos.y, "SYNC", nullptr);
+    std::string syncLabel = expandedVinylSyncLabel();
+    nvgText(args.vg, warningPos.x, warningPos.y, syncLabel.c_str(), nullptr);
   } else {
     nvgFillColor(args.vg, nvgRGBA(255, 178, 82, 240));
     nvgText(args.vg, warningPos.x, warningPos.y, string::f("LOW UI FPS: %.0f", uiFpsDisplayHz).c_str(), nullptr);
@@ -646,6 +648,8 @@ static std::atomic<bool> gExpandedVinylDownloadRunning {false};
 static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
 static std::mutex gExpandedVinylDownloadResultMutex;
 static std::string gExpandedVinylDownloadResultError;
+static std::atomic<int> gExpandedVinylDownloadCurrentIndex {0};
+static std::atomic<int> gExpandedVinylDownloadTotalFiles {0};
 static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
 static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
 
@@ -655,6 +659,16 @@ static bool isExpandedVinylSyncActive() {
 
 static bool isExpandedVinylDownloadRunning() {
   return gExpandedVinylDownloadRunning.load(std::memory_order_relaxed);
+}
+
+static std::string expandedVinylSyncLabel() {
+  int current = gExpandedVinylDownloadCurrentIndex.load(std::memory_order_relaxed);
+  int total = gExpandedVinylDownloadTotalFiles.load(std::memory_order_relaxed);
+  if (current > 0 && total > 0) {
+    current = std::min(current, total);
+    return string::f("SYNC (%d/%d)", current, total);
+  }
+  return "SYNC";
 }
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
@@ -1719,11 +1733,17 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     }
   }
 
+  int totalFilesToDownload = int(missingFiles.size() + staleFiles.size());
+  gExpandedVinylDownloadTotalFiles.store(totalFilesToDownload, std::memory_order_relaxed);
+  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  int currentFetchIndex = 0;
+
   auto downloadQueued = [&](const std::vector<const VinylDownloadPlan::FileItem *> &queue) -> bool {
     for (const VinylDownloadPlan::FileItem *item : queue) {
       if (!item) {
         continue;
       }
+      gExpandedVinylDownloadCurrentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
       std::string encodedFile = network::encodeUrl(item->file);
       std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
       std::string filePath = system::join(tempRoot, item->file);
@@ -1741,6 +1761,8 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     system::removeRecursively(tempRoot);
     return false;
   }
+  // All files fetched; keep plain SYNC while finalizing install.
+  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
 
   system::removeRecursively(finalRoot);
   if (!system::rename(tempRoot, finalRoot)) {
@@ -1771,6 +1793,8 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
     return false;
   }
   gExpandedVinylDownloadResultPending.store(false, std::memory_order_relaxed);
+  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
   {
     std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
     gExpandedVinylDownloadResultError.clear();
@@ -1783,6 +1807,8 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
       std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
       gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
     }
+    gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+    gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
     gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
     gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
   }).detach();
