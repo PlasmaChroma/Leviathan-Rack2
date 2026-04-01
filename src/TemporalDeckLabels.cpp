@@ -77,6 +77,16 @@ const char *TemporalDeck::bufferDurationLabelFor(int index) {
   }
 }
 
+const char *TemporalDeck::externalGatePosLabelFor(int index) {
+  switch (index) {
+  case EXTERNAL_GATE_POS_MODULE_SYNC:
+    return "Module sync";
+  case EXTERNAL_GATE_POS_GLIDE:
+  default:
+    return "Glide / inertia";
+  }
+}
+
 const char *TemporalDeck::platterArtModeLabelFor(int index) {
   switch (index) {
   case PLATTER_ART_DRAGON_KING:

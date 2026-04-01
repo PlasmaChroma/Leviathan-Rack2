@@ -42,6 +42,10 @@ constexpr int TemporalDeck::BUFFER_DURATION_10M_STEREO;
 constexpr int TemporalDeck::BUFFER_DURATION_10M_MONO;
 constexpr int TemporalDeck::BUFFER_DURATION_COUNT;
 
+constexpr int TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
+constexpr int TemporalDeck::EXTERNAL_GATE_POS_MODULE_SYNC;
+constexpr int TemporalDeck::EXTERNAL_GATE_POS_COUNT;
+
 constexpr int TemporalDeck::SAMPLE_SOURCE_LIVE;
 constexpr int TemporalDeck::SAMPLE_SOURCE_FILE;
 
@@ -552,6 +556,7 @@ struct TemporalDeckEngine {
   bool reverseState = false;
   bool slipState = false;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
+  int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   bool scratchActive = false;
   bool slipReturning = false;
@@ -1660,9 +1665,32 @@ struct TemporalDeckEngine {
 
   void integrateExternalCvScratch(float dt, double limit, double newestPos, double targetLag,
                                   float nowSnapThresholdSamples) {
-    // External CV scratch follows a physically limited lag trajectory instead of
-    // teleporting the read head. Limits are set to roughly upper-end
-    // turntablist hand speed.
+    bool syncMode = (externalGatePosMode == TemporalDeck::EXTERNAL_GATE_POS_MODULE_SYNC);
+    if (syncMode) {
+      // External gate+POS is defined as direct lag positioning in module-sync
+      // mode so S.GATE/S.POS can drive another deck to the same read points.
+      scratchHandVelocity = 0.f;
+      scratchMotionVelocity = 0.f;
+      scratchWheelVelocityBurst = 0.f;
+      platterVelocity = 0.f;
+      scratch3LagVelocity = 0.f;
+
+      bool loopActive = isSampleLoopActive();
+      scratchLagTargetSamples = clampLag(targetLag, limit);
+      double lagEstimate = scratchLagTargetSamples;
+      if (!loopActive && lagEstimate <= nowSnapThresholdSamples) {
+        lagEstimate = 0.0;
+        scratchLagTargetSamples = 0.0;
+      }
+
+      scratchLagSamples = lagEstimate;
+      readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos)
+                                      : buffer.wrapPosition(newestPos - lagEstimate);
+      return;
+    }
+
+    // Glide/inertia mode: external CV scratch follows a physically limited lag
+    // trajectory instead of teleporting the read head.
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratchWheelVelocityBurst = 0.f;
@@ -1705,7 +1733,8 @@ struct TemporalDeckEngine {
     }
 
     scratchLagSamples = lagEstimate;
-    readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos) : buffer.wrapPosition(newestPos - lagEstimate);
+    readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos)
+                                    : buffer.wrapPosition(newestPos - lagEstimate);
   }
 
   void integrateScratch3Touch(float dt, double limit, double newestPos, double prevReadHead,
@@ -1909,10 +1938,13 @@ struct TemporalDeckEngine {
       }
     }
     bool hasFreshPlatterGesture = platterGestureRevision != lastPlatterGestureRevision;
-    auto updateScratchControlOutputs = [&](bool gateHigh, double lagNow) {
+    auto updateScratchControlOutputs = [&](bool gateHigh, double lagNow, bool externalScratchActive) {
       if (gateHigh && !scratchOutGateHigh) {
-        // New scratch gesture starts from a fresh zero-offset anchor.
-        scratchOutAnchorLagSamples = lagNow;
+        bool syncMode = (externalGatePosMode == TemporalDeck::EXTERNAL_GATE_POS_MODULE_SYNC);
+        // Manual/wheel gestures are always relative to gate-rise lag. In
+        // module-sync mode, external gate+POS preserves its own gate-rise
+        // anchor so held non-zero POS is reflected immediately on S.POS.
+        scratchOutAnchorLagSamples = (syncMode && externalScratchActive) ? externalCvAnchorLagSamples : lagNow;
       }
       scratchOutGateHigh = gateHigh;
       result.scratchGateOut = gateHigh ? 10.f : 0.f;
@@ -1989,7 +2021,7 @@ struct TemporalDeckEngine {
       externalCvGateHigh = false;
       result.lag = currentLagFromNewest(newestPos);
       result.accessibleLag = sampleWindowEndPos;
-      updateScratchControlOutputs(anyScratch, result.lag);
+      updateScratchControlOutputs(anyScratch, result.lag, externalScratch);
       result.platterAngle = platterPhase;
       result.sampleMode = true;
       result.sampleLoaded = sampleLoaded;
@@ -2541,7 +2573,7 @@ struct TemporalDeckEngine {
     result.outR = outR;
     result.lag = currentLagFromNewest(newestPos);
     result.accessibleLag = limit;
-    updateScratchControlOutputs(anyScratch, result.lag);
+    updateScratchControlOutputs(anyScratch, result.lag, externalScratch);
     result.platterAngle = platterPhase;
     result.sampleMode = sampleModeActive;
     result.sampleLoaded = sampleLoaded;
@@ -2636,6 +2668,7 @@ struct TemporalDeck::Impl {
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
+  int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
@@ -2758,6 +2791,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->engine.reset(impl->cachedSampleRate);
   impl->engine.sampleModeEnabled = sampleModeEnabled;
   impl->engine.sampleLoopEnabled = sampleLoopEnabled;
+  impl->engine.externalGatePosMode = impl->externalGatePosMode;
   if (decodedSample.frames > 0 && !decodedSample.left.empty()) {
     int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, impl->cachedSampleRate);
     int maxFrames = maxFramesForModeAtSampleRate(impl->engine.bufferDurationMode, impl->cachedSampleRate);
@@ -2831,6 +2865,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
+  json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
@@ -2858,6 +2893,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *slipJ = json_object_get(root, "slipLatched");
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
+  json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
@@ -2883,6 +2919,10 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (platterTraceLoggingJ) {
     impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
+  }
+  if (externalGatePosModeJ) {
+    impl->externalGatePosMode =
+      clamp((int)json_integer_value(externalGatePosModeJ), EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
   }
   if (slipReturnModeJ) {
     impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
@@ -3013,6 +3053,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
+  impl->engine.externalGatePosMode = impl->externalGatePosMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
   impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
@@ -3400,4 +3441,12 @@ int TemporalDeck::getSlipReturnMode() const {
 
 void TemporalDeck::setSlipReturnMode(int mode) {
   impl->slipReturnMode = clamp(mode, SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
+}
+
+int TemporalDeck::getExternalGatePosMode() const {
+  return impl->externalGatePosMode;
+}
+
+void TemporalDeck::setExternalGatePosMode(int mode) {
+  impl->externalGatePosMode = clamp(mode, EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
 }

@@ -36,6 +36,10 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
   static constexpr int BUFFER_DURATION_COUNT = 4;
 
+  static constexpr int EXTERNAL_GATE_POS_GLIDE = 0;
+  static constexpr int EXTERNAL_GATE_POS_MODULE_SYNC = 1;
+  static constexpr int EXTERNAL_GATE_POS_COUNT = 2;
+
   static constexpr int SAMPLE_SOURCE_LIVE = 0;
   static constexpr int SAMPLE_SOURCE_FILE = 1;
   static constexpr int PLATTER_ART_BUILTIN_SVG = 0;
@@ -99,6 +103,7 @@ struct TemporalDeck final : Module {
   static const char *scratchInterpolationLabelFor(int index);
   static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
+  static const char *externalGatePosLabelFor(int index);
   static const char *platterArtModeLabelFor(int index);
   static const char *platterBrightnessLabelFor(int index);
 
@@ -163,6 +168,8 @@ struct TemporalDeck final : Module {
   void setSlipLatched(bool enabled);
   int getSlipReturnMode() const;
   void setSlipReturnMode(int mode);
+  int getExternalGatePosMode() const;
+  void setExternalGatePosMode(int mode);
 
 private:
   void applySampleRateChange(float sampleRate);

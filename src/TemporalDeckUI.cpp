@@ -3275,6 +3275,14 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
+      menu->addChild(createSubmenuItem("Gate+POS mode", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::externalGatePosLabelFor(i), "",
+            [=]() { return module->getExternalGatePosMode() == i; },
+            [=]() { module->setExternalGatePosMode(i); }));
+        }
+      }));
       if (!module->isSampleModeEnabled()) {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
           auto bufferModeMenuLabel = [=](int mode) {
