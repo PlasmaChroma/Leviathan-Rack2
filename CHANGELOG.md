@@ -2,13 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.2]
+
+- Added Temporal Deck module
+
 ## [v2.2.6]
 
 ### Integral Flux
-Fix EoC / EoR behavior when in slew mode
+- Fix EoC / EoR behavior when in slew mode
 
 ### Proc
-Fix EoC / EoR behavior when in slew mode
+- Fix EoC / EoR behavior when in slew mode
 
 ## [v2.2.5]
 

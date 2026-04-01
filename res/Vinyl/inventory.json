@@ -1,0 +1,60 @@
+{
+  "type": "TemporalDeckVinylInventory",
+  "version": 1,
+  "basePath": "res/Vinyl",
+  "vinyl": [
+    {
+      "id": "temporal_deck",
+      "label": "Temporal Deck",
+      "file": "TemporalDeck.png",
+      "format": "png",
+      "menuVisible": true,
+      "menuId": 1
+    },
+    {
+      "id": "blank",
+      "label": "Blank",
+      "file": "Blank.png",
+      "format": "png",
+      "menuVisible": true,
+      "menuId": 2
+    },
+    {
+      "id": "static_svg",
+      "label": "Built-in SVG",
+      "file": "Static.svg",
+      "format": "svg",
+      "menuVisible": false,
+      "menuId": 100
+    }
+  ],
+  "signed": {
+    "algorithm": "fnv1a64-keyed-v1",
+    "generatedUnix": 1775008315,
+    "keyId": "f2f64a74e0dd68c5",
+    "signature": "7c1df9cf72d89e64",
+    "files": [
+      {
+        "id": "temporal_deck",
+        "file": "TemporalDeck.png",
+        "menuId": 1,
+        "size": 537560,
+        "hash": "5ac733ac8ee72d32"
+      },
+      {
+        "id": "blank",
+        "file": "Blank.png",
+        "menuId": 2,
+        "size": 268693,
+        "hash": "4f74d11669369e1e"
+      },
+      {
+        "id": "static_svg",
+        "file": "Static.svg",
+        "menuId": 100,
+        "size": 26442,
+        "hash": "288f967cfb02138d"
+      }
+    ]
+  }
+}

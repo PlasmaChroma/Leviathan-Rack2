@@ -1,7 +1,11 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
+<<<<<<< HEAD
   "version": "2.3.6",
+=======
+  "version": "2.3.5",
+>>>>>>> d13ae2f1b17d81a4284c758bd02a3fcf0fce57fa
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -10,7 +14,7 @@
   "pluginUrl": "",
   "manualUrl": "",
   "sourceUrl": "https://github.com/PlasmaChroma/Leviathan-Rack2",
-  "donateUrl": "https://account.venmo.com/u/LeviKendall1981",
+  "donateUrl": "https://buymeacoffee.com/dragonkingleviathan",
   "changelogUrl": "https://github.com/PlasmaChroma/Leviathan-Rack2/blob/master/CHANGELOG.md",
   "modules": [
     {
@@ -38,7 +42,11 @@
     {
       "slug": "TemporalDeck",
       "name": "Temporal Deck",
+<<<<<<< HEAD
       "description": "Virtual turntable with modern hybrid control.",
+=======
+      "description": "Like a turntable with modern hybrid control.",
+>>>>>>> d13ae2f1b17d81a4284c758bd02a3fcf0fce57fa
       "tags": [
         "Delay",
         "Distortion",

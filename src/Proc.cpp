@@ -15,6 +15,7 @@ struct Proc : Module {
 		RISE_PARAM,
 		FALL_PARAM,
 		SHAPE_PARAM,
+		AMP_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -93,6 +94,7 @@ struct Proc : Module {
 		float riseTimeStep = 0.f;
 		float fallTimeStep = 0.f;
 		int timeInterpSamplesLeft = 0;
+		float signalOutputGain = 1.f;
 	};
 
 	struct ChannelConfig {
@@ -130,6 +132,9 @@ struct Proc : Module {
 		std::atomic<float> riseTime {0.01f};
 		std::atomic<float> fallTime {0.01f};
 		std::atomic<float> curveSigned {0.f};
+		std::atomic<float> dotXNorm {0.f};
+		std::atomic<float> dotYNorm {0.f};
+		std::atomic<uint8_t> dotVisible {0};
 		std::atomic<uint8_t> interactiveRecent {0};
 		std::atomic<uint32_t> version {1};
 	};
@@ -155,8 +160,8 @@ struct Proc : Module {
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float FUNCTION_V_MIN = 0.f;
-	// Proc's free-running FG mode spans 0-8 V, while slew mode keeps the wider reference range.
-	static constexpr float FG_V_MAX = 8.f;
+	// Proc's free-running FG mode spans 0-10 V, while slew mode keeps the wider reference range.
+	static constexpr float FG_V_MAX = 10.f;
 	static constexpr float SLEW_REF_V_MAX = 10.2f;
 	static constexpr float WARP_K_MAX = 40.f;
 	static constexpr int WARP_SCALE_SAMPLES = 16;
@@ -178,6 +183,7 @@ struct Proc : Module {
 	static constexpr float SIGNAL_INJECT_GAIN = 0.55f;
 	// One-pole attraction time constant for FG input perturbation.
 	static constexpr float SIGNAL_INJECT_TAU = 0.0015f;
+	static constexpr float DEFAULT_FUNCTION_AMP = 8.f;
 	// Empirical BOTH CV response fit (hardware-calibrated saturating model).
 	static constexpr float BOTH_F_OFF_HZ = 1.93157058f;
 	static constexpr float BOTH_F_MAX_HZ = 986.84629918f;
@@ -191,7 +197,7 @@ struct Proc : Module {
 	static constexpr float CV_OCT_CLAMP = 12.f;
 	static constexpr float STAGE_CV_OCT_PER_V = 0.5f;
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
-	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 30.f;
+	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
@@ -377,7 +383,7 @@ struct Proc : Module {
 		}
 		float f = clamp(fraction01, 1e-6f, 1.f);
 		float p = f - 1.f;
-		ch.signalBlep.insertDiscontinuity(p, step);
+		ch.signalBlep.insertDiscontinuity(p, step * ch.signalOutputGain);
 	}
 
 	void setTimingUpdateDiv(int div) {
@@ -427,6 +433,12 @@ struct Proc : Module {
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
 		shared.interactiveRecent.store(interactiveRecent ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 		shared.version.fetch_add(1, std::memory_order_relaxed);
+	}
+
+	void publishPreviewDot(PreviewSharedState& shared, bool visible, float xNorm, float yNorm) {
+		shared.dotXNorm.store(clamp(xNorm, 0.f, 1.f), std::memory_order_relaxed);
+		shared.dotYNorm.store(clamp(yNorm, 0.f, 1.f), std::memory_order_relaxed);
+		shared.dotVisible.store(visible ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 	}
 
 	static bool previewChangedMeaningfully(float riseNow, float risePrev, float fallNow, float fallPrev, float curveNow, float curvePrev) {
@@ -480,11 +492,15 @@ struct Proc : Module {
 		}
 	}
 
-	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, bool& interactiveRecent, uint32_t& version) const {
+	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm, float& dotYNorm,
+		bool& dotVisible, bool& interactiveRecent, uint32_t& version) const {
 		const PreviewSharedState& shared = previewState;
 		riseTime = shared.riseTime.load(std::memory_order_relaxed);
 		fallTime = shared.fallTime.load(std::memory_order_relaxed);
 		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
+		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
+		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
 		interactiveRecent = shared.interactiveRecent.load(std::memory_order_relaxed) != 0;
 		version = shared.version.load(std::memory_order_relaxed);
 	}
@@ -678,12 +694,15 @@ struct Proc : Module {
 		}
 		float scale = ch.cachedWarpScale;
 
+		float functionAmp = params[AMP_PARAM].getValue();
+		float functionAmpScale = functionAmp / FG_V_MAX;
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
 		if (!haltHigh && ch.phase == CHANNEL_IDLE && cycleOn) {
 			// Cycle retriggers as soon as the channel reaches idle.
 			triggerFunction(ch);
 		}
+		ch.signalOutputGain = (ch.phase != CHANNEL_IDLE) ? functionAmpScale : 1.f;
 		if (haltHigh) {
 			ChannelResult result;
 			result.cycleOn = cycleOn;
@@ -701,14 +720,19 @@ struct Proc : Module {
 
 		if (ch.phase != CHANNEL_IDLE) {
 			// Function-generator integration path.
+			ch.signalOutputGain = functionAmpScale;
 			float s = shapeSigned;
 			float range = FG_V_MAX - FUNCTION_V_MIN;
 			float xIn = 0.f;
 			float injectAlpha = 0.f;
 			if (signalPatched) {
-				// Map patched input into the same normalized domain as the internal integrator state.
-				float inSoft = softClamp8(signalIn);
-				xIn = clamp((inSoft - FUNCTION_V_MIN) / range, 0.f, 1.f);
+				// During active cycling, shape toward the patched signal's
+				// fixed FG-domain amplitude so AMP does not alter Signal IN influence.
+				float shapedTarget = clamp(signalIn, FUNCTION_V_MIN, FG_V_MAX);
+				float targetNorm = (FG_V_MAX > FUNCTION_V_MIN)
+					? clamp((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
+					: 0.f;
+				xIn = targetNorm;
 				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
 				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
 			}
@@ -766,6 +790,7 @@ struct Proc : Module {
 		}
 		else if (signalPatched) {
 			// Use the same curve-warp family as the function generator path.
+			ch.signalOutputGain = 1.f;
 			SlewStepResult slewStep = processUnifiedShapedSlew(
 				ch,
 				signalIn,
@@ -781,9 +806,23 @@ struct Proc : Module {
 			updateGateOutputs(eorGateIsHigh, eocGateIsHigh, 1e-6f);
 		}
 		else {
+			ch.signalOutputGain = 1.f;
 			ch.slewDir = 0;
 			ch.out = 0.f;
 		}
+
+		bool fgDotVisible = (ch.phase != CHANNEL_IDLE);
+		float dotXNorm = 0.f;
+		if (fgDotVisible) {
+			float total = std::max(riseTime + fallTime, 1e-6f);
+			if (ch.phase == CHANNEL_RISE) {
+				dotXNorm = clamp((ch.phasePos * riseTime) / total, 0.f, 1.f);
+			} else if (ch.phase == CHANNEL_FALL) {
+				dotXNorm = clamp((riseTime + ch.phasePos * fallTime) / total, 0.f, 1.f);
+			}
+		}
+		float dotYNorm = clamp((ch.out - FUNCTION_V_MIN) / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f), 0.f, 1.f);
+		publishPreviewDot(previewShared, fgDotVisible, dotXNorm, dotYNorm);
 
 		ChannelResult result;
 		result.cycleOn = cycleOn;
@@ -797,6 +836,7 @@ struct Proc : Module {
 		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
 		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
 		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+		configParam(AMP_PARAM, 0.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
 		configInput(SIGNAL_INPUT, "Signal");
 		configInput(TRIGGER_INPUT, "Trigger");
 		configInput(HALT_INPUT, "Halt CV");
@@ -888,7 +928,8 @@ struct Proc : Module {
 		}
 
 		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
-		float outRendered = channel.out + (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+		float outRendered = channel.out * channel.signalOutputGain
+			+ (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
 		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
 		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
 		float negOut = -outRendered;
@@ -950,11 +991,17 @@ struct WavePreviewWidget : Widget {
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
+	static constexpr float DOT_RADIUS = 2.1f;
+	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
+	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
+	float dotXNorm = 0.f;
+	float dotYNorm = 0.f;
+	bool dotVisible = false;
 
 	WavePreviewWidget() = default;
 
@@ -1039,10 +1086,8 @@ struct WavePreviewWidget : Widget {
 
 	void step() override {
 		Widget::step();
-		Proc* modulePtr = nullptr;
-		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
-			modulePtr = moduleWidget->getModule<Proc>();
-		}
+		ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
+		Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1052,11 +1097,22 @@ struct WavePreviewWidget : Widget {
 		float riseTime = 0.01f;
 		float fallTime = 0.01f;
 		float curveSigned = 0.f;
+		float previewDotXNorm = 0.f;
+		float previewDotYNorm = 0.f;
+		bool previewDotVisible = false;
 		bool interactiveRecent = false;
 		uint32_t version = 0;
-		modulePtr->getPreviewState(riseTime, fallTime, curveSigned, interactiveRecent, version);
+		modulePtr->getPreviewState(riseTime, fallTime, curveSigned, previewDotXNorm, previewDotYNorm, previewDotVisible,
+			interactiveRecent, version);
+		dotXNorm = previewDotXNorm;
+		dotYNorm = previewDotYNorm;
 		// Displayed frequency reflects the currently effective cycle period.
 		lastFreqHz = 1.f / std::max(riseTime + fallTime, 1e-6f);
+		if (lastFreqHz >= DOT_HIDE_MIN_HZ) {
+			dotVisible = false;
+		} else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
+			dotVisible = previewDotVisible;
+		}
 		if (!pointsValid || version != lastVersion) {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
@@ -1077,6 +1133,30 @@ struct WavePreviewWidget : Widget {
 			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
 			nvgLineCap(args.vg, NVG_BUTT);
 			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+		}
+		if (pointsValid && dotVisible) {
+			float w = std::max(box.size.x, 1.f);
+			float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
+			float left = drawPad;
+			float right = std::max(left + 1.f, w - drawPad);
+			float drawW = right - left;
+			float x = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
+			// Keep the marker visually glued to the rendered waveform by sampling
+			// directly from the preview polyline instead of a separately published y.
+			float idx = clamp(dotXNorm, 0.f, 1.f) * float(POINT_COUNT - 1);
+			int i0 = clamp(int(std::floor(idx)), 0, POINT_COUNT - 1);
+			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
+			float f = idx - float(i0);
+			float y = points[i0].y + (points[i1].y - points[i0].y) * f;
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, DOT_RADIUS);
+			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, DOT_RADIUS + 0.55f);
+			nvgStrokeWidth(args.vg, 0.9f);
+			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 220));
 			nvgStroke(args.vg);
 		}
 
@@ -1149,6 +1229,28 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
+struct AmpVoltageReadoutWidget : Widget {
+	Proc* module = nullptr;
+	int paramId = -1;
+
+	void draw(const DrawArgs& args) override {
+		Widget::draw(args);
+		if (paramId < 0 || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		if (!module) {
+			return;
+		}
+		char ampText[16];
+		std::snprintf(ampText, sizeof(ampText), "%.1fV", module->params[paramId].getValue());
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.0f);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		nvgText(args.vg, box.size.x * 0.5f, 0.f, ampText, nullptr);
+	}
+};
+
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
@@ -1164,6 +1266,15 @@ struct ProcWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(7.246, 28.71)), module, Proc::AMP_PARAM));
+		{
+			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
+			ampReadout->module = module;
+			ampReadout->paramId = Proc::AMP_PARAM;
+			ampReadout->box.pos = mm2px(Vec(2.5, 32.15));
+			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
+			addChild(ampReadout);
+		}
 		{
 			WavePreviewWidget* previewWidget = new WavePreviewWidget();
 			math::Rect previewRectMm;
@@ -1182,7 +1293,7 @@ struct ProcWidget : ModuleWidget {
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 36.367)), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 40.367)), module, Proc::HALT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::FALL_CV_INPUT));
