@@ -49,6 +49,12 @@ constexpr int TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_MODULE_SYNC;
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_COUNT;
 
+constexpr int TemporalDeck::LIVE_FORWARD_COMP_NONE;
+constexpr int TemporalDeck::LIVE_FORWARD_COMP_LOW;
+constexpr int TemporalDeck::LIVE_FORWARD_COMP_MEDIUM;
+constexpr int TemporalDeck::LIVE_FORWARD_COMP_HIGH;
+constexpr int TemporalDeck::LIVE_FORWARD_COMP_COUNT;
+
 constexpr int TemporalDeck::SAMPLE_SOURCE_LIVE;
 constexpr int TemporalDeck::SAMPLE_SOURCE_FILE;
 
@@ -632,6 +638,7 @@ struct TemporalDeckEngine {
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
+  int liveForwardCompMode = TemporalDeck::LIVE_FORWARD_COMP_HIGH;
   bool scratchActive = false;
   bool slipReturning = false;
   bool slipBlendActive = false;
@@ -1697,6 +1704,20 @@ struct TemporalDeckEngine {
     }
   }
 
+  float liveForwardCompAmount() const {
+    switch (clamp(liveForwardCompMode, TemporalDeck::LIVE_FORWARD_COMP_NONE, TemporalDeck::LIVE_FORWARD_COMP_COUNT - 1)) {
+    case TemporalDeck::LIVE_FORWARD_COMP_NONE:
+      return 0.f;
+    case TemporalDeck::LIVE_FORWARD_COMP_LOW:
+      return 0.35f;
+    case TemporalDeck::LIVE_FORWARD_COMP_MEDIUM:
+      return 0.70f;
+    case TemporalDeck::LIVE_FORWARD_COMP_HIGH:
+    default:
+      return 1.f;
+    }
+  }
+
   void integrateHybridScratch(float dt, double limit, double newestPos, float targetReadVelocity, float followScale,
                               float dampingScale, float correctionScale, float nowSnapThresholdSamples,
                               bool clampOvershootToTarget = false, bool allowNowSnap = true) {
@@ -2295,6 +2316,7 @@ struct TemporalDeckEngine {
       // Hybrid scratch keeps lag as the authoritative state, but moves it
       // from an integrated motion model instead of direct target chasing.
       scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+      float liveForwardComp = sampleModeActive ? 0.f : liveForwardCompAmount();
       if (manualTouchScratch) {
         scratchWheelVelocityBurst = 0.f;
         if (hasFreshPlatterGesture) {
@@ -2314,7 +2336,13 @@ struct TemporalDeckEngine {
             if (targetLag < nearNowWindow) {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
             }
-            targetLag += driftLag * driftMix;
+            // LIVE forward compensation should only change toward-NOW behavior.
+            // Keep full drift anchoring for backward drags and stationary hold
+            // so reverse feel is not weakened.
+            double gestureLagDelta = double(platterLagTarget) - lastPlatterLagTarget;
+            bool towardNowGesture = gestureLagDelta < -1e-4;
+            double forwardScale = towardNowGesture ? double(liveForwardComp) : 1.0;
+            targetLag += driftLag * driftMix * forwardScale;
           }
           scratchLagTargetSamples = clampLag(targetLag, limit);
           lastPlatterGestureRevision = platterGestureRevision;
@@ -2335,6 +2363,9 @@ struct TemporalDeckEngine {
             targetReadVelocity = platterGestureVelocity;
             if (platter_interaction::shouldApplyWriteHeadCompensation(freezeForScratchModel, hasFreshPlatterGesture,
                                                                       platterMotionActive)) {
+              // Keep the write-head frame conversion stable for both gesture
+              // directions; user-selected LIVE forward compensation is applied
+              // in forward-assist paths, not by removing this baseline.
               targetReadVelocity += sampleRate;
             }
           }
@@ -2353,19 +2384,20 @@ struct TemporalDeckEngine {
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool allowNowSnap = !manualTouchScratch;
           double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
+          float preIntegrateLag = scratchLagSamples;
           integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
                                  0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples, false, allowNowSnap);
           if (!sampleModeActive && manualMotionActive && gestureDirection != 0.f) {
-            double postIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
-            double deltaRead = postIntegrateReadHead - preIntegrateReadHead;
-            // During active live drag, never allow motion opposite to gesture
-            // direction. This prevents sporadic forward steps while dragging
-            // backward (and vice versa) when lag-correction terms disagree.
-            bool oppositeMotion =
-              (gestureDirection > 0.f && deltaRead < 0.0) || (gestureDirection < 0.f && deltaRead > 0.0);
+            // Gesture direction is expressed in lag space (toward/away from
+            // NOW). In live mode the read head can still move forward in
+            // absolute buffer space while lag increases, so clamp against lag
+            // direction, not absolute read-head direction.
+            float lagDelta = scratchLagSamples - preIntegrateLag;
+            bool oppositeMotion = (gestureDirection > 0.f && lagDelta > 0.f) || (gestureDirection < 0.f && lagDelta < 0.f);
             if (oppositeMotion) {
               readHead = buffer.wrapPosition(preIntegrateReadHead);
-              scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
+              scratchLagSamples = preIntegrateLag;
+              scratchLagTargetSamples = preIntegrateLag;
             }
           }
         }
@@ -2376,7 +2408,7 @@ struct TemporalDeckEngine {
         if (!sampleModeActive && !freezeForScratchModel && wheelDeltaShaped < 0.f) {
           // In live circular mode, small toward-NOW wheel nudges must overcome
           // moving write-head drift. Give forward wheel ticks a slight assist.
-          wheelDeltaShaped *= 1.35f;
+          wheelDeltaShaped *= 1.f + 0.35f * liveForwardComp;
         }
         if (std::fabs(wheelDelta) > 1e-6f) {
           scratchLagTargetSamples = clampLag(scratchLagTargetSamples + wheelDeltaShaped, limit);
@@ -2804,6 +2836,7 @@ struct TemporalDeck::Impl {
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
+  int liveForwardCompMode = TemporalDeck::LIVE_FORWARD_COMP_HIGH;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
@@ -3110,6 +3143,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
+  json_object_set_new(root, "liveForwardCompMode", json_integer(impl->liveForwardCompMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
@@ -3138,6 +3172,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
+  json_t *liveForwardCompModeJ = json_object_get(root, "liveForwardCompMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
@@ -3169,6 +3204,10 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (slipReturnModeJ) {
     impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
+  }
+  if (liveForwardCompModeJ) {
+    impl->liveForwardCompMode =
+      clamp((int)json_integer_value(liveForwardCompModeJ), LIVE_FORWARD_COMP_NONE, LIVE_FORWARD_COMP_COUNT - 1);
   }
   if (cartridgeJ) {
     impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, CARTRIDGE_COUNT - 1);
@@ -3356,6 +3395,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.externalGatePosMode = impl->externalGatePosMode;
+  impl->engine.liveForwardCompMode = impl->liveForwardCompMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.sampleRate = args.sampleRate;
   impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
@@ -3756,4 +3796,12 @@ int TemporalDeck::getExternalGatePosMode() const {
 
 void TemporalDeck::setExternalGatePosMode(int mode) {
   impl->externalGatePosMode = clamp(mode, EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
+}
+
+int TemporalDeck::getLiveForwardCompMode() const {
+  return impl->liveForwardCompMode;
+}
+
+void TemporalDeck::setLiveForwardCompMode(int mode) {
+  impl->liveForwardCompMode = clamp(mode, LIVE_FORWARD_COMP_NONE, LIVE_FORWARD_COMP_COUNT - 1);
 }

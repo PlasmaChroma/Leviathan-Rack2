@@ -3,8 +3,10 @@
 #include "../src/TemporalDeckTest.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -25,6 +27,22 @@ bool parseDouble(const std::string &s, double *out) {
   } catch (...) {
     return false;
   }
+}
+
+std::string trimToken(const std::string &s) {
+  size_t start = 0;
+  size_t end = s.size();
+  while (start < end && std::isspace(static_cast<unsigned char>(s[start]))) {
+    ++start;
+  }
+  while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
+    --end;
+  }
+  if (end >= start + 3 && static_cast<unsigned char>(s[start]) == 0xEF &&
+      static_cast<unsigned char>(s[start + 1]) == 0xBB && static_cast<unsigned char>(s[start + 2]) == 0xBF) {
+    start += 3;
+  }
+  return s.substr(start, end - start);
 }
 
 std::vector<std::string> splitCsvLine(const std::string &line) {
@@ -60,6 +78,19 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
   int errCount = 0;
 
   std::string line;
+  std::map<std::string, int> headerIndex;
+  int idxTime = 1;
+  int idxEvent = 2;
+  int idxFreeze = 3;
+  int idxLagDelta = 12;
+  int idxLiveLag = 13;
+  int idxLocalLag = 14;
+
+  auto assignIndex = [&](const std::string &name, int *dst, int fallback) {
+    auto it = headerIndex.find(name);
+    *dst = (it != headerIndex.end()) ? it->second : fallback;
+  };
+
   while (std::getline(f, line)) {
     if (line.empty() || line[0] == '#') {
       continue;
@@ -69,7 +100,22 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
     if (cols.size() < 18) {
       continue;
     }
-    if (cols[0] == "seq") {
+    if (trimToken(cols[0]) == "seq") {
+      headerIndex.clear();
+      for (int i = 0; i < int(cols.size()); ++i) {
+        headerIndex[trimToken(cols[i])] = i;
+      }
+      assignIndex("t_sec", &idxTime, idxTime);
+      assignIndex("event", &idxEvent, idxEvent);
+      assignIndex("freeze", &idxFreeze, idxFreeze);
+      assignIndex("lag_delta", &idxLagDelta, idxLagDelta);
+      assignIndex("live_lag", &idxLiveLag, idxLiveLag);
+      assignIndex("local_lag", &idxLocalLag, idxLocalLag);
+      continue;
+    }
+
+    int requiredIdx = std::max({idxTime, idxEvent, idxFreeze, idxLagDelta, idxLiveLag, idxLocalLag});
+    if (requiredIdx >= int(cols.size())) {
       continue;
     }
 
@@ -78,8 +124,9 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
     double lagDelta = 0.0;
     double liveLag = 0.0;
     double localLag = 0.0;
-    if (!parseDouble(cols[1], &tSec) || !parseDouble(cols[3], &freezeFlag) || !parseDouble(cols[12], &lagDelta) ||
-        !parseDouble(cols[13], &liveLag) || !parseDouble(cols[14], &localLag)) {
+    if (!parseDouble(cols[idxTime], &tSec) || !parseDouble(cols[idxFreeze], &freezeFlag) ||
+        !parseDouble(cols[idxLagDelta], &lagDelta) || !parseDouble(cols[idxLiveLag], &liveLag) ||
+        !parseDouble(cols[idxLocalLag], &localLag)) {
       continue;
     }
 
@@ -88,7 +135,7 @@ bool replayTraceFile(const std::string &path, std::ostream &out) {
     lastRecordedLag = localLag;
     hasRecordedLag = true;
 
-    const std::string &eventName = cols[2];
+    const std::string eventName = trimToken(cols[idxEvent]);
     if (eventName == "WHEEL") {
       wheelRows++;
       continue;

@@ -87,6 +87,20 @@ const char *TemporalDeck::externalGatePosLabelFor(int index) {
   }
 }
 
+const char *TemporalDeck::liveForwardCompLabelFor(int index) {
+  switch (index) {
+  case LIVE_FORWARD_COMP_NONE:
+    return "None";
+  case LIVE_FORWARD_COMP_LOW:
+    return "Low";
+  case LIVE_FORWARD_COMP_MEDIUM:
+    return "Medium";
+  case LIVE_FORWARD_COMP_HIGH:
+  default:
+    return "High";
+  }
+}
+
 const char *TemporalDeck::platterArtModeLabelFor(int index) {
   switch (index) {
   case PLATTER_ART_DRAGON_KING:

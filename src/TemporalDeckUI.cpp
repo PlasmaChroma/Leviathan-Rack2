@@ -86,6 +86,9 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   bool dragging = false;
   bool dragHasTiming = false;
   Vec onButtonPos;
+  bool mouseDownAnchorValid = false;
+  Vec mouseDownAnchorLocal;
+  float mouseDownAnchorLagSamples = 0.f;
   float contactAngle = 0.f;
   float contactRadiusPx = 0.f;
   float localLagSamples = 0.f;
@@ -2926,6 +2929,12 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
 void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
   syncTraceCaptureState();
   onButtonPos = e.pos;
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && !isWithinPlatter(e.pos)) {
+    mouseDownAnchorValid = false;
+  }
+  if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+    mouseDownAnchorValid = false;
+  }
   if (e.button == GLFW_MOUSE_BUTTON_MIDDLE && isWithinPlatter(e.pos)) {
     if (e.action == GLFW_PRESS && module) {
       module->triggerQuickSlipReturn();
@@ -2942,6 +2951,9 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
       logTraceEvent("BUTTON_PRESS", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, float(module ? module->getUiLagSamples() : 0.f),
                     localLagSamples, filteredGestureVelocity);
       if (module) {
+        mouseDownAnchorValid = true;
+        mouseDownAnchorLocal = local;
+        mouseDownAnchorLagSamples = float(module->getUiLagSamples());
         localLagSamples = module->getUiLagSamples();
         filteredGestureVelocity = 0.f;
         dragHasTiming = false;
@@ -2959,6 +2971,7 @@ void TemporalDeckPlatterWidget::onButton(const event::Button &e) {
         module->setPlatterScratch(false, localLagSamples, 0.f);
         module->setPlatterMotionFreshSamples(0);
       }
+      mouseDownAnchorValid = false;
       e.consume(this);
       return;
     }
@@ -3019,7 +3032,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || !isWithinPlatter(onButtonPos)) {
     return;
   }
-  Vec local = onButtonPos.minus(localCenter());
+  Vec local = mouseDownAnchorValid ? mouseDownAnchorLocal : onButtonPos.minus(localCenter());
   dragging = true;
   dragHasTiming = false;
   lastMoveTimeSec = system::getTime();
@@ -3027,7 +3040,7 @@ void TemporalDeckPlatterWidget::onDragStart(const event::DragStart &e) {
   filteredGestureVelocity = 0.f;
   contactAngle = std::atan2(local.y, local.x);
   contactRadiusPx = clamp(local.norm(), platterRadiusPx * 0.32f, platterRadiusPx * 0.98f);
-  localLagSamples = float(module->getUiLagSamples());
+  localLagSamples = mouseDownAnchorValid ? mouseDownAnchorLagSamples : float(module->getUiLagSamples());
   module->setPlatterScratch(true, localLagSamples, 0.f);
   module->setPlatterMotionFreshSamples(0);
   logTraceEvent("DRAG_START", local, Vec(0.f, 0.f), 0.f, 0.f, 0.f, localLagSamples, localLagSamples, 0.f);
@@ -3041,6 +3054,7 @@ void TemporalDeckPlatterWidget::onDragMove(const event::DragMove &e) {
   }
   if (!isLeftMouseDown()) {
     dragging = false;
+    mouseDownAnchorValid = false;
     if (module) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
@@ -3067,6 +3081,7 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
       return;
     }
     dragging = false;
+    mouseDownAnchorValid = false;
     if (module) {
       module->setPlatterScratch(false, localLagSamples, 0.f);
       module->setPlatterMotionFreshSamples(0);
@@ -3304,6 +3319,16 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
+      if (!module->isSampleModeEnabled()) {
+        menu->addChild(createSubmenuItem("LIVE forward scratch comp", "", [=](Menu *submenu) {
+          for (int i = 0; i < TemporalDeck::LIVE_FORWARD_COMP_COUNT; ++i) {
+            submenu->addChild(createCheckMenuItem(
+              TemporalDeck::liveForwardCompLabelFor(i), "",
+              [=]() { return module->getLiveForwardCompMode() == i; },
+              [=]() { module->setLiveForwardCompMode(i); }));
+          }
+        }));
+      }
       menu->addChild(createSubmenuItem("Gate+Pos mode", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(
@@ -3346,11 +3371,11 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      // Hidden for now, but keep the trace plumbing available in code in case
-      // we need to bring back platter interaction logging for debugging.
-      // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
-      //                                    [=]() { return module->isPlatterTraceLoggingEnabled(); },
-      //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
+      menu->addChild(createCheckMenuItem("Capture platter trace data", "",
+                                         [=]() { return module->isPlatterTraceLoggingEnabled(); },
+                                         [=]() {
+                                           module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
+                                         }));
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {
           std::string defaultDir = temporalDeckUserRootPath();
