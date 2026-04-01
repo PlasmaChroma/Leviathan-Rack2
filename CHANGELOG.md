@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.7]
+
+### Temporal Deck
+- Fix issue with s.pos tracking
+
 ## [v2.3.6]
 
 ### Temporal Deck
