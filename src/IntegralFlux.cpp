@@ -1113,26 +1113,6 @@ struct IntegralFlux : Module {
 
 namespace {
 
-struct MyImageWidget : Widget {
-	int imageHandle = -1;
-
-    void draw(const DrawArgs& args) override {
-		// Lazy-load panel image on first draw to avoid startup overhead.
-        if (imageHandle < 0) {
-            std::string path = asset::plugin(pluginInstance, "res/maths2.jpg");
-            imageHandle = nvgCreateImage(args.vg, path.c_str(), 0);
-        }
-
-        if (imageHandle >= 0) {
-            NVGpaint imgPaint = nvgImagePattern(args.vg, 0, 0, box.size.x, box.size.y, 0, imageHandle, 1.0f);
-            nvgBeginPath(args.vg);
-            nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-            nvgFillPaint(args.vg, imgPaint);
-            nvgFill(args.vg);
-        }
-    }
-};
-
 struct IMBigPushButton : CKD6 {
 	int* mode = NULL;
 	TransformWidget *tw;
