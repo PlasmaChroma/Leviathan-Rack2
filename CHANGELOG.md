@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.9]
+
+### Temporal Deck
+- Some more robustness over threading and allocation
+- Use Leviathan/TemporalDeck/Vinyl for storage of images
+
 ## [v2.3.8]
 
 ### Temporal Deck
