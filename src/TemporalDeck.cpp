@@ -2512,6 +2512,12 @@ struct TemporalDeckEngine {
       // Keep anchored POS reference in write-head time while gate is held.
       externalCvAnchorLagSamples += 1.0;
     }
+    if (anyScratch && writeAdvanced) {
+      // Keep S_POS output anchored in write-head time while S_GATE is high.
+      // This avoids output drift when the read head is held and live input
+      // continues advancing the write head.
+      scratchOutAnchorLagSamples += 1.0;
+    }
 
     if (buffer.size > 0) {
       double readDelta = readHead - prevReadHead;
