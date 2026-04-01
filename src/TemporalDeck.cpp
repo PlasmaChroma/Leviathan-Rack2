@@ -129,8 +129,11 @@ static bool isManagedVinylArtPath(const std::string &path) {
   }
   std::string normalizedPath = normalizePathForPrefixCompare(path);
   std::string builtInRoot = normalizePathForPrefixCompare(asset::plugin(pluginInstance, "res/Vinyl"));
-  std::string expandedRoot = normalizePathForPrefixCompare(system::join(asset::user(), "TemporalDeck/Vinyl"));
-  return hasPathPrefix(normalizedPath, builtInRoot) || hasPathPrefix(normalizedPath, expandedRoot);
+  std::string expandedRoot = normalizePathForPrefixCompare(system::join(asset::user(), "Leviathan/TemporalDeck/Vinyl"));
+  // Legacy user path kept for backward compatibility with older installs.
+  std::string expandedLegacyRoot = normalizePathForPrefixCompare(system::join(asset::user(), "TemporalDeck/Vinyl"));
+  return hasPathPrefix(normalizedPath, builtInRoot) || hasPathPrefix(normalizedPath, expandedRoot) ||
+         hasPathPrefix(normalizedPath, expandedLegacyRoot);
 }
 
 static double clampd(double x, double a, double b) {

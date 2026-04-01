@@ -24,6 +24,7 @@ static bool isExpandedVinylDownloadRunning();
 static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
+static std::string temporalDeckUserRootPath();
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -326,7 +327,7 @@ void TemporalDeckPlatterWidget::startTraceCapture() {
   if (!module || traceRecorder.active) {
     return;
   }
-  std::string traceDir = system::join(asset::user(), "TemporalDeck/platter_traces");
+  std::string traceDir = system::join(temporalDeckUserRootPath(), "platter_traces");
   system::createDirectories(traceDir);
   long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
   std::string filename = "platter_trace_" + std::to_string(stampMs) + ".csv";
@@ -673,7 +674,9 @@ static std::string expandedVinylSyncLabel() {
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
 
-static std::string expandedVinylRootPath() { return system::join(asset::user(), "TemporalDeck/Vinyl"); }
+static std::string temporalDeckUserRootPath() { return system::join(asset::user(), "Leviathan/TemporalDeck"); }
+
+static std::string expandedVinylRootPath() { return system::join(temporalDeckUserRootPath(), "Vinyl"); }
 
 static std::string expandedVinylInventoryPath() { return system::join(expandedVinylRootPath(), "expanded.json"); }
 
@@ -3350,7 +3353,7 @@ struct TemporalDeckWidget : ModuleWidget {
       //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {
-          std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+          std::string defaultDir = temporalDeckUserRootPath();
           system::createDirectories(defaultDir);
           osdialog_filters *filters = osdialog_filters_parse("JSON:json,JSON");
           char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "inventory.signed.json", filters);
@@ -3384,7 +3387,7 @@ struct TemporalDeckWidget : ModuleWidget {
             osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, msg.c_str());
             return;
           }
-          std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+          std::string defaultDir = temporalDeckUserRootPath();
           system::createDirectories(defaultDir);
           osdialog_filters *filters = osdialog_filters_parse("JSON:json,JSON");
           char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "inventory.expanded.signed.json", filters);
@@ -3412,7 +3415,7 @@ struct TemporalDeckWidget : ModuleWidget {
           Vec platterCenter = mm2px(Vec(50.8f, 72.f));
           float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
           loadPlatterAnchor(platterCenter, platterRadius);
-          std::string defaultDir = system::join(asset::user(), "TemporalDeck");
+          std::string defaultDir = temporalDeckUserRootPath();
           system::createDirectories(defaultDir);
           osdialog_filters *filters = osdialog_filters_parse("SVG:svg,SVG");
           char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "temporaldeck_platter.svg", filters);
