@@ -3275,7 +3275,7 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
-      menu->addChild(createSubmenuItem("Gate+POS mode", "", [=](Menu *submenu) {
+      menu->addChild(createSubmenuItem("Gate+Pos mode", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(
             TemporalDeck::externalGatePosLabelFor(i), "",
