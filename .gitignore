@@ -10,3 +10,6 @@
 /build
 /dep
 /dist
+
+# Local runtime debug flag
+/res/dragonking.txt
