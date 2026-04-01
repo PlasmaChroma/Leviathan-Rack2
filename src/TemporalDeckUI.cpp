@@ -67,7 +67,7 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   static constexpr float kLowFpsCompStartHz = 90.f;
   static constexpr float kLowFpsCompFullHz = 45.f;
   static constexpr float kLowFpsWarningOnHz = 55.f;
-  static constexpr float kLowFpsWarningOffHz = 60.f;
+  static constexpr float kLowFpsWarningOffHz = 55.f;
   static constexpr float kLowFpsWarningSettleSec = 1.0f;
   static constexpr float kLowFpsWarningClearSec = 0.25f;
 
