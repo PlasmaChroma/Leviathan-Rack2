@@ -6,13 +6,16 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -167,6 +170,77 @@ static void resampleSampleChannel(const std::vector<float> &src, float sourceRat
     float t = float(srcPos - double(i0));
     (*dst)[i] = crossfade(src[i0], src[i1], t) * outputGain;
   }
+}
+
+struct PreparedSampleData {
+  std::vector<float> left;
+  std::vector<float> right;
+  int frames = 0;
+  int bufferMode = TemporalDeck::BUFFER_DURATION_10S;
+  float sampleRate = 44100.f;
+  bool truncated = false;
+  bool autoPlayOnLoad = true;
+  bool monoStorage = false;
+  bool valid = false;
+};
+
+static bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
+                                bool autoPlayOnLoad, PreparedSampleData *outPrepared) {
+  if (!outPrepared) {
+    return false;
+  }
+  PreparedSampleData prepared;
+  if (decodedSample.frames <= 0 || decodedSample.left.empty() || targetSampleRate <= 1.f) {
+    *outPrepared = prepared;
+    return false;
+  }
+
+  prepared.bufferMode = clamp(bufferMode, TemporalDeck::BUFFER_DURATION_10S, TemporalDeck::BUFFER_DURATION_COUNT - 1);
+  prepared.sampleRate = targetSampleRate;
+  prepared.autoPlayOnLoad = autoPlayOnLoad;
+  prepared.monoStorage = isMonoBufferMode(prepared.bufferMode);
+
+  int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, targetSampleRate);
+  int maxFrames = maxFramesForModeAtSampleRate(prepared.bufferMode, targetSampleRate);
+  prepared.truncated = decodedSample.truncated;
+  if (outFrames > maxFrames) {
+    outFrames = maxFrames;
+    prepared.truncated = true;
+  }
+  if (outFrames <= 0) {
+    *outPrepared = prepared;
+    return false;
+  }
+
+  if (prepared.monoStorage) {
+    std::vector<float> leftResampled;
+    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &leftResampled,
+                          kSampleFileVoltageScale);
+    if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
+      std::vector<float> rightResampled;
+      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &rightResampled,
+                            kSampleFileVoltageScale);
+      for (int i = 0; i < outFrames; ++i) {
+        leftResampled[i] = 0.5f * (leftResampled[i] + rightResampled[i]);
+      }
+    }
+    prepared.left = std::move(leftResampled);
+    std::vector<float>().swap(prepared.right);
+  } else {
+    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.left,
+                          kSampleFileVoltageScale);
+    if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
+      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.right,
+                            kSampleFileVoltageScale);
+    } else {
+      prepared.right = prepared.left;
+    }
+  }
+
+  prepared.frames = std::min(outFrames, int(prepared.left.size()));
+  prepared.valid = prepared.frames > 0;
+  *outPrepared = std::move(prepared);
+  return outPrepared->valid;
 }
 
 static int nextCartridgeCharacter(int current) {
@@ -635,9 +709,11 @@ struct TemporalDeckEngine {
   double scratchOutAnchorLagSamples = 0.0;
   float prevBaseSpeed = 1.f;
 
-  void reset(float sr) {
+  void reset(float sr, bool resetBuffer = true) {
     sampleRate = sr;
-    buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
+    if (resetBuffer) {
+      buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
+    }
     sampleLoaded = false;
     sampleTransportPlaying = false;
     sampleTruncated = false;
@@ -1570,6 +1646,38 @@ struct TemporalDeckEngine {
         buffer.right[i] = r;
       }
     }
+  }
+
+  void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool autoplay,
+                             bool truncated, bool monoStorage) {
+    sampleLoaded = frames > 0 && !left.empty();
+    sampleModeEnabled = sampleLoaded || sampleModeEnabled;
+    sampleTransportPlaying = autoplay && sampleLoaded;
+    sampleTruncated = truncated;
+    samplePlayhead = 0.0;
+    readHead = 0.0;
+    timelineHead = 0.0;
+
+    buffer.sampleRate = sampleRate;
+    buffer.monoStorage = monoStorage;
+    buffer.left = std::move(left);
+    if (monoStorage) {
+      std::vector<float>().swap(buffer.right);
+    } else {
+      buffer.right = std::move(right);
+      if (buffer.right.size() < buffer.left.size()) {
+        buffer.right.resize(buffer.left.size(), 0.f);
+      }
+    }
+    if (buffer.left.empty()) {
+      buffer.left.assign(1, 0.f);
+    }
+    buffer.size = std::max(1, int(buffer.left.size()));
+    buffer.durationSeconds = std::max(1.f, float(buffer.size) / std::max(sampleRate, 1.f));
+
+    sampleFrames = std::max(0, std::min(frames, buffer.size));
+    buffer.filled = sampleFrames;
+    buffer.writeHead = buffer.wrapIndex(sampleFrames);
   }
 
   void clearScratchMotionState() {
@@ -2622,6 +2730,18 @@ struct ScratchSensitivityQuantity : ParamQuantity {
 } // namespace
 
 struct TemporalDeck::Impl {
+  struct AsyncSampleBuildRequest {
+    enum Type {
+      NONE = 0,
+      LOAD_PATH = 1,
+      REBUILD_FROM_DECODED = 2,
+    };
+    int type = NONE;
+    std::string path;
+    float targetSampleRate = 44100.f;
+    int requestedBufferMode = TemporalDeck::BUFFER_DURATION_10S;
+  };
+
   TemporalDeckEngine engine;
   dsp::SchmittTrigger freezeTrigger;
   dsp::SchmittTrigger reverseTrigger;
@@ -2641,6 +2761,20 @@ struct TemporalDeck::Impl {
   std::string samplePath;
   std::string sampleDisplayName;
   DecodedSampleFile decodedSample;
+  std::atomic<bool> decodedSampleAvailable{false};
+  std::mutex preparedSampleMutex;
+  PreparedSampleData preparedSample;
+  std::atomic<bool> pendingPreparedSampleInstall{false};
+  std::thread sampleBuildThread;
+  std::mutex sampleBuildMutex;
+  std::condition_variable sampleBuildCv;
+  bool sampleBuildStop = false;
+  bool sampleBuildHasRequest = false;
+  AsyncSampleBuildRequest sampleBuildRequest;
+  std::atomic<bool> sampleBuildInProgress{false};
+  std::atomic<uint64_t> sampleBuildRequestSerial{0};
+  uint64_t sampleBuildAppliedSerial = 0;
+  std::atomic<bool> allocationFallbackPending{false};
   std::atomic<bool> platterTouched{false};
   std::atomic<uint32_t> platterGestureRevision{0};
   std::atomic<float> platterLagTarget{0.f};
@@ -2674,6 +2808,114 @@ struct TemporalDeck::Impl {
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
   bool pendingInitialPlatterArtSelection = true;
+
+  void requestAsyncSampleBuild(const AsyncSampleBuildRequest &request) {
+    {
+      std::lock_guard<std::mutex> lock(sampleBuildMutex);
+      sampleBuildRequest = request;
+      sampleBuildHasRequest = true;
+      sampleBuildRequestSerial.fetch_add(1, std::memory_order_relaxed);
+      sampleBuildInProgress.store(true, std::memory_order_relaxed);
+    }
+    sampleBuildCv.notify_one();
+  }
+
+  void startSampleBuildWorker() {
+    sampleBuildStop = false;
+    sampleBuildThread = std::thread([this]() {
+      while (true) {
+        AsyncSampleBuildRequest request;
+        uint64_t requestSerial = 0;
+        {
+          std::unique_lock<std::mutex> lock(sampleBuildMutex);
+          sampleBuildCv.wait(lock, [this]() { return sampleBuildStop || sampleBuildHasRequest; });
+          if (sampleBuildStop) {
+            break;
+          }
+          request = sampleBuildRequest;
+          sampleBuildHasRequest = false;
+          requestSerial = sampleBuildRequestSerial.load(std::memory_order_relaxed);
+        }
+
+        DecodedSampleFile decoded;
+        bool autoPlayOnLoad = true;
+        bool validDecoded = false;
+
+        if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
+          std::string decodeError;
+          bool decodeOk = false;
+          try {
+            decodeOk = decodeSampleFile(request.path, &decoded, &decodeError);
+          } catch (const std::bad_alloc &) {
+            WARN("TemporalDeck: sample decode allocation failed, falling back to 10s live mode");
+            allocationFallbackPending.store(true, std::memory_order_relaxed);
+            pendingSampleStateApply.store(true, std::memory_order_relaxed);
+            sampleBuildInProgress.store(false, std::memory_order_relaxed);
+            continue;
+          }
+          if (!decodeOk) {
+            WARN("TemporalDeck: sample decode failed for '%s': %s", request.path.c_str(), decodeError.c_str());
+            sampleBuildInProgress.store(false, std::memory_order_relaxed);
+            continue;
+          }
+          {
+            std::lock_guard<std::mutex> lock(sampleStateMutex);
+            samplePath = request.path;
+            sampleDisplayName = system::getFilename(request.path);
+            decodedSample = decoded;
+            autoPlayOnLoad = sampleAutoPlayOnLoad;
+            decodedSampleAvailable.store(decodedSample.frames > 0 && !decodedSample.left.empty(),
+                                        std::memory_order_relaxed);
+          }
+          validDecoded = decoded.frames > 0 && !decoded.left.empty();
+        } else if (request.type == AsyncSampleBuildRequest::REBUILD_FROM_DECODED) {
+          std::lock_guard<std::mutex> lock(sampleStateMutex);
+          decoded = decodedSample;
+          autoPlayOnLoad = sampleAutoPlayOnLoad;
+          validDecoded = decoded.frames > 0 && !decoded.left.empty();
+        }
+
+        if (!validDecoded) {
+          sampleBuildInProgress.store(false, std::memory_order_relaxed);
+          continue;
+        }
+
+        int targetMode = request.requestedBufferMode;
+        if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
+          targetMode = chooseSampleBufferMode(decoded);
+          bufferDurationMode.store(targetMode, std::memory_order_relaxed);
+        }
+
+        PreparedSampleData prepared;
+        try {
+          if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, autoPlayOnLoad, &prepared)) {
+            if (requestSerial == sampleBuildRequestSerial.load(std::memory_order_relaxed)) {
+              std::lock_guard<std::mutex> lock(preparedSampleMutex);
+              preparedSample = std::move(prepared);
+              pendingPreparedSampleInstall.store(true, std::memory_order_relaxed);
+            }
+          }
+        } catch (const std::bad_alloc &) {
+          WARN("TemporalDeck: sample prep allocation failed, falling back to 10s live mode");
+          allocationFallbackPending.store(true, std::memory_order_relaxed);
+          pendingSampleStateApply.store(true, std::memory_order_relaxed);
+        }
+        sampleBuildInProgress.store(false, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  void stopSampleBuildWorker() {
+    {
+      std::lock_guard<std::mutex> lock(sampleBuildMutex);
+      sampleBuildStop = true;
+      sampleBuildHasRequest = false;
+    }
+    sampleBuildCv.notify_all();
+    if (sampleBuildThread.joinable()) {
+      sampleBuildThread.join();
+    }
+  }
 };
 
 struct ProcessSignalInputs {
@@ -2758,10 +3000,15 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
     int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
+  impl->startSampleBuildWorker();
   applySampleRateChange(APP->engine->getSampleRate());
 }
 
-TemporalDeck::~TemporalDeck() = default;
+TemporalDeck::~TemporalDeck() {
+  if (impl) {
+    impl->stopSampleBuildWorker();
+  }
+}
 
 float TemporalDeck::scratchSensitivity() {
   return ScratchSensitivityQuantity::sensitivityForValue(params[SCRATCH_SENSITIVITY_PARAM].getValue());
@@ -2778,71 +3025,67 @@ void TemporalDeck::applyBufferDurationMode(int mode) {
 void TemporalDeck::applySampleRateChange(float sampleRate) {
   impl->cachedSampleRate = sampleRate;
   int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
-  DecodedSampleFile decodedSample;
   bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   bool sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
-  bool sampleAutoPlayOnLoad = true;
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    decodedSample = impl->decodedSample;
-    sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
-  }
-  impl->engine.bufferDurationMode = mode;
-  impl->engine.reset(impl->cachedSampleRate);
-  impl->engine.sampleModeEnabled = sampleModeEnabled;
-  impl->engine.sampleLoopEnabled = sampleLoopEnabled;
-  impl->engine.externalGatePosMode = impl->externalGatePosMode;
-  if (decodedSample.frames > 0 && !decodedSample.left.empty()) {
-    int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, impl->cachedSampleRate);
-    int maxFrames = maxFramesForModeAtSampleRate(impl->engine.bufferDurationMode, impl->cachedSampleRate);
-    bool truncated = false;
-    if (outFrames > maxFrames) {
-      outFrames = maxFrames;
-      truncated = true;
+  auto applyUiState = [&](int uiMode) {
+    impl->uiSampleRate.store(impl->cachedSampleRate);
+    impl->uiLagSamples.store(0.0);
+    impl->uiAccessibleLagSamples.store(0.0);
+    impl->uiPlatterAngle.store(0.f);
+    impl->uiFreezeLatched.store(false);
+    impl->uiSampleModeEnabled.store(impl->engine.sampleModeEnabled);
+    impl->uiSampleLoaded.store(impl->engine.sampleLoaded);
+    impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying);
+    impl->uiSamplePlayheadSeconds.store(0.0);
+    impl->uiSampleDurationSeconds.store(
+      impl->engine.sampleLoaded ? double(impl->engine.sampleFrames) / std::max(double(impl->cachedSampleRate), 1.0) : 0.0);
+    impl->uiSampleProgress.store(0.0);
+    if (paramQuantities[BUFFER_PARAM]) {
+      float displaySeconds = usableBufferSecondsForMode(uiMode);
+      if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
+        displaySeconds = float(impl->engine.sampleFrames) / std::max(impl->cachedSampleRate, 1.f);
+      }
+      paramQuantities[BUFFER_PARAM]->displayMultiplier = displaySeconds;
     }
-    if (outFrames > 0) {
-      float sr = std::max(impl->cachedSampleRate, 1.f);
-      float sampleSeconds = std::max(float(outFrames) / sr, 1.f / sr);
-      // In sample mode, allocate only as much buffer as needed for the loaded
-      // material instead of always reserving the full mode capacity.
-      impl->engine.buffer.reset(impl->cachedSampleRate, sampleSeconds, isMonoBufferMode(mode));
+    impl->uiPublishTimerSec = 0.f;
+    impl->platterScratchHoldSamples.store(0);
+    impl->platterMotionFreshSamples.store(0);
+    for (int i = 0; i < kArcLightCount; ++i) {
+      lights[ARC_LIGHT_START + i].setBrightness(0.f);
+      lights[ARC_MAX_LIGHT_START + i].setBrightness(0.f);
     }
-    std::vector<float> left;
-    std::vector<float> right;
-    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &left,
-                          kSampleFileVoltageScale);
-    if (decodedSample.channels > 1) {
-      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, impl->cachedSampleRate, outFrames, &right,
-                            kSampleFileVoltageScale);
-    }
-    impl->engine.installSample(left, right, outFrames, sampleAutoPlayOnLoad, truncated || decodedSample.truncated);
+  };
+
+  try {
+    impl->engine.bufferDurationMode = mode;
+    impl->engine.reset(impl->cachedSampleRate);
     impl->engine.sampleModeEnabled = sampleModeEnabled;
-  }
-  impl->uiSampleRate.store(impl->cachedSampleRate);
-  impl->uiLagSamples.store(0.0);
-  impl->uiAccessibleLagSamples.store(0.0);
-  impl->uiPlatterAngle.store(0.f);
-  impl->uiFreezeLatched.store(false);
-  impl->uiSampleModeEnabled.store(impl->engine.sampleModeEnabled);
-  impl->uiSampleLoaded.store(impl->engine.sampleLoaded);
-  impl->uiSampleTransportPlaying.store(impl->engine.sampleTransportPlaying);
-  impl->uiSamplePlayheadSeconds.store(0.0);
-  impl->uiSampleDurationSeconds.store(impl->engine.sampleLoaded ? double(impl->engine.sampleFrames) / std::max(double(impl->cachedSampleRate), 1.0) : 0.0);
-  impl->uiSampleProgress.store(0.0);
-  if (paramQuantities[BUFFER_PARAM]) {
-    float displaySeconds = usableBufferSecondsForMode(mode);
-    if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
-      displaySeconds = float(impl->engine.sampleFrames) / std::max(impl->cachedSampleRate, 1.f);
+    impl->engine.sampleLoopEnabled = sampleLoopEnabled;
+    impl->engine.externalGatePosMode = impl->externalGatePosMode;
+  } catch (const std::bad_alloc &) {
+    WARN("TemporalDeck: buffer allocation failed, forcing 10s live fallback");
+    {
+      std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+      impl->samplePath.clear();
+      impl->sampleDisplayName.clear();
+      impl->decodedSample = DecodedSampleFile();
     }
-    paramQuantities[BUFFER_PARAM]->displayMultiplier = displaySeconds;
+    impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
+    impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
+    {
+      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
+      impl->preparedSample = PreparedSampleData();
+    }
+    impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
+    impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
+    mode = BUFFER_DURATION_10S;
+    impl->engine.bufferDurationMode = mode;
+    impl->engine.reset(impl->cachedSampleRate);
+    impl->engine.sampleModeEnabled = false;
+    impl->engine.sampleLoopEnabled = sampleLoopEnabled;
+    impl->engine.externalGatePosMode = impl->externalGatePosMode;
   }
-  impl->uiPublishTimerSec = 0.f;
-  impl->platterScratchHoldSamples.store(0);
-  impl->platterMotionFreshSamples.store(0);
-  for (int i = 0; i < kArcLightCount; ++i) {
-    lights[ARC_LIGHT_START + i].setBrightness(0.f);
-    lights[ARC_MAX_LIGHT_START + i].setBrightness(0.f);
-  }
+  applyUiState(mode);
 }
 
 void TemporalDeck::onSampleRateChange() {
@@ -2978,12 +3221,71 @@ void TemporalDeck::dataFromJson(json_t *root) {
 }
 
 void TemporalDeck::process(const ProcessArgs &args) {
+  if (impl->allocationFallbackPending.exchange(false, std::memory_order_relaxed)) {
+    {
+      std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
+      impl->samplePath.clear();
+      impl->sampleDisplayName.clear();
+      impl->decodedSample = DecodedSampleFile();
+    }
+    impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
+    impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
+    {
+      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
+      impl->preparedSample = PreparedSampleData();
+    }
+    impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
+    impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
+    impl->pendingSampleStateApply.store(true, std::memory_order_relaxed);
+  }
+
+  if (impl->pendingPreparedSampleInstall.exchange(false, std::memory_order_relaxed)) {
+    PreparedSampleData prepared;
+    bool havePrepared = false;
+    {
+      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
+      if (impl->preparedSample.valid) {
+        prepared = std::move(impl->preparedSample);
+        impl->preparedSample = PreparedSampleData();
+        havePrepared = true;
+      }
+    }
+    if (havePrepared) {
+      impl->sampleBuildAppliedSerial = impl->sampleBuildRequestSerial.load(std::memory_order_relaxed);
+      impl->cachedSampleRate = prepared.sampleRate;
+      impl->bufferDurationMode.store(prepared.bufferMode, std::memory_order_relaxed);
+      impl->engine.bufferDurationMode = prepared.bufferMode;
+      impl->engine.reset(prepared.sampleRate, false);
+      impl->engine.sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
+      impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
+      impl->engine.externalGatePosMode = impl->externalGatePosMode;
+      impl->engine.installPreparedSample(std::move(prepared.left), std::move(prepared.right), prepared.frames,
+                                         prepared.autoPlayOnLoad, prepared.truncated, prepared.monoStorage);
+      impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+      if (paramQuantities[BUFFER_PARAM]) {
+        paramQuantities[BUFFER_PARAM]->displayMultiplier =
+          float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
+      }
+      impl->sampleBuildInProgress.store(false, std::memory_order_relaxed);
+    }
+  }
+
   int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
   bool bufferModeChanged = requestedBufferMode != impl->engine.bufferDurationMode;
   bool sampleStateApplyRequested = impl->pendingSampleStateApply.exchange(false);
-  if (bufferModeChanged || args.sampleRate != impl->cachedSampleRate || sampleStateApplyRequested) {
+  bool sampleRateChanged = args.sampleRate != impl->cachedSampleRate;
+  bool decodedAvailable = impl->decodedSampleAvailable.load(std::memory_order_relaxed);
+  bool shouldRebuildLoadedSample = decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
+  if (!decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested)) {
     applySampleRateChange(args.sampleRate);
+  } else if (shouldRebuildLoadedSample && !impl->sampleBuildInProgress.load(std::memory_order_relaxed)) {
+    Impl::AsyncSampleBuildRequest request;
+    request.type = Impl::AsyncSampleBuildRequest::REBUILD_FROM_DECODED;
+    request.targetSampleRate = args.sampleRate;
+    request.requestedBufferMode = requestedBufferMode;
+    impl->requestAsyncSampleBuild(request);
   }
+
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
 
   if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
@@ -3055,6 +3357,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.slipReturnMode = impl->slipReturnMode;
   impl->engine.externalGatePosMode = impl->externalGatePosMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
+  impl->engine.sampleRate = args.sampleRate;
   impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
   impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
   uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
@@ -3277,6 +3580,17 @@ void TemporalDeck::clearLoadedSample() {
     impl->sampleDisplayName.clear();
     impl->decodedSample = DecodedSampleFile();
   }
+  impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
+  impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
+  {
+    std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
+    impl->preparedSample = PreparedSampleData();
+  }
+  Impl::AsyncSampleBuildRequest cancelRequest;
+  cancelRequest.type = Impl::AsyncSampleBuildRequest::NONE;
+  cancelRequest.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
+  cancelRequest.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
+  impl->requestAsyncSampleBuild(cancelRequest);
   impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
   impl->bufferDurationMode.store(BUFFER_DURATION_10S);
   if (paramQuantities[BUFFER_PARAM]) {
@@ -3286,32 +3600,25 @@ void TemporalDeck::clearLoadedSample() {
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
-  DecodedSampleFile decoded;
-  if (!decodeSampleFile(path, &decoded, errorOut)) {
-    return false;
-  }
-
-  int targetMode = chooseSampleBufferMode(decoded);
-  impl->bufferDurationMode.store(targetMode);
-  if (paramQuantities[BUFFER_PARAM]) {
-    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(targetMode);
-  }
+  (void)errorOut;
   bool autoPlayOnLoad = true;
   bool wasFreezeLatched = impl->freezeLatched;
   bool wasFreezeLatchedByButton = impl->freezeLatchedByButton;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->samplePath = path;
-    impl->sampleDisplayName = system::getFilename(path);
-    impl->decodedSample = std::move(decoded);
     autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
-  impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
   impl->freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
   impl->freezeLatchedByButton = impl->freezeLatched ? wasFreezeLatchedByButton : false;
   impl->reverseLatched = false;
   impl->slipLatched = false;
-  impl->pendingSampleStateApply.store(true);
+
+  Impl::AsyncSampleBuildRequest request;
+  request.type = Impl::AsyncSampleBuildRequest::LOAD_PATH;
+  request.path = path;
+  request.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
+  request.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
+  impl->requestAsyncSampleBuild(request);
   return true;
 }
 
