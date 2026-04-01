@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.10]
+
+### Temporal Deck
+- Clear low fps print at > 57hz
+
 ## [v2.3.9]
 
 ### Temporal Deck
