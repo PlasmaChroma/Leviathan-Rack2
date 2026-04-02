@@ -1,12 +1,11 @@
 #include "TemporalDeck.hpp"
-#include "TemporalDeckBufferModes.hpp"
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSamplePrep.hpp"
-#include "TemporalDeckUiPublish.hpp"
 #include "codec.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
@@ -416,6 +415,106 @@ static void updateTransportModeLights(TemporalDeck &module, bool freezeActive, b
   module.lights[TemporalDeck::SLIP_FAST_LIGHT].setBrightness(
     slipReturnMode == TemporalDeck::SLIP_RETURN_INSTANT ? selectedModeBrightness : unselectedModeBrightness);
 }
+
+namespace {
+
+template <size_t N>
+static void smoothLedBrightness(std::array<float, N> &values, float sideWeight = 0.22f) {
+  sideWeight = clamp(sideWeight, 0.f, 0.49f);
+  float centerWeight = 1.f - 2.f * sideWeight;
+  std::array<float, N> src = values;
+  for (size_t i = 0; i < N; ++i) {
+    float prev = src[i > 0 ? i - 1 : i];
+    float next = src[i + 1 < N ? i + 1 : i];
+    values[i] = clamp(prev * sideWeight + src[i] * centerWeight + next * sideWeight, 0.f, 1.f);
+  }
+}
+
+} // namespace
+
+namespace temporaldeck_ui {
+
+void publishArcLights(TemporalDeck *module, int sampleFrames, float maxLagSamples, bool sampleMode, bool sampleLoaded,
+                      double lag, double accessibleLag, double sampleProgress) {
+  std::array<float, TemporalDeck::kArcLightCount> arcYellow{};
+  std::array<float, TemporalDeck::kArcLightCount> arcRed{};
+  std::array<float, TemporalDeck::kArcLightCount> limitYellowBlendAllowed{};
+  const float limitIndicatorRedBrightness = 0.9f;
+  const float limitApproachWindowLeds = 2.0f;
+  auto applyLimitMarker = [&](int i, float playheadLed, float limitLed, float *brightness, bool allowYellowBlend) {
+    int limitLedIndex = clamp(int(std::round(limitLed)), 0, TemporalDeck::kArcLightCount - 1);
+    bool isLimitLed = i == limitLedIndex;
+    if (isLimitLed) {
+      limitYellowBlendAllowed[i] = allowYellowBlend ? 1.f : 0.f;
+      if (allowYellowBlend) {
+        float approach = clamp(1.f - std::fabs(playheadLed - limitLed) / limitApproachWindowLeds, 0.f, 1.f);
+        *brightness = std::max(*brightness, 0.42f * approach);
+      }
+    }
+    arcRed[i] = isLimitLed ? limitIndicatorRedBrightness : 0.f;
+  };
+
+  if (sampleMode && sampleLoaded) {
+    // Sample mode fills from left->right. The red limit marker indicates the
+    // effective playback end (full sample end or knob-limited end).
+    float leftLed = float(TemporalDeck::kArcLightCount - 1);
+    float sampleNewest = std::max(1.f, float(sampleFrames - 1));
+    float limitRatio = clamp(float(accessibleLag / sampleNewest), 0.f, 1.f);
+    float sampleEndLed = (1.f - limitRatio) * leftLed;
+    float progressNorm = clamp(float(sampleProgress), 0.f, 1.f);
+    float ledSpan = std::max(0.f, leftLed - sampleEndLed);
+    float progressLedUnits = progressNorm * ledSpan;
+    float playheadLed = leftLed - progressLedUnits;
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      // Progressive fill from left to right with fractional leading LED.
+      // At start, all LEDs are off; the leading LED ramps in proportionally.
+      float ledFromStart = leftLed - float(i);
+      float fill = clamp(progressLedUnits - ledFromStart, 0.f, 1.f);
+      float brightness = 0.92f * fill;
+      // Keep anything beyond the effective sample end dark.
+      if (float(i) + 0.5f < sampleEndLed) {
+        brightness = 0.f;
+      }
+      bool allowYellowBlend = brightness > 1e-4f;
+      applyLimitMarker(i, playheadLed, sampleEndLed, &brightness, allowYellowBlend);
+      arcYellow[i] = brightness;
+    }
+  } else {
+    float lagRatio = clamp(float(lag) / maxLagSamples, 0.f, 1.f);
+    float limitRatio = clamp(float(accessibleLag) / maxLagSamples, 0.f, 1.f);
+    float lagLed = lagRatio * float(TemporalDeck::kArcLightCount - 1);
+    float limitLed = limitRatio * float(TemporalDeck::kArcLightCount - 1);
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      float brightness = 0.f;
+      if (i == 0) {
+        brightness = clamp(lagLed, 0.f, 1.f);
+      } else {
+        brightness = clamp(lagLed - float(i) + 1.f, 0.f, 1.f);
+      }
+      if (float(i) > limitLed + 0.5f) {
+        brightness = 0.f;
+      }
+      bool allowYellowBlend = brightness > 1e-4f;
+      applyLimitMarker(i, lagLed, limitLed, &brightness, allowYellowBlend);
+      arcYellow[i] = brightness;
+    }
+  }
+
+  // Small spatial blend to remove visible dead-zones between LEDs while
+  // preserving endpoint markers.
+  smoothLedBrightness(arcYellow);
+  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+    if (arcRed[i] > 0.f && limitYellowBlendAllowed[i] < 0.5f) {
+      arcYellow[i] = 0.f;
+    }
+  }
+  for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+    module->lights[TemporalDeck::ARC_LIGHT_START + i].setBrightness(arcYellow[i]);
+    module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].setBrightness(arcRed[i]);
+  }
+}
+
+} // namespace temporaldeck_ui
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -1161,4 +1260,118 @@ int TemporalDeck::getExternalGatePosMode() const {
 
 void TemporalDeck::setExternalGatePosMode(int mode) {
   impl->externalGatePosMode = clamp(mode, EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
+}
+
+const char *TemporalDeck::cartridgeLabelFor(int index) {
+  switch (index) {
+  case CARTRIDGE_M44_7:
+    return "M44-7";
+  case CARTRIDGE_ORTOFON_SCRATCH:
+    return "C.MKII S";
+  case CARTRIDGE_STANTON_680HP:
+    return "680 HP";
+  case CARTRIDGE_QBERT:
+    return "Q.Bert";
+  case CARTRIDGE_LOFI:
+    return "Lo-Fi";
+  case CARTRIDGE_CLEAN:
+  default:
+    return "Clean";
+  }
+}
+
+CartridgeVisualStyle TemporalDeck::cartridgeVisualStyleFor(int index) {
+  switch (index) {
+  case CARTRIDGE_M44_7:
+    return {nvgRGBA(26, 26, 26, 238), nvgRGBA(110, 110, 118, 190), nvgRGBA(252, 252, 252, 235)};
+  case CARTRIDGE_ORTOFON_SCRATCH:
+    return {nvgRGBA(242, 242, 242, 240), nvgRGBA(26, 26, 26, 210), nvgRGBA(18, 18, 18, 228)};
+  case CARTRIDGE_STANTON_680HP:
+    return {nvgRGBA(180, 186, 194, 238), nvgRGBA(120, 126, 134, 195), nvgRGBA(24, 24, 28, 230)};
+  case CARTRIDGE_QBERT:
+    return {nvgRGBA(34, 35, 40, 240), nvgRGBA(240, 242, 246, 210), nvgRGBA(248, 200, 58, 235)};
+  case CARTRIDGE_LOFI:
+    return {nvgRGBA(35, 28, 74, 238), nvgRGBA(87, 64, 191, 205), nvgRGBA(87, 64, 191, 224)};
+  case CARTRIDGE_CLEAN:
+  default:
+    return {nvgRGBA(90, 178, 187, 236), nvgRGBA(12, 41, 45, 190), nvgRGBA(0, 0, 0, 235)};
+  }
+}
+
+const char *TemporalDeck::scratchInterpolationLabelFor(int index) {
+  switch (index) {
+  case SCRATCH_INTERP_LAGRANGE6:
+    return "6-point Lagrange";
+  case SCRATCH_INTERP_SINC:
+    return "Sinc (CPU heavy)";
+  case SCRATCH_INTERP_CUBIC:
+  default:
+    return "Cubic";
+  }
+}
+
+const char *TemporalDeck::slipReturnLabelFor(int index) {
+  switch (index) {
+  case SLIP_RETURN_SLOW:
+    return "Slow";
+  case SLIP_RETURN_INSTANT:
+    return "Instant";
+  case SLIP_RETURN_NORMAL:
+  default:
+    return "Normal";
+  }
+}
+
+const char *TemporalDeck::bufferDurationLabelFor(int index) {
+  switch (index) {
+  case BUFFER_DURATION_20S:
+    return "20 s";
+  case BUFFER_DURATION_10M_STEREO:
+    return "10 min stereo";
+  case BUFFER_DURATION_10M_MONO:
+    return "10 min mono";
+  case BUFFER_DURATION_10S:
+  default:
+    return "10 s";
+  }
+}
+
+const char *TemporalDeck::externalGatePosLabelFor(int index) {
+  switch (index) {
+  case EXTERNAL_GATE_POS_MODULE_SYNC:
+    return "Module sync";
+  case EXTERNAL_GATE_POS_GLIDE:
+  default:
+    return "Glide / inertia";
+  }
+}
+
+const char *TemporalDeck::platterArtModeLabelFor(int index) {
+  switch (index) {
+  case PLATTER_ART_DRAGON_KING:
+    return "Dragon King";
+  case PLATTER_ART_BLANK:
+    return "Blank";
+  case PLATTER_ART_TEMPORAL_DECK:
+    return "Temporal Deck";
+  case PLATTER_ART_PROCEDURAL:
+    return "Procedural";
+  case PLATTER_ART_CUSTOM:
+    return "Custom file";
+  case PLATTER_ART_BUILTIN_SVG:
+  default:
+    return "Built-in SVG";
+  }
+}
+
+const char *TemporalDeck::platterBrightnessLabelFor(int index) {
+  switch (index) {
+  case PLATTER_BRIGHTNESS_LOW:
+    return "Low";
+  case PLATTER_BRIGHTNESS_MEDIUM:
+    return "Medium";
+  case PLATTER_BRIGHTNESS_FULL:
+  default:
+    return "Full";
+  }
 }

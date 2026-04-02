@@ -5,32 +5,6 @@
 #include <string>
 #include <vector>
 
-namespace temporaldeck_modes {
-
-float realBufferSecondsForMode(int index) {
-  switch (index) {
-  case temporaldeck::TemporalDeckEngine::BUFFER_DURATION_10S:
-    return 11.f;
-  case temporaldeck::TemporalDeckEngine::BUFFER_DURATION_20S:
-    return 21.f;
-  case temporaldeck::TemporalDeckEngine::BUFFER_DURATION_10MIN_STEREO:
-  case temporaldeck::TemporalDeckEngine::BUFFER_DURATION_10MIN_MONO:
-    return 601.f;
-  default:
-    return 11.f;
-  }
-}
-
-float usableBufferSecondsForMode(int index) {
-  return std::max(1.f, realBufferSecondsForMode(index) - 1.f);
-}
-
-bool isMonoBufferMode(int index) {
-  return index == temporaldeck::TemporalDeckEngine::BUFFER_DURATION_10MIN_MONO;
-}
-
-} // namespace temporaldeck_modes
-
 namespace {
 
 using Engine = temporaldeck::TemporalDeckEngine;

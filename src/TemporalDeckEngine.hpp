@@ -1,7 +1,6 @@
 #pragma once
 
 #include "TemporalDeckTest.hpp"
-#include "TemporalDeckBufferModes.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -10,6 +9,28 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+namespace temporaldeck_modes {
+
+inline float realBufferSecondsForMode(int index) {
+  switch (index) {
+  case 0:
+    return 11.f; // 10s mode with guard second
+  case 1:
+    return 21.f; // 20s mode with guard second
+  case 2:
+  case 3:
+    return 601.f; // 10m modes with guard second
+  default:
+    return 11.f;
+  }
+}
+
+inline float usableBufferSecondsForMode(int index) { return std::max(1.f, realBufferSecondsForMode(index) - 1.f); }
+
+inline bool isMonoBufferMode(int index) { return index == 3; }
+
+} // namespace temporaldeck_modes
 
 namespace temporaldeck {
 

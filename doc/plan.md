@@ -101,6 +101,24 @@ Effort:
 4. Edge-case regression expansion
 5. Cleanup/docs pass
 
+## File Management Notes
+- Prefer a small number of cohesive units over many tiny helper files.
+- For this restructuring pass, cap net-new module-side source files to two components:
+  - `TemporalDeckTransportControl` (`.hpp` + `.cpp`)
+  - `TemporalDeckSampleLifecycle` (`.hpp` + `.cpp`)
+- Keep `TemporalDeck.cpp` as orchestration/glue:
+  - Rack param/input/output/light wiring
+  - state handoff between module/UI and extracted components
+  - JSON serialization/deserialization and public module API forwarding
+- Keep `TemporalDeckEngine`, `TemporalDeckPlatterInput`, and `TemporalDeckSamplePrep` as existing stable boundaries unless a behavioral bug requires change.
+- Add a new file only when it owns a complete behavior/state-machine boundary; do not split out thin utility-only files unless reused by multiple components.
+- If a proposed new file would be under ~150 lines, prefer merging into an existing component unless there is a clear compile-time or ownership reason.
+- During extraction, remove moved logic from `TemporalDeck.cpp` immediately to avoid duplicate paths.
+- Keep test ownership aligned with code ownership:
+  - transport control behavior covered by integration-style gesture/transport specs
+  - lifecycle behavior covered by deterministic async/load-state specs
+- After each slice, ensure `make test` stays green before introducing another file boundary.
+
 ## Risk Notes
 - Most behavior risk is around transport edge transitions and sample mode switching.
 - Refactors should be done in small slices with test runs after each slice.
