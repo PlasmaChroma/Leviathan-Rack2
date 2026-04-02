@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.11]
+
+### Integral Flux
+- Removing non-ideal mixing option
+
+### Temporal Deck
+
+
 ## [v2.3.10]
 
 ### Temporal Deck
