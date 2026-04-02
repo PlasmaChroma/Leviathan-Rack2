@@ -86,6 +86,7 @@ Scope:
 
 Deliverable:
 - Cleaned source layout and a short developer-facing note.
+- Architecture note: `doc/TemporalDeck_Architecture.md`.
 
 Acceptance criteria:
 - No dead paths or duplicate logic left in `TemporalDeck.cpp`.
