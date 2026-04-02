@@ -22,7 +22,7 @@ DISTRIBUTABLES += $(wildcard presets)
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
 
-.PHONY: test platter-spec-test
+.PHONY: test
 test:
 	@mkdir -p build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp -o build/tests/platter_spec_harness
@@ -39,5 +39,3 @@ test:
 	@build/tests/temporaldeck_platter_input_spec
 	@build/tests/temporaldeck_sample_prep_spec
 	@build/tests/temporaldeck_virtual_integration_spec
-
-platter-spec-test: test
