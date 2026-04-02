@@ -2,6 +2,7 @@
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSamplePrep.hpp"
+#include "TemporalDeckTransportControl.hpp"
 #include "codec.hpp"
 
 #include <algorithm>
@@ -121,10 +122,6 @@ static bool isManagedVinylArtPath(const std::string &path) {
   return hasPathPrefix(normalizedPath, builtInRoot) || hasPathPrefix(normalizedPath, expandedRoot);
 }
 
-static double clampd(double x, double a, double b) {
-  return std::max(a, std::min(x, b));
-}
-
 static int nextCartridgeCharacter(int current) {
   switch (current) {
   case TemporalDeck::CARTRIDGE_CLEAN:
@@ -196,11 +193,7 @@ struct TemporalDeck::Impl {
   dsp::SchmittTrigger slipTrigger;
   dsp::SchmittTrigger cartridgeCycleTrigger;
   float cachedSampleRate = 0.f;
-  bool freezeLatched = false;
-  bool freezeLatchedByButton = false;
-  bool reverseLatched = false;
-  bool slipLatched = false;
-  bool prevFreezeGateHigh = false;
+  temporaldeck_transport::TransportControlState transportControl;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
   bool sampleAutoPlayOnLoad = true;
@@ -244,7 +237,6 @@ struct TemporalDeck::Impl {
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
-  int slipReturnMode = TemporalDeck::SLIP_RETURN_NORMAL;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
@@ -643,13 +635,13 @@ json_t *TemporalDeck::dataToJson() {
     sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
     samplePath = impl->samplePath;
   }
-  json_object_set_new(root, "freezeLatched", json_boolean(impl->freezeLatched));
-  json_object_set_new(root, "reverseLatched", json_boolean(impl->reverseLatched));
-  json_object_set_new(root, "slipLatched", json_boolean(impl->slipLatched));
+  json_object_set_new(root, "freezeLatched", json_boolean(impl->transportControl.freezeLatched));
+  json_object_set_new(root, "reverseLatched", json_boolean(impl->transportControl.reverseLatched));
+  json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
-  json_object_set_new(root, "slipReturnMode", json_integer(impl->slipReturnMode));
+  json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
@@ -687,14 +679,14 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
   json_t *samplePathJ = json_object_get(root, "samplePath");
   if (freezeJ) {
-    impl->freezeLatched = json_boolean_value(freezeJ);
-    impl->freezeLatchedByButton = impl->freezeLatched;
+    impl->transportControl.freezeLatched = json_boolean_value(freezeJ);
+    impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched;
   }
   if (reverseJ) {
-    impl->reverseLatched = json_boolean_value(reverseJ);
+    impl->transportControl.reverseLatched = json_boolean_value(reverseJ);
   }
   if (slipJ) {
-    impl->slipLatched = json_boolean_value(slipJ);
+    impl->transportControl.slipLatched = json_boolean_value(slipJ);
   }
   if (scratchInterpModeJ) {
     impl->scratchInterpolationMode =
@@ -708,7 +700,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
       clamp((int)json_integer_value(externalGatePosModeJ), EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
   }
   if (slipReturnModeJ) {
-    impl->slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
+    impl->transportControl.slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
   }
   if (cartridgeJ) {
     impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, CARTRIDGE_COUNT - 1);
@@ -827,51 +819,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
 
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
+  temporaldeck_transport::TransportButtonEvents transportButtons;
+  transportButtons.freezePressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
+  transportButtons.reversePressed = impl->reverseTrigger.process(params[REVERSE_PARAM].getValue());
+  transportButtons.slipPressed = impl->slipTrigger.process(params[SLIP_PARAM].getValue());
+  temporaldeck_transport::TransportButtonResult transportResult = temporaldeck_transport::applyTransportButtonEvents(
+    impl->transportControl, transportButtons, desiredSampleModeEnabled, impl->engine.sampleLoaded);
+  if (transportResult.forceSampleTransportPlay) {
+    impl->engine.sampleTransportPlaying = true;
+    impl->uiSampleTransportPlaying.store(true, std::memory_order_relaxed);
+  }
 
-  if (impl->freezeTrigger.process(params[FREEZE_PARAM].getValue())) {
-    bool next = !impl->freezeLatched;
-    impl->freezeLatched = next;
-    impl->freezeLatchedByButton = next;
-    if (next) {
-      impl->reverseLatched = false;
-      impl->slipLatched = false;
-    }
-  }
-  if (impl->reverseTrigger.process(params[REVERSE_PARAM].getValue())) {
-    bool next = !impl->reverseLatched;
-    impl->reverseLatched = next;
-    if (next) {
-      impl->freezeLatched = false;
-      impl->freezeLatchedByButton = false;
-      impl->slipLatched = false;
-      if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
-        // In sample mode, REV should have immediate transport effect.
-        impl->engine.sampleTransportPlaying = true;
-        impl->uiSampleTransportPlaying.store(true);
-      }
-    }
-  }
-  if (impl->slipTrigger.process(params[SLIP_PARAM].getValue())) {
-    if (!impl->slipLatched) {
-      impl->slipLatched = true;
-      impl->slipReturnMode = SLIP_RETURN_SLOW;
-      impl->freezeLatched = false;
-      impl->freezeLatchedByButton = false;
-      impl->reverseLatched = false;
-    } else if (impl->slipReturnMode == SLIP_RETURN_SLOW) {
-      impl->slipReturnMode = SLIP_RETURN_NORMAL;
-      impl->freezeLatched = false;
-      impl->freezeLatchedByButton = false;
-      impl->reverseLatched = false;
-    } else if (impl->slipReturnMode == SLIP_RETURN_NORMAL) {
-      impl->slipReturnMode = SLIP_RETURN_INSTANT;
-      impl->freezeLatched = false;
-      impl->freezeLatchedByButton = false;
-      impl->reverseLatched = false;
-    } else {
-      impl->slipLatched = false;
-    }
-  }
   if (impl->cartridgeCycleTrigger.process(params[CARTRIDGE_CYCLE_PARAM].getValue())) {
     impl->cartridgeCharacter = nextCartridgeCharacter(impl->cartridgeCharacter);
   }
@@ -886,38 +844,20 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool scratchGateHigh = signalIn.scratchGateHigh;
   bool scratchGateConnected = signalIn.scratchGateConnected;
   bool positionConnected = signalIn.positionConnected;
-  bool freezeGateFallingEdge = impl->prevFreezeGateHigh && !freezeGateHigh;
-  impl->prevFreezeGateHigh = freezeGateHigh;
-  if (freezeGateFallingEdge && impl->freezeLatched && impl->freezeLatchedByButton) {
-    impl->freezeLatched = false;
-    impl->freezeLatchedByButton = false;
-  }
+  temporaldeck_transport::applyFreezeGateEdge(impl->transportControl, freezeGateHigh);
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
-  impl->engine.slipReturnMode = impl->slipReturnMode;
+  impl->engine.slipReturnMode = impl->transportControl.slipReturnMode;
   impl->engine.externalGatePosMode = impl->externalGatePosMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
   impl->engine.sampleRate = args.sampleRate;
   impl->engine.sampleModeEnabled = desiredSampleModeEnabled;
   impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
   uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
-  if (pendingSeekRevision != impl->appliedSampleSeekRevision) {
-    float seekNorm = clamp(impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed), 0.f, 1.f);
-    if (impl->engine.sampleLoaded && impl->engine.sampleFrames > 0) {
-      double sampleEndPos = std::max(0.0, double(impl->engine.sampleFrames - 1));
-      double sampleWindowEndPos = sampleEndPos * double(clamp(params[BUFFER_PARAM].getValue(), 0.f, 1.f));
-      // Arc seek maps to absolute sample time over the full arc; window limit
-      // then clamps that target if it lies past the current playback cap.
-      double targetFrame = clampd(double(seekNorm) * sampleEndPos, 0.0, sampleWindowEndPos);
-      impl->engine.samplePlayhead = targetFrame;
-      impl->engine.readHead = targetFrame;
-      impl->engine.scratchLagSamples = 0.0;
-      impl->engine.scratchLagTargetSamples = 0.0;
-      impl->engine.nowCatchActive = false;
-      impl->engine.cancelSlipReturnState();
-    }
-    impl->appliedSampleSeekRevision = pendingSeekRevision;
-  }
+  float pendingSeekNorm = impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed);
+  float bufferKnob = params[BUFFER_PARAM].getValue();
+  impl->appliedSampleSeekRevision = temporaldeck_transport::applyPendingSampleSeek(
+    impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
   TemporalDeckEngine::FrameInput frameInput;
@@ -928,9 +868,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
   frameInput.rateKnob = params[RATE_PARAM].getValue();
   frameInput.mixKnob = params[MIX_PARAM].getValue();
   frameInput.feedbackKnob = params[FEEDBACK_PARAM].getValue();
-  frameInput.freezeButton = impl->freezeLatched;
-  frameInput.reverseButton = impl->reverseLatched;
-  frameInput.slipButton = impl->slipLatched;
+  frameInput.freezeButton = impl->transportControl.freezeLatched;
+  frameInput.reverseButton = impl->transportControl.reverseLatched;
+  frameInput.slipButton = impl->transportControl.slipLatched;
   frameInput.quickSlipTrigger = platterInput.quickSlipTrigger;
   frameInput.freezeGate = freezeGateHigh;
   frameInput.scratchGate = scratchGateHigh;
@@ -949,17 +889,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   auto frame = impl->engine.process(frameInput);
 
-  if (frame.autoFreezeRequested && !impl->freezeLatched && !freezeGateHigh) {
-    impl->freezeLatched = true;
-    impl->freezeLatchedByButton = false;
-    impl->reverseLatched = false;
-    impl->slipLatched = false;
-  }
+  temporaldeck_transport::applyAutoFreezeRequest(impl->transportControl, frame.autoFreezeRequested, freezeGateHigh);
 
   writeFrameOutputs(*this, frame);
-  bool freezeActive = impl->freezeLatched || freezeGateHigh;
-  updateTransportModeLights(*this, freezeActive, impl->reverseLatched, impl->slipLatched,
-                            impl->slipReturnMode);
+  bool freezeActive = impl->transportControl.freezeLatched || freezeGateHigh;
+  updateTransportModeLights(*this, freezeActive, impl->transportControl.reverseLatched, impl->transportControl.slipLatched,
+                            impl->transportControl.slipReturnMode);
   impl->uiPlatterAngle.store(frame.platterAngle, std::memory_order_relaxed);
   impl->uiLagSamples.store(frame.lag, std::memory_order_relaxed);
   impl->uiAccessibleLagSamples.store(frame.accessibleLag, std::memory_order_relaxed);
@@ -1106,16 +1041,16 @@ void TemporalDeck::clearLoadedSample() {
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
   (void)errorOut;
   bool autoPlayOnLoad = true;
-  bool wasFreezeLatched = impl->freezeLatched;
-  bool wasFreezeLatchedByButton = impl->freezeLatchedByButton;
+  bool wasFreezeLatched = impl->transportControl.freezeLatched;
+  bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
   {
     std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
     autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
   }
-  impl->freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
-  impl->freezeLatchedByButton = impl->freezeLatched ? wasFreezeLatchedByButton : false;
-  impl->reverseLatched = false;
-  impl->slipLatched = false;
+  impl->transportControl.freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
+  impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
+  impl->transportControl.reverseLatched = false;
+  impl->transportControl.slipLatched = false;
 
   Impl::AsyncSampleBuildRequest request;
   request.type = Impl::AsyncSampleBuildRequest::LOAD_PATH;
@@ -1153,7 +1088,7 @@ bool TemporalDeck::wasLoadedSampleTruncated() const {
 }
 
 bool TemporalDeck::isSlipLatched() const {
-  return impl->slipLatched;
+  return impl->transportControl.slipLatched;
 }
 
 int TemporalDeck::getCartridgeCharacter() const {
@@ -1238,20 +1173,20 @@ void TemporalDeck::setScratchInterpolationMode(int mode) {
 }
 
 void TemporalDeck::setSlipLatched(bool enabled) {
-  impl->slipLatched = enabled;
+  impl->transportControl.slipLatched = enabled;
   if (enabled) {
-    impl->freezeLatched = false;
-    impl->freezeLatchedByButton = false;
-    impl->reverseLatched = false;
+    impl->transportControl.freezeLatched = false;
+    impl->transportControl.freezeLatchedByButton = false;
+    impl->transportControl.reverseLatched = false;
   }
 }
 
 int TemporalDeck::getSlipReturnMode() const {
-  return impl->slipReturnMode;
+  return impl->transportControl.slipReturnMode;
 }
 
 void TemporalDeck::setSlipReturnMode(int mode) {
-  impl->slipReturnMode = clamp(mode, SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
+  impl->transportControl.slipReturnMode = clamp(mode, SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
 }
 
 int TemporalDeck::getExternalGatePosMode() const {
