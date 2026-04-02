@@ -1,24 +1,22 @@
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckPlatterInput.hpp"
+#include "TemporalDeckSampleLifecycle.hpp"
 #include "TemporalDeckSamplePrep.hpp"
 #include "TemporalDeckTransportControl.hpp"
-#include "codec.hpp"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
-#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#include <mutex>
 #include <new>
+#include <mutex>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -82,11 +80,7 @@ using temporaldeck_modes::isMonoBufferMode;
 using temporaldeck_modes::realBufferSecondsForMode;
 using temporaldeck_modes::usableBufferSecondsForMode;
 
-using temporaldeck::DecodedSampleFile;
-using temporaldeck::decodeSampleFile;
 using temporaldeck::PreparedSampleData;
-using temporaldeck::buildPreparedSample;
-using temporaldeck::chooseSampleBufferMode;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 
@@ -175,18 +169,6 @@ struct ScratchSensitivityQuantity : ParamQuantity {
 } // namespace
 
 struct TemporalDeck::Impl {
-  struct AsyncSampleBuildRequest {
-    enum Type {
-      NONE = 0,
-      LOAD_PATH = 1,
-      REBUILD_FROM_DECODED = 2,
-    };
-    int type = NONE;
-    std::string path;
-    float targetSampleRate = 44100.f;
-    int requestedBufferMode = TemporalDeck::BUFFER_DURATION_10S;
-  };
-
   TemporalDeckEngine engine;
   dsp::SchmittTrigger freezeTrigger;
   dsp::SchmittTrigger reverseTrigger;
@@ -194,28 +176,9 @@ struct TemporalDeck::Impl {
   dsp::SchmittTrigger cartridgeCycleTrigger;
   float cachedSampleRate = 0.f;
   temporaldeck_transport::TransportControlState transportControl;
+  temporaldeck_lifecycle::TemporalDeckSampleLifecycle sampleLifecycle;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
-  bool sampleAutoPlayOnLoad = true;
-  std::mutex sampleStateMutex;
-  std::atomic<bool> pendingSampleStateApply{false};
-  std::string samplePath;
-  std::string sampleDisplayName;
-  DecodedSampleFile decodedSample;
-  std::atomic<bool> decodedSampleAvailable{false};
-  std::mutex preparedSampleMutex;
-  PreparedSampleData preparedSample;
-  std::atomic<bool> pendingPreparedSampleInstall{false};
-  std::thread sampleBuildThread;
-  std::mutex sampleBuildMutex;
-  std::condition_variable sampleBuildCv;
-  bool sampleBuildStop = false;
-  bool sampleBuildHasRequest = false;
-  AsyncSampleBuildRequest sampleBuildRequest;
-  std::atomic<bool> sampleBuildInProgress{false};
-  std::atomic<uint64_t> sampleBuildRequestSerial{0};
-  uint64_t sampleBuildAppliedSerial = 0;
-  std::atomic<bool> allocationFallbackPending{false};
   PlatterInputState platterInput;
   std::atomic<float> pendingSampleSeekNormalized{0.f};
   std::atomic<uint32_t> pendingSampleSeekRevision{0};
@@ -241,114 +204,6 @@ struct TemporalDeck::Impl {
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
   bool pendingInitialPlatterArtSelection = true;
-
-  void requestAsyncSampleBuild(const AsyncSampleBuildRequest &request) {
-    {
-      std::lock_guard<std::mutex> lock(sampleBuildMutex);
-      sampleBuildRequest = request;
-      sampleBuildHasRequest = true;
-      sampleBuildRequestSerial.fetch_add(1, std::memory_order_relaxed);
-      sampleBuildInProgress.store(true, std::memory_order_relaxed);
-    }
-    sampleBuildCv.notify_one();
-  }
-
-  void startSampleBuildWorker() {
-    sampleBuildStop = false;
-    sampleBuildThread = std::thread([this]() {
-      while (true) {
-        AsyncSampleBuildRequest request;
-        uint64_t requestSerial = 0;
-        {
-          std::unique_lock<std::mutex> lock(sampleBuildMutex);
-          sampleBuildCv.wait(lock, [this]() { return sampleBuildStop || sampleBuildHasRequest; });
-          if (sampleBuildStop) {
-            break;
-          }
-          request = sampleBuildRequest;
-          sampleBuildHasRequest = false;
-          requestSerial = sampleBuildRequestSerial.load(std::memory_order_relaxed);
-        }
-
-        DecodedSampleFile decoded;
-        bool autoPlayOnLoad = true;
-        bool validDecoded = false;
-
-        if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
-          std::string decodeError;
-          bool decodeOk = false;
-          try {
-            decodeOk = decodeSampleFile(request.path, &decoded, &decodeError);
-          } catch (const std::bad_alloc &) {
-            WARN("TemporalDeck: sample decode allocation failed, falling back to 10s live mode");
-            allocationFallbackPending.store(true, std::memory_order_relaxed);
-            pendingSampleStateApply.store(true, std::memory_order_relaxed);
-            sampleBuildInProgress.store(false, std::memory_order_relaxed);
-            continue;
-          }
-          if (!decodeOk) {
-            WARN("TemporalDeck: sample decode failed for '%s': %s", request.path.c_str(), decodeError.c_str());
-            sampleBuildInProgress.store(false, std::memory_order_relaxed);
-            continue;
-          }
-          {
-            std::lock_guard<std::mutex> lock(sampleStateMutex);
-            samplePath = request.path;
-            sampleDisplayName = system::getFilename(request.path);
-            decodedSample = decoded;
-            autoPlayOnLoad = sampleAutoPlayOnLoad;
-            decodedSampleAvailable.store(decodedSample.frames > 0 && !decodedSample.left.empty(),
-                                        std::memory_order_relaxed);
-          }
-          validDecoded = decoded.frames > 0 && !decoded.left.empty();
-        } else if (request.type == AsyncSampleBuildRequest::REBUILD_FROM_DECODED) {
-          std::lock_guard<std::mutex> lock(sampleStateMutex);
-          decoded = decodedSample;
-          autoPlayOnLoad = sampleAutoPlayOnLoad;
-          validDecoded = decoded.frames > 0 && !decoded.left.empty();
-        }
-
-        if (!validDecoded) {
-          sampleBuildInProgress.store(false, std::memory_order_relaxed);
-          continue;
-        }
-
-        int targetMode = request.requestedBufferMode;
-        if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
-          targetMode = chooseSampleBufferMode(decoded);
-          bufferDurationMode.store(targetMode, std::memory_order_relaxed);
-        }
-
-        PreparedSampleData prepared;
-        try {
-          if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, autoPlayOnLoad, &prepared)) {
-            if (requestSerial == sampleBuildRequestSerial.load(std::memory_order_relaxed)) {
-              std::lock_guard<std::mutex> lock(preparedSampleMutex);
-              preparedSample = std::move(prepared);
-              pendingPreparedSampleInstall.store(true, std::memory_order_relaxed);
-            }
-          }
-        } catch (const std::bad_alloc &) {
-          WARN("TemporalDeck: sample prep allocation failed, falling back to 10s live mode");
-          allocationFallbackPending.store(true, std::memory_order_relaxed);
-          pendingSampleStateApply.store(true, std::memory_order_relaxed);
-        }
-        sampleBuildInProgress.store(false, std::memory_order_relaxed);
-      }
-    });
-  }
-
-  void stopSampleBuildWorker() {
-    {
-      std::lock_guard<std::mutex> lock(sampleBuildMutex);
-      sampleBuildStop = true;
-      sampleBuildHasRequest = false;
-    }
-    sampleBuildCv.notify_all();
-    if (sampleBuildThread.joinable()) {
-      sampleBuildThread.join();
-    }
-  }
 };
 
 struct ProcessSignalInputs {
@@ -533,13 +388,13 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
     int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
-  impl->startSampleBuildWorker();
+  impl->sampleLifecycle.startWorker();
   applySampleRateChange(APP->engine->getSampleRate());
 }
 
 TemporalDeck::~TemporalDeck() {
   if (impl) {
-    impl->stopSampleBuildWorker();
+    impl->sampleLifecycle.stopWorker();
   }
 }
 
@@ -596,18 +451,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
     impl->engine.externalGatePosMode = impl->externalGatePosMode;
   } catch (const std::bad_alloc &) {
     WARN("TemporalDeck: buffer allocation failed, forcing 10s live fallback");
-    {
-      std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-      impl->samplePath.clear();
-      impl->sampleDisplayName.clear();
-      impl->decodedSample = DecodedSampleFile();
-    }
-    impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
-    impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
-    {
-      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
-      impl->preparedSample = PreparedSampleData();
-    }
+    impl->sampleLifecycle.clearDecodedAndPreparedState();
     impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
     impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
     mode = BUFFER_DURATION_10S;
@@ -630,11 +474,7 @@ json_t *TemporalDeck::dataToJson() {
   bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   bool sampleAutoPlayOnLoad = true;
   std::string samplePath;
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    sampleAutoPlayOnLoad = impl->sampleAutoPlayOnLoad;
-    samplePath = impl->samplePath;
-  }
+  impl->sampleLifecycle.sampleJsonSnapshot(&sampleAutoPlayOnLoad, &samplePath);
   json_object_set_new(root, "freezeLatched", json_boolean(impl->transportControl.freezeLatched));
   json_object_set_new(root, "reverseLatched", json_boolean(impl->transportControl.reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
@@ -714,10 +554,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (sampleLoopEnabledJ) {
     impl->sampleLoopEnabled.store(json_boolean_value(sampleLoopEnabledJ), std::memory_order_relaxed);
   }
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleAutoPlayOnLoad = true;
-  }
+  impl->sampleLifecycle.setSampleAutoPlayOnLoad(true);
   if (platterArtModeJ) {
     impl->platterArtMode =
       clamp((int)json_integer_value(platterArtModeJ), PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
@@ -749,73 +586,48 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   // Ensure restored patch state (buffer mode, sample state, etc.) is applied
   // to the runtime buffer allocation on the first audio process callback.
-  impl->pendingSampleStateApply.store(true);
+  impl->sampleLifecycle.setPendingSampleStateApply();
 }
 
 void TemporalDeck::process(const ProcessArgs &args) {
-  if (impl->allocationFallbackPending.exchange(false, std::memory_order_relaxed)) {
-    {
-      std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-      impl->samplePath.clear();
-      impl->sampleDisplayName.clear();
-      impl->decodedSample = DecodedSampleFile();
-    }
-    impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
-    impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
-    {
-      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
-      impl->preparedSample = PreparedSampleData();
-    }
+  if (impl->sampleLifecycle.consumeAllocationFallbackPending()) {
+    impl->sampleLifecycle.clearDecodedAndPreparedState();
     impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
     impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
-    impl->pendingSampleStateApply.store(true, std::memory_order_relaxed);
+    impl->sampleLifecycle.setPendingSampleStateApply();
   }
 
-  if (impl->pendingPreparedSampleInstall.exchange(false, std::memory_order_relaxed)) {
-    PreparedSampleData prepared;
-    bool havePrepared = false;
-    {
-      std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
-      if (impl->preparedSample.valid) {
-        prepared = std::move(impl->preparedSample);
-        impl->preparedSample = PreparedSampleData();
-        havePrepared = true;
-      }
-    }
-    if (havePrepared) {
-      impl->sampleBuildAppliedSerial = impl->sampleBuildRequestSerial.load(std::memory_order_relaxed);
-      impl->cachedSampleRate = prepared.sampleRate;
-      impl->bufferDurationMode.store(prepared.bufferMode, std::memory_order_relaxed);
-      impl->engine.bufferDurationMode = prepared.bufferMode;
-      impl->engine.reset(prepared.sampleRate, false);
-      impl->engine.sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
-      impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
-      impl->engine.externalGatePosMode = impl->externalGatePosMode;
-      impl->engine.installPreparedSample(std::move(prepared.left), std::move(prepared.right), prepared.frames,
-                                         prepared.autoPlayOnLoad, prepared.truncated, prepared.monoStorage);
-      impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
-      if (paramQuantities[BUFFER_PARAM]) {
-        paramQuantities[BUFFER_PARAM]->displayMultiplier =
-          float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
-      }
-      impl->sampleBuildInProgress.store(false, std::memory_order_relaxed);
+  PreparedSampleData prepared;
+  if (impl->sampleLifecycle.consumePendingPreparedSample(&prepared)) {
+    impl->cachedSampleRate = prepared.sampleRate;
+    impl->bufferDurationMode.store(prepared.bufferMode, std::memory_order_relaxed);
+    impl->engine.bufferDurationMode = prepared.bufferMode;
+    impl->engine.reset(prepared.sampleRate, false);
+    impl->engine.sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
+    impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
+    impl->engine.externalGatePosMode = impl->externalGatePosMode;
+    impl->engine.installPreparedSample(std::move(prepared.left), std::move(prepared.right), prepared.frames,
+                                       prepared.autoPlayOnLoad, prepared.truncated, prepared.monoStorage);
+    impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+    if (paramQuantities[BUFFER_PARAM]) {
+      paramQuantities[BUFFER_PARAM]->displayMultiplier = float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
     }
   }
 
   int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
   bool bufferModeChanged = requestedBufferMode != impl->engine.bufferDurationMode;
-  bool sampleStateApplyRequested = impl->pendingSampleStateApply.exchange(false);
+  bool sampleStateApplyRequested = impl->sampleLifecycle.consumePendingSampleStateApply();
   bool sampleRateChanged = args.sampleRate != impl->cachedSampleRate;
-  bool decodedAvailable = impl->decodedSampleAvailable.load(std::memory_order_relaxed);
+  bool decodedAvailable = impl->sampleLifecycle.decodedSampleAvailable();
   bool shouldRebuildLoadedSample = decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
   if (!decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested)) {
     applySampleRateChange(args.sampleRate);
-  } else if (shouldRebuildLoadedSample && !impl->sampleBuildInProgress.load(std::memory_order_relaxed)) {
-    Impl::AsyncSampleBuildRequest request;
-    request.type = Impl::AsyncSampleBuildRequest::REBUILD_FROM_DECODED;
+  } else if (shouldRebuildLoadedSample && !impl->sampleLifecycle.sampleBuildInProgress()) {
+    temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
+    request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::REBUILD_FROM_DECODED;
     request.targetSampleRate = args.sampleRate;
     request.requestedBufferMode = requestedBufferMode;
-    impl->requestAsyncSampleBuild(request);
+    impl->sampleLifecycle.requestAsyncSampleBuild(request);
   }
 
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
@@ -965,21 +777,17 @@ bool TemporalDeck::hasLoadedSample() const {
 }
 
 bool TemporalDeck::isSampleAutoPlayOnLoadEnabled() const {
-  std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-  return impl->sampleAutoPlayOnLoad;
+  return impl->sampleLifecycle.sampleAutoPlayOnLoad();
 }
 
 void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->sampleAutoPlayOnLoad = enabled;
-  }
-  impl->pendingSampleStateApply.store(true);
+  impl->sampleLifecycle.setSampleAutoPlayOnLoad(enabled);
+  impl->sampleLifecycle.setPendingSampleStateApply();
 }
 
 void TemporalDeck::setSampleModeEnabled(bool enabled) {
   impl->sampleModeEnabled.store(enabled, std::memory_order_relaxed);
-  impl->pendingSampleStateApply.store(true);
+  impl->sampleLifecycle.setPendingSampleStateApply();
   impl->uiSampleModeEnabled.store(enabled && impl->engine.sampleLoaded, std::memory_order_relaxed);
 }
 
@@ -1013,51 +821,36 @@ void TemporalDeck::stopSampleTransport() {
 }
 
 void TemporalDeck::clearLoadedSample() {
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    impl->samplePath.clear();
-    impl->sampleDisplayName.clear();
-    impl->decodedSample = DecodedSampleFile();
-  }
-  impl->decodedSampleAvailable.store(false, std::memory_order_relaxed);
-  impl->pendingPreparedSampleInstall.store(false, std::memory_order_relaxed);
-  {
-    std::lock_guard<std::mutex> lock(impl->preparedSampleMutex);
-    impl->preparedSample = PreparedSampleData();
-  }
-  Impl::AsyncSampleBuildRequest cancelRequest;
-  cancelRequest.type = Impl::AsyncSampleBuildRequest::NONE;
+  impl->sampleLifecycle.clearDecodedAndPreparedState();
+  temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
+  cancelRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::NONE;
   cancelRequest.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
   cancelRequest.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
-  impl->requestAsyncSampleBuild(cancelRequest);
+  impl->sampleLifecycle.requestAsyncSampleBuild(cancelRequest);
   impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
   impl->bufferDurationMode.store(BUFFER_DURATION_10S);
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(BUFFER_DURATION_10S);
   }
-  impl->pendingSampleStateApply.store(true);
+  impl->sampleLifecycle.setPendingSampleStateApply();
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
   (void)errorOut;
-  bool autoPlayOnLoad = true;
+  bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
   bool wasFreezeLatched = impl->transportControl.freezeLatched;
   bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
-  {
-    std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-    autoPlayOnLoad = impl->sampleAutoPlayOnLoad;
-  }
   impl->transportControl.freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
   impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
   impl->transportControl.reverseLatched = false;
   impl->transportControl.slipLatched = false;
 
-  Impl::AsyncSampleBuildRequest request;
-  request.type = Impl::AsyncSampleBuildRequest::LOAD_PATH;
+  temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
+  request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::LOAD_PATH;
   request.path = path;
   request.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
   request.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
-  impl->requestAsyncSampleBuild(request);
+  impl->sampleLifecycle.requestAsyncSampleBuild(request);
   return true;
 }
 
@@ -1079,8 +872,7 @@ double TemporalDeck::getUiSampleProgress() const {
 }
 
 std::string TemporalDeck::getLoadedSampleDisplayName() const {
-  std::lock_guard<std::mutex> lock(impl->sampleStateMutex);
-  return impl->sampleDisplayName;
+  return impl->sampleLifecycle.sampleDisplayName();
 }
 
 bool TemporalDeck::wasLoadedSampleTruncated() const {
