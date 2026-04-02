@@ -2,7 +2,6 @@
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSampleLifecycle.hpp"
-#include "TemporalDeckSamplePrep.hpp"
 #include "TemporalDeckTransportControl.hpp"
 
 #include <algorithm>
@@ -10,15 +9,11 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <limits>
-#include <new>
 #include <mutex>
+#include <new>
 #include <string>
 #include <utility>
-#include <vector>
 
 // C++11/MinGW can require out-of-class definitions for constexpr static members
 // when they are ODR-used.
@@ -77,7 +72,6 @@ using temporaldeck::TemporalDeckEngine;
 
 namespace {
 using temporaldeck_modes::isMonoBufferMode;
-using temporaldeck_modes::realBufferSecondsForMode;
 using temporaldeck_modes::usableBufferSecondsForMode;
 
 using temporaldeck::PreparedSampleData;
