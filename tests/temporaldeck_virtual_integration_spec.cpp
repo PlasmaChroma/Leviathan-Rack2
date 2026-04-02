@@ -379,6 +379,24 @@ TestResult testEdgeSampleSeekDuringTransportStateChanges() {
             " reverseSet=" + std::to_string(int(reverseSet))};
 }
 
+TestResult testEdgeLiveScratchLimitDoesNotFreezeBufferGrowth() {
+  VirtualRig rig;
+  rig.fillLive(128);
+
+  rig.setScratch(true, 100000.f, 0.f, 0);
+  Engine::FrameResult a = rig.step();
+  Engine::FrameResult b = rig.step();
+  Engine::FrameResult c = rig.step();
+  Engine::FrameResult d = rig.step();
+
+  // While manually held at the live lag edge before full-buffer, readable
+  // limit should keep advancing as live input writes continue.
+  bool advancing = (b.accessibleLag > a.accessibleLag) && (c.accessibleLag > b.accessibleLag) && (d.accessibleLag > c.accessibleLag);
+  return {"Edge: live scratch limit continues buffer growth while held", advancing,
+          "a=" + std::to_string(a.accessibleLag) + " b=" + std::to_string(b.accessibleLag) +
+            " c=" + std::to_string(c.accessibleLag) + " d=" + std::to_string(d.accessibleLag)};
+}
+
 } // namespace
 
 int main() {
@@ -392,6 +410,7 @@ int main() {
   tests.push_back(testEdgeSampleLoopToggleAtEndHandling());
   tests.push_back(testEdgeQuickSlipOneShotSemantics());
   tests.push_back(testEdgeSampleSeekDuringTransportStateChanges());
+  tests.push_back(testEdgeLiveScratchLimitDoesNotFreezeBufferGrowth());
 
   int failed = 0;
   std::cout << "TemporalDeck Virtual Integration Spec\n";

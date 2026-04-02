@@ -2122,8 +2122,37 @@ struct TemporalDeckEngine {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
             }
             targetLag += driftLag * driftMix;
+            // Keep drift compensation incremental to recent gesture timing
+            // rather than accumulating from initial scratch-start time.
+            liveManualScratchAnchorNewestPos = newestPos;
           }
           scratchLagTargetSamples = clampLag(targetLag, limit);
+          if (!sampleModeActive && limit > 0.0 && scratchLagSamples >= (limit - 0.5) &&
+              scratchLagTargetSamples >= (limit - 0.5)) {
+            // When manual touch scratch is pinned at the live readable limit,
+            // keep the drag anchor in step with the advancing write head.
+            // This avoids a growing drift term that can make forward movement
+            // feel sticky after holding at the red limit.
+            liveManualScratchAnchorNewestPos = newestPos;
+          }
+          if (!sampleModeActive && limit > 0.0 && scratchLagSamples >= (limit - 0.5) &&
+              scratchLagTargetSamples < (scratchLagSamples - 1.0)) {
+            // Edge-release assist: when the hand moves toward NOW after being
+            // pinned at the live readable limit, immediately release from the
+            // clamp point so movement doesn't feel sticky.
+            scratchLagSamples = scratchLagTargetSamples;
+            scratchHandVelocity = 0.f;
+            scratchMotionVelocity = 0.f;
+            scratch3LagVelocity = 0.f;
+          }
+          if (!sampleModeActive && scratchLagTargetSamples < (scratchLagSamples - 1.0)) {
+            // Live touch gestures that move toward NOW should feel direct and
+            // not be dominated by accumulated lag-state inertia.
+            scratchLagSamples = scratchLagTargetSamples;
+            scratchHandVelocity = 0.f;
+            scratchMotionVelocity = 0.f;
+            scratch3LagVelocity = 0.f;
+          }
           lastPlatterGestureRevision = platterGestureRevision;
         }
 
@@ -2260,9 +2289,8 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(newestPos - targetLag);
     }
 
-    bool holdAtScratchEdge = manualScratch && limit > 0.f && scratchLagSamples >= (limit - 0.5f);
     bool holdAtReverseEdge = reverseAtOldestEdge;
-    bool holdAtBufferEdge = holdAtScratchEdge || holdAtReverseEdge;
+    bool holdAtBufferEdge = holdAtReverseEdge;
 
     bool scratchReadPath = anyScratch;
     bool slipReadPath = !sampleModeActive && (slipReturning || slipBlendActive);
