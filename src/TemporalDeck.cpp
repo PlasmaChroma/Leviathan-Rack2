@@ -1,6 +1,8 @@
 #include "TemporalDeck.hpp"
 #include "TemporalDeckBufferModes.hpp"
 #include "TemporalDeckEngine.hpp"
+#include "TemporalDeckPlatterInput.hpp"
+#include "TemporalDeckSamplePrep.hpp"
 #include "TemporalDeckUiPublish.hpp"
 #include "codec.hpp"
 
@@ -80,29 +82,13 @@ using temporaldeck_modes::isMonoBufferMode;
 using temporaldeck_modes::realBufferSecondsForMode;
 using temporaldeck_modes::usableBufferSecondsForMode;
 
-static constexpr float kSampleFileVoltageScale = 5.f;
-
 using temporaldeck::DecodedSampleFile;
 using temporaldeck::decodeSampleFile;
-
-static int chooseSampleBufferMode(const DecodedSampleFile &sample) {
-  if (sample.channels <= 1) {
-    return TemporalDeck::BUFFER_DURATION_10M_MONO;
-  }
-  return TemporalDeck::BUFFER_DURATION_10M_STEREO;
-}
-
-static int maxFramesForModeAtSampleRate(int mode, float sampleRate) {
-  return std::max(1, int(std::floor(usableBufferSecondsForMode(mode) * std::max(sampleRate, 1.f))));
-}
-
-static int resampledFrameCount(int sourceFrames, float sourceRate, float targetRate) {
-  if (sourceFrames <= 0 || sourceRate <= 1.f || targetRate <= 1.f) {
-    return 0;
-  }
-  double seconds = double(sourceFrames) / double(sourceRate);
-  return std::max(1, int(std::round(seconds * double(targetRate))));
-}
+using temporaldeck::PreparedSampleData;
+using temporaldeck::buildPreparedSample;
+using temporaldeck::chooseSampleBufferMode;
+using temporaldeck::PlatterInputSnapshot;
+using temporaldeck::PlatterInputState;
 
 static std::string normalizePathForPrefixCompare(std::string path) {
   std::replace(path.begin(), path.end(), '\\', '/');
@@ -138,101 +124,6 @@ static bool isManagedVinylArtPath(const std::string &path) {
 
 static double clampd(double x, double a, double b) {
   return std::max(a, std::min(x, b));
-}
-
-static void resampleSampleChannel(const std::vector<float> &src, float sourceRate, float targetRate, int outFrames,
-                                  std::vector<float> *dst, float outputGain = 1.f) {
-  dst->assign(std::max(outFrames, 0), 0.f);
-  if (src.empty() || outFrames <= 0) {
-    return;
-  }
-  if (src.size() == 1 || std::fabs(sourceRate - targetRate) < 1e-3f) {
-    for (int i = 0; i < outFrames; ++i) {
-      int srcIndex = std::min<int>(i, src.size() - 1);
-      (*dst)[i] = src[srcIndex] * outputGain;
-    }
-    return;
-  }
-
-  double ratio = double(sourceRate) / double(targetRate);
-  for (int i = 0; i < outFrames; ++i) {
-    double srcPos = double(i) * ratio;
-    int i0 = clamp(int(std::floor(srcPos)), 0, int(src.size()) - 1);
-    int i1 = clamp(i0 + 1, 0, int(src.size()) - 1);
-    float t = float(srcPos - double(i0));
-    (*dst)[i] = crossfade(src[i0], src[i1], t) * outputGain;
-  }
-}
-
-struct PreparedSampleData {
-  std::vector<float> left;
-  std::vector<float> right;
-  int frames = 0;
-  int bufferMode = TemporalDeck::BUFFER_DURATION_10S;
-  float sampleRate = 44100.f;
-  bool truncated = false;
-  bool autoPlayOnLoad = true;
-  bool monoStorage = false;
-  bool valid = false;
-};
-
-static bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
-                                bool autoPlayOnLoad, PreparedSampleData *outPrepared) {
-  if (!outPrepared) {
-    return false;
-  }
-  PreparedSampleData prepared;
-  if (decodedSample.frames <= 0 || decodedSample.left.empty() || targetSampleRate <= 1.f) {
-    *outPrepared = prepared;
-    return false;
-  }
-
-  prepared.bufferMode = clamp(bufferMode, TemporalDeck::BUFFER_DURATION_10S, TemporalDeck::BUFFER_DURATION_COUNT - 1);
-  prepared.sampleRate = targetSampleRate;
-  prepared.autoPlayOnLoad = autoPlayOnLoad;
-  prepared.monoStorage = isMonoBufferMode(prepared.bufferMode);
-
-  int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, targetSampleRate);
-  int maxFrames = maxFramesForModeAtSampleRate(prepared.bufferMode, targetSampleRate);
-  prepared.truncated = decodedSample.truncated;
-  if (outFrames > maxFrames) {
-    outFrames = maxFrames;
-    prepared.truncated = true;
-  }
-  if (outFrames <= 0) {
-    *outPrepared = prepared;
-    return false;
-  }
-
-  if (prepared.monoStorage) {
-    std::vector<float> leftResampled;
-    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &leftResampled,
-                          kSampleFileVoltageScale);
-    if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
-      std::vector<float> rightResampled;
-      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &rightResampled,
-                            kSampleFileVoltageScale);
-      for (int i = 0; i < outFrames; ++i) {
-        leftResampled[i] = 0.5f * (leftResampled[i] + rightResampled[i]);
-      }
-    }
-    prepared.left = std::move(leftResampled);
-    std::vector<float>().swap(prepared.right);
-  } else {
-    resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.left,
-                          kSampleFileVoltageScale);
-    if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
-      resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.right,
-                            kSampleFileVoltageScale);
-    } else {
-      prepared.right = prepared.left;
-    }
-  }
-
-  prepared.frames = std::min(outFrames, int(prepared.left.size()));
-  prepared.valid = prepared.frames > 0;
-  *outPrepared = std::move(prepared);
-  return outPrepared->valid;
 }
 
 static int nextCartridgeCharacter(int current) {
@@ -333,14 +224,7 @@ struct TemporalDeck::Impl {
   std::atomic<uint64_t> sampleBuildRequestSerial{0};
   uint64_t sampleBuildAppliedSerial = 0;
   std::atomic<bool> allocationFallbackPending{false};
-  std::atomic<bool> platterTouched{false};
-  std::atomic<uint32_t> platterGestureRevision{0};
-  std::atomic<float> platterLagTarget{0.f};
-  std::atomic<float> platterGestureVelocity{0.f};
-  std::atomic<float> platterWheelDelta{0.f};
-  std::atomic<int> platterScratchHoldSamples{0};
-  std::atomic<int> platterMotionFreshSamples{0};
-  std::atomic<bool> quickSlipTrigger{false};
+  PlatterInputState platterInput;
   std::atomic<float> pendingSampleSeekNormalized{0.f};
   std::atomic<uint32_t> pendingSampleSeekRevision{0};
   uint32_t appliedSampleSeekRevision = 0;
@@ -606,8 +490,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
       paramQuantities[BUFFER_PARAM]->displayMultiplier = displaySeconds;
     }
     impl->uiPublishTimerSec = 0.f;
-    impl->platterScratchHoldSamples.store(0);
-    impl->platterMotionFreshSamples.store(0);
+    impl->platterInput.resetAudioHoldState();
     for (int i = 0; i < kArcLightCount; ++i) {
       lights[ARC_LIGHT_START + i].setBrightness(0.f);
       lights[ARC_MAX_LIGHT_START + i].setBrightness(0.f);
@@ -936,32 +819,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     }
     impl->appliedSampleSeekRevision = pendingSeekRevision;
   }
-  int scratchHold = impl->platterScratchHoldSamples.load(std::memory_order_relaxed);
-  bool wheelScratchHeld = scratchHold > 0;
-  if (wheelScratchHeld) {
-    impl->platterScratchHoldSamples.store(std::max(0, scratchHold - 1), std::memory_order_relaxed);
-  }
-  int motionFresh = impl->platterMotionFreshSamples.load(std::memory_order_relaxed);
-  bool platterMotionActive = motionFresh > 0;
-  if (platterMotionActive) {
-    impl->platterMotionFreshSamples.store(std::max(0, motionFresh - 1), std::memory_order_relaxed);
-  }
-  float wheelDelta = impl->platterWheelDelta.load(std::memory_order_relaxed);
-  if (std::fabs(wheelDelta) > 1e-9f) {
-    wheelDelta = impl->platterWheelDelta.exchange(0.f, std::memory_order_relaxed);
-  } else {
-    wheelDelta = 0.f;
-  }
-  bool platterTouched = impl->platterTouched.load(std::memory_order_relaxed);
-  uint32_t platterGestureRevision = 0;
-  float platterLagTarget = 0.f;
-  float platterGestureVelocity = 0.f;
-  if (platterTouched || wheelScratchHeld || platterMotionActive) {
-    platterGestureRevision = impl->platterGestureRevision.load(std::memory_order_relaxed);
-    platterLagTarget = impl->platterLagTarget.load(std::memory_order_relaxed);
-    platterGestureVelocity = impl->platterGestureVelocity.load(std::memory_order_relaxed);
-  }
-  bool quickSlipTrigger = impl->quickSlipTrigger.exchange(false, std::memory_order_relaxed);
+  PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
   TemporalDeckEngine::FrameInput frameInput;
   frameInput.dt = args.sampleTime;
@@ -974,7 +832,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   frameInput.freezeButton = impl->freezeLatched;
   frameInput.reverseButton = impl->reverseLatched;
   frameInput.slipButton = impl->slipLatched;
-  frameInput.quickSlipTrigger = quickSlipTrigger;
+  frameInput.quickSlipTrigger = platterInput.quickSlipTrigger;
   frameInput.freezeGate = freezeGateHigh;
   frameInput.scratchGate = scratchGateHigh;
   frameInput.scratchGateConnected = scratchGateConnected;
@@ -982,13 +840,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
   frameInput.positionCv = positionCv;
   frameInput.rateCv = rateCv;
   frameInput.rateCvConnected = rateCvConnected;
-  frameInput.platterTouched = platterTouched;
-  frameInput.wheelScratchHeld = wheelScratchHeld;
-  frameInput.platterMotionActive = platterMotionActive;
-  frameInput.platterGestureRevision = platterGestureRevision;
-  frameInput.platterLagTarget = platterLagTarget;
-  frameInput.platterGestureVelocity = platterGestureVelocity;
-  frameInput.wheelDelta = wheelDelta;
+  frameInput.platterTouched = platterInput.platterTouched;
+  frameInput.wheelScratchHeld = platterInput.wheelScratchHeld;
+  frameInput.platterMotionActive = platterInput.platterMotionActive;
+  frameInput.platterGestureRevision = platterInput.platterGestureRevision;
+  frameInput.platterLagTarget = platterInput.platterLagTarget;
+  frameInput.platterGestureVelocity = platterInput.platterGestureVelocity;
+  frameInput.wheelDelta = platterInput.wheelDelta;
 
   auto frame = impl->engine.process(frameInput);
 
@@ -1028,30 +886,19 @@ void TemporalDeck::process(const ProcessArgs &args) {
 }
 
 void TemporalDeck::setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples) {
-  impl->platterTouched.store(touched, std::memory_order_relaxed);
-  impl->platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
-  impl->platterLagTarget.store(lagSamples, std::memory_order_relaxed);
-  impl->platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
-  impl->platterScratchHoldSamples.store(std::max(0, holdSamples), std::memory_order_relaxed);
-  if (touched || holdSamples == 0) {
-    impl->platterWheelDelta.store(0.f, std::memory_order_relaxed);
-  }
+  impl->platterInput.setScratch(touched, lagSamples, velocitySamples, holdSamples);
 }
 
 void TemporalDeck::setPlatterMotionFreshSamples(int motionFreshSamples) {
-  impl->platterMotionFreshSamples.store(std::max(0, motionFreshSamples), std::memory_order_relaxed);
+  impl->platterInput.setMotionFreshSamples(motionFreshSamples);
 }
 
 void TemporalDeck::addPlatterWheelDelta(float delta, int holdSamples) {
-  float expected = impl->platterWheelDelta.load(std::memory_order_relaxed);
-  while (!impl->platterWheelDelta.compare_exchange_weak(expected, expected + delta, std::memory_order_relaxed,
-                                                         std::memory_order_relaxed)) {
-  }
-  impl->platterScratchHoldSamples.store(std::max(0, holdSamples), std::memory_order_relaxed);
+  impl->platterInput.addWheelDelta(delta, holdSamples);
 }
 
 void TemporalDeck::triggerQuickSlipReturn() {
-  impl->quickSlipTrigger.store(true, std::memory_order_relaxed);
+  impl->platterInput.triggerQuickSlipReturn();
 }
 
 double TemporalDeck::getUiLagSamples() const {
