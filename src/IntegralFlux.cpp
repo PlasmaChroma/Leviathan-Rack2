@@ -145,26 +145,6 @@ struct IntegralFlux : Module {
 		int direction = 0;
 	};
 
-	struct MixNonIdealCal {
-		bool enabled = true;
-
-		// SUM
-		// Symmetric soft saturation models analog summing headroom.
-		float sumSatV = 10.f;
-		float sumDrive = 1.15f;
-
-		// OR
-		// Positive-only saturation models diode OR behavior at high levels.
-		float orSatV = 10.f;
-		float orDrive = 1.05f;
-		float orVDrop = 0.f;  // Phase 1 keeps threshold behavior disabled.
-
-		// INV
-		bool invUseExtraSat = false;
-		float invSatV = 10.f;
-		float invDrive = 1.0f;
-	};
-
 	OuterChannelState ch1;
 	OuterChannelState ch4;
 	struct PreviewSharedState {
@@ -190,7 +170,6 @@ struct IntegralFlux : Module {
 		float lastCurveSent = 0.f;
 		bool sentOnce = false;
 	};
-	MixNonIdealCal mixCal;
 	PreviewSharedState previewCh1;
 	PreviewSharedState previewCh4;
 	PreviewUpdateState previewUpdateCh1;
@@ -246,22 +225,6 @@ struct IntegralFlux : Module {
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
-	}
-
-	static float fastTanh(float x) {
-		// Low-cost tanh approximation.
-		float x2 = x * x;
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-
-	static float softSatSymFast(float x, float satV, float drive) {
-		satV = std::max(satV, 1e-6f);
-		return satV * fastTanh((drive / satV) * x);
-	}
-
-	static float softSatPosFast(float x, float satV, float drive) {
-		float y = softSatSymFast(std::fmax(0.f, x), satV, drive);
-		return clamp(y, 0.f, satV);
 	}
 
 	static float softClamp8(float v) {
@@ -934,7 +897,6 @@ struct IntegralFlux : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
 		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
-		json_object_set_new(rootJ, "mixNonIdealEnabled", json_boolean(mixCal.enabled));
 		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
@@ -951,11 +913,6 @@ struct IntegralFlux : Module {
 		json_t* ch4CycleJ = json_object_get(rootJ, "ch4CycleLatched");
 		if (ch4CycleJ) {
 			ch4.cycleLatched = json_boolean_value(ch4CycleJ);
-		}
-
-		json_t* mixEnabledJ = json_object_get(rootJ, "mixNonIdealEnabled");
-		if (mixEnabledJ) {
-			mixCal.enabled = json_boolean_value(mixEnabledJ);
 		}
 
 		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
@@ -1064,22 +1021,10 @@ struct IntegralFlux : Module {
 			float busV3 = outputs[OUT_3_OUTPUT].isConnected() ? 0.f : ch3Var;
 			float busV4 = outputs[OUT_4_OUTPUT].isConnected() ? 0.f : ch4Var;
 			float sumRaw = busV1 + busV2 + busV3 + busV4;
-			float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1 - mixCal.orVDrop, busV2 - mixCal.orVDrop), std::fmax(busV3 - mixCal.orVDrop, busV4 - mixCal.orVDrop)));
-			if (mixCal.enabled) {
-				// Non-ideal mode: soft saturation and diode-ish OR response.
-				sumOut = softSatSymFast(sumRaw, mixCal.sumSatV, mixCal.sumDrive);
-				invOut = -sumOut;
-				if (mixCal.invUseExtraSat) {
-					invOut = softSatSymFast(invOut, mixCal.invSatV, mixCal.invDrive);
-				}
-				orOut = softSatPosFast(orRaw, mixCal.orSatV, mixCal.orDrive);
-			}
-			else {
-				// Ideal digital fallback: hard clamps only.
-				sumOut = clamp(sumRaw, -10.f, 10.f);
-				invOut = clamp(-sumOut, -10.f, 10.f);
-				orOut = clamp(orRaw, 0.f, 10.f);
-			}
+			float orRaw = std::fmax(0.f, std::fmax(std::fmax(busV1, busV2), std::fmax(busV3, busV4)));
+			sumOut = clamp(sumRaw, -10.f, 10.f);
+			invOut = clamp(-sumOut, -10.f, 10.f);
+			orOut = clamp(orRaw, 0.f, 10.f);
 		}
 
 		outputs[EOR_1_OUTPUT].setVoltage(eorOut);
@@ -1496,9 +1441,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		assert(menu);
 
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createMenuLabel("Mix Modeling"));
 		if (maths) {
-			menu->addChild(createBoolPtrMenuItem("Analog Mix Non-Idealities", "", &maths->mixCal.enabled));
 			menu->addChild(createMenuLabel("Performance"));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
 			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1/CH4 Signal Outputs", "", &maths->bandlimitedSignalOutputs));
