@@ -1,5 +1,6 @@
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
+#include "TemporalDeckFrameInput.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSampleLifecycle.hpp"
 #include "TemporalDeckTransportControl.hpp"
@@ -200,17 +201,7 @@ struct TemporalDeck::Impl {
   bool pendingInitialPlatterArtSelection = true;
 };
 
-struct ProcessSignalInputs {
-  float inL = 0.f;
-  float inR = 0.f;
-  float positionCv = 0.f;
-  float rateCv = 0.f;
-  bool rateCvConnected = false;
-  bool freezeGateHigh = false;
-  bool scratchGateHigh = false;
-  bool scratchGateConnected = false;
-  bool positionConnected = false;
-};
+using ProcessSignalInputs = temporaldeck_frameinput::SignalInputs;
 
 static ProcessSignalInputs readProcessSignalInputs(TemporalDeck &module) {
   ProcessSignalInputs in;
@@ -666,32 +657,29 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
-  TemporalDeckEngine::FrameInput frameInput;
-  frameInput.dt = args.sampleTime;
-  frameInput.inL = inL;
-  frameInput.inR = inR;
-  frameInput.bufferKnob = params[BUFFER_PARAM].getValue();
-  frameInput.rateKnob = params[RATE_PARAM].getValue();
-  frameInput.mixKnob = params[MIX_PARAM].getValue();
-  frameInput.feedbackKnob = params[FEEDBACK_PARAM].getValue();
-  frameInput.freezeButton = impl->transportControl.freezeLatched;
-  frameInput.reverseButton = impl->transportControl.reverseLatched;
-  frameInput.slipButton = impl->transportControl.slipLatched;
-  frameInput.quickSlipTrigger = platterInput.quickSlipTrigger;
-  frameInput.freezeGate = freezeGateHigh;
-  frameInput.scratchGate = scratchGateHigh;
-  frameInput.scratchGateConnected = scratchGateConnected;
-  frameInput.positionConnected = positionConnected;
-  frameInput.positionCv = positionCv;
-  frameInput.rateCv = rateCv;
-  frameInput.rateCvConnected = rateCvConnected;
-  frameInput.platterTouched = platterInput.platterTouched;
-  frameInput.wheelScratchHeld = platterInput.wheelScratchHeld;
-  frameInput.platterMotionActive = platterInput.platterMotionActive;
-  frameInput.platterGestureRevision = platterInput.platterGestureRevision;
-  frameInput.platterLagTarget = platterInput.platterLagTarget;
-  frameInput.platterGestureVelocity = platterInput.platterGestureVelocity;
-  frameInput.wheelDelta = platterInput.wheelDelta;
+  temporaldeck_frameinput::FrameInputControls controls;
+  controls.dt = args.sampleTime;
+  controls.bufferKnob = params[BUFFER_PARAM].getValue();
+  controls.rateKnob = params[RATE_PARAM].getValue();
+  controls.mixKnob = params[MIX_PARAM].getValue();
+  controls.feedbackKnob = params[FEEDBACK_PARAM].getValue();
+  controls.freezeButton = impl->transportControl.freezeLatched;
+  controls.reverseButton = impl->transportControl.reverseLatched;
+  controls.slipButton = impl->transportControl.slipLatched;
+
+  ProcessSignalInputs frameSignals;
+  frameSignals.inL = inL;
+  frameSignals.inR = inR;
+  frameSignals.positionCv = positionCv;
+  frameSignals.rateCv = rateCv;
+  frameSignals.rateCvConnected = rateCvConnected;
+  frameSignals.freezeGateHigh = freezeGateHigh;
+  frameSignals.scratchGateHigh = scratchGateHigh;
+  frameSignals.scratchGateConnected = scratchGateConnected;
+  frameSignals.positionConnected = positionConnected;
+
+  TemporalDeckEngine::FrameInput frameInput =
+    temporaldeck_frameinput::buildFrameInput(frameSignals, controls, platterInput);
 
   auto frame = impl->engine.process(frameInput);
 
