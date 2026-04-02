@@ -3346,11 +3346,11 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      // Hidden for now, but keep the trace plumbing available in code in case
-      // we need to bring back platter interaction logging for debugging.
-      // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
-      //                                    [=]() { return module->isPlatterTraceLoggingEnabled(); },
-      //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
+      menu->addChild(createCheckMenuItem("Log platter mouse events", "",
+                                         [=]() { return module->isPlatterTraceLoggingEnabled(); },
+                                         [=]() {
+                                           module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
+                                         }));
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {
           std::string defaultDir = temporalDeckUserRootPath();
