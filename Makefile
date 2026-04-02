@@ -26,6 +26,8 @@ include $(RACK_DIR)/plugin.mk
 test:
 	@mkdir -p build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp -o build/tests/platter_spec_harness
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_engine_spec.cpp -o build/tests/temporaldeck_engine_spec
 	@build/tests/platter_spec_harness
+	@build/tests/temporaldeck_engine_spec
 
 platter-spec-test: test
