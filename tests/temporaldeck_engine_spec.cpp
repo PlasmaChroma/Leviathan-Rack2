@@ -188,6 +188,72 @@ TestResult testLiveFreezeForwardTouchSnapAppliesToReadHead() {
           "lag=" + std::to_string(out.lag) + " target=" + std::to_string(targetLag) + " err=" + std::to_string(err)};
 }
 
+TestResult testLiveTouchUiLikeAlternatingScratchRegressionGuard() {
+  const float sr = 48000.f;
+  Engine engine;
+  engine.reset(sr);
+  engine.sampleModeEnabled = false;
+  engine.sampleLoaded = false;
+
+  auto in = makeDefaultInput(sr);
+  in.inL = 0.12f;
+  in.inR = -0.08f;
+  for (int i = 0; i < 12000; ++i) {
+    engine.process(in);
+  }
+
+  double newest = engine.newestReadablePos();
+  double localLag = 5000.0;
+  engine.readHead = engine.buffer.wrapPosition(newest - localLag);
+
+  double prevEngineLag = engine.currentLagFromNewest(engine.newestReadablePos());
+  double maxAbsGap = 0.0;
+  double revExtraSum = 0.0;
+  double fwdExtraSum = 0.0;
+  int revCount = 0;
+  int fwdCount = 0;
+  uint32_t rev = 0;
+  bool reversePhase = true;
+  constexpr float kSensitivity = 1.f;
+  constexpr float kAngleStep = 0.010f;
+  for (int i = 0; i < 160; ++i) {
+    if (i > 0 && (i % 16) == 0) {
+      reversePhase = !reversePhase;
+    }
+
+    float deltaAngle = reversePhase ? -kAngleStep : kAngleStep;
+    float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, sr, kSensitivity, Engine::kMouseScratchTravelScale,
+                                                            Engine::kNominalPlatterRpm);
+    localLag = platter_interaction::rebaseLagTarget(float(localLag), float(prevEngineLag), lagDelta);
+    localLag = std::max(0.0, std::min(localLag - double(lagDelta), double(engine.maxLagFromKnob(1.f))));
+
+    in.platterTouched = true;
+    in.platterMotionActive = true;
+    in.platterGestureRevision = ++rev;
+    in.platterLagTarget = float(localLag);
+    in.platterGestureVelocity = lagDelta / std::max(in.dt, 1e-6f);
+    auto out = engine.process(in);
+    double gap = out.lag - localLag;
+    maxAbsGap = std::max(maxAbsGap, std::fabs(gap));
+    double extra = (out.lag - prevEngineLag) - 1.0; // subtract nominal write-drift
+    if (reversePhase) {
+      revExtraSum += extra;
+      revCount++;
+    } else {
+      fwdExtraSum += extra;
+      fwdCount++;
+    }
+    prevEngineLag = out.lag;
+  }
+
+  double revAvg = revCount > 0 ? (revExtraSum / double(revCount)) : 0.0;
+  double fwdAvg = fwdCount > 0 ? (fwdExtraSum / double(fwdCount)) : 0.0;
+  bool pass = revAvg > 0.02 && fwdAvg < 0.25 && maxAbsGap < 15000.0;
+  return {"Live touch UI-like alternating scratch regression guard", pass,
+          "revAvgExtra=" + std::to_string(revAvg) + " fwdAvgExtra=" + std::to_string(fwdAvg) +
+            " maxAbsGap=" + std::to_string(maxAbsGap)};
+}
+
 } // namespace
 
 int main() {
@@ -197,6 +263,7 @@ int main() {
   tests.push_back(testSampleTransportStopsAtEndWithoutLoop());
   tests.push_back(testSampleLoopWraps());
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
+  tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
 
   int failed = 0;
   std::cout << "TemporalDeck Engine Spec\n";
