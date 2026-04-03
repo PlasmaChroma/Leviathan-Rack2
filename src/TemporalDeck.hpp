@@ -137,7 +137,11 @@ struct TemporalDeck final : Module {
   void stopSampleTransport();
   void clearLoadedSample();
   bool loadSampleFromPath(const std::string &path, std::string *errorOut = nullptr);
+  void convertLiveToSample();
   void seekSampleByNormalizedPosition(double normalized);
+  void seekLiveByArcNormalizedPosition(double normalized);
+  bool isLoadedSampleLiveConversion() const;
+  bool saveLoadedSampleToPath(const std::string &path, std::string *errorOut = nullptr);
   double getUiSamplePlayheadSeconds() const;
   double getUiSampleDurationSeconds() const;
   double getUiSampleProgress() const;

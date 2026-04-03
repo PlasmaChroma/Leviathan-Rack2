@@ -2068,6 +2068,15 @@ static std::string ensureSvgExtension(std::string path) {
   return path;
 }
 
+static std::string ensureWavExtension(std::string path) {
+  std::string ext = system::getExtension(path);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+  if (ext != ".wav") {
+    path += ".wav";
+  }
+  return path;
+}
+
 static std::string lowercaseExtension(const std::string &path) {
   std::string ext = system::getExtension(path);
   std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -2270,7 +2279,7 @@ bool TemporalDeckDisplayWidget::isWithinSampleSeekArc(Vec panelPos) const {
 }
 
 void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
-  if (!module || !module->isSampleModeEnabled() || !module->hasLoadedSample()) {
+  if (!module) {
     return;
   }
   Vec local = panelPos.minus(centerMm);
@@ -2279,8 +2288,13 @@ void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
     return;
   }
   float arcT = clamp(-angle / float(M_PI), 0.f, 1.f); // right->left along top arc
-  float seekNorm = 1.f - arcT;                         // sample mode maps left->right as start->end
-  module->seekSampleByNormalizedPosition(seekNorm);
+  bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+  if (sampleDisplay) {
+    float seekNorm = 1.f - arcT; // sample mode maps left->right as start->end
+    module->seekSampleByNormalizedPosition(seekNorm);
+  } else {
+    module->seekLiveByArcNormalizedPosition(arcT);
+  }
 }
 
 Vec TemporalDeckDisplayWidget::currentPanelMousePos() const {
@@ -2391,8 +2405,7 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
       e.consume(this);
       return;
     }
-    if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
-        isWithinSampleSeekArc(e.pos)) {
+    if (e.action == GLFW_PRESS && module && isWithinSampleSeekArc(e.pos)) {
       arcScrubbing = true;
       seekSampleFromArcPosition(e.pos);
       e.consume(this);
@@ -2878,7 +2891,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
   // accumulated hand motion when DSP smoothing lags behind dense UI events.
   double accessibleLag = module->getUiAccessibleLagSamples();
   float liveLag = clamp(float(module->getUiLagSamples()), 0.f, float(accessibleLag));
-  bool freezeLikeDrag = true;
+  bool freezeLikeDrag = module->isUiFreezeLatched();
   float lowFpsComp = lowFpsCompensationFactor();
   float sensitivity = module->scratchSensitivity();
   float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, module->getUiSampleRate(), sensitivity,
@@ -3346,11 +3359,13 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      // Hidden for now, but keep the trace plumbing available in code in case
-      // we need to bring back platter interaction logging for debugging.
-      // menu->addChild(createCheckMenuItem("Log platter mouse events", "",
-      //                                    [=]() { return module->isPlatterTraceLoggingEnabled(); },
-      //                                    [=]() { module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled()); }));
+      if (isDragonKingDebugEnabled()) {
+        menu->addChild(createCheckMenuItem("Log platter mouse events", "",
+                                           [=]() { return module->isPlatterTraceLoggingEnabled(); },
+                                           [=]() {
+                                             module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
+                                           }));
+      }
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {
           std::string defaultDir = temporalDeckUserRootPath();
@@ -3439,7 +3454,15 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Sample"));
       std::string loadedSampleName = module->getLoadedSampleDisplayName();
+      bool hasLoadedSample = module->hasLoadedSample();
+      bool liveConvertedSample = module->isLoadedSampleLiveConversion();
+      std::string sampleInfoName = (!loadedSampleName.empty() ? loadedSampleName : (hasLoadedSample ? "Live conversion" : ""));
       std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
+      bool liveModeActive = !module->isSampleModeEnabled();
+      if (liveModeActive) {
+        bool disableConvert = module->getUiAccessibleLagSamples() < 1.0;
+        menu->addChild(createMenuItem("Convert live -> sample", "", [=]() { module->convertLiveToSample(); }, disableConvert));
+      }
       menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
         osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
         char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
@@ -3455,10 +3478,29 @@ struct TemporalDeckWidget : ModuleWidget {
           osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
         }
       }));
-      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
-      if (module->hasLoadedSample()) {
+      if (liveConvertedSample) {
+        menu->addChild(createMenuItem("Save sample...", "WAV", [=]() {
+          std::string defaultDir = temporalDeckUserRootPath();
+          system::createDirectories(defaultDir);
+          osdialog_filters *filters = osdialog_filters_parse("WAV:wav,WAV");
+          char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "live_conversion.wav", filters);
+          osdialog_filters_free(filters);
+          if (!pathC) {
+            return;
+          }
+          std::string path = ensureWavExtension(pathC);
+          std::free(pathC);
+          std::string error;
+          if (!module->saveLoadedSampleToPath(path, &error)) {
+            std::string message = error.empty() ? "Sample save failed" : error;
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+          }
+        }));
+      }
+      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !hasLoadedSample));
+      if (hasLoadedSample) {
         menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
-          submenu->addChild(createMenuLabel(loadedSampleName));
+          submenu->addChild(createMenuLabel(sampleInfoName));
           submenu->addChild(
             createMenuLabel(string::f("Length: %.2f s", std::max(0.0, module->getUiSampleDurationSeconds()))));
           if (module->wasLoadedSampleTruncated()) {

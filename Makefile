@@ -22,10 +22,20 @@ DISTRIBUTABLES += $(wildcard presets)
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
 
-.PHONY: test platter-spec-test
+.PHONY: test
 test:
 	@mkdir -p build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp -o build/tests/platter_spec_harness
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp -o build/tests/temporaldeck_arc_lights_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_engine_spec.cpp -o build/tests/temporaldeck_engine_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_frame_input_spec.cpp src/TemporalDeckFrameInput.cpp -o build/tests/temporaldeck_frame_input_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_platter_input_spec.cpp src/TemporalDeckPlatterInput.cpp -o build/tests/temporaldeck_platter_input_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_sample_prep_spec.cpp src/TemporalDeckSamplePrep.cpp -o build/tests/temporaldeck_sample_prep_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp -o build/tests/temporaldeck_virtual_integration_spec
 	@build/tests/platter_spec_harness
-
-platter-spec-test: test
+	@build/tests/temporaldeck_arc_lights_spec
+	@build/tests/temporaldeck_engine_spec
+	@build/tests/temporaldeck_frame_input_spec
+	@build/tests/temporaldeck_platter_input_spec
+	@build/tests/temporaldeck_sample_prep_spec
+	@build/tests/temporaldeck_virtual_integration_spec
