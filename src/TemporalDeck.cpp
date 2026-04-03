@@ -176,6 +176,7 @@ struct TemporalDeck::Impl {
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
   PlatterInputState platterInput;
+  std::atomic<bool> pendingLiveToSampleConvert{false};
   std::atomic<float> pendingSampleSeekNormalized{0.f};
   std::atomic<uint32_t> pendingSampleSeekRevision{0};
   uint32_t appliedSampleSeekRevision = 0;
@@ -535,6 +536,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->sampleLifecycle.requestAsyncSampleBuild(request);
   }
 
+  if (impl->pendingLiveToSampleConvert.exchange(false, std::memory_order_relaxed)) {
+    bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
+    if (impl->engine.convertLiveWindowToSample(params[BUFFER_PARAM].getValue(), autoPlayOnLoad)) {
+      impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+      if (paramQuantities[BUFFER_PARAM]) {
+        paramQuantities[BUFFER_PARAM]->displayMultiplier =
+          float(impl->engine.sampleFrames) / std::max(args.sampleRate, 1.f);
+      }
+    }
+  }
+
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   temporaldeck_transport::TransportButtonEvents transportButtons;
   transportButtons.freezePressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
@@ -754,6 +766,24 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   request.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
   impl->sampleLifecycle.requestAsyncSampleBuild(request);
   return true;
+}
+
+void TemporalDeck::convertLiveToSample() {
+  bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
+  bool wasFreezeLatched = impl->transportControl.freezeLatched;
+  bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
+  impl->transportControl.freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
+  impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
+  impl->transportControl.reverseLatched = false;
+  impl->transportControl.slipLatched = false;
+
+  impl->sampleLifecycle.clearDecodedAndPreparedState();
+  temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
+  cancelRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::NONE;
+  cancelRequest.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
+  cancelRequest.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
+  impl->sampleLifecycle.requestAsyncSampleBuild(cancelRequest);
+  impl->pendingLiveToSampleConvert.store(true, std::memory_order_relaxed);
 }
 
 void TemporalDeck::seekSampleByNormalizedPosition(double normalized) {

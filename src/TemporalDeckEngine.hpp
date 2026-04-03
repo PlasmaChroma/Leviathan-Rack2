@@ -1489,6 +1489,40 @@ struct TemporalDeckEngine {
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
   }
 
+  bool convertLiveWindowToSample(float bufferKnob, bool autoplay) {
+    bool sampleModeActive = sampleModeEnabled && sampleLoaded && sampleFrames > 0;
+    if (sampleModeActive || buffer.filled <= 0 || buffer.size <= 0) {
+      return false;
+    }
+
+    double liveLimit = accessibleLag(bufferKnob);
+    int capturedFrames = std::max(1, int(std::floor(std::max(0.0, liveLimit))) + 1);
+    capturedFrames = std::min(capturedFrames, buffer.filled);
+    if (capturedFrames <= 0) {
+      return false;
+    }
+
+    std::vector<float> left(capturedFrames, 0.f);
+    std::vector<float> right;
+    if (!buffer.monoStorage) {
+      right.assign(capturedFrames, 0.f);
+    }
+
+    int newestIndex = buffer.wrapIndex(buffer.writeHead - 1);
+    int oldestIndex = buffer.wrapIndex(newestIndex - (capturedFrames - 1));
+    for (int i = 0; i < capturedFrames; ++i) {
+      int src = buffer.wrapIndex(oldestIndex + i);
+      left[i] = buffer.left[src];
+      if (!buffer.monoStorage) {
+        right[i] = buffer.rightSample(src);
+      }
+    }
+
+    installPreparedSample(std::move(left), std::move(right), capturedFrames, autoplay, false, buffer.monoStorage);
+    sampleModeEnabled = sampleLoaded;
+    return sampleLoaded;
+  }
+
   void clearScratchMotionState() {
     platterVelocity = 0.f;
     scratchHandVelocity = 0.f;

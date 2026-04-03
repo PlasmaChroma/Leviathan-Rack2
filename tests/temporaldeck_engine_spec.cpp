@@ -254,6 +254,31 @@ TestResult testLiveTouchUiLikeAlternatingScratchRegressionGuard() {
             " maxAbsGap=" + std::to_string(maxAbsGap)};
 }
 
+TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
+  const float sr = 1000.f;
+  Engine engine;
+  engine.reset(sr);
+  engine.sampleModeEnabled = false;
+  engine.sampleLoaded = false;
+
+  for (int i = 0; i < 10; ++i) {
+    engine.buffer.write(float(i), float(100 + i));
+  }
+
+  bool converted = engine.convertLiveWindowToSample(0.00045f, true);
+  bool sizeOk = engine.sampleFrames == 5;
+  bool endpointsOk = sizeOk && std::fabs(engine.buffer.left[0] - 5.f) <= 1e-6f &&
+                     std::fabs(engine.buffer.left[engine.sampleFrames - 1] - 9.f) <= 1e-6f;
+  bool rightOk = sizeOk && !engine.buffer.monoStorage && std::fabs(engine.buffer.right[0] - 105.f) <= 1e-6f &&
+                 std::fabs(engine.buffer.right[engine.sampleFrames - 1] - 109.f) <= 1e-6f;
+  bool pass = converted && sizeOk && endpointsOk && rightOk && engine.sampleModeEnabled && engine.sampleLoaded &&
+              engine.sampleTransportPlaying;
+  return {"Convert live -> sample captures red-limit window", pass,
+          "converted=" + std::to_string(int(converted)) + " frames=" + std::to_string(engine.sampleFrames) +
+            " firstL=" + std::to_string(engine.buffer.left[0]) +
+            " lastL=" + std::to_string(engine.buffer.left[std::max(0, engine.sampleFrames - 1)])};
+}
+
 } // namespace
 
 int main() {
@@ -264,6 +289,7 @@ int main() {
   tests.push_back(testSampleLoopWraps());
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
   tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
+  tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
 
   int failed = 0;
   std::cout << "TemporalDeck Engine Spec\n";

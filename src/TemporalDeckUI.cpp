@@ -3440,6 +3440,11 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(createMenuLabel("Sample"));
       std::string loadedSampleName = module->getLoadedSampleDisplayName();
       std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
+      bool liveModeActive = !module->isSampleModeEnabled();
+      if (liveModeActive) {
+        bool disableConvert = module->getUiAccessibleLagSamples() < 1.0;
+        menu->addChild(createMenuItem("Convert live -> sample", "", [=]() { module->convertLiveToSample(); }, disableConvert));
+      }
       menu->addChild(createMenuItem("Load sample...", loadedSampleRight, [=]() {
         osdialog_filters *filters = osdialog_filters_parse("Audio:wav,WAV,flac,FLAC,mp3,MP3");
         char *pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
