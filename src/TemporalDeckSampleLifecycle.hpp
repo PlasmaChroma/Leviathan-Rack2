@@ -46,6 +46,7 @@ struct TemporalDeckSampleLifecycle {
   std::string samplePath() const;
   std::string sampleDisplayName() const;
   void sampleJsonSnapshot(bool *autoPlayOut, std::string *pathOut) const;
+  void setSampleSavedPath(const std::string &path);
 
 private:
   void workerLoop();

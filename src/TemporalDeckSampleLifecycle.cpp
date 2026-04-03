@@ -127,6 +127,12 @@ void TemporalDeckSampleLifecycle::sampleJsonSnapshot(bool *autoPlayOut, std::str
   }
 }
 
+void TemporalDeckSampleLifecycle::setSampleSavedPath(const std::string &path) {
+  std::lock_guard<std::mutex> lock(sampleStateMutex_);
+  samplePath_ = path;
+  sampleDisplayName_ = path.empty() ? std::string() : system::getFilename(path);
+}
+
 void TemporalDeckSampleLifecycle::workerLoop() {
   while (true) {
     AsyncSampleBuildRequest request;

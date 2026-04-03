@@ -2068,6 +2068,15 @@ static std::string ensureSvgExtension(std::string path) {
   return path;
 }
 
+static std::string ensureWavExtension(std::string path) {
+  std::string ext = system::getExtension(path);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+  if (ext != ".wav") {
+    path += ".wav";
+  }
+  return path;
+}
+
 static std::string lowercaseExtension(const std::string &path) {
   std::string ext = system::getExtension(path);
   std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -3443,6 +3452,9 @@ struct TemporalDeckWidget : ModuleWidget {
       menu->addChild(new MenuSeparator());
       menu->addChild(createMenuLabel("Sample"));
       std::string loadedSampleName = module->getLoadedSampleDisplayName();
+      bool hasLoadedSample = module->hasLoadedSample();
+      bool liveConvertedSample = module->isLoadedSampleLiveConversion();
+      std::string sampleInfoName = (!loadedSampleName.empty() ? loadedSampleName : (hasLoadedSample ? "Live conversion" : ""));
       std::string loadedSampleRight = loadedSampleName.empty() ? "WAV/FLAC/MP3" : "Loaded";
       bool liveModeActive = !module->isSampleModeEnabled();
       if (liveModeActive) {
@@ -3464,10 +3476,29 @@ struct TemporalDeckWidget : ModuleWidget {
           osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
         }
       }));
-      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !module->hasLoadedSample()));
-      if (module->hasLoadedSample()) {
+      if (liveConvertedSample) {
+        menu->addChild(createMenuItem("Save sample...", "WAV", [=]() {
+          std::string defaultDir = temporalDeckUserRootPath();
+          system::createDirectories(defaultDir);
+          osdialog_filters *filters = osdialog_filters_parse("WAV:wav,WAV");
+          char *pathC = osdialog_file(OSDIALOG_SAVE, defaultDir.c_str(), "live_conversion.wav", filters);
+          osdialog_filters_free(filters);
+          if (!pathC) {
+            return;
+          }
+          std::string path = ensureWavExtension(pathC);
+          std::free(pathC);
+          std::string error;
+          if (!module->saveLoadedSampleToPath(path, &error)) {
+            std::string message = error.empty() ? "Sample save failed" : error;
+            osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
+          }
+        }));
+      }
+      menu->addChild(createMenuItem("Clear sample", "", [=]() { module->clearLoadedSample(); }, !hasLoadedSample));
+      if (hasLoadedSample) {
         menu->addChild(createSubmenuItem("Sample info", "", [=](Menu *submenu) {
-          submenu->addChild(createMenuLabel(loadedSampleName));
+          submenu->addChild(createMenuLabel(sampleInfoName));
           submenu->addChild(
             createMenuLabel(string::f("Length: %.2f s", std::max(0.0, module->getUiSampleDurationSeconds()))));
           if (module->wasLoadedSampleTruncated()) {

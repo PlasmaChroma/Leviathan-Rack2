@@ -11,11 +11,13 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <limits>
 #include <mutex>
 #include <new>
 #include <string>
 #include <utility>
+#include <vector>
 
 // C++11/MinGW can require out-of-class definitions for constexpr static members
 // when they are ODR-used.
@@ -110,6 +112,110 @@ static bool isManagedVinylArtPath(const std::string &path) {
   std::string builtInRoot = normalizePathForPrefixCompare(asset::plugin(pluginInstance, "res/Vinyl"));
   std::string expandedRoot = normalizePathForPrefixCompare(system::join(asset::user(), "Leviathan/TemporalDeck/Vinyl"));
   return hasPathPrefix(normalizedPath, builtInRoot) || hasPathPrefix(normalizedPath, expandedRoot);
+}
+
+static void writeLe16(std::ofstream &out, uint16_t value) {
+  char bytes[2];
+  bytes[0] = char(value & 0xFFu);
+  bytes[1] = char((value >> 8) & 0xFFu);
+  out.write(bytes, sizeof(bytes));
+}
+
+static void writeLe32(std::ofstream &out, uint32_t value) {
+  char bytes[4];
+  bytes[0] = char(value & 0xFFu);
+  bytes[1] = char((value >> 8) & 0xFFu);
+  bytes[2] = char((value >> 16) & 0xFFu);
+  bytes[3] = char((value >> 24) & 0xFFu);
+  out.write(bytes, sizeof(bytes));
+}
+
+static int16_t floatToPcm16(float x) {
+  x = clamp(x, -1.f, 1.f);
+  int v = int(std::lround(double(x) * 32767.0));
+  v = std::max(-32768, std::min(32767, v));
+  return int16_t(v);
+}
+
+static bool writeStereoOrMonoWav16(const std::string &path, const std::vector<float> &left, const std::vector<float> &right,
+                                   int frames, int channels, float sampleRate, std::string *errorOut) {
+  if (path.empty()) {
+    if (errorOut) {
+      *errorOut = "Missing save path";
+    }
+    return false;
+  }
+  if (frames <= 0 || channels < 1 || channels > 2 || sampleRate <= 0.f) {
+    if (errorOut) {
+      *errorOut = "Invalid sample data";
+    }
+    return false;
+  }
+  if (int(left.size()) < frames || (channels == 2 && int(right.size()) < frames)) {
+    if (errorOut) {
+      *errorOut = "Sample buffer is incomplete";
+    }
+    return false;
+  }
+
+  uint32_t sr = uint32_t(std::max(1, int(std::lround(double(sampleRate)))));
+  uint32_t blockAlign = uint32_t(channels * 2);
+  uint64_t dataBytes64 = uint64_t(std::max(frames, 0)) * uint64_t(blockAlign);
+  if (dataBytes64 > uint64_t(std::numeric_limits<uint32_t>::max())) {
+    if (errorOut) {
+      *errorOut = "Sample is too large to save as WAV";
+    }
+    return false;
+  }
+  uint32_t dataBytes = uint32_t(dataBytes64);
+  uint64_t riffSize64 = 36ull + uint64_t(dataBytes);
+  if (riffSize64 > uint64_t(std::numeric_limits<uint32_t>::max())) {
+    if (errorOut) {
+      *errorOut = "WAV output exceeds RIFF size limit";
+    }
+    return false;
+  }
+  uint32_t riffSize = uint32_t(riffSize64);
+  uint32_t byteRate = sr * blockAlign;
+
+  std::ofstream out(path.c_str(), std::ios::binary | std::ios::trunc);
+  if (!out.good()) {
+    if (errorOut) {
+      *errorOut = "Failed to open save path";
+    }
+    return false;
+  }
+
+  out.write("RIFF", 4);
+  writeLe32(out, riffSize);
+  out.write("WAVE", 4);
+  out.write("fmt ", 4);
+  writeLe32(out, 16u);
+  writeLe16(out, 1u); // PCM int16
+  writeLe16(out, uint16_t(channels));
+  writeLe32(out, sr);
+  writeLe32(out, byteRate);
+  writeLe16(out, uint16_t(blockAlign));
+  writeLe16(out, 16u);
+  out.write("data", 4);
+  writeLe32(out, dataBytes);
+
+  for (int i = 0; i < frames; ++i) {
+    int16_t l = floatToPcm16(left[size_t(i)]);
+    writeLe16(out, uint16_t(l));
+    if (channels == 2) {
+      int16_t r = floatToPcm16(right[size_t(i)]);
+      writeLe16(out, uint16_t(r));
+    }
+  }
+
+  if (!out.good()) {
+    if (errorOut) {
+      *errorOut = "Failed while writing WAV file";
+    }
+    return false;
+  }
+  return true;
 }
 
 static int nextCartridgeCharacter(int current) {
@@ -801,6 +907,31 @@ void TemporalDeck::seekSampleByNormalizedPosition(double normalized) {
 void TemporalDeck::seekLiveByArcNormalizedPosition(double normalized) {
   impl->pendingLiveSeekArcNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
   impl->pendingLiveSeekRevision.fetch_add(1, std::memory_order_relaxed);
+}
+
+bool TemporalDeck::isLoadedSampleLiveConversion() const {
+  if (!hasLoadedSample()) {
+    return false;
+  }
+  return impl->sampleLifecycle.samplePath().empty();
+}
+
+bool TemporalDeck::saveLoadedSampleToPath(const std::string &path, std::string *errorOut) {
+  if (!impl->engine.sampleLoaded || impl->engine.sampleFrames <= 0) {
+    if (errorOut) {
+      *errorOut = "No sample is loaded";
+    }
+    return false;
+  }
+  int frames = impl->engine.sampleFrames;
+  int channels = impl->engine.buffer.monoStorage ? 1 : 2;
+  if (!writeStereoOrMonoWav16(path, impl->engine.buffer.left, impl->engine.buffer.right, frames, channels,
+                              impl->engine.sampleRate, errorOut)) {
+    return false;
+  }
+  // Promote live-converted sample to file-backed state for patch restore.
+  impl->sampleLifecycle.setSampleSavedPath(path);
+  return true;
 }
 
 double TemporalDeck::getUiSamplePlayheadSeconds() const {
