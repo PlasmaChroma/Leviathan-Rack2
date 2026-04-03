@@ -147,6 +147,47 @@ TestResult testSampleLoopWraps() {
             ", autoFreeze=" + (sawAutoFreeze ? "true" : "false")};
 }
 
+TestResult testLiveFreezeForwardTouchSnapAppliesToReadHead() {
+  const float sr = 48000.f;
+  Engine engine;
+  engine.reset(sr);
+  engine.sampleModeEnabled = false;
+  engine.sampleLoaded = false;
+
+  auto warm = makeDefaultInput(sr);
+  warm.inL = 0.25f;
+  warm.inR = -0.1f;
+  for (int i = 0; i < 12000; ++i) {
+    engine.process(warm);
+  }
+
+  const double startLag = 4000.0;
+  const double targetLag = 1000.0;
+  double newest = engine.newestReadablePos();
+  engine.readHead = engine.buffer.wrapPosition(newest - startLag);
+  engine.scratchLagSamples = startLag;
+  engine.scratchLagTargetSamples = startLag;
+  engine.lastPlatterGestureRevision = 0;
+
+  auto in = makeDefaultInput(sr);
+  in.freezeButton = true;
+  in.platterTouched = true;
+  in.platterMotionActive = true;
+  in.platterGestureVelocity = 0.f;
+  in.platterGestureRevision = 1;
+  in.platterLagTarget = float(startLag);
+  engine.process(in);
+
+  in.platterGestureRevision = 2;
+  in.platterLagTarget = float(targetLag);
+  auto out = engine.process(in);
+
+  double err = std::fabs(out.lag - targetLag);
+  bool pass = err <= 4.0;
+  return {"Live freeze forward touch snap updates read-head", pass,
+          "lag=" + std::to_string(out.lag) + " target=" + std::to_string(targetLag) + " err=" + std::to_string(err)};
+}
+
 } // namespace
 
 int main() {
@@ -155,6 +196,7 @@ int main() {
   tests.push_back(testSampleModeDisablesWrites());
   tests.push_back(testSampleTransportStopsAtEndWithoutLoop());
   tests.push_back(testSampleLoopWraps());
+  tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
 
   int failed = 0;
   std::cout << "TemporalDeck Engine Spec\n";

@@ -38,6 +38,9 @@ using temporaldeck_modes::isMonoBufferMode;
 using temporaldeck_modes::realBufferSecondsForMode;
 using temporaldeck_modes::usableBufferSecondsForMode;
 
+constexpr float kPi = 3.14159265358979323846f;
+constexpr float kTwoPi = 2.f * kPi;
+
 inline double clampd(double x, double a, double b) {
   return std::max(a, std::min(x, b));
 }
@@ -172,7 +175,6 @@ struct TemporalDeckBuffer {
     if (ax > radius) {
       return 0.f;
     }
-    constexpr float kPi = float(M_PI);
     if (ax < 1e-5f) {
       return 1.f;
     }
@@ -967,7 +969,7 @@ struct TemporalDeckEngine {
     if (hz <= 0.f) {
       return 0.f;
     }
-    return 1.f - std::exp(-2.f * float(M_PI) * hz / std::max(sampleRate, 1.f));
+    return 1.f - std::exp(-kTwoPi * hz / std::max(sampleRate, 1.f));
   }
 
   static CartridgeParams paramsForCartridge(int mode) {
@@ -1081,7 +1083,7 @@ struct TemporalDeckEngine {
     }
     if (lofiModUpdateCountdown <= 0) {
       float dt = float(lofiModUpdateIntervalSamples) / sr;
-      constexpr float kTau = 2.f * float(M_PI);
+      constexpr float kTau = kTwoPi;
       lofiWowPhaseA += kTau * 0.33f * dt;
       lofiWowPhaseB += kTau * 0.57f * dt;
       lofiFlutterPhase += kTau * 7.6f * dt;
@@ -1218,7 +1220,7 @@ struct TemporalDeckEngine {
   }
 
   float platterRadiansPerSample() const {
-    return (2.f * float(M_PI) * (kNominalPlatterRpm / 60.f)) / std::max(sampleRate, 1.f);
+    return (kTwoPi * (kNominalPlatterRpm / 60.f)) / std::max(sampleRate, 1.f);
   }
 
   float samplesPerPlatterRadian() const { return 1.f / std::max(platterRadiansPerSample(), 1e-9f); }
@@ -1928,8 +1930,8 @@ struct TemporalDeckEngine {
 
       double visualDelta = readHead - prevReadHead;
       platterPhase += float(visualDelta) * platterRadiansPerSample();
-      if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
-        platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
+      if (platterPhase > kPi || platterPhase < -kPi) {
+        platterPhase = std::fmod(platterPhase, kTwoPi);
       }
 
       scratchActive = false;
@@ -2122,9 +2124,9 @@ struct TemporalDeckEngine {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
             }
             targetLag += driftLag * driftMix;
-            // Keep drift compensation incremental to recent gesture timing
-            // rather than accumulating from initial scratch-start time.
-            liveManualScratchAnchorNewestPos = newestPos;
+            // Keep drift compensation anchored to scratch-start timing so
+            // live drag targets stay aligned with write-head progression.
+            // The anchor is only resynced explicitly at buffer-limit hold.
           }
           scratchLagTargetSamples = clampLag(targetLag, limit);
           if (!sampleModeActive && limit > 0.0 && scratchLagSamples >= (limit - 0.5) &&
@@ -2135,7 +2137,7 @@ struct TemporalDeckEngine {
             // feel sticky after holding at the red limit.
             liveManualScratchAnchorNewestPos = newestPos;
           }
-          if (!sampleModeActive && limit > 0.0 && scratchLagSamples >= (limit - 0.5) &&
+          if (!sampleModeActive && freezeState && limit > 0.0 && scratchLagSamples >= (limit - 0.5) &&
               scratchLagTargetSamples < (scratchLagSamples - 1.0)) {
             // Edge-release assist: when the hand moves toward NOW after being
             // pinned at the live readable limit, immediately release from the
@@ -2144,14 +2146,16 @@ struct TemporalDeckEngine {
             scratchHandVelocity = 0.f;
             scratchMotionVelocity = 0.f;
             scratch3LagVelocity = 0.f;
+            readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
           }
-          if (!sampleModeActive && scratchLagTargetSamples < (scratchLagSamples - 1.0)) {
+          if (!sampleModeActive && freezeState && scratchLagTargetSamples < (scratchLagSamples - 1.0)) {
             // Live touch gestures that move toward NOW should feel direct and
             // not be dominated by accumulated lag-state inertia.
             scratchLagSamples = scratchLagTargetSamples;
             scratchHandVelocity = 0.f;
             scratchMotionVelocity = 0.f;
             scratch3LagVelocity = 0.f;
+            readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
           }
           lastPlatterGestureRevision = platterGestureRevision;
         }
@@ -2322,7 +2326,7 @@ struct TemporalDeckEngine {
       std::pair<float, float> catchWet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);
       std::pair<float, float> liveWet = readLiveInterpolatedAt(newestPos, effectiveScratchInterpolation);
       float blendProgress = 1.f - clamp(slipBlendRemaining / std::max(kSlipBlendTime, 1e-6f), 0.f, 1.f);
-      float theta = blendProgress * 0.5f * float(M_PI);
+      float theta = blendProgress * 0.5f * kPi;
       float catchGain = std::cos(theta);
       float liveGain = std::sin(theta);
       wet.first = catchWet.first * catchGain + liveWet.first * liveGain;
@@ -2507,8 +2511,8 @@ struct TemporalDeckEngine {
       // synchronized when transport is causality-limited near NOW.
       double visualDelta = readDelta;
       platterPhase += float(visualDelta) * platterRadiansPerSample();
-      if (platterPhase > float(M_PI) || platterPhase < -float(M_PI)) {
-        platterPhase = std::fmod(platterPhase, 2.f * float(M_PI));
+      if (platterPhase > kPi || platterPhase < -kPi) {
+        platterPhase = std::fmod(platterPhase, kTwoPi);
       }
     }
 
