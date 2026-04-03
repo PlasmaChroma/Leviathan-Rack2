@@ -3359,11 +3359,13 @@ struct TemporalDeckWidget : ModuleWidget {
             }));
         }
       }));
-      menu->addChild(createCheckMenuItem("Log platter mouse events", "",
-                                         [=]() { return module->isPlatterTraceLoggingEnabled(); },
-                                         [=]() {
-                                           module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
-                                         }));
+      if (isDragonKingDebugEnabled()) {
+        menu->addChild(createCheckMenuItem("Log platter mouse events", "",
+                                           [=]() { return module->isPlatterTraceLoggingEnabled(); },
+                                           [=]() {
+                                             module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
+                                           }));
+      }
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {
           std::string defaultDir = temporalDeckUserRootPath();

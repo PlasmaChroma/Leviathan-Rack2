@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file.
 - Allow arc-light seeking in live mode
 - Engine split to allow better unit tests
 - Fixed a lot of scratch problems
+- Add save sample option for live conversions
 
 ## [v2.3.10]
 
