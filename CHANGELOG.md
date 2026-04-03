@@ -8,7 +8,10 @@ All notable changes to this project are documented in this file.
 - Removing non-ideal mixing option
 
 ### Temporal Deck
-
+- Add convert live -> sample menu option
+- Allow arc-light seeking in live mode
+- Engine split to allow better unit tests
+- Fixed a lot of scratch problems
 
 ## [v2.3.10]
 
