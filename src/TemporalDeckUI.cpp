@@ -2270,7 +2270,7 @@ bool TemporalDeckDisplayWidget::isWithinSampleSeekArc(Vec panelPos) const {
 }
 
 void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
-  if (!module || !module->isSampleModeEnabled() || !module->hasLoadedSample()) {
+  if (!module) {
     return;
   }
   Vec local = panelPos.minus(centerMm);
@@ -2279,8 +2279,13 @@ void TemporalDeckDisplayWidget::seekSampleFromArcPosition(Vec panelPos) {
     return;
   }
   float arcT = clamp(-angle / float(M_PI), 0.f, 1.f); // right->left along top arc
-  float seekNorm = 1.f - arcT;                         // sample mode maps left->right as start->end
-  module->seekSampleByNormalizedPosition(seekNorm);
+  bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+  if (sampleDisplay) {
+    float seekNorm = 1.f - arcT; // sample mode maps left->right as start->end
+    module->seekSampleByNormalizedPosition(seekNorm);
+  } else {
+    module->seekLiveByArcNormalizedPosition(arcT);
+  }
 }
 
 Vec TemporalDeckDisplayWidget::currentPanelMousePos() const {
@@ -2391,8 +2396,7 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
       e.consume(this);
       return;
     }
-    if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
-        isWithinSampleSeekArc(e.pos)) {
+    if (e.action == GLFW_PRESS && module && isWithinSampleSeekArc(e.pos)) {
       arcScrubbing = true;
       seekSampleFromArcPosition(e.pos);
       e.consume(this);

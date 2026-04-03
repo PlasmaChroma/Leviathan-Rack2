@@ -105,4 +105,38 @@ uint32_t applyPendingSampleSeek(temporaldeck::TemporalDeckEngine &engine, uint32
   return pendingRevision;
 }
 
+uint32_t applyPendingLiveSeekArc(temporaldeck::TemporalDeckEngine &engine, uint32_t appliedRevision,
+                                 uint32_t pendingRevision, float pendingArcNormalized, float bufferKnob) {
+  if (pendingRevision == appliedRevision) {
+    return appliedRevision;
+  }
+
+  if (engine.sampleModeEnabled && engine.sampleLoaded) {
+    return pendingRevision;
+  }
+  if (engine.buffer.size <= 0 || engine.buffer.filled <= 0) {
+    return pendingRevision;
+  }
+
+  double maxLag = std::max(0.0, engine.maxLagFromKnob(1.f));
+  double limitLag = std::max(0.0, engine.accessibleLag(bufferKnob));
+  float arcNorm = std::max(0.f, std::min(pendingArcNormalized, 1.f));
+  // Arc seek maps across full arc range and clamps to current live limit.
+  double targetLag = clampd(double(arcNorm) * maxLag, 0.0, limitLag);
+  double newestPos = engine.newestReadablePos();
+  double targetRead = newestPos - targetLag;
+  engine.readHead = engine.buffer.wrapPosition(targetRead);
+  engine.scratchLagSamples = targetLag;
+  engine.scratchLagTargetSamples = targetLag;
+  engine.filteredManualLagTargetSamples = targetLag;
+  engine.liveManualScratchAnchorNewestPos = newestPos;
+  engine.liveManualScratchAnchorLagSamples = targetLag;
+  engine.scratchHandVelocity = 0.f;
+  engine.scratchMotionVelocity = 0.f;
+  engine.scratch3LagVelocity = 0.f;
+  engine.nowCatchActive = false;
+  engine.cancelSlipReturnState();
+  return pendingRevision;
+}
+
 } // namespace temporaldeck_transport

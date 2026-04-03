@@ -34,5 +34,7 @@ void applyAutoFreezeRequest(TransportControlState &state, bool autoFreezeRequest
 
 uint32_t applyPendingSampleSeek(temporaldeck::TemporalDeckEngine &engine, uint32_t appliedRevision,
                                 uint32_t pendingRevision, float pendingNormalized, float bufferKnob);
+uint32_t applyPendingLiveSeekArc(temporaldeck::TemporalDeckEngine &engine, uint32_t appliedRevision,
+                                 uint32_t pendingRevision, float pendingArcNormalized, float bufferKnob);
 
 } // namespace temporaldeck_transport

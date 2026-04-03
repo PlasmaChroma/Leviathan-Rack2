@@ -180,6 +180,9 @@ struct TemporalDeck::Impl {
   std::atomic<float> pendingSampleSeekNormalized{0.f};
   std::atomic<uint32_t> pendingSampleSeekRevision{0};
   uint32_t appliedSampleSeekRevision = 0;
+  std::atomic<float> pendingLiveSeekArcNormalized{0.f};
+  std::atomic<uint32_t> pendingLiveSeekRevision{0};
+  uint32_t appliedLiveSeekRevision = 0;
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
@@ -584,9 +587,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
   uint32_t pendingSeekRevision = impl->pendingSampleSeekRevision.load(std::memory_order_relaxed);
   float pendingSeekNorm = impl->pendingSampleSeekNormalized.load(std::memory_order_relaxed);
+  uint32_t pendingLiveSeekRevision = impl->pendingLiveSeekRevision.load(std::memory_order_relaxed);
+  float pendingLiveSeekArcNorm = impl->pendingLiveSeekArcNormalized.load(std::memory_order_relaxed);
   float bufferKnob = params[BUFFER_PARAM].getValue();
   impl->appliedSampleSeekRevision = temporaldeck_transport::applyPendingSampleSeek(
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
+  impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
+    impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
   temporaldeck_frameinput::FrameInputControls controls;
@@ -789,6 +796,11 @@ void TemporalDeck::convertLiveToSample() {
 void TemporalDeck::seekSampleByNormalizedPosition(double normalized) {
   impl->pendingSampleSeekNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
   impl->pendingSampleSeekRevision.fetch_add(1, std::memory_order_relaxed);
+}
+
+void TemporalDeck::seekLiveByArcNormalizedPosition(double normalized) {
+  impl->pendingLiveSeekArcNormalized.store(clamp(float(normalized), 0.f, 1.f), std::memory_order_relaxed);
+  impl->pendingLiveSeekRevision.fetch_add(1, std::memory_order_relaxed);
 }
 
 double TemporalDeck::getUiSamplePlayheadSeconds() const {
