@@ -2123,6 +2123,15 @@ struct TemporalDeckEngine {
             if (targetLag < nearNowWindow) {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
             }
+            // In unfrozen live mode, forward/toward-NOW gestures should not
+            // fight accumulated write-head drift from earlier reverse motion.
+            // Keep full compensation while moving away from NOW, but reset the
+            // drift anchor when direction flips toward NOW.
+            bool towardNowGesture = targetLag < (lastPlatterLagTarget - 1e-4);
+            if (!freezeState && towardNowGesture) {
+              driftLag = 0.0;
+              liveManualScratchAnchorNewestPos = newestPos;
+            }
             targetLag += driftLag * driftMix;
             // Keep drift compensation anchored to scratch-start timing so
             // live drag targets stay aligned with write-head progression.
@@ -2189,6 +2198,18 @@ struct TemporalDeckEngine {
           }
           if (gestureDirection == 0.f && std::fabs(targetReadVelocity) > kHybridScratchVelocityDeadband) {
             gestureDirection = (targetReadVelocity > 0.f) ? 1.f : -1.f;
+          }
+          bool reverseGestureIntent = gestureDirection < 0.f;
+          if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
+            // Preserve reverse intent across sparse gesture updates. Using raw
+            // platter velocity avoids sign flips caused by write compensation.
+            reverseGestureIntent = true;
+          }
+          if (!sampleModeActive && !freezeForScratchModel && reverseGestureIntent) {
+            // In live touch scratch, reverse gestures should not need to
+            // overcome write-head baseline speed before audible/visual motion
+            // appears. Keep compensation for forward motion only.
+            targetReadVelocity -= sampleRate;
           }
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool allowNowSnap = !manualTouchScratch;
@@ -2472,6 +2493,14 @@ struct TemporalDeckEngine {
       outR = inR * (1.f - mix) + wet.second * mix;
     }
 
+    double lagPreWriteForVisual = 0.0;
+    bool useLagPreWriteForVisual = !sampleModeActive && manualTouchScratch && !freezeState;
+    if (useLagPreWriteForVisual) {
+      // Capture lag before live write-head advancement so platter visuals can
+      // reflect hand-induced motion, not transport drift.
+      lagPreWriteForVisual = currentLagFromNewest(newestPos);
+    }
+
     bool writeAdvanced = false;
     if (!sampleModeActive && !freezeState && !holdAtBufferEdge) {
       if (noFeedback) {
@@ -2510,6 +2539,9 @@ struct TemporalDeckEngine {
       // Drive the platter UI from actual read-head movement so the visual stays
       // synchronized when transport is causality-limited near NOW.
       double visualDelta = readDelta;
+      if (useLagPreWriteForVisual) {
+        visualDelta = double(lagNow) - lagPreWriteForVisual;
+      }
       platterPhase += float(visualDelta) * platterRadiansPerSample();
       if (platterPhase > kPi || platterPhase < -kPi) {
         platterPhase = std::fmod(platterPhase, kTwoPi);
