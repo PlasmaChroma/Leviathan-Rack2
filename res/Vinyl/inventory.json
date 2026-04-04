@@ -10,7 +10,8 @@
       "format": "png",
       "menuVisible": true,
       "menuId": 1,
-      "submenu": "Core"
+      "submenu": "Core",
+      "submenuOrder": 1
     },
     {
       "id": "blank",
@@ -27,14 +28,15 @@
       "file": "Static.svg",
       "format": "svg",
       "menuVisible": false,
-      "menuId": 100
+      "menuId": 3,
+      "submenu": "Core"
     }
   ],
   "signed": {
     "algorithm": "fnv1a64-keyed-v1",
-    "generatedUnix": 1775008315,
+    "generatedUnix": 1775310502,
     "keyId": "f2f64a74e0dd68c5",
-    "signature": "7c1df9cf72d89e64",
+    "signature": "d4fb016417590f72",
     "files": [
       {
         "id": "temporal_deck",
@@ -53,7 +55,7 @@
       {
         "id": "static_svg",
         "file": "Static.svg",
-        "menuId": 100,
+        "menuId": 3,
         "size": 26442,
         "hash": "288f967cfb02138d"
       }

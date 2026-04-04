@@ -772,6 +772,7 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
   json_t *vinylJ = json_object_get(root, "vinyl");
   std::set<std::string> seenIds;
   std::set<int> seenMenuIds;
+  std::map<std::string, int> submenuOrderByLabel;
   if (!json_is_array(vinylJ)) {
     state.error = "inventory.json must contain a vinyl[] array";
     json_decref(root);
@@ -809,6 +810,21 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
       entry.submenuOrder = int(json_integer_value(submenuOrderJ));
       if (entry.submenuOrder < 0) {
         state.error = string::f("vinyl[%zu] has invalid submenuOrder", i);
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+      if (entry.submenu.empty()) {
+        state.error = string::f("vinyl[%zu] defines submenuOrder without submenu", i);
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+      auto found = submenuOrderByLabel.find(entry.submenu);
+      if (found == submenuOrderByLabel.end()) {
+        submenuOrderByLabel[entry.submenu] = entry.submenuOrder;
+      } else if (found->second != entry.submenuOrder) {
+        state.error = string::f("vinyl[%zu] has conflicting submenuOrder for submenu '%s'", i, entry.submenu.c_str());
         state.entries.clear();
         json_decref(root);
         return state;
@@ -856,6 +872,16 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     entry.basePath = state.basePath;
     entry.absolutePath = inventoryAbsolutePath(entry);
     state.entries.push_back(entry);
+  }
+
+  for (VinylInventoryEntry &entry : state.entries) {
+    if (entry.submenu.empty() || entry.submenuOrder >= 0) {
+      continue;
+    }
+    auto found = submenuOrderByLabel.find(entry.submenu);
+    if (found != submenuOrderByLabel.end()) {
+      entry.submenuOrder = found->second;
+    }
   }
 
   if (state.entries.empty()) {
@@ -1134,6 +1160,18 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
 
   appendEntries(builtIn, false);
   appendEntries(expanded, true);
+
+  if (merged.entries.empty()) {
+    merged.valid = false;
+    if (!builtIn.valid) {
+      merged.error = builtIn.error;
+    } else if (!expanded.valid) {
+      merged.error = expanded.error;
+    } else {
+      merged.error = "No vinyl entries available";
+    }
+    return merged;
+  }
 
   merged.verifiedEntryCount = 0;
   for (const VinylInventoryEntry &entry : merged.entries) {
@@ -1915,6 +1953,7 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
   out << "  \"version\": 1,\n";
   out << "  \"basePath\": \"" << jsonEscape(basePath) << "\",\n";
   out << "  \"vinyl\": [\n";
+  std::set<std::string> writtenSubmenuOrders;
   for (size_t i = 0; i < records.size(); ++i) {
     const VinylSignatureRecord &record = records[i];
     std::string ext = lowercaseExtension(record.file);
@@ -1928,7 +1967,8 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
     if (!record.submenu.empty()) {
       out << "      \"submenu\": \"" << jsonEscape(record.submenu) << "\",\n";
     }
-    if (record.submenuOrder >= 0) {
+    if (record.submenuOrder >= 0 && (!record.submenu.empty()) &&
+        writtenSubmenuOrders.insert(record.submenu).second) {
       out << "      \"submenuOrder\": " << record.submenuOrder << ",\n";
     }
     out << "      \"file\": \"" << jsonEscape(record.file) << "\",\n";
@@ -3245,9 +3285,14 @@ struct TemporalDeckWidget : ModuleWidget {
         }
 
         std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
-        if (visibleModes.empty()) {
-          submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
-        } else {
+        std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
+        if (visibleModes.empty() && customEntries.empty()) {
+          if (!inventoryState.error.empty()) {
+            submenu->addChild(createMenuLabel(inventoryState.error));
+          } else {
+            submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
+          }
+        } else if (!visibleModes.empty()) {
           auto addModeMenuItem = [=](Menu *targetMenu, int mode) {
             std::string modeLabel = vinylLabelForPlatterArtMode(mode);
             bool modeVerified = isInventoryPlatterArtModeVerified(mode);
@@ -3292,7 +3337,6 @@ struct TemporalDeckWidget : ModuleWidget {
             }
           }
         }
-        std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
         if (!customEntries.empty()) {
           auto addCustomEntryMenuItem = [=](Menu *targetMenu, const VinylInventoryEntry *entry) {
             if (!entry) {
