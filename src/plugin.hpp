@@ -12,6 +12,7 @@ extern Plugin* pluginInstance;
 extern Model* modelIntegralFlux;
 extern Model* modelProc;
 extern Model* modelTemporalDeck;
+extern Model* modelTDScope;
 
 // Runtime feature flag: enabled when `res/dragonking.txt` exists.
 bool isDragonKingDebugEnabled();

@@ -28,6 +28,7 @@ test:
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp -o build/tests/platter_spec_harness
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp -o build/tests/temporaldeck_arc_lights_spec
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_engine_spec.cpp -o build/tests/temporaldeck_engine_spec
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_expander_preview_spec.cpp -o build/tests/temporaldeck_expander_preview_spec
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_menu_utils_spec.cpp -o build/tests/temporaldeck_menu_utils_spec
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_frame_input_spec.cpp src/TemporalDeckFrameInput.cpp -o build/tests/temporaldeck_frame_input_spec
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/temporaldeck_platter_input_spec.cpp src/TemporalDeckPlatterInput.cpp -o build/tests/temporaldeck_platter_input_spec
@@ -36,6 +37,7 @@ test:
 	@build/tests/platter_spec_harness
 	@build/tests/temporaldeck_arc_lights_spec
 	@build/tests/temporaldeck_engine_spec
+	@build/tests/temporaldeck_expander_preview_spec
 	@build/tests/temporaldeck_menu_utils_spec
 	@build/tests/temporaldeck_frame_input_spec
 	@build/tests/temporaldeck_platter_input_spec

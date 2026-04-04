@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60.96mm" height="128.5mm" viewBox="0 0 60.96 128.5">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b222a"/>
+      <stop offset="100%" stop-color="#0d1116"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="60.96" height="128.5" fill="url(#bg)"/>
+  <rect x="2.0" y="2.0" width="56.96" height="124.5" rx="2.4" fill="none" stroke="#3e4f60" stroke-width="0.8"/>
+
+  <text x="30.48" y="14.0" text-anchor="middle" font-size="5.0" fill="#d7e2ef" font-family="DejaVu Sans">TD.Scope</text>
+  <text x="30.48" y="21.0" text-anchor="middle" font-size="2.5" fill="#90a4b8" font-family="DejaVu Sans">Temporal Deck Expander</text>
+
+  <rect x="8.5" y="30.0" width="43.96" height="44.0" rx="1.8" fill="#111820" stroke="#435363" stroke-width="0.6"/>
+  <path d="M10 65 C14 58, 18 70, 22 63 S30 56, 34 64 S42 71, 50 60" fill="none" stroke="#7ad2ff" stroke-width="1.1"/>
+  <line x1="30.48" y1="30.0" x2="30.48" y2="74.0" stroke="#ffb347" stroke-width="0.6" opacity="0.9"/>
+
+  <text x="16.5" y="58.8" text-anchor="middle" font-size="2.5" fill="#ff7272" font-family="DejaVu Sans">LINK</text>
+  <text x="16.5" y="70.8" text-anchor="middle" font-size="2.5" fill="#7be87b" font-family="DejaVu Sans">DATA</text>
+
+  <text x="30.48" y="116.0" text-anchor="middle" font-size="2.4" fill="#7e8ea0" font-family="DejaVu Sans">Place to the right of Temporal Deck</text>
+</svg>
+

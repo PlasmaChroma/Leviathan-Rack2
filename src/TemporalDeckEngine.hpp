@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 
 #include <algorithm>
@@ -516,11 +517,27 @@ struct TemporalDeckEngine {
   bool scratchOutGateHigh = false;
   double scratchOutAnchorLagSamples = 0.0;
   float prevBaseSpeed = 1.f;
+  temporaldeck_expander::PreviewAccumulator preview;
+  uint64_t bufferGeneration = 1;
+
+  void resetPreviewAccumulator() {
+    preview.reset(uint32_t(std::max(1, buffer.size)));
+  }
+
+  void bumpBufferGeneration() {
+    if (bufferGeneration == UINT64_MAX) {
+      bufferGeneration = 1;
+    } else {
+      bufferGeneration += 1;
+    }
+  }
 
   void reset(float sr, bool resetBuffer = true) {
     sampleRate = sr;
     if (resetBuffer) {
       buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
+      resetPreviewAccumulator();
+      bumpBufferGeneration();
     }
     sampleLoaded = false;
     sampleTransportPlaying = false;
@@ -1438,6 +1455,8 @@ struct TemporalDeckEngine {
     timelineHead = 0.0;
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    resetPreviewAccumulator();
+    bumpBufferGeneration();
     if (sampleFrames <= 0) {
       return;
     }
@@ -1487,6 +1506,8 @@ struct TemporalDeckEngine {
     sampleFrames = std::max(0, std::min(frames, buffer.size));
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    resetPreviewAccumulator();
+    bumpBufferGeneration();
   }
 
   bool convertLiveWindowToSample(float bufferKnob, bool autoplay) {
@@ -2537,11 +2558,17 @@ struct TemporalDeckEngine {
 
     bool writeAdvanced = false;
     if (!sampleModeActive && !freezeState && !holdAtBufferEdge) {
+      float writeL = 0.f;
+      float writeR = 0.f;
       if (noFeedback) {
-        buffer.write(inL, inR);
+        writeL = inL;
+        writeR = inR;
       } else {
-        buffer.write(inL + outL * feedback, inR + outR * feedback);
+        writeL = inL + outL * feedback;
+        writeR = inR + outR * feedback;
       }
+      buffer.write(writeL, writeR);
+      preview.pushMonoSample(0.5f * (writeL + writeR));
       writeAdvanced = true;
       newestPos = newestReadablePos();
       if (pinToNow) {

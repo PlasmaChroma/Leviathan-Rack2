@@ -44,6 +44,15 @@
         "Distortion",
         "Sampler"
       ]
+    },
+    {
+      "slug": "TDScope",
+      "name": "TD.Scope",
+      "description": "Expander display module for Temporal Deck timeline and waveform preview.",
+      "tags": [
+        "Visualizer",
+        "Expander"
+      ]
     }
   ]
 }

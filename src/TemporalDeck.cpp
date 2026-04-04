@@ -1,6 +1,7 @@
 #include "TemporalDeckArcLights.hpp"
 #include "TemporalDeck.hpp"
 #include "TemporalDeckEngine.hpp"
+#include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckFrameInput.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSampleLifecycle.hpp"
@@ -301,6 +302,7 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiSampleDurationSeconds{0.0};
   std::atomic<double> uiSampleProgress{0.0};
   float uiPublishTimerSec = 0.f;
+  uint64_t expanderPublishSeq = 0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -745,6 +747,47 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead, std::memory_order_relaxed);
   impl->uiSampleDurationSeconds.store(frame.sampleDuration, std::memory_order_relaxed);
   impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
+  if (rightExpander.module) {
+    auto *msg = reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
+    if (msg) {
+      uint32_t flags = 0;
+      if (frame.sampleMode) {
+        flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;
+      }
+      if (frame.sampleLoaded) {
+        flags |= temporaldeck_expander::FLAG_SAMPLE_LOADED;
+      }
+      if (frame.sampleTransportPlaying) {
+        flags |= temporaldeck_expander::FLAG_SAMPLE_PLAYING;
+      }
+      if (impl->sampleLoopEnabled.load(std::memory_order_relaxed)) {
+        flags |= temporaldeck_expander::FLAG_SAMPLE_LOOP;
+      }
+      if (freezeActive) {
+        flags |= temporaldeck_expander::FLAG_FREEZE;
+      }
+      if (impl->transportControl.reverseLatched) {
+        flags |= temporaldeck_expander::FLAG_REVERSE;
+      }
+      if (impl->transportControl.slipLatched) {
+        flags |= temporaldeck_expander::FLAG_SLIP;
+      }
+      if (impl->engine.preview.filledBins > 0) {
+        flags |= temporaldeck_expander::FLAG_PREVIEW_VALID;
+      }
+      if (impl->engine.buffer.monoStorage) {
+        flags |= temporaldeck_expander::FLAG_MONO_BUFFER;
+      }
+
+      impl->expanderPublishSeq++;
+      temporaldeck_expander::populateHostMessage(
+        msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, float(frame.lag),
+        float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
+        float(frame.sampleProgress), uint32_t(std::max(0, impl->engine.buffer.size)),
+        uint32_t(std::max(0, impl->engine.buffer.filled)), impl->engine.preview);
+      rightExpander.module->leftExpander.messageFlipRequested = true;
+    }
+  }
 
   impl->sampleModeEnabled.store(impl->engine.sampleModeEnabled, std::memory_order_relaxed);
   impl->uiPublishTimerSec += args.sampleTime;
