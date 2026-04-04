@@ -1,4 +1,5 @@
 #include "TemporalDeck.hpp"
+#include "TemporalDeckMenuUtils.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -3238,9 +3239,9 @@ struct TemporalDeckWidget : ModuleWidget {
         }
         std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
         if (!customEntries.empty()) {
-          for (const VinylInventoryEntry *entry : customEntries) {
+          auto addCustomEntryMenuItem = [=](Menu *targetMenu, const VinylInventoryEntry *entry) {
             if (!entry) {
-              continue;
+              return;
             }
             std::string absolutePath = inventoryAbsolutePath(*entry);
             bool entryVerified = entry->signatureVerified;
@@ -3249,7 +3250,7 @@ struct TemporalDeckWidget : ModuleWidget {
             if (!entryVerified) {
               rightText = "Signiture error";
             }
-            submenu->addChild(createCheckMenuItem(
+            targetMenu->addChild(createCheckMenuItem(
               entryLabel, rightText,
               [=]() {
                 return module->getPlatterArtMode() == TemporalDeck::PLATTER_ART_CUSTOM &&
@@ -3263,6 +3264,23 @@ struct TemporalDeckWidget : ModuleWidget {
                 }
               },
               !entryVerified || !system::isFile(absolutePath)));
+          };
+
+          const int kArtChunkSize = 12;
+          std::vector<temporaldeck_menu::ArtBatch> artBatches =
+            temporaldeck_menu::buildArtBatches(int(customEntries.size()), kArtChunkSize);
+          if (!artBatches.empty()) {
+            for (const temporaldeck_menu::ArtBatch &batch : artBatches) {
+              submenu->addChild(createSubmenuItem(batch.label, "", [=](Menu *artBatchMenu) {
+                for (int i = batch.begin; i < batch.endExclusive; ++i) {
+                  addCustomEntryMenuItem(artBatchMenu, customEntries[i]);
+                }
+              }));
+            }
+          } else {
+            for (const VinylInventoryEntry *entry : customEntries) {
+              addCustomEntryMenuItem(submenu, entry);
+            }
           }
         }
         submenu->addChild(new MenuSeparator());
