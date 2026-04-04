@@ -97,6 +97,32 @@ TestResult testSubmenuLabelWhitespaceIsHandledByCaller() {
   return {"Submenu layout supports mixed grouped/ungrouped entries", pass, "labels=[" + joinLabels(layout.groups) + "]"};
 }
 
+TestResult testExplicitSubmenuOrderOverridesMenuIdOrder() {
+  std::vector<SubmenuItem> items;
+  SubmenuItem i0;
+  i0.menuId = 10;
+  i0.submenu = "Core";
+  i0.submenuOrder = 20;
+  i0.index = 0;
+  items.push_back(i0);
+  SubmenuItem i1;
+  i1.menuId = 50;
+  i1.submenu = "Expansion";
+  i1.submenuOrder = 5;
+  i1.index = 1;
+  items.push_back(i1);
+  SubmenuItem i2;
+  i2.menuId = 15;
+  i2.submenu = "Core";
+  i2.submenuOrder = 20;
+  i2.index = 2;
+  items.push_back(i2);
+
+  temporaldeck_menu::SubmenuLayout layout = temporaldeck_menu::buildSubmenuLayout(items);
+  bool pass = layout.groups.size() == 2 && layout.groups[0].label == "Expansion" && layout.groups[1].label == "Core";
+  return {"Explicit submenuOrder controls submenu ordering", pass, "labels=[" + joinLabels(layout.groups) + "]"};
+}
+
 } // namespace
 
 int main() {
@@ -104,6 +130,7 @@ int main() {
   tests.push_back(testItemsWithoutSubmenuStayAtRoot());
   tests.push_back(testSubmenuGroupingByLabelAndMenuIdOrder());
   tests.push_back(testSubmenuLabelWhitespaceIsHandledByCaller());
+  tests.push_back(testExplicitSubmenuOrderOverridesMenuIdOrder());
 
   int failed = 0;
   std::cout << "TemporalDeck Menu Utils Spec\n";

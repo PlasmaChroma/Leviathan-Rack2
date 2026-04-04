@@ -38,12 +38,14 @@ inline std::vector<ArtBatch> buildArtBatches(int totalEntries, int chunkSize) {
 struct SubmenuItem {
   int menuId = -1;
   std::string submenu;
+  int submenuOrder = -1;
   int index = -1;
 };
 
 struct SubmenuGroup {
   std::string label;
   std::vector<int> indices;
+  int sortOrder = -1;
   int firstMenuId = -1;
 };
 
@@ -75,12 +77,18 @@ inline SubmenuLayout buildSubmenuLayout(const std::vector<SubmenuItem> &items) {
     if (it == groupIndexByLabel.end()) {
       SubmenuGroup group;
       group.label = item.submenu;
+      group.sortOrder = item.submenuOrder;
       group.firstMenuId = item.menuId;
       layout.groups.push_back(group);
       groupIndexByLabel[item.submenu] = layout.groups.size() - 1;
       it = groupIndexByLabel.find(item.submenu);
     }
     SubmenuGroup &group = layout.groups[it->second];
+    if (item.submenuOrder >= 0) {
+      if (group.sortOrder < 0 || item.submenuOrder < group.sortOrder) {
+        group.sortOrder = item.submenuOrder;
+      }
+    }
     if (group.firstMenuId < 0 || (item.menuId >= 0 && item.menuId < group.firstMenuId)) {
       group.firstMenuId = item.menuId;
     }
@@ -88,6 +96,14 @@ inline SubmenuLayout buildSubmenuLayout(const std::vector<SubmenuItem> &items) {
   }
 
   std::sort(layout.groups.begin(), layout.groups.end(), [](const SubmenuGroup &a, const SubmenuGroup &b) {
+    bool aHasSortOrder = a.sortOrder >= 0;
+    bool bHasSortOrder = b.sortOrder >= 0;
+    if (aHasSortOrder != bHasSortOrder) {
+      return aHasSortOrder;
+    }
+    if (aHasSortOrder && bHasSortOrder && a.sortOrder != b.sortOrder) {
+      return a.sortOrder < b.sortOrder;
+    }
     if (a.firstMenuId != b.firstMenuId) {
       return a.firstMenuId < b.firstMenuId;
     }

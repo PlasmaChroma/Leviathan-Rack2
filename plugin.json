@@ -52,7 +52,8 @@
       "tags": [
         "Visualizer",
         "Expander"
-      ]
+      ],
+      "hidden": true
     }
   ]
 }

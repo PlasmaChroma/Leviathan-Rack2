@@ -476,6 +476,7 @@ struct VinylSignatureRecord {
   std::string id;
   std::string label;
   std::string submenu;
+  int submenuOrder = -1;
   std::string file;
   bool menuVisible = true;
   int menuId = -1;
@@ -495,6 +496,7 @@ struct VinylInventoryEntry {
   std::string id;
   std::string label;
   std::string submenu;
+  int submenuOrder = -1;
   std::string file;
   bool menuVisible = true;
   int menuId = -1;
@@ -787,6 +789,7 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     json_t *idJ = json_object_get(itemJ, "id");
     json_t *labelJ = json_object_get(itemJ, "label");
     json_t *submenuJ = json_object_get(itemJ, "submenu");
+    json_t *submenuOrderJ = json_object_get(itemJ, "submenuOrder");
     json_t *fileJ = json_object_get(itemJ, "file");
     json_t *menuVisibleJ = json_object_get(itemJ, "menuVisible");
     json_t *menuIdJ = json_object_get(itemJ, "menuId");
@@ -802,6 +805,15 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     entry.file = trimAsciiWhitespace(json_string_value(fileJ));
     entry.label = json_is_string(labelJ) ? trimAsciiWhitespace(json_string_value(labelJ)) : "";
     entry.submenu = json_is_string(submenuJ) ? trimAsciiWhitespace(json_string_value(submenuJ)) : "";
+    if (json_is_integer(submenuOrderJ)) {
+      entry.submenuOrder = int(json_integer_value(submenuOrderJ));
+      if (entry.submenuOrder < 0) {
+        state.error = string::f("vinyl[%zu] has invalid submenuOrder", i);
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+    }
     entry.menuVisible = !menuVisibleJ || json_is_true(menuVisibleJ);
     if (entry.menuVisible) {
       if (!json_is_integer(menuIdJ)) {
@@ -1515,6 +1527,7 @@ static bool collectVinylSignatureRecords(const VinylInventoryState &inventory, i
     rec.id = entry.id;
     rec.label = entry.label;
     rec.submenu = entry.submenu;
+    rec.submenuOrder = entry.submenuOrder;
     rec.file = entry.file;
     rec.menuVisible = entry.menuVisible;
     rec.menuId = entry.menuId;
@@ -1914,6 +1927,9 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
     out << "      \"label\": \"" << jsonEscape(record.label) << "\",\n";
     if (!record.submenu.empty()) {
       out << "      \"submenu\": \"" << jsonEscape(record.submenu) << "\",\n";
+    }
+    if (record.submenuOrder >= 0) {
+      out << "      \"submenuOrder\": " << record.submenuOrder << ",\n";
     }
     out << "      \"file\": \"" << jsonEscape(record.file) << "\",\n";
     out << "      \"format\": \"" << jsonEscape(format) << "\",\n";
@@ -3256,15 +3272,11 @@ struct TemporalDeckWidget : ModuleWidget {
             temporaldeck_menu::SubmenuItem item;
             item.menuId = modeEntry ? modeEntry->menuId : i;
             item.submenu = modeEntry ? modeEntry->submenu : "";
+            item.submenuOrder = modeEntry ? modeEntry->submenuOrder : -1;
             item.index = i;
             modeSubmenuItems.push_back(item);
           }
           temporaldeck_menu::SubmenuLayout modeSubmenuLayout = temporaldeck_menu::buildSubmenuLayout(modeSubmenuItems);
-          for (int idx : modeSubmenuLayout.rootIndices) {
-            if (idx >= 0 && idx < int(visibleModes.size())) {
-              addModeMenuItem(submenu, visibleModes[idx]);
-            }
-          }
           for (const temporaldeck_menu::SubmenuGroup &group : modeSubmenuLayout.groups) {
             submenu->addChild(createSubmenuItem(group.label, "", [=](Menu *groupMenu) {
               for (int idx : group.indices) {
@@ -3273,6 +3285,11 @@ struct TemporalDeckWidget : ModuleWidget {
                 }
               }
             }));
+          }
+          for (int idx : modeSubmenuLayout.rootIndices) {
+            if (idx >= 0 && idx < int(visibleModes.size())) {
+              addModeMenuItem(submenu, visibleModes[idx]);
+            }
           }
         }
         std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
@@ -3314,15 +3331,11 @@ struct TemporalDeckWidget : ModuleWidget {
             temporaldeck_menu::SubmenuItem item;
             item.menuId = entry->menuId;
             item.submenu = entry->submenu;
+            item.submenuOrder = entry->submenuOrder;
             item.index = i;
             submenuItems.push_back(item);
           }
           temporaldeck_menu::SubmenuLayout submenuLayout = temporaldeck_menu::buildSubmenuLayout(submenuItems);
-          for (int idx : submenuLayout.rootIndices) {
-            if (idx >= 0 && idx < int(customEntries.size())) {
-              addCustomEntryMenuItem(submenu, customEntries[idx]);
-            }
-          }
           for (const temporaldeck_menu::SubmenuGroup &group : submenuLayout.groups) {
             submenu->addChild(createSubmenuItem(group.label, "", [=](Menu *groupMenu) {
               for (int idx : group.indices) {
@@ -3331,6 +3344,11 @@ struct TemporalDeckWidget : ModuleWidget {
                 }
               }
             }));
+          }
+          for (int idx : submenuLayout.rootIndices) {
+            if (idx >= 0 && idx < int(customEntries.size())) {
+              addCustomEntryMenuItem(submenu, customEntries[idx]);
+            }
           }
         }
         submenu->addChild(new MenuSeparator());
