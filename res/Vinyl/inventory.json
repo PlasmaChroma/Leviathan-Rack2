@@ -9,7 +9,8 @@
       "file": "TemporalDeck.png",
       "format": "png",
       "menuVisible": true,
-      "menuId": 1
+      "menuId": 1,
+      "submenu": "Core"
     },
     {
       "id": "blank",
@@ -17,7 +18,8 @@
       "file": "Blank.png",
       "format": "png",
       "menuVisible": true,
-      "menuId": 2
+      "menuId": 2,
+      "submenu": "Core"
     },
     {
       "id": "static_svg",
