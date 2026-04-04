@@ -4,6 +4,7 @@
 #include "TemporalDeckTest.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -186,6 +187,43 @@ struct TemporalDeckBuffer {
     return sinc * blackman;
   }
 
+  static constexpr int kSincRadius = 8;
+  static constexpr int kSincTapCount = kSincRadius * 2;
+  static constexpr int kSincPhaseCount = 1024;
+
+  struct SincKernel {
+    std::array<float, kSincTapCount> weights {};
+    float invWeightSum = 1.f;
+  };
+
+  static const std::array<SincKernel, kSincPhaseCount> &sincKernelLut() {
+    struct LutBuilder {
+      std::array<SincKernel, kSincPhaseCount> kernels {};
+      LutBuilder() {
+        for (int phase = 0; phase < kSincPhaseCount; ++phase) {
+          float frac = float(phase) / float(kSincPhaseCount);
+          float weightSum = 0.f;
+          for (int tap = 0; tap < kSincTapCount; ++tap) {
+            int k = tap - kSincRadius + 1; // [-7, 8]
+            float w = windowedSinc(float(k) - frac, float(kSincRadius));
+            kernels[phase].weights[size_t(tap)] = w;
+            weightSum += w;
+          }
+          kernels[phase].invWeightSum = (std::fabs(weightSum) > 1e-6f) ? (1.f / weightSum) : 1.f;
+        }
+      }
+    };
+    static const LutBuilder lutBuilder;
+    return lutBuilder.kernels;
+  }
+
+  static const SincKernel &sincKernelForFraction(float frac) {
+    frac = clamp(frac, 0.f, 0.999999f);
+    int phase = int(std::lround(frac * float(kSincPhaseCount)));
+    phase = clamp(phase, 0, kSincPhaseCount - 1);
+    return sincKernelLut()[size_t(phase)];
+  }
+
   std::pair<float, float> readCubic(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
@@ -253,23 +291,18 @@ struct TemporalDeckBuffer {
       return {left[idx], rightSample(idx)};
     }
 
-    constexpr int kRadius = 8;
     float accL = 0.f;
     float accR = 0.f;
-    float weightSum = 0.f;
-    for (int k = -kRadius + 1; k <= kRadius; ++k) {
+    const SincKernel &kernel = sincKernelForFraction(frac);
+    for (int tap = 0; tap < kSincTapCount; ++tap) {
+      int k = tap - kSincRadius + 1;
       int idx = wrapIndex(center + k);
-      float dist = float(k) - frac;
-      float w = windowedSinc(dist, float(kRadius));
+      float w = kernel.weights[size_t(tap)];
       accL += left[idx] * w;
       accR += rightSample(idx) * w;
-      weightSum += w;
     }
-    if (std::fabs(weightSum) > 1e-6f) {
-      float inv = 1.f / weightSum;
-      accL *= inv;
-      accR *= inv;
-    }
+    accL *= kernel.invWeightSum;
+    accR *= kernel.invWeightSum;
     return {accL, accR};
   }
 };
@@ -1356,35 +1389,30 @@ struct TemporalDeckEngine {
     }
 
     if (interpolationMode == SCRATCH_INTERP_SINC) {
-      constexpr int kRadius = 8;
       float accL = 0.f;
       float accR = 0.f;
-      float weightSum = 0.f;
-      bool interior = !loopActive && (i1 - (kRadius - 1) >= 0) && (i1 + kRadius <= readMaxIndex);
+      const TemporalDeckBuffer::SincKernel &kernel = TemporalDeckBuffer::sincKernelForFraction(t);
+      bool interior = !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
+                      (i1 + TemporalDeckBuffer::kSincRadius <= readMaxIndex);
       if (interior) {
-        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+        for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
+          int k = tap - TemporalDeckBuffer::kSincRadius + 1;
           int idx = i1 + k;
-          float dist = float(k) - t;
-          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          float w = kernel.weights[size_t(tap)];
           accL += leftData[idx] * w;
           accR += rightData[idx] * w;
-          weightSum += w;
         }
       } else {
-        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+        for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
+          int k = tap - TemporalDeckBuffer::kSincRadius + 1;
           int idx = clampSampleIndex(i1 + k, maxIndex);
-          float dist = float(k) - t;
-          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          float w = kernel.weights[size_t(tap)];
           accL += leftData[idx] * w;
           accR += rightData[idx] * w;
-          weightSum += w;
         }
       }
-      if (std::fabs(weightSum) > 1e-6f) {
-        float inv = 1.f / weightSum;
-        accL *= inv;
-        accR *= inv;
-      }
+      accL *= kernel.invWeightSum;
+      accR *= kernel.invWeightSum;
       return {accL, accR};
     }
 

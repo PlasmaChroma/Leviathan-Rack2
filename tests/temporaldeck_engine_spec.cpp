@@ -8,6 +8,7 @@
 namespace {
 
 using Engine = temporaldeck::TemporalDeckEngine;
+using Buffer = temporaldeck::TemporalDeckBuffer;
 
 struct TestResult {
   std::string name;
@@ -53,6 +54,69 @@ void installRampSample(Engine &engine, int frames) {
   engine.installSample(left, left, frames, true, false);
   engine.sampleModeEnabled = true;
   engine.sampleTransportPlaying = true;
+}
+
+std::pair<float, float> directSincReferenceWrapped(const Buffer &buffer, double pos) {
+  if (buffer.size <= 0 || buffer.filled <= 0) {
+    return {0.f, 0.f};
+  }
+  pos = buffer.wrapPosition(pos);
+  int center = int(std::floor(pos));
+  float frac = float(pos - double(center));
+  if (std::fabs(frac) <= 1e-6f || std::fabs(1.f - frac) <= 1e-6f) {
+    int idx = buffer.wrapIndex(int(std::round(pos)));
+    return {buffer.left[idx], buffer.rightSample(idx)};
+  }
+
+  float accL = 0.f;
+  float accR = 0.f;
+  float weightSum = 0.f;
+  for (int k = -Buffer::kSincRadius + 1; k <= Buffer::kSincRadius; ++k) {
+    int idx = buffer.wrapIndex(center + k);
+    float dist = float(k) - frac;
+    float w = Buffer::windowedSinc(dist, float(Buffer::kSincRadius));
+    accL += buffer.left[idx] * w;
+    accR += buffer.rightSample(idx) * w;
+    weightSum += w;
+  }
+  if (std::fabs(weightSum) > 1e-6f) {
+    float inv = 1.f / weightSum;
+    accL *= inv;
+    accR *= inv;
+  }
+  return {accL, accR};
+}
+
+std::pair<float, float> directSincReferenceClamped(const std::vector<float> &left, const std::vector<float> &right, double pos,
+                                                   int maxIndex) {
+  if (left.empty() || right.empty() || maxIndex < 0) {
+    return {0.f, 0.f};
+  }
+  pos = std::max(0.0, std::min(pos, double(maxIndex)));
+  int i1 = int(std::floor(pos));
+  float t = float(pos - double(i1));
+  if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
+    int idx = std::max(0, std::min(int(std::round(pos)), maxIndex));
+    return {left[size_t(idx)], right[size_t(idx)]};
+  }
+
+  float accL = 0.f;
+  float accR = 0.f;
+  float weightSum = 0.f;
+  for (int k = -Buffer::kSincRadius + 1; k <= Buffer::kSincRadius; ++k) {
+    int idx = std::max(0, std::min(i1 + k, maxIndex));
+    float dist = float(k) - t;
+    float w = Buffer::windowedSinc(dist, float(Buffer::kSincRadius));
+    accL += left[size_t(idx)] * w;
+    accR += right[size_t(idx)] * w;
+    weightSum += w;
+  }
+  if (std::fabs(weightSum) > 1e-6f) {
+    float inv = 1.f / weightSum;
+    accL *= inv;
+    accR *= inv;
+  }
+  return {accL, accR};
 }
 
 TestResult testLiveModeWritesAdvance() {
@@ -254,6 +318,73 @@ TestResult testLiveTouchUiLikeAlternatingScratchRegressionGuard() {
             " maxAbsGap=" + std::to_string(maxAbsGap)};
 }
 
+TestResult testLiveTouchDirectionalCompensationBalance() {
+  const float sr = 48000.f;
+
+  auto runDirection = [&](float deltaAngleSign) {
+    Engine engine;
+    engine.reset(sr);
+    engine.sampleModeEnabled = false;
+    engine.sampleLoaded = false;
+
+    auto in = makeDefaultInput(sr);
+    in.inL = 0.15f;
+    in.inR = -0.1f;
+    for (int i = 0; i < 12000; ++i) {
+      engine.process(in);
+    }
+
+    double newest = engine.newestReadablePos();
+    double startLag = 5000.0;
+    engine.readHead = engine.buffer.wrapPosition(newest - startLag);
+    engine.scratchLagSamples = startLag;
+    engine.scratchLagTargetSamples = startLag;
+    engine.lastPlatterGestureRevision = 0;
+
+    in = makeDefaultInput(sr);
+    in.freezeButton = false;
+    in.platterTouched = true;
+    in.platterMotionActive = true;
+
+    uint32_t rev = 1;
+    double localLag = startLag;
+    in.platterGestureRevision = rev;
+    in.platterLagTarget = float(localLag);
+    in.platterGestureVelocity = 0.f;
+    auto out = engine.process(in);
+    double prevLag = out.lag;
+
+    const int steps = 120;
+    const float deltaAngle = deltaAngleSign * 0.010f;
+    double stepExtraSum = 0.0;
+    for (int i = 0; i < steps; ++i) {
+      float lagDelta = platter_interaction::lagDeltaFromAngle(deltaAngle, sr, 1.f, 1.0f, Engine::kNominalPlatterRpm);
+      localLag = platter_interaction::rebaseLagTarget(float(localLag), float(prevLag), lagDelta);
+      localLag = std::max(0.0, std::min(localLag - double(lagDelta), double(out.accessibleLag)));
+
+      in.platterGestureRevision = ++rev;
+      in.platterLagTarget = float(localLag);
+      in.platterGestureVelocity = lagDelta / std::max(in.dt, 1e-6f);
+      out = engine.process(in);
+
+      // Strip nominal +1 sample/frame live drift so this captures only
+      // direction-dependent scratch compensation behavior.
+      stepExtraSum += (out.lag - prevLag) - 1.0;
+      prevLag = out.lag;
+    }
+    return stepExtraSum / double(steps);
+  };
+
+  double forwardAvgExtra = runDirection(+1.f);
+  double backwardAvgExtra = runDirection(-1.f);
+  double imbalance = std::fabs(backwardAvgExtra + forwardAvgExtra);
+  bool pass =
+    forwardAvgExtra < -0.02 && backwardAvgExtra > 0.02 && imbalance < 0.12;
+  return {"Live touch directional compensation remains balanced", pass,
+          "fwdAvgExtra=" + std::to_string(forwardAvgExtra) + " backAvgExtra=" + std::to_string(backwardAvgExtra) +
+            " imbalance=" + std::to_string(imbalance)};
+}
+
 TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
   const float sr = 1000.f;
   Engine engine;
@@ -279,6 +410,67 @@ TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
             " lastL=" + std::to_string(engine.buffer.left[std::max(0, engine.sampleFrames - 1)])};
 }
 
+TestResult testSincLutMatchesDirectWindowedSincReference() {
+  Buffer buffer;
+  buffer.reset(1024.f, 1.f, false);
+  for (int i = 0; i < buffer.size; ++i) {
+    float t = float(i) / std::max(1, buffer.size - 1);
+    buffer.left[size_t(i)] =
+      std::sin(temporaldeck::kTwoPi * (3.0f * t + 0.13f)) + 0.2f * std::sin(temporaldeck::kTwoPi * 9.0f * t);
+    buffer.right[size_t(i)] =
+      std::cos(temporaldeck::kTwoPi * (5.0f * t + 0.07f)) + 0.15f * std::sin(temporaldeck::kTwoPi * 11.0f * t);
+  }
+  buffer.filled = buffer.size;
+
+  float maxAbsErrL = 0.f;
+  float maxAbsErrR = 0.f;
+  for (int i = 0; i < 500; ++i) {
+    double pos = double(i) * 7.137 + 0.381;
+    std::pair<float, float> got = buffer.readSinc(pos);
+    std::pair<float, float> ref = directSincReferenceWrapped(buffer, pos);
+    maxAbsErrL = std::max(maxAbsErrL, std::fabs(got.first - ref.first));
+    maxAbsErrR = std::max(maxAbsErrR, std::fabs(got.second - ref.second));
+  }
+
+  bool pass = maxAbsErrL < 0.0025f && maxAbsErrR < 0.0025f;
+  return {"SINC LUT closely matches direct windowed-sinc (wrapped)", pass,
+          "maxErrL=" + std::to_string(maxAbsErrL) + " maxErrR=" + std::to_string(maxAbsErrR)};
+}
+
+TestResult testSampleBoundedSincLutMatchesDirectReference() {
+  const float sr = 48000.f;
+  Engine engine;
+  engine.reset(sr);
+  const int frames = 512;
+  std::vector<float> left(size_t(frames), 0.f);
+  std::vector<float> right(size_t(frames), 0.f);
+  for (int i = 0; i < frames; ++i) {
+    float t = float(i) / std::max(1, frames - 1);
+    left[size_t(i)] =
+      0.65f * std::sin(temporaldeck::kTwoPi * 4.0f * t) + 0.30f * std::sin(temporaldeck::kTwoPi * 13.0f * t);
+    right[size_t(i)] =
+      0.72f * std::cos(temporaldeck::kTwoPi * 6.0f * t) + 0.25f * std::sin(temporaldeck::kTwoPi * 17.0f * t);
+  }
+  engine.installSample(left, right, frames, true, false);
+  engine.sampleModeEnabled = true;
+  engine.sampleLoopEnabled = false;
+  double newestPos = double(frames - 1);
+
+  float maxAbsErrL = 0.f;
+  float maxAbsErrR = 0.f;
+  for (int i = 0; i < 600; ++i) {
+    double pos = (double(i) * 0.853) + 0.231;
+    std::pair<float, float> got = engine.readSampleBounded(pos, Engine::SCRATCH_INTERP_SINC, newestPos);
+    std::pair<float, float> ref = directSincReferenceClamped(left, right, pos, frames - 1);
+    maxAbsErrL = std::max(maxAbsErrL, std::fabs(got.first - ref.first));
+    maxAbsErrR = std::max(maxAbsErrR, std::fabs(got.second - ref.second));
+  }
+
+  bool pass = maxAbsErrL < 0.0025f && maxAbsErrR < 0.0025f;
+  return {"SINC LUT closely matches direct windowed-sinc (sample-bounded)", pass,
+          "maxErrL=" + std::to_string(maxAbsErrL) + " maxErrR=" + std::to_string(maxAbsErrR)};
+}
+
 } // namespace
 
 int main() {
@@ -289,7 +481,10 @@ int main() {
   tests.push_back(testSampleLoopWraps());
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
   tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
+  tests.push_back(testLiveTouchDirectionalCompensationBalance());
   tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
+  tests.push_back(testSincLutMatchesDirectWindowedSincReference());
+  tests.push_back(testSampleBoundedSincLutMatchesDirectReference());
 
   int failed = 0;
   std::cout << "TemporalDeck Engine Spec\n";

@@ -102,9 +102,13 @@ There is a draft servo-style slip redesign proposal that targets smoother, less 
 
 ### SINC performance
 Potential optimization path for high-quality scratch interpolation:
-- SIMD tap accumulation
-- polyphase/precomputed kernel tables
-- optional quality guardrails under extreme motion
+- Implemented: polyphase/precomputed kernel LUT (radius-8 windowed SINC,
+  1024 phase table) in both live and sample-bounded SINC read paths.
+- Implemented: regression tests that compare LUT SINC output to direct
+  windowed-SINC reference math for wrapped/live and sample-bounded reads.
+- Remaining ideas:
+  - SIMD tap accumulation
+  - optional quality guardrails under extreme motion
 
 These should be pursued only with profile-backed validation and regression/perceptual checks.
 
