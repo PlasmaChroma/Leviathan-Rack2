@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.3.12]
+
+### Temporal Deck
+- Allow for more organization of Vinyl art assets
+- Fix scratch sensitivity
+- Prep for adding for expander feature
+
 ## [v2.3.11]
 
 ### Integral Flux

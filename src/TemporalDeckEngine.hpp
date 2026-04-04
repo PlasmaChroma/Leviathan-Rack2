@@ -2166,26 +2166,14 @@ struct TemporalDeckEngine {
             nowCatchActive = false;
           }
           double targetLag = clampLag(platterLagTarget, limit);
-          if (!sampleModeActive) {
-            // Mouse drag in live mode should feel freeze-like while held, but
-            // the forward edge still needs to reach the real current NOW rather
-            // than the scratch-start anchor. Keep full drift compensation
-            // across most of the range so sensitivity stays stable, then only
-            // taper it out in a small near-NOW window.
+          if (!sampleModeActive && freezeState) {
+            // Explicit freeze in live mode keeps write-head drift compensation
+            // so held gestures stay anchored while transport is paused.
             double driftLag = std::max(0.0, newestPos - liveManualScratchAnchorNewestPos);
             double nearNowWindow = std::max(1.0, double(sampleRate) * 0.060);
             double driftMix = 1.0;
             if (targetLag < nearNowWindow) {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
-            }
-            // In unfrozen live mode, forward/toward-NOW gestures should not
-            // fight accumulated write-head drift from earlier reverse motion.
-            // Keep full compensation while moving away from NOW, but reset the
-            // drift anchor when direction flips toward NOW.
-            bool towardNowGesture = targetLag < (lastPlatterLagTarget - 1e-4);
-            if (!freezeState && towardNowGesture) {
-              driftLag = 0.0;
-              liveManualScratchAnchorNewestPos = newestPos;
             }
             targetLag += driftLag * driftMix;
             // Keep drift compensation anchored to scratch-start timing so
