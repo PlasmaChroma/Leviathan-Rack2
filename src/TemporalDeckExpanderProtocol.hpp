@@ -10,8 +10,9 @@
 namespace temporaldeck_expander {
 
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
-constexpr uint16_t VERSION = 1u;
+constexpr uint16_t VERSION = 2u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
+constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
 
 enum HostFlags : uint32_t {
@@ -26,10 +27,21 @@ enum HostFlags : uint32_t {
   FLAG_MONO_BUFFER = 1u << 8,
 };
 
-struct PreviewBin {
+struct ScopeBin {
   int16_t min = 0;
   int16_t max = 0;
 };
+
+using PreviewBin = ScopeBin;
+
+inline ScopeBin makeEmptyScopeBin() {
+  ScopeBin bin;
+  bin.min = 1;
+  bin.max = 0;
+  return bin;
+}
+
+inline bool isScopeBinValid(const ScopeBin &bin) { return bin.max >= bin.min; }
 
 struct HostToDisplay {
   uint32_t magic = MAGIC;
@@ -52,11 +64,12 @@ struct HostToDisplay {
   uint32_t bufferCapacityFrames = 0;
   uint32_t bufferFilledFrames = 0;
 
-  uint32_t previewWriteIndex = 0;
-  uint32_t previewFilledBins = 0;
-  uint32_t samplesPerBin = 1;
+  float scopeHalfWindowMs = 900.f;
+  float scopeStartLagSamples = 0.f;
+  float scopeBinSpanSamples = 1.f;
+  uint32_t scopeBinCount = 0;
 
-  PreviewBin preview[PREVIEW_BIN_COUNT];
+  ScopeBin scope[SCOPE_BIN_COUNT];
 };
 
 static_assert(std::is_standard_layout<HostToDisplay>::value, "HostToDisplay must stay POD-like");
@@ -125,7 +138,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
                                 float sampleRate, float lagSamples, float accessibleLagSamples, float platterAngle,
                                 float samplePlayheadSec, float sampleDurationSec, float sampleProgress,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
-                                const PreviewAccumulator &preview) {
+                                float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
+                                uint32_t scopeBinCount, const ScopeBin *scopeBins) {
   if (!out) {
     return;
   }
@@ -144,10 +158,17 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   out->sampleProgress = sampleProgress;
   out->bufferCapacityFrames = bufferCapacityFrames;
   out->bufferFilledFrames = bufferFilledFrames;
-  out->previewWriteIndex = preview.writeIndex;
-  out->previewFilledBins = preview.filledBins;
-  out->samplesPerBin = preview.samplesPerBin;
-  std::memcpy(out->preview, preview.bins.data(), sizeof(out->preview));
+  out->scopeHalfWindowMs = scopeHalfWindowMs;
+  out->scopeStartLagSamples = scopeStartLagSamples;
+  out->scopeBinSpanSamples = scopeBinSpanSamples;
+  out->scopeBinCount = std::min(scopeBinCount, SCOPE_BIN_COUNT);
+  ScopeBin empty = makeEmptyScopeBin();
+  for (size_t i = 0; i < SCOPE_BIN_COUNT; ++i) {
+    out->scope[i] = empty;
+  }
+  if (scopeBins && out->scopeBinCount > 0) {
+    std::memcpy(out->scope, scopeBins, sizeof(ScopeBin) * size_t(out->scopeBinCount));
+  }
 }
 
 } // namespace temporaldeck_expander

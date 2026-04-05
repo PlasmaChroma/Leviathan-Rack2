@@ -6,9 +6,66 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
+#include <regex>
+#include <sstream>
+
+namespace {
+
+static bool loadRectFromSvgMm(const std::string &svgPath, const std::string &rectId, math::Rect *outRect) {
+  if (!outRect) {
+    return false;
+  }
+
+  std::ifstream svgFile(svgPath.c_str());
+  if (!svgFile.good()) {
+    return false;
+  }
+
+  std::ostringstream svgBuffer;
+  svgBuffer << svgFile.rdbuf();
+  const std::string svgText = svgBuffer.str();
+
+  const std::regex rectRegex("<rect\\b[^>]*\\bid\\s*=\\s*\"" + rectId + "\"[^>]*>", std::regex::icase);
+  std::smatch rectMatch;
+  if (!std::regex_search(svgText, rectMatch, rectRegex)) {
+    return false;
+  }
+  const std::string rectTag = rectMatch.str(0);
+
+  auto parseAttrMm = [&](const char *attr, float *outMm) -> bool {
+    if (!outMm) {
+      return false;
+    }
+    const std::regex attrRegex(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
+    std::smatch attrMatch;
+    if (!std::regex_search(rectTag, attrMatch, attrRegex)) {
+      return false;
+    }
+    // Inkscape panel coordinates are in 1/100 mm (viewBox-scale style).
+    *outMm = std::stof(attrMatch.str(1)) * 0.01f;
+    return true;
+  };
+
+  float xMm = 0.f;
+  float yMm = 0.f;
+  float wMm = 0.f;
+  float hMm = 0.f;
+  if (!parseAttrMm("x", &xMm) || !parseAttrMm("y", &yMm) || !parseAttrMm("width", &wMm) ||
+      !parseAttrMm("height", &hMm)) {
+    return false;
+  }
+
+  outRect->pos = Vec(xMm, yMm);
+  outRect->size = Vec(wMm, hMm);
+  return true;
+}
+
+} // namespace
 
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
+  enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_COUNT };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
   temporaldeck_expander::HostToDisplay uiSnapshot;
@@ -20,6 +77,7 @@ struct TDScope final : Module {
   uint64_t lastPublishSeq = 0;
   int staleFrames = 0;
   bool previewValid = false;
+  int scopeDisplayRangeMode = SCOPE_RANGE_5V;
 
   static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
 
@@ -28,6 +86,24 @@ struct TDScope final : Module {
     leftExpander.producerMessage = &leftMessages[0];
     leftExpander.consumerMessage = &leftMessages[1];
     uiSnapshot = temporaldeck_expander::HostToDisplay();
+  }
+
+  float scopeDisplayFullScaleVolts() const { return scopeDisplayRangeMode == SCOPE_RANGE_10V ? 10.f : 5.f; }
+
+  json_t *dataToJson() override {
+    json_t *root = json_object();
+    json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
+    return root;
+  }
+
+  void dataFromJson(json_t *root) override {
+    if (!root) {
+      return;
+    }
+    json_t *rangeJ = json_object_get(root, "scopeDisplayRangeMode");
+    if (rangeJ) {
+      scopeDisplayRangeMode = clamp(int(json_integer_value(rangeJ)), SCOPE_RANGE_5V, SCOPE_RANGE_COUNT - 1);
+    }
   }
 
   void publishSnapshotToUi(const temporaldeck_expander::HostToDisplay &msg) {
@@ -94,68 +170,6 @@ struct TDScope final : Module {
 
 struct TDScopeDisplayWidget final : Widget {
   TDScope *module = nullptr;
-  uint64_t seenSeq = 0;
-  float linkPulse = 0.f;
-  static constexpr float kWindowMs = 900.f;
-
-  bool previewBinForLag(const temporaldeck_expander::HostToDisplay &msg, float lagSamples,
-                        temporaldeck_expander::PreviewBin *outBin) const {
-    if (!outBin || msg.previewFilledBins == 0 || msg.samplesPerBin == 0) {
-      return false;
-    }
-    if (lagSamples < 0.f) {
-      return false;
-    }
-    int lagBins = int(std::lround(lagSamples / std::max(1u, msg.samplesPerBin)));
-    if (lagBins < 0 || lagBins >= int(msg.previewFilledBins)) {
-      return false;
-    }
-    int newestBin = int(msg.previewWriteIndex + temporaldeck_expander::PREVIEW_BIN_COUNT - 1u) %
-                    int(temporaldeck_expander::PREVIEW_BIN_COUNT);
-    int idx = newestBin - lagBins;
-    while (idx < 0) {
-      idx += int(temporaldeck_expander::PREVIEW_BIN_COUNT);
-    }
-    idx %= int(temporaldeck_expander::PREVIEW_BIN_COUNT);
-    *outBin = msg.preview[idx];
-    return true;
-  }
-
-  void drawLinkStatus(const DrawArgs &args, bool hasHostModule, bool linkActive, bool previewValid) {
-    nvgFontSize(args.vg, 12.f);
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-
-    NVGcolor statusColor = nvgRGBA(220, 80, 80, 220);
-    const char *statusText = hasHostModule ? "STALE" : "NO HOST";
-    if (linkActive && previewValid) {
-      statusColor = nvgRGBA(92, 224, 132, 235);
-      statusText = "LINK OK";
-    } else if (linkActive) {
-      statusColor = nvgRGBA(230, 186, 86, 235);
-      statusText = "LINK / NO DATA";
-    }
-
-    nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 4.f, 4.f, box.size.x - 8.f, 16.f, 4.f);
-    nvgFillColor(args.vg, nvgRGBA(12, 18, 26, 190));
-    nvgFill(args.vg);
-
-    nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 4.f, 4.f, box.size.x - 8.f, 16.f, 4.f);
-    nvgStrokeColor(args.vg, statusColor);
-    nvgStrokeWidth(args.vg, 1.1f);
-    nvgStroke(args.vg);
-
-    nvgFillColor(args.vg, statusColor);
-    nvgText(args.vg, 8.f, 12.f, statusText, nullptr);
-
-    float dotAlpha = clamp(linkPulse, 0.f, 1.f);
-    nvgBeginPath(args.vg);
-    nvgCircle(args.vg, box.size.x - 12.f, 12.f, 3.2f);
-    nvgFillColor(args.vg, nvgRGBAf(statusColor.r, statusColor.g, statusColor.b, 0.28f + 0.72f * dotAlpha));
-    nvgFill(args.vg);
-  }
 
   void draw(const DrawArgs &args) override {
     nvgBeginPath(args.vg);
@@ -169,21 +183,8 @@ struct TDScopeDisplayWidget final : Widget {
     nvgStrokeWidth(args.vg, 1.f);
     nvgStroke(args.vg);
 
-    bool hasHostModule = module && module->leftExpander.module;
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
-
-    if (module) {
-      uint64_t seq = module->uiLastPublishSeq.load(std::memory_order_relaxed);
-      if (seq != seenSeq) {
-        seenSeq = seq;
-        linkPulse = 1.f;
-      } else {
-        linkPulse *= 0.93f;
-      }
-    }
-
-    drawLinkStatus(args, hasHostModule, linkActive, previewValid);
 
     if (!module) {
       return;
@@ -194,34 +195,31 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
+    uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
+    if (scopeBinCount == 0u) {
+      return;
+    }
+
     const float centerY = box.size.y * 0.5f;
     const float centerX = box.size.x * 0.5f;
     const float ampHalfWidth = box.size.x * 0.46f;
-    const float halfHeight = box.size.y * 0.5f;
-    const bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    const float lagMs = (msg.lagSamples / std::max(msg.sampleRate, 1.f)) * 1000.f;
-    const float forwardWindowMs = sampleMode ? kWindowMs : std::min(kWindowMs, std::max(0.f, lagMs));
-    const float samplesPerMs = std::max(msg.sampleRate, 1.f) * 0.001f;
+    const float yDen = std::max(box.size.y - 1.f, 1.f);
+    float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
+    float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
 
     for (int iy = 0; iy < int(std::ceil(box.size.y)); ++iy) {
       float y = float(iy) + 0.5f;
-      float rel = (y - centerY) / std::max(halfHeight, 1.f); // top=-1, bottom=+1
-      float offsetMs = rel * kWindowMs;
-      if (offsetMs > forwardWindowMs) {
-        continue;
-      }
-      float targetLagSamples = msg.lagSamples - offsetMs * samplesPerMs;
-      if (targetLagSamples < 0.f || targetLagSamples > msg.accessibleLagSamples) {
+      float t = clamp(y / yDen, 0.f, 1.f);
+      uint32_t binIndex = uint32_t(std::lround(t * float(scopeBinCount - 1u)));
+      binIndex = std::min(binIndex, scopeBinCount - 1u);
+
+      const temporaldeck_expander::ScopeBin &bin = msg.scope[binIndex];
+      if (!temporaldeck_expander::isScopeBinValid(bin)) {
         continue;
       }
 
-      temporaldeck_expander::PreviewBin bin;
-      if (!previewBinForLag(msg, targetLagSamples, &bin)) {
-        continue;
-      }
-
-      float minNorm = float(bin.min) / 32767.f;
-      float maxNorm = float(bin.max) / 32767.f;
+      float minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
+      float maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
       float x0 = centerX + minNorm * ampHalfWidth;
       float x1 = centerX + maxNorm * ampHalfWidth;
       if (x1 < x0) {
@@ -248,21 +246,40 @@ struct TDScopeDisplayWidget final : Widget {
 struct TDScopeWidget : ModuleWidget {
   TDScopeWidget(TDScope *module) {
     setModule(module);
-    setPanel(createPanel(asset::plugin(pluginInstance, "res/tdscope.svg")));
-
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
+    setPanel(createPanel(panelPath));
 
     auto *display = new TDScopeDisplayWidget;
     display->module = module;
-    display->box.pos = mm2px(Vec(8.5f, 23.25f));
-    display->box.size = mm2px(Vec(43.96f, 82.0f));
+    math::Rect scopeRectMm;
+    if (loadRectFromSvgMm(panelPath, "scope", &scopeRectMm)) {
+      display->box.pos = mm2px(scopeRectMm.pos);
+      display->box.size = mm2px(scopeRectMm.size);
+    } else {
+      display->box.pos = mm2px(Vec(1.1138f, 10.9404f));
+      display->box.size = mm2px(Vec(38.5563f, 109.4206f));
+    }
     addChild(display);
 
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(9.5f, 58.0f)), module, TDScope::LINK_LIGHT));
-    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(9.5f, 70.0f)), module, TDScope::PREVIEW_LIGHT));
+    addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(4.5f, 8.0f)), module, TDScope::LINK_LIGHT));
+    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(4.5f, 13.0f)), module, TDScope::PREVIEW_LIGHT));
+  }
+
+  void appendContextMenu(Menu *menu) override {
+    ModuleWidget::appendContextMenu(menu);
+    TDScope *scopeModule = dynamic_cast<TDScope *>(module);
+    if (!scopeModule) {
+      return;
+    }
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Scope Range"));
+    menu->addChild(createCheckMenuItem(
+      "+/-5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_5V; },
+      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_5V; }));
+    menu->addChild(createCheckMenuItem(
+      "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
+      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
   }
 };
 
