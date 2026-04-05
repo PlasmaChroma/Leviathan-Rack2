@@ -66,7 +66,7 @@ static bool loadRectFromSvgMm(const std::string &svgPath, const std::string &rec
 
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
-  enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_COUNT };
+  enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_COUNT };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
   temporaldeck_expander::HostToDisplay uiSnapshot;
@@ -89,7 +89,17 @@ struct TDScope final : Module {
     uiSnapshot = temporaldeck_expander::HostToDisplay();
   }
 
-  float scopeDisplayFullScaleVolts() const { return scopeDisplayRangeMode == SCOPE_RANGE_10V ? 10.f : 5.f; }
+  float scopeDisplayFullScaleVolts() const {
+    switch (scopeDisplayRangeMode) {
+      case SCOPE_RANGE_10V:
+        return 10.f;
+      case SCOPE_RANGE_2V5:
+        return 2.5f;
+      case SCOPE_RANGE_5V:
+      default:
+        return 5.f;
+    }
+  }
 
   json_t *dataToJson() override {
     json_t *root = json_object();
@@ -174,17 +184,6 @@ struct TDScopeDisplayWidget final : Widget {
   TDScope *module = nullptr;
 
   void draw(const DrawArgs &args) override {
-    nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 2.5f);
-    nvgFillColor(args.vg, nvgRGBA(8, 14, 22, 210));
-    nvgFill(args.vg);
-
-    nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 2.5f);
-    nvgStrokeColor(args.vg, nvgRGBA(66, 87, 108, 210));
-    nvgStrokeWidth(args.vg, 1.f);
-    nvgStroke(args.vg);
-
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
 
@@ -202,13 +201,18 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
-    const float centerY = box.size.y * 0.5f;
+    const float yInset = 2.f;
+    const float drawTop = yInset;
+    const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
+    const float drawHeight = std::max(drawBottom - drawTop, 1.f);
+
+    const float centerY = 0.5f * (drawTop + drawBottom);
     const float centerX = box.size.x * 0.5f;
     const float ampHalfWidth = box.size.x * 0.46f;
-    const float yDen = std::max(box.size.y - 1.f, 1.f);
+    const float yDen = std::max(drawHeight - 1.f, 1.f);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
-    const int rowCount = std::max(1, int(std::ceil(box.size.y)));
+    const int rowCount = std::max(1, int(std::ceil(drawHeight)));
     std::vector<float> rowX0(size_t(rowCount), centerX);
     std::vector<float> rowX1(size_t(rowCount), centerX);
     std::vector<uint8_t> rowValid(size_t(rowCount), 0u);
@@ -219,8 +223,8 @@ struct TDScopeDisplayWidget final : Widget {
     };
 
     for (int iy = 0; iy < rowCount; ++iy) {
-      float y = float(iy) + 0.5f;
-      float t = clamp(y / yDen, 0.f, 1.f);
+      float y = drawTop + float(iy) + 0.5f;
+      float t = clamp((y - drawTop) / yDen, 0.f, 1.f);
       float binPos = t * float(scopeBinCount - 1u);
       uint32_t binIndex0 = uint32_t(std::floor(binPos));
       binIndex0 = std::min(binIndex0, scopeBinCount - 1u);
@@ -264,11 +268,18 @@ struct TDScopeDisplayWidget final : Widget {
 
     NVGcolor waveColor = nvgRGBA(114, 216, 255, 210);
     NVGcolor connectColor = nvgRGBA(114, 216, 255, 150);
+    nvgSave(args.vg);
+    nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
+    bool prevDrawn = false;
+    float prevX0 = centerX;
+    float prevX1 = centerX;
+    float prevY = drawTop + 0.5f;
     for (int iy = 0; iy < rowCount; ++iy) {
       if (!rowValid[size_t(iy)]) {
         continue;
       }
-      float y = float(iy) + 0.5f;
+
+      float y = drawTop + float(iy) + 0.5f;
       float x0 = rowX0[size_t(iy)];
       float x1 = rowX1[size_t(iy)];
       nvgBeginPath(args.vg);
@@ -278,26 +289,55 @@ struct TDScopeDisplayWidget final : Widget {
       nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
 
-      int prev = iy - 1;
-      if (prev >= 0 && rowValid[size_t(prev)]) {
-        float prevY = float(prev) + 0.5f;
+      if (prevDrawn) {
         nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, rowX0[size_t(prev)], prevY);
+        nvgMoveTo(args.vg, prevX0, prevY);
         nvgLineTo(args.vg, x0, y);
-        nvgMoveTo(args.vg, rowX1[size_t(prev)], prevY);
+        nvgMoveTo(args.vg, prevX1, prevY);
         nvgLineTo(args.vg, x1, y);
         nvgStrokeColor(args.vg, connectColor);
         nvgStrokeWidth(args.vg, 0.75f);
         nvgStroke(args.vg);
       }
+      prevDrawn = true;
+      prevX0 = x0;
+      prevX1 = x1;
+      prevY = y;
     }
 
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, 2.f, centerY);
     nvgLineTo(args.vg, box.size.x - 2.f, centerY);
-    nvgStrokeColor(args.vg, nvgRGBA(208, 84, 255, 245));
+    nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 128));
     nvgStrokeWidth(args.vg, 1.9f);
     nvgStroke(args.vg);
+    nvgResetScissor(args.vg);
+    nvgRestore(args.vg);
+  }
+};
+
+struct TDScopeSeamBlendWidget final : Widget {
+  TDScope *module = nullptr;
+
+  void draw(const DrawArgs &args) override {
+    if (!module || !module->leftExpander.module || module->leftExpander.module->model != modelTemporalDeck) {
+      return;
+    }
+
+    const float seamW = 1.25f;
+    const float featherW = 1.75f;
+    NVGcolor seamColor = nvgRGBA(11, 15, 20, 235);
+
+    nvgBeginPath(args.vg);
+    nvgRect(args.vg, 0.f, 0.f, seamW, box.size.y);
+    nvgFillColor(args.vg, seamColor);
+    nvgFill(args.vg);
+
+    NVGpaint feather = nvgLinearGradient(args.vg, seamW, 0.f, seamW + featherW, 0.f, seamColor, nvgRGBA(11, 15, 20, 0));
+    nvgBeginPath(args.vg);
+    nvgRect(args.vg, seamW, 0.f, featherW, box.size.y);
+    nvgFillPaint(args.vg, feather);
+    nvgFill(args.vg);
   }
 };
 
@@ -306,6 +346,12 @@ struct TDScopeWidget : ModuleWidget {
     setModule(module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
+
+    auto *seamBlend = new TDScopeSeamBlendWidget;
+    seamBlend->module = module;
+    seamBlend->box.pos = Vec(0.f, 0.f);
+    seamBlend->box.size = box.size;
+    addChild(seamBlend);
 
     auto *display = new TDScopeDisplayWidget;
     display->module = module;
@@ -332,6 +378,9 @@ struct TDScopeWidget : ModuleWidget {
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Scope Range"));
+    menu->addChild(createCheckMenuItem(
+      "+/-2.5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_2V5; },
+      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_2V5; }));
     menu->addChild(createCheckMenuItem(
       "+/-5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_5V; },
       [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_5V; }));

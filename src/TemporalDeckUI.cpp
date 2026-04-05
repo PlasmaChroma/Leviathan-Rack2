@@ -3165,10 +3165,43 @@ struct BananutBlack : app::SvgPort {
   BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
 };
 
+struct TemporalDeckSeamBlendWidget final : Widget {
+  TemporalDeck *module = nullptr;
+
+  void draw(const DrawArgs &args) override {
+    if (!module || !module->rightExpander.module || module->rightExpander.module->model != modelTDScope) {
+      return;
+    }
+
+    const float seamW = 1.25f;
+    const float featherW = 1.75f;
+    NVGcolor seamColor = nvgRGBA(11, 15, 20, 235);
+    float seamX = box.size.x - seamW;
+    float featherX = std::max(0.f, seamX - featherW);
+
+    nvgBeginPath(args.vg);
+    nvgRect(args.vg, seamX, 0.f, seamW, box.size.y);
+    nvgFillColor(args.vg, seamColor);
+    nvgFill(args.vg);
+
+    NVGpaint feather = nvgLinearGradient(args.vg, featherX, 0.f, seamX, 0.f, nvgRGBA(11, 15, 20, 0), seamColor);
+    nvgBeginPath(args.vg);
+    nvgRect(args.vg, featherX, 0.f, seamX - featherX, box.size.y);
+    nvgFillPaint(args.vg, feather);
+    nvgFill(args.vg);
+  }
+};
+
 struct TemporalDeckWidget : ModuleWidget {
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
     setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
+
+    auto *seamBlend = new TemporalDeckSeamBlendWidget;
+    seamBlend->module = module;
+    seamBlend->box.pos = Vec(0.f, 0.f);
+    seamBlend->box.size = box.size;
+    addChild(seamBlend);
 
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
