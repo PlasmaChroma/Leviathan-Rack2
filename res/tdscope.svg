@@ -12,13 +12,11 @@
   <text x="30.48" y="14.0" text-anchor="middle" font-size="5.0" fill="#d7e2ef" font-family="DejaVu Sans">TD.Scope</text>
   <text x="30.48" y="21.0" text-anchor="middle" font-size="2.5" fill="#90a4b8" font-family="DejaVu Sans">Temporal Deck Expander</text>
 
-  <rect x="8.5" y="30.0" width="43.96" height="44.0" rx="1.8" fill="#111820" stroke="#435363" stroke-width="0.6"/>
-  <path d="M10 65 C14 58, 18 70, 22 63 S30 56, 34 64 S42 71, 50 60" fill="none" stroke="#7ad2ff" stroke-width="1.1"/>
-  <line x1="30.48" y1="30.0" x2="30.48" y2="74.0" stroke="#ffb347" stroke-width="0.6" opacity="0.9"/>
+  <rect x="8.5" y="23.25" width="43.96" height="82.0" rx="1.8" fill="#111820" stroke="#435363" stroke-width="0.6"/>
+  <line x1="30.48" y1="23.25" x2="30.48" y2="105.25" stroke="#ffb347" stroke-width="0.6" opacity="0.9"/>
 
   <text x="16.5" y="58.8" text-anchor="middle" font-size="2.5" fill="#ff7272" font-family="DejaVu Sans">LINK</text>
   <text x="16.5" y="70.8" text-anchor="middle" font-size="2.5" fill="#7be87b" font-family="DejaVu Sans">DATA</text>
 
   <text x="30.48" y="116.0" text-anchor="middle" font-size="2.4" fill="#7e8ea0" font-family="DejaVu Sans">Place to the right of Temporal Deck</text>
 </svg>
-

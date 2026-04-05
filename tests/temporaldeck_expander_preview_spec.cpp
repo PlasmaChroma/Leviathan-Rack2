@@ -121,7 +121,28 @@ TestResult testEnginePreviewUpdatesOnlyWhenLiveWritesAdvance() {
           "samplesPerBin=" + std::to_string(samplesPerBin) + " filledBins=" + std::to_string(engine.preview.filledBins)};
 }
 
-TestResult testLiveToSampleConversionBumpsGenerationAndStopsPreviewWrites() {
+TestResult testSampleInstallPopulatesPreviewBins() {
+  Engine engine;
+  engine.reset(48000.f);
+
+  const int frames = 128;
+  std::vector<float> left(frames, 0.f);
+  std::vector<float> right(frames, 0.f);
+  for (int i = 0; i < frames; ++i) {
+    left[i] = float(i) / float(std::max(1, frames - 1));
+    right[i] = -left[i];
+  }
+
+  engine.installSample(left, right, frames, true, false);
+  bool pass = engine.sampleLoaded && engine.sampleFrames == frames && engine.preview.filledBins > 0 &&
+              engine.preview.samplesPerBin >= 1u;
+  return {"Installing a sample precomputes expander preview bins", pass,
+          "sampleFrames=" + std::to_string(engine.sampleFrames) +
+            " filledBins=" + std::to_string(engine.preview.filledBins) +
+            " samplesPerBin=" + std::to_string(engine.preview.samplesPerBin)};
+}
+
+TestResult testLiveToSampleConversionBumpsGenerationAndPreservesStaticSamplePreview() {
   const float sr = 48000.f;
   Engine engine;
   engine.reset(sr);
@@ -138,15 +159,18 @@ TestResult testLiveToSampleConversionBumpsGenerationAndStopsPreviewWrites() {
   bool converted = engine.convertLiveWindowToSample(1.f, true);
   uint64_t genAfter = engine.bufferGeneration;
   bool generationBumped = genAfter > genBefore;
-  bool previewReset = engine.preview.filledBins == 0;
+  bool previewPopulated = engine.preview.filledBins > 0;
+  uint32_t previewFilledBefore = engine.preview.filledBins;
+  uint32_t previewWriteBefore = engine.preview.writeIndex;
 
-  for (uint32_t i = 0; i < samplesPerBin; ++i) {
+  for (uint32_t i = 0; i < std::max(1u, samplesPerBin); ++i) {
     engine.process(in);
   }
-  bool sampleModeDoesNotAdvance = engine.preview.filledBins == 0;
+  bool sampleModeDoesNotAdvance = engine.preview.filledBins == previewFilledBefore &&
+                                  engine.preview.writeIndex == previewWriteBefore;
 
-  bool pass = converted && generationBumped && previewReset && sampleModeDoesNotAdvance;
-  return {"Live->sample conversion bumps generation and pauses preview accumulation", pass,
+  bool pass = converted && generationBumped && previewPopulated && sampleModeDoesNotAdvance;
+  return {"Live->sample conversion bumps generation and keeps sample preview static", pass,
           "converted=" + std::to_string(int(converted)) + " genBefore=" + std::to_string(genBefore) +
             " genAfter=" + std::to_string(genAfter) + " filledBins=" + std::to_string(engine.preview.filledBins)};
 }
@@ -159,7 +183,8 @@ int main() {
   tests.push_back(testPreviewAccumulatorFinalizeAndWrap());
   tests.push_back(testPopulateHostMessageCopiesPreviewAndScalars());
   tests.push_back(testEnginePreviewUpdatesOnlyWhenLiveWritesAdvance());
-  tests.push_back(testLiveToSampleConversionBumpsGenerationAndStopsPreviewWrites());
+  tests.push_back(testSampleInstallPopulatesPreviewBins());
+  tests.push_back(testLiveToSampleConversionBumpsGenerationAndPreservesStaticSamplePreview());
 
   int failed = 0;
   std::cout << "TemporalDeck Expander Preview Spec\n";

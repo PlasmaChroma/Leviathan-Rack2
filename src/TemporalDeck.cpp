@@ -83,6 +83,9 @@ using temporaldeck::PreparedSampleData;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 
+static constexpr float kExpanderPublishRateHz = 60.f;
+static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
+
 static std::string normalizePathForPrefixCompare(std::string path) {
   std::replace(path.begin(), path.end(), '\\', '/');
   while (path.size() > 1 && path.back() == '/') {
@@ -303,6 +306,9 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiSampleProgress{0.0};
   float uiPublishTimerSec = 0.f;
   uint64_t expanderPublishSeq = 0;
+  float expanderPublishTimerSec = 0.f;
+  bool expanderWasConnected = false;
+  uint64_t expanderLastPublishedGeneration = 0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -747,47 +753,65 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead, std::memory_order_relaxed);
   impl->uiSampleDurationSeconds.store(frame.sampleDuration, std::memory_order_relaxed);
   impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
-  if (rightExpander.module) {
-    auto *msg = reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
-    if (msg) {
-      uint32_t flags = 0;
-      if (frame.sampleMode) {
-        flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;
+  bool expanderConnected = rightExpander.module && rightExpander.module->leftExpander.producerMessage;
+  if (expanderConnected) {
+    bool justConnected = !impl->expanderWasConnected;
+    bool generationChanged = impl->engine.bufferGeneration != impl->expanderLastPublishedGeneration;
+    impl->expanderPublishTimerSec += args.sampleTime;
+    bool timerElapsed = impl->expanderPublishTimerSec >= kExpanderPublishIntervalSec;
+    bool shouldPublish = justConnected || generationChanged || timerElapsed;
+    if (shouldPublish) {
+      if (timerElapsed) {
+        impl->expanderPublishTimerSec = std::fmod(impl->expanderPublishTimerSec, kExpanderPublishIntervalSec);
+      } else {
+        impl->expanderPublishTimerSec = 0.f;
       }
-      if (frame.sampleLoaded) {
-        flags |= temporaldeck_expander::FLAG_SAMPLE_LOADED;
-      }
-      if (frame.sampleTransportPlaying) {
-        flags |= temporaldeck_expander::FLAG_SAMPLE_PLAYING;
-      }
-      if (impl->sampleLoopEnabled.load(std::memory_order_relaxed)) {
-        flags |= temporaldeck_expander::FLAG_SAMPLE_LOOP;
-      }
-      if (freezeActive) {
-        flags |= temporaldeck_expander::FLAG_FREEZE;
-      }
-      if (impl->transportControl.reverseLatched) {
-        flags |= temporaldeck_expander::FLAG_REVERSE;
-      }
-      if (impl->transportControl.slipLatched) {
-        flags |= temporaldeck_expander::FLAG_SLIP;
-      }
-      if (impl->engine.preview.filledBins > 0) {
-        flags |= temporaldeck_expander::FLAG_PREVIEW_VALID;
-      }
-      if (impl->engine.buffer.monoStorage) {
-        flags |= temporaldeck_expander::FLAG_MONO_BUFFER;
-      }
+      auto *msg =
+        reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
+      if (msg) {
+        uint32_t flags = 0;
+        if (frame.sampleMode) {
+          flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;
+        }
+        if (frame.sampleLoaded) {
+          flags |= temporaldeck_expander::FLAG_SAMPLE_LOADED;
+        }
+        if (frame.sampleTransportPlaying) {
+          flags |= temporaldeck_expander::FLAG_SAMPLE_PLAYING;
+        }
+        if (impl->sampleLoopEnabled.load(std::memory_order_relaxed)) {
+          flags |= temporaldeck_expander::FLAG_SAMPLE_LOOP;
+        }
+        if (freezeActive) {
+          flags |= temporaldeck_expander::FLAG_FREEZE;
+        }
+        if (impl->transportControl.reverseLatched) {
+          flags |= temporaldeck_expander::FLAG_REVERSE;
+        }
+        if (impl->transportControl.slipLatched) {
+          flags |= temporaldeck_expander::FLAG_SLIP;
+        }
+        if (impl->engine.preview.filledBins > 0) {
+          flags |= temporaldeck_expander::FLAG_PREVIEW_VALID;
+        }
+        if (impl->engine.buffer.monoStorage) {
+          flags |= temporaldeck_expander::FLAG_MONO_BUFFER;
+        }
 
-      impl->expanderPublishSeq++;
-      temporaldeck_expander::populateHostMessage(
-        msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, float(frame.lag),
-        float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
-        float(frame.sampleProgress), uint32_t(std::max(0, impl->engine.buffer.size)),
-        uint32_t(std::max(0, impl->engine.buffer.filled)), impl->engine.preview);
-      rightExpander.module->leftExpander.messageFlipRequested = true;
+        impl->expanderPublishSeq++;
+        temporaldeck_expander::populateHostMessage(
+          msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, float(frame.lag),
+          float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
+          float(frame.sampleProgress), uint32_t(std::max(0, impl->engine.buffer.size)),
+          uint32_t(std::max(0, impl->engine.buffer.filled)), impl->engine.preview);
+        rightExpander.module->leftExpander.messageFlipRequested = true;
+        impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
+      }
     }
+  } else {
+    impl->expanderPublishTimerSec = 0.f;
   }
+  impl->expanderWasConnected = expanderConnected;
 
   impl->sampleModeEnabled.store(impl->engine.sampleModeEnabled, std::memory_order_relaxed);
   impl->uiPublishTimerSec += args.sampleTime;

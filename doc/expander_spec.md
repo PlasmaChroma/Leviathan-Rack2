@@ -178,12 +178,22 @@ samplesPerBin = bufferCapacityFrames / PREVIEW_BIN_COUNT;
 
 The expander renders:
 
-> **A viewport over a circular history of preview bins**
+> **A vertical timeline viewport over preview bins centered on read-head time**
 
 Not:
 
 * raw audio
 * sample-accurate waveform
+
+### 4.1.1 Orientation (required)
+
+* **Top = backward in time** (older than read head)
+* **Bottom = forward in time** (newer / closer to NOW)
+* **Center = read-head anchor**
+
+Waveform bars are drawn as **horizontal amplitude bars** per timeline row.
+Amplitude is visualized left/right from centerline (or full-width fill by style),
+while time advances vertically.
 
 ---
 
@@ -221,8 +231,8 @@ Action:
 ## 5.1 Overview Mode (default)
 
 * fixed window anchored to recent history
-* marker moves within waveform
-* waveform mostly stable
+* read-head remains at center indicator
+* waveform rows scroll relative to read-head lag evolution
 
 ---
 
@@ -253,7 +263,30 @@ Option A (recommended):
 
 # 6. View Mapping
 
-## 6.1 Convert lag → normalized position
+## 6.1 Time Window Around Read Head
+
+Target window:
+
+* `900 ms` before center (older / upward)
+* `900 ms` after center (forward / downward)
+
+### Live-mode forward clamp
+
+In live mode, forward time from the read head is limited by distance to NOW:
+
+```cpp
+availableForwardMs = (lagSamples / sampleRate) * 1000.0f;
+forwardWindowMs = min(900.0f, availableForwardMs);
+```
+
+Backward window remains target `900 ms` unless bounded by available history.
+
+If forward window is clamped, lower rows with no timeline coverage render as
+empty/quiet background (not wrapped).
+
+---
+
+## 6.2 Convert lag → normalized/bin position
 
 ```cpp
 normalized = lagSamples / accessibleLagSamples;
@@ -267,7 +300,7 @@ normalized ∈ [0, 1]
 
 ---
 
-## 6.2 Convert to preview bin index
+## 6.3 Convert to preview bin index
 
 ```cpp
 binPos = normalized * previewFilledBins;
@@ -281,18 +314,18 @@ startIndex = (previewWriteIndex - previewFilledBins + binPos) mod BIN_COUNT;
 
 ---
 
-## 6.3 Screen mapping
+## 6.4 Screen mapping (vertical timeline)
 
-For each pixel column:
+For each pixel row:
 
 ```cpp
-binsPerPixel = visibleBins / widgetWidth
+binsPerPixel = visibleBins / widgetHeight
 
-for each column:
+for each row:
     gather bins in range
     min = min(all mins)
     max = max(all maxes)
-    draw vertical line
+    draw horizontal amplitude bar
 ```
 
 ---
@@ -301,12 +334,12 @@ for each column:
 
 ## 7.1 Waveform
 
-* vertical min/max bars OR filled band
+* horizontal min/max bars OR filled horizontal band
 * mono only (v1)
 
 ## 7.2 Markers
 
-* read/playhead marker (primary)
+* read/playhead marker (primary): **bright purple horizontal center line**
 * optional:
 
   * NOW marker
@@ -345,7 +378,7 @@ Must ensure:
 
 * no scanning raw buffer in UI
 * no per-frame allocation
-* bounded cost ~O(widget width)
+* bounded cost ~O(widget height)
 * stable under:
 
   * continuous live input

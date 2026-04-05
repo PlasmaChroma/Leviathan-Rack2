@@ -108,6 +108,17 @@ struct PreviewAccumulator {
     filledBins = std::min(filledBins + 1u, PREVIEW_BIN_COUNT);
     samplesInCurrentBin = 0;
   }
+
+  void finalizePartialBin() {
+    if (samplesInCurrentBin == 0) {
+      return;
+    }
+    bins[writeIndex].min = currentMin;
+    bins[writeIndex].max = currentMax;
+    writeIndex = (writeIndex + 1u) % PREVIEW_BIN_COUNT;
+    filledBins = std::min(filledBins + 1u, PREVIEW_BIN_COUNT);
+    samplesInCurrentBin = 0;
+  }
 };
 
 inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_t bufferGeneration, uint32_t flags,

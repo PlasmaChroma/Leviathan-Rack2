@@ -553,8 +553,22 @@ struct TemporalDeckEngine {
   temporaldeck_expander::PreviewAccumulator preview;
   uint64_t bufferGeneration = 1;
 
-  void resetPreviewAccumulator() {
-    preview.reset(uint32_t(std::max(1, buffer.size)));
+  void resetPreviewAccumulator(uint32_t capacityFrames = 0u) {
+    uint32_t effectiveCapacity = capacityFrames > 0u ? capacityFrames : uint32_t(std::max(1, buffer.size));
+    preview.reset(effectiveCapacity);
+  }
+
+  void rebuildPreviewFromCurrentSample() {
+    resetPreviewAccumulator(uint32_t(std::max(1, sampleFrames)));
+    if (!sampleLoaded || sampleFrames <= 0 || buffer.size <= 0) {
+      return;
+    }
+    for (int i = 0; i < sampleFrames; ++i) {
+      float l = buffer.left[i];
+      float r = buffer.rightSample(i);
+      preview.pushMonoSample(0.5f * (l + r));
+    }
+    preview.finalizePartialBin();
   }
 
   void bumpBufferGeneration() {
@@ -1502,6 +1516,7 @@ struct TemporalDeckEngine {
         buffer.right[i] = r;
       }
     }
+    rebuildPreviewFromCurrentSample();
   }
 
   void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool autoplay,
@@ -1534,7 +1549,7 @@ struct TemporalDeckEngine {
     sampleFrames = std::max(0, std::min(frames, buffer.size));
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
-    resetPreviewAccumulator();
+    rebuildPreviewFromCurrentSample();
     bumpBufferGeneration();
   }
 

@@ -53,7 +53,7 @@
         "Visualizer",
         "Expander"
       ],
-      "hidden": true
+      "hidden": false
     }
   ]
 }
