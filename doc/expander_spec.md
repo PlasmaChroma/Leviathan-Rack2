@@ -330,6 +330,36 @@ for each row:
 
 ---
 
+## 6.5 Waveform stability notes ("dancing peaks")
+
+Observed issue:
+- peak heights can appear to change while waveform scrolls, even with steady
+  source audio.
+
+Primary cause:
+- time-to-pixel mapping aliasing (row/bin alignment drift), not just missing
+  source data.
+
+Implemented stabilization path:
+- Host-side scope bins anchored to a global lag grid in
+  `buildScopeWindowBins()` (`src/TemporalDeck.cpp`) so bin boundaries do not
+  phase-drift each publish.
+- TD.Scope rows map by absolute lag coordinates using expander metadata
+  (`lagSamples`, `scopeStartLagSamples`, `scopeBinSpanSamples`) in
+  `src/TDScope.cpp`.
+- Per-row rendering uses small interval supersampling
+  (`kRowSupersampleTaps = 3`) and combines envelopes with `min(min)` /
+  `max(max)` so peak extent remains stable.
+
+Practical tuning order:
+- Raise `kRowSupersampleTaps` first if more stability is needed.
+- Raise host extraction density (`kScopeEvaluationBudgetPerPublish`) only after
+  mapper/supersample tuning; this can increase host CPU.
+- Avoid temporal smoothing for this specific issue; it tends to reduce
+  responsiveness and can make visuals fuzzy/blocky.
+
+---
+
 # 7. Rendering Strategy
 
 ## 7.1 Waveform

@@ -90,18 +90,27 @@ static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
 
 static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
-                                       double lagSamples) {
+                                       bool sampleLoopEnabled, double lagSamples) {
   if (engine.buffer.size <= 0) {
     return 0.f;
   }
   double pos = newestPos - lagSamples;
   int idx = 0;
   if (sampleMode) {
-    int maxIndex = std::max(0, engine.sampleFrames - 1);
+    int maxIndex = std::max(0, std::min(engine.sampleFrames - 1, int(std::floor(std::max(0.0, newestPos)))));
     if (maxIndex <= 0) {
       idx = 0;
     } else {
-      idx = int(std::lround(pos));
+      if (sampleLoopEnabled) {
+        double length = std::max(1.0, double(maxIndex) + 1.0);
+        double wrappedPos = std::fmod(pos, length);
+        if (wrappedPos < 0.0) {
+          wrappedPos += length;
+        }
+        idx = int(std::lround(wrappedPos));
+      } else {
+        idx = int(std::lround(pos));
+      }
       idx = std::max(0, std::min(maxIndex, idx));
     }
   } else {
@@ -114,7 +123,8 @@ static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double 
 }
 
 static uint32_t buildScopeWindowBins(
-  const TemporalDeckEngine &engine, bool sampleMode, float sampleRate, float lagSamples, float accessibleLagSamples,
+  const TemporalDeckEngine &engine, bool sampleMode, bool sampleLoopEnabled, float sampleRate, float lagSamples,
+  float accessibleLagSamples,
   std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut,
   float *scopeStartLagSamplesOut, float *scopeBinSpanSamplesOut) {
   if (!binsOut) {
@@ -149,7 +159,7 @@ static uint32_t buildScopeWindowBins(
     *scopeBinSpanSamplesOut = binSpanSamples;
   }
 
-  double newestPos = engine.newestReadablePos();
+  double newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples)) : engine.newestReadablePos();
   float minLagSamples = 0.f;
   float maxLagSamples = std::max(0.f, accessibleLagSamples);
   uint32_t validCount = 0u;
@@ -157,10 +167,19 @@ static uint32_t buildScopeWindowBins(
   for (uint32_t i = 0; i < binCount; ++i) {
     float lagHigh = scopeStartLagSamples - float(i) * binSpanSamples;
     float lagLow = lagHigh - binSpanSamples;
-    float overlapLow = std::max(minLagSamples, std::min(lagLow, lagHigh));
-    float overlapHigh = std::min(maxLagSamples, std::max(lagLow, lagHigh));
-    if (overlapHigh < overlapLow) {
-      continue;
+    float overlapLow = 0.f;
+    float overlapHigh = 0.f;
+    if (sampleMode && sampleLoopEnabled && maxLagSamples > 0.f) {
+      // In sample loop mode, window coverage wraps around the sample bounds.
+      // Do not clip to [0, maxLag] so bins near boundaries still render.
+      overlapLow = std::min(lagLow, lagHigh);
+      overlapHigh = std::max(lagLow, lagHigh);
+    } else {
+      overlapLow = std::max(minLagSamples, std::min(lagLow, lagHigh));
+      overlapHigh = std::min(maxLagSamples, std::max(lagLow, lagHigh));
+      if (overlapHigh < overlapLow) {
+        continue;
+      }
     }
 
     int firstLag = int(std::floor(overlapLow));
@@ -177,7 +196,7 @@ static uint32_t buildScopeWindowBins(
       if (lag == lastAccumulatedLag) {
         return;
       }
-      float mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, double(lag));
+      float mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, sampleLoopEnabled, double(lag));
       if (!hasData) {
         minMono = mono;
         maxMono = mono;
@@ -209,7 +228,10 @@ static uint32_t buildScopeWindowBins(
     validCount++;
   }
 
-  return validCount;
+  // Preserve timeline indexing across the full window (including intentionally
+  // empty bins near clamped edges). Returning only validCount can truncate the
+  // tail and hide forward look-ahead at sample boundaries.
+  return validCount > 0u ? binCount : 0u;
 }
 
 static std::string normalizePathForPrefixCompare(std::string path) {
@@ -899,9 +921,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBins;
         float scopeStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
-        uint32_t scopeBinCount = buildScopeWindowBins(impl->engine, frame.sampleMode, impl->cachedSampleRate,
-                                                      float(frame.lag), float(frame.accessibleLag), &scopeBins,
-                                                      &scopeStartLagSamples, &scopeBinSpanSamples);
+        uint32_t scopeBinCount = buildScopeWindowBins(
+          impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
+          float(frame.lag), float(frame.accessibleLag), &scopeBins, &scopeStartLagSamples, &scopeBinSpanSamples);
         uint32_t flags = 0;
         if (frame.sampleMode) {
           flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;

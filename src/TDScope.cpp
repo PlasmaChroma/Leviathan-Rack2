@@ -66,7 +66,7 @@ static bool loadRectFromSvgMm(const std::string &svgPath, const std::string &rec
 
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
-  enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_COUNT };
+  enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
   temporaldeck_expander::HostToDisplay uiSnapshot;
@@ -95,6 +95,8 @@ struct TDScope final : Module {
         return 10.f;
       case SCOPE_RANGE_2V5:
         return 2.5f;
+      case SCOPE_RANGE_AUTO:
+        return 5.f;
       case SCOPE_RANGE_5V:
       default:
         return 5.f;
@@ -182,6 +184,8 @@ struct TDScope final : Module {
 
 struct TDScopeDisplayWidget final : Widget {
   TDScope *module = nullptr;
+  float autoDisplayFullScaleVolts = 5.f;
+  bool autoDisplayScaleInitialized = false;
 
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
@@ -201,7 +205,7 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
-    const float yInset = 2.f;
+    const float yInset = 0.75f;
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
@@ -211,6 +215,36 @@ struct TDScopeDisplayWidget final : Widget {
     const float ampHalfWidth = box.size.x * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
+    if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
+      int peakQ = 0;
+      for (uint32_t i = 0; i < scopeBinCount; ++i) {
+        const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+        if (!temporaldeck_expander::isScopeBinValid(bin)) {
+          continue;
+        }
+        peakQ = std::max(peakQ, int(std::abs(int(bin.min))));
+        peakQ = std::max(peakQ, int(std::abs(int(bin.max))));
+      }
+      float peakVolts = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+      float targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+      if (!autoDisplayScaleInitialized) {
+        autoDisplayFullScaleVolts = targetFullScaleVolts;
+        autoDisplayScaleInitialized = true;
+      } else {
+        // Smooth autoscale transitions: expand quickly to avoid clipping spikes,
+        // contract slowly to prevent visible snapping/pumping.
+        float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
+        if (std::fabs(delta) > 1e-4f) {
+          constexpr float kAutoScaleAttackAlpha = 0.16f;
+          constexpr float kAutoScaleReleaseAlpha = 0.08f;
+          float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
+          autoDisplayFullScaleVolts += delta * alpha;
+        }
+      }
+      displayFullScaleVolts = autoDisplayFullScaleVolts;
+    } else {
+      autoDisplayScaleInitialized = false;
+    }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
     float windowTopLag = msg.lagSamples + halfWindowSamples;
@@ -219,6 +253,7 @@ struct TDScopeDisplayWidget final : Widget {
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
     std::vector<float> rowX0(size_t(rowCount), centerX);
     std::vector<float> rowX1(size_t(rowCount), centerX);
+    std::vector<float> rowIntensity(size_t(rowCount), 0.f);
     std::vector<uint8_t> rowValid(size_t(rowCount), 0u);
 
     auto decodeScopeBin = [&](const temporaldeck_expander::ScopeBin &bin, float *minNorm, float *maxNorm) {
@@ -226,16 +261,13 @@ struct TDScopeDisplayWidget final : Widget {
       *maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
     };
 
-    for (int iy = 0; iy < rowCount; ++iy) {
-      float y = drawTop + float(iy) + 0.5f;
-      float t = clamp((y - drawTop) / yDen, 0.f, 1.f);
-      float lagAtRow = windowTopLag + (windowBottomLag - windowTopLag) * t;
-      float binPos = (msg.scopeStartLagSamples - lagAtRow) / scopeBinSpanSamples;
-      uint32_t binIndex0 = uint32_t(std::floor(binPos));
+    auto sampleEnvelopeAtT = [&](float t, float *minNormOut, float *maxNormOut) -> bool {
+      float lag = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t, 0.f, 1.f);
+      float binPos = (msg.scopeStartLagSamples - lag) / scopeBinSpanSamples;
       if (binPos < 0.f || binPos > float(scopeBinCount - 1u)) {
-        continue;
+        return false;
       }
-      binIndex0 = std::min(binIndex0, scopeBinCount - 1u);
+      uint32_t binIndex0 = std::min(uint32_t(std::floor(binPos)), scopeBinCount - 1u);
       uint32_t binIndex1 = std::min(binIndex0 + 1u, scopeBinCount - 1u);
       float binFrac = clamp(binPos - float(binIndex0), 0.f, 1.f);
 
@@ -244,7 +276,7 @@ struct TDScopeDisplayWidget final : Widget {
       bool valid0 = temporaldeck_expander::isScopeBinValid(bin0);
       bool valid1 = temporaldeck_expander::isScopeBinValid(bin1);
       if (!valid0 && !valid1) {
-        continue;
+        return false;
       }
 
       float minNorm = 0.f;
@@ -256,8 +288,6 @@ struct TDScopeDisplayWidget final : Widget {
         float maxNorm1 = 0.f;
         decodeScopeBin(bin0, &minNorm0, &maxNorm0);
         decodeScopeBin(bin1, &minNorm1, &maxNorm1);
-        // Preserve envelope height while sliding between bins to avoid
-        // apparent peak shrink/expand ("dancing peaks").
         if (binFrac <= 0.001f) {
           minNorm = minNorm0;
           maxNorm = maxNorm0;
@@ -273,25 +303,75 @@ struct TDScopeDisplayWidget final : Widget {
       } else {
         decodeScopeBin(bin1, &minNorm, &maxNorm);
       }
+      *minNormOut = minNorm;
+      *maxNormOut = maxNorm;
+      return true;
+    };
 
-      float x0 = centerX + minNorm * ampHalfWidth;
-      float x1 = centerX + maxNorm * ampHalfWidth;
+    for (int iy = 0; iy < rowCount; ++iy) {
+      float y = drawTop + float(iy) + 0.5f;
+      float t0 = clamp((y - drawTop - 0.5f) / yDen, 0.f, 1.f);
+      float t1 = clamp((y - drawTop + 0.5f) / yDen, 0.f, 1.f);
+      float rowMinNorm = 0.f;
+      float rowMaxNorm = 0.f;
+      bool rowHasData = false;
+      constexpr int kRowSupersampleTaps = 3;
+      for (int tap = 0; tap < kRowSupersampleTaps; ++tap) {
+        float frac = (float(tap) + 0.5f) / float(kRowSupersampleTaps);
+        float t = t0 + (t1 - t0) * frac;
+        float sampleMinNorm = 0.f;
+        float sampleMaxNorm = 0.f;
+        if (!sampleEnvelopeAtT(t, &sampleMinNorm, &sampleMaxNorm)) {
+          continue;
+        }
+        if (!rowHasData) {
+          rowMinNorm = sampleMinNorm;
+          rowMaxNorm = sampleMaxNorm;
+          rowHasData = true;
+        } else {
+          rowMinNorm = std::min(rowMinNorm, sampleMinNorm);
+          rowMaxNorm = std::max(rowMaxNorm, sampleMaxNorm);
+        }
+      }
+      if (!rowHasData) {
+        continue;
+      }
+
+      float x0 = centerX + rowMinNorm * ampHalfWidth;
+      float x1 = centerX + rowMaxNorm * ampHalfWidth;
       if (x1 < x0) {
         std::swap(x0, x1);
       }
       rowX0[size_t(iy)] = x0;
       rowX1[size_t(iy)] = x1;
+      float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
+      float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
+      rowIntensity[size_t(iy)] = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
       rowValid[size_t(iy)] = 1u;
     }
 
-    NVGcolor waveColor = nvgRGBA(114, 216, 255, 210);
-    NVGcolor connectColor = nvgRGBA(114, 216, 255, 150);
+    auto gradientColorForIntensity = [](float intensity, uint8_t alpha) -> NVGcolor {
+      intensity = clamp(intensity, 0.f, 1.f);
+      // Inverted mapping: low intensity -> purple, high intensity -> cyan.
+      constexpr float lowR = 122.f; // #7a5cff (TD.Scope title gradient stop)
+      constexpr float lowG = 92.f;
+      constexpr float lowB = 255.f;
+      constexpr float highR = 28.f; // #1cccd9 (TD.Scope title gradient stop)
+      constexpr float highG = 204.f;
+      constexpr float highB = 217.f;
+      uint8_t r = uint8_t(std::lround(lowR + (highR - lowR) * intensity));
+      uint8_t g = uint8_t(std::lround(lowG + (highG - lowG) * intensity));
+      uint8_t b = uint8_t(std::lround(lowB + (highB - lowB) * intensity));
+      return nvgRGBA(r, g, b, alpha);
+    };
+
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
     bool prevDrawn = false;
     float prevX0 = centerX;
     float prevX1 = centerX;
     float prevY = drawTop + 0.5f;
+    float prevIntensity = 0.f;
     for (int iy = 0; iy < rowCount; ++iy) {
       if (!rowValid[size_t(iy)]) {
         continue;
@@ -300,20 +380,22 @@ struct TDScopeDisplayWidget final : Widget {
       float y = drawTop + float(iy) + 0.5f;
       float x0 = rowX0[size_t(iy)];
       float x1 = rowX1[size_t(iy)];
+      float intensity = rowIntensity[size_t(iy)];
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, x0, y);
       nvgLineTo(args.vg, x1, y);
-      nvgStrokeColor(args.vg, waveColor);
+      nvgStrokeColor(args.vg, gradientColorForIntensity(intensity, 210));
       nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
 
       if (prevDrawn) {
+        float connectIntensity = 0.5f * (prevIntensity + intensity);
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, prevX0, prevY);
         nvgLineTo(args.vg, x0, y);
         nvgMoveTo(args.vg, prevX1, prevY);
         nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, connectColor);
+        nvgStrokeColor(args.vg, gradientColorForIntensity(connectIntensity, 150));
         nvgStrokeWidth(args.vg, 0.75f);
         nvgStroke(args.vg);
       }
@@ -321,6 +403,7 @@ struct TDScopeDisplayWidget final : Widget {
       prevX0 = x0;
       prevX1 = x1;
       prevY = y;
+      prevIntensity = intensity;
     }
 
     nvgBeginPath(args.vg);
@@ -396,6 +479,10 @@ struct TDScopeWidget : ModuleWidget {
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Scope Range"));
+    menu->addChild(createCheckMenuItem(
+      "Auto (window peak)", "",
+      [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO; },
+      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_AUTO; }));
     menu->addChild(createCheckMenuItem(
       "+/-2.5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_2V5; },
       [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_2V5; }));
