@@ -87,6 +87,7 @@ static constexpr float kExpanderPublishRateHz = 60.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
+static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
 
 static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
                                        double lagSamples) {
@@ -131,6 +132,10 @@ static uint32_t buildScopeWindowBins(
   float halfWindowSamples = sr * kScopeHalfWindowSeconds;
   float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
   float binSpanSamples = totalWindowSamples / float(binCount);
+  int totalWindowSamplesInt = std::max(1, int(std::ceil(totalWindowSamples)));
+  // UI envelope extraction only needs an approximate min/max to look stable.
+  // Bound worst-case work per publish to reduce host CPU when scope is attached.
+  int scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
   float scopeStartLagSamples = lagSamples + halfWindowSamples;
   if (scopeStartLagSamplesOut) {
     *scopeStartLagSamplesOut = scopeStartLagSamples;
@@ -162,7 +167,7 @@ static uint32_t buildScopeWindowBins(
     bool hasData = false;
     float minMono = 0.f;
     float maxMono = 0.f;
-    for (int lag = firstLag; lag <= lastLag; ++lag) {
+    for (int lag = firstLag; lag <= lastLag; lag += scopeStride) {
       float mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, double(lag));
       if (!hasData) {
         minMono = mono;
@@ -171,6 +176,18 @@ static uint32_t buildScopeWindowBins(
       } else {
         minMono = std::min(minMono, mono);
         maxMono = std::max(maxMono, mono);
+      }
+    }
+    if (!hasData || lastLag != firstLag) {
+      // Ensure bin edge is always considered even when stride skips it.
+      float edgeMono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, double(lastLag));
+      if (!hasData) {
+        minMono = edgeMono;
+        maxMono = edgeMono;
+        hasData = true;
+      } else {
+        minMono = std::min(minMono, edgeMono);
+        maxMono = std::max(maxMono, edgeMono);
       }
     }
 
@@ -410,6 +427,7 @@ struct TemporalDeck::Impl {
   uint64_t expanderPublishSeq = 0;
   float expanderPublishTimerSec = 0.f;
   bool expanderWasConnected = false;
+  bool expanderPreviewValid = false;
   uint64_t expanderLastPublishedGeneration = 0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
@@ -899,7 +917,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
         if (impl->transportControl.slipLatched) {
           flags |= temporaldeck_expander::FLAG_SLIP;
         }
-        if (scopeBinCount > 0u) {
+        bool scopeReady = scopeBinCount > 0u;
+        if (scopeReady) {
           flags |= temporaldeck_expander::FLAG_PREVIEW_VALID;
         }
         if (impl->engine.buffer.monoStorage) {
@@ -915,12 +934,19 @@ void TemporalDeck::process(const ProcessArgs &args) {
           scopeBinSpanSamples, scopeBinCount, scopeBins.data());
         rightExpander.module->leftExpander.messageFlipRequested = true;
         impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
+        impl->expanderPreviewValid = scopeReady;
+      } else {
+        impl->expanderPreviewValid = false;
       }
     }
   } else {
     impl->expanderPublishTimerSec = 0.f;
+    impl->expanderPreviewValid = false;
   }
   impl->expanderWasConnected = expanderConnected;
+  bool expanderReady = expanderConnected && impl->expanderPreviewValid;
+  lights[EXPANDER_LINK_LIGHT].setBrightness(expanderConnected && !expanderReady ? 1.f : 0.f);
+  lights[EXPANDER_READY_LIGHT].setBrightness(expanderReady ? 1.f : 0.f);
 
   impl->sampleModeEnabled.store(impl->engine.sampleModeEnabled, std::memory_order_relaxed);
   impl->uiPublishTimerSec += args.sampleTime;

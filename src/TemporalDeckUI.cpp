@@ -3203,6 +3203,10 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.8, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(33.2, 95.3)), module, TemporalDeck::SLIP_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.6, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(
+      createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_LINK_LIGHT));
+    addChild(
+      createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_READY_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;

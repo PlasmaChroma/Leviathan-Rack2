@@ -9,6 +9,7 @@
 #include <fstream>
 #include <regex>
 #include <sstream>
+#include <vector>
 
 namespace {
 
@@ -163,8 +164,9 @@ struct TDScope final : Module {
       publishSnapshotToUi(*latestMsg);
     }
 
-    lights[LINK_LIGHT].setBrightness(linkActive ? 1.f : 0.f);
-    lights[PREVIEW_LIGHT].setBrightness(linkActive && previewValid ? 1.f : 0.f);
+    bool ready = linkActive && previewValid;
+    lights[LINK_LIGHT].setBrightness(linkActive && !ready ? 1.f : 0.f);
+    lights[PREVIEW_LIGHT].setBrightness(ready ? 1.f : 0.f);
   }
 };
 
@@ -206,32 +208,88 @@ struct TDScopeDisplayWidget final : Widget {
     const float yDen = std::max(box.size.y - 1.f, 1.f);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
+    const int rowCount = std::max(1, int(std::ceil(box.size.y)));
+    std::vector<float> rowX0(size_t(rowCount), centerX);
+    std::vector<float> rowX1(size_t(rowCount), centerX);
+    std::vector<uint8_t> rowValid(size_t(rowCount), 0u);
 
-    for (int iy = 0; iy < int(std::ceil(box.size.y)); ++iy) {
+    auto decodeScopeBin = [&](const temporaldeck_expander::ScopeBin &bin, float *minNorm, float *maxNorm) {
+      *minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
+      *maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
+    };
+
+    for (int iy = 0; iy < rowCount; ++iy) {
       float y = float(iy) + 0.5f;
       float t = clamp(y / yDen, 0.f, 1.f);
-      uint32_t binIndex = uint32_t(std::lround(t * float(scopeBinCount - 1u)));
-      binIndex = std::min(binIndex, scopeBinCount - 1u);
+      float binPos = t * float(scopeBinCount - 1u);
+      uint32_t binIndex0 = uint32_t(std::floor(binPos));
+      binIndex0 = std::min(binIndex0, scopeBinCount - 1u);
+      uint32_t binIndex1 = std::min(binIndex0 + 1u, scopeBinCount - 1u);
+      float binFrac = clamp(binPos - float(binIndex0), 0.f, 1.f);
 
-      const temporaldeck_expander::ScopeBin &bin = msg.scope[binIndex];
-      if (!temporaldeck_expander::isScopeBinValid(bin)) {
+      const temporaldeck_expander::ScopeBin &bin0 = msg.scope[binIndex0];
+      const temporaldeck_expander::ScopeBin &bin1 = msg.scope[binIndex1];
+      bool valid0 = temporaldeck_expander::isScopeBinValid(bin0);
+      bool valid1 = temporaldeck_expander::isScopeBinValid(bin1);
+      if (!valid0 && !valid1) {
         continue;
       }
 
-      float minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
-      float maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
+      float minNorm = 0.f;
+      float maxNorm = 0.f;
+      if (valid0 && valid1) {
+        float minNorm0 = 0.f;
+        float maxNorm0 = 0.f;
+        float minNorm1 = 0.f;
+        float maxNorm1 = 0.f;
+        decodeScopeBin(bin0, &minNorm0, &maxNorm0);
+        decodeScopeBin(bin1, &minNorm1, &maxNorm1);
+        minNorm = minNorm0 + (minNorm1 - minNorm0) * binFrac;
+        maxNorm = maxNorm0 + (maxNorm1 - maxNorm0) * binFrac;
+      } else if (valid0) {
+        decodeScopeBin(bin0, &minNorm, &maxNorm);
+      } else {
+        decodeScopeBin(bin1, &minNorm, &maxNorm);
+      }
+
       float x0 = centerX + minNorm * ampHalfWidth;
       float x1 = centerX + maxNorm * ampHalfWidth;
       if (x1 < x0) {
         std::swap(x0, x1);
       }
+      rowX0[size_t(iy)] = x0;
+      rowX1[size_t(iy)] = x1;
+      rowValid[size_t(iy)] = 1u;
+    }
 
+    NVGcolor waveColor = nvgRGBA(114, 216, 255, 210);
+    NVGcolor connectColor = nvgRGBA(114, 216, 255, 150);
+    for (int iy = 0; iy < rowCount; ++iy) {
+      if (!rowValid[size_t(iy)]) {
+        continue;
+      }
+      float y = float(iy) + 0.5f;
+      float x0 = rowX0[size_t(iy)];
+      float x1 = rowX1[size_t(iy)];
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, x0, y);
       nvgLineTo(args.vg, x1, y);
-      nvgStrokeColor(args.vg, nvgRGBA(114, 216, 255, 210));
+      nvgStrokeColor(args.vg, waveColor);
       nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
+
+      int prev = iy - 1;
+      if (prev >= 0 && rowValid[size_t(prev)]) {
+        float prevY = float(prev) + 0.5f;
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, rowX0[size_t(prev)], prevY);
+        nvgLineTo(args.vg, x0, y);
+        nvgMoveTo(args.vg, rowX1[size_t(prev)], prevY);
+        nvgLineTo(args.vg, x1, y);
+        nvgStrokeColor(args.vg, connectColor);
+        nvgStrokeWidth(args.vg, 0.75f);
+        nvgStroke(args.vg);
+      }
     }
 
     nvgBeginPath(args.vg);
@@ -261,8 +319,8 @@ struct TDScopeWidget : ModuleWidget {
     }
     addChild(display);
 
-    addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(4.5f, 8.0f)), module, TDScope::LINK_LIGHT));
-    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(4.5f, 13.0f)), module, TDScope::PREVIEW_LIGHT));
+    addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
+    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
   }
 
   void appendContextMenu(Menu *menu) override {

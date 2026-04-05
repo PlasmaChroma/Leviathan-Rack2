@@ -90,6 +90,8 @@ struct TemporalDeck final : Module {
     SLIP_SLOW_LIGHT,
     SLIP_LIGHT,
     SLIP_FAST_LIGHT,
+    EXPANDER_LINK_LIGHT,
+    EXPANDER_READY_LIGHT,
     ARC_LIGHT_START,
     ARC_MAX_LIGHT_START = ARC_LIGHT_START + kArcLightCount,
     LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount
