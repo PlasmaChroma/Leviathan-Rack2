@@ -90,6 +90,12 @@ struct PreviewAccumulator {
   int16_t currentMin = 0;
   int16_t currentMax = 0;
 
+  // Tiered max tracking for rolling peak efficiency
+  static constexpr uint32_t BINS_PER_BLOCK = 64;
+  static constexpr uint32_t BLOCK_COUNT = PREVIEW_BIN_COUNT / BINS_PER_BLOCK;
+  std::array<int16_t, BLOCK_COUNT> blockMaxes;
+  int16_t globalMaxQ = 0;
+
   void reset(uint32_t bufferCapacityFrames) {
     writeIndex = 0;
     filledBins = 0;
@@ -101,6 +107,8 @@ struct PreviewAccumulator {
       bins[i].min = 0;
       bins[i].max = 0;
     }
+    blockMaxes.fill(0);
+    globalMaxQ = 0;
   }
 
   void pushMonoSample(float monoVolts) {
@@ -116,37 +124,66 @@ struct PreviewAccumulator {
     if (samplesInCurrentBin < samplesPerBin) {
       return;
     }
-    bins[writeIndex].min = currentMin;
-    bins[writeIndex].max = currentMax;
-    writeIndex = (writeIndex + 1u) % PREVIEW_BIN_COUNT;
-    filledBins = std::min(filledBins + 1u, PREVIEW_BIN_COUNT);
-    samplesInCurrentBin = 0;
+    finalizeCurrentBin();
   }
 
   void finalizePartialBin() {
     if (samplesInCurrentBin == 0) {
       return;
     }
+    finalizeCurrentBin();
+  }
+
+  void finalizeCurrentBin() {
+    int oldMin = int(bins[writeIndex].min);
+    int oldMax = int(bins[writeIndex].max);
+    int16_t oldBinMax = int16_t(std::max(std::abs(oldMin), std::abs(oldMax)));
+
     bins[writeIndex].min = currentMin;
     bins[writeIndex].max = currentMax;
+    int16_t newBinMax = int16_t(std::max(std::abs(int(currentMin)), std::abs(int(currentMax))));
+
+    uint32_t blockIdx = writeIndex / BINS_PER_BLOCK;
+    if (newBinMax >= blockMaxes[blockIdx]) {
+      blockMaxes[blockIdx] = newBinMax;
+    } else if (oldBinMax == blockMaxes[blockIdx]) {
+      // Old bin was the max of this block, re-scan block.
+      int16_t bm = 0;
+      uint32_t start = blockIdx * BINS_PER_BLOCK;
+      for (uint32_t i = 0; i < BINS_PER_BLOCK; ++i) {
+        const auto &bin = bins[start + i];
+        int16_t m = int16_t(std::max(std::abs(int(bin.min)), std::abs(int(bin.max))));
+        if (m > bm) bm = m;
+      }
+      blockMaxes[blockIdx] = bm;
+    }
+
+    // Refresh global max from blockMaxes if it might have changed.
+    if (blockMaxes[blockIdx] > globalMaxQ) {
+      globalMaxQ = blockMaxes[blockIdx];
+    } else if (oldBinMax == globalMaxQ) {
+      int16_t gm = 0;
+      for (int16_t bm : blockMaxes) {
+        if (bm > gm) gm = bm;
+      }
+      globalMaxQ = gm;
+    }
+
     writeIndex = (writeIndex + 1u) % PREVIEW_BIN_COUNT;
     filledBins = std::min(filledBins + 1u, PREVIEW_BIN_COUNT);
     samplesInCurrentBin = 0;
+    currentMin = 0;
+    currentMax = 0;
   }
 
   int16_t getAbsolutePeakQ() const {
-    int16_t q = 0;
-    // Current partial bin
+    int q = int(globalMaxQ);
+    // Include current partial bin
     if (samplesInCurrentBin > 0) {
-      q = std::max(q, int16_t(std::abs(int(currentMin))));
-      q = std::max(q, int16_t(std::abs(int(currentMax))));
+      q = std::max(q, std::abs(int(currentMin)));
+      q = std::max(q, std::abs(int(currentMax)));
     }
-    // All completed bins
-    for (uint32_t i = 0; i < filledBins; ++i) {
-      q = std::max(q, int16_t(std::abs(int(bins[i].min))));
-      q = std::max(q, int16_t(std::abs(int(bins[i].max))));
-    }
-    return q;
+    return int16_t(std::min(q, 32767));
   }
 };
 

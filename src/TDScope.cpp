@@ -242,7 +242,7 @@ struct TDScopeDisplayWidget final : Widget {
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
       float peakVolts = 0.f;
-      if (sampleMode && msg.sampleAbsolutePeakVolts > 0.f) {
+      if (msg.sampleAbsolutePeakVolts > 0.f) {
         peakVolts = msg.sampleAbsolutePeakVolts;
       } else {
         int peakQ = 0;

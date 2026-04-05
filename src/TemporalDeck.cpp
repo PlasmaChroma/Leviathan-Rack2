@@ -125,7 +125,7 @@ static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double 
 
 static uint32_t buildScopeWindowBins(
   const TemporalDeckEngine &engine, bool sampleMode, bool sampleLoopEnabled, float sampleRate, float lagSamples,
-  float accessibleLagSamples,
+  float accessibleLagSamples, double liveNewestPosOverride,
   std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut,
   float *scopeStartLagSamplesOut, float *scopeBinSpanSamplesOut) {
   if (!binsOut) {
@@ -179,7 +179,8 @@ static uint32_t buildScopeWindowBins(
     *scopeBinSpanSamplesOut = binSpanSamples;
   }
 
-  double newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples)) : engine.newestReadablePos();
+  double newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples))
+                                : (liveNewestPosOverride >= 0.0 ? liveNewestPosOverride : engine.newestReadablePos());
   float minLagSamples = 0.f;
   float maxLagSamples = std::max(0.f, accessibleLagSamples);
   uint32_t validCount = 0u;
@@ -489,6 +490,10 @@ struct TemporalDeck::Impl {
   bool expanderWasConnected = false;
   bool expanderPreviewValid = false;
   uint64_t expanderLastPublishedGeneration = 0;
+  bool expanderScopeLagHoldActive = false;
+  float expanderScopeLagHoldSamples = 0.f;
+  bool expanderScopeNewestPosHoldActive = false;
+  double expanderScopeNewestPosHold = 0.0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -949,12 +954,32 @@ void TemporalDeck::process(const ProcessArgs &args) {
       auto *msg =
         reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
       if (msg) {
+        bool holdPreviewLag =
+          !frame.sampleMode && platterInput.platterTouched && !platterInput.platterMotionActive && !platterInput.wheelScratchHeld;
+        float scopeLagForPreview = float(frame.lag);
+        if (holdPreviewLag) {
+          if (!impl->expanderScopeLagHoldActive) {
+            impl->expanderScopeLagHoldSamples = scopeLagForPreview;
+            impl->expanderScopeLagHoldActive = true;
+          }
+          scopeLagForPreview = impl->expanderScopeLagHoldSamples;
+          if (!impl->expanderScopeNewestPosHoldActive) {
+            impl->expanderScopeNewestPosHold = impl->engine.newestReadablePos();
+            impl->expanderScopeNewestPosHoldActive = true;
+          }
+        } else {
+          impl->expanderScopeLagHoldActive = false;
+          impl->expanderScopeNewestPosHoldActive = false;
+        }
+        double scopeLiveNewestPosOverride = impl->expanderScopeNewestPosHoldActive ? impl->expanderScopeNewestPosHold : -1.0;
+
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBins;
         float scopeStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
         uint32_t scopeBinCount = buildScopeWindowBins(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
-          float(frame.lag), float(frame.accessibleLag), &scopeBins, &scopeStartLagSamples, &scopeBinSpanSamples);
+          scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestPosOverride, &scopeBins, &scopeStartLagSamples,
+          &scopeBinSpanSamples);
         uint32_t flags = 0;
         if (frame.sampleMode) {
           flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;
@@ -987,9 +1012,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
         impl->expanderPublishSeq++;
         float sampleAbsolutePeakVolts =
-          (frame.sampleMode && frame.sampleLoaded) ? impl->engine.sampleAbsolutePeakVolts : 0.f;
+          (frame.sampleMode && frame.sampleLoaded) ? impl->engine.sampleAbsolutePeakVolts : impl->engine.getLiveAbsolutePeakVolts();
         temporaldeck_expander::populateHostMessage(
-          msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, float(frame.lag),
+          msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, scopeLagForPreview,
           float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
           float(frame.sampleProgress), sampleAbsolutePeakVolts, uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
@@ -1004,6 +1029,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   } else {
     impl->expanderPublishTimerSec = 0.f;
     impl->expanderPreviewValid = false;
+    impl->expanderScopeLagHoldActive = false;
+    impl->expanderScopeNewestPosHoldActive = false;
   }
   impl->expanderWasConnected = expanderConnected;
   bool expanderReady = expanderConnected && impl->expanderPreviewValid;

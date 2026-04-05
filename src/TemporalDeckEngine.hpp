@@ -1477,6 +1477,11 @@ struct TemporalDeckEngine {
             TemporalDeckBuffer::cubicSample(rightAt(i0), rightAt(i1), rightAt(i2), rightAt(i3), t)};
   }
 
+  float getLiveAbsolutePeakVolts() const {
+    int16_t q = preview.getAbsolutePeakQ();
+    return (float(q) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+  }
+
   std::pair<float, float> readLiveInterpolatedAt(double pos, int interpolationMode) const {
     if (interpolationMode == SCRATCH_INTERP_LAGRANGE6) {
       return buffer.readHighQuality(pos);
