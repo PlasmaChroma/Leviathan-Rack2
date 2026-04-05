@@ -137,6 +137,11 @@ static uint32_t buildScopeWindowBins(
   // Bound worst-case work per publish to reduce host CPU when scope is attached.
   int scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
   float scopeStartLagSamples = lagSamples + halfWindowSamples;
+  // Anchor bin boundaries to a global lag grid so the envelope sampling phase
+  // stays stable while the visible window moves.
+  if (binSpanSamples > 0.f) {
+    scopeStartLagSamples = std::ceil(scopeStartLagSamples / binSpanSamples) * binSpanSamples;
+  }
   if (scopeStartLagSamplesOut) {
     *scopeStartLagSamplesOut = scopeStartLagSamples;
   }
@@ -167,7 +172,11 @@ static uint32_t buildScopeWindowBins(
     bool hasData = false;
     float minMono = 0.f;
     float maxMono = 0.f;
-    for (int lag = firstLag; lag <= lastLag; lag += scopeStride) {
+    int lastAccumulatedLag = std::numeric_limits<int>::min();
+    auto accumulateLag = [&](int lag) {
+      if (lag == lastAccumulatedLag) {
+        return;
+      }
       float mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, double(lag));
       if (!hasData) {
         minMono = mono;
@@ -177,19 +186,17 @@ static uint32_t buildScopeWindowBins(
         minMono = std::min(minMono, mono);
         maxMono = std::max(maxMono, mono);
       }
+      lastAccumulatedLag = lag;
+    };
+
+    // Always include both bin edges, and sample interior points on a stable global lattice.
+    // This reduces visible peak jitter ("dancing peaks") when the scope window shifts.
+    accumulateLag(firstLag);
+    int alignedLag = ((firstLag + scopeStride - 1) / scopeStride) * scopeStride;
+    for (int lag = alignedLag; lag <= lastLag; lag += scopeStride) {
+      accumulateLag(lag);
     }
-    if (!hasData || lastLag != firstLag) {
-      // Ensure bin edge is always considered even when stride skips it.
-      float edgeMono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, double(lastLag));
-      if (!hasData) {
-        minMono = edgeMono;
-        maxMono = edgeMono;
-        hasData = true;
-      } else {
-        minMono = std::min(minMono, edgeMono);
-        maxMono = std::max(maxMono, edgeMono);
-      }
-    }
+    accumulateLag(lastLag);
 
     if (!hasData) {
       continue;

@@ -212,6 +212,10 @@ struct TDScopeDisplayWidget final : Widget {
     const float yDen = std::max(drawHeight - 1.f, 1.f);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
+    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
+    float windowTopLag = msg.lagSamples + halfWindowSamples;
+    float windowBottomLag = msg.lagSamples - halfWindowSamples;
+    float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
     std::vector<float> rowX0(size_t(rowCount), centerX);
     std::vector<float> rowX1(size_t(rowCount), centerX);
@@ -225,8 +229,12 @@ struct TDScopeDisplayWidget final : Widget {
     for (int iy = 0; iy < rowCount; ++iy) {
       float y = drawTop + float(iy) + 0.5f;
       float t = clamp((y - drawTop) / yDen, 0.f, 1.f);
-      float binPos = t * float(scopeBinCount - 1u);
+      float lagAtRow = windowTopLag + (windowBottomLag - windowTopLag) * t;
+      float binPos = (msg.scopeStartLagSamples - lagAtRow) / scopeBinSpanSamples;
       uint32_t binIndex0 = uint32_t(std::floor(binPos));
+      if (binPos < 0.f || binPos > float(scopeBinCount - 1u)) {
+        continue;
+      }
       binIndex0 = std::min(binIndex0, scopeBinCount - 1u);
       uint32_t binIndex1 = std::min(binIndex0 + 1u, scopeBinCount - 1u);
       float binFrac = clamp(binPos - float(binIndex0), 0.f, 1.f);
@@ -248,8 +256,18 @@ struct TDScopeDisplayWidget final : Widget {
         float maxNorm1 = 0.f;
         decodeScopeBin(bin0, &minNorm0, &maxNorm0);
         decodeScopeBin(bin1, &minNorm1, &maxNorm1);
-        minNorm = minNorm0 + (minNorm1 - minNorm0) * binFrac;
-        maxNorm = maxNorm0 + (maxNorm1 - maxNorm0) * binFrac;
+        // Preserve envelope height while sliding between bins to avoid
+        // apparent peak shrink/expand ("dancing peaks").
+        if (binFrac <= 0.001f) {
+          minNorm = minNorm0;
+          maxNorm = maxNorm0;
+        } else if (binFrac >= 0.999f) {
+          minNorm = minNorm1;
+          maxNorm = maxNorm1;
+        } else {
+          minNorm = std::min(minNorm0, minNorm1);
+          maxNorm = std::max(maxNorm0, maxNorm1);
+        }
       } else if (valid0) {
         decodeScopeBin(bin0, &minNorm, &maxNorm);
       } else {
