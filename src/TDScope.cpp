@@ -62,6 +62,18 @@ static bool loadRectFromSvgMm(const std::string &svgPath, const std::string &rec
   return true;
 }
 
+static PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
+  }
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
+
 } // namespace
 
 struct TDScope final : Module {
@@ -417,42 +429,16 @@ struct TDScopeDisplayWidget final : Widget {
   }
 };
 
-struct TDScopeSeamBlendWidget final : Widget {
-  TDScope *module = nullptr;
-
-  void draw(const DrawArgs &args) override {
-    if (!module || !module->leftExpander.module || module->leftExpander.module->model != modelTemporalDeck) {
-      return;
-    }
-
-    const float seamW = 1.25f;
-    const float featherW = 1.75f;
-    NVGcolor seamColor = nvgRGBA(11, 15, 20, 235);
-
-    nvgBeginPath(args.vg);
-    nvgRect(args.vg, 0.f, 0.f, seamW, box.size.y);
-    nvgFillColor(args.vg, seamColor);
-    nvgFill(args.vg);
-
-    NVGpaint feather = nvgLinearGradient(args.vg, seamW, 0.f, seamW + featherW, 0.f, seamColor, nvgRGBA(11, 15, 20, 0));
-    nvgBeginPath(args.vg);
-    nvgRect(args.vg, seamW, 0.f, featherW, box.size.y);
-    nvgFillPaint(args.vg, feather);
-    nvgFill(args.vg);
-  }
-};
-
 struct TDScopeWidget : ModuleWidget {
+  PanelBorder *panelBorder = nullptr;
+
   TDScopeWidget(TDScope *module) {
     setModule(module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
-
-    auto *seamBlend = new TDScopeSeamBlendWidget;
-    seamBlend->module = module;
-    seamBlend->box.pos = Vec(0.f, 0.f);
-    seamBlend->box.size = box.size;
-    addChild(seamBlend);
+    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      panelBorder = findPanelBorder(svgPanel->fb);
+    }
 
     auto *display = new TDScopeDisplayWidget;
     display->module = module;
@@ -468,6 +454,21 @@ struct TDScopeWidget : ModuleWidget {
 
     addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
     addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
+  }
+
+  void step() override {
+    TDScope *scopeModule = static_cast<TDScope *>(module);
+    bool linkedToDeck =
+      scopeModule && scopeModule->leftExpander.module && scopeModule->leftExpander.module->model == modelTemporalDeck;
+    const float borderGrowPx = linkedToDeck ? 3.f : 0.f;
+    if (panelBorder && (panelBorder->box.pos.x != -borderGrowPx || panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
+      panelBorder->box.pos.x = -borderGrowPx;
+      panelBorder->box.size.x = box.size.x + borderGrowPx;
+      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+        svgPanel->fb->dirty = true;
+      }
+    }
+    ModuleWidget::step();
   }
 
   void appendContextMenu(Menu *menu) override {

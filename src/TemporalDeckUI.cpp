@@ -3165,43 +3165,27 @@ struct BananutBlack : app::SvgPort {
   BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
 };
 
-struct TemporalDeckSeamBlendWidget final : Widget {
-  TemporalDeck *module = nullptr;
-
-  void draw(const DrawArgs &args) override {
-    if (!module || !module->rightExpander.module || module->rightExpander.module->model != modelTDScope) {
-      return;
-    }
-
-    const float seamW = 1.25f;
-    const float featherW = 1.75f;
-    NVGcolor seamColor = nvgRGBA(11, 15, 20, 235);
-    float seamX = box.size.x - seamW;
-    float featherX = std::max(0.f, seamX - featherW);
-
-    nvgBeginPath(args.vg);
-    nvgRect(args.vg, seamX, 0.f, seamW, box.size.y);
-    nvgFillColor(args.vg, seamColor);
-    nvgFill(args.vg);
-
-    NVGpaint feather = nvgLinearGradient(args.vg, featherX, 0.f, seamX, 0.f, nvgRGBA(11, 15, 20, 0), seamColor);
-    nvgBeginPath(args.vg);
-    nvgRect(args.vg, featherX, 0.f, seamX - featherX, box.size.y);
-    nvgFillPaint(args.vg, feather);
-    nvgFill(args.vg);
+static PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
   }
-};
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
 
 struct TemporalDeckWidget : ModuleWidget {
+  PanelBorder *panelBorder = nullptr;
+
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
     setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
-
-    auto *seamBlend = new TemporalDeckSeamBlendWidget;
-    seamBlend->module = module;
-    seamBlend->box.pos = Vec(0.f, 0.f);
-    seamBlend->box.size = box.size;
-    addChild(seamBlend);
+    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      panelBorder = findPanelBorder(svgPanel->fb);
+    }
 
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -3288,6 +3272,33 @@ struct TemporalDeckWidget : ModuleWidget {
 
     // Add after platter/tonearm so this control is visible on top.
     addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
+  }
+
+  void draw(const DrawArgs &args) override {
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    bool linkedToScope =
+      deckModule && deckModule->rightExpander.module && deckModule->rightExpander.module->model == modelTDScope;
+    if (linkedToScope) {
+      DrawArgs adjusted = args;
+      adjusted.clipBox.size.x += mm2px(0.3f);
+      ModuleWidget::draw(adjusted);
+    } else {
+      ModuleWidget::draw(args);
+    }
+  }
+
+  void step() override {
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    bool linkedToScope =
+      deckModule && deckModule->rightExpander.module && deckModule->rightExpander.module->model == modelTDScope;
+    const float borderGrowPx = linkedToScope ? 3.f : 0.f;
+    if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
+      panelBorder->box.size.x = box.size.x + borderGrowPx;
+      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+        svgPanel->fb->dirty = true;
+      }
+    }
+    ModuleWidget::step();
   }
 
   void appendContextMenu(Menu *menu) override {
