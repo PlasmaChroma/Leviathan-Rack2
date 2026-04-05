@@ -86,14 +86,15 @@ TestResult testPopulateHostMessageCopiesPreviewAndScalars() {
   temporaldeck_expander::populateHostMessage(&msg, 42u, 7u,
                                              temporaldeck_expander::FLAG_PREVIEW_VALID |
                                                temporaldeck_expander::FLAG_MONO_BUFFER,
-                                             48000.f, 321.f, 640.f, 1.25f, 0.5f, 10.f, 0.05f, 9000u, 4500u, 900.f,
+                                             48000.f, 321.f, 640.f, 1.25f, 0.5f, 10.f, 0.05f, 6.25f, 9000u, 4500u, 900.f,
                                              1120.f, 1.75f, 2u, scope.data());
 
   bool pass = msg.magic == temporaldeck_expander::MAGIC && msg.version == temporaldeck_expander::VERSION &&
               msg.publishSeq == 42u && msg.bufferGeneration == 7u && msg.flags != 0u && msg.sampleRate == 48000.f &&
               msg.lagSamples == 321.f && msg.accessibleLagSamples == 640.f && msg.bufferCapacityFrames == 9000u &&
               msg.bufferFilledFrames == 4500u && msg.scopeHalfWindowMs == 900.f && msg.scopeStartLagSamples == 1120.f &&
-              msg.scopeBinSpanSamples == 1.75f && msg.scopeBinCount == 2u && msg.scope[0].min == scope[0].min &&
+              msg.scopeBinSpanSamples == 1.75f && msg.sampleAbsolutePeakVolts == 6.25f && msg.scopeBinCount == 2u &&
+              msg.scope[0].min == scope[0].min &&
               msg.scope[0].max == scope[0].max && msg.scope[1].min == scope[1].min &&
               msg.scope[1].max == scope[1].max && !temporaldeck_expander::isScopeBinValid(msg.scope[2]);
   return {"Host message population copies scalars + scope bins", pass,

@@ -216,28 +216,44 @@ struct TDScopeDisplayWidget final : Widget {
     if (scopeBinCount == 0u) {
       return;
     }
+    int peakQAbs = 0;
+    for (uint32_t i = 0; i < scopeBinCount; ++i) {
+      const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+      if (!temporaldeck_expander::isScopeBinValid(bin)) {
+        continue;
+      }
+      peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.min))));
+      peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.max))));
+    }
+    float peakWindowVolts = (float(peakQAbs) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+    bool lowSignalWindow = peakWindowVolts < 0.03f;
 
     const float yInset = 0.75f;
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
 
-    const float centerY = 0.5f * (drawTop + drawBottom);
     const float centerX = box.size.x * 0.5f;
     const float ampHalfWidth = box.size.x * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
-      int peakQ = 0;
-      for (uint32_t i = 0; i < scopeBinCount; ++i) {
-        const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
-        if (!temporaldeck_expander::isScopeBinValid(bin)) {
-          continue;
+      bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+      float peakVolts = 0.f;
+      if (sampleMode && msg.sampleAbsolutePeakVolts > 0.f) {
+        peakVolts = msg.sampleAbsolutePeakVolts;
+      } else {
+        int peakQ = 0;
+        for (uint32_t i = 0; i < scopeBinCount; ++i) {
+          const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+          if (!temporaldeck_expander::isScopeBinValid(bin)) {
+            continue;
+          }
+          peakQ = std::max(peakQ, int(std::abs(int(bin.min))));
+          peakQ = std::max(peakQ, int(std::abs(int(bin.max))));
         }
-        peakQ = std::max(peakQ, int(std::abs(int(bin.min))));
-        peakQ = std::max(peakQ, int(std::abs(int(bin.max))));
+        peakVolts = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
       }
-      float peakVolts = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
       float targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
       if (!autoDisplayScaleInitialized) {
         autoDisplayFullScaleVolts = targetFullScaleVolts;
@@ -259,8 +275,26 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
-    float windowTopLag = msg.lagSamples + halfWindowSamples;
-    float windowBottomLag = msg.lagSamples - halfWindowSamples;
+    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    float forwardWindowSamples = halfWindowSamples;
+    float backwardWindowSamples = halfWindowSamples;
+    if (!sampleMode) {
+      // Live mode viewport bias near NOW:
+      // lag=0 => read-head at bottom, lag=halfWindow => read-head centered.
+      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
+      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
+    }
+    float windowTopLag = msg.lagSamples + backwardWindowSamples;
+    float windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    float readHeadT = 0.5f;
+    if (windowTopLag != windowBottomLag) {
+      readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
+    }
+    float readHeadY = drawTop + readHeadT * yDen + 0.5f;
+    if (lowSignalWindow) {
+      readHeadY = drawTop + 0.5f * yDen + 0.5f;
+    }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
     std::vector<float> rowX0(size_t(rowCount), centerX);
@@ -419,9 +453,9 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, 2.f, centerY);
-    nvgLineTo(args.vg, box.size.x - 2.f, centerY);
-    nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 128));
+    nvgMoveTo(args.vg, 2.f, readHeadY);
+    nvgLineTo(args.vg, box.size.x - 2.f, readHeadY);
+    nvgStrokeColor(args.vg, nvgRGBA(244, 220, 96, 128));
     nvgStrokeWidth(args.vg, 1.9f);
     nvgStroke(args.vg);
     nvgResetScissor(args.vg);

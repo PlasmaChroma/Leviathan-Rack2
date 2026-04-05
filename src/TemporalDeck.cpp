@@ -146,7 +146,15 @@ static uint32_t buildScopeWindowBins(
   // UI envelope extraction only needs an approximate min/max to look stable.
   // Bound worst-case work per publish to reduce host CPU when scope is attached.
   int scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
-  float scopeStartLagSamples = lagSamples + halfWindowSamples;
+  float forwardWindowSamples = halfWindowSamples;
+  float backwardWindowSamples = halfWindowSamples;
+  if (!sampleMode) {
+    // Live mode: when near NOW, keep full 1.8s window but bias it backward
+    // so the read-head can move toward the bottom of the scope.
+    forwardWindowSamples = std::min(halfWindowSamples, std::max(lagSamples, 0.f));
+    backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
+  }
+  float scopeStartLagSamples = lagSamples + backwardWindowSamples;
   // Anchor bin boundaries to a global lag grid so the envelope sampling phase
   // stays stable while the visible window moves.
   if (binSpanSamples > 0.f) {
@@ -955,10 +963,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
         }
 
         impl->expanderPublishSeq++;
+        float sampleAbsolutePeakVolts =
+          (frame.sampleMode && frame.sampleLoaded) ? impl->engine.sampleAbsolutePeakVolts : 0.f;
         temporaldeck_expander::populateHostMessage(
           msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, float(frame.lag),
           float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
-          float(frame.sampleProgress), uint32_t(std::max(0, impl->engine.buffer.size)),
+          float(frame.sampleProgress), sampleAbsolutePeakVolts, uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
           scopeBinSpanSamples, scopeBinCount, scopeBins.data());
         rightExpander.module->leftExpander.messageFlipRequested = true;

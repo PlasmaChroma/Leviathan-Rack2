@@ -463,6 +463,7 @@ struct TemporalDeckEngine {
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
   int sampleFrames = 0;
+  float sampleAbsolutePeakVolts = 0.f;
   double samplePlayhead = 0.0;
   double readHead = 0.0;
   double timelineHead = 0.0;
@@ -560,12 +561,15 @@ struct TemporalDeckEngine {
 
   void rebuildPreviewFromCurrentSample() {
     resetPreviewAccumulator(uint32_t(std::max(1, sampleFrames)));
+    sampleAbsolutePeakVolts = 0.f;
     if (!sampleLoaded || sampleFrames <= 0 || buffer.size <= 0) {
       return;
     }
     for (int i = 0; i < sampleFrames; ++i) {
       float l = buffer.left[i];
       float r = buffer.rightSample(i);
+      sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(l));
+      sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(r));
       preview.pushMonoSample(0.5f * (l + r));
     }
     preview.finalizePartialBin();
@@ -590,6 +594,7 @@ struct TemporalDeckEngine {
     sampleTransportPlaying = false;
     sampleTruncated = false;
     sampleFrames = 0;
+    sampleAbsolutePeakVolts = 0.f;
     samplePlayhead = 0.f;
     readHead = 0.f;
     timelineHead = 0.f;

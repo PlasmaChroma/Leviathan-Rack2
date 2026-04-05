@@ -10,7 +10,7 @@
 namespace temporaldeck_expander {
 
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
-constexpr uint16_t VERSION = 2u;
+constexpr uint16_t VERSION = 3u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
 constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
@@ -60,6 +60,7 @@ struct HostToDisplay {
   float samplePlayheadSec = 0.f;
   float sampleDurationSec = 0.f;
   float sampleProgress = 0.f;
+  float sampleAbsolutePeakVolts = 0.f;
 
   uint32_t bufferCapacityFrames = 0;
   uint32_t bufferFilledFrames = 0;
@@ -137,6 +138,7 @@ struct PreviewAccumulator {
 inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_t bufferGeneration, uint32_t flags,
                                 float sampleRate, float lagSamples, float accessibleLagSamples, float platterAngle,
                                 float samplePlayheadSec, float sampleDurationSec, float sampleProgress,
+                                float sampleAbsolutePeakVolts,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
                                 float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
                                 uint32_t scopeBinCount, const ScopeBin *scopeBins) {
@@ -156,6 +158,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   out->samplePlayheadSec = samplePlayheadSec;
   out->sampleDurationSec = sampleDurationSec;
   out->sampleProgress = sampleProgress;
+  out->sampleAbsolutePeakVolts = sampleAbsolutePeakVolts;
   out->bufferCapacityFrames = bufferCapacityFrames;
   out->bufferFilledFrames = bufferFilledFrames;
   out->scopeHalfWindowMs = scopeHalfWindowMs;
