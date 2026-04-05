@@ -88,6 +88,7 @@ static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateH
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
+static constexpr int kScopeMaxLiveStride = 2;
 
 static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
                                        bool sampleLoopEnabled, double lagSamples) {
@@ -141,11 +142,20 @@ static uint32_t buildScopeWindowBins(
   float sr = std::max(sampleRate, 1.f);
   float halfWindowSamples = sr * kScopeHalfWindowSeconds;
   float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
-  float binSpanSamples = totalWindowSamples / float(binCount);
+  // Use fixed-point lag geometry for deterministic bin boundaries.
+  constexpr int kLagFpShift = 10;
+  constexpr int64_t kLagFpOne = int64_t(1) << kLagFpShift;
+  int64_t totalWindowLagFp = std::max<int64_t>(kLagFpOne, int64_t(std::llround(double(totalWindowSamples) * double(kLagFpOne))));
+  int64_t binSpanLagFp = std::max<int64_t>(1, totalWindowLagFp / int64_t(binCount));
+  float binSpanSamples = float(double(binSpanLagFp) / double(kLagFpOne));
   int totalWindowSamplesInt = std::max(1, int(std::ceil(totalWindowSamples)));
   // UI envelope extraction only needs an approximate min/max to look stable.
   // Bound worst-case work per publish to reduce host CPU when scope is attached.
   int scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
+  if (!sampleMode) {
+    // Live mode benefits from denser envelope extraction to reduce peak shimmer.
+    scopeStride = std::min(scopeStride, kScopeMaxLiveStride);
+  }
   float forwardWindowSamples = halfWindowSamples;
   float backwardWindowSamples = halfWindowSamples;
   if (!sampleMode) {
@@ -155,11 +165,13 @@ static uint32_t buildScopeWindowBins(
     backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
   }
   float scopeStartLagSamples = lagSamples + backwardWindowSamples;
-  // Anchor bin boundaries to a global lag grid so the envelope sampling phase
-  // stays stable while the visible window moves.
-  if (binSpanSamples > 0.f) {
-    scopeStartLagSamples = std::ceil(scopeStartLagSamples / binSpanSamples) * binSpanSamples;
+  int64_t scopeStartLagFp = int64_t(std::llround(double(scopeStartLagSamples) * double(kLagFpOne)));
+  // Anchor bin boundaries to a global lag grid in fixed-point so envelope
+  // sampling phase stays deterministic while the visible window moves.
+  if (binSpanLagFp > 0) {
+    scopeStartLagFp = ((scopeStartLagFp + binSpanLagFp - 1) / binSpanLagFp) * binSpanLagFp;
   }
+  scopeStartLagSamples = float(double(scopeStartLagFp) / double(kLagFpOne));
   if (scopeStartLagSamplesOut) {
     *scopeStartLagSamplesOut = scopeStartLagSamples;
   }
@@ -173,8 +185,10 @@ static uint32_t buildScopeWindowBins(
   uint32_t validCount = 0u;
 
   for (uint32_t i = 0; i < binCount; ++i) {
-    float lagHigh = scopeStartLagSamples - float(i) * binSpanSamples;
-    float lagLow = lagHigh - binSpanSamples;
+    int64_t lagHighFp = scopeStartLagFp - int64_t(i) * binSpanLagFp;
+    int64_t lagLowFp = lagHighFp - binSpanLagFp;
+    float lagHigh = float(double(lagHighFp) / double(kLagFpOne));
+    float lagLow = float(double(lagLowFp) / double(kLagFpOne));
     float overlapLow = 0.f;
     float overlapHigh = 0.f;
     if (sampleMode && sampleLoopEnabled && maxLagSamples > 0.f) {
@@ -222,6 +236,15 @@ static uint32_t buildScopeWindowBins(
     int alignedLag = ((firstLag + scopeStride - 1) / scopeStride) * scopeStride;
     for (int lag = alignedLag; lag <= lastLag; lag += scopeStride) {
       accumulateLag(lag);
+    }
+    // Add a second phase pass when decimating to reduce peak shimmer from
+    // lattice phase changes as the window advances ("dancing peaks").
+    if (scopeStride > 1) {
+      int phaseOffset = std::max(1, scopeStride / 2);
+      int alignedLagPhase2 = alignedLag + phaseOffset;
+      for (int lag = alignedLagPhase2; lag <= lastLag; lag += scopeStride) {
+        accumulateLag(lag);
+      }
     }
     accumulateLag(lastLag);
 

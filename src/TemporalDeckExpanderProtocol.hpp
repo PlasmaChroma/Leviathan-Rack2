@@ -133,6 +133,21 @@ struct PreviewAccumulator {
     filledBins = std::min(filledBins + 1u, PREVIEW_BIN_COUNT);
     samplesInCurrentBin = 0;
   }
+
+  int16_t getAbsolutePeakQ() const {
+    int16_t q = 0;
+    // Current partial bin
+    if (samplesInCurrentBin > 0) {
+      q = std::max(q, int16_t(std::abs(int(currentMin))));
+      q = std::max(q, int16_t(std::abs(int(currentMax))));
+    }
+    // All completed bins
+    for (uint32_t i = 0; i < filledBins; ++i) {
+      q = std::max(q, int16_t(std::abs(int(bins[i].min))));
+      q = std::max(q, int16_t(std::abs(int(bins[i].max))));
+    }
+    return q;
+  }
 };
 
 inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_t bufferGeneration, uint32_t flags,

@@ -198,6 +198,8 @@ struct TDScopeDisplayWidget final : Widget {
   TDScope *module = nullptr;
   float autoDisplayFullScaleVolts = 5.f;
   bool autoDisplayScaleInitialized = false;
+  float autoLivePeakFilteredVolts = 0.f;
+  int autoLivePeakHoldFrames = 0;
 
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
@@ -254,17 +256,33 @@ struct TDScopeDisplayWidget final : Widget {
         }
         peakVolts = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
       }
+      if (!sampleMode) {
+        // Live mode: hold recent peaks briefly and decay slowly to reduce
+        // auto-scale flicker from moving-window peak churn.
+        if (!autoDisplayScaleInitialized) {
+          autoLivePeakFilteredVolts = peakVolts;
+          autoLivePeakHoldFrames = 0;
+        } else if (peakVolts > autoLivePeakFilteredVolts) {
+          autoLivePeakFilteredVolts = peakVolts;
+          autoLivePeakHoldFrames = 18; // ~300ms @ 60Hz
+        } else if (autoLivePeakHoldFrames > 0) {
+          autoLivePeakHoldFrames--;
+        } else {
+          autoLivePeakFilteredVolts += (peakVolts - autoLivePeakFilteredVolts) * 0.04f;
+        }
+        peakVolts = autoLivePeakFilteredVolts;
+      }
       float targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
       if (!autoDisplayScaleInitialized) {
         autoDisplayFullScaleVolts = targetFullScaleVolts;
         autoDisplayScaleInitialized = true;
       } else {
-        // Smooth autoscale transitions: expand quickly to avoid clipping spikes,
-        // contract slowly to prevent visible snapping/pumping.
+        // Smooth autoscale transitions.
+        // In live mode keep slower motion to minimize flicker.
         float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-        if (std::fabs(delta) > 1e-4f) {
-          constexpr float kAutoScaleAttackAlpha = 0.16f;
-          constexpr float kAutoScaleReleaseAlpha = 0.08f;
+        if (std::fabs(delta) > 0.01f) {
+          float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
+          float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
           float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
           autoDisplayFullScaleVolts += delta * alpha;
         }
@@ -272,6 +290,8 @@ struct TDScopeDisplayWidget final : Widget {
       displayFullScaleVolts = autoDisplayFullScaleVolts;
     } else {
       autoDisplayScaleInitialized = false;
+      autoLivePeakFilteredVolts = 0.f;
+      autoLivePeakHoldFrames = 0;
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
