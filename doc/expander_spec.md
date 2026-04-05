@@ -456,6 +456,114 @@ Must ensure:
 
 ---
 
+# 13. Appendix — Current Implementation Notes (2026-04)
+
+This appendix records where the code is today vs the original v1 draft above,
+plus the recommended next step to reduce CPU and live flicker together.
+
+## 13.1 Protocol/Transport reality in code
+
+Current protocol is `VERSION = 3` in `src/TemporalDeckExpanderProtocol.hpp` and
+uses a scope-window payload (not the original full preview ring model):
+
+* `SCOPE_BIN_COUNT = 1024`
+* `scopeHalfWindowMs`, `scopeStartLagSamples`, `scopeBinSpanSamples`
+* `scopeBinCount`
+* `scope[]` (per-bin min/max envelope)
+* `sampleAbsolutePeakVolts` (used by TD.Scope auto-range)
+
+Host publish cadence is timer-based at ~60 Hz in `src/TemporalDeck.cpp`.
+
+## 13.2 Why attach still costs CPU (even in freeze)
+
+When TD.Scope is attached, host currently rebuilds scope-window bins on publish
+ticks, including per-bin envelope sampling. This work still occurs while
+transport is frozen unless short-circuited.
+
+Hot path: `buildScopeWindowBins()` in `src/TemporalDeck.cpp`.
+
+## 13.3 Live-mode flicker vs sample-mode stability
+
+Observed behavior:
+
+* Live mode shows more peak churn/flicker.
+* Sample mode is generally more stable.
+
+Reason:
+
+* Live data domain is continuously changing (write-head/content drift), so
+  per-frame extrema can shift.
+* Sample domain is mostly static and can use global peak metadata.
+
+Current mitigations already in code:
+
+* fixed-point lag-grid anchoring for scope bin boundaries
+* live fast-path integer tap reads
+* live-only second-phase interior sampling (to reduce lattice shimmer)
+
+## 13.4 Next clean architecture: incremental scope-bin cache
+
+Implement a `ScopeBuildCache` in host publish path (`src/TemporalDeck.cpp`) and
+split logic into:
+
+1. deterministic geometry compute (window/bin mapping)
+2. bin evaluation for changed ranges only
+
+Reuse tiers:
+
+* Tier A: geometry+source unchanged -> reuse all bins
+* Tier B: small window shift -> shift cached bins, recompute edge bins only
+* Tier C: jump/geometry change -> full rebuild
+
+Expected outcomes:
+
+* major CPU reduction when attached (especially freeze/static cases)
+* reduced live flicker, because most bins persist frame-to-frame
+* no need for UI-side temporal blur/smear
+
+## 13.5 Suggested rollout (low risk)
+
+1. Add cache scaffolding + freeze/static full-reuse short-circuit
+2. Add shift+edge recompute path for live/freeze motion
+3. Add metrics/log counters (reused bins vs recomputed bins) for tuning
+4. Add tests covering:
+   * freeze static reuse
+   * small lag shift edge-only recompute
+   * large jump fallback full rebuild
+   * live hold-anchor behavior
+
+## 13.6 GPU offload boundaries (important)
+
+GPU-focused rendering optimizations are useful for TD.Scope UI cost, but do not
+remove host-side scope extraction work in TemporalDeck.
+
+Implication:
+
+* CPU spike on TD attach must be addressed first in host bin-build/reuse.
+* GPU/offscreen caching should be treated as a second-stage UI optimization.
+
+Recommended order:
+
+1. Host incremental bin cache/reuse (audio-thread-side publish work)
+2. Scope draw-path optimization (texture/batched/shader approach)
+
+## 13.7 Success metrics for each phase
+
+Track these during implementation:
+
+* TD CPU delta on attach (`scope disconnected` vs `connected`)
+* TD CPU delta in freeze idle
+* TD CPU delta in live steady playback
+* visual stability in live mode (peak shimmer subjective + trace replay checks)
+* correctness parity (scope window alignment, read-head placement, sample edges)
+
+Phase acceptance gate:
+
+* each phase should improve at least one metric with no regression in scope
+  correctness or scratch behavior.
+
+---
+
 # 🔥 Final Insight
 
 The key idea that makes this whole system work is:
