@@ -88,7 +88,6 @@ static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateH
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
-static constexpr int kScopeMaxLiveStride = 2;
 
 static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
                                        bool sampleLoopEnabled, double lagSamples) {
@@ -152,10 +151,6 @@ static uint32_t buildScopeWindowBins(
   // UI envelope extraction only needs an approximate min/max to look stable.
   // Bound worst-case work per publish to reduce host CPU when scope is attached.
   int scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
-  if (!sampleMode) {
-    // Live mode benefits from denser envelope extraction to reduce peak shimmer.
-    scopeStride = std::min(scopeStride, kScopeMaxLiveStride);
-  }
   float forwardWindowSamples = halfWindowSamples;
   float backwardWindowSamples = halfWindowSamples;
   if (!sampleMode) {
@@ -181,6 +176,10 @@ static uint32_t buildScopeWindowBins(
 
   double newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples))
                                 : (liveNewestPosOverride >= 0.0 ? liveNewestPosOverride : engine.newestReadablePos());
+  int newestLiveIndex = 0;
+  if (!sampleMode) {
+    newestLiveIndex = engine.buffer.wrapIndex(int(std::lround(newestPos)));
+  }
   float minLagSamples = 0.f;
   float maxLagSamples = std::max(0.f, accessibleLagSamples);
   uint32_t validCount = 0u;
@@ -219,7 +218,17 @@ static uint32_t buildScopeWindowBins(
       if (lag == lastAccumulatedLag) {
         return;
       }
-      float mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, sampleLoopEnabled, double(lag));
+      float mono = 0.f;
+      if (!sampleMode) {
+        // Fast path: live scope extraction uses integer lag taps, so avoid
+        // generic floating wrap/round math on every sampled point.
+        int idx = engine.buffer.wrapIndex(newestLiveIndex - lag);
+        float left = engine.buffer.left[size_t(idx)];
+        float right = engine.buffer.rightSample(idx);
+        mono = 0.5f * (left + right);
+      } else {
+        mono = readScopeMonoAtLagSamples(engine, newestPos, sampleMode, sampleLoopEnabled, double(lag));
+      }
       if (!hasData) {
         minMono = mono;
         maxMono = mono;
@@ -240,7 +249,7 @@ static uint32_t buildScopeWindowBins(
     }
     // Add a second phase pass when decimating to reduce peak shimmer from
     // lattice phase changes as the window advances ("dancing peaks").
-    if (scopeStride > 1) {
+    if (!sampleMode && scopeStride > 1) {
       int phaseOffset = std::max(1, scopeStride / 2);
       int alignedLagPhase2 = alignedLag + phaseOffset;
       for (int lag = alignedLagPhase2; lag <= lastLag; lag += scopeStride) {
