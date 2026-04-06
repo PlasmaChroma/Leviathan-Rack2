@@ -79,6 +79,7 @@ static PanelBorder *findPanelBorder(Widget *widget) {
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
+  enum ColorScheme { COLOR_SCHEME_TEMPORAL_DECK = 0, COLOR_SCHEME_LEVIATHAN, COLOR_SCHEME_COUNT };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
   temporaldeck_expander::HostToDisplay uiSnapshot;
@@ -91,6 +92,7 @@ struct TDScope final : Module {
   int staleFrames = 0;
   bool previewValid = false;
   int scopeDisplayRangeMode = SCOPE_RANGE_5V;
+  int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
 
   static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
 
@@ -118,6 +120,7 @@ struct TDScope final : Module {
   json_t *dataToJson() override {
     json_t *root = json_object();
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
+    json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
     return root;
   }
 
@@ -128,6 +131,10 @@ struct TDScope final : Module {
     json_t *rangeJ = json_object_get(root, "scopeDisplayRangeMode");
     if (rangeJ) {
       scopeDisplayRangeMode = clamp(int(json_integer_value(rangeJ)), SCOPE_RANGE_5V, SCOPE_RANGE_COUNT - 1);
+    }
+    json_t *schemeJ = json_object_get(root, "scopeColorScheme");
+    if (schemeJ) {
+      scopeColorScheme = clamp(int(json_integer_value(schemeJ)), COLOR_SCHEME_TEMPORAL_DECK, COLOR_SCHEME_COUNT - 1);
     }
   }
 
@@ -416,15 +423,36 @@ struct TDScopeDisplayWidget final : Widget {
       rowValid[size_t(iy)] = 1u;
     }
 
-    auto gradientColorForIntensity = [](float intensity, uint8_t alpha) -> NVGcolor {
+    auto gradientColorForIntensity = [&](float intensity, uint8_t alpha) -> NVGcolor {
       intensity = clamp(intensity, 0.f, 1.f);
-      // Inverted mapping: low intensity -> purple, high intensity -> cyan.
-      constexpr float lowR = 122.f; // #7a5cff (TD.Scope title gradient stop)
-      constexpr float lowG = 92.f;
-      constexpr float lowB = 255.f;
-      constexpr float highR = 28.f; // #1cccd9 (TD.Scope title gradient stop)
-      constexpr float highG = 204.f;
-      constexpr float highB = 217.f;
+      float lowR = 85.f;
+      float lowG = 227.f;
+      float lowB = 238.f;
+      float highR = 233.f;
+      float highG = 112.f;
+      float highB = 218.f;
+      switch (module->scopeColorScheme) {
+        case TDScope::COLOR_SCHEME_LEVIATHAN:
+          // Original Leviathan palette from TD.Scope title gradient:
+          // low -> #7a5cff, high -> #1cccd9.
+          lowR = 122.f;
+          lowG = 92.f;
+          lowB = 255.f;
+          highR = 28.f;
+          highG = 204.f;
+          highB = 217.f;
+          break;
+        case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
+        default:
+          // Temporal Deck: low -> #55e3ee, high -> #e970da.
+          lowR = 85.f;
+          lowG = 227.f;
+          lowB = 238.f;
+          highR = 233.f;
+          highG = 112.f;
+          highB = 218.f;
+          break;
+      }
       uint8_t r = uint8_t(std::lround(lowR + (highR - lowR) * intensity));
       uint8_t g = uint8_t(std::lround(lowG + (highG - lowG) * intensity));
       uint8_t b = uint8_t(std::lround(lowB + (highB - lowB) * intensity));
@@ -472,12 +500,25 @@ struct TDScopeDisplayWidget final : Widget {
       prevIntensity = intensity;
     }
 
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, 2.f, readHeadY);
-    nvgLineTo(args.vg, box.size.x - 2.f, readHeadY);
-    nvgStrokeColor(args.vg, nvgRGBA(244, 220, 96, 128));
-    nvgStrokeWidth(args.vg, 1.9f);
-    nvgStroke(args.vg);
+    float lineX0 = 2.f;
+    float lineX1 = box.size.x - 2.f;
+    if (lineX1 > lineX0) {
+      auto drawReadHeadLine = [&](float y, uint8_t alpha, float width) {
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, lineX0, y);
+        nvgLineTo(args.vg, lineX1, y);
+        nvgStrokeColor(args.vg, nvgRGBA(244, 220, 96, alpha));
+        nvgStrokeWidth(args.vg, width);
+        nvgStroke(args.vg);
+      };
+
+      // Full-width center core plus vertical feather.
+      drawReadHeadLine(readHeadY - 2.f, 64, 1.f);
+      drawReadHeadLine(readHeadY + 2.f, 64, 1.f);
+      drawReadHeadLine(readHeadY - 1.f, 148, 1.f);
+      drawReadHeadLine(readHeadY + 1.f, 148, 1.f);
+      drawReadHeadLine(readHeadY, 255, 1.15f);
+    }
     nvgResetScissor(args.vg);
     nvgRestore(args.vg);
   }
@@ -485,6 +526,8 @@ struct TDScopeDisplayWidget final : Widget {
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
+  static constexpr float kTopBarYmm = 9.522227f;
+  static constexpr float kTopBarLeftStartMm = 2.2491839f;
 
   TDScopeWidget(TDScope *module) {
     setModule(module);
@@ -525,6 +568,34 @@ struct TDScopeWidget : ModuleWidget {
     ModuleWidget::step();
   }
 
+  void draw(const DrawArgs &args) override {
+    TDScope *scopeModule = static_cast<TDScope *>(module);
+    bool linkedToDeck =
+      scopeModule && scopeModule->leftExpander.module && scopeModule->leftExpander.module->model == modelTemporalDeck;
+    if (linkedToDeck) {
+      DrawArgs adjusted = args;
+      adjusted.clipBox.pos.x -= mm2px(0.3f);
+      adjusted.clipBox.size.x += mm2px(0.3f);
+      ModuleWidget::draw(adjusted);
+
+      // Bridge the top purple divider from the left panel edge when docked.
+      float y = mm2px(kTopBarYmm);
+      float x0 = 0.f;
+      float x1 = mm2px(kTopBarLeftStartMm);
+      if (x1 > x0 + 0.1f) {
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, x0, y);
+        nvgLineTo(args.vg, x1, y);
+        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
+        nvgStrokeWidth(args.vg, mm2px(0.50f));
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgStroke(args.vg);
+      }
+    } else {
+      ModuleWidget::draw(args);
+    }
+  }
+
   void appendContextMenu(Menu *menu) override {
     ModuleWidget::appendContextMenu(menu);
     TDScope *scopeModule = dynamic_cast<TDScope *>(module);
@@ -547,6 +618,16 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
       [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {
+      submenu->addChild(createCheckMenuItem(
+        "Temporal Deck", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_TEMPORAL_DECK; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_TEMPORAL_DECK; }));
+      submenu->addChild(createCheckMenuItem(
+        "Leviathan", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_LEVIATHAN; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_LEVIATHAN; }));
+    }));
   }
 };
 

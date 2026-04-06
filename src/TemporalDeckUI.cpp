@@ -3179,6 +3179,8 @@ static PanelBorder *findPanelBorder(Widget *widget) {
 
 struct TemporalDeckWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
+  static constexpr float kTopBarYmm = 9.522227f;
+  static constexpr float kTopBarRightEndMm = 97.413935f;
 
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
@@ -3282,6 +3284,20 @@ struct TemporalDeckWidget : ModuleWidget {
       DrawArgs adjusted = args;
       adjusted.clipBox.size.x += mm2px(0.3f);
       ModuleWidget::draw(adjusted);
+
+      // Bridge the top purple divider to the right panel edge when docked.
+      float y = mm2px(kTopBarYmm);
+      float x0 = mm2px(kTopBarRightEndMm);
+      float x1 = box.size.x;
+      if (x1 > x0 + 0.1f) {
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, x0, y);
+        nvgLineTo(args.vg, x1, y);
+        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
+        nvgStrokeWidth(args.vg, mm2px(0.50f));
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgStroke(args.vg);
+      }
     } else {
       ModuleWidget::draw(args);
     }
