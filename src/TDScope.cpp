@@ -602,22 +602,40 @@ struct TDScopeDisplayWidget final : Widget {
       float x0 = rowX0[size_t(iy)];
       float x1 = rowX1[size_t(iy)];
       float intensity = rowIntensity[size_t(iy)];
+      constexpr float kIntensityGamma = 0.72f;
+      float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.02f, 0.f, 1.f);
+      uint8_t mainAlpha = uint8_t(std::lround(122.f + 120.f * visualIntensity));
+      float mainWidth = 0.78f + 0.62f * visualIntensity;
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, x0, y);
       nvgLineTo(args.vg, x1, y);
-      nvgStrokeColor(args.vg, gradientColorForIntensity(intensity, 210));
-      nvgStrokeWidth(args.vg, 1.f);
+      nvgStrokeColor(args.vg, gradientColorForIntensity(visualIntensity, mainAlpha));
+      nvgStrokeWidth(args.vg, mainWidth);
       nvgStroke(args.vg);
+
+      if (visualIntensity > 0.90f) {
+        float boostT = clamp((visualIntensity - 0.90f) / 0.10f, 0.f, 1.f);
+        uint8_t boostAlpha = uint8_t(std::lround(52.f + 108.f * boostT));
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, x0, y);
+        nvgLineTo(args.vg, x1, y);
+        nvgStrokeColor(args.vg, gradientColorForIntensity(1.f, boostAlpha));
+        nvgStrokeWidth(args.vg, mainWidth + 0.34f);
+        nvgStroke(args.vg);
+      }
 
       if (prevDrawn) {
         float connectIntensity = 0.5f * (prevIntensity + intensity);
+        float connectVisual = clamp(std::pow(connectIntensity, kIntensityGamma), 0.f, 1.f);
+        uint8_t connectAlpha = uint8_t(std::lround(88.f + 92.f * connectVisual));
+        float connectWidth = 0.58f + 0.40f * connectVisual;
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, prevX0, prevY);
         nvgLineTo(args.vg, x0, y);
         nvgMoveTo(args.vg, prevX1, prevY);
         nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, gradientColorForIntensity(connectIntensity, 150));
-        nvgStrokeWidth(args.vg, 0.75f);
+        nvgStrokeColor(args.vg, gradientColorForIntensity(connectVisual, connectAlpha));
+        nvgStrokeWidth(args.vg, connectWidth);
         nvgStroke(args.vg);
       }
       prevDrawn = true;
