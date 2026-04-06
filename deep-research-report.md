@@ -439,3 +439,32 @@ For each scenario:
 - Visualization research on downsampling large signals emphasizes perceptual representativeness and robust selection strategies (e.g., MinMax + LTTB variants), which map well to “stable auto-width” and “non-shimmering envelope” goals. citeturn27search0turn27search1  
 - VCV Rack supports caching of UI drawing via `FramebufferWidget` and documents the dirty-redraw pattern; this is the canonical Rack-native path to reduce expensive vector redraw work. citeturn29search0turn29search2  
 - NanoVG performance discussions repeatedly identify tessellation/flattening as a CPU hotspot and suggest caching or reducing dynamic path work—exactly what batching and framebuffer strategies accomplish here. citeturn26search3turn26search15
+
+## Appendix: What Has Actually Been Implemented
+
+This appendix tracks concrete work completed in code (not just proposed).
+
+### `src/TDScope.cpp`
+
+- Added persistent row buffers as widget members (`rowX0/rowX1/rowVisualIntensity/rowY/rowValid/rowBucket`) so draw-time data structures are reused instead of reallocated each frame.
+- Added snapshot-driven geometry caching keys (`cachedPublishSeq`, `cachedRowCount`, `cachedRangeMode`, `cachedGeometryValid`) and only rebuild row geometry when needed.
+- Switched row envelope sampling from neighbor-union interpolation to interval-overlap reduction (`sampleEnvelopeOverInterval(t0, t1)`), reducing peak jitter from bin-boundary phase shifts.
+- Kept autoscale updates tied to message/range changes, preserving the existing live-mode hold+release behavior while avoiding redundant work on duplicate frames.
+- Refactored render path to intensity-bucket batching:
+  - horizontal waveform bars are drawn by bucket,
+  - boost pass is drawn only for high-intensity buckets,
+  - connector lines are also bucket-batched by adjacent-row average intensity.
+  This reduces per-frame NanoVG stroke count substantially versus per-row drawing.
+
+### `src/TemporalDeck.cpp`
+
+- Updated `computeScopeWindowParams()` to make `scopeStride` budget-aware for live decimation second-phase cost:
+  - when live and decimating, effective budget is halved before stride selection,
+  - this better matches actual live bin-evaluation work and prevents implicit budget overruns.
+
+### `doc/expander_spec.md`
+
+- Added implementation notes and forward plan content covering:
+  - fixed-point window anchoring and scope protocol behavior,
+  - current anti-jitter approach,
+  - staged optimization roadmap for host caching and UI rendering.

@@ -218,6 +218,16 @@ struct TDScopeDisplayWidget final : Widget {
   bool autoDisplayScaleInitialized = false;
   float autoLivePeakFilteredVolts = 0.f;
   int autoLivePeakHoldFrames = 0;
+  std::vector<float> rowX0;
+  std::vector<float> rowX1;
+  std::vector<float> rowVisualIntensity;
+  std::vector<float> rowY;
+  std::vector<uint8_t> rowValid;
+  std::vector<uint8_t> rowBucket;
+  uint64_t cachedPublishSeq = 0;
+  int cachedRowCount = 0;
+  int cachedRangeMode = -1;
+  bool cachedGeometryValid = false;
 
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
@@ -256,6 +266,8 @@ struct TDScopeDisplayWidget final : Widget {
     const float centerX = box.size.x * 0.5f;
     const float ampHalfWidth = box.size.x * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
+    const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
+    const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
@@ -274,35 +286,38 @@ struct TDScopeDisplayWidget final : Widget {
         }
         peakVolts = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
       }
-      if (!sampleMode) {
-        // Live mode: hold recent peaks briefly and decay slowly to reduce
-        // auto-scale flicker from moving-window peak churn.
-        if (!autoDisplayScaleInitialized) {
-          autoLivePeakFilteredVolts = peakVolts;
-          autoLivePeakHoldFrames = 0;
-        } else if (peakVolts > autoLivePeakFilteredVolts) {
-          autoLivePeakFilteredVolts = peakVolts;
-          autoLivePeakHoldFrames = 18; // ~300ms @ 60Hz
-        } else if (autoLivePeakHoldFrames > 0) {
-          autoLivePeakHoldFrames--;
-        } else {
-          autoLivePeakFilteredVolts += (peakVolts - autoLivePeakFilteredVolts) * 0.04f;
+      // Recompute auto-scale state only when snapshot updates (or mode changes).
+      if (msgChanged || rangeModeChanged || !autoDisplayScaleInitialized) {
+        if (!sampleMode) {
+          // Live mode: hold recent peaks briefly and decay slowly to reduce
+          // auto-scale flicker from moving-window peak churn.
+          if (!autoDisplayScaleInitialized) {
+            autoLivePeakFilteredVolts = peakVolts;
+            autoLivePeakHoldFrames = 0;
+          } else if (peakVolts > autoLivePeakFilteredVolts) {
+            autoLivePeakFilteredVolts = peakVolts;
+            autoLivePeakHoldFrames = 18; // ~300ms @ 60Hz
+          } else if (autoLivePeakHoldFrames > 0) {
+            autoLivePeakHoldFrames--;
+          } else {
+            autoLivePeakFilteredVolts += (peakVolts - autoLivePeakFilteredVolts) * 0.04f;
+          }
+          peakVolts = autoLivePeakFilteredVolts;
         }
-        peakVolts = autoLivePeakFilteredVolts;
-      }
-      float targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
-      if (!autoDisplayScaleInitialized) {
-        autoDisplayFullScaleVolts = targetFullScaleVolts;
-        autoDisplayScaleInitialized = true;
-      } else {
-        // Smooth autoscale transitions.
-        // In live mode keep slower motion to minimize flicker.
-        float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-        if (std::fabs(delta) > 0.01f) {
-          float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
-          float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
-          float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
-          autoDisplayFullScaleVolts += delta * alpha;
+        float targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+        if (!autoDisplayScaleInitialized) {
+          autoDisplayFullScaleVolts = targetFullScaleVolts;
+          autoDisplayScaleInitialized = true;
+        } else {
+          // Smooth autoscale transitions.
+          // In live mode keep slower motion to minimize flicker.
+          float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
+          if (std::fabs(delta) > 0.01f) {
+            float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
+            float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
+            float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
+            autoDisplayFullScaleVolts += delta * alpha;
+          }
         }
       }
       displayFullScaleVolts = autoDisplayFullScaleVolts;
@@ -335,103 +350,110 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
-    std::vector<float> rowX0(size_t(rowCount), centerX);
-    std::vector<float> rowX1(size_t(rowCount), centerX);
-    std::vector<float> rowIntensity(size_t(rowCount), 0.f);
-    std::vector<uint8_t> rowValid(size_t(rowCount), 0u);
+    constexpr int kIntensityBuckets = 8;
+    size_t rowCountU = size_t(rowCount);
+    if (rowX0.size() != rowCountU) {
+      rowX0.assign(rowCountU, centerX);
+      rowX1.assign(rowCountU, centerX);
+      rowVisualIntensity.assign(rowCountU, 0.f);
+      rowY.assign(rowCountU, 0.f);
+      rowValid.assign(rowCountU, 0u);
+      rowBucket.assign(rowCountU, 0u);
+      cachedGeometryValid = false;
+    }
+
+    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || rowCount != cachedRowCount;
 
     auto decodeScopeBin = [&](const temporaldeck_expander::ScopeBin &bin, float *minNorm, float *maxNorm) {
       *minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
       *maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
     };
 
-    auto sampleEnvelopeAtT = [&](float t, float *minNormOut, float *maxNormOut) -> bool {
-      float lag = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t, 0.f, 1.f);
-      float binPos = (msg.scopeStartLagSamples - lag) / scopeBinSpanSamples;
-      if (binPos < 0.f || binPos > float(scopeBinCount - 1u)) {
-        return false;
-      }
-      uint32_t binIndex0 = std::min(uint32_t(std::floor(binPos)), scopeBinCount - 1u);
-      uint32_t binIndex1 = std::min(binIndex0 + 1u, scopeBinCount - 1u);
-      float binFrac = clamp(binPos - float(binIndex0), 0.f, 1.f);
-
-      const temporaldeck_expander::ScopeBin &bin0 = msg.scope[binIndex0];
-      const temporaldeck_expander::ScopeBin &bin1 = msg.scope[binIndex1];
-      bool valid0 = temporaldeck_expander::isScopeBinValid(bin0);
-      bool valid1 = temporaldeck_expander::isScopeBinValid(bin1);
-      if (!valid0 && !valid1) {
+    auto sampleEnvelopeOverInterval = [&](float t0, float t1, float *minNormOut, float *maxNormOut) -> bool {
+      float lag0 = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t0, 0.f, 1.f);
+      float lag1 = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t1, 0.f, 1.f);
+      float binPos0 = (msg.scopeStartLagSamples - lag0) / scopeBinSpanSamples;
+      float binPos1 = (msg.scopeStartLagSamples - lag1) / scopeBinSpanSamples;
+      float binPosMin = std::min(binPos0, binPos1);
+      float binPosMax = std::max(binPos0, binPos1);
+      if (binPosMax < 0.f || binPosMin > float(scopeBinCount - 1u)) {
         return false;
       }
 
-      float minNorm = 0.f;
-      float maxNorm = 0.f;
-      if (valid0 && valid1) {
-        float minNorm0 = 0.f;
-        float maxNorm0 = 0.f;
-        float minNorm1 = 0.f;
-        float maxNorm1 = 0.f;
-        decodeScopeBin(bin0, &minNorm0, &maxNorm0);
-        decodeScopeBin(bin1, &minNorm1, &maxNorm1);
-        if (binFrac <= 0.001f) {
-          minNorm = minNorm0;
-          maxNorm = maxNorm0;
-        } else if (binFrac >= 0.999f) {
-          minNorm = minNorm1;
-          maxNorm = maxNorm1;
-        } else {
-          minNorm = std::min(minNorm0, minNorm1);
-          maxNorm = std::max(maxNorm0, maxNorm1);
+      int binIndex0 = std::max(0, int(std::floor(binPosMin)));
+      int binIndex1 = std::min(int(scopeBinCount - 1u), int(std::ceil(binPosMax)));
+      if (binIndex1 < binIndex0) {
+        return false;
+      }
+
+      float rowMinNorm = 0.f;
+      float rowMaxNorm = 0.f;
+      bool any = false;
+      for (int i = binIndex0; i <= binIndex1; ++i) {
+        const temporaldeck_expander::ScopeBin &bin = msg.scope[size_t(i)];
+        if (!temporaldeck_expander::isScopeBinValid(bin)) {
+          continue;
         }
-      } else if (valid0) {
-        decodeScopeBin(bin0, &minNorm, &maxNorm);
-      } else {
-        decodeScopeBin(bin1, &minNorm, &maxNorm);
+        float minNorm = 0.f;
+        float maxNorm = 0.f;
+        decodeScopeBin(bin, &minNorm, &maxNorm);
+        if (!any) {
+          rowMinNorm = minNorm;
+          rowMaxNorm = maxNorm;
+          any = true;
+        } else {
+          rowMinNorm = std::min(rowMinNorm, minNorm);
+          rowMaxNorm = std::max(rowMaxNorm, maxNorm);
+        }
       }
-      *minNormOut = minNorm;
-      *maxNormOut = maxNorm;
+      if (!any) {
+        return false;
+      }
+      *minNormOut = rowMinNorm;
+      *maxNormOut = rowMaxNorm;
       return true;
     };
 
-    for (int iy = 0; iy < rowCount; ++iy) {
-      float y = drawTop + float(iy) + 0.5f;
-      float t0 = clamp((y - drawTop - 0.5f) / yDen, 0.f, 1.f);
-      float t1 = clamp((y - drawTop + 0.5f) / yDen, 0.f, 1.f);
-      float rowMinNorm = 0.f;
-      float rowMaxNorm = 0.f;
-      bool rowHasData = false;
-      constexpr int kRowSupersampleTaps = 3;
-      for (int tap = 0; tap < kRowSupersampleTaps; ++tap) {
-        float frac = (float(tap) + 0.5f) / float(kRowSupersampleTaps);
-        float t = t0 + (t1 - t0) * frac;
-        float sampleMinNorm = 0.f;
-        float sampleMaxNorm = 0.f;
-        if (!sampleEnvelopeAtT(t, &sampleMinNorm, &sampleMaxNorm)) {
+    if (shouldRebuild) {
+      std::fill(rowValid.begin(), rowValid.end(), 0u);
+      std::fill(rowVisualIntensity.begin(), rowVisualIntensity.end(), 0.f);
+      for (int iy = 0; iy < rowCount; ++iy) {
+        size_t idx = size_t(iy);
+        float y = drawTop + float(iy) + 0.5f;
+        rowY[idx] = y;
+        float t0 = clamp((y - drawTop - 0.5f) / yDen, 0.f, 1.f);
+        float t1 = clamp((y - drawTop + 0.5f) / yDen, 0.f, 1.f);
+        float rowMinNorm = 0.f;
+        float rowMaxNorm = 0.f;
+        if (!sampleEnvelopeOverInterval(t0, t1, &rowMinNorm, &rowMaxNorm)) {
+          rowX0[idx] = centerX;
+          rowX1[idx] = centerX;
+          rowBucket[idx] = 0u;
           continue;
         }
-        if (!rowHasData) {
-          rowMinNorm = sampleMinNorm;
-          rowMaxNorm = sampleMaxNorm;
-          rowHasData = true;
-        } else {
-          rowMinNorm = std::min(rowMinNorm, sampleMinNorm);
-          rowMaxNorm = std::max(rowMaxNorm, sampleMaxNorm);
-        }
-      }
-      if (!rowHasData) {
-        continue;
-      }
 
-      float x0 = centerX + rowMinNorm * ampHalfWidth;
-      float x1 = centerX + rowMaxNorm * ampHalfWidth;
-      if (x1 < x0) {
-        std::swap(x0, x1);
+        float x0 = centerX + rowMinNorm * ampHalfWidth;
+        float x1 = centerX + rowMaxNorm * ampHalfWidth;
+        if (x1 < x0) {
+          std::swap(x0, x1);
+        }
+        rowX0[idx] = x0;
+        rowX1[idx] = x1;
+        float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
+        float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
+        float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
+        constexpr float kIntensityGamma = 0.72f;
+        float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.02f, 0.f, 1.f);
+        int bucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
+        bucket = clamp(bucket, 0, kIntensityBuckets - 1);
+        rowVisualIntensity[idx] = visualIntensity;
+        rowBucket[idx] = uint8_t(bucket);
+        rowValid[idx] = 1u;
       }
-      rowX0[size_t(iy)] = x0;
-      rowX1[size_t(iy)] = x1;
-      float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
-      float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
-      rowIntensity[size_t(iy)] = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-      rowValid[size_t(iy)] = 1u;
+      cachedPublishSeq = msg.publishSeq;
+      cachedRowCount = rowCount;
+      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedGeometryValid = true;
     }
 
     auto gradientColorForIntensity = [&](float intensity, uint8_t alpha) -> NVGcolor {
@@ -586,63 +608,116 @@ struct TDScopeDisplayWidget final : Widget {
       return nvgRGBA(rq, gq, bq, alpha);
     };
 
+    std::array<float, kIntensityBuckets> mainWidth {};
+    std::array<float, kIntensityBuckets> connectWidth {};
+    std::array<float, kIntensityBuckets> boostWidth {};
+    std::array<NVGcolor, kIntensityBuckets> mainColor {};
+    std::array<NVGcolor, kIntensityBuckets> connectColor {};
+    std::array<NVGcolor, kIntensityBuckets> boostColor {};
+    std::array<uint8_t, kIntensityBuckets> bucketHasBoost {};
+    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+      float visual = (float(bucket) + 0.5f) / float(kIntensityBuckets);
+      mainWidth[size_t(bucket)] = 0.78f + 0.62f * visual;
+      connectWidth[size_t(bucket)] = 0.58f + 0.40f * visual;
+      mainColor[size_t(bucket)] =
+        gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
+      connectColor[size_t(bucket)] =
+        gradientColorForIntensity(visual, uint8_t(std::lround(88.f + 92.f * visual)));
+      if (visual > 0.90f) {
+        float boostT = clamp((visual - 0.90f) / 0.10f, 0.f, 1.f);
+        boostColor[size_t(bucket)] = gradientColorForIntensity(1.f, uint8_t(std::lround(52.f + 108.f * boostT)));
+        boostWidth[size_t(bucket)] = mainWidth[size_t(bucket)] + 0.34f;
+        bucketHasBoost[size_t(bucket)] = 1u;
+      }
+    }
+
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
-    bool prevDrawn = false;
-    float prevX0 = centerX;
-    float prevX1 = centerX;
-    float prevY = drawTop + 0.5f;
-    float prevIntensity = 0.f;
-    for (int iy = 0; iy < rowCount; ++iy) {
-      if (!rowValid[size_t(iy)]) {
+
+    // Batch horizontal bars by quantized intensity bucket.
+    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+      bool havePath = false;
+      nvgBeginPath(args.vg);
+      for (int iy = 0; iy < rowCount; ++iy) {
+        size_t idx = size_t(iy);
+        if (!rowValid[idx] || rowBucket[idx] != uint8_t(bucket)) {
+          continue;
+        }
+        nvgMoveTo(args.vg, rowX0[idx], rowY[idx]);
+        nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
+        havePath = true;
+      }
+      if (!havePath) {
         continue;
       }
-
-      float y = drawTop + float(iy) + 0.5f;
-      float x0 = rowX0[size_t(iy)];
-      float x1 = rowX1[size_t(iy)];
-      float intensity = rowIntensity[size_t(iy)];
-      constexpr float kIntensityGamma = 0.72f;
-      float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.02f, 0.f, 1.f);
-      uint8_t mainAlpha = uint8_t(std::lround(122.f + 120.f * visualIntensity));
-      float mainWidth = 0.78f + 0.62f * visualIntensity;
-      nvgBeginPath(args.vg);
-      nvgMoveTo(args.vg, x0, y);
-      nvgLineTo(args.vg, x1, y);
-      nvgStrokeColor(args.vg, gradientColorForIntensity(visualIntensity, mainAlpha));
-      nvgStrokeWidth(args.vg, mainWidth);
+      nvgStrokeColor(args.vg, mainColor[size_t(bucket)]);
+      nvgStrokeWidth(args.vg, mainWidth[size_t(bucket)]);
       nvgStroke(args.vg);
+    }
 
-      if (visualIntensity > 0.90f) {
-        float boostT = clamp((visualIntensity - 0.90f) / 0.10f, 0.f, 1.f);
-        uint8_t boostAlpha = uint8_t(std::lround(52.f + 108.f * boostT));
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, gradientColorForIntensity(1.f, boostAlpha));
-        nvgStrokeWidth(args.vg, mainWidth + 0.34f);
-        nvgStroke(args.vg);
+    // Optional bright core pass for the highest-intensity buckets.
+    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+      if (!bucketHasBoost[size_t(bucket)]) {
+        continue;
       }
+      bool havePath = false;
+      nvgBeginPath(args.vg);
+      for (int iy = 0; iy < rowCount; ++iy) {
+        size_t idx = size_t(iy);
+        if (!rowValid[idx] || rowBucket[idx] != uint8_t(bucket)) {
+          continue;
+        }
+        nvgMoveTo(args.vg, rowX0[idx], rowY[idx]);
+        nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
+        havePath = true;
+      }
+      if (!havePath) {
+        continue;
+      }
+      nvgStrokeColor(args.vg, boostColor[size_t(bucket)]);
+      nvgStrokeWidth(args.vg, boostWidth[size_t(bucket)]);
+      nvgStroke(args.vg);
+    }
 
-      if (prevDrawn) {
-        float connectIntensity = 0.5f * (prevIntensity + intensity);
-        float connectVisual = clamp(std::pow(connectIntensity, kIntensityGamma), 0.f, 1.f);
-        uint8_t connectAlpha = uint8_t(std::lround(88.f + 92.f * connectVisual));
-        float connectWidth = 0.58f + 0.40f * connectVisual;
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, prevX0, prevY);
-        nvgLineTo(args.vg, x0, y);
-        nvgMoveTo(args.vg, prevX1, prevY);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, gradientColorForIntensity(connectVisual, connectAlpha));
-        nvgStrokeWidth(args.vg, connectWidth);
-        nvgStroke(args.vg);
+    // Batch connector lines by the average intensity of adjacent rows.
+    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+      bool havePath = false;
+      bool prevValid = false;
+      float prevX0 = centerX;
+      float prevX1 = centerX;
+      float prevY = drawTop + 0.5f;
+      float prevVisual = 0.f;
+      nvgBeginPath(args.vg);
+      for (int iy = 0; iy < rowCount; ++iy) {
+        size_t idx = size_t(iy);
+        if (!rowValid[idx]) {
+          prevValid = false;
+          continue;
+        }
+        if (prevValid) {
+          float connectVisual = clamp(0.5f * (prevVisual + rowVisualIntensity[idx]), 0.f, 1.f);
+          int connectBucket = int(std::floor(connectVisual * float(kIntensityBuckets)));
+          connectBucket = clamp(connectBucket, 0, kIntensityBuckets - 1);
+          if (connectBucket == bucket) {
+            nvgMoveTo(args.vg, prevX0, prevY);
+            nvgLineTo(args.vg, rowX0[idx], rowY[idx]);
+            nvgMoveTo(args.vg, prevX1, prevY);
+            nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
+            havePath = true;
+          }
+        }
+        prevX0 = rowX0[idx];
+        prevX1 = rowX1[idx];
+        prevY = rowY[idx];
+        prevVisual = rowVisualIntensity[idx];
+        prevValid = true;
       }
-      prevDrawn = true;
-      prevX0 = x0;
-      prevX1 = x1;
-      prevY = y;
-      prevIntensity = intensity;
+      if (!havePath) {
+        continue;
+      }
+      nvgStrokeColor(args.vg, connectColor[size_t(bucket)]);
+      nvgStrokeWidth(args.vg, connectWidth[size_t(bucket)]);
+      nvgStroke(args.vg);
     }
 
     float lineX0 = 2.f;

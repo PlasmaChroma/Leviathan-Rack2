@@ -174,8 +174,13 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   out->binSpanLagFp = std::max<int64_t>(1, totalWindowLagFp / int64_t(out->binCount));
   out->binSpanSamples = float(double(out->binSpanLagFp) / double(kScopeLagFpOne));
   int totalWindowSamplesInt = std::max(1, int(std::ceil(totalWindowSamples)));
-  out->scopeStride =
-    std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(kScopeEvaluationBudgetPerPublish))));
+  int effectiveEvalBudget = kScopeEvaluationBudgetPerPublish;
+  if (!sampleMode && totalWindowSamplesInt > kScopeEvaluationBudgetPerPublish) {
+    // Live decimation does a second lattice phase (see evaluateScopeBinAtIndex),
+    // so reserve half budget for that additional pass.
+    effectiveEvalBudget = std::max(1, kScopeEvaluationBudgetPerPublish / 2);
+  }
+  out->scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(effectiveEvalBudget))));
 
   float forwardWindowSamples = halfWindowSamples;
   float backwardWindowSamples = halfWindowSamples;
