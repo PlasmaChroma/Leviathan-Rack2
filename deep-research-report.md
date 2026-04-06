@@ -450,6 +450,13 @@ This appendix tracks concrete work completed in code (not just proposed).
 - Added snapshot-driven geometry caching keys (`cachedPublishSeq`, `cachedRowCount`, `cachedRangeMode`, `cachedGeometryValid`) and only rebuild row geometry when needed.
 - Switched row envelope sampling from neighbor-union interpolation to interval-overlap reduction (`sampleEnvelopeOverInterval(t0, t1)`), reducing peak jitter from bin-boundary phase shifts.
 - Kept autoscale updates tied to message/range changes, preserving the existing live-mode hold+release behavior while avoiding redundant work on duplicate frames.
+- Tightened autoscale peak-source semantics:
+  - in sample mode with a loaded sample, `sampleAbsolutePeakVolts` is treated as authoritative even when it is `0.0` (silent sample),
+  - fallback bin scanning is now reserved for cases where a trusted sample peak is not available.
+- Implemented robust live-mode auto-width:
+  - live mode now derives target scale from per-bin `p99` magnitude plus a true-peak hold guardrail (`max(p99*margin, peakHold*small_margin)`),
+  - added hysteresis around current full-scale to suppress small retarget jitter,
+  - retained attack/release smoothing after target selection.
 - Refactored render path to intensity-bucket batching:
   - horizontal waveform bars are drawn by bucket,
   - boost pass is drawn only for high-intensity buckets,
@@ -461,6 +468,11 @@ This appendix tracks concrete work completed in code (not just proposed).
 - Updated `computeScopeWindowParams()` to make `scopeStride` budget-aware for live decimation second-phase cost:
   - when live and decimating, effective budget is halved before stride selection,
   - this better matches actual live bin-evaluation work and prevents implicit budget overruns.
+- Added a persisted **HQ scope preview** toggle path for A/B evaluation:
+  - `highQualityScopePreviewEnabled` is saved/restored in module JSON and exposed in the Temporal Deck context menu,
+  - when enabled, live scope keeps denser stride selection (skips the budget-halving adjustment),
+  - when disabled (default), uses budget-aware stride for lower CPU,
+  - scope cache reuse now also checks `scopeStride`, and mode flips invalidate cache to avoid stale-bin reuse across quality modes.
 
 ### `doc/expander_spec.md`
 

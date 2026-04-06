@@ -169,6 +169,8 @@ struct TemporalDeck final : Module {
 
   bool isHighQualityScratchInterpolationEnabled() const;
   void setHighQualityScratchInterpolationEnabled(bool enabled);
+  bool isHighQualityScopePreviewEnabled() const;
+  void setHighQualityScopePreviewEnabled(bool enabled);
   int getScratchInterpolationMode() const;
   void setScratchInterpolationMode(int mode);
   void setSlipLatched(bool enabled);
