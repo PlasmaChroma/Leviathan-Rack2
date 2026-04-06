@@ -93,23 +93,25 @@
     <linearGradient
    id="bgGrad"
    x1="1108.8855"
-   y1="886.8808"
+   y1="886.88062"
    x2="1108.8855"
    y2="12348.43"
    gradientTransform="matrix(0.35573807,0,0,1.1244228,591.70921,0)"
    gradientUnits="userSpaceOnUse">
       <stop
-   offset="0%"
+   offset="0"
    stop-color="#0b0d10"
-   id="stop1" />
+   id="stop1"
+   style="stop-color:#060709;stop-opacity:1;" />
       <stop
    offset="50%"
    stop-color="#10141a"
    id="stop2" />
       <stop
-   offset="100%"
+   offset="1"
    stop-color="#07080a"
-   id="stop3" />
+   id="stop3"
+   style="stop-color:#0a0c0f;stop-opacity:1;" />
     </linearGradient>
     <linearGradient
    id="panelSheen"
@@ -246,15 +248,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="1.6868414"
-   inkscape:cx="-90.998478"
-   inkscape:cy="217.26998"
+   inkscape:zoom="2.385554"
+   inkscape:cx="-46.320478"
+   inkscape:cy="212.31966"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="svg488"
+   inkscape:current-layer="Background_Rect"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -275,7 +277,8 @@
    fill="url(#bgGrad)"
    id="black_background"
    style="display:inline;fill:url(#bgGrad);stroke-width:17.8492"
-   sodipodi:insensitive="true" />
+   sodipodi:insensitive="true"
+   inkscape:label="black_background" />
       <g
    id="waves_layer"
    style="display:inline;opacity:0.5"

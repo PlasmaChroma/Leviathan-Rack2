@@ -79,7 +79,14 @@ static PanelBorder *findPanelBorder(Widget *widget) {
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
-  enum ColorScheme { COLOR_SCHEME_TEMPORAL_DECK = 0, COLOR_SCHEME_LEVIATHAN, COLOR_SCHEME_COUNT };
+  enum ColorScheme {
+    COLOR_SCHEME_TEMPORAL_DECK = 0,
+    COLOR_SCHEME_LEVIATHAN,
+    COLOR_SCHEME_PICKLE,
+    COLOR_SCHEME_HELLFIRE,
+    COLOR_SCHEME_ANGELIC,
+    COLOR_SCHEME_COUNT
+  };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
   temporaldeck_expander::HostToDisplay uiSnapshot;
@@ -432,6 +439,33 @@ struct TDScopeDisplayWidget final : Widget {
       float highG = 112.f;
       float highB = 218.f;
       switch (module->scopeColorScheme) {
+        case TDScope::COLOR_SCHEME_ANGELIC:
+          // Angelic: low -> soft pearl white, high -> celestial sky blue.
+          lowR = 248.f;  // #f8f5ff
+          lowG = 245.f;
+          lowB = 255.f;
+          highR = 179.f; // #b3e5ff
+          highG = 229.f;
+          highB = 255.f;
+          break;
+        case TDScope::COLOR_SCHEME_HELLFIRE:
+          // Hellfire: low -> deep lava red, high -> bright ember yellow.
+          lowR = 120.f;  // #78180f
+          lowG = 24.f;
+          lowB = 15.f;
+          highR = 255.f; // #ffd166
+          highG = 209.f;
+          highB = 102.f;
+          break;
+        case TDScope::COLOR_SCHEME_PICKLE:
+          // Pickle: low -> deep dill green, high -> bright brine chartreuse.
+          lowR = 62.f;   // #3e6f31
+          lowG = 111.f;
+          lowB = 49.f;
+          highR = 190.f; // #beea61
+          highG = 234.f;
+          highB = 97.f;
+          break;
         case TDScope::COLOR_SCHEME_LEVIATHAN:
           // Original Leviathan palette from TD.Scope title gradient:
           // low -> #7a5cff, high -> #1cccd9.
@@ -627,6 +661,15 @@ struct TDScopeWidget : ModuleWidget {
       submenu->addChild(createCheckMenuItem(
         "Leviathan", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_LEVIATHAN; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_LEVIATHAN; }));
+      submenu->addChild(createCheckMenuItem(
+        "Pickle", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PICKLE; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PICKLE; }));
+      submenu->addChild(createCheckMenuItem(
+        "Hellfire", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_HELLFIRE; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_HELLFIRE; }));
+      submenu->addChild(createCheckMenuItem(
+        "Angelic", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_ANGELIC; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_ANGELIC; }));
     }));
   }
 };
