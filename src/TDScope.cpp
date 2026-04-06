@@ -79,6 +79,7 @@ static PanelBorder *findPanelBorder(Widget *widget) {
 struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
+  enum ScopeChannelMode { SCOPE_CHANNEL_MONO = 0, SCOPE_CHANNEL_STEREO, SCOPE_CHANNEL_COUNT };
   enum ColorScheme {
     COLOR_SCHEME_TEMPORAL_DECK = 0,
     COLOR_SCHEME_LEVIATHAN,
@@ -103,9 +104,14 @@ struct TDScope final : Module {
   int staleFrames = 0;
   bool previewValid = false;
   int scopeDisplayRangeMode = SCOPE_RANGE_5V;
+  int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
+  float requestPublishTimerSec = 0.f;
+  uint64_t requestSeq = 0u;
+  uint32_t lastRequestedScopeFormat = uint32_t(-1);
 
   static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
+  static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
 
   TDScope() {
     config(0, 0, 0, LIGHTS_LEN);
@@ -131,6 +137,7 @@ struct TDScope final : Module {
   json_t *dataToJson() override {
     json_t *root = json_object();
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
+    json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
     return root;
   }
@@ -142,6 +149,10 @@ struct TDScope final : Module {
     json_t *rangeJ = json_object_get(root, "scopeDisplayRangeMode");
     if (rangeJ) {
       scopeDisplayRangeMode = clamp(int(json_integer_value(rangeJ)), SCOPE_RANGE_5V, SCOPE_RANGE_COUNT - 1);
+    }
+    json_t *channelJ = json_object_get(root, "scopeChannelMode");
+    if (channelJ) {
+      scopeChannelMode = clamp(int(json_integer_value(channelJ)), SCOPE_CHANNEL_MONO, SCOPE_CHANNEL_COUNT - 1);
     }
     json_t *schemeJ = json_object_get(root, "scopeColorScheme");
     if (schemeJ) {
@@ -200,6 +211,36 @@ struct TDScope final : Module {
     bool linkActive = validMessage && staleFrames < 2048;
     uiLinkActive.store(linkActive, std::memory_order_relaxed);
     uiPreviewValid.store(linkActive && previewValid, std::memory_order_relaxed);
+
+    // Publish requested scope payload format back to TemporalDeck.
+    if (leftExpander.module && leftExpander.module->model == modelTemporalDeck &&
+        leftExpander.module->rightExpander.producerMessage) {
+      uint32_t requestedScopeFormat = (scopeChannelMode == SCOPE_CHANNEL_STEREO)
+                                        ? temporaldeck_expander::SCOPE_FORMAT_STEREO
+                                        : temporaldeck_expander::SCOPE_FORMAT_MONO;
+      requestPublishTimerSec += args.sampleTime;
+      bool formatChanged = requestedScopeFormat != lastRequestedScopeFormat;
+      bool timerElapsed = requestPublishTimerSec >= kRequestPublishIntervalSec;
+      if (formatChanged || timerElapsed) {
+        if (timerElapsed) {
+          requestPublishTimerSec = std::fmod(requestPublishTimerSec, kRequestPublishIntervalSec);
+        } else {
+          requestPublishTimerSec = 0.f;
+        }
+        auto *request =
+          reinterpret_cast<temporaldeck_expander::DisplayToHost *>(leftExpander.module->rightExpander.producerMessage);
+        if (request) {
+          requestSeq++;
+          temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat);
+          leftExpander.module->rightExpander.messageFlipRequested = true;
+          lastRequestedScopeFormat = requestedScopeFormat;
+        }
+      }
+    } else {
+      requestPublishTimerSec = 0.f;
+      lastRequestedScopeFormat = uint32_t(-1);
+    }
+
     uiPublishTimerSec += args.sampleTime;
     if (linkActive && latestMsg && uiPublishTimerSec >= kUiPublishIntervalSec) {
       uiPublishTimerSec = std::fmod(uiPublishTimerSec, kUiPublishIntervalSec);
@@ -221,13 +262,19 @@ struct TDScopeDisplayWidget final : Widget {
   int autoLivePeakHoldFrames = 0;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
+  std::vector<float> rowX0Right;
+  std::vector<float> rowX1Right;
   std::vector<float> rowVisualIntensity;
+  std::vector<float> rowVisualIntensityRight;
   std::vector<float> rowY;
   std::vector<uint8_t> rowValid;
+  std::vector<uint8_t> rowValidRight;
   std::vector<uint8_t> rowBucket;
+  std::vector<uint8_t> rowBucketRight;
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
+  bool cachedStereoLayout = false;
   bool cachedGeometryValid = false;
 
   void draw(const DrawArgs &args) override {
@@ -247,6 +294,9 @@ struct TDScopeDisplayWidget final : Widget {
     if (scopeBinCount == 0u) {
       return;
     }
+    bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
+    bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
       const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
@@ -255,6 +305,13 @@ struct TDScopeDisplayWidget final : Widget {
       }
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.min))));
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.max))));
+      if (renderStereo) {
+        const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+        if (temporaldeck_expander::isScopeBinValid(binR)) {
+          peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.min))));
+          peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.max))));
+        }
+      }
     }
     float peakWindowVolts = (float(peakQAbs) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
     bool lowSignalWindow = peakWindowVolts < 0.03f;
@@ -264,8 +321,12 @@ struct TDScopeDisplayWidget final : Widget {
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
 
-    const float centerX = box.size.x * 0.5f;
-    const float ampHalfWidth = box.size.x * 0.46f;
+    const float laneGap = renderStereo ? 2.f : 0.f;
+    const float laneWidth =
+      renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);
+    const float lane0CenterX = renderStereo ? (laneWidth * 0.5f) : (box.size.x * 0.5f);
+    const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
+    const float laneAmpHalfWidth = laneWidth * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
     const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
@@ -276,15 +337,24 @@ struct TDScopeDisplayWidget final : Widget {
       auto computeLivePeakStats = [&]() -> std::pair<float, float> {
         // Returns {windowPeakVolts, p99Volts} over per-bin absolute peaks.
         std::vector<float> peaks;
-        peaks.reserve(scopeBinCount);
+        peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
         for (uint32_t i = 0; i < scopeBinCount; ++i) {
           const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
           if (!temporaldeck_expander::isScopeBinValid(bin)) {
-            continue;
+            // fall through to right channel in stereo mode
+          } else {
+            int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
+            float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+            peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
           }
-          int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
-          float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-          peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+          if (renderStereo) {
+            const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+            if (temporaldeck_expander::isScopeBinValid(binR)) {
+              int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
+              float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+              peaks.push_back(clamp(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+            }
+          }
         }
         if (peaks.empty()) {
           return std::make_pair(0.f, 0.f);
@@ -403,23 +473,30 @@ struct TDScopeDisplayWidget final : Widget {
     constexpr int kIntensityBuckets = 8;
     size_t rowCountU = size_t(rowCount);
     if (rowX0.size() != rowCountU) {
-      rowX0.assign(rowCountU, centerX);
-      rowX1.assign(rowCountU, centerX);
+      rowX0.assign(rowCountU, lane0CenterX);
+      rowX1.assign(rowCountU, lane0CenterX);
+      rowX0Right.assign(rowCountU, lane1CenterX);
+      rowX1Right.assign(rowCountU, lane1CenterX);
       rowVisualIntensity.assign(rowCountU, 0.f);
+      rowVisualIntensityRight.assign(rowCountU, 0.f);
       rowY.assign(rowCountU, 0.f);
       rowValid.assign(rowCountU, 0u);
+      rowValidRight.assign(rowCountU, 0u);
       rowBucket.assign(rowCountU, 0u);
+      rowBucketRight.assign(rowCountU, 0u);
       cachedGeometryValid = false;
     }
 
-    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || rowCount != cachedRowCount;
+    bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
+    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || rowCount != cachedRowCount || stereoLayoutChanged;
 
     auto decodeScopeBin = [&](const temporaldeck_expander::ScopeBin &bin, float *minNorm, float *maxNorm) {
       *minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
       *maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
     };
 
-    auto sampleEnvelopeOverInterval = [&](float t0, float t1, float *minNormOut, float *maxNormOut) -> bool {
+    auto sampleEnvelopeOverInterval = [&](const temporaldeck_expander::ScopeBin *scopeData, float t0, float t1,
+                                          float *minNormOut, float *maxNormOut) -> bool {
       float lag0 = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t0, 0.f, 1.f);
       float lag1 = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t1, 0.f, 1.f);
       float binPos0 = (msg.scopeStartLagSamples - lag0) / scopeBinSpanSamples;
@@ -440,7 +517,7 @@ struct TDScopeDisplayWidget final : Widget {
       float rowMaxNorm = 0.f;
       bool any = false;
       for (int i = binIndex0; i <= binIndex1; ++i) {
-        const temporaldeck_expander::ScopeBin &bin = msg.scope[size_t(i)];
+        const temporaldeck_expander::ScopeBin &bin = scopeData[size_t(i)];
         if (!temporaldeck_expander::isScopeBinValid(bin)) {
           continue;
         }
@@ -464,9 +541,14 @@ struct TDScopeDisplayWidget final : Widget {
       return true;
     };
 
-    if (shouldRebuild) {
-      std::fill(rowValid.begin(), rowValid.end(), 0u);
-      std::fill(rowVisualIntensity.begin(), rowVisualIntensity.end(), 0.f);
+    auto rebuildLane = [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
+                           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut,
+                           std::vector<uint8_t> *validOut, std::vector<uint8_t> *bucketOut) {
+      if (!x0Out || !x1Out || !visualOut || !validOut || !bucketOut) {
+        return;
+      }
+      std::fill(validOut->begin(), validOut->end(), 0u);
+      std::fill(visualOut->begin(), visualOut->end(), 0.f);
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t idx = size_t(iy);
         float y = drawTop + float(iy) + 0.5f;
@@ -475,20 +557,20 @@ struct TDScopeDisplayWidget final : Widget {
         float t1 = clamp((y - drawTop + 0.5f) / yDen, 0.f, 1.f);
         float rowMinNorm = 0.f;
         float rowMaxNorm = 0.f;
-        if (!sampleEnvelopeOverInterval(t0, t1, &rowMinNorm, &rowMaxNorm)) {
-          rowX0[idx] = centerX;
-          rowX1[idx] = centerX;
-          rowBucket[idx] = 0u;
+        if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
+          (*x0Out)[idx] = laneCenterXLocal;
+          (*x1Out)[idx] = laneCenterXLocal;
+          (*bucketOut)[idx] = 0u;
           continue;
         }
 
-        float x0 = centerX + rowMinNorm * ampHalfWidth;
-        float x1 = centerX + rowMaxNorm * ampHalfWidth;
+        float x0 = laneCenterXLocal + rowMinNorm * laneHalfWidthLocal;
+        float x1 = laneCenterXLocal + rowMaxNorm * laneHalfWidthLocal;
         if (x1 < x0) {
           std::swap(x0, x1);
         }
-        rowX0[idx] = x0;
-        rowX1[idx] = x1;
+        (*x0Out)[idx] = x0;
+        (*x1Out)[idx] = x1;
         float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
         float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
         float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
@@ -496,13 +578,31 @@ struct TDScopeDisplayWidget final : Widget {
         float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.02f, 0.f, 1.f);
         int bucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
         bucket = clamp(bucket, 0, kIntensityBuckets - 1);
-        rowVisualIntensity[idx] = visualIntensity;
-        rowBucket[idx] = uint8_t(bucket);
-        rowValid[idx] = 1u;
+        (*visualOut)[idx] = visualIntensity;
+        (*bucketOut)[idx] = uint8_t(bucket);
+        (*validOut)[idx] = 1u;
+      }
+    };
+
+    if (shouldRebuild) {
+      rebuildLane(msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket);
+      if (renderStereo) {
+        rebuildLane(
+          msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
+          &rowBucketRight);
+      } else {
+        std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
+        std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
+        for (size_t idx = 0; idx < rowCountU; ++idx) {
+          rowX0Right[idx] = lane1CenterX;
+          rowX1Right[idx] = lane1CenterX;
+          rowBucketRight[idx] = 0u;
+        }
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
       cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
     }
 
@@ -684,89 +784,106 @@ struct TDScopeDisplayWidget final : Widget {
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
 
-    // Batch horizontal bars by quantized intensity bucket.
-    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-      bool havePath = false;
-      nvgBeginPath(args.vg);
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t idx = size_t(iy);
-        if (!rowValid[idx] || rowBucket[idx] != uint8_t(bucket)) {
-          continue;
-        }
-        nvgMoveTo(args.vg, rowX0[idx], rowY[idx]);
-        nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
-        havePath = true;
-      }
-      if (!havePath) {
-        continue;
-      }
-      nvgStrokeColor(args.vg, mainColor[size_t(bucket)]);
-      nvgStrokeWidth(args.vg, mainWidth[size_t(bucket)]);
-      nvgStroke(args.vg);
-    }
-
-    // Optional bright core pass for the highest-intensity buckets.
-    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-      if (!bucketHasBoost[size_t(bucket)]) {
-        continue;
-      }
-      bool havePath = false;
-      nvgBeginPath(args.vg);
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t idx = size_t(iy);
-        if (!rowValid[idx] || rowBucket[idx] != uint8_t(bucket)) {
-          continue;
-        }
-        nvgMoveTo(args.vg, rowX0[idx], rowY[idx]);
-        nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
-        havePath = true;
-      }
-      if (!havePath) {
-        continue;
-      }
-      nvgStrokeColor(args.vg, boostColor[size_t(bucket)]);
-      nvgStrokeWidth(args.vg, boostWidth[size_t(bucket)]);
-      nvgStroke(args.vg);
-    }
-
-    // Batch connector lines by the average intensity of adjacent rows.
-    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-      bool havePath = false;
-      bool prevValid = false;
-      float prevX0 = centerX;
-      float prevX1 = centerX;
-      float prevY = drawTop + 0.5f;
-      float prevVisual = 0.f;
-      nvgBeginPath(args.vg);
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t idx = size_t(iy);
-        if (!rowValid[idx]) {
-          prevValid = false;
-          continue;
-        }
-        if (prevValid) {
-          float connectVisual = clamp(0.5f * (prevVisual + rowVisualIntensity[idx]), 0.f, 1.f);
-          int connectBucket = int(std::floor(connectVisual * float(kIntensityBuckets)));
-          connectBucket = clamp(connectBucket, 0, kIntensityBuckets - 1);
-          if (connectBucket == bucket) {
-            nvgMoveTo(args.vg, prevX0, prevY);
-            nvgLineTo(args.vg, rowX0[idx], rowY[idx]);
-            nvgMoveTo(args.vg, prevX1, prevY);
-            nvgLineTo(args.vg, rowX1[idx], rowY[idx]);
-            havePath = true;
+    auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
+                        const std::vector<uint8_t> &valid, const std::vector<uint8_t> &bucketByRow, float laneCenterXForConnectors) {
+      // Batch horizontal bars by quantized intensity bucket.
+      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+        bool havePath = false;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx] || bucketByRow[idx] != uint8_t(bucket)) {
+            continue;
           }
+          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+          nvgLineTo(args.vg, x1[idx], rowY[idx]);
+          havePath = true;
         }
-        prevX0 = rowX0[idx];
-        prevX1 = rowX1[idx];
-        prevY = rowY[idx];
-        prevVisual = rowVisualIntensity[idx];
-        prevValid = true;
+        if (!havePath) {
+          continue;
+        }
+        nvgStrokeColor(args.vg, mainColor[size_t(bucket)]);
+        nvgStrokeWidth(args.vg, mainWidth[size_t(bucket)]);
+        nvgStroke(args.vg);
       }
-      if (!havePath) {
-        continue;
+
+      // Optional bright core pass for the highest-intensity buckets.
+      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+        if (!bucketHasBoost[size_t(bucket)]) {
+          continue;
+        }
+        bool havePath = false;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx] || bucketByRow[idx] != uint8_t(bucket)) {
+            continue;
+          }
+          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+          nvgLineTo(args.vg, x1[idx], rowY[idx]);
+          havePath = true;
+        }
+        if (!havePath) {
+          continue;
+        }
+        nvgStrokeColor(args.vg, boostColor[size_t(bucket)]);
+        nvgStrokeWidth(args.vg, boostWidth[size_t(bucket)]);
+        nvgStroke(args.vg);
       }
-      nvgStrokeColor(args.vg, connectColor[size_t(bucket)]);
-      nvgStrokeWidth(args.vg, connectWidth[size_t(bucket)]);
+
+      // Batch connector lines by the average intensity of adjacent rows.
+      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
+        bool havePath = false;
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        float prevY = drawTop + 0.5f;
+        float prevVisual = 0.f;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
+            prevValid = false;
+            continue;
+          }
+          if (prevValid) {
+            float connectVisual = clamp(0.5f * (prevVisual + visualIntensity[idx]), 0.f, 1.f);
+            int connectBucket = int(std::floor(connectVisual * float(kIntensityBuckets)));
+            connectBucket = clamp(connectBucket, 0, kIntensityBuckets - 1);
+            if (connectBucket == bucket) {
+              nvgMoveTo(args.vg, prevX0, prevY);
+              nvgLineTo(args.vg, x0[idx], rowY[idx]);
+              nvgMoveTo(args.vg, prevX1, prevY);
+              nvgLineTo(args.vg, x1[idx], rowY[idx]);
+              havePath = true;
+            }
+          }
+          prevX0 = x0[idx];
+          prevX1 = x1[idx];
+          prevY = rowY[idx];
+          prevVisual = visualIntensity[idx];
+          prevValid = true;
+        }
+        if (!havePath) {
+          continue;
+        }
+        nvgStrokeColor(args.vg, connectColor[size_t(bucket)]);
+        nvgStrokeWidth(args.vg, connectWidth[size_t(bucket)]);
+        nvgStroke(args.vg);
+      }
+    };
+
+    drawLane(rowX0, rowX1, rowVisualIntensity, rowValid, rowBucket, lane0CenterX);
+    if (renderStereo) {
+      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, rowBucketRight, lane1CenterX);
+
+      // Draw subtle lane divider for stereo side-by-side view.
+      float dividerX = laneWidth + laneGap * 0.5f;
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, dividerX, drawTop);
+      nvgLineTo(args.vg, dividerX, drawBottom);
+      nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
+      nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
     }
 
@@ -888,6 +1005,16 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
       [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Channel View"));
+    menu->addChild(createCheckMenuItem(
+      "Mono", "", [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_MONO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_MONO; }));
+    menu->addChild(createCheckMenuItem(
+      "Stereo (side-by-side)", "",
+      [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {

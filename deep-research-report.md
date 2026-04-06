@@ -462,6 +462,14 @@ This appendix tracks concrete work completed in code (not just proposed).
   - boost pass is drawn only for high-intensity buckets,
   - connector lines are also bucket-batched by adjacent-row average intensity.
   This reduces per-frame NanoVG stroke count substantially versus per-row drawing.
+- Added scope channel-view mode with persisted module state:
+  - `scopeChannelMode` defaults to mono and is saved/restored in module JSON.
+- Added display-to-host request publishing from TD.Scope:
+  - TD.Scope now periodically publishes a `DisplayToHost` request to Temporal Deck describing desired scope format (mono/stereo), and republish is immediate on mode change.
+- Added stereo side-by-side rendering path:
+  - when TD.Scope is in stereo mode and host payload advertises stereo data, channels render in two lanes with half-width geometry per lane and a subtle divider.
+- Added TD.Scope context-menu control:
+  - `Channel View -> Mono / Stereo (side-by-side)`.
 
 ### `src/TemporalDeck.cpp`
 
@@ -473,6 +481,25 @@ This appendix tracks concrete work completed in code (not just proposed).
   - when enabled, live scope keeps denser stride selection (skips the budget-halving adjustment),
   - when disabled (default), uses budget-aware stride for lower CPU,
   - scope cache reuse now also checks `scopeStride`, and mode flips invalidate cache to avoid stale-bin reuse across quality modes.
+- Added host-side support for request-driven scope format selection:
+  - Temporal Deck now reads `DisplayToHost` request messages from TD.Scope and selects mono or stereo scope generation accordingly.
+- Expanded scope extraction pipeline to support channel modes:
+  - mono/mid extraction remains default,
+  - stereo mode generates left and right scope envelopes independently.
+- Added dual scope caches for expander publishing:
+  - mono/left cache and right-lane cache are maintained separately and invalidated together when needed.
+- Host expander message flags now advertise stereo scope payload when present.
+
+### `src/TemporalDeckExpanderProtocol.hpp`
+
+- Protocol version bumped to `VERSION = 4`.
+- `HostToDisplay` now includes a second scope lane buffer (`scopeRight[]`) for stereo payloads.
+- Added `FLAG_SCOPE_STEREO` host flag to indicate right-lane data is populated.
+- Added reverse request message type `DisplayToHost` for TD.Scope-to-TemporalDeck negotiation.
+- Added scope format enum (`SCOPE_FORMAT_MONO`, `SCOPE_FORMAT_STEREO`) and helper functions:
+  - `isDisplayRequestValid(...)`
+  - `populateDisplayRequest(...)`
+- Extended `populateHostMessage(...)` to optionally populate both left/mono and right scope bins.
 
 ### `doc/expander_spec.md`
 

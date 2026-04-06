@@ -116,8 +116,26 @@ struct ScopeWindowCache {
   std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> bins;
 };
 
-static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
-                                       bool sampleLoopEnabled, double lagSamples) {
+enum ScopeChannelMode {
+  SCOPE_CHANNEL_MID = 0,
+  SCOPE_CHANNEL_LEFT,
+  SCOPE_CHANNEL_RIGHT
+};
+
+static float reduceScopeChannelValue(float left, float right, ScopeChannelMode channelMode) {
+  switch (channelMode) {
+    case SCOPE_CHANNEL_LEFT:
+      return left;
+    case SCOPE_CHANNEL_RIGHT:
+      return right;
+    case SCOPE_CHANNEL_MID:
+    default:
+      return 0.5f * (left + right);
+  }
+}
+
+static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
+                                          bool sampleLoopEnabled, double lagSamples, ScopeChannelMode channelMode) {
   if (engine.buffer.size <= 0) {
     return 0.f;
   }
@@ -146,7 +164,7 @@ static float readScopeMonoAtLagSamples(const TemporalDeckEngine &engine, double 
   }
   float left = engine.buffer.left[size_t(idx)];
   float right = engine.buffer.rightSample(idx);
-  return 0.5f * (left + right);
+  return reduceScopeChannelValue(left, right, channelMode);
 }
 
 static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool sampleMode, bool sampleLoopEnabled,
@@ -212,7 +230,7 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
 }
 
 static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const ScopeWindowParams &params, uint32_t binIndex,
-                                    temporaldeck_expander::ScopeBin *outBin) {
+                                    ScopeChannelMode channelMode, temporaldeck_expander::ScopeBin *outBin) {
   if (!outBin || binIndex >= params.binCount) {
     return false;
   }
@@ -259,9 +277,10 @@ static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const Scop
       int idx = engine.buffer.wrapIndex(params.newestLiveIndex - lag);
       float left = engine.buffer.left[size_t(idx)];
       float right = engine.buffer.rightSample(idx);
-      mono = 0.5f * (left + right);
+      mono = reduceScopeChannelValue(left, right, channelMode);
     } else {
-      mono = readScopeMonoAtLagSamples(engine, params.newestPos, params.sampleMode, params.sampleLoopEnabled, double(lag));
+      mono =
+        readScopeChannelAtLagSamples(engine, params.newestPos, params.sampleMode, params.sampleLoopEnabled, double(lag), channelMode);
     }
     if (!hasData) {
       minMono = mono;
@@ -303,6 +322,7 @@ static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const Scop
 }
 
 static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const ScopeWindowParams &params,
+                                     ScopeChannelMode channelMode,
                                      std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut) {
   if (!binsOut || params.binCount == 0u || engine.buffer.size <= 0) {
     return 0u;
@@ -313,7 +333,7 @@ static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const Sco
   uint32_t validCount = 0u;
   for (uint32_t i = 0; i < params.binCount; ++i) {
     temporaldeck_expander::ScopeBin bin = emptyBin;
-    if (evaluateScopeBinAtIndex(engine, params, i, &bin)) {
+    if (evaluateScopeBinAtIndex(engine, params, i, channelMode, &bin)) {
       validCount++;
     }
     (*binsOut)[i] = bin;
@@ -344,7 +364,7 @@ static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const Sco
 }
 
 static uint32_t buildScopeWindowBinsWithCache(
-  const TemporalDeckEngine &engine, const ScopeWindowParams &params, ScopeWindowCache *cache,
+  const TemporalDeckEngine &engine, const ScopeWindowParams &params, ScopeChannelMode channelMode, ScopeWindowCache *cache,
   std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut) {
   if (!binsOut) {
     return 0u;
@@ -372,7 +392,7 @@ static uint32_t buildScopeWindowBinsWithCache(
           (*binsOut)[i] = cache->bins[size_t(j)];
         } else {
           temporaldeck_expander::ScopeBin bin = emptyBin;
-          (void)evaluateScopeBinAtIndex(engine, params, i, &bin);
+          (void)evaluateScopeBinAtIndex(engine, params, i, channelMode, &bin);
           (*binsOut)[i] = bin;
         }
       }
@@ -387,7 +407,7 @@ static uint32_t buildScopeWindowBinsWithCache(
   }
 
   if (!reused) {
-    scopeBinCount = buildScopeWindowBins(engine, params, binsOut);
+    scopeBinCount = buildScopeWindowBins(engine, params, channelMode, binsOut);
   }
 
   if (cache) {
@@ -626,11 +646,14 @@ struct TemporalDeck::Impl {
   bool expanderWasConnected = false;
   bool expanderPreviewValid = false;
   uint64_t expanderLastPublishedGeneration = 0;
-  ScopeWindowCache expanderScopeCache;
+  ScopeWindowCache expanderScopeCacheMono;
+  ScopeWindowCache expanderScopeCacheRight;
   bool expanderScopeLagHoldActive = false;
   float expanderScopeLagHoldSamples = 0.f;
   bool expanderScopeNewestPosHoldActive = false;
   double expanderScopeNewestPosHold = 0.0;
+  std::array<temporaldeck_expander::DisplayToHost, 2> expanderRequestMessages;
+  uint32_t expanderRequestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -711,6 +734,8 @@ void publishArcLights(TemporalDeck *module, int sampleFrames, float maxLagSample
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+  rightExpander.producerMessage = &impl->expanderRequestMessages[0];
+  rightExpander.consumerMessage = &impl->expanderRequestMessages[1];
   configParam(BUFFER_PARAM, 0.f, 1.f, 1.f, "Buffer", " s", 0.f, 10.f);
   configParam<DeckRateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
   configParam<ScratchSensitivityQuantity>(SCRATCH_SENSITIVITY_PARAM, 0.f, 1.f, 0.5f, "Scratch sensitivity");
@@ -1083,6 +1108,19 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
   bool expanderConnected = rightExpander.module && rightExpander.module->leftExpander.producerMessage;
   if (expanderConnected) {
+    uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
+    if (rightExpander.consumerMessage) {
+      const auto *request =
+        reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
+      if (request && temporaldeck_expander::isDisplayRequestValid(*request)) {
+        requestedScopeFormat = (request->requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO)
+                                 ? temporaldeck_expander::SCOPE_FORMAT_STEREO
+                                 : temporaldeck_expander::SCOPE_FORMAT_MONO;
+      }
+    }
+    impl->expanderRequestedScopeFormat = requestedScopeFormat;
+    bool wantStereoScope = requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO;
+
     bool justConnected = !impl->expanderWasConnected;
     bool generationChanged = impl->engine.bufferGeneration != impl->expanderLastPublishedGeneration;
     impl->expanderPublishTimerSec += args.sampleTime;
@@ -1117,6 +1155,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         double scopeLiveNewestPosOverride = impl->expanderScopeNewestPosHoldActive ? impl->expanderScopeNewestPosHold : -1.0;
 
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBins;
+        std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBinsRight;
         float scopeStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
         uint32_t scopeBinCount = 0u;
@@ -1126,11 +1165,23 @@ void TemporalDeck::process(const ProcessArgs &args) {
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestPosOverride, impl->highQualityScopePreviewEnabled,
           &scopeParams);
         if (haveScopeParams) {
-          scopeBinCount = buildScopeWindowBinsWithCache(impl->engine, scopeParams, &impl->expanderScopeCache, &scopeBins);
+          ScopeChannelMode leftMode = wantStereoScope ? SCOPE_CHANNEL_LEFT : SCOPE_CHANNEL_MID;
+          uint32_t leftCount =
+            buildScopeWindowBinsWithCache(impl->engine, scopeParams, leftMode, &impl->expanderScopeCacheMono, &scopeBins);
+          uint32_t rightCount = 0u;
+          if (wantStereoScope) {
+            rightCount = buildScopeWindowBinsWithCache(
+              impl->engine, scopeParams, SCOPE_CHANNEL_RIGHT, &impl->expanderScopeCacheRight, &scopeBinsRight);
+            scopeBinCount = (leftCount > 0u && rightCount > 0u) ? std::min(leftCount, rightCount) : 0u;
+          } else {
+            impl->expanderScopeCacheRight.valid = false;
+            scopeBinCount = leftCount;
+          }
           scopeStartLagSamples = scopeParams.scopeStartLagSamples;
           scopeBinSpanSamples = scopeParams.binSpanSamples;
         } else {
-          impl->expanderScopeCache.valid = false;
+          impl->expanderScopeCacheMono.valid = false;
+          impl->expanderScopeCacheRight.valid = false;
         }
         uint32_t flags = 0;
         if (frame.sampleMode) {
@@ -1157,6 +1208,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
         bool scopeReady = scopeBinCount > 0u;
         if (scopeReady) {
           flags |= temporaldeck_expander::FLAG_PREVIEW_VALID;
+          if (wantStereoScope) {
+            flags |= temporaldeck_expander::FLAG_SCOPE_STEREO;
+          }
         }
         if (impl->engine.buffer.monoStorage) {
           flags |= temporaldeck_expander::FLAG_MONO_BUFFER;
@@ -1170,7 +1224,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
           float(frame.sampleProgress), sampleAbsolutePeakVolts, uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
-          scopeBinSpanSamples, scopeBinCount, scopeBins.data());
+          scopeBinSpanSamples, scopeBinCount, scopeBins.data(), wantStereoScope ? scopeBinsRight.data() : nullptr);
         rightExpander.module->leftExpander.messageFlipRequested = true;
         impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
         impl->expanderPreviewValid = scopeReady;
@@ -1181,9 +1235,11 @@ void TemporalDeck::process(const ProcessArgs &args) {
   } else {
     impl->expanderPublishTimerSec = 0.f;
     impl->expanderPreviewValid = false;
-    impl->expanderScopeCache.valid = false;
+    impl->expanderScopeCacheMono.valid = false;
+    impl->expanderScopeCacheRight.valid = false;
     impl->expanderScopeLagHoldActive = false;
     impl->expanderScopeNewestPosHoldActive = false;
+    impl->expanderRequestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   }
   impl->expanderWasConnected = expanderConnected;
   bool expanderReady = expanderConnected && impl->expanderPreviewValid;
@@ -1482,7 +1538,8 @@ bool TemporalDeck::isHighQualityScopePreviewEnabled() const {
 void TemporalDeck::setHighQualityScopePreviewEnabled(bool enabled) {
   impl->highQualityScopePreviewEnabled = enabled;
   // Scope extraction behavior changed; avoid shifting stale bins from prior mode.
-  impl->expanderScopeCache.valid = false;
+  impl->expanderScopeCacheMono.valid = false;
+  impl->expanderScopeCacheRight.valid = false;
 }
 
 int TemporalDeck::getScratchInterpolationMode() const {

@@ -10,7 +10,9 @@
 namespace temporaldeck_expander {
 
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
-constexpr uint16_t VERSION = 3u;
+constexpr uint16_t VERSION = 4u;
+constexpr uint32_t DISPLAY_MAGIC = 0x54445844u; // "TDXD"
+constexpr uint16_t DISPLAY_VERSION = 1u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
 constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
@@ -25,6 +27,12 @@ enum HostFlags : uint32_t {
   FLAG_SLIP = 1u << 6,
   FLAG_PREVIEW_VALID = 1u << 7,
   FLAG_MONO_BUFFER = 1u << 8,
+  FLAG_SCOPE_STEREO = 1u << 9,
+};
+
+enum ScopeFormat : uint32_t {
+  SCOPE_FORMAT_MONO = 0u,
+  SCOPE_FORMAT_STEREO = 1u,
 };
 
 struct ScopeBin {
@@ -71,9 +79,26 @@ struct HostToDisplay {
   uint32_t scopeBinCount = 0;
 
   ScopeBin scope[SCOPE_BIN_COUNT];
+  ScopeBin scopeRight[SCOPE_BIN_COUNT];
 };
 
 static_assert(std::is_standard_layout<HostToDisplay>::value, "HostToDisplay must stay POD-like");
+
+struct DisplayToHost {
+  uint32_t magic = DISPLAY_MAGIC;
+  uint16_t version = DISPLAY_VERSION;
+  uint16_t size = uint16_t(sizeof(DisplayToHost));
+
+  uint64_t requestSeq = 0;
+  uint32_t requestedScopeFormat = SCOPE_FORMAT_MONO;
+  uint32_t reserved = 0;
+};
+
+static_assert(std::is_standard_layout<DisplayToHost>::value, "DisplayToHost must stay POD-like");
+
+inline bool isDisplayRequestValid(const DisplayToHost &msg) {
+  return msg.magic == DISPLAY_MAGIC && msg.version == DISPLAY_VERSION && msg.size == sizeof(DisplayToHost);
+}
 
 inline int16_t quantizePreviewSample(float monoVolts) {
   float clamped = std::max(-kPreviewQuantizeVolts, std::min(monoVolts, kPreviewQuantizeVolts));
@@ -193,7 +218,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
                                 float sampleAbsolutePeakVolts,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
                                 float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
-                                uint32_t scopeBinCount, const ScopeBin *scopeBins) {
+                                uint32_t scopeBinCount, const ScopeBin *scopeBins, const ScopeBin *scopeRightBins = nullptr) {
   if (!out) {
     return;
   }
@@ -220,10 +245,26 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   ScopeBin empty = makeEmptyScopeBin();
   for (size_t i = 0; i < SCOPE_BIN_COUNT; ++i) {
     out->scope[i] = empty;
+    out->scopeRight[i] = empty;
   }
   if (scopeBins && out->scopeBinCount > 0) {
     std::memcpy(out->scope, scopeBins, sizeof(ScopeBin) * size_t(out->scopeBinCount));
   }
+  if (scopeRightBins && out->scopeBinCount > 0) {
+    std::memcpy(out->scopeRight, scopeRightBins, sizeof(ScopeBin) * size_t(out->scopeBinCount));
+  }
+}
+
+inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat) {
+  if (!out) {
+    return;
+  }
+  out->magic = DISPLAY_MAGIC;
+  out->version = DISPLAY_VERSION;
+  out->size = uint16_t(sizeof(DisplayToHost));
+  out->requestSeq = requestSeq;
+  out->requestedScopeFormat = (requestedScopeFormat == SCOPE_FORMAT_STEREO) ? SCOPE_FORMAT_STEREO : SCOPE_FORMAT_MONO;
+  out->reserved = 0u;
 }
 
 } // namespace temporaldeck_expander
