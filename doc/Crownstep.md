@@ -80,6 +80,10 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
   * Values: Full, 8, 16, 32, 64
 * **Root knob**
 * **Scale selector** (menu or switch)
+* **Gate Width knob**
+
+  * Fraction of clock cycle used for gate high time
+  * Default: 0.50 (50%)
 * **Run/Stop toggle**
 * **New Game button** (prominent)
 
@@ -91,6 +95,7 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 
 * Gate/trigger
 * Advances playback
+* **Required in v1** (no internal clock for v1)
 
 ### 5.2 RESET IN
 
@@ -99,20 +104,31 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 
 ### 5.3 SEQ LEN CV IN
 
-* CV input
-* Quantized to:
+* **Deferred for v1**
+* v1 uses the Seq Length knob only, discretized to:
 
   * Full, 8, 16, 32, 64
 
 ### 5.4 TRANSPOSE CV IN
 
 * CV input
-* Applied to pitch output
+* 1V/oct additive pitch offset
+* Applied directly to pitch output path (after step pitch mapping)
 
 ### 5.5 ROOT CV IN
 
 * CV input
-* Offsets root note
+* 1V/oct root offset input
+* Combined with Root knob, then quantized to semitone/root domain used by the selected scale
+
+### 5.6 CV Range Policy (v1)
+
+* Default assumption for CV input handling is Rack’s common useful range: **-10V to +10V**
+* Inputs should be clamped to their effective working range before mapping
+* Some controls may intentionally use narrower musical ranges (for finer control):
+
+  * e.g. transpose/root style controls may map a reduced sub-range rather than the full +/-10V span
+* Any narrowed mapping should be explicitly documented in implementation constants/comments
 
 ---
 
@@ -126,6 +142,20 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 ### 6.2 GATE OUT
 
 * Gate per step
+* Gate high duration is derived from:
+
+  * `gateHighSeconds = gateWidthFraction * previousClockPeriodSeconds`
+* `gateWidthFraction` comes from the Gate Width parameter (default 0.50)
+* Startup behavior (before a valid period is known):
+
+  * on the first received clock edge, gate goes high and remains high
+  * gate is closed only when the next clock edge arrives
+  * fractional gate-width timing begins once a prior clock period has been measured
+* If a new clock edge arrives before the scheduled gate-off time:
+
+  * current gate pulse is terminated immediately
+  * next step gate is retriggered on the new clock edge
+  * effective pulse width follows the newest measured period
 
 ### 6.3 ACCENT OUT
 
@@ -143,6 +173,7 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
   * +capture weight
   * +multi-jump weight
   * +kinging bonus
+* Default output range target in v1: **0V to +10V** from normalized move intensity
 
 ### 6.5 EOC OUT
 
@@ -212,9 +243,16 @@ history[startIndex + stepIndex]
 
 ### 8.3 Playback
 
-* Driven by clock (external or internal)
+* Driven by **external clock input only** in v1
 * Step index increments per trigger
 * Wraps at `activeLength`
+* Gate timing model:
+
+  * measure `previousClockPeriodSeconds` from successive clock edges
+  * if no valid previous period exists yet, hold gate high until next clock edge
+  * on each clock edge, emit gate high and schedule gate low at
+    `now + gateWidthFraction * previousClockPeriodSeconds`
+  * if clock retriggers early, cancel pending gate-off and start the new pulse immediately
 
 ---
 
@@ -233,6 +271,9 @@ int octave = idx / scaleLength;
 ```cpp
 pitch = scale[scaleDegree] + octaveOffset + transpose + root;
 ```
+
+Where `transpose` and `root` are both driven by 1V/oct style offsets (knob + CV),
+with root constrained to the module's semitone/scale-root domain before final quantization.
 
 ---
 
@@ -299,6 +340,8 @@ float computeMod(Move m) {
   * king count
   * mobility
   * capture availability
+* v1 AI turn response timing is **immediate / event-driven** after the user move commits
+* no rigid timing budget or delayed-response behavior is required in v1
 
 ---
 
@@ -319,7 +362,7 @@ Right-click menu:
 1. User presses **New Game**
 2. User makes first move
 3. Step appended
-4. AI responds
+4. AI responds immediately (event-driven; no fixed delay requirement)
 5. Step appended
 6. Sequence grows
 7. Playback runs independently
