@@ -54,6 +54,16 @@
         "Expander"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Crownstep",
+      "name": "Crownstep",
+      "description": "Checkers-driven sequencer with shared human and AI move history.",
+      "tags": [
+        "Sequencer",
+        "CV",
+        "Game"
+      ]
     }
   ]
 }

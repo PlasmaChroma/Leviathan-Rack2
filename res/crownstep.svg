@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="91.44mm"
+  height="128.5mm"
+  viewBox="0 0 91.44 128.5">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#15110f"/>
+      <stop offset="100%" stop-color="#2e231c"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="91.44" height="128.5" rx="3.2" fill="url(#bg)"/>
+  <rect x="4.8" y="10.3" width="81.84" height="81.84" rx="2.2" fill="#3a2d24" stroke="#9d7a53" stroke-width="0.8"/>
+  <rect x="4.8" y="94.4" width="81.84" height="15.0" rx="2.0" fill="#201814" stroke="#6d5440" stroke-width="0.5"/>
+  <rect x="4.8" y="110.8" width="81.84" height="13.6" rx="2.0" fill="#171210" stroke="#5f4b3d" stroke-width="0.5"/>
+  <text x="45.72" y="6.8" text-anchor="middle" fill="#f0e2cf" font-family="DejaVu Sans" font-size="5.2">CROWNSTEP</text>
+  <text x="12" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.4">SEQ</text>
+  <text x="29" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.4">ROOT</text>
+  <text x="46" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.4">SCALE</text>
+  <text x="63" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.4">GATE</text>
+  <text x="77.5" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.4">RUN</text>
+  <text x="86" y="97.6" text-anchor="middle" fill="#d8c1a3" font-family="DejaVu Sans" font-size="2.2">NEW</text>
+  <text x="12" y="113.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">CLK</text>
+  <text x="29" y="113.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">RST</text>
+  <text x="46" y="113.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.2">TRNSP</text>
+  <text x="63" y="113.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">ROOT</text>
+  <text x="12" y="124.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">PITCH</text>
+  <text x="29" y="124.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">GATE</text>
+  <text x="46" y="124.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">ACC</text>
+  <text x="63" y="124.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">MOD</text>
+  <text x="80" y="124.2" text-anchor="middle" fill="#cbb49a" font-family="DejaVu Sans" font-size="2.4">EOC</text>
+</svg>
