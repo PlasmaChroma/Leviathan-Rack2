@@ -22,12 +22,21 @@ struct Scale {
 	}
 };
 
-static const std::array<Scale, 6> SCALES = {{
+static constexpr std::array<const char*, 12> KEY_NAMES = {{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}};
+
+static const std::array<Scale, 13> SCALES = {{
 	{"Major", {0, 2, 4, 5, 7, 9, 11}, 7},
 	{"Minor", {0, 2, 3, 5, 7, 8, 10}, 7},
+	{"Harmonic Minor", {0, 2, 3, 5, 7, 8, 11}, 7},
+	{"Melodic Minor", {0, 2, 3, 5, 7, 9, 11}, 7},
 	{"Dorian", {0, 2, 3, 5, 7, 9, 10}, 7},
+	{"Phrygian", {0, 1, 3, 5, 7, 8, 10}, 7},
+	{"Lydian", {0, 2, 4, 6, 7, 9, 11}, 7},
 	{"Mixolydian", {0, 2, 4, 5, 7, 9, 10}, 7},
-	{"Pentatonic", {0, 2, 4, 7, 9, 0, 0}, 5},
+	{"Locrian", {0, 1, 3, 5, 6, 8, 10}, 7},
+	{"Major Pentatonic", {0, 2, 4, 7, 9, 0, 0}, 5},
+	{"Minor Pentatonic", {0, 3, 5, 7, 10, 0, 0}, 5},
+	{"Blues", {0, 3, 5, 6, 7, 10, 0}, 6},
 	{"Chromatic", {0, 1, 2, 3, 4, 5, 6}, 7},
 }};
 

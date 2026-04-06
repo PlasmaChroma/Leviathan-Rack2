@@ -7,6 +7,7 @@ using crownstep::AI_SIDE;
 using crownstep::BOARD_SIZE;
 using crownstep::DIFFICULTY_NAMES;
 using crownstep::HUMAN_SIDE;
+using crownstep::KEY_NAMES;
 using crownstep::Move;
 using crownstep::SCALES;
 using crownstep::SEQ_CAP_NAMES;
@@ -60,6 +61,7 @@ struct Crownstep : Module {
 
 	int selectedSquare = -1;
 	int turnSide = HUMAN_SIDE;
+	int winnerSide = 0;
 	int aiDifficulty = 1;
 	int playhead = 0;
 	float transportTimeSeconds = 0.f;
@@ -69,8 +71,10 @@ struct Crownstep : Module {
 	float heldPitch = 0.f;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
+	float captureFlashSeconds = 0.f;
 	bool gateActive = false;
 	bool gateHoldUntilNextClock = false;
+	bool gameOver = false;
 
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -148,6 +152,9 @@ struct Crownstep : Module {
 		selectedSquare = -1;
 		lastMove = Move();
 		turnSide = HUMAN_SIDE;
+		winnerSide = 0;
+		gameOver = false;
+		captureFlashSeconds = 0.f;
 		resetPlayback();
 		refreshLegalMoves();
 	}
@@ -162,10 +169,13 @@ struct Crownstep : Module {
 					highlightedDestinations.push_back(move.destinationIndex);
 				}
 			}
-			if (highlightedDestinations.empty()) {
-				selectedSquare = -1;
+				if (highlightedDestinations.empty()) {
+					selectedSquare = -1;
+				}
 			}
-		}
+		const std::vector<Move>& activeMoves = (turnSide == HUMAN_SIDE) ? humanMoves : aiMoves;
+		gameOver = activeMoves.empty();
+		winnerSide = gameOver ? -turnSide : 0;
 	}
 
 	int searchDepthForDifficulty() const {
@@ -187,11 +197,12 @@ struct Crownstep : Module {
 		selectedSquare = -1;
 		highlightedDestinations.clear();
 		turnSide = -moverSide;
+		captureFlashSeconds = move.isCapture ? 0.16f : 0.f;
 		refreshLegalMoves();
 	}
 
 	void maybeRunAiTurn() {
-		if (turnSide != AI_SIDE) {
+		if (turnSide != AI_SIDE || gameOver) {
 			return;
 		}
 		Move move = chooseAiMove();
@@ -202,7 +213,7 @@ struct Crownstep : Module {
 	}
 
 	void onBoardSquarePressed(int index) {
-		if (turnSide != HUMAN_SIDE) {
+		if (turnSide != HUMAN_SIDE || gameOver) {
 			return;
 		}
 		if (index < 0 || index >= BOARD_SIZE) {
@@ -280,6 +291,7 @@ struct Crownstep : Module {
 
 	void process(const ProcessArgs& args) override {
 		transportTimeSeconds += args.sampleTime;
+		captureFlashSeconds = std::max(0.f, captureFlashSeconds - args.sampleTime);
 
 		if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
 			startNewGame();
@@ -318,16 +330,18 @@ struct Crownstep : Module {
 		outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
 
 		lights[RUN_LIGHT].setBrightness(running ? 1.f : 0.f);
-		lights[HUMAN_TURN_LIGHT].setBrightness(turnSide == HUMAN_SIDE ? 1.f : 0.f);
-		lights[AI_TURN_LIGHT].setBrightness(turnSide == AI_SIDE ? 1.f : 0.f);
+		lights[HUMAN_TURN_LIGHT].setBrightness(!gameOver && turnSide == HUMAN_SIDE ? 1.f : 0.f);
+		lights[AI_TURN_LIGHT].setBrightness(!gameOver && turnSide == AI_SIDE ? 1.f : 0.f);
 	}
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "turnSide", json_integer(turnSide));
+		json_object_set_new(rootJ, "winnerSide", json_integer(winnerSide));
 		json_object_set_new(rootJ, "selectedSquare", json_integer(selectedSquare));
 		json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
+		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 
 		json_t* boardJ = json_array();
 		for (int piece : board) {
@@ -381,6 +395,10 @@ struct Crownstep : Module {
 		if (turnJ) {
 			turnSide = json_integer_value(turnJ) >= 0 ? HUMAN_SIDE : AI_SIDE;
 		}
+		json_t* winnerJ = json_object_get(rootJ, "winnerSide");
+		if (winnerJ) {
+			winnerSide = int(json_integer_value(winnerJ));
+		}
 		json_t* selectedJ = json_object_get(rootJ, "selectedSquare");
 		if (selectedJ) {
 			selectedSquare = int(json_integer_value(selectedJ));
@@ -392,6 +410,10 @@ struct Crownstep : Module {
 		json_t* playheadJ = json_object_get(rootJ, "playhead");
 		if (playheadJ) {
 			playhead = std::max(0, int(json_integer_value(playheadJ)));
+		}
+		json_t* gameOverJ = json_object_get(rootJ, "gameOver");
+		if (gameOverJ) {
+			gameOver = json_is_true(gameOverJ);
 		}
 
 		json_t* boardJ = json_object_get(rootJ, "board");
@@ -453,6 +475,7 @@ struct Crownstep : Module {
 		}
 
 		lastMove = moveHistory.empty() ? Move() : moveHistory.back();
+		captureFlashSeconds = 0.f;
 		refreshLegalMoves();
 	}
 };
@@ -473,9 +496,8 @@ struct CrownstepScaleQuantity final : ParamQuantity {
 
 struct CrownstepRootQuantity final : ParamQuantity {
 	std::string getDisplayValueString() override {
-		static const std::array<const char*, 12> names = {{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}};
 		int index = clamp(int(std::round(getValue())), 0, 11);
-		return names[size_t(index)];
+		return KEY_NAMES[size_t(index)];
 	}
 };
 
@@ -566,6 +588,17 @@ struct CrownstepBoardWidget final : Widget {
 					nvgStroke(args.vg);
 				}
 			}
+			if (module->captureFlashSeconds > 0.f && module->lastMove.destinationIndex >= 0) {
+				int row = 0;
+				int col = 0;
+				if (crownstep::indexToCoord(module->lastMove.destinationIndex, &row, &col)) {
+					float alpha = clamp(module->captureFlashSeconds / 0.16f, 0.f, 1.f);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, col * cellWidth + 2.f, row * cellHeight + 2.f, cellWidth - 4.f, cellHeight - 4.f);
+					nvgFillColor(args.vg, nvgRGBA(255, 210, 120, int(90.f * alpha)));
+					nvgFill(args.vg);
+				}
+			}
 
 			for (int i = 0; i < BOARD_SIZE; ++i) {
 				int piece = module->board[size_t(i)];
@@ -599,6 +632,22 @@ struct CrownstepBoardWidget final : Widget {
 					nvgText(args.vg, centerX, centerY + 1.f, "K", nullptr);
 				}
 			}
+
+			if (module->gameOver) {
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, 0.f, box.size.y * 0.39f, box.size.x, box.size.y * 0.22f);
+				nvgFillColor(args.vg, nvgRGBA(10, 10, 12, 180));
+				nvgFill(args.vg);
+				nvgFontFaceId(args.vg, APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"))->handle);
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+				nvgFontSize(args.vg, 15.f);
+				nvgFillColor(args.vg, nvgRGB(244, 229, 206));
+				const char* label = module->winnerSide == HUMAN_SIDE ? "YOU WIN" : "AI WINS";
+				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.47f, label, nullptr);
+				nvgFontSize(args.vg, 10.5f);
+				nvgFillColor(args.vg, nvgRGB(213, 189, 160));
+				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback continues", nullptr);
+			}
 		}
 
 		nvgBeginPath(args.vg);
@@ -606,6 +655,59 @@ struct CrownstepBoardWidget final : Widget {
 		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 50));
 		nvgStrokeWidth(args.vg, 1.2f);
 		nvgStroke(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+struct CrownstepStatusWidget final : Widget {
+	Crownstep* module = nullptr;
+	std::shared_ptr<Font> font;
+
+	explicit CrownstepStatusWidget(Crownstep* crownstepModule) {
+		module = crownstepModule;
+		font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgSave(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 5.f);
+		nvgFillColor(args.vg, nvgRGBA(14, 12, 12, 235));
+		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(166, 127, 92, 120));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStroke(args.vg);
+
+		if (module && font) {
+			nvgFontFaceId(args.vg, font->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+
+			std::string turnText;
+			if (module->gameOver) {
+				turnText = (module->winnerSide == HUMAN_SIDE) ? "Game over: human wins" : "Game over: AI wins";
+			}
+			else {
+				turnText = (module->turnSide == HUMAN_SIDE) ? "Turn: human" : "Turn: AI";
+			}
+			nvgFontSize(args.vg, 10.5f);
+			nvgFillColor(args.vg, nvgRGB(244, 229, 206));
+			nvgText(args.vg, 8.f, 7.f, turnText.c_str(), nullptr);
+
+			std::string sequenceText = std::string("Seq: ") + SEQ_CAP_NAMES[size_t(clamp(int(std::round(
+				module->params[Crownstep::SEQ_LENGTH_PARAM].getValue())), 0, int(SEQ_CAP_NAMES.size()) - 1))];
+			std::string scaleText = std::string("Scale: ") + SCALES[size_t(module->currentScaleIndex())].name;
+			std::string keyText = std::string("Key: ") + KEY_NAMES[size_t(module->rootSemitone())];
+			std::string historyText = "Moves: " + std::to_string(module->history.size());
+			std::string windowText = "Window: " + std::to_string(module->activeLength());
+
+			nvgFontSize(args.vg, 9.f);
+			nvgFillColor(args.vg, nvgRGB(212, 191, 164));
+			nvgText(args.vg, 8.f, 23.f, sequenceText.c_str(), nullptr);
+			nvgText(args.vg, 72.f, 23.f, scaleText.c_str(), nullptr);
+			nvgText(args.vg, 8.f, 38.f, historyText.c_str(), nullptr);
+			nvgText(args.vg, 72.f, 38.f, keyText.c_str(), nullptr);
+			nvgText(args.vg, 8.f, 52.f, windowText.c_str(), nullptr);
+		}
 		nvgRestore(args.vg);
 	}
 };
@@ -642,12 +744,17 @@ struct CrownstepWidget final : ModuleWidget {
 		boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
 		addChild(boardWidget);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 101.f)), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.f, 101.f)), module, Crownstep::ROOT_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(46.f, 101.f)), module, Crownstep::SCALE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(63.f, 101.f)), module, Crownstep::GATE_WIDTH_PARAM));
-		addParam(createParamCentered<CKSS>(mm2px(Vec(77.5f, 100.5f)), module, Crownstep::RUN_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(86.f, 100.5f)), module, Crownstep::NEW_GAME_PARAM));
+		CrownstepStatusWidget* statusWidget = new CrownstepStatusWidget(module);
+		statusWidget->box.pos = mm2px(Vec(5.5f, 93.8f));
+		statusWidget->box.size = mm2px(Vec(80.5f, 16.2f));
+		addChild(statusWidget);
+
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 101.2f)), module, Crownstep::SEQ_LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.f, 101.2f)), module, Crownstep::ROOT_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(46.f, 101.2f)), module, Crownstep::SCALE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(63.f, 101.2f)), module, Crownstep::GATE_WIDTH_PARAM));
+		addParam(createParamCentered<CKSS>(mm2px(Vec(77.5f, 101.0f)), module, Crownstep::RUN_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(86.f, 101.0f)), module, Crownstep::NEW_GAME_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 116.f)), module, Crownstep::CLOCK_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(29.f, 116.f)), module, Crownstep::RESET_INPUT));
@@ -692,6 +799,41 @@ struct CrownstepWidget final : ModuleWidget {
 		ModuleWidget::appendContextMenu(menu);
 		Crownstep* module = dynamic_cast<Crownstep*>(this->module);
 		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("Quantizer", "", [=](Menu* submenu) {
+			submenu->addChild(createSubmenuItem("Scale", "", [=](Menu* scaleMenu) {
+				for (int i = 0; i < int(SCALES.size()); ++i) {
+					scaleMenu->addChild(createCheckMenuItem(
+						SCALES[size_t(i)].name,
+						"",
+						[=]() {
+							return module && clamp(int(std::round(module->params[Crownstep::SCALE_PARAM].getValue())), 0,
+								int(SCALES.size()) - 1) == i;
+						},
+						[=]() {
+							if (module) {
+								module->params[Crownstep::SCALE_PARAM].setValue(float(i));
+							}
+						}
+					));
+				}
+			}));
+			submenu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
+				for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
+					keyMenu->addChild(createCheckMenuItem(
+						KEY_NAMES[size_t(i)],
+						"",
+						[=]() {
+							return module && clamp(int(std::round(module->params[Crownstep::ROOT_PARAM].getValue())), 0, 11) == i;
+						},
+						[=]() {
+							if (module) {
+								module->params[Crownstep::ROOT_PARAM].setValue(float(i));
+							}
+						}
+					));
+				}
+			}));
+		}));
 		MenuLabel* label = new MenuLabel();
 		label->text = "AI Difficulty";
 		menu->addChild(label);
