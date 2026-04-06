@@ -85,6 +85,10 @@ struct TDScope final : Module {
     COLOR_SCHEME_PICKLE,
     COLOR_SCHEME_HELLFIRE,
     COLOR_SCHEME_ANGELIC,
+    COLOR_SCHEME_VIOLET_FLAME,
+    COLOR_SCHEME_PIXIE,
+    COLOR_SCHEME_WASP,
+    COLOR_SCHEME_EMERALD,
     COLOR_SCHEME_COUNT
   };
 
@@ -435,62 +439,151 @@ struct TDScopeDisplayWidget final : Widget {
       float lowR = 85.f;
       float lowG = 227.f;
       float lowB = 238.f;
+      float midR = 176.f;
+      float midG = 143.f;
+      float midB = 245.f;
       float highR = 233.f;
       float highG = 112.f;
       float highB = 218.f;
+      float midPoint = 0.5f;
       switch (module->scopeColorScheme) {
+        case TDScope::COLOR_SCHEME_EMERALD:
+          // Emerald: low -> deep forest green, mid -> jade, high -> mint.
+          lowR = 15.f;   // #0f4f36
+          lowG = 79.f;
+          lowB = 54.f;
+          midR = 47.f;   // #2fa86e
+          midG = 168.f;
+          midB = 110.f;
+          highR = 87.f;  // #57f0b6
+          highG = 240.f;
+          highB = 182.f;
+          midPoint = 0.52f;
+          break;
+        case TDScope::COLOR_SCHEME_WASP:
+          // Wasp: low -> amber shadow, mid -> warning orange, high -> yellow.
+          lowR = 33.f;   // #211b12
+          lowG = 27.f;
+          lowB = 18.f;
+          midR = 231.f;  // #e7892f
+          midG = 137.f;
+          midB = 47.f;
+          highR = 255.f; // #ffd84a
+          highG = 216.f;
+          highB = 74.f;
+          midPoint = 0.58f;
+          break;
+        case TDScope::COLOR_SCHEME_PIXIE:
+          // Pixie: low -> candy pink, mid -> fairy lavender, high -> mint.
+          lowR = 255.f;  // #ff8fd1
+          lowG = 143.f;
+          lowB = 209.f;
+          midR = 211.f;  // #d3b4ef
+          midG = 180.f;
+          midB = 239.f;
+          highR = 129.f; // #81ffd2
+          highG = 255.f;
+          highB = 210.f;
+          midPoint = 0.48f;
+          break;
+        case TDScope::COLOR_SCHEME_VIOLET_FLAME:
+          // Violet Flame: low -> indigo, mid -> flame magenta, high -> violet.
+          lowR = 42.f;   // #2a1f5f
+          lowG = 31.f;
+          lowB = 95.f;
+          midR = 147.f;  // #9347d9
+          midG = 71.f;
+          midB = 217.f;
+          highR = 181.f; // #b56dff
+          highG = 109.f;
+          highB = 255.f;
+          midPoint = 0.54f;
+          break;
         case TDScope::COLOR_SCHEME_ANGELIC:
-          // Angelic: low -> soft pearl white, high -> celestial sky blue.
+          // Angelic: low -> pearl, mid -> halo lavender, high -> sky blue.
           lowR = 248.f;  // #f8f5ff
           lowG = 245.f;
           lowB = 255.f;
+          midR = 232.f;  // #e8dcff
+          midG = 220.f;
+          midB = 255.f;
           highR = 179.f; // #b3e5ff
           highG = 229.f;
           highB = 255.f;
+          midPoint = 0.40f;
           break;
         case TDScope::COLOR_SCHEME_HELLFIRE:
-          // Hellfire: low -> deep lava red, high -> bright ember yellow.
+          // Hellfire: low -> lava red, mid -> inferno orange, high -> ember.
           lowR = 120.f;  // #78180f
           lowG = 24.f;
           lowB = 15.f;
+          midR = 255.f;  // #ff6f2b
+          midG = 111.f;
+          midB = 43.f;
           highR = 255.f; // #ffd166
           highG = 209.f;
           highB = 102.f;
+          midPoint = 0.60f;
           break;
         case TDScope::COLOR_SCHEME_PICKLE:
-          // Pickle: low -> deep dill green, high -> bright brine chartreuse.
+          // Pickle: low -> dill green, mid -> olive brine, high -> chartreuse.
           lowR = 62.f;   // #3e6f31
           lowG = 111.f;
           lowB = 49.f;
+          midR = 132.f;  // #84b948
+          midG = 185.f;
+          midB = 72.f;
           highR = 190.f; // #beea61
           highG = 234.f;
           highB = 97.f;
+          midPoint = 0.56f;
           break;
         case TDScope::COLOR_SCHEME_LEVIATHAN:
-          // Original Leviathan palette from TD.Scope title gradient:
-          // low -> #7a5cff, high -> #1cccd9.
+          // Leviathan: low -> purple, mid -> vivid blue, high -> cyan.
           lowR = 122.f;
           lowG = 92.f;
           lowB = 255.f;
+          midR = 75.f;   // #4b8dff
+          midG = 141.f;
+          midB = 255.f;
           highR = 28.f;
           highG = 204.f;
           highB = 217.f;
+          midPoint = 0.52f;
           break;
         case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
         default:
-          // Temporal Deck: low -> #55e3ee, high -> #e970da.
+          // Temporal Deck: low cyan -> mid lilac -> high magenta.
           lowR = 85.f;
           lowG = 227.f;
           lowB = 238.f;
+          midR = 176.f;
+          midG = 143.f;
+          midB = 245.f;
           highR = 233.f;
           highG = 112.f;
           highB = 218.f;
+          midPoint = 0.5f;
           break;
       }
-      uint8_t r = uint8_t(std::lround(lowR + (highR - lowR) * intensity));
-      uint8_t g = uint8_t(std::lround(lowG + (highG - lowG) * intensity));
-      uint8_t b = uint8_t(std::lround(lowB + (highB - lowB) * intensity));
-      return nvgRGBA(r, g, b, alpha);
+      float r = 0.f;
+      float g = 0.f;
+      float b = 0.f;
+      if (intensity <= midPoint) {
+        float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+        r = lowR + (midR - lowR) * t;
+        g = lowG + (midG - lowG) * t;
+        b = lowB + (midB - lowB) * t;
+      } else {
+        float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+        r = midR + (highR - midR) * t;
+        g = midG + (highG - midG) * t;
+        b = midB + (highB - midB) * t;
+      }
+      uint8_t rq = uint8_t(std::lround(clamp(r, 0.f, 255.f)));
+      uint8_t gq = uint8_t(std::lround(clamp(g, 0.f, 255.f)));
+      uint8_t bq = uint8_t(std::lround(clamp(b, 0.f, 255.f)));
+      return nvgRGBA(rq, gq, bq, alpha);
     };
 
     nvgSave(args.vg);
@@ -670,6 +763,18 @@ struct TDScopeWidget : ModuleWidget {
       submenu->addChild(createCheckMenuItem(
         "Angelic", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_ANGELIC; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_ANGELIC; }));
+      submenu->addChild(createCheckMenuItem(
+        "Violet Flame", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_VIOLET_FLAME; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_VIOLET_FLAME; }));
+      submenu->addChild(createCheckMenuItem(
+        "Pixie", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PIXIE; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PIXIE; }));
+      submenu->addChild(createCheckMenuItem(
+        "Wasp", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_WASP; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_WASP; }));
+      submenu->addChild(createCheckMenuItem(
+        "Emerald", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_EMERALD; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_EMERALD; }));
     }));
   }
 };
