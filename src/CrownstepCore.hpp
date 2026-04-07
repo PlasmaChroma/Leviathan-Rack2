@@ -43,6 +43,7 @@ static const std::array<Scale, 13> SCALES = {{
 static constexpr std::array<int, 5> SEQ_CAPS = {{0, 8, 16, 32, 64}};
 static constexpr std::array<const char*, 5> SEQ_CAP_NAMES = {{"Full", "8", "16", "32", "64"}};
 static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal", "Hard"}};
+static constexpr std::array<const char*, 2> PITCH_INTERPRETATION_NAMES = {{"Origin Square", "Destination Square"}};
 
 struct Move {
 	int originIndex = -1;
@@ -422,17 +423,41 @@ inline Move chooseAiMove(const std::array<int, BOARD_SIZE>& board, int difficult
 	return moves[size_t(bestIndex)];
 }
 
-inline float mapPitch(const Move& move, int scaleIndex, int rootSemitone, float transposeVolts) {
+inline int interpretPitchIndexForMove(const Move& move, int interpretationMode) {
+	int mode = std::max(0, std::min(interpretationMode, int(PITCH_INTERPRETATION_NAMES.size()) - 1));
+	int index = (mode == 1) ? move.destinationIndex : move.originIndex;
+	return std::max(0, std::min(index, BOARD_SIZE - 1));
+}
+
+inline float mapPitchFromIndex(int index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {
 	const Scale& scale = SCALES[size_t(std::max(0, std::min(scaleIndex, int(SCALES.size()) - 1)))];
 	int scaleLen = std::max(scale.length, 1);
-	int idx = std::max(0, std::min(move.originIndex, BOARD_SIZE - 1));
+	int idx = std::max(0, index);
 	int scaleDegree = idx % scaleLen;
 	int octave = idx / scaleLen;
 	int semitone = scale.semitones[size_t(scaleDegree)] + octave * 12 + wrapSemitone12(rootSemitone);
-	if (move.isKing) {
+	if (isKing) {
 		semitone += 12;
 	}
 	return float(semitone) / 12.f + transposeVolts;
+}
+
+inline float mapRawPitchFromIndex(int index, bool isKing, float transposeVolts) {
+	int semitone = std::max(0, index);
+	if (isKing) {
+		semitone += 12;
+	}
+	return float(semitone) / 12.f + transposeVolts;
+}
+
+inline float mapPitch(const Move& move, int scaleIndex, int rootSemitone, float transposeVolts) {
+	int index = interpretPitchIndexForMove(move, 0);
+	return mapPitchFromIndex(index, move.isKing, scaleIndex, rootSemitone, transposeVolts);
+}
+
+inline float mapRawPitch(const Move& move, float transposeVolts) {
+	int index = interpretPitchIndexForMove(move, 0);
+	return mapRawPitchFromIndex(index, move.isKing, transposeVolts);
 }
 
 inline Step makeStepFromMove(const Move& move, int scaleIndex, int rootSemitone, float transposeVolts) {

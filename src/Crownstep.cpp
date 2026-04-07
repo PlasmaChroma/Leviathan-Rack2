@@ -14,6 +14,7 @@ using crownstep::DIFFICULTY_NAMES;
 using crownstep::HUMAN_SIDE;
 using crownstep::KEY_NAMES;
 using crownstep::Move;
+using crownstep::PITCH_INTERPRETATION_NAMES;
 using crownstep::SCALES;
 using crownstep::SEQ_CAP_NAMES;
 using crownstep::SEQ_CAPS;
@@ -150,6 +151,8 @@ struct Crownstep : Module {
 	int winnerSide = 0;
 	int lastMoveSide = 0;
 	int aiDifficulty = 1;
+	bool quantizationEnabled = true;
+	int pitchInterpretationMode = 0;
 	int playhead = 0;
 	float transportTimeSeconds = 0.f;
 	float lastClockEdgeSeconds = -1.f;
@@ -297,8 +300,24 @@ struct Crownstep : Module {
 		return crownstep::wrapSemitone12(total);
 	}
 
+	float pitchForMove(const Move& move) {
+		int interpretedIndex = crownstep::interpretPitchIndexForMove(move, pitchInterpretationMode);
+		if (quantizationEnabled) {
+			return crownstep::mapPitchFromIndex(
+				interpretedIndex,
+				move.isKing,
+				currentScaleIndex(),
+				rootSemitone(),
+				transposeVolts()
+			);
+		}
+		return crownstep::mapRawPitchFromIndex(interpretedIndex, move.isKing, transposeVolts());
+	}
+
 	Step makeStepFromMove(const Move& move) {
-		return crownstep::makeStepFromMove(move, currentScaleIndex(), rootSemitone(), transposeVolts());
+		Step step = crownstep::makeStepFromMove(move, currentScaleIndex(), rootSemitone(), transposeVolts());
+		step.pitch = pitchForMove(move);
+		return step;
 	}
 
 	void startNewGame() {
@@ -526,11 +545,11 @@ struct Crownstep : Module {
 			return 0.f;
 		}
 
-		// Preferred path: derive pitch from the underlying move sequence so
-		// quantizer settings are applied live at playback time.
+		// Preferred path: derive pitch from move sequence so interpretation
+		// and quantization settings are applied live at playback time.
 		if (sequenceIndex < int(moveHistory.size())) {
 			const Move& move = moveHistory[size_t(sequenceIndex)];
-			return crownstep::mapPitch(move, currentScaleIndex(), rootSemitone(), transposeVolts());
+			return pitchForMove(move);
 		}
 
 		// Backward compatibility for older saves that may not contain moveHistory.
@@ -649,6 +668,8 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "winnerSide", json_integer(winnerSide));
 		json_object_set_new(rootJ, "selectedSquare", json_integer(selectedSquare));
 		json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
+		json_object_set_new(rootJ, "quantizationEnabled", json_boolean(quantizationEnabled));
+		json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -717,6 +738,15 @@ struct Crownstep : Module {
 		json_t* difficultyJ = json_object_get(rootJ, "aiDifficulty");
 		if (difficultyJ) {
 			aiDifficulty = clamp(int(json_integer_value(difficultyJ)), 0, 2);
+		}
+		json_t* quantizationEnabledJ = json_object_get(rootJ, "quantizationEnabled");
+		if (quantizationEnabledJ) {
+			quantizationEnabled = json_is_true(quantizationEnabledJ);
+		}
+		json_t* pitchInterpretationModeJ = json_object_get(rootJ, "pitchInterpretationMode");
+		if (pitchInterpretationModeJ) {
+			pitchInterpretationMode =
+				clamp(int(json_integer_value(pitchInterpretationModeJ)), 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
 		}
 		json_t* playheadJ = json_object_get(rootJ, "playhead");
 		if (playheadJ) {
@@ -1137,6 +1167,16 @@ struct CrownstepBoardWidget final : Widget {
 						return false;
 					};
 
+					const bool showMovablePieceHints = !module->gameOver && module->turnSide == HUMAN_SIDE;
+					std::array<uint8_t, BOARD_SIZE> movableOrigins {};
+					if (showMovablePieceHints) {
+						for (const Move& move : module->humanMoves) {
+							if (move.originIndex >= 0 && move.originIndex < BOARD_SIZE) {
+								movableOrigins[size_t(move.originIndex)] = 1u;
+							}
+						}
+					}
+
 					for (int i = 0; i < BOARD_SIZE; ++i) {
 						int piece = module->board[size_t(i)];
 						if (piece == 0) {
@@ -1290,6 +1330,41 @@ struct CrownstepBoardWidget final : Widget {
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.062f);
 						nvgFillColor(args.vg, nvgRGBA(255, 222, 128, int(190.f + 56.f * breath)));
 						nvgFill(args.vg);
+					}
+				}
+
+				// Human-turn assist: ring pieces that have at least one legal move.
+				if (showMovablePieceHints) {
+					for (int i = 0; i < BOARD_SIZE; ++i) {
+						if (!movableOrigins[size_t(i)]) {
+							continue;
+						}
+						int piece = module->board[size_t(i)];
+						if (crownstep::pieceSide(piece) != HUMAN_SIDE) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(i, &row, &col)) {
+							continue;
+						}
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						float phase = float(i) * 0.37f + 0.4f;
+						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + phase);
+						float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
+
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, ringRadius);
+						nvgStrokeColor(args.vg, nvgRGBA(88, 240, 154, int(38.f + 44.f * pulse)));
+						nvgStrokeWidth(args.vg, 3.6f);
+						nvgStroke(args.vg);
+
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, ringRadius);
+						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(182.f + 58.f * pulse)));
+						nvgStrokeWidth(args.vg, 1.85f);
+						nvgStroke(args.vg);
 					}
 				}
 
@@ -1487,6 +1562,34 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
+		menu->addChild(createSubmenuItem("Move Interpretation", "", [=](Menu* interpretationMenu) {
+			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
+				interpretationMenu->addChild(createCheckMenuItem(
+					PITCH_INTERPRETATION_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->pitchInterpretationMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->pitchInterpretationMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createCheckMenuItem(
+			"Enable Quantization",
+			"",
+			[=]() {
+				return module && module->quantizationEnabled;
+			},
+			[=]() {
+				if (module) {
+					module->quantizationEnabled = !module->quantizationEnabled;
+				}
+			}
+		));
 		MenuLabel* label = new MenuLabel();
 		label->text = "AI Difficulty";
 		menu->addChild(label);
