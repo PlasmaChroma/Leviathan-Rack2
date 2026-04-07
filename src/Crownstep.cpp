@@ -10,6 +10,7 @@
 
 using crownstep::AI_SIDE;
 using crownstep::BOARD_SIZE;
+using crownstep::BOARD_VALUE_LAYOUT_NAMES;
 using crownstep::DIFFICULTY_NAMES;
 using crownstep::HUMAN_SIDE;
 using crownstep::KEY_NAMES;
@@ -153,6 +154,7 @@ struct Crownstep : Module {
 	int aiDifficulty = 1;
 	bool quantizationEnabled = true;
 	int pitchInterpretationMode = 0;
+	int boardValueLayoutMode = 0;
 	int playhead = 0;
 	float transportTimeSeconds = 0.f;
 	float lastClockEdgeSeconds = -1.f;
@@ -301,17 +303,17 @@ struct Crownstep : Module {
 	}
 
 	float pitchForMove(const Move& move) {
-		int interpretedIndex = crownstep::interpretPitchIndexForMove(move, pitchInterpretationMode);
+		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
 		if (quantizationEnabled) {
 			return crownstep::mapPitchFromIndex(
-				interpretedIndex,
+				boardValueIndex,
 				move.isKing,
 				currentScaleIndex(),
 				rootSemitone(),
 				transposeVolts()
 			);
 		}
-		return crownstep::mapRawPitchFromIndex(interpretedIndex, move.isKing, transposeVolts());
+		return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, transposeVolts());
 	}
 
 	Step makeStepFromMove(const Move& move) {
@@ -670,6 +672,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
 		json_object_set_new(rootJ, "quantizationEnabled", json_boolean(quantizationEnabled));
 		json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
+		json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -747,6 +750,11 @@ struct Crownstep : Module {
 		if (pitchInterpretationModeJ) {
 			pitchInterpretationMode =
 				clamp(int(json_integer_value(pitchInterpretationModeJ)), 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
+		}
+		json_t* boardValueLayoutModeJ = json_object_get(rootJ, "boardValueLayoutMode");
+		if (boardValueLayoutModeJ) {
+			boardValueLayoutMode =
+				clamp(int(json_integer_value(boardValueLayoutModeJ)), 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
 		}
 		json_t* playheadJ = json_object_get(rootJ, "playhead");
 		if (playheadJ) {
@@ -1562,7 +1570,7 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Move Interpretation", "", [=](Menu* interpretationMenu) {
+		menu->addChild(createSubmenuItem("Pitch Data Source", "", [=](Menu* interpretationMenu) {
 			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
 				interpretationMenu->addChild(createCheckMenuItem(
 					PITCH_INTERPRETATION_NAMES[size_t(i)],
@@ -1573,6 +1581,22 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->pitchInterpretationMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Board Value Layout", "", [=](Menu* valueLayoutMenu) {
+			for (int i = 0; i < int(BOARD_VALUE_LAYOUT_NAMES.size()); ++i) {
+				valueLayoutMenu->addChild(createCheckMenuItem(
+					BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->boardValueLayoutMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->boardValueLayoutMode = i;
 						}
 					}
 				));

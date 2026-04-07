@@ -43,7 +43,12 @@ static const std::array<Scale, 13> SCALES = {{
 static constexpr std::array<int, 5> SEQ_CAPS = {{0, 8, 16, 32, 64}};
 static constexpr std::array<const char*, 5> SEQ_CAP_NAMES = {{"Full", "8", "16", "32", "64"}};
 static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal", "Hard"}};
-static constexpr std::array<const char*, 2> PITCH_INTERPRETATION_NAMES = {{"Origin Square", "Destination Square"}};
+static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
+	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
+};
+static constexpr std::array<const char*, 3> BOARD_VALUE_LAYOUT_NAMES = {
+	{"Linear", "Serpentine Rows", "Center-Out"}
+};
 
 struct Move {
 	int originIndex = -1;
@@ -423,16 +428,87 @@ inline Move chooseAiMove(const std::array<int, BOARD_SIZE>& board, int difficult
 	return moves[size_t(bestIndex)];
 }
 
-inline int interpretPitchIndexForMove(const Move& move, int interpretationMode) {
+inline float interpretPitchIndexForMove(const Move& move, int interpretationMode) {
 	int mode = std::max(0, std::min(interpretationMode, int(PITCH_INTERPRETATION_NAMES.size()) - 1));
-	int index = (mode == 1) ? move.destinationIndex : move.originIndex;
-	return std::max(0, std::min(index, BOARD_SIZE - 1));
+	float origin = float(std::max(0, std::min(move.originIndex, BOARD_SIZE - 1)));
+	float destination = float(std::max(0, std::min(move.destinationIndex, BOARD_SIZE - 1)));
+	if (mode == 1) {
+		return destination;
+	}
+	if (mode == 2) {
+		return 0.5f * (origin + destination);
+	}
+	return origin;
 }
 
-inline float mapPitchFromIndex(int index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {
+inline float boardCenterMetric(int boardIndex) {
+	int row = 0;
+	int col = 0;
+	indexToCoord(boardIndex, &row, &col);
+	float dx = float(col) - 3.5f;
+	float dy = float(row) - 3.5f;
+	// Tie-breakers keep rank stable for symmetric cells.
+	return dx * dx + dy * dy + float(row) * 0.01f + float(col) * 0.001f;
+}
+
+inline int boardValueForIndex(int boardIndex, int layoutMode) {
+	int index = std::max(0, std::min(boardIndex, BOARD_SIZE - 1));
+	int mode = std::max(0, std::min(layoutMode, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1));
+	switch (mode) {
+		case 1: {
+			int row = index / 4;
+			int posInRow = index % 4;
+			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
+			return row * 4 + serpentinePos;
+		}
+		case 2: {
+			float metric = boardCenterMetric(index);
+			int rank = 0;
+			for (int i = 0; i < BOARD_SIZE; ++i) {
+				if (boardCenterMetric(i) < metric) {
+					rank++;
+				}
+			}
+			return rank;
+		}
+		case 0:
+		default:
+			return index;
+	}
+}
+
+inline float boardValueForSampledIndex(float sampledIndex, int layoutMode) {
+	float x = std::max(0.f, std::min(sampledIndex, float(BOARD_SIZE - 1)));
+	int low = int(std::floor(x));
+	int high = int(std::ceil(x));
+	float lowValue = float(boardValueForIndex(low, layoutMode));
+	if (high <= low) {
+		return lowValue;
+	}
+	float highValue = float(boardValueForIndex(high, layoutMode));
+	float t = x - float(low);
+	return lowValue + (highValue - lowValue) * t;
+}
+
+inline float sampledBoardValueForMove(const Move& move, int interpretationMode, int layoutMode) {
+	int mode = std::max(0, std::min(interpretationMode, int(PITCH_INTERPRETATION_NAMES.size()) - 1));
+	float originIndex = float(std::max(0, std::min(move.originIndex, BOARD_SIZE - 1)));
+	float destinationIndex = float(std::max(0, std::min(move.destinationIndex, BOARD_SIZE - 1)));
+	float originValue = boardValueForSampledIndex(originIndex, layoutMode);
+	float destinationValue = boardValueForSampledIndex(destinationIndex, layoutMode);
+	if (mode == 1) {
+		return destinationValue;
+	}
+	if (mode == 2) {
+		return 0.5f * (originValue + destinationValue);
+	}
+	return originValue;
+}
+
+inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {
 	const Scale& scale = SCALES[size_t(std::max(0, std::min(scaleIndex, int(SCALES.size()) - 1)))];
 	int scaleLen = std::max(scale.length, 1);
-	int idx = std::max(0, index);
+	int idx = std::max(0, int(std::lround(std::max(0.f, index))));
 	int scaleDegree = idx % scaleLen;
 	int octave = idx / scaleLen;
 	int semitone = scale.semitones[size_t(scaleDegree)] + octave * 12 + wrapSemitone12(rootSemitone);
@@ -442,21 +518,21 @@ inline float mapPitchFromIndex(int index, bool isKing, int scaleIndex, int rootS
 	return float(semitone) / 12.f + transposeVolts;
 }
 
-inline float mapRawPitchFromIndex(int index, bool isKing, float transposeVolts) {
-	int semitone = std::max(0, index);
+inline float mapRawPitchFromIndex(float index, bool isKing, float transposeVolts) {
+	float semitone = std::max(0.f, index);
 	if (isKing) {
-		semitone += 12;
+		semitone += 12.f;
 	}
-	return float(semitone) / 12.f + transposeVolts;
+	return semitone / 12.f + transposeVolts;
 }
 
 inline float mapPitch(const Move& move, int scaleIndex, int rootSemitone, float transposeVolts) {
-	int index = interpretPitchIndexForMove(move, 0);
+	float index = interpretPitchIndexForMove(move, 0);
 	return mapPitchFromIndex(index, move.isKing, scaleIndex, rootSemitone, transposeVolts);
 }
 
 inline float mapRawPitch(const Move& move, float transposeVolts) {
-	int index = interpretPitchIndexForMove(move, 0);
+	float index = interpretPitchIndexForMove(move, 0);
 	return mapRawPitchFromIndex(index, move.isKing, transposeVolts);
 }
 
