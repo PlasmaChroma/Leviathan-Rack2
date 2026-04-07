@@ -1253,6 +1253,77 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
+				// Keep forced/destination hint visibility even when a destination is visually occupied
+				// (e.g. during queued animations) by drawing a top-layer pulse over the piece.
+				if (!module->gameOver) {
+					for (int destinationIndex : module->highlightedDestinations) {
+						if (destinationIndex < 0 || destinationIndex >= BOARD_SIZE) {
+							continue;
+						}
+						bool occupied = module->board[size_t(destinationIndex)] != 0;
+						bool landingAnimation =
+							(module->moveAnimation.active && module->moveAnimation.destinationIndex == destinationIndex)
+							|| indexIsQueuedDestination(destinationIndex);
+						if (!occupied && !landingAnimation) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+							continue;
+						}
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						float phase = float(destinationIndex) * 0.43f + 0.9f;
+						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.8f + phase);
+						float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, ringRadius);
+						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(186.f + 62.f * breath)));
+						nvgStrokeWidth(args.vg, 1.9f);
+						nvgStroke(args.vg);
+					}
+
+					for (int destinationIndex : module->opponentHighlightedDestinations) {
+						bool overlapsHuman = false;
+						for (int humanDestination : module->highlightedDestinations) {
+							if (humanDestination == destinationIndex) {
+								overlapsHuman = true;
+								break;
+							}
+						}
+						if (overlapsHuman || destinationIndex < 0 || destinationIndex >= BOARD_SIZE) {
+							continue;
+						}
+						bool occupied = module->board[size_t(destinationIndex)] != 0;
+						bool landingAnimation =
+							(module->moveAnimation.active && module->moveAnimation.destinationIndex == destinationIndex)
+							|| indexIsQueuedDestination(destinationIndex);
+						if (!occupied && !landingAnimation) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+							continue;
+						}
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						float phase = float(destinationIndex) * 0.39f + 2.2f;
+						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.2f + phase);
+						float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, ringRadius);
+						nvgStrokeColor(args.vg, nvgRGBA(255, 213, 79, int(180.f + 68.f * breath)));
+						nvgStrokeWidth(args.vg, 1.85f);
+						nvgStroke(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.062f);
+						nvgFillColor(args.vg, nvgRGBA(255, 222, 128, int(190.f + 56.f * breath)));
+						nvgFill(args.vg);
+					}
+				}
+
 				if (module->gameOver) {
 				nvgBeginPath(args.vg);
 				nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -1323,20 +1394,91 @@ struct CrownstepWidget final : ModuleWidget {
 
 		// Bottom control layout:
 		// left cluster = inputs, center = knobs/button, right cluster = outputs.
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(43.f, 101.5f)), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(43.f, 114.0f)), module, Crownstep::GATE_WIDTH_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(43.f, 124.8f)), module, Crownstep::NEW_GAME_PARAM));
+		math::Rect inputsAreaMm;
+		math::Rect outputsAreaMm;
+		math::Rect controlsAreaMm;
+		bool hasInputsArea = loadRectFromSvgMm(panelPath, "INPUTS_AREA", &inputsAreaMm);
+		bool hasOutputsArea = loadRectFromSvgMm(panelPath, "OUTPUTS_AREA", &outputsAreaMm);
+		bool hasControlsArea = loadRectFromSvgMm(panelPath, "CONTROLS_AREA", &controlsAreaMm);
+		bool hasBottomAnchors = hasInputsArea || hasOutputsArea || hasControlsArea;
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 108.0f)), module, Crownstep::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 108.0f)), module, Crownstep::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 121.0f)), module, Crownstep::TRANSPOSE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 121.0f)), module, Crownstep::ROOT_INPUT));
+		auto pointInRect = [](const math::Rect& rect, float u, float v) {
+			return Vec(rect.pos.x + rect.size.x * u, rect.pos.y + rect.size.y * v);
+		};
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(58.f, 108.0f)), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.f, 108.0f)), module, Crownstep::GATE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(58.f, 121.0f)), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.f, 121.0f)), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(86.f, 121.0f)), module, Crownstep::EOC_OUTPUT));
+		Vec seqPos(43.f, 101.5f);
+		Vec gateWidthPos(43.f, 114.0f);
+		Vec newGamePos(43.f, 124.8f);
+		Vec clockPos(12.f, 108.0f);
+		Vec resetPos(28.f, 108.0f);
+		Vec transposePos(12.f, 121.0f);
+		Vec rootCvPos(28.f, 121.0f);
+		Vec pitchPos(58.f, 108.0f);
+		Vec gatePos(74.f, 108.0f);
+		Vec accentPos(58.f, 121.0f);
+		Vec modPos(74.f, 121.0f);
+		Vec eocPos(86.f, 121.0f);
+
+		if (hasInputsArea) {
+			clockPos = pointInRect(inputsAreaMm, 0.30f, 0.38f);
+			resetPos = pointInRect(inputsAreaMm, 0.70f, 0.38f);
+			transposePos = pointInRect(inputsAreaMm, 0.30f, 0.78f);
+			rootCvPos = pointInRect(inputsAreaMm, 0.70f, 0.78f);
+		}
+		if (hasOutputsArea) {
+			pitchPos = pointInRect(outputsAreaMm, 0.20f, 0.38f);
+			gatePos = pointInRect(outputsAreaMm, 0.51f, 0.38f);
+			accentPos = pointInRect(outputsAreaMm, 0.20f, 0.78f);
+			modPos = pointInRect(outputsAreaMm, 0.51f, 0.78f);
+			eocPos = pointInRect(outputsAreaMm, 0.82f, 0.78f);
+		}
+		if (hasBottomAnchors) {
+			float controlX = 43.f;
+			float controlY = 98.f;
+			float controlH = 22.f;
+			if (hasControlsArea) {
+				controlX = controlsAreaMm.pos.x + controlsAreaMm.size.x * 0.5f;
+				controlY = controlsAreaMm.pos.y;
+				controlH = controlsAreaMm.size.y;
+			}
+			else {
+				if (hasInputsArea && hasOutputsArea) {
+					float leftX = inputsAreaMm.pos.x + inputsAreaMm.size.x;
+					float rightX = outputsAreaMm.pos.x;
+					controlX = (leftX + rightX) * 0.5f;
+					controlY = (inputsAreaMm.pos.y + outputsAreaMm.pos.y) * 0.5f;
+					controlH = (inputsAreaMm.size.y + outputsAreaMm.size.y) * 0.5f;
+				}
+				else if (hasInputsArea) {
+					controlX = inputsAreaMm.pos.x + inputsAreaMm.size.x + 8.f;
+					controlY = inputsAreaMm.pos.y;
+					controlH = inputsAreaMm.size.y;
+				}
+				else if (hasOutputsArea) {
+					controlX = outputsAreaMm.pos.x - 8.f;
+					controlY = outputsAreaMm.pos.y;
+					controlH = outputsAreaMm.size.y;
+				}
+			}
+			seqPos = Vec(controlX, controlY + controlH * 0.16f);
+			gateWidthPos = Vec(controlX, controlY + controlH * 0.53f);
+			newGamePos = Vec(controlX, controlY + controlH * 0.88f);
+		}
+
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(seqPos), module, Crownstep::SEQ_LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(gateWidthPos), module, Crownstep::GATE_WIDTH_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+
+		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
+
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(gatePos), module, Crownstep::GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(Vec(86.5f, 93.f)), module, Crownstep::AI_TURN_LIGHT));
