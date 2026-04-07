@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.3.12",
+  "version": "2.3.13",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -58,11 +58,11 @@
     {
       "slug": "Crownstep",
       "name": "Crownstep",
-      "description": "Checkers-driven sequencer with shared human and AI move history.",
+      "description": "Checkers-driven sequencer.",
       "tags": [
         "Sequencer"
       ],
-      "hidden": true
+      "hidden": false
     }
   ]
 }

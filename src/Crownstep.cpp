@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "CrownstepCore.hpp"
 
+#include <exception>
 #include <string>
 
 using crownstep::AI_SIDE;
@@ -503,13 +504,9 @@ struct Crownstep : Module {
 
 struct CrownstepBoardWidget final : Widget {
 	Crownstep* module = nullptr;
-	std::shared_ptr<Font> font;
 
 	explicit CrownstepBoardWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
-		if (APP && APP->window) {
-			font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
-		}
 	}
 
 	int indexFromLocalPos(Vec pos) const {
@@ -630,9 +627,6 @@ struct CrownstepBoardWidget final : Widget {
 
 				if (crownstep::pieceIsKing(piece)) {
 					nvgFontSize(args.vg, radius * 1.05f);
-					if (font) {
-						nvgFontFaceId(args.vg, font->handle);
-					}
 					nvgFillColor(args.vg, nvgRGB(247, 214, 99));
 					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 					nvgText(args.vg, centerX, centerY + 1.f, "K", nullptr);
@@ -644,9 +638,6 @@ struct CrownstepBoardWidget final : Widget {
 				nvgRect(args.vg, 0.f, box.size.y * 0.39f, box.size.x, box.size.y * 0.22f);
 				nvgFillColor(args.vg, nvgRGBA(10, 10, 12, 180));
 				nvgFill(args.vg);
-				if (font) {
-					nvgFontFaceId(args.vg, font->handle);
-				}
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFontSize(args.vg, 15.f);
 				nvgFillColor(args.vg, nvgRGB(244, 229, 206));
@@ -669,13 +660,9 @@ struct CrownstepBoardWidget final : Widget {
 
 struct CrownstepStatusWidget final : Widget {
 	Crownstep* module = nullptr;
-	std::shared_ptr<Font> font;
 
 	explicit CrownstepStatusWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
-		if (APP && APP->window) {
-			font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
-		}
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -688,8 +675,7 @@ struct CrownstepStatusWidget final : Widget {
 		nvgStrokeWidth(args.vg, 1.f);
 		nvgStroke(args.vg);
 
-		if (module && font) {
-			nvgFontFaceId(args.vg, font->handle);
+		if (module) {
 			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 
 			std::string turnText;
@@ -742,7 +728,14 @@ struct CrownstepDifficultyItem final : MenuItem {
 struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/crownstep.svg")));
+		const std::string panelPath = asset::plugin(pluginInstance, "res/crownstep.svg");
+		try {
+			setPanel(createPanel(panelPath));
+		}
+		catch (const std::exception& e) {
+			WARN("Crownstep panel load failed (%s), using fallback: %s", panelPath.c_str(), e.what());
+			setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg")));
+		}
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));

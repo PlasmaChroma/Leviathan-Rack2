@@ -25,13 +25,22 @@ void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
 
+	auto registerModel = [&](Model* model, const char* label) {
+		if (!model) {
+			WARN("Leviathan init: model %s is null", label);
+			return;
+		}
+		p->addModel(model);
+		INFO("Leviathan init: registered %s (slug=%s)", label, model->slug.c_str());
+	};
+
 	// Add modules here
 	// p->addModel(modelMyModule);
-	p->addModel(modelIntegralFlux);
-	p->addModel(modelProc);
-	p->addModel(modelTemporalDeck);
-	p->addModel(modelTDScope);
-	p->addModel(modelCrownstep);
+	registerModel(modelIntegralFlux, "Integral Flux");
+	registerModel(modelProc, "Proc");
+	registerModel(modelTemporalDeck, "Temporal Deck");
+	registerModel(modelTDScope, "TD.Scope");
+	registerModel(modelCrownstep, "Crownstep");
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
