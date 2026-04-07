@@ -992,8 +992,6 @@ struct TDScopeDisplayWidget final : Widget {
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
-  static constexpr float kTopBarYmm = 9.522227f;
-  static constexpr float kTopBarLeftStartMm = 2.2491839f;
 
   TDScopeWidget(TDScope *module) {
     setModule(module);
@@ -1043,20 +1041,6 @@ struct TDScopeWidget : ModuleWidget {
       adjusted.clipBox.pos.x -= mm2px(0.3f);
       adjusted.clipBox.size.x += mm2px(0.3f);
       ModuleWidget::draw(adjusted);
-
-      // Bridge the top purple divider from the left panel edge when docked.
-      float y = mm2px(kTopBarYmm);
-      float x0 = 0.f;
-      float x1 = mm2px(kTopBarLeftStartMm);
-      if (x1 > x0 + 0.1f) {
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
-        nvgStrokeWidth(args.vg, mm2px(0.50f));
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-      }
     } else {
       ModuleWidget::draw(args);
     }
