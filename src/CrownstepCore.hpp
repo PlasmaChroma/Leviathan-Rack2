@@ -14,10 +14,10 @@ static constexpr int AI_SIDE = -1;
 
 struct Scale {
 	const char* name;
-	std::array<int, 7> semitones;
+	std::array<int, 12> semitones;
 	int length;
 
-	Scale(const char* scaleName, std::array<int, 7> scaleSemitones, int scaleLength)
+	Scale(const char* scaleName, std::array<int, 12> scaleSemitones, int scaleLength)
 		: name(scaleName), semitones(scaleSemitones), length(scaleLength) {
 	}
 };
@@ -34,10 +34,10 @@ static const std::array<Scale, 13> SCALES = {{
 	{"Lydian", {0, 2, 4, 6, 7, 9, 11}, 7},
 	{"Mixolydian", {0, 2, 4, 5, 7, 9, 10}, 7},
 	{"Locrian", {0, 1, 3, 5, 6, 8, 10}, 7},
-	{"Major Pentatonic", {0, 2, 4, 7, 9, 0, 0}, 5},
-	{"Minor Pentatonic", {0, 3, 5, 7, 10, 0, 0}, 5},
-	{"Blues", {0, 3, 5, 6, 7, 10, 0}, 6},
-	{"Chromatic", {0, 1, 2, 3, 4, 5, 6}, 7},
+	{"Major Pentatonic", {0, 2, 4, 7, 9}, 5},
+	{"Minor Pentatonic", {0, 3, 5, 7, 10}, 5},
+	{"Blues", {0, 3, 5, 6, 7, 10}, 6},
+	{"Chromatic", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 12},
 }};
 
 static constexpr std::array<int, 5> SEQ_CAPS = {{0, 8, 16, 32, 64}};
