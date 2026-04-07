@@ -485,7 +485,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
-    constexpr int kIntensityBuckets = 8;
+    constexpr int kIntensityBuckets = 12;
     size_t rowCountU = size_t(rowCount);
     if (rowX0.size() != rowCountU) {
       rowX0.assign(rowCountU, lane0CenterX);
@@ -589,8 +589,8 @@ struct TDScopeDisplayWidget final : Widget {
         float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
         float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
         float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-        constexpr float kIntensityGamma = 0.72f;
-        float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.02f, 0.f, 1.f);
+        constexpr float kIntensityGamma = 0.68f;
+        float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f, 0.f, 1.f);
         int bucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
         bucket = clamp(bucket, 0, kIntensityBuckets - 1);
         (*visualOut)[idx] = visualIntensity;
@@ -810,8 +810,8 @@ struct TDScopeDisplayWidget final : Widget {
         gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
       connectColor[size_t(bucket)] =
         gradientColorForIntensity(visual, uint8_t(std::lround(88.f + 92.f * visual)));
-      if (visual > 0.90f) {
-        float boostT = clamp((visual - 0.90f) / 0.10f, 0.f, 1.f);
+      if (visual > 0.86f) {
+        float boostT = clamp((visual - 0.86f) / 0.14f, 0.f, 1.f);
         boostColor[size_t(bucket)] = gradientColorForIntensity(1.f, uint8_t(std::lround(52.f + 108.f * boostT)));
         boostWidth[size_t(bucket)] = mainWidth[size_t(bucket)] + 0.34f;
         bucketHasBoost[size_t(bucket)] = 1u;
