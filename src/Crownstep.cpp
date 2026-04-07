@@ -1,7 +1,11 @@
 #include "plugin.hpp"
 #include "CrownstepCore.hpp"
 
+#include <cmath>
 #include <exception>
+#include <fstream>
+#include <regex>
+#include <sstream>
 #include <string>
 
 using crownstep::AI_SIDE;
@@ -14,6 +18,54 @@ using crownstep::SCALES;
 using crownstep::SEQ_CAP_NAMES;
 using crownstep::SEQ_CAPS;
 using crownstep::Step;
+
+static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
+	if (!outRect) {
+		return false;
+	}
+
+	std::ifstream svgFile(svgPath);
+	if (!svgFile.good()) {
+		return false;
+	}
+
+	std::ostringstream svgBuffer;
+	svgBuffer << svgFile.rdbuf();
+	const std::string svgText = svgBuffer.str();
+
+	const std::regex rectRegex("<rect\\b[^>]*\\bid\\s*=\\s*\"" + rectId + "\"[^>]*>", std::regex::icase);
+	std::smatch rectMatch;
+	if (!std::regex_search(svgText, rectMatch, rectRegex)) {
+		return false;
+	}
+	const std::string rectTag = rectMatch.str(0);
+
+	auto parseAttrMm = [&](const char* attr, float* outMm) -> bool {
+		if (!outMm) {
+			return false;
+		}
+		const std::regex attrRegex(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
+		std::smatch attrMatch;
+		if (!std::regex_search(rectTag, attrMatch, attrRegex)) {
+			return false;
+		}
+		// Inkscape panel coordinates are in 1/100 mm (viewBox-style coordinates).
+		*outMm = std::stof(attrMatch.str(1)) * 0.01f;
+		return true;
+	};
+
+	float xMm = 0.f;
+	float yMm = 0.f;
+	float wMm = 0.f;
+	float hMm = 0.f;
+	if (!parseAttrMm("x", &xMm) || !parseAttrMm("y", &yMm) || !parseAttrMm("width", &wMm) || !parseAttrMm("height", &hMm)) {
+		return false;
+	}
+
+	outRect->pos = Vec(xMm, yMm);
+	outRect->size = Vec(wMm, hMm);
+	return true;
+}
 
 struct CrownstepSeqLengthQuantity final : ParamQuantity {
 	std::string getDisplayValueString() override {
@@ -74,7 +126,20 @@ struct Crownstep : Module {
 	std::vector<Move> humanMoves;
 	std::vector<Move> aiMoves;
 	std::vector<int> highlightedDestinations;
+	std::vector<int> opponentHighlightedDestinations;
 	Move lastMove;
+	struct MoveVisualAnimation {
+		std::vector<int> path;
+		std::vector<int> capturedIndices;
+		std::vector<int> capturedPieces;
+		int movingPiece = 0;
+		int destinationIndex = -1;
+		float elapsedSeconds = 0.f;
+		float durationSeconds = 0.f;
+		bool active = false;
+	};
+	MoveVisualAnimation moveAnimation;
+	std::vector<MoveVisualAnimation> moveAnimationQueue;
 
 	dsp::SchmittTrigger clockTrigger;
 	dsp::SchmittTrigger resetTrigger;
@@ -82,8 +147,10 @@ struct Crownstep : Module {
 	dsp::PulseGenerator eocPulse;
 
 	int selectedSquare = -1;
+	int hoveredSquare = -1;
 	int turnSide = HUMAN_SIDE;
 	int winnerSide = 0;
+	int lastMoveSide = 0;
 	int aiDifficulty = 1;
 	int playhead = 0;
 	float transportTimeSeconds = 0.f;
@@ -93,9 +160,15 @@ struct Crownstep : Module {
 	float heldPitch = 0.f;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
+	float modOutputVolts = 0.f;
+	float modGlideStartVolts = 0.f;
+	float modGlideTargetVolts = 0.f;
+	float modGlideStartSeconds = 0.f;
+	float modGlideDurationSeconds = 0.f;
 	float captureFlashSeconds = 0.f;
 	bool gateActive = false;
 	bool gateHoldUntilNextClock = false;
+	bool modGlideActive = false;
 	bool gameOver = false;
 
 	Crownstep() {
@@ -126,6 +199,71 @@ struct Crownstep : Module {
 		refreshLegalMoves();
 	}
 
+	void resetMoveAnimation() {
+		moveAnimation.path.clear();
+		moveAnimation.capturedIndices.clear();
+		moveAnimation.capturedPieces.clear();
+		moveAnimation.movingPiece = 0;
+		moveAnimation.destinationIndex = -1;
+		moveAnimation.elapsedSeconds = 0.f;
+		moveAnimation.durationSeconds = 0.f;
+		moveAnimation.active = false;
+		moveAnimationQueue.clear();
+	}
+
+	void beginMoveAnimation(const Move& move, const std::array<int, BOARD_SIZE>& beforeBoard) {
+		MoveVisualAnimation nextAnimation;
+		if (move.originIndex < 0 || move.originIndex >= BOARD_SIZE || move.destinationIndex < 0 || move.destinationIndex >= BOARD_SIZE) {
+			return;
+		}
+
+		int movingPiece = beforeBoard[size_t(move.originIndex)];
+		if (movingPiece == 0) {
+			return;
+		}
+
+		nextAnimation.movingPiece = movingPiece;
+		nextAnimation.destinationIndex = move.destinationIndex;
+		nextAnimation.path.push_back(move.originIndex);
+		if (move.path.empty()) {
+			nextAnimation.path.push_back(move.destinationIndex);
+		}
+		else {
+			for (int pathIndex : move.path) {
+				nextAnimation.path.push_back(pathIndex);
+			}
+			if (nextAnimation.path.back() != move.destinationIndex) {
+				nextAnimation.path.push_back(move.destinationIndex);
+			}
+		}
+
+		for (int captureIndex : move.captured) {
+			nextAnimation.capturedIndices.push_back(captureIndex);
+			if (captureIndex >= 0 && captureIndex < BOARD_SIZE) {
+				nextAnimation.capturedPieces.push_back(beforeBoard[size_t(captureIndex)]);
+			}
+			else {
+				nextAnimation.capturedPieces.push_back(0);
+			}
+		}
+
+		if (nextAnimation.path.size() < 2) {
+			return;
+		}
+
+		float segments = float(nextAnimation.path.size() - 1);
+		nextAnimation.durationSeconds = clamp(0.085f * segments, 0.12f, 0.34f);
+		nextAnimation.elapsedSeconds = 0.f;
+		nextAnimation.active = true;
+
+		if (!moveAnimation.active) {
+			moveAnimation = nextAnimation;
+		}
+		else {
+			moveAnimationQueue.push_back(nextAnimation);
+		}
+	}
+
 	void onReset() override {
 		resetPlayback();
 	}
@@ -140,6 +278,13 @@ struct Crownstep : Module {
 		heldPitch = 0.f;
 		heldAccent = 0.f;
 		heldMod = 0.f;
+		modOutputVolts = 0.f;
+		modGlideStartVolts = 0.f;
+		modGlideTargetVolts = 0.f;
+		modGlideStartSeconds = transportTimeSeconds;
+		modGlideDurationSeconds = 0.f;
+		modGlideActive = false;
+		resetMoveAnimation();
 	}
 
 	int currentSequenceCap() {
@@ -171,20 +316,39 @@ struct Crownstep : Module {
 		history.clear();
 		moveHistory.clear();
 		highlightedDestinations.clear();
+		opponentHighlightedDestinations.clear();
 		selectedSquare = -1;
+		hoveredSquare = -1;
 		lastMove = Move();
 		turnSide = HUMAN_SIDE;
 		winnerSide = 0;
+		lastMoveSide = 0;
 		gameOver = false;
 		captureFlashSeconds = 0.f;
 		resetPlayback();
+		resetMoveAnimation();
 		refreshLegalMoves();
+	}
+
+	void setHoveredSquare(int index) {
+		int normalizedIndex = (index >= 0 && index < BOARD_SIZE) ? index : -1;
+		if (hoveredSquare == normalizedIndex) {
+			return;
+		}
+		hoveredSquare = normalizedIndex;
+
+		// Hover only influences UI move-hint previewing while the user is
+		// selecting a human move and the game is still active.
+		if (!gameOver && turnSide == HUMAN_SIDE && selectedSquare >= 0) {
+			refreshLegalMoves();
+		}
 	}
 
 	void refreshLegalMoves() {
 		humanMoves = crownstep::generateLegalMovesForSide(board, HUMAN_SIDE);
 		aiMoves = crownstep::generateLegalMovesForSide(board, AI_SIDE);
 		highlightedDestinations.clear();
+		opponentHighlightedDestinations.clear();
 		if (selectedSquare >= 0) {
 				for (const Move& move : humanMoves) {
 				if (move.originIndex == selectedSquare) {
@@ -195,6 +359,31 @@ struct Crownstep : Module {
 					selectedSquare = -1;
 				}
 			}
+		bool showOpponentTips = (selectedSquare >= 0) || (turnSide == AI_SIDE);
+		const std::vector<Move>* opponentMoveSource = &aiMoves;
+		std::vector<Move> previewAiMoves;
+		if (selectedSquare >= 0 && hoveredSquare >= 0) {
+			for (const Move& move : humanMoves) {
+				if (move.originIndex == selectedSquare && move.destinationIndex == hoveredSquare) {
+					std::array<int, BOARD_SIZE> previewBoard = crownstep::applyMoveToBoard(board, move);
+					previewAiMoves = crownstep::generateLegalMovesForSide(previewBoard, AI_SIDE);
+					opponentMoveSource = &previewAiMoves;
+					break;
+				}
+			}
+		}
+		if (showOpponentTips) {
+			std::array<bool, BOARD_SIZE> seen {};
+			seen.fill(false);
+			for (const Move& move : *opponentMoveSource) {
+				int destination = move.destinationIndex;
+				if (destination < 0 || destination >= BOARD_SIZE || seen[size_t(destination)]) {
+					continue;
+				}
+				seen[size_t(destination)] = true;
+				opponentHighlightedDestinations.push_back(destination);
+			}
+		}
 		const std::vector<Move>& activeMoves = (turnSide == HUMAN_SIDE) ? humanMoves : aiMoves;
 		gameOver = activeMoves.empty();
 		winnerSide = gameOver ? -turnSide : 0;
@@ -208,14 +397,86 @@ struct Crownstep : Module {
 		return crownstep::chooseAiMove(board, aiDifficulty);
 	}
 
+	float expressiveModForMove(
+		const Move& move,
+		const std::array<int, BOARD_SIZE>& beforeBoard,
+		const std::array<int, BOARD_SIZE>& afterBoard,
+		int moverSide
+	) const {
+		auto captureCount = [](const std::vector<Move>& moves) {
+			int captures = 0;
+			for (const Move& candidate : moves) {
+				if (candidate.isCapture) {
+					captures++;
+				}
+			}
+			return captures;
+		};
+
+		auto pieceCounts = [](const std::array<int, BOARD_SIZE>& sourceBoard, int* men, int* kings) {
+			int localMen = 0;
+			int localKings = 0;
+			for (int piece : sourceBoard) {
+				if (piece == 1 || piece == -1) {
+					localMen++;
+				}
+				else if (piece == 2 || piece == -2) {
+					localKings++;
+				}
+			}
+			if (men) {
+				*men = localMen;
+			}
+			if (kings) {
+				*kings = localKings;
+			}
+		};
+
+		float moveEnergy = crownstep::normalizedMoveMod(move);
+
+		int beforeEval = crownstep::evaluatePosition(beforeBoard);
+		int afterEval = crownstep::evaluatePosition(afterBoard);
+		float moverBefore = (moverSide == AI_SIDE) ? float(beforeEval) : -float(beforeEval);
+		float moverAfter = (moverSide == AI_SIDE) ? float(afterEval) : -float(afterEval);
+		float evalSwingNorm = clamp(std::fabs(moverAfter - moverBefore) / 260.f, 0.f, 1.f);
+
+		std::vector<Move> afterHumanMoves = crownstep::generateLegalMovesForSide(afterBoard, HUMAN_SIDE);
+		std::vector<Move> afterAiMoves = crownstep::generateLegalMovesForSide(afterBoard, AI_SIDE);
+		int pressureCaptures = captureCount(afterHumanMoves) + captureCount(afterAiMoves);
+		float pressureNorm = clamp(float(pressureCaptures) / 5.f, 0.f, 1.f);
+
+		float mobilityDeltaNorm =
+			clamp(std::fabs(float(int(afterHumanMoves.size()) - int(afterAiMoves.size()))) / 12.f, 0.f, 1.f);
+
+		int men = 0;
+		int kings = 0;
+		pieceCounts(afterBoard, &men, &kings);
+		// Lower piece count generally means a more exposed/endgame board state.
+		float phaseNorm = clamp((24.f - (float(men) + float(kings))) / 24.f, 0.f, 1.f);
+
+		float materialNorm = clamp(std::fabs(float(crownstep::evaluateBoardMaterial(afterBoard))) / 900.f, 0.f, 1.f);
+
+		float boardContext =
+			0.34f * evalSwingNorm + 0.24f * pressureNorm + 0.18f * mobilityDeltaNorm + 0.14f * phaseNorm + 0.10f * materialNorm;
+
+		float combined = 0.45f * moveEnergy + 0.55f * boardContext;
+		return clamp(combined, 0.f, 1.f);
+	}
+
 	void commitMove(const Move& move, int moverSide) {
 		if (move.originIndex < 0 || move.destinationIndex < 0) {
 			return;
 		}
-		board = crownstep::applyMoveToBoard(board, move);
+		const std::array<int, BOARD_SIZE> beforeBoard = board;
+		const std::array<int, BOARD_SIZE> afterBoard = crownstep::applyMoveToBoard(beforeBoard, move);
+		beginMoveAnimation(move, beforeBoard);
+		board = afterBoard;
 		lastMove = move;
+		lastMoveSide = moverSide;
 		moveHistory.push_back(move);
-		history.push_back(makeStepFromMove(move));
+		Step step = makeStepFromMove(move);
+		step.mod = expressiveModForMove(move, beforeBoard, afterBoard, moverSide);
+		history.push_back(step);
 		selectedSquare = -1;
 		highlightedDestinations.clear();
 		turnSide = -moverSide;
@@ -245,12 +506,7 @@ struct Crownstep : Module {
 		int piece = board[size_t(index)];
 		if (crownstep::pieceSide(piece) == HUMAN_SIDE) {
 			selectedSquare = index;
-			highlightedDestinations.clear();
-			for (const Move& move : humanMoves) {
-				if (move.originIndex == selectedSquare) {
-					highlightedDestinations.push_back(move.destinationIndex);
-				}
-			}
+			refreshLegalMoves();
 			return;
 		}
 
@@ -275,6 +531,26 @@ struct Crownstep : Module {
 		return crownstep::activeStartIndex(int(history.size()), currentSequenceCap());
 	}
 
+	float pitchForSequenceIndex(int sequenceIndex) {
+		if (sequenceIndex < 0) {
+			return 0.f;
+		}
+
+		// Preferred path: derive pitch from the underlying move sequence so
+		// quantizer settings are applied live at playback time.
+		if (sequenceIndex < int(moveHistory.size())) {
+			const Move& move = moveHistory[size_t(sequenceIndex)];
+			return crownstep::mapPitch(move, currentScaleIndex(), rootSemitone(), transposeVolts());
+		}
+
+		// Backward compatibility for older saves that may not contain moveHistory.
+		if (sequenceIndex < int(history.size())) {
+			return history[size_t(sequenceIndex)].pitch;
+		}
+
+		return 0.f;
+	}
+
 	void emitStepAtClockEdge() {
 		int length = activeLength();
 		if (length <= 0) {
@@ -283,15 +559,40 @@ struct Crownstep : Module {
 			heldPitch = 0.f;
 			heldAccent = 0.f;
 			heldMod = 0.f;
+			modOutputVolts = 0.f;
+			modGlideStartVolts = 0.f;
+			modGlideTargetVolts = 0.f;
+			modGlideDurationSeconds = 0.f;
+			modGlideActive = false;
 			playhead = 0;
 			return;
 		}
 
 		playhead = clamp(playhead, 0, std::max(length - 1, 0));
-		const Step& step = history[size_t(activeStartIndex() + playhead)];
-		heldPitch = step.pitch;
+		int sequenceIndex = activeStartIndex() + playhead;
+		const Step& step = history[size_t(sequenceIndex)];
+		heldPitch = pitchForSequenceIndex(sequenceIndex);
 		heldAccent = step.accent;
 		heldMod = step.mod * 10.f;
+		if (previousClockPeriodSeconds > 0.f) {
+			modGlideStartVolts = modOutputVolts;
+			modGlideTargetVolts = heldMod;
+			modGlideStartSeconds = transportTimeSeconds;
+			modGlideDurationSeconds = previousClockPeriodSeconds;
+			modGlideActive = std::fabs(modGlideTargetVolts - modGlideStartVolts) > 1e-6f;
+			if (!modGlideActive) {
+				modOutputVolts = modGlideTargetVolts;
+			}
+		}
+		else {
+			// Before we have a valid clock period, snap directly.
+			modGlideStartVolts = heldMod;
+			modGlideTargetVolts = heldMod;
+			modGlideStartSeconds = transportTimeSeconds;
+			modGlideDurationSeconds = 0.f;
+			modGlideActive = false;
+			modOutputVolts = heldMod;
+		}
 		gateActive = step.gate;
 
 		if (previousClockPeriodSeconds > 0.f) {
@@ -314,6 +615,20 @@ struct Crownstep : Module {
 	void process(const ProcessArgs& args) override {
 		transportTimeSeconds += args.sampleTime;
 		captureFlashSeconds = std::max(0.f, captureFlashSeconds - args.sampleTime);
+		if (moveAnimation.active) {
+			moveAnimation.elapsedSeconds += args.sampleTime;
+			if (moveAnimation.elapsedSeconds >= moveAnimation.durationSeconds) {
+				moveAnimation.active = false;
+				if (!moveAnimationQueue.empty()) {
+					moveAnimation = moveAnimationQueue.front();
+					moveAnimationQueue.erase(moveAnimationQueue.begin());
+				}
+			}
+		}
+		else if (!moveAnimationQueue.empty()) {
+			moveAnimation = moveAnimationQueue.front();
+			moveAnimationQueue.erase(moveAnimationQueue.begin());
+		}
 
 		if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
 			startNewGame();
@@ -341,10 +656,17 @@ struct Crownstep : Module {
 		if (gateActive && !gateHoldUntilNextClock && gateOffTimeSeconds > 0.f && transportTimeSeconds >= gateOffTimeSeconds) {
 			gateActive = false;
 		}
+		if (modGlideActive && modGlideDurationSeconds > 0.f) {
+			float t = clamp((transportTimeSeconds - modGlideStartSeconds) / modGlideDurationSeconds, 0.f, 1.f);
+			modOutputVolts = modGlideStartVolts + (modGlideTargetVolts - modGlideStartVolts) * t;
+			if (t >= 1.f) {
+				modGlideActive = false;
+			}
+		}
 		outputs[PITCH_OUTPUT].setVoltage(heldPitch);
 		outputs[GATE_OUTPUT].setVoltage(gateActive ? 10.f : 0.f);
 		outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
-		outputs[MOD_OUTPUT].setVoltage(heldMod);
+		outputs[MOD_OUTPUT].setVoltage(modOutputVolts);
 		outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
 
 		lights[RUN_LIGHT].setBrightness(0.f);
@@ -360,6 +682,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
+		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
 
 		json_t* boardJ = json_array();
 		for (int piece : board) {
@@ -421,6 +744,7 @@ struct Crownstep : Module {
 		if (selectedJ) {
 			selectedSquare = int(json_integer_value(selectedJ));
 		}
+		hoveredSquare = -1;
 		json_t* difficultyJ = json_object_get(rootJ, "aiDifficulty");
 		if (difficultyJ) {
 			aiDifficulty = clamp(int(json_integer_value(difficultyJ)), 0, 2);
@@ -432,6 +756,11 @@ struct Crownstep : Module {
 		json_t* gameOverJ = json_object_get(rootJ, "gameOver");
 		if (gameOverJ) {
 			gameOver = json_is_true(gameOverJ);
+		}
+		json_t* lastMoveSideJ = json_object_get(rootJ, "lastMoveSide");
+		if (lastMoveSideJ) {
+			int side = int(json_integer_value(lastMoveSideJ));
+			lastMoveSide = (side > 0) ? HUMAN_SIDE : ((side < 0) ? AI_SIDE : 0);
 		}
 
 		json_t* boardJ = json_object_get(rootJ, "board");
@@ -493,7 +822,11 @@ struct Crownstep : Module {
 		}
 
 		lastMove = moveHistory.empty() ? Move() : moveHistory.back();
+		if (!lastMoveSideJ) {
+			lastMoveSide = moveHistory.empty() ? 0 : -turnSide;
+		}
 		captureFlashSeconds = 0.f;
+		resetMoveAnimation();
 		refreshLegalMoves();
 	}
 };
@@ -509,11 +842,14 @@ struct CrownstepBoardWidget final : Widget {
 		if (!box.size.x || !box.size.y) {
 			return -1;
 		}
+		if (pos.x < 0.f || pos.y < 0.f || pos.x >= box.size.x || pos.y >= box.size.y) {
+			return -1;
+		}
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
 		int col = clamp(int(pos.x / cellWidth), 0, 7);
 		int row = clamp(int(pos.y / cellHeight), 0, 7);
-			return crownstep::coordToIndex(row, col);
+		return crownstep::coordToIndex(row, col);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -530,6 +866,20 @@ struct CrownstepBoardWidget final : Widget {
 		Widget::onButton(e);
 	}
 
+	void onHover(const event::Hover& e) override {
+		if (module) {
+			module->setHoveredSquare(indexFromLocalPos(e.pos));
+		}
+		Widget::onHover(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		if (module) {
+			module->setHoveredSquare(-1);
+		}
+		Widget::onLeave(e);
+	}
+
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 
@@ -538,98 +888,376 @@ struct CrownstepBoardWidget final : Widget {
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
-				NVGcolor squareColor = dark ? nvgRGB(64, 46, 34) : nvgRGB(215, 196, 168);
+				float x = col * cellWidth;
+				float y = row * cellHeight;
+
+				NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
+				NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
+
 				nvgBeginPath(args.vg);
-				nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-				nvgFillColor(args.vg, squareColor);
+				nvgRect(args.vg, x, y, cellWidth, cellHeight);
+				NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+				nvgFillPaint(args.vg, basePaint);
 				nvgFill(args.vg);
+
+				NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
+				NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, y, cellWidth, cellHeight);
+				NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
+				nvgFillPaint(args.vg, sheenPaint);
+				nvgFill(args.vg);
+
+				float seed = float((row * 29 + col * 17) % 97) * 0.17f;
+				for (int grain = 0; grain < 4; ++grain) {
+					float t = (grain + 1) / 5.f;
+					float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
+					float thickness = 0.5f + 0.15f * float(grain & 1);
+					int alpha = dark ? 28 : 24;
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
+					nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+					nvgFill(args.vg);
+				}
+
+				if (((row * 8 + col + 3) % 11) == 0) {
+					float knotX = x + cellWidth * (0.28f + 0.42f * std::fabs(std::sin(seed)));
+					float knotY = y + cellHeight * (0.30f + 0.32f * std::fabs(std::sin(seed * 1.7f)));
+					float knotRadius = std::min(cellWidth, cellHeight) * 0.13f;
+					NVGcolor knotInner = dark ? nvgRGBA(48, 27, 14, 55) : nvgRGBA(136, 89, 50, 46);
+					NVGcolor knotOuter = nvgRGBA(0, 0, 0, 0);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint knotPaint =
+						nvgRadialGradient(args.vg, knotX, knotY, knotRadius * 0.2f, knotRadius, knotInner, knotOuter);
+					nvgFillPaint(args.vg, knotPaint);
+					nvgFill(args.vg);
+				}
 			}
 		}
 
-		if (module) {
-			if (module->selectedSquare >= 0) {
-				int row = 0;
-				int col = 0;
-					if (crownstep::indexToCoord(module->selectedSquare, &row, &col)) {
-					nvgBeginPath(args.vg);
-					nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-					nvgStrokeColor(args.vg, nvgRGB(255, 213, 79));
-					nvgStrokeWidth(args.vg, 2.f);
-					nvgStroke(args.vg);
-				}
-			}
-			for (int destinationIndex : module->highlightedDestinations) {
-				int row = 0;
-				int col = 0;
-				if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
-					continue;
-				}
-				float centerX = (col + 0.5f) * cellWidth;
-				float centerY = (row + 0.5f) * cellHeight;
-				nvgBeginPath(args.vg);
-				nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.12f);
-				nvgFillColor(args.vg, nvgRGB(255, 213, 79));
-				nvgFill(args.vg);
-			}
-			if (module->lastMove.originIndex >= 0) {
-				for (int highlightIndex : {module->lastMove.originIndex, module->lastMove.destinationIndex}) {
+			if (module) {
+				if (!module->gameOver && module->selectedSquare >= 0) {
 					int row = 0;
 					int col = 0;
-					if (!crownstep::indexToCoord(highlightIndex, &row, &col)) {
-						continue;
+					if (crownstep::indexToCoord(module->selectedSquare, &row, &col)) {
+						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + 0.8f);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
+						nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(24.f + 48.f * pulse)));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(188.f + 54.f * pulse)));
+						nvgStrokeWidth(args.vg, 2.15f);
+						nvgStroke(args.vg);
 					}
-					nvgBeginPath(args.vg);
-					nvgRect(args.vg, col * cellWidth + 1.f, row * cellHeight + 1.f, cellWidth - 2.f, cellHeight - 2.f);
-					nvgStrokeColor(args.vg, nvgRGBA(95, 255, 170, 220));
-					nvgStrokeWidth(args.vg, 2.f);
-					nvgStroke(args.vg);
 				}
-			}
-			if (module->captureFlashSeconds > 0.f && module->lastMove.destinationIndex >= 0) {
-				int row = 0;
-				int col = 0;
-				if (crownstep::indexToCoord(module->lastMove.destinationIndex, &row, &col)) {
+				if (!module->gameOver) {
+					for (int destinationIndex : module->highlightedDestinations) {
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+							continue;
+						}
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						float phase = float(destinationIndex) * 0.43f;
+						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.4f + phase);
+						float glowRadius = std::min(cellWidth, cellHeight) * (0.17f + 0.06f * breath);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, glowRadius);
+						nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(44.f + 50.f * breath)));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.105f);
+						nvgFillColor(args.vg, nvgRGB(98, 235, 154));
+						nvgFill(args.vg);
+					}
+					for (int destinationIndex : module->opponentHighlightedDestinations) {
+						bool overlapsHuman = false;
+						for (int humanDestination : module->highlightedDestinations) {
+							if (humanDestination == destinationIndex) {
+								overlapsHuman = true;
+								break;
+							}
+						}
+						if (overlapsHuman) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+							continue;
+						}
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						float phase = float(destinationIndex) * 0.39f + 1.7f;
+						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.1f + phase);
+						float glowRadius = std::min(cellWidth, cellHeight) * (0.16f + 0.055f * breath);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, glowRadius);
+						nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(36.f + 48.f * breath)));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.092f);
+						nvgFillColor(args.vg, nvgRGB(255, 213, 79));
+						nvgFill(args.vg);
+					}
+				}
+				if (!module->gameOver && module->lastMove.originIndex >= 0) {
+					NVGcolor edgeColor = (module->lastMoveSide == HUMAN_SIDE) ? nvgRGB(98, 235, 154) : nvgRGB(255, 213, 79);
+					for (int highlightIndex : {module->lastMove.originIndex, module->lastMove.destinationIndex}) {
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(highlightIndex, &row, &col)) {
+							continue;
+						}
+						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == HUMAN_SIDE) ? 0.f : 1.5f);
+						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 3.8f + phase);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
+						if (module->lastMoveSide == HUMAN_SIDE) {
+							nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(18.f + 34.f * pulse)));
+						}
+						else {
+							nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(18.f + 34.f * pulse)));
+						}
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, col * cellWidth + 1.f, row * cellHeight + 1.f, cellWidth - 2.f, cellHeight - 2.f);
+						nvgStrokeColor(args.vg, edgeColor);
+						nvgStrokeWidth(args.vg, 2.0f);
+						nvgStroke(args.vg);
+					}
+				}
+				if (!module->gameOver && module->captureFlashSeconds > 0.f && module->lastMove.destinationIndex >= 0) {
+					int row = 0;
+					int col = 0;
+					if (crownstep::indexToCoord(module->lastMove.destinationIndex, &row, &col)) {
 					float alpha = clamp(module->captureFlashSeconds / 0.16f, 0.f, 1.f);
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, col * cellWidth + 2.f, row * cellHeight + 2.f, cellWidth - 4.f, cellHeight - 4.f);
 					nvgFillColor(args.vg, nvgRGBA(255, 210, 120, int(90.f * alpha)));
-					nvgFill(args.vg);
+						nvgFill(args.vg);
+					}
 				}
-			}
 
-			for (int i = 0; i < BOARD_SIZE; ++i) {
-				int piece = module->board[size_t(i)];
-				if (piece == 0) {
-					continue;
-				}
-				int row = 0;
-				int col = 0;
-				if (!crownstep::indexToCoord(i, &row, &col)) {
-					continue;
-				}
-				float centerX = (col + 0.5f) * cellWidth;
-				float centerY = (row + 0.5f) * cellHeight;
-				float radius = std::min(cellWidth, cellHeight) * 0.36f;
-				NVGcolor fill = (piece > 0) ? nvgRGB(217, 72, 58) : nvgRGB(28, 28, 32);
-				NVGcolor stroke = (piece > 0) ? nvgRGB(255, 228, 208) : nvgRGB(200, 200, 205);
+					auto drawPieceAt = [&](float centerX, float centerY, int piece, float alpha) {
+						if (piece == 0) {
+							return;
+						}
+						alpha = clamp(alpha, 0.f, 1.f);
+						float radius = std::min(cellWidth, cellHeight) * 0.36f;
+						int fillAlpha = int(255.f * alpha);
+						int strokeAlpha = int(240.f * alpha);
+						bool humanPiece = piece > 0;
 
+						NVGcolor coreInner = humanPiece ? nvgRGBA(237, 112, 94, fillAlpha) : nvgRGBA(78, 78, 86, fillAlpha);
+						NVGcolor coreOuter = humanPiece ? nvgRGBA(152, 46, 38, fillAlpha) : nvgRGBA(12, 12, 16, fillAlpha);
+						NVGcolor rimBright = humanPiece ? nvgRGBA(255, 228, 208, strokeAlpha) : nvgRGBA(210, 210, 216, strokeAlpha);
+						NVGcolor rimDark = humanPiece ? nvgRGBA(82, 22, 16, int(210.f * alpha)) : nvgRGBA(6, 6, 9, int(215.f * alpha));
+
+						// Base disc with beveled radial falloff.
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, radius);
+						NVGpaint corePaint = nvgRadialGradient(args.vg, centerX - radius * 0.18f, centerY - radius * 0.2f,
+							radius * 0.14f, radius * 1.06f, coreInner, coreOuter);
+						nvgFillPaint(args.vg, corePaint);
+						nvgFill(args.vg);
+
+						// Outer and inner rim lines for a machined/checker edge feel.
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, radius);
+						nvgStrokeColor(args.vg, rimBright);
+						nvgStrokeWidth(args.vg, 1.55f);
+						nvgStroke(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, radius * 0.83f);
+						nvgStrokeColor(args.vg, rimDark);
+						nvgStrokeWidth(args.vg, 1.05f);
+						nvgStroke(args.vg);
+
+						// Tiny radial pips around the edge to imply textured perimeter.
+						for (int pip = 0; pip < 14; ++pip) {
+							float a = float(pip) * (2.f * float(M_PI) / 14.f);
+							float ringX = centerX + std::cos(a) * radius * 0.92f;
+							float ringY = centerY + std::sin(a) * radius * 0.92f;
+							int pipAlpha = (pip & 1) ? int(48.f * alpha) : int(28.f * alpha);
+							if (humanPiece) {
+								nvgFillColor(args.vg, nvgRGBA(255, 214, 188, pipAlpha));
+							}
+							else {
+								nvgFillColor(args.vg, nvgRGBA(170, 170, 180, pipAlpha));
+							}
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, ringX, ringY, radius * 0.042f);
+							nvgFill(args.vg);
+						}
+
+						// Top sheen.
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX - radius * 0.20f, centerY - radius * 0.24f, radius * 0.34f);
+						nvgFillColor(args.vg, nvgRGBA(255, 255, 255, int(36.f * alpha)));
+						nvgFill(args.vg);
+
+						if (crownstep::pieceIsKing(piece)) {
+							// Symmetric outline crown icon.
+							NVGcolor crownStrokeDark = nvgRGBA(82, 54, 18, int(230.f * alpha));
+							NVGcolor crownStrokeLight = nvgRGBA(255, 224, 142, int(244.f * alpha));
+							NVGcolor crownFillSoft = nvgRGBA(250, 214, 110, int(42.f * alpha));
+							float crownBaseY = centerY + radius * 0.24f;
+							float crownShoulderY = centerY + radius * 0.06f;
+							float crownPeakY = centerY - radius * 0.24f;
+							float crownCenterPeakY = centerY - radius * 0.31f;
+
+							nvgBeginPath(args.vg);
+							nvgMoveTo(args.vg, centerX - radius * 0.56f, crownBaseY);
+							nvgLineTo(args.vg, centerX - radius * 0.56f, crownShoulderY);
+							nvgLineTo(args.vg, centerX - radius * 0.35f, crownPeakY);
+							nvgLineTo(args.vg, centerX - radius * 0.17f, crownShoulderY);
+							nvgLineTo(args.vg, centerX, crownCenterPeakY);
+							nvgLineTo(args.vg, centerX + radius * 0.17f, crownShoulderY);
+							nvgLineTo(args.vg, centerX + radius * 0.35f, crownPeakY);
+							nvgLineTo(args.vg, centerX + radius * 0.56f, crownShoulderY);
+							nvgLineTo(args.vg, centerX + radius * 0.56f, crownBaseY);
+							nvgClosePath(args.vg);
+							nvgFillColor(args.vg, crownFillSoft);
+							nvgFill(args.vg);
+
+							nvgStrokeColor(args.vg, crownStrokeDark);
+							nvgStrokeWidth(args.vg, 1.45f);
+							nvgStroke(args.vg);
+							nvgStrokeColor(args.vg, crownStrokeLight);
+							nvgStrokeWidth(args.vg, 0.82f);
+							nvgStroke(args.vg);
+
+							nvgBeginPath(args.vg);
+							nvgRect(args.vg, centerX - radius * 0.56f, crownBaseY - radius * 0.01f, radius * 1.12f, radius * 0.12f);
+							nvgStrokeColor(args.vg, crownStrokeDark);
+							nvgStrokeWidth(args.vg, 1.2f);
+							nvgStroke(args.vg);
+							nvgBeginPath(args.vg);
+							nvgRect(args.vg, centerX - radius * 0.54f, crownBaseY + radius * 0.01f, radius * 1.08f, radius * 0.08f);
+							nvgStrokeColor(args.vg, crownStrokeLight);
+							nvgStrokeWidth(args.vg, 0.74f);
+							nvgStroke(args.vg);
+
+							for (float dx : {-0.34f, 0.f, 0.34f}) {
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX + radius * dx, centerY - radius * 0.07f, radius * 0.058f);
+								nvgStrokeColor(args.vg, crownStrokeLight);
+								nvgStrokeWidth(args.vg, 0.7f);
+								nvgStroke(args.vg);
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX + radius * dx, centerY - radius * 0.07f, radius * 0.02f);
+								nvgFillColor(args.vg, nvgRGBA(255, 235, 170, int(205.f * alpha)));
+								nvgFill(args.vg);
+							}
+						}
+					};
+
+					auto indexIsQueuedDestination = [&](int index) {
+						for (const Crownstep::MoveVisualAnimation& queued : module->moveAnimationQueue) {
+							if (queued.destinationIndex == index) {
+								return true;
+							}
+						}
+						return false;
+					};
+
+					for (int i = 0; i < BOARD_SIZE; ++i) {
+						int piece = module->board[size_t(i)];
+						if (piece == 0) {
+							continue;
+						}
+						if ((module->moveAnimation.active && i == module->moveAnimation.destinationIndex) || indexIsQueuedDestination(i)) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(i, &row, &col)) {
+						continue;
+					}
+					float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						drawPieceAt(centerX, centerY, piece, 1.f);
+					}
+
+					// Staged queued moves: keep the queued moving piece visible at its start cell
+					// until that queued animation becomes active, preventing destination teleport.
+					for (const Crownstep::MoveVisualAnimation& queued : module->moveAnimationQueue) {
+						if (queued.path.empty() || queued.movingPiece == 0) {
+							continue;
+						}
+						int startIndex = queued.path.front();
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(startIndex, &row, &col)) {
+							continue;
+						}
+						drawPieceAt((col + 0.5f) * cellWidth, (row + 0.5f) * cellHeight, queued.movingPiece, 0.95f);
+					}
+
+				if (module->moveAnimation.active && module->moveAnimation.path.size() >= 2) {
+					float duration = std::max(module->moveAnimation.durationSeconds, 1e-6f);
+					float t = clamp(module->moveAnimation.elapsedSeconds / duration, 0.f, 1.f);
+
+					for (size_t i = 0; i < module->moveAnimation.capturedIndices.size(); ++i) {
+						int captureIndex = module->moveAnimation.capturedIndices[i];
+						int capturedPiece = (i < module->moveAnimation.capturedPieces.size()) ? module->moveAnimation.capturedPieces[i] : 0;
+						if (capturedPiece == 0) {
+							continue;
+						}
+						int row = 0;
+						int col = 0;
+						if (!crownstep::indexToCoord(captureIndex, &row, &col)) {
+							continue;
+						}
+						float ghostAlpha = clamp(0.72f - t * 1.45f, 0.f, 0.72f);
+						drawPieceAt((col + 0.5f) * cellWidth, (row + 0.5f) * cellHeight, capturedPiece, ghostAlpha);
+					}
+
+					int segments = int(module->moveAnimation.path.size()) - 1;
+					float segmentPos = t * float(segments);
+					int segmentIndex = clamp(int(std::floor(segmentPos)), 0, std::max(segments - 1, 0));
+					float localT = segmentPos - float(segmentIndex);
+					if (segmentIndex >= segments) {
+						segmentIndex = segments - 1;
+						localT = 1.f;
+					}
+
+					int fromIndex = module->moveAnimation.path[size_t(segmentIndex)];
+					int toIndex = module->moveAnimation.path[size_t(segmentIndex + 1)];
+					int fromRow = 0;
+					int fromCol = 0;
+					int toRow = 0;
+					int toCol = 0;
+					if (crownstep::indexToCoord(fromIndex, &fromRow, &fromCol) && crownstep::indexToCoord(toIndex, &toRow, &toCol)) {
+						float fromX = (fromCol + 0.5f) * cellWidth;
+						float fromY = (fromRow + 0.5f) * cellHeight;
+						float toX = (toCol + 0.5f) * cellWidth;
+						float toY = (toRow + 0.5f) * cellHeight;
+						float centerX = fromX + (toX - fromX) * localT;
+						float centerY = fromY + (toY - fromY) * localT;
+						float shadowRadius = std::min(cellWidth, cellHeight) * 0.40f;
+
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX + 0.9f, centerY + 1.2f, shadowRadius);
+						nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 42));
+						nvgFill(args.vg);
+
+						drawPieceAt(centerX, centerY, module->moveAnimation.movingPiece, 1.f);
+					}
+				}
+
+				if (module->gameOver) {
 				nvgBeginPath(args.vg);
-				nvgCircle(args.vg, centerX, centerY, radius);
-				nvgFillColor(args.vg, fill);
+				nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+				nvgFillColor(args.vg, nvgRGBA(8, 8, 10, 92));
 				nvgFill(args.vg);
-				nvgStrokeColor(args.vg, stroke);
-				nvgStrokeWidth(args.vg, 1.5f);
-				nvgStroke(args.vg);
-
-				if (crownstep::pieceIsKing(piece)) {
-					nvgFontSize(args.vg, radius * 1.05f);
-					nvgFillColor(args.vg, nvgRGB(247, 214, 99));
-					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-					nvgText(args.vg, centerX, centerY + 1.f, "K", nullptr);
-				}
-			}
-
-			if (module->gameOver) {
 				nvgBeginPath(args.vg);
 				nvgRect(args.vg, 0.f, box.size.y * 0.39f, box.size.x, box.size.y * 0.22f);
 				nvgFillColor(args.vg, nvgRGBA(10, 10, 12, 180));
@@ -637,11 +1265,10 @@ struct CrownstepBoardWidget final : Widget {
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFontSize(args.vg, 15.f);
 				nvgFillColor(args.vg, nvgRGB(244, 229, 206));
-				const char* label = module->winnerSide == HUMAN_SIDE ? "YOU WIN" : "AI WINS";
-				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.47f, label, nullptr);
+				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.47f, "Game Complete", nullptr);
 				nvgFontSize(args.vg, 10.5f);
 				nvgFillColor(args.vg, nvgRGB(213, 189, 160));
-				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback continues", nullptr);
+				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback Mode", nullptr);
 			}
 		}
 		nvgRestore(args.vg);
@@ -679,28 +1306,37 @@ struct CrownstepWidget final : ModuleWidget {
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+			addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+			addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
-		boardWidget->box.pos = mm2px(Vec(5.5f, 11.f));
-		boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
-		addChild(boardWidget);
+			CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
+			math::Rect boardRectMm;
+			if (loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
+				boardWidget->box.pos = mm2px(boardRectMm.pos);
+				boardWidget->box.size = mm2px(boardRectMm.size);
+			}
+			else {
+				boardWidget->box.pos = mm2px(Vec(5.5f, 11.f));
+				boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
+			}
+			addChild(boardWidget);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 101.2f)), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(63.f, 101.2f)), module, Crownstep::GATE_WIDTH_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(86.f, 101.0f)), module, Crownstep::NEW_GAME_PARAM));
+		// Bottom control layout:
+		// left cluster = inputs, center = knobs/button, right cluster = outputs.
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(43.f, 101.5f)), module, Crownstep::SEQ_LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(43.f, 114.0f)), module, Crownstep::GATE_WIDTH_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(43.f, 124.8f)), module, Crownstep::NEW_GAME_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 116.f)), module, Crownstep::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(29.f, 116.f)), module, Crownstep::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(46.f, 116.f)), module, Crownstep::TRANSPOSE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(63.f, 116.f)), module, Crownstep::ROOT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 108.0f)), module, Crownstep::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 108.0f)), module, Crownstep::RESET_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 121.0f)), module, Crownstep::TRANSPOSE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 121.0f)), module, Crownstep::ROOT_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(12.f, 123.f)), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(29.f, 123.f)), module, Crownstep::GATE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(46.f, 123.f)), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(63.f, 123.f)), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(80.f, 123.f)), module, Crownstep::EOC_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(58.f, 108.0f)), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.f, 108.0f)), module, Crownstep::GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(58.f, 121.0f)), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.f, 121.0f)), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(86.f, 121.0f)), module, Crownstep::EOC_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(Vec(86.5f, 93.f)), module, Crownstep::AI_TURN_LIGHT));
@@ -710,40 +1346,41 @@ struct CrownstepWidget final : ModuleWidget {
 		ModuleWidget::appendContextMenu(menu);
 		Crownstep* module = dynamic_cast<Crownstep*>(this->module);
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createSubmenuItem("Quantizer", "", [=](Menu* submenu) {
-			submenu->addChild(createSubmenuItem("Scale", "", [=](Menu* scaleMenu) {
-				for (int i = 0; i < int(SCALES.size()); ++i) {
-					scaleMenu->addChild(createCheckMenuItem(
-						SCALES[size_t(i)].name,
-						"",
-						[=]() {
-							return module && clamp(int(std::round(module->params[Crownstep::SCALE_PARAM].getValue())), 0,
-								int(SCALES.size()) - 1) == i;
-						},
-						[=]() {
-							if (module) {
-								module->params[Crownstep::SCALE_PARAM].setValue(float(i));
-							}
+		MenuLabel* quantizerLabel = new MenuLabel();
+		quantizerLabel->text = "Quantizer";
+		menu->addChild(quantizerLabel);
+		menu->addChild(createSubmenuItem("Scale", "", [=](Menu* scaleMenu) {
+			for (int i = 0; i < int(SCALES.size()); ++i) {
+				scaleMenu->addChild(createCheckMenuItem(
+					SCALES[size_t(i)].name,
+					"",
+					[=]() {
+						return module && clamp(int(std::round(module->params[Crownstep::SCALE_PARAM].getValue())), 0,
+							int(SCALES.size()) - 1) == i;
+					},
+					[=]() {
+						if (module) {
+							module->params[Crownstep::SCALE_PARAM].setValue(float(i));
 						}
-					));
-				}
-			}));
-			submenu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
-				for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
-					keyMenu->addChild(createCheckMenuItem(
-						KEY_NAMES[size_t(i)],
-						"",
-						[=]() {
-							return module && clamp(int(std::round(module->params[Crownstep::ROOT_PARAM].getValue())), 0, 11) == i;
-						},
-						[=]() {
-							if (module) {
-								module->params[Crownstep::ROOT_PARAM].setValue(float(i));
-							}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
+			for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
+				keyMenu->addChild(createCheckMenuItem(
+					KEY_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && clamp(int(std::round(module->params[Crownstep::ROOT_PARAM].getValue())), 0, 11) == i;
+					},
+					[=]() {
+						if (module) {
+							module->params[Crownstep::ROOT_PARAM].setValue(float(i));
 						}
-					));
-				}
-			}));
+					}
+				));
+			}
 		}));
 		MenuLabel* label = new MenuLabel();
 		label->text = "AI Difficulty";
