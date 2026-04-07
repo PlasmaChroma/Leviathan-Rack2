@@ -277,95 +277,16 @@ struct TDScopeDisplayWidget final : Widget {
   bool cachedStereoLayout = false;
   bool cachedGeometryValid = false;
 
-  static NVGcolor idleColorForScheme(int scheme, uint8_t alpha) {
-    switch (scheme) {
-      case TDScope::COLOR_SCHEME_EMERALD:
-        return nvgRGBA(87, 240, 182, alpha);
-      case TDScope::COLOR_SCHEME_WASP:
-        return nvgRGBA(255, 216, 74, alpha);
-      case TDScope::COLOR_SCHEME_PIXIE:
-        return nvgRGBA(129, 255, 210, alpha);
-      case TDScope::COLOR_SCHEME_VIOLET_FLAME:
-        return nvgRGBA(181, 109, 255, alpha);
-      case TDScope::COLOR_SCHEME_ANGELIC:
-        return nvgRGBA(179, 229, 255, alpha);
-      case TDScope::COLOR_SCHEME_HELLFIRE:
-        return nvgRGBA(255, 209, 102, alpha);
-      case TDScope::COLOR_SCHEME_PICKLE:
-        return nvgRGBA(190, 234, 97, alpha);
-      case TDScope::COLOR_SCHEME_LEVIATHAN:
-        return nvgRGBA(28, 204, 217, alpha);
-      case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
-      default:
-        return nvgRGBA(233, 112, 218, alpha);
-    }
-  }
-
-  void drawIdlePreview(const DrawArgs &args, int colorScheme) const {
-    float width = box.size.x;
-    float height = box.size.y;
-    if (width <= 2.f || height <= 2.f) {
-      return;
-    }
-
-    const float centerX = width * 0.5f;
-    const float centerY = height * 0.5f;
-    const float laneHalfWidth = width * 0.30f;
-    const float yInset = 2.f;
-    const int pointCount = 33;
-
-    nvgSave(args.vg);
-
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, centerX, yInset);
-    nvgLineTo(args.vg, centerX, height - yInset);
-    nvgStrokeColor(args.vg, nvgRGBA(244, 220, 96, 208));
-    nvgStrokeWidth(args.vg, 1.1f);
-    nvgStroke(args.vg);
-
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, 1.5f, centerY);
-    nvgLineTo(args.vg, width - 1.5f, centerY);
-    nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 18));
-    nvgStrokeWidth(args.vg, 1.f);
-    nvgStroke(args.vg);
-
-    const NVGcolor waveColor = idleColorForScheme(colorScheme, 214);
-    nvgBeginPath(args.vg);
-    for (int i = 0; i < pointCount; ++i) {
-      float t = float(i) / float(pointCount - 1);
-      float y = yInset + t * (height - 2.f * yInset);
-      float shaped = std::sin((t * 2.4f - 0.15f) * float(M_PI));
-      float taper = 0.60f + 0.40f * std::cos((t - 0.5f) * float(M_PI));
-      float x = centerX + shaped * laneHalfWidth * taper;
-      if (i == 0) {
-        nvgMoveTo(args.vg, x, y);
-      } else {
-        nvgLineTo(args.vg, x, y);
-      }
-    }
-    nvgStrokeColor(args.vg, waveColor);
-    nvgStrokeWidth(args.vg, 1.65f);
-    nvgLineCap(args.vg, NVG_ROUND);
-    nvgLineJoin(args.vg, NVG_ROUND);
-    nvgStroke(args.vg);
-
-    nvgRestore(args.vg);
-  }
-
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
-    int colorScheme = module ? module->scopeColorScheme : TDScope::COLOR_SCHEME_TEMPORAL_DECK;
 
     if (!module) {
-      drawIdlePreview(args, colorScheme);
       return;
     }
 
     temporaldeck_expander::HostToDisplay msg;
     if (!module->readSnapshotForUi(&msg) || !linkActive || !previewValid) {
-      drawIdlePreview(args, colorScheme);
       return;
     }
 
@@ -804,13 +725,13 @@ struct TDScopeDisplayWidget final : Widget {
           break;
         case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
         default:
-          // Temporal Deck: low cyan -> mid lilac -> high magenta.
+          // Temporal Deck: low cyan -> mid ember yellow -> high magenta.
           lowR = 85.f;
           lowG = 227.f;
           lowB = 238.f;
-          midR = 176.f;
-          midG = 143.f;
-          midB = 245.f;
+          midR = 255.f;  // #ffbf56
+          midG = 191.f;
+          midB = 86.f;
           highR = 233.f;
           highG = 112.f;
           highB = 218.f;

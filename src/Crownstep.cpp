@@ -539,16 +539,6 @@ struct CrownstepBoardWidget final : Widget {
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
-		for (int row = 0; row < 8; ++row) {
-			for (int col = 0; col < 8; ++col) {
-				bool dark = ((row + col) & 1) == 1;
-				NVGcolor squareColor = dark ? nvgRGB(64, 46, 34) : nvgRGB(215, 196, 168);
-				nvgBeginPath(args.vg);
-				nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-				nvgFillColor(args.vg, squareColor);
-				nvgFill(args.vg);
-			}
-		}
 
 		if (module) {
 			if (module->selectedSquare >= 0) {
@@ -648,62 +638,6 @@ struct CrownstepBoardWidget final : Widget {
 				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback continues", nullptr);
 			}
 		}
-
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 50));
-		nvgStrokeWidth(args.vg, 1.2f);
-		nvgStroke(args.vg);
-		nvgRestore(args.vg);
-	}
-};
-
-struct CrownstepStatusWidget final : Widget {
-	Crownstep* module = nullptr;
-
-	explicit CrownstepStatusWidget(Crownstep* crownstepModule) {
-		module = crownstepModule;
-	}
-
-	void draw(const DrawArgs& args) override {
-		nvgSave(args.vg);
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 5.f);
-		nvgFillColor(args.vg, nvgRGBA(14, 12, 12, 235));
-		nvgFill(args.vg);
-		nvgStrokeColor(args.vg, nvgRGBA(166, 127, 92, 120));
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStroke(args.vg);
-
-		if (module) {
-			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-
-			std::string turnText;
-			if (module->gameOver) {
-				turnText = (module->winnerSide == HUMAN_SIDE) ? "Game over: human wins" : "Game over: AI wins";
-			}
-			else {
-				turnText = (module->turnSide == HUMAN_SIDE) ? "Turn: human" : "Turn: AI";
-			}
-			nvgFontSize(args.vg, 10.5f);
-			nvgFillColor(args.vg, nvgRGB(244, 229, 206));
-			nvgText(args.vg, 8.f, 7.f, turnText.c_str(), nullptr);
-
-			std::string sequenceText = std::string("Seq: ") + SEQ_CAP_NAMES[size_t(clamp(int(std::round(
-				module->params[Crownstep::SEQ_LENGTH_PARAM].getValue())), 0, int(SEQ_CAP_NAMES.size()) - 1))];
-			std::string scaleText = std::string("Scale: ") + SCALES[size_t(module->currentScaleIndex())].name;
-			std::string keyText = std::string("Key: ") + KEY_NAMES[size_t(module->rootSemitone())];
-			std::string historyText = "Moves: " + std::to_string(module->history.size());
-			std::string windowText = "Window: " + std::to_string(module->activeLength());
-
-			nvgFontSize(args.vg, 9.f);
-			nvgFillColor(args.vg, nvgRGB(212, 191, 164));
-			nvgText(args.vg, 8.f, 23.f, sequenceText.c_str(), nullptr);
-			nvgText(args.vg, 72.f, 23.f, scaleText.c_str(), nullptr);
-			nvgText(args.vg, 8.f, 38.f, historyText.c_str(), nullptr);
-			nvgText(args.vg, 72.f, 38.f, keyText.c_str(), nullptr);
-			nvgText(args.vg, 8.f, 52.f, windowText.c_str(), nullptr);
-		}
 		nvgRestore(args.vg);
 	}
 };
@@ -746,11 +680,6 @@ struct CrownstepWidget final : ModuleWidget {
 		boardWidget->box.pos = mm2px(Vec(5.5f, 11.f));
 		boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
 		addChild(boardWidget);
-
-		CrownstepStatusWidget* statusWidget = new CrownstepStatusWidget(module);
-		statusWidget->box.pos = mm2px(Vec(5.5f, 93.8f));
-		statusWidget->box.size = mm2px(Vec(80.5f, 16.2f));
-		addChild(statusWidget);
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 101.2f)), module, Crownstep::SEQ_LENGTH_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.f, 101.2f)), module, Crownstep::ROOT_PARAM));
