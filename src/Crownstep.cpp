@@ -325,7 +325,7 @@ struct Crownstep : Module {
 			gateHoldUntilNextClock = false;
 		}
 
-		bool running = params[RUN_PARAM].getValue() >= 0.5f;
+		bool running = true;
 		if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
 			if (lastClockEdgeSeconds >= 0.f) {
 				previousClockPeriodSeconds = std::max(transportTimeSeconds - lastClockEdgeSeconds, 1e-6f);
@@ -341,17 +341,13 @@ struct Crownstep : Module {
 		if (gateActive && !gateHoldUntilNextClock && gateOffTimeSeconds > 0.f && transportTimeSeconds >= gateOffTimeSeconds) {
 			gateActive = false;
 		}
-		if (!running) {
-			gateActive = false;
-		}
-
 		outputs[PITCH_OUTPUT].setVoltage(heldPitch);
 		outputs[GATE_OUTPUT].setVoltage(gateActive ? 10.f : 0.f);
 		outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
 		outputs[MOD_OUTPUT].setVoltage(heldMod);
 		outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
 
-		lights[RUN_LIGHT].setBrightness(running ? 1.f : 0.f);
+		lights[RUN_LIGHT].setBrightness(0.f);
 		lights[HUMAN_TURN_LIGHT].setBrightness(!gameOver && turnSide == HUMAN_SIDE ? 1.f : 0.f);
 		lights[AI_TURN_LIGHT].setBrightness(!gameOver && turnSide == AI_SIDE ? 1.f : 0.f);
 	}
@@ -692,10 +688,7 @@ struct CrownstepWidget final : ModuleWidget {
 		addChild(boardWidget);
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 101.2f)), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.f, 101.2f)), module, Crownstep::ROOT_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(46.f, 101.2f)), module, Crownstep::SCALE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(63.f, 101.2f)), module, Crownstep::GATE_WIDTH_PARAM));
-		addParam(createParamCentered<CKSS>(mm2px(Vec(77.5f, 101.0f)), module, Crownstep::RUN_PARAM));
 		addParam(createParamCentered<LEDButton>(mm2px(Vec(86.f, 101.0f)), module, Crownstep::NEW_GAME_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 116.f)), module, Crownstep::CLOCK_INPUT));
@@ -709,7 +702,6 @@ struct CrownstepWidget final : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(63.f, 123.f)), module, Crownstep::MOD_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(80.f, 123.f)), module, Crownstep::EOC_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(77.5f, 93.f)), module, Crownstep::RUN_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(Vec(86.5f, 93.f)), module, Crownstep::AI_TURN_LIGHT));
 	}
