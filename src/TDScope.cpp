@@ -74,6 +74,13 @@ static PanelBorder *findPanelBorder(Widget *widget) {
   return nullptr;
 }
 
+static bool isTemporalDeckModule(const engine::Module *neighbor) {
+  if (!neighbor || !neighbor->model) {
+    return false;
+  }
+  return (neighbor->model == modelTemporalDeck) || (neighbor->model->slug == "TemporalDeck");
+}
+
 } // namespace
 
 struct TDScope final : Module {
@@ -213,8 +220,7 @@ struct TDScope final : Module {
     uiPreviewValid.store(linkActive && previewValid, std::memory_order_relaxed);
 
     // Publish requested scope payload format back to TemporalDeck.
-    if (leftExpander.module && leftExpander.module->model == modelTemporalDeck &&
-        leftExpander.module->rightExpander.producerMessage) {
+    if (isTemporalDeckModule(leftExpander.module) && leftExpander.module->rightExpander.producerMessage) {
       uint32_t requestedScopeFormat = (scopeChannelMode == SCOPE_CHANNEL_STEREO)
                                         ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
@@ -971,8 +977,7 @@ struct TDScopeWidget : ModuleWidget {
 
   void step() override {
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    bool linkedToDeck =
-      scopeModule && scopeModule->leftExpander.module && scopeModule->leftExpander.module->model == modelTemporalDeck;
+    bool linkedToDeck = scopeModule && isTemporalDeckModule(scopeModule->leftExpander.module);
     const float borderGrowPx = linkedToDeck ? 3.f : 0.f;
     if (panelBorder && (panelBorder->box.pos.x != -borderGrowPx || panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
       panelBorder->box.pos.x = -borderGrowPx;
@@ -986,8 +991,7 @@ struct TDScopeWidget : ModuleWidget {
 
   void draw(const DrawArgs &args) override {
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    bool linkedToDeck =
-      scopeModule && scopeModule->leftExpander.module && scopeModule->leftExpander.module->model == modelTemporalDeck;
+    bool linkedToDeck = scopeModule && isTemporalDeckModule(scopeModule->leftExpander.module);
     if (linkedToDeck) {
       DrawArgs adjusted = args;
       adjusted.clipBox.pos.x -= mm2px(0.3f);

@@ -3177,6 +3177,13 @@ static PanelBorder *findPanelBorder(Widget *widget) {
   return nullptr;
 }
 
+static bool isTDScopeModule(const engine::Module *neighbor) {
+  if (!neighbor || !neighbor->model) {
+    return false;
+  }
+  return (neighbor->model == modelTDScope) || (neighbor->model->slug == "TDScope");
+}
+
 struct TemporalDeckWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   static constexpr float kTopBarYmm = 9.522227f;
@@ -3278,8 +3285,7 @@ struct TemporalDeckWidget : ModuleWidget {
 
   void draw(const DrawArgs &args) override {
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
-    bool linkedToScope =
-      deckModule && deckModule->rightExpander.module && deckModule->rightExpander.module->model == modelTDScope;
+    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (linkedToScope) {
       DrawArgs adjusted = args;
       adjusted.clipBox.size.x += mm2px(0.3f);
@@ -3305,8 +3311,7 @@ struct TemporalDeckWidget : ModuleWidget {
 
   void step() override {
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
-    bool linkedToScope =
-      deckModule && deckModule->rightExpander.module && deckModule->rightExpander.module->model == modelTDScope;
+    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     const float borderGrowPx = linkedToScope ? 3.f : 0.f;
     if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
       panelBorder->box.size.x = box.size.x + borderGrowPx;
