@@ -93,7 +93,6 @@ struct Crownstep : Module {
 		SEQ_LENGTH_PARAM,
 		ROOT_PARAM,
 		SCALE_PARAM,
-		GATE_WIDTH_PARAM,
 		RUN_PARAM,
 		NEW_GAME_PARAM,
 		PARAMS_LEN
@@ -107,7 +106,6 @@ struct Crownstep : Module {
 	};
 	enum OutputId {
 		PITCH_OUTPUT,
-		GATE_OUTPUT,
 		ACCENT_OUTPUT,
 		MOD_OUTPUT,
 		EOC_OUTPUT,
@@ -156,7 +154,6 @@ struct Crownstep : Module {
 	float transportTimeSeconds = 0.f;
 	float lastClockEdgeSeconds = -1.f;
 	float previousClockPeriodSeconds = -1.f;
-	float gateOffTimeSeconds = 0.f;
 	float heldPitch = 0.f;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
@@ -166,8 +163,6 @@ struct Crownstep : Module {
 	float modGlideStartSeconds = 0.f;
 	float modGlideDurationSeconds = 0.f;
 	float captureFlashSeconds = 0.f;
-	bool gateActive = false;
-	bool gateHoldUntilNextClock = false;
 	bool modGlideActive = false;
 	bool gameOver = false;
 
@@ -177,7 +172,6 @@ struct Crownstep : Module {
 		configParam<CrownstepSeqLengthQuantity>(SEQ_LENGTH_PARAM, 0.f, 4.f, 0.f, "Sequence length");
 		configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
 		configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
-		configParam(GATE_WIDTH_PARAM, 0.05f, 1.f, 0.5f, "Gate width");
 		configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
 		configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
 
@@ -191,7 +185,6 @@ struct Crownstep : Module {
 		configInput(ROOT_INPUT, "Root");
 
 		configOutput(PITCH_OUTPUT, "Pitch");
-		configOutput(GATE_OUTPUT, "Gate");
 		configOutput(ACCENT_OUTPUT, "Accent");
 		configOutput(MOD_OUTPUT, "Mod");
 		configOutput(EOC_OUTPUT, "End of cycle");
@@ -272,9 +265,6 @@ struct Crownstep : Module {
 		playhead = 0;
 		lastClockEdgeSeconds = -1.f;
 		previousClockPeriodSeconds = -1.f;
-		gateOffTimeSeconds = 0.f;
-		gateActive = false;
-		gateHoldUntilNextClock = false;
 		heldPitch = 0.f;
 		heldAccent = 0.f;
 		heldMod = 0.f;
@@ -554,8 +544,6 @@ struct Crownstep : Module {
 	void emitStepAtClockEdge() {
 		int length = activeLength();
 		if (length <= 0) {
-			gateActive = false;
-			gateHoldUntilNextClock = false;
 			heldPitch = 0.f;
 			heldAccent = 0.f;
 			heldMod = 0.f;
@@ -593,17 +581,6 @@ struct Crownstep : Module {
 			modGlideActive = false;
 			modOutputVolts = heldMod;
 		}
-		gateActive = step.gate;
-
-		if (previousClockPeriodSeconds > 0.f) {
-			float gateWidth = clamp(params[GATE_WIDTH_PARAM].getValue(), 0.05f, 1.f);
-			gateOffTimeSeconds = transportTimeSeconds + gateWidth * previousClockPeriodSeconds;
-			gateHoldUntilNextClock = false;
-		}
-		else {
-			gateOffTimeSeconds = 0.f;
-			gateHoldUntilNextClock = true;
-		}
 
 		playhead++;
 		if (playhead >= length) {
@@ -636,8 +613,6 @@ struct Crownstep : Module {
 
 		if (resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
 			playhead = 0;
-			gateActive = false;
-			gateHoldUntilNextClock = false;
 		}
 
 		bool running = true;
@@ -646,16 +621,11 @@ struct Crownstep : Module {
 				previousClockPeriodSeconds = std::max(transportTimeSeconds - lastClockEdgeSeconds, 1e-6f);
 			}
 			lastClockEdgeSeconds = transportTimeSeconds;
-			gateActive = false;
-			gateHoldUntilNextClock = false;
 			if (running) {
 				emitStepAtClockEdge();
 			}
 		}
 
-		if (gateActive && !gateHoldUntilNextClock && gateOffTimeSeconds > 0.f && transportTimeSeconds >= gateOffTimeSeconds) {
-			gateActive = false;
-		}
 		if (modGlideActive && modGlideDurationSeconds > 0.f) {
 			float t = clamp((transportTimeSeconds - modGlideStartSeconds) / modGlideDurationSeconds, 0.f, 1.f);
 			modOutputVolts = modGlideStartVolts + (modGlideTargetVolts - modGlideStartVolts) * t;
@@ -664,7 +634,6 @@ struct Crownstep : Module {
 			}
 		}
 		outputs[PITCH_OUTPUT].setVoltage(heldPitch);
-		outputs[GATE_OUTPUT].setVoltage(gateActive ? 10.f : 0.f);
 		outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
 		outputs[MOD_OUTPUT].setVoltage(modOutputVolts);
 		outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
@@ -1407,14 +1376,12 @@ struct CrownstepWidget final : ModuleWidget {
 		};
 
 		Vec seqPos(43.f, 101.5f);
-		Vec gateWidthPos(43.f, 114.0f);
-		Vec newGamePos(43.f, 124.8f);
+		Vec newGamePos(43.f, 114.0f);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
 		Vec rootCvPos(28.f, 121.0f);
 		Vec pitchPos(58.f, 108.0f);
-		Vec gatePos(74.f, 108.0f);
 		Vec accentPos(58.f, 121.0f);
 		Vec modPos(74.f, 121.0f);
 		Vec eocPos(86.f, 121.0f);
@@ -1426,11 +1393,10 @@ struct CrownstepWidget final : ModuleWidget {
 			rootCvPos = pointInRect(inputsAreaMm, 0.70f, 0.78f);
 		}
 		if (hasOutputsArea) {
-			pitchPos = pointInRect(outputsAreaMm, 0.20f, 0.38f);
-			gatePos = pointInRect(outputsAreaMm, 0.51f, 0.38f);
-			accentPos = pointInRect(outputsAreaMm, 0.20f, 0.78f);
-			modPos = pointInRect(outputsAreaMm, 0.51f, 0.78f);
-			eocPos = pointInRect(outputsAreaMm, 0.82f, 0.78f);
+			pitchPos = pointInRect(outputsAreaMm, 0.17f, 0.58f);
+			accentPos = pointInRect(outputsAreaMm, 0.39f, 0.58f);
+			modPos = pointInRect(outputsAreaMm, 0.61f, 0.58f);
+			eocPos = pointInRect(outputsAreaMm, 0.83f, 0.58f);
 		}
 		if (hasBottomAnchors) {
 			float controlX = 43.f;
@@ -1460,13 +1426,11 @@ struct CrownstepWidget final : ModuleWidget {
 					controlH = outputsAreaMm.size.y;
 				}
 			}
-			seqPos = Vec(controlX, controlY + controlH * 0.16f);
-			gateWidthPos = Vec(controlX, controlY + controlH * 0.53f);
-			newGamePos = Vec(controlX, controlY + controlH * 0.88f);
+			seqPos = Vec(controlX, controlY + controlH * 0.28f);
+			newGamePos = Vec(controlX, controlY + controlH * 0.76f);
 		}
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(seqPos), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(gateWidthPos), module, Crownstep::GATE_WIDTH_PARAM));
 		addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
@@ -1475,7 +1439,6 @@ struct CrownstepWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(gatePos), module, Crownstep::GATE_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
