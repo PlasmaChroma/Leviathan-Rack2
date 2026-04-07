@@ -14,6 +14,27 @@ using crownstep::SEQ_CAP_NAMES;
 using crownstep::SEQ_CAPS;
 using crownstep::Step;
 
+struct CrownstepSeqLengthQuantity final : ParamQuantity {
+	std::string getDisplayValueString() override {
+		int index = clamp(int(std::round(getValue())), 0, int(SEQ_CAP_NAMES.size()) - 1);
+		return SEQ_CAP_NAMES[size_t(index)];
+	}
+};
+
+struct CrownstepScaleQuantity final : ParamQuantity {
+	std::string getDisplayValueString() override {
+		int index = clamp(int(std::round(getValue())), 0, int(SCALES.size()) - 1);
+		return SCALES[size_t(index)].name;
+	}
+};
+
+struct CrownstepRootQuantity final : ParamQuantity {
+	std::string getDisplayValueString() override {
+		int index = clamp(int(std::round(getValue())), 0, 11);
+		return KEY_NAMES[size_t(index)];
+	}
+};
+
 struct Crownstep : Module {
 	enum ParamId {
 		SEQ_LENGTH_PARAM,
@@ -79,9 +100,9 @@ struct Crownstep : Module {
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-		configParam(SEQ_LENGTH_PARAM, 0.f, 4.f, 0.f, "Sequence length");
-		configParam(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
-		configParam(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
+		configParam<CrownstepSeqLengthQuantity>(SEQ_LENGTH_PARAM, 0.f, 4.f, 0.f, "Sequence length");
+		configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
+		configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 		configParam(GATE_WIDTH_PARAM, 0.05f, 1.f, 0.5f, "Gate width");
 		configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
 		configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
@@ -480,32 +501,15 @@ struct Crownstep : Module {
 	}
 };
 
-struct CrownstepSeqLengthQuantity final : ParamQuantity {
-	std::string getDisplayValueString() override {
-			int index = clamp(int(std::round(getValue())), 0, int(SEQ_CAP_NAMES.size()) - 1);
-			return SEQ_CAP_NAMES[size_t(index)];
-	}
-};
-
-struct CrownstepScaleQuantity final : ParamQuantity {
-	std::string getDisplayValueString() override {
-			int index = clamp(int(std::round(getValue())), 0, int(SCALES.size()) - 1);
-			return SCALES[size_t(index)].name;
-	}
-};
-
-struct CrownstepRootQuantity final : ParamQuantity {
-	std::string getDisplayValueString() override {
-		int index = clamp(int(std::round(getValue())), 0, 11);
-		return KEY_NAMES[size_t(index)];
-	}
-};
-
 struct CrownstepBoardWidget final : Widget {
 	Crownstep* module = nullptr;
+	std::shared_ptr<Font> font;
 
 	explicit CrownstepBoardWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
+		if (APP && APP->window) {
+			font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
+		}
 	}
 
 	int indexFromLocalPos(Vec pos) const {
@@ -626,7 +630,9 @@ struct CrownstepBoardWidget final : Widget {
 
 				if (crownstep::pieceIsKing(piece)) {
 					nvgFontSize(args.vg, radius * 1.05f);
-					nvgFontFaceId(args.vg, APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"))->handle);
+					if (font) {
+						nvgFontFaceId(args.vg, font->handle);
+					}
 					nvgFillColor(args.vg, nvgRGB(247, 214, 99));
 					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 					nvgText(args.vg, centerX, centerY + 1.f, "K", nullptr);
@@ -638,7 +644,9 @@ struct CrownstepBoardWidget final : Widget {
 				nvgRect(args.vg, 0.f, box.size.y * 0.39f, box.size.x, box.size.y * 0.22f);
 				nvgFillColor(args.vg, nvgRGBA(10, 10, 12, 180));
 				nvgFill(args.vg);
-				nvgFontFaceId(args.vg, APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"))->handle);
+				if (font) {
+					nvgFontFaceId(args.vg, font->handle);
+				}
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFontSize(args.vg, 15.f);
 				nvgFillColor(args.vg, nvgRGB(244, 229, 206));
@@ -665,7 +673,9 @@ struct CrownstepStatusWidget final : Widget {
 
 	explicit CrownstepStatusWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
-		font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
+		if (APP && APP->window) {
+			font = APP->window->loadFont(asset::system("res/fonts/DejaVuSans.ttf"));
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -770,29 +780,6 @@ struct CrownstepWidget final : ModuleWidget {
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(77.5f, 93.f)), module, Crownstep::RUN_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(Vec(86.5f, 93.f)), module, Crownstep::AI_TURN_LIGHT));
-
-		if (module) {
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM] = new CrownstepSeqLengthQuantity();
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM]->module = module;
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM]->paramId = Crownstep::SEQ_LENGTH_PARAM;
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM]->minValue = 0.f;
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM]->maxValue = 4.f;
-			module->paramQuantities[Crownstep::SEQ_LENGTH_PARAM]->defaultValue = 0.f;
-
-			module->paramQuantities[Crownstep::ROOT_PARAM] = new CrownstepRootQuantity();
-			module->paramQuantities[Crownstep::ROOT_PARAM]->module = module;
-			module->paramQuantities[Crownstep::ROOT_PARAM]->paramId = Crownstep::ROOT_PARAM;
-			module->paramQuantities[Crownstep::ROOT_PARAM]->minValue = 0.f;
-			module->paramQuantities[Crownstep::ROOT_PARAM]->maxValue = 11.f;
-			module->paramQuantities[Crownstep::ROOT_PARAM]->defaultValue = 0.f;
-
-			module->paramQuantities[Crownstep::SCALE_PARAM] = new CrownstepScaleQuantity();
-			module->paramQuantities[Crownstep::SCALE_PARAM]->module = module;
-			module->paramQuantities[Crownstep::SCALE_PARAM]->paramId = Crownstep::SCALE_PARAM;
-			module->paramQuantities[Crownstep::SCALE_PARAM]->minValue = 0.f;
-			module->paramQuantities[Crownstep::SCALE_PARAM]->maxValue = float(SCALES.size() - 1);
-			module->paramQuantities[Crownstep::SCALE_PARAM]->defaultValue = 0.f;
-		}
 	}
 
 	void appendContextMenu(Menu* menu) override {
