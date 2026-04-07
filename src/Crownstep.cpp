@@ -539,6 +539,16 @@ struct CrownstepBoardWidget final : Widget {
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
+		for (int row = 0; row < 8; ++row) {
+			for (int col = 0; col < 8; ++col) {
+				bool dark = ((row + col) & 1) == 1;
+				NVGcolor squareColor = dark ? nvgRGB(64, 46, 34) : nvgRGB(215, 196, 168);
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+				nvgFillColor(args.vg, squareColor);
+				nvgFill(args.vg);
+			}
+		}
 
 		if (module) {
 			if (module->selectedSquare >= 0) {

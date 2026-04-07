@@ -618,6 +618,7 @@ struct TDScopeDisplayWidget final : Widget {
       float highG = 112.f;
       float highB = 218.f;
       float midPoint = 0.5f;
+      float midHoldHalfWidth = 0.f;
       switch (module->scopeColorScheme) {
         case TDScope::COLOR_SCHEME_EMERALD:
           // Emerald: low -> deep forest green, mid -> jade, high -> mint.
@@ -736,18 +737,39 @@ struct TDScopeDisplayWidget final : Widget {
           highG = 112.f;
           highB = 218.f;
           midPoint = 0.5f;
+          // Hold a visible ember band around the midpoint so the 3-stop gradient
+          // reads clearly even with quantized intensity buckets.
+          midHoldHalfWidth = 0.16f;
           break;
       }
       float r = 0.f;
       float g = 0.f;
       float b = 0.f;
-      if (intensity <= midPoint) {
-        float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+      float midStart = clamp(midPoint - midHoldHalfWidth, 0.f, 1.f);
+      float midEnd = clamp(midPoint + midHoldHalfWidth, 0.f, 1.f);
+      if (midEnd <= midStart + 1e-6f) {
+        if (intensity <= midPoint) {
+          float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+          r = lowR + (midR - lowR) * t;
+          g = lowG + (midG - lowG) * t;
+          b = lowB + (midB - lowB) * t;
+        } else {
+          float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+          r = midR + (highR - midR) * t;
+          g = midG + (highG - midG) * t;
+          b = midB + (highB - midB) * t;
+        }
+      } else if (intensity < midStart) {
+        float t = (midStart > 1e-6f) ? (intensity / midStart) : 0.f;
         r = lowR + (midR - lowR) * t;
         g = lowG + (midG - lowG) * t;
         b = lowB + (midB - lowB) * t;
+      } else if (intensity <= midEnd) {
+        r = midR;
+        g = midG;
+        b = midB;
       } else {
-        float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+        float t = (1.f - midEnd > 1e-6f) ? ((intensity - midEnd) / (1.f - midEnd)) : 1.f;
         r = midR + (highR - midR) * t;
         g = midG + (highG - midG) * t;
         b = midB + (highB - midB) * t;
