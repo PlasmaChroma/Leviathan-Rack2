@@ -468,6 +468,15 @@ struct TDScopeDisplayWidget final : Widget {
     if (lowSignalWindow) {
       readHeadY = drawTop + 0.5f * yDen + 0.5f;
     }
+    // Keep the full multi-line read-head band visible near window edges.
+    constexpr float kReadHeadHalfBandPx = 2.f;
+    float minReadHeadY = drawTop + kReadHeadHalfBandPx + 0.5f;
+    float maxReadHeadY = drawBottom - kReadHeadHalfBandPx - 0.5f;
+    if (maxReadHeadY >= minReadHeadY) {
+      readHeadY = clamp(readHeadY, minReadHeadY, maxReadHeadY);
+    } else {
+      readHeadY = 0.5f * (drawTop + drawBottom);
+    }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
     constexpr int kIntensityBuckets = 8;

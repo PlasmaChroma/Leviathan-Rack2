@@ -703,11 +703,11 @@ struct CrownstepWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(46.f, 116.f)), module, Crownstep::TRANSPOSE_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(63.f, 116.f)), module, Crownstep::ROOT_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(12.f, 127.f)), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(29.f, 127.f)), module, Crownstep::GATE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(46.f, 127.f)), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(63.f, 127.f)), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(80.f, 127.f)), module, Crownstep::EOC_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(12.f, 123.f)), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(29.f, 123.f)), module, Crownstep::GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(46.f, 123.f)), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(63.f, 123.f)), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(80.f, 123.f)), module, Crownstep::EOC_OUTPUT));
 
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(77.5f, 93.f)), module, Crownstep::RUN_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));

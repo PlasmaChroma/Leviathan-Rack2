@@ -48,7 +48,7 @@
     {
       "slug": "TDScope",
       "name": "TD.Scope",
-      "description": "Expander display module for Temporal Deck timeline and waveform preview.",
+      "description": "Expander: Waveform display for Temporal Deck.",
       "tags": [
         "Visualizer",
         "Expander"
