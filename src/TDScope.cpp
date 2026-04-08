@@ -277,6 +277,8 @@ struct TDScopeDisplayWidget final : Widget {
   std::vector<uint8_t> rowValidRight;
   std::vector<uint8_t> rowBucket;
   std::vector<uint8_t> rowBucketRight;
+  std::vector<uint8_t> rowHoldFrames;
+  std::vector<uint8_t> rowHoldFramesRight;
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
@@ -499,6 +501,8 @@ struct TDScopeDisplayWidget final : Widget {
       rowValidRight.assign(rowCountU, 0u);
       rowBucket.assign(rowCountU, 0u);
       rowBucketRight.assign(rowCountU, 0u);
+      rowHoldFrames.assign(rowCountU, 0u);
+      rowHoldFramesRight.assign(rowCountU, 0u);
       cachedGeometryValid = false;
     }
 
@@ -558,14 +562,19 @@ struct TDScopeDisplayWidget final : Widget {
 
     auto rebuildLane = [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
                            std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut,
-                           std::vector<uint8_t> *validOut, std::vector<uint8_t> *bucketOut) {
-      if (!x0Out || !x1Out || !visualOut || !validOut || !bucketOut) {
+                           std::vector<uint8_t> *validOut, std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
+      if (!x0Out || !x1Out || !visualOut || !validOut || !bucketOut || !holdOut) {
         return;
       }
-      std::fill(validOut->begin(), validOut->end(), 0u);
-      std::fill(visualOut->begin(), visualOut->end(), 0.f);
+      constexpr uint8_t kRowTailHoldFrames = 2u;
+      constexpr float kRowTailIntensityDecay = 0.92f;
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t idx = size_t(iy);
+        bool prevValid = (*validOut)[idx] != 0u;
+        float prevX0 = (*x0Out)[idx];
+        float prevX1 = (*x1Out)[idx];
+        float prevVisual = (*visualOut)[idx];
+        uint8_t prevHold = (*holdOut)[idx];
         float y = drawTop + float(iy) + 0.5f;
         rowY[idx] = y;
         float t0 = clamp((y - drawTop - 0.5f) / yDen, 0.f, 1.f);
@@ -573,9 +582,24 @@ struct TDScopeDisplayWidget final : Widget {
         float rowMinNorm = 0.f;
         float rowMaxNorm = 0.f;
         if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
-          (*x0Out)[idx] = laneCenterXLocal;
-          (*x1Out)[idx] = laneCenterXLocal;
-          (*bucketOut)[idx] = 0u;
+          if (prevValid && prevHold > 0u) {
+            (*x0Out)[idx] = prevX0;
+            (*x1Out)[idx] = prevX1;
+            float carryVisual = clamp(prevVisual * kRowTailIntensityDecay, 0.f, 1.f);
+            int bucket = int(std::floor(carryVisual * float(kIntensityBuckets)));
+            bucket = clamp(bucket, 0, kIntensityBuckets - 1);
+            (*visualOut)[idx] = carryVisual;
+            (*bucketOut)[idx] = uint8_t(bucket);
+            (*validOut)[idx] = 1u;
+            (*holdOut)[idx] = uint8_t(prevHold - 1u);
+          } else {
+            (*x0Out)[idx] = laneCenterXLocal;
+            (*x1Out)[idx] = laneCenterXLocal;
+            (*visualOut)[idx] = 0.f;
+            (*bucketOut)[idx] = 0u;
+            (*validOut)[idx] = 0u;
+            (*holdOut)[idx] = 0u;
+          }
           continue;
         }
 
@@ -596,18 +620,21 @@ struct TDScopeDisplayWidget final : Widget {
         (*visualOut)[idx] = visualIntensity;
         (*bucketOut)[idx] = uint8_t(bucket);
         (*validOut)[idx] = 1u;
+        (*holdOut)[idx] = kRowTailHoldFrames;
       }
     };
 
     if (shouldRebuild) {
-      rebuildLane(msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket);
+      rebuildLane(msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
+                  &rowHoldFrames);
       if (renderStereo) {
         rebuildLane(
           msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
-          &rowBucketRight);
+          &rowBucketRight, &rowHoldFramesRight);
       } else {
         std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
         std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
+        std::fill(rowHoldFramesRight.begin(), rowHoldFramesRight.end(), 0u);
         for (size_t idx = 0; idx < rowCountU; ++idx) {
           rowX0Right[idx] = lane1CenterX;
           rowX1Right[idx] = lane1CenterX;

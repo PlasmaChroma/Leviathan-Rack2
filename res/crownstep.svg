@@ -278,8 +278,8 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="3.3736828"
-   inkscape:cx="169.54765"
-   inkscape:cy="332.72245"
+   inkscape:cx="186.73955"
+   inkscape:cy="377.18425"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -373,8 +373,8 @@
         <rect
    x="1107.2235"
    y="10831.58"
-   width="3538.4043"
-   height="2208.5784"
+   width="2572.2305"
+   height="2441.6138"
    rx="181.74057"
    ry="181.74057"
    fill="#000000"
@@ -386,10 +386,10 @@
    style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
         
         <rect
-   x="6327.8511"
-   y="10852.833"
-   width="3709.1392"
-   height="2173.2686"
+   x="7759.873"
+   y="10915.757"
+   width="2324.3264"
+   height="2322.7134"
    rx="182.51744"
    ry="183.18156"
    fill="#000000"
@@ -786,49 +786,59 @@
         
         
         <text
-   id="reworked_lbl_eor"
-   x="1014.0171"
-   y="10341.131"
+   id="clk_lbl"
+   x="708.15698"
+   y="10890.111"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">EoR</text>
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan3">CLOCK</tspan></text><text
+   id="clk_lbl-6"
+   x="2103.2771"
+   y="10890.101"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan5"
+     x="2103.2771"
+     y="10890.101">RESET</tspan></text><text
+   id="transpose_lbl"
+   x="717.63348"
+   y="12106.766"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan4">TRANS</tspan></text><text
+   id="transpose_lbl-1"
+   x="2097.2766"
+   y="12106.801"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan6"
+     x="2097.2766"
+     y="12106.801">ROOT</tspan></text>
         
-        <text
-   id="reworked_lbl_out1"
-   x="2531.5142"
-   y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">1</text>
         
-        <text
-   id="reworked_lbl_out3"
-   x="5952.8721"
-   y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">3</text>
-        <text
-   id="reworked_lbl_out4"
-   x="7588.1367"
-   y="10341.1"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">4</text>
+        
+        
+        
         
         <text
    id="reworked_text29-7"
    x="6803.3994"
    y="11737.7"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve">INV</text>
-        
-        <text
-   id="reworked_lbl_s1"
-   x="993.21527"
-   y="11741.934"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   xml:space="preserve">INV</text><text
+   id="reworked_text29-7-0"
+   x="8459.4717"
+   y="11924.597"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
-     id="tspan101"
-     x="993.21527"
-     y="11741.934">∫ 1</tspan></text>
+     id="tspan7">EoC</tspan></text>
+        
+        
         
         <text
    id="reworked_module_description"
@@ -895,73 +905,77 @@
         
       </g><g
    id="components"
-   style="display:none"><ellipse
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
-     id="LIN_LOG_1"
-     cx="1397.5443"
-     cy="5052.6074"
-     rx="294.84427"
-     ry="295.80988" /><ellipse
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
-     id="EoR_CH_1"
-     cx="1653.6869"
-     cy="9676.0312"
-     rx="114.98675"
-     ry="120.83137" /><ellipse
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
-     id="Light_Unity_1"
-     cx="1654.6868"
-     cy="11075.845"
-     rx="114.98675"
-     ry="120.83137" /><ellipse
-     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
-     id="EOR_1"
-     cx="1003.6987"
-     cy="9694.5723"
-     rx="398.39865"
-     ry="405.17139" /><ellipse
-     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
-     id="CH_1_Unity"
-     cx="1004.7076"
-     cy="11068.226"
-     rx="398.39865"
-     ry="405.17139" /><ellipse
-     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
-     id="CH1_BOTH_CV"
-     cx="2663.2986"
-     cy="5026.9717"
-     rx="398.39865"
-     ry="405.17142" /><ellipse
-     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
-     id="CH1_RISE_CV"
-     cx="2168.2986"
-     cy="3641.5715"
-     rx="398.39865"
-     ry="405.17142" /><ellipse
-     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
-     id="SUM_OUT"
-     cx="5071.3989"
-     cy="11088.226"
-     rx="398.39865"
-     ry="405.17139" /><ellipse
-     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302"
-     id="OR_OUT"
-     cx="3365.1987"
-     cy="11088.226"
-     rx="398.39865"
-     ry="405.17139" /><ellipse
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
-     id="OR_LED"
-     cx="4237.3867"
-     cy="11075.831"
-     rx="114.98675"
-     ry="120.83137" /><ellipse
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
-     id="ATTENUATE_2"
-     cx="4254.2441"
-     cy="8644.5771"
-     rx="294.84427"
-     ry="295.80988" /></g><rect
+   style="display:inline"><circle
+     id="SEQ_LENGTH_PARAM"
+     cx="4485.8662"
+     cy="10422.234"
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.5"
+     r="295" /><circle
+     id="NEW_GAME_PARAM"
+     cx="7270"
+     cy="400"
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.5"
+     r="170" /><ellipse
+     id="CLOCK_INPUT"
+     cx="688.70001"
+     cy="10312.4"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="RESET_INPUT"
+     cx="2099.4414"
+     cy="10312.4"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="TRANSPOSE_INPUT"
+     cx="698.70001"
+     cy="11523.299"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="ROOT_INPUT"
+     cx="2109.4414"
+     cy="11523.299"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="PITCH_OUTPUT"
+     cx="7325.1768"
+     cy="10252.333"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="ACCENT_OUTPUT"
+     cx="7307.2114"
+     cy="11326.764"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="MOD_OUTPUT"
+     cx="8395.0488"
+     cy="10260.175"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="EOC_OUTPUT"
+     cx="8408.4541"
+     cy="11318.922"
+     rx="398.39999"
+     ry="405.20001"
+     style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
+     id="HUMAN_TURN_LIGHT"
+     cx="8250"
+     cy="9300"
+     rx="115"
+     ry="121"
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><ellipse
+     id="AI_TURN_LIGHT"
+     cx="8650"
+     cy="9300"
+     rx="115"
+     ry="121"
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /></g><rect
    id="INPUTS_AREA"
    x="120.64642"
    y="9805.6377"

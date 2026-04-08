@@ -23,6 +23,7 @@ using crownstep::Step;
 static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
+static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
 
 static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
 	if (!outRect) {
@@ -121,6 +122,11 @@ struct Crownstep : Module {
 		AI_TURN_LIGHT,
 		LIGHTS_LEN
 	};
+	enum BoardTextureMode {
+		BOARD_TEXTURE_WOOD = 0,
+		BOARD_TEXTURE_MARBLE,
+		BOARD_TEXTURE_COUNT
+	};
 
 	std::array<int, BOARD_SIZE> board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
@@ -159,6 +165,7 @@ struct Crownstep : Module {
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
 	int pitchDividerMode = 0;
+	int boardTextureMode = BOARD_TEXTURE_WOOD;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -696,6 +703,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 		json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 		json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
+		json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -800,6 +808,10 @@ struct Crownstep : Module {
 			else {
 				boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
 			}
+		}
+		json_t* boardTextureModeJ = json_object_get(rootJ, "boardTextureMode");
+		if (boardTextureModeJ) {
+			boardTextureMode = clamp(int(json_integer_value(boardTextureModeJ)), 0, int(BOARD_TEXTURE_NAMES.size()) - 1);
 		}
 		json_t* playheadJ = json_object_get(rootJ, "playhead");
 		if (playheadJ) {
@@ -956,52 +968,69 @@ struct CrownstepBoardWidget final : Widget {
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
+				bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 				float x = col * cellWidth;
 				float y = row * cellHeight;
-
-				NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
-				NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
-
-				nvgBeginPath(args.vg);
-				nvgRect(args.vg, x, y, cellWidth, cellHeight);
-				NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
-				nvgFillPaint(args.vg, basePaint);
-				nvgFill(args.vg);
-
-				NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
-				NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
-				nvgBeginPath(args.vg);
-				nvgRect(args.vg, x, y, cellWidth, cellHeight);
-				NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
-				nvgFillPaint(args.vg, sheenPaint);
-				nvgFill(args.vg);
-
 				float seed = float((row * 29 + col * 17) % 97) * 0.17f;
-				for (int grain = 0; grain < 4; ++grain) {
-					float t = (grain + 1) / 5.f;
-					float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
-					float thickness = 0.5f + 0.15f * float(grain & 1);
-					int alpha = dark ? 28 : 24;
-
+				if (marbleTexture) {
+					NVGcolor topColor = dark ? nvgRGB(72, 74, 82) : nvgRGB(208, 212, 222);
+					NVGcolor bottomColor = dark ? nvgRGB(42, 44, 52) : nvgRGB(166, 172, 184);
 					nvgBeginPath(args.vg);
-					nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
-					nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
 					nvgFill(args.vg);
-				}
 
-				if (((row * 8 + col + 3) % 11) == 0) {
-					float knotX = x + cellWidth * (0.28f + 0.42f * std::fabs(std::sin(seed)));
-					float knotY = y + cellHeight * (0.30f + 0.32f * std::fabs(std::sin(seed * 1.7f)));
-					float knotRadius = std::min(cellWidth, cellHeight) * 0.13f;
-					NVGcolor knotInner = dark ? nvgRGBA(48, 27, 14, 55) : nvgRGBA(136, 89, 50, 46);
-					NVGcolor knotOuter = nvgRGBA(0, 0, 0, 0);
+					NVGcolor cloudA = dark ? nvgRGBA(116, 122, 140, 30) : nvgRGBA(255, 255, 255, 44);
+					NVGcolor cloudB = dark ? nvgRGBA(30, 34, 46, 22) : nvgRGBA(144, 152, 168, 28);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint cloudPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, cloudA, cloudB);
+					nvgFillPaint(args.vg, cloudPaint);
+					nvgFill(args.vg);
+
+					for (int vein = 0; vein < 3; ++vein) {
+						float t = (vein + 1.f) / 4.f;
+						float y0 = y + t * cellHeight + std::sin(seed * 0.9f + float(vein) * 1.8f) * 0.9f;
+						float y1 = y0 + std::cos(seed * 0.6f + float(vein) * 1.5f) * 1.1f;
+						NVGcolor veinColor = dark ? nvgRGBA(178, 186, 206, 44) : nvgRGBA(116, 124, 144, 54);
+						nvgBeginPath(args.vg);
+						nvgMoveTo(args.vg, x + 0.8f, y0);
+						nvgBezierTo(args.vg, x + cellWidth * 0.30f, y0 - 1.1f, x + cellWidth * 0.65f, y1 + 1.1f, x + cellWidth - 0.8f, y1);
+						nvgStrokeColor(args.vg, veinColor);
+						nvgStrokeWidth(args.vg, 0.62f + 0.12f * float(vein & 1));
+						nvgStroke(args.vg);
+					}
+				}
+				else {
+					NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
+					NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
 
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, x, y, cellWidth, cellHeight);
-					NVGpaint knotPaint =
-						nvgRadialGradient(args.vg, knotX, knotY, knotRadius * 0.2f, knotRadius, knotInner, knotOuter);
-					nvgFillPaint(args.vg, knotPaint);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
 					nvgFill(args.vg);
+
+					NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
+					NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
+					nvgFillPaint(args.vg, sheenPaint);
+					nvgFill(args.vg);
+
+					for (int grain = 0; grain < 4; ++grain) {
+						float t = (grain + 1) / 5.f;
+						float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
+						float thickness = 0.5f + 0.15f * float(grain & 1);
+						int alpha = dark ? 28 : 24;
+
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
+						nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+						nvgFill(args.vg);
+					}
 				}
 			}
 		}
@@ -1813,6 +1842,26 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->pitchDividerMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(new MenuSeparator());
+		MenuLabel* boardLabel = new MenuLabel();
+		boardLabel->text = "Board";
+		menu->addChild(boardLabel);
+		menu->addChild(createSubmenuItem("Texture", "", [=](Menu* textureMenu) {
+			for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
+				textureMenu->addChild(createCheckMenuItem(
+					BOARD_TEXTURE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->boardTextureMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->boardTextureMode = i;
 						}
 					}
 				));
