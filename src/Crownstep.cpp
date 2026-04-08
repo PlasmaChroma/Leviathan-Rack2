@@ -73,6 +73,62 @@ static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rec
 	return true;
 }
 
+static bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId, Vec* outPointMm) {
+	if (!outPointMm) {
+		return false;
+	}
+
+	std::ifstream svgFile(svgPath);
+	if (!svgFile.good()) {
+		return false;
+	}
+
+	std::ostringstream svgBuffer;
+	svgBuffer << svgFile.rdbuf();
+	const std::string svgText = svgBuffer.str();
+
+	const std::regex elementRegex(
+		"<(ellipse|circle|rect)\\b[^>]*\\bid\\s*=\\s*\"" + elementId + "\"[^>]*>",
+		std::regex::icase
+	);
+	std::smatch elementMatch;
+	if (!std::regex_search(svgText, elementMatch, elementRegex)) {
+		return false;
+	}
+	const std::string elementTag = elementMatch.str(0);
+
+	auto parseAttrMm = [&](const char* attr, float* outMm) -> bool {
+		if (!outMm) {
+			return false;
+		}
+		const std::regex attrRegex(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
+		std::smatch attrMatch;
+		if (!std::regex_search(elementTag, attrMatch, attrRegex)) {
+			return false;
+		}
+		*outMm = std::stof(attrMatch.str(1)) * 0.01f;
+		return true;
+	};
+
+	float cxMm = 0.f;
+	float cyMm = 0.f;
+	if (parseAttrMm("cx", &cxMm) && parseAttrMm("cy", &cyMm)) {
+		*outPointMm = Vec(cxMm, cyMm);
+		return true;
+	}
+
+	float xMm = 0.f;
+	float yMm = 0.f;
+	float wMm = 0.f;
+	float hMm = 0.f;
+	if (parseAttrMm("x", &xMm) && parseAttrMm("y", &yMm) && parseAttrMm("width", &wMm) && parseAttrMm("height", &hMm)) {
+		*outPointMm = Vec(xMm + 0.5f * wMm, yMm + 0.5f * hMm);
+		return true;
+	}
+
+	return false;
+}
+
 struct Crownstep;
 
 struct CrownstepSeqLengthQuantity final : ParamQuantity {
@@ -1728,6 +1784,8 @@ struct CrownstepWidget final : ModuleWidget {
 		Vec accentPos(58.f, 121.0f);
 		Vec modPos(74.f, 121.0f);
 		Vec eocPos(86.f, 121.0f);
+		Vec humanLightPos(82.5f, 93.f);
+		Vec aiLightPos(86.5f, 93.f);
 
 		if (hasInputsArea) {
 			clockPos = pointInRect(inputsAreaMm, 0.30f, 0.38f);
@@ -1773,9 +1831,25 @@ struct CrownstepWidget final : ModuleWidget {
 			newGamePos = Vec(controlX, controlY + controlH * 0.76f);
 		}
 
-		// Keep New Game near the top-right while clearing both the top screw
-		// and the purple horizontal accent line.
-		newGamePos = Vec(78.0f, 6.2f);
+		// Prefer explicit component anchors from the SVG "components" layer.
+		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
+			Vec pointMm;
+			if (loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+				*outPos = pointMm;
+			}
+		};
+		applyPointOverride("SEQ_LENGTH_PARAM", &seqPos);
+		applyPointOverride("NEW_GAME_PARAM", &newGamePos);
+		applyPointOverride("CLOCK_INPUT", &clockPos);
+		applyPointOverride("RESET_INPUT", &resetPos);
+		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
+		applyPointOverride("ROOT_INPUT", &rootCvPos);
+		applyPointOverride("PITCH_OUTPUT", &pitchPos);
+		applyPointOverride("ACCENT_OUTPUT", &accentPos);
+		applyPointOverride("MOD_OUTPUT", &modPos);
+		applyPointOverride("EOC_OUTPUT", &eocPos);
+		applyPointOverride("HUMAN_TURN_LIGHT", &humanLightPos);
+		applyPointOverride("AI_TURN_LIGHT", &aiLightPos);
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(seqPos), module, Crownstep::SEQ_LENGTH_PARAM));
 		addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
@@ -1790,8 +1864,8 @@ struct CrownstepWidget final : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(82.5f, 93.f)), module, Crownstep::HUMAN_TURN_LIGHT));
-		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(Vec(86.5f, 93.f)), module, Crownstep::AI_TURN_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
+		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
