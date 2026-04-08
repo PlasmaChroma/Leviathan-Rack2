@@ -252,6 +252,120 @@ TestResult testChessPromotionAutoQueensPawn() {
           "found=" + std::to_string(found ? 1 : 0) + " piece=" + std::to_string(promotedPiece)};
 }
 
+TestResult testChessKingCannotCaptureEnemyKing() {
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(6, 4))] = -crownstep::CHESS_KING;
+  crownstep::ChessState state = crownstep::chessInitialState();
+
+  std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, HUMAN_SIDE, state);
+  bool canCaptureEnemyKing = false;
+  for (const Move& move : moves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(7, 4) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(6, 4)) {
+      canCaptureEnemyKing = true;
+      break;
+    }
+  }
+  return {"Chess king cannot capture enemy king", !canCaptureEnemyKing,
+          "moves=" + std::to_string(moves.size())};
+}
+
+TestResult testChessCastlingMovesAndRookShift() {
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(7, 0))] = crownstep::CHESS_ROOK;
+  board[size_t(crownstep::chessCoordToIndex(7, 7))] = crownstep::CHESS_ROOK;
+  board[size_t(crownstep::chessCoordToIndex(0, 4))] = -crownstep::CHESS_KING;
+  crownstep::ChessState state = crownstep::chessInitialState();
+
+  std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, HUMAN_SIDE, state);
+  Move kingSideCastle;
+  bool foundKingSide = false;
+  bool foundQueenSide = false;
+  for (const Move& move : moves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(7, 4) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(7, 6)) {
+      kingSideCastle = move;
+      foundKingSide = true;
+    }
+    if (move.originIndex == crownstep::chessCoordToIndex(7, 4) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(7, 2)) {
+      foundQueenSide = true;
+    }
+  }
+
+  crownstep::ChessState nextState = state;
+  BoardState nextBoard = foundKingSide
+    ? crownstep::chessApplyMoveToBoard(board, kingSideCastle, state, &nextState)
+    : board;
+  bool rookShifted = nextBoard[size_t(crownstep::chessCoordToIndex(7, 5))] == crownstep::CHESS_ROOK &&
+                     nextBoard[size_t(crownstep::chessCoordToIndex(7, 7))] == 0;
+  bool kingShifted = nextBoard[size_t(crownstep::chessCoordToIndex(7, 6))] == crownstep::CHESS_KING;
+  bool rightsCleared = !nextState.whiteCanCastleKingSide && !nextState.whiteCanCastleQueenSide;
+  bool pass = foundKingSide && foundQueenSide && kingShifted && rookShifted && rightsCleared;
+  return {"Chess castling legal + rook shifts correctly", pass,
+          "k=" + std::to_string(foundKingSide ? 1 : 0) + " q=" + std::to_string(foundQueenSide ? 1 : 0)};
+}
+
+TestResult testChessEnPassantImmediateCapture() {
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(0, 4))] = -crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(6, 4))] = crownstep::CHESS_PAWN;   // White pawn e2
+  board[size_t(crownstep::chessCoordToIndex(4, 3))] = -crownstep::CHESS_PAWN;  // Black pawn d4
+  crownstep::ChessState state = crownstep::chessInitialState();
+
+  std::vector<Move> whiteMoves = crownstep::chessGenerateLegalMovesForSide(board, HUMAN_SIDE, state);
+  Move whiteDoublePush;
+  bool foundDoublePush = false;
+  for (const Move& move : whiteMoves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(6, 4) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(4, 4)) {
+      whiteDoublePush = move;
+      foundDoublePush = true;
+      break;
+    }
+  }
+
+  crownstep::ChessState afterWhite = state;
+  BoardState boardAfterWhite = foundDoublePush
+    ? crownstep::chessApplyMoveToBoard(board, whiteDoublePush, state, &afterWhite)
+    : board;
+
+  std::vector<Move> blackMoves = crownstep::chessGenerateLegalMovesForSide(boardAfterWhite, AI_SIDE, afterWhite);
+  Move enPassantMove;
+  bool foundEnPassant = false;
+  int capturedIndex = -1;
+  for (const Move& move : blackMoves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(4, 3) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(5, 4) &&
+        !move.captured.empty()) {
+      enPassantMove = move;
+      capturedIndex = move.captured[0];
+      foundEnPassant = true;
+      break;
+    }
+  }
+
+  crownstep::ChessState afterBlack = afterWhite;
+  BoardState boardAfterBlack = foundEnPassant
+    ? crownstep::chessApplyMoveToBoard(boardAfterWhite, enPassantMove, afterWhite, &afterBlack)
+    : boardAfterWhite;
+  bool destinationHasBlackPawn =
+    boardAfterBlack[size_t(crownstep::chessCoordToIndex(5, 4))] == -crownstep::CHESS_PAWN;
+  bool whitePawnRemoved = boardAfterBlack[size_t(crownstep::chessCoordToIndex(4, 4))] == 0;
+  bool pass = foundDoublePush && foundEnPassant &&
+              capturedIndex == crownstep::chessCoordToIndex(4, 4) &&
+              destinationHasBlackPawn && whitePawnRemoved;
+  return {"Chess en passant is generated + applied immediately", pass,
+          "doublePush=" + std::to_string(foundDoublePush ? 1 : 0) +
+            " ep=" + std::to_string(foundEnPassant ? 1 : 0)};
+}
+
 } // namespace
 
 int main() {
@@ -270,6 +384,9 @@ int main() {
   tests.push_back(testChessStalemateIsDraw());
   tests.push_back(testChessCheckmateReportsWinner());
   tests.push_back(testChessPromotionAutoQueensPawn());
+  tests.push_back(testChessKingCannotCaptureEnemyKing());
+  tests.push_back(testChessCastlingMovesAndRookShift());
+  tests.push_back(testChessEnPassantImmediateCapture());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";

@@ -23,6 +23,14 @@ static constexpr int CHESS_ROOK = 4;
 static constexpr int CHESS_QUEEN = 5;
 static constexpr int CHESS_KING = 6;
 
+struct ChessState {
+	bool whiteCanCastleKingSide = true;
+	bool whiteCanCastleQueenSide = true;
+	bool blackCanCastleKingSide = true;
+	bool blackCanCastleQueenSide = true;
+	int enPassantTargetIndex = -1;
+};
+
 struct Scale {
 	const char* name;
 	std::array<int, 12> semitones;
@@ -469,6 +477,86 @@ inline int chessPieceType(int piece) {
 	return std::abs(piece);
 }
 
+inline ChessState chessInitialState() {
+	return ChessState();
+}
+
+inline int chessKingStartIndexForSide(int side) {
+	return (side == HUMAN_SIDE) ? chessCoordToIndex(7, 4) : chessCoordToIndex(0, 4);
+}
+
+inline int chessKingsideRookStartIndexForSide(int side) {
+	return (side == HUMAN_SIDE) ? chessCoordToIndex(7, 7) : chessCoordToIndex(0, 7);
+}
+
+inline int chessQueensideRookStartIndexForSide(int side) {
+	return (side == HUMAN_SIDE) ? chessCoordToIndex(7, 0) : chessCoordToIndex(0, 0);
+}
+
+inline bool chessCanCapturePiece(int movingSide, int destinationPiece) {
+	if (destinationPiece == 0 || pieceSide(destinationPiece) == movingSide) {
+		return false;
+	}
+	return chessPieceType(destinationPiece) != CHESS_KING;
+}
+
+inline ChessState chessInferStateFromBoard(const BoardState& board) {
+	ChessState state;
+	state.enPassantTargetIndex = -1;
+	state.whiteCanCastleKingSide =
+		(board[size_t(chessKingStartIndexForSide(HUMAN_SIDE))] == CHESS_KING) &&
+		(board[size_t(chessKingsideRookStartIndexForSide(HUMAN_SIDE))] == CHESS_ROOK);
+	state.whiteCanCastleQueenSide =
+		(board[size_t(chessKingStartIndexForSide(HUMAN_SIDE))] == CHESS_KING) &&
+		(board[size_t(chessQueensideRookStartIndexForSide(HUMAN_SIDE))] == CHESS_ROOK);
+	state.blackCanCastleKingSide =
+		(board[size_t(chessKingStartIndexForSide(AI_SIDE))] == -CHESS_KING) &&
+		(board[size_t(chessKingsideRookStartIndexForSide(AI_SIDE))] == -CHESS_ROOK);
+	state.blackCanCastleQueenSide =
+		(board[size_t(chessKingStartIndexForSide(AI_SIDE))] == -CHESS_KING) &&
+		(board[size_t(chessQueensideRookStartIndexForSide(AI_SIDE))] == -CHESS_ROOK);
+	return state;
+}
+
+inline bool chessCanCastleForSide(const ChessState& state, int side, bool kingSide) {
+	if (side == HUMAN_SIDE) {
+		return kingSide ? state.whiteCanCastleKingSide : state.whiteCanCastleQueenSide;
+	}
+	return kingSide ? state.blackCanCastleKingSide : state.blackCanCastleQueenSide;
+}
+
+inline void chessClearCastlingForSide(ChessState* state, int side) {
+	if (!state) {
+		return;
+	}
+	if (side == HUMAN_SIDE) {
+		state->whiteCanCastleKingSide = false;
+		state->whiteCanCastleQueenSide = false;
+	}
+	else if (side == AI_SIDE) {
+		state->blackCanCastleKingSide = false;
+		state->blackCanCastleQueenSide = false;
+	}
+}
+
+inline void chessClearRookCastlingRightForIndex(ChessState* state, int rookIndex) {
+	if (!state) {
+		return;
+	}
+	if (rookIndex == chessKingsideRookStartIndexForSide(HUMAN_SIDE)) {
+		state->whiteCanCastleKingSide = false;
+	}
+	else if (rookIndex == chessQueensideRookStartIndexForSide(HUMAN_SIDE)) {
+		state->whiteCanCastleQueenSide = false;
+	}
+	else if (rookIndex == chessKingsideRookStartIndexForSide(AI_SIDE)) {
+		state->blackCanCastleKingSide = false;
+	}
+	else if (rookIndex == chessQueensideRookStartIndexForSide(AI_SIDE)) {
+		state->blackCanCastleQueenSide = false;
+	}
+}
+
 inline int chessBackRankPieceTypeForCol(int col) {
 	switch (col) {
 		case 0:
@@ -517,7 +605,10 @@ inline void chessAppendMove(
 	moves->push_back(move);
 }
 
-inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std::vector<Move>* moves) {
+inline bool chessSquareIsAttackedBySide(const BoardState& board, int targetIndex, int attackerSide);
+inline bool chessIsKingInCheck(const BoardState& board, int side);
+
+inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std::vector<Move>* moves, const ChessState* state = nullptr) {
 	if (!moves || index < 0 || index >= CHESS_BOARD_SIZE) {
 		return;
 	}
@@ -551,8 +642,23 @@ inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std:
 				continue;
 			}
 			int capturePiece = board[size_t(captureIndex)];
-			if (capturePiece != 0 && pieceSide(capturePiece) == -side) {
+			if (chessCanCapturePiece(side, capturePiece)) {
 				chessAppendMove(index, captureIndex, piece, captureIndex, moves);
+			}
+		}
+		if (state && state->enPassantTargetIndex >= 0) {
+			int targetRow = 0;
+			int targetCol = 0;
+			if (chessIndexToCoord(state->enPassantTargetIndex, &targetRow, &targetCol) &&
+				targetRow == nextRow && std::abs(targetCol - col) == 1 &&
+				board[size_t(state->enPassantTargetIndex)] == 0) {
+				int capturedIndex = state->enPassantTargetIndex - forward * 8;
+				if (capturedIndex >= 0 && capturedIndex < CHESS_BOARD_SIZE) {
+					int capturedPiece = board[size_t(capturedIndex)];
+					if (capturedPiece == -side * CHESS_PAWN) {
+						chessAppendMove(index, state->enPassantTargetIndex, piece, capturedIndex, moves);
+					}
+				}
 			}
 		}
 		return;
@@ -574,7 +680,7 @@ inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std:
 			if (destinationPiece == 0) {
 				chessAppendMove(index, destination, piece, -1, moves);
 			}
-			else if (pieceSide(destinationPiece) == -side) {
+			else if (chessCanCapturePiece(side, destinationPiece)) {
 				chessAppendMove(index, destination, piece, destination, moves);
 			}
 		}
@@ -597,7 +703,7 @@ inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std:
 					chessAppendMove(index, destination, piece, -1, moves);
 				}
 				else {
-					if (pieceSide(destinationPiece) == -side) {
+					if (chessCanCapturePiece(side, destinationPiece)) {
 						chessAppendMove(index, destination, piece, destination, moves);
 					}
 					break;
@@ -626,12 +732,42 @@ inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std:
 				if (destination < 0) {
 					continue;
 				}
-				int destinationPiece = board[size_t(destination)];
-				if (destinationPiece == 0) {
+					int destinationPiece = board[size_t(destination)];
+					if (destinationPiece == 0) {
+						chessAppendMove(index, destination, piece, -1, moves);
+					}
+					else if (chessCanCapturePiece(side, destinationPiece)) {
+						chessAppendMove(index, destination, piece, destination, moves);
+					}
+				}
+			}
+		if (state && index == chessKingStartIndexForSide(side) && !chessIsKingInCheck(board, side)) {
+			int row = (side == HUMAN_SIDE) ? 7 : 0;
+			int opponent = -side;
+			if (chessCanCastleForSide(*state, side, true)) {
+				int rookIndex = chessCoordToIndex(row, 7);
+				int passIndex = chessCoordToIndex(row, 5);
+				int destination = chessCoordToIndex(row, 6);
+				if (board[size_t(rookIndex)] == side * CHESS_ROOK &&
+					board[size_t(passIndex)] == 0 &&
+					board[size_t(destination)] == 0 &&
+					!chessSquareIsAttackedBySide(board, passIndex, opponent) &&
+					!chessSquareIsAttackedBySide(board, destination, opponent)) {
 					chessAppendMove(index, destination, piece, -1, moves);
 				}
-				else if (pieceSide(destinationPiece) == -side) {
-					chessAppendMove(index, destination, piece, destination, moves);
+			}
+			if (chessCanCastleForSide(*state, side, false)) {
+				int rookIndex = chessCoordToIndex(row, 0);
+				int passIndex = chessCoordToIndex(row, 3);
+				int destination = chessCoordToIndex(row, 2);
+				int bufferIndex = chessCoordToIndex(row, 1);
+				if (board[size_t(rookIndex)] == side * CHESS_ROOK &&
+					board[size_t(passIndex)] == 0 &&
+					board[size_t(destination)] == 0 &&
+					board[size_t(bufferIndex)] == 0 &&
+					!chessSquareIsAttackedBySide(board, passIndex, opponent) &&
+					!chessSquareIsAttackedBySide(board, destination, opponent)) {
+					chessAppendMove(index, destination, piece, -1, moves);
 				}
 			}
 		}
@@ -739,53 +875,113 @@ inline bool chessIsKingInCheck(const BoardState& board, int side) {
 	return chessSquareIsAttackedBySide(board, kingIndex, -side);
 }
 
-inline BoardState chessApplyMoveToBoard(const BoardState& sourceBoard, const Move& move) {
+inline BoardState chessApplyMoveToBoard(
+	const BoardState& sourceBoard,
+	const Move& move,
+	const ChessState& sourceState,
+	ChessState* outState
+) {
+	ChessState nextState = sourceState;
+	nextState.enPassantTargetIndex = -1;
 	BoardState nextBoard = sourceBoard;
 	if (move.originIndex < 0 || move.originIndex >= CHESS_BOARD_SIZE ||
 		move.destinationIndex < 0 || move.destinationIndex >= CHESS_BOARD_SIZE) {
+		if (outState) {
+			*outState = nextState;
+		}
 		return nextBoard;
 	}
 	int movingPiece = nextBoard[size_t(move.originIndex)];
 	if (movingPiece == 0) {
+		if (outState) {
+			*outState = nextState;
+		}
 		return nextBoard;
+	}
+	int movingSide = pieceSide(movingPiece);
+	int movingType = chessPieceType(movingPiece);
+	if (movingType == CHESS_KING) {
+		chessClearCastlingForSide(&nextState, movingSide);
+	}
+	else if (movingType == CHESS_ROOK) {
+		chessClearRookCastlingRightForIndex(&nextState, move.originIndex);
+	}
+	int destinationPiece = nextBoard[size_t(move.destinationIndex)];
+	if (destinationPiece != 0 && chessPieceType(destinationPiece) == CHESS_ROOK) {
+		chessClearRookCastlingRightForIndex(&nextState, move.destinationIndex);
 	}
 	nextBoard[size_t(move.originIndex)] = 0;
 	for (int captureIndex : move.captured) {
 		if (captureIndex >= 0 && captureIndex < CHESS_BOARD_SIZE) {
+			int capturedPiece = nextBoard[size_t(captureIndex)];
+			if (capturedPiece != 0 && chessPieceType(capturedPiece) == CHESS_ROOK) {
+				chessClearRookCastlingRightForIndex(&nextState, captureIndex);
+			}
 			nextBoard[size_t(captureIndex)] = 0;
 		}
 	}
+	int originRow = 0;
+	int originCol = 0;
+	int destinationCol = 0;
+	chessIndexToCoord(move.originIndex, &originRow, &originCol);
+	chessIndexToCoord(move.destinationIndex, nullptr, &destinationCol);
+	if (movingType == CHESS_KING && originRow == ((movingSide == HUMAN_SIDE) ? 7 : 0) &&
+		std::abs(destinationCol - originCol) == 2) {
+		bool kingSide = destinationCol > originCol;
+		int rookFrom = kingSide ? chessKingsideRookStartIndexForSide(movingSide) : chessQueensideRookStartIndexForSide(movingSide);
+		int rookTo = kingSide ? chessCoordToIndex(originRow, 5) : chessCoordToIndex(originRow, 3);
+		int rookPiece = nextBoard[size_t(rookFrom)];
+		nextBoard[size_t(rookFrom)] = 0;
+		nextBoard[size_t(rookTo)] = rookPiece;
+	}
 	int destinationRow = 0;
 	chessIndexToCoord(move.destinationIndex, &destinationRow, nullptr);
-	if (chessPieceType(movingPiece) == CHESS_PAWN) {
+	if (movingType == CHESS_PAWN) {
+		if (std::abs(destinationRow - originRow) == 2) {
+			nextState.enPassantTargetIndex = chessCoordToIndex((originRow + destinationRow) / 2, originCol);
+		}
 		bool promote = (pieceSide(movingPiece) == HUMAN_SIDE) ? (destinationRow == 0) : (destinationRow == 7);
 		if (promote) {
 			movingPiece = pieceSide(movingPiece) * CHESS_QUEEN;
 		}
 	}
 	nextBoard[size_t(move.destinationIndex)] = movingPiece;
+	if (outState) {
+		*outState = nextState;
+	}
 	return nextBoard;
 }
 
-inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side) {
+inline BoardState chessApplyMoveToBoard(const BoardState& sourceBoard, const Move& move) {
+	ChessState inferred = chessInferStateFromBoard(sourceBoard);
+	return chessApplyMoveToBoard(sourceBoard, move, inferred, nullptr);
+}
+
+inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side, const ChessState& state) {
 	std::vector<Move> pseudo;
 	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
 		int piece = sourceBoard[size_t(i)];
 		if (piece == 0 || pieceSide(piece) != side) {
 			continue;
 		}
-		chessAddPseudoMovesForPiece(sourceBoard, i, &pseudo);
+		chessAddPseudoMovesForPiece(sourceBoard, i, &pseudo, &state);
 	}
 
 	std::vector<Move> legal;
 	legal.reserve(pseudo.size());
 	for (const Move& move : pseudo) {
-		BoardState nextBoard = chessApplyMoveToBoard(sourceBoard, move);
+		ChessState nextState;
+		BoardState nextBoard = chessApplyMoveToBoard(sourceBoard, move, state, &nextState);
 		if (!chessIsKingInCheck(nextBoard, side)) {
 			legal.push_back(move);
 		}
 	}
 	return legal;
+}
+
+inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side) {
+	ChessState inferred = chessInferStateFromBoard(sourceBoard);
+	return chessGenerateLegalMovesForSide(sourceBoard, side, inferred);
 }
 
 inline int chessPieceMaterialValue(int pieceType) {
@@ -813,9 +1009,9 @@ inline int chessEvaluateBoardMaterial(const BoardState& board) {
 	return score;
 }
 
-inline int chessEvaluatePosition(const BoardState& board) {
-	std::vector<Move> aiMoves = chessGenerateLegalMovesForSide(board, AI_SIDE);
-	std::vector<Move> humanMoves = chessGenerateLegalMovesForSide(board, HUMAN_SIDE);
+inline int chessEvaluatePosition(const BoardState& board, const ChessState& state) {
+	std::vector<Move> aiMoves = chessGenerateLegalMovesForSide(board, AI_SIDE, state);
+	std::vector<Move> humanMoves = chessGenerateLegalMovesForSide(board, HUMAN_SIDE, state);
 
 	int score = chessEvaluateBoardMaterial(board);
 	score += int(aiMoves.size()) * 4;
@@ -830,6 +1026,11 @@ inline int chessEvaluatePosition(const BoardState& board) {
 	return score;
 }
 
+inline int chessEvaluatePosition(const BoardState& board) {
+	ChessState inferred = chessInferStateFromBoard(board);
+	return chessEvaluatePosition(board, inferred);
+}
+
 inline int chessSearchDepthForDifficulty(int difficulty) {
 	switch (std::max(0, std::min(difficulty, 2))) {
 		case 0: return 1;
@@ -838,16 +1039,17 @@ inline int chessSearchDepthForDifficulty(int difficulty) {
 	}
 }
 
-inline int chessSearchScore(const BoardState& board, int sideToMove, int depth, int alpha, int beta) {
-	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove);
+inline int chessSearchScore(const BoardState& board, const ChessState& state, int sideToMove, int depth, int alpha, int beta) {
+	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove, state);
 	if (depth <= 0 || moves.empty()) {
-		int score = chessEvaluatePosition(board);
+		int score = chessEvaluatePosition(board, state);
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
-		BoardState nextBoard = chessApplyMoveToBoard(board, move);
-		int value = -chessSearchScore(nextBoard, -sideToMove, depth - 1, -beta, -alpha);
+		ChessState nextState;
+		BoardState nextBoard = chessApplyMoveToBoard(board, move, state, &nextState);
+		int value = -chessSearchScore(nextBoard, nextState, -sideToMove, depth - 1, -beta, -alpha);
 		best = std::max(best, value);
 		alpha = std::max(alpha, value);
 		if (alpha >= beta) {
@@ -857,8 +1059,13 @@ inline int chessSearchScore(const BoardState& board, int sideToMove, int depth, 
 	return best;
 }
 
-inline Move chessChooseAiMove(const BoardState& board, int difficulty) {
-	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, AI_SIDE);
+inline int chessSearchScore(const BoardState& board, int sideToMove, int depth, int alpha, int beta) {
+	ChessState inferred = chessInferStateFromBoard(board);
+	return chessSearchScore(board, inferred, sideToMove, depth, alpha, beta);
+}
+
+inline Move chessChooseAiMove(const BoardState& board, int difficulty, const ChessState& state) {
+	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, AI_SIDE, state);
 	if (moves.empty()) {
 		return Move();
 	}
@@ -866,9 +1073,11 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty) {
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
 	for (int i = 0; i < int(moves.size()); ++i) {
-		BoardState nextBoard = chessApplyMoveToBoard(board, moves[size_t(i)]);
+		ChessState nextState;
+		BoardState nextBoard = chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
 		int score = -chessSearchScore(
 			nextBoard,
+			nextState,
 			HUMAN_SIDE,
 			depth - 1,
 			std::numeric_limits<int>::min() / 2,
@@ -881,6 +1090,11 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty) {
 		}
 	}
 	return moves[size_t(bestIndex)];
+}
+
+inline Move chessChooseAiMove(const BoardState& board, int difficulty) {
+	ChessState inferred = chessInferStateFromBoard(board);
+	return chessChooseAiMove(board, difficulty, inferred);
 }
 
 inline int chessWinnerForNoLegalMoves(const BoardState& board, int sideToMove) {

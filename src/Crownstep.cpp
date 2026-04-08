@@ -12,6 +12,7 @@
 
 using crownstep::AI_SIDE;
 using crownstep::BoardState;
+using crownstep::ChessState;
 using crownstep::BOARD_VALUE_LAYOUT_NAMES;
 using crownstep::DIFFICULTY_NAMES;
 using crownstep::HUMAN_SIDE;
@@ -247,6 +248,7 @@ struct Crownstep : Module {
 	float captureFlashSeconds = 0.f;
 	bool modGlideActive = false;
 	bool gameOver = false;
+	ChessState chessState = crownstep::chessInitialState();
 	const crownstep::IGameRules* gameRules = &crownstep::checkersRules();
 
 	Crownstep() {
@@ -528,6 +530,7 @@ struct Crownstep : Module {
 
 	void startNewGame() {
 		board = gameRules ? gameRules->makeInitialBoard() : crownstep::makeInitialBoard();
+		chessState = crownstep::chessInitialState();
 		history.clear();
 		moveHistory.clear();
 		highlightedDestinations.clear();
@@ -561,10 +564,16 @@ struct Crownstep : Module {
 	}
 
 	void refreshLegalMoves() {
-		humanMoves = gameRules ? gameRules->generateLegalMovesForSide(board, humanSide())
-		                      : crownstep::generateLegalMovesForSide(board, humanSide());
-		aiMoves = gameRules ? gameRules->generateLegalMovesForSide(board, aiSide())
-		                    : crownstep::generateLegalMovesForSide(board, aiSide());
+		if (isChessMode()) {
+			humanMoves = crownstep::chessGenerateLegalMovesForSide(board, humanSide(), chessState);
+			aiMoves = crownstep::chessGenerateLegalMovesForSide(board, aiSide(), chessState);
+		}
+		else {
+			humanMoves = gameRules ? gameRules->generateLegalMovesForSide(board, humanSide())
+			                      : crownstep::generateLegalMovesForSide(board, humanSide());
+			aiMoves = gameRules ? gameRules->generateLegalMovesForSide(board, aiSide())
+			                    : crownstep::generateLegalMovesForSide(board, aiSide());
+		}
 		highlightedDestinations.clear();
 		opponentHighlightedDestinations.clear();
 		opponentHintsPreviewActive = false;
@@ -584,10 +593,17 @@ struct Crownstep : Module {
 		if (selectedSquare >= 0 && hoveredSquare >= 0) {
 			for (const Move& move : humanMoves) {
 				if (move.originIndex == selectedSquare && move.destinationIndex == hoveredSquare) {
-					BoardState previewBoard =
-						gameRules ? gameRules->applyMoveToBoard(board, move) : crownstep::applyMoveToBoard(board, move);
-					previewAiMoves = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
-					                           : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
+					BoardState previewBoard {};
+					if (isChessMode()) {
+						ChessState previewState;
+						previewBoard = crownstep::chessApplyMoveToBoard(board, move, chessState, &previewState);
+						previewAiMoves = crownstep::chessGenerateLegalMovesForSide(previewBoard, aiSide(), previewState);
+					}
+					else {
+						previewBoard = gameRules ? gameRules->applyMoveToBoard(board, move) : crownstep::applyMoveToBoard(board, move);
+						previewAiMoves = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
+						                           : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
+					}
 					opponentMoveSource = &previewAiMoves;
 					opponentHintsPreviewActive = true;
 					break;
@@ -618,6 +634,9 @@ struct Crownstep : Module {
 	}
 
 	Move chooseAiMove() const {
+		if (isChessMode()) {
+			return crownstep::chessChooseAiMove(board, aiDifficulty, chessState);
+		}
 		return gameRules ? gameRules->chooseAiMove(board, aiDifficulty) : crownstep::chooseAiMove(board, aiDifficulty);
 	}
 
@@ -702,10 +721,15 @@ struct Crownstep : Module {
 			return;
 		}
 		const BoardState beforeBoard = board;
-		const BoardState afterBoard =
-			gameRules ? gameRules->applyMoveToBoard(beforeBoard, move) : crownstep::applyMoveToBoard(beforeBoard, move);
+		ChessState nextChessState = chessState;
+		const BoardState afterBoard = isChessMode()
+			? crownstep::chessApplyMoveToBoard(beforeBoard, move, chessState, &nextChessState)
+			: (gameRules ? gameRules->applyMoveToBoard(beforeBoard, move) : crownstep::applyMoveToBoard(beforeBoard, move));
 		beginMoveAnimation(move, beforeBoard);
 		board = afterBoard;
+		if (isChessMode()) {
+			chessState = nextChessState;
+		}
 		lastMove = move;
 		lastMoveSide = moverSide;
 		moveHistory.push_back(move);
@@ -905,6 +929,11 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 		json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 		json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
+		json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
+		json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
+		json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
+		json_object_set_new(rootJ, "chessCastleBQ", json_boolean(chessState.blackCanCastleQueenSide));
+		json_object_set_new(rootJ, "chessEnPassantTarget", json_integer(chessState.enPassantTargetIndex));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -1045,6 +1074,30 @@ struct Crownstep : Module {
 					board[size_t(i)] = int(json_integer_value(pieceJ));
 				}
 			}
+		}
+		if (isChessMode()) {
+			json_t* castleWkJ = json_object_get(rootJ, "chessCastleWK");
+			json_t* castleWqJ = json_object_get(rootJ, "chessCastleWQ");
+			json_t* castleBkJ = json_object_get(rootJ, "chessCastleBK");
+			json_t* castleBqJ = json_object_get(rootJ, "chessCastleBQ");
+			json_t* enPassantTargetJ = json_object_get(rootJ, "chessEnPassantTarget");
+			bool hasSerializedChessState = castleWkJ || castleWqJ || castleBkJ || castleBqJ || enPassantTargetJ;
+			if (hasSerializedChessState) {
+				chessState.whiteCanCastleKingSide = castleWkJ ? json_is_true(castleWkJ) : false;
+				chessState.whiteCanCastleQueenSide = castleWqJ ? json_is_true(castleWqJ) : false;
+				chessState.blackCanCastleKingSide = castleBkJ ? json_is_true(castleBkJ) : false;
+				chessState.blackCanCastleQueenSide = castleBqJ ? json_is_true(castleBqJ) : false;
+				chessState.enPassantTargetIndex = enPassantTargetJ ? int(json_integer_value(enPassantTargetJ)) : -1;
+				if (chessState.enPassantTargetIndex < 0 || chessState.enPassantTargetIndex >= crownstep::CHESS_BOARD_SIZE) {
+					chessState.enPassantTargetIndex = -1;
+				}
+			}
+			else {
+				chessState = crownstep::chessInferStateFromBoard(board);
+			}
+		}
+		else {
+			chessState = crownstep::chessInitialState();
 		}
 
 		history.clear();
@@ -1369,44 +1422,143 @@ struct CrownstepBoardWidget final : Widget {
 						bool humanPiece = piece > 0;
 						if (module->isChessMode()) {
 							int pieceType = std::abs(piece);
-							char symbol = '?';
-							switch (pieceType) {
-								case crownstep::CHESS_PAWN: symbol = 'P'; break;
-								case crownstep::CHESS_KNIGHT: symbol = 'N'; break;
-								case crownstep::CHESS_BISHOP: symbol = 'B'; break;
-								case crownstep::CHESS_ROOK: symbol = 'R'; break;
-								case crownstep::CHESS_QUEEN: symbol = 'Q'; break;
-								case crownstep::CHESS_KING: symbol = 'K'; break;
-								default: symbol = '?'; break;
-							}
-							float glyphRadius = std::min(cellWidth, cellHeight) * 0.34f;
-							NVGcolor fillColor = humanPiece ? nvgRGBA(238, 232, 214, fillAlpha) : nvgRGBA(34, 36, 44, fillAlpha);
-							NVGcolor edgeColor = humanPiece ? nvgRGBA(76, 68, 56, strokeAlpha) : nvgRGBA(214, 220, 234, strokeAlpha);
-							NVGcolor textColor = humanPiece ? nvgRGBA(44, 36, 28, fillAlpha) : nvgRGBA(246, 246, 252, fillAlpha);
+							float tokenR = radius * 0.95f;
+							NVGcolor tokenFill = humanPiece ? nvgRGBA(242, 236, 224, fillAlpha) : nvgRGBA(32, 36, 46, fillAlpha);
+							NVGcolor tokenEdge = humanPiece ? nvgRGBA(84, 74, 60, strokeAlpha) : nvgRGBA(210, 216, 232, strokeAlpha);
+							NVGcolor markColor = humanPiece ? nvgRGBA(56, 48, 38, fillAlpha) : nvgRGBA(244, 246, 252, fillAlpha);
+							NVGcolor innerRing = humanPiece ? nvgRGBA(118, 104, 84, int(140.f * alpha)) : nvgRGBA(132, 144, 168, int(130.f * alpha));
 
 							nvgBeginPath(args.vg);
-							nvgCircle(args.vg, centerX, centerY, glyphRadius);
-							NVGpaint piecePaint = nvgRadialGradient(
-								args.vg,
-								centerX - glyphRadius * 0.2f,
-								centerY - glyphRadius * 0.24f,
-								glyphRadius * 0.16f,
-								glyphRadius * 1.05f,
-								fillColor,
-								humanPiece ? nvgRGBA(194, 182, 154, fillAlpha) : nvgRGBA(8, 10, 16, fillAlpha)
-							);
-							nvgFillPaint(args.vg, piecePaint);
+							nvgCircle(args.vg, centerX, centerY, tokenR);
+							nvgFillColor(args.vg, tokenFill);
 							nvgFill(args.vg);
-							nvgStrokeColor(args.vg, edgeColor);
-							nvgStrokeWidth(args.vg, 1.35f);
+							nvgStrokeColor(args.vg, tokenEdge);
+							nvgStrokeWidth(args.vg, 1.25f);
 							nvgStroke(args.vg);
 
-							char text[2] = {symbol, '\0'};
-							nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-							nvgFontSize(args.vg, glyphRadius * 1.20f);
-							nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-							nvgFillColor(args.vg, textColor);
-							nvgText(args.vg, centerX, centerY + glyphRadius * 0.02f, text, nullptr);
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, tokenR * 0.80f);
+							nvgStrokeColor(args.vg, innerRing);
+							nvgStrokeWidth(args.vg, 0.8f);
+							nvgStroke(args.vg);
+
+							auto fillBase = [&](float y, float w, float h) {
+								nvgBeginPath(args.vg);
+								nvgRoundedRect(args.vg, centerX - w * 0.5f, y, w, h, h * 0.25f);
+								nvgFillColor(args.vg, markColor);
+								nvgFill(args.vg);
+							};
+
+							switch (pieceType) {
+								case crownstep::CHESS_PAWN: {
+									nvgBeginPath(args.vg);
+									nvgCircle(args.vg, centerX, centerY - tokenR * 0.28f, tokenR * 0.20f);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									fillBase(centerY - tokenR * 0.06f, tokenR * 0.36f, tokenR * 0.40f);
+									fillBase(centerY + tokenR * 0.30f, tokenR * 0.66f, tokenR * 0.15f);
+									break;
+								}
+								case crownstep::CHESS_ROOK: {
+									fillBase(centerY - tokenR * 0.16f, tokenR * 0.56f, tokenR * 0.50f);
+									fillBase(centerY + tokenR * 0.34f, tokenR * 0.72f, tokenR * 0.13f);
+									for (int i = -1; i <= 1; ++i) {
+										float cx = centerX + float(i) * tokenR * 0.18f;
+										nvgBeginPath(args.vg);
+										nvgRect(args.vg, cx - tokenR * 0.07f, centerY - tokenR * 0.34f, tokenR * 0.14f, tokenR * 0.16f);
+										nvgFillColor(args.vg, markColor);
+										nvgFill(args.vg);
+									}
+									break;
+								}
+								case crownstep::CHESS_KNIGHT: {
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - tokenR * 0.36f, centerY + tokenR * 0.34f);
+									nvgLineTo(args.vg, centerX - tokenR * 0.14f, centerY - tokenR * 0.34f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.14f, centerY - tokenR * 0.12f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.02f, centerY - tokenR * 0.01f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.28f, centerY + tokenR * 0.10f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.18f, centerY + tokenR * 0.34f);
+									nvgClosePath(args.vg);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									nvgBeginPath(args.vg);
+									nvgCircle(args.vg, centerX + tokenR * 0.03f, centerY - tokenR * 0.14f, tokenR * 0.04f);
+									nvgFillColor(args.vg, tokenFill);
+									nvgFill(args.vg);
+									break;
+								}
+								case crownstep::CHESS_BISHOP: {
+									nvgBeginPath(args.vg);
+									nvgCircle(args.vg, centerX, centerY - tokenR * 0.30f, tokenR * 0.12f);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX, centerY - tokenR * 0.38f);
+									nvgBezierTo(args.vg,
+										centerX + tokenR * 0.28f, centerY - tokenR * 0.06f,
+										centerX + tokenR * 0.18f, centerY + tokenR * 0.24f,
+										centerX, centerY + tokenR * 0.28f);
+									nvgBezierTo(args.vg,
+										centerX - tokenR * 0.18f, centerY + tokenR * 0.24f,
+										centerX - tokenR * 0.28f, centerY - tokenR * 0.06f,
+										centerX, centerY - tokenR * 0.38f);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - tokenR * 0.09f, centerY - tokenR * 0.24f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.08f, centerY - tokenR * 0.08f);
+									nvgStrokeColor(args.vg, tokenFill);
+									nvgStrokeWidth(args.vg, 1.15f);
+									nvgStroke(args.vg);
+									fillBase(centerY + tokenR * 0.30f, tokenR * 0.64f, tokenR * 0.13f);
+									break;
+								}
+								case crownstep::CHESS_QUEEN: {
+									fillBase(centerY + tokenR * 0.31f, tokenR * 0.72f, tokenR * 0.13f);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - tokenR * 0.34f, centerY + tokenR * 0.24f);
+									nvgLineTo(args.vg, centerX - tokenR * 0.23f, centerY - tokenR * 0.20f);
+									nvgLineTo(args.vg, centerX - tokenR * 0.07f, centerY + tokenR * 0.02f);
+									nvgLineTo(args.vg, centerX, centerY - tokenR * 0.30f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.07f, centerY + tokenR * 0.02f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.23f, centerY - tokenR * 0.20f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.34f, centerY + tokenR * 0.24f);
+									nvgClosePath(args.vg);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									for (int i = -2; i <= 2; ++i) {
+										float cx = centerX + float(i) * tokenR * 0.10f;
+										float cy = centerY - tokenR * (0.32f - std::abs(float(i)) * 0.05f);
+										nvgBeginPath(args.vg);
+										nvgCircle(args.vg, cx, cy, tokenR * 0.045f);
+										nvgFillColor(args.vg, markColor);
+										nvgFill(args.vg);
+									}
+									break;
+								}
+								case crownstep::CHESS_KING:
+								default: {
+									fillBase(centerY + tokenR * 0.31f, tokenR * 0.70f, tokenR * 0.13f);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - tokenR * 0.28f, centerY + tokenR * 0.24f);
+									nvgLineTo(args.vg, centerX - tokenR * 0.20f, centerY - tokenR * 0.16f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.20f, centerY - tokenR * 0.16f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.28f, centerY + tokenR * 0.24f);
+									nvgClosePath(args.vg);
+									nvgFillColor(args.vg, markColor);
+									nvgFill(args.vg);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX, centerY - tokenR * 0.38f);
+									nvgLineTo(args.vg, centerX, centerY - tokenR * 0.18f);
+									nvgMoveTo(args.vg, centerX - tokenR * 0.10f, centerY - tokenR * 0.28f);
+									nvgLineTo(args.vg, centerX + tokenR * 0.10f, centerY - tokenR * 0.28f);
+									nvgStrokeColor(args.vg, markColor);
+									nvgStrokeWidth(args.vg, 1.25f);
+									nvgStroke(args.vg);
+									break;
+								}
+							}
 							return;
 						}
 
