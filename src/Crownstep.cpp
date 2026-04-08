@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "CrownstepCore.hpp"
 
+#include <cstdio>
 #include <cmath>
 #include <exception>
 #include <fstream>
@@ -20,6 +21,8 @@ using crownstep::SCALES;
 using crownstep::SEQ_CAP_NAMES;
 using crownstep::SEQ_CAPS;
 using crownstep::Step;
+
+static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 
 static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
 	if (!outRect) {
@@ -153,13 +156,16 @@ struct Crownstep : Module {
 	int lastMoveSide = 0;
 	int aiDifficulty = 1;
 	bool quantizationEnabled = true;
+	bool pitchBipolarEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
+	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
+	int displayedStep = 0;
 	float transportTimeSeconds = 0.f;
 	float lastClockEdgeSeconds = -1.f;
 	float previousClockPeriodSeconds = -1.f;
-	float heldPitch = 0.f;
+	float heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
 	float modOutputVolts = 0.f;
@@ -268,9 +274,10 @@ struct Crownstep : Module {
 
 	void resetPlayback() {
 		playhead = 0;
+		displayedStep = 0;
 		lastClockEdgeSeconds = -1.f;
 		previousClockPeriodSeconds = -1.f;
-		heldPitch = 0.f;
+		heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 		heldAccent = 0.f;
 		heldMod = 0.f;
 		modOutputVolts = 0.f;
@@ -304,6 +311,9 @@ struct Crownstep : Module {
 
 	float pitchForMove(const Move& move) {
 		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
+		if (pitchBipolarEnabled) {
+			boardValueIndex -= 0.5f * float(BOARD_SIZE - 1);
+		}
 		if (quantizationEnabled) {
 			return crownstep::mapPitchFromIndex(
 				boardValueIndex,
@@ -360,6 +370,7 @@ struct Crownstep : Module {
 		aiMoves = crownstep::generateLegalMovesForSide(board, AI_SIDE);
 		highlightedDestinations.clear();
 		opponentHighlightedDestinations.clear();
+		opponentHintsPreviewActive = false;
 		if (selectedSquare >= 0) {
 				for (const Move& move : humanMoves) {
 				if (move.originIndex == selectedSquare) {
@@ -379,6 +390,7 @@ struct Crownstep : Module {
 					std::array<int, BOARD_SIZE> previewBoard = crownstep::applyMoveToBoard(board, move);
 					previewAiMoves = crownstep::generateLegalMovesForSide(previewBoard, AI_SIDE);
 					opponentMoveSource = &previewAiMoves;
+					opponentHintsPreviewActive = true;
 					break;
 				}
 			}
@@ -565,7 +577,8 @@ struct Crownstep : Module {
 	void emitStepAtClockEdge() {
 		int length = activeLength();
 		if (length <= 0) {
-			heldPitch = 0.f;
+			displayedStep = 0;
+			heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 			heldAccent = 0.f;
 			heldMod = 0.f;
 			modOutputVolts = 0.f;
@@ -578,6 +591,7 @@ struct Crownstep : Module {
 		}
 
 		playhead = clamp(playhead, 0, std::max(length - 1, 0));
+		displayedStep = playhead + 1;
 		int sequenceIndex = activeStartIndex() + playhead;
 		const Step& step = history[size_t(sequenceIndex)];
 		heldPitch = pitchForSequenceIndex(sequenceIndex);
@@ -634,6 +648,7 @@ struct Crownstep : Module {
 
 		if (resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
 			playhead = 0;
+			displayedStep = 0;
 		}
 
 		bool running = true;
@@ -671,6 +686,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "selectedSquare", json_integer(selectedSquare));
 		json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
 		json_object_set_new(rootJ, "quantizationEnabled", json_boolean(quantizationEnabled));
+		json_object_set_new(rootJ, "pitchBipolarEnabled", json_boolean(pitchBipolarEnabled));
 		json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 		json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
@@ -745,6 +761,10 @@ struct Crownstep : Module {
 		json_t* quantizationEnabledJ = json_object_get(rootJ, "quantizationEnabled");
 		if (quantizationEnabledJ) {
 			quantizationEnabled = json_is_true(quantizationEnabledJ);
+		}
+		json_t* pitchBipolarEnabledJ = json_object_get(rootJ, "pitchBipolarEnabled");
+		if (pitchBipolarEnabledJ) {
+			pitchBipolarEnabled = json_is_true(pitchBipolarEnabledJ);
 		}
 		json_t* pitchInterpretationModeJ = json_object_get(rootJ, "pitchInterpretationMode");
 		if (pitchInterpretationModeJ) {
@@ -999,6 +1019,9 @@ struct CrownstepBoardWidget final : Widget {
 						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
 							continue;
 						}
+						if (module->opponentHintsPreviewActive && module->board[size_t(destinationIndex)] != 0) {
+							continue;
+						}
 						float centerX = (col + 0.5f) * cellWidth;
 						float centerY = (row + 0.5f) * cellHeight;
 						float phase = float(destinationIndex) * 0.39f + 1.7f;
@@ -1111,58 +1134,63 @@ struct CrownstepBoardWidget final : Widget {
 						nvgFill(args.vg);
 
 						if (crownstep::pieceIsKing(piece)) {
-							// Symmetric outline crown icon.
-							NVGcolor crownStrokeDark = nvgRGBA(82, 54, 18, int(230.f * alpha));
-							NVGcolor crownStrokeLight = nvgRGBA(255, 224, 142, int(244.f * alpha));
-							NVGcolor crownFillSoft = nvgRGBA(250, 214, 110, int(42.f * alpha));
-							float crownBaseY = centerY + radius * 0.24f;
-							float crownShoulderY = centerY + radius * 0.06f;
-							float crownPeakY = centerY - radius * 0.24f;
-							float crownCenterPeakY = centerY - radius * 0.31f;
+							// Ultra-simple crown: mostly gold, minimal edging, wider outer points.
+							NVGcolor crownEdge = nvgRGBA(172, 126, 40, int(132.f * alpha));
+							NVGcolor crownFillTop = nvgRGBA(255, 238, 172, int(246.f * alpha));
+							NVGcolor crownFillBottom = nvgRGBA(236, 184, 70, int(244.f * alpha));
+							float crownYOffset = radius * 0.07f;
+							float leftX = centerX - radius * 0.56f;
+							float rightX = centerX + radius * 0.56f;
+							float bandTopY = centerY + radius * 0.05f + crownYOffset;
+							float bandBottomY = centerY + radius * 0.24f + crownYOffset;
+							float sideTipY = centerY - radius * 0.36f + crownYOffset;
+							float centerTipY = centerY - radius * 0.55f + crownYOffset;
+							float valleyY = centerY - radius * 0.08f + crownYOffset;
+							float leftTipX = centerX - radius * 0.50f;
+							float rightTipX = centerX + radius * 0.50f;
+							float leftValleyX = centerX - radius * 0.18f;
+							float rightValleyX = centerX + radius * 0.18f;
 
 							nvgBeginPath(args.vg);
-							nvgMoveTo(args.vg, centerX - radius * 0.56f, crownBaseY);
-							nvgLineTo(args.vg, centerX - radius * 0.56f, crownShoulderY);
-							nvgLineTo(args.vg, centerX - radius * 0.35f, crownPeakY);
-							nvgLineTo(args.vg, centerX - radius * 0.17f, crownShoulderY);
-							nvgLineTo(args.vg, centerX, crownCenterPeakY);
-							nvgLineTo(args.vg, centerX + radius * 0.17f, crownShoulderY);
-							nvgLineTo(args.vg, centerX + radius * 0.35f, crownPeakY);
-							nvgLineTo(args.vg, centerX + radius * 0.56f, crownShoulderY);
-							nvgLineTo(args.vg, centerX + radius * 0.56f, crownBaseY);
+							nvgMoveTo(args.vg, leftX, bandTopY);
+							nvgLineTo(args.vg, leftTipX, sideTipY);
+							nvgLineTo(args.vg, leftValleyX, valleyY);
+							nvgLineTo(args.vg, centerX, centerTipY);
+							nvgLineTo(args.vg, rightValleyX, valleyY);
+							nvgLineTo(args.vg, rightTipX, sideTipY);
+							nvgLineTo(args.vg, rightX, bandTopY);
 							nvgClosePath(args.vg);
-							nvgFillColor(args.vg, crownFillSoft);
+							NVGpaint crownBodyPaint = nvgLinearGradient(
+								args.vg, centerX, centerY - radius * 0.58f, centerX, bandBottomY, crownFillTop, crownFillBottom);
+							nvgFillPaint(args.vg, crownBodyPaint);
 							nvgFill(args.vg);
-
-							nvgStrokeColor(args.vg, crownStrokeDark);
-							nvgStrokeWidth(args.vg, 1.45f);
-							nvgStroke(args.vg);
-							nvgStrokeColor(args.vg, crownStrokeLight);
-							nvgStrokeWidth(args.vg, 0.82f);
+							nvgStrokeColor(args.vg, crownEdge);
+							nvgStrokeWidth(args.vg, 0.62f);
 							nvgStroke(args.vg);
 
 							nvgBeginPath(args.vg);
-							nvgRect(args.vg, centerX - radius * 0.56f, crownBaseY - radius * 0.01f, radius * 1.12f, radius * 0.12f);
-							nvgStrokeColor(args.vg, crownStrokeDark);
-							nvgStrokeWidth(args.vg, 1.2f);
-							nvgStroke(args.vg);
-							nvgBeginPath(args.vg);
-							nvgRect(args.vg, centerX - radius * 0.54f, crownBaseY + radius * 0.01f, radius * 1.08f, radius * 0.08f);
-							nvgStrokeColor(args.vg, crownStrokeLight);
-							nvgStrokeWidth(args.vg, 0.74f);
+							nvgRoundedRect(args.vg, leftX - radius * 0.03f, bandTopY, (rightX - leftX) + radius * 0.06f,
+								bandBottomY - bandTopY, radius * 0.06f);
+							nvgFillColor(args.vg, nvgRGBA(230, 174, 58, int(244.f * alpha)));
+							nvgFill(args.vg);
+							nvgStrokeColor(args.vg, crownEdge);
+							nvgStrokeWidth(args.vg, 0.58f);
 							nvgStroke(args.vg);
 
-							for (float dx : {-0.34f, 0.f, 0.34f}) {
+							// Three tip beads improve recognition at distance.
+							for (int i = 0; i < 3; ++i) {
+								float tipX = (i == 0) ? leftTipX : ((i == 1) ? centerX : rightTipX);
+								float tipY = (i == 1) ? centerTipY : sideTipY;
+								float beadR = radius * 0.07f;
 								nvgBeginPath(args.vg);
-								nvgCircle(args.vg, centerX + radius * dx, centerY - radius * 0.07f, radius * 0.058f);
-								nvgStrokeColor(args.vg, crownStrokeLight);
-								nvgStrokeWidth(args.vg, 0.7f);
-								nvgStroke(args.vg);
-								nvgBeginPath(args.vg);
-								nvgCircle(args.vg, centerX + radius * dx, centerY - radius * 0.07f, radius * 0.02f);
-								nvgFillColor(args.vg, nvgRGBA(255, 235, 170, int(205.f * alpha)));
+								nvgCircle(args.vg, tipX, tipY, beadR);
+								nvgFillColor(args.vg, nvgRGBA(255, 223, 120, int(246.f * alpha)));
 								nvgFill(args.vg);
+								nvgStrokeColor(args.vg, crownEdge);
+								nvgStrokeWidth(args.vg, 0.55f);
+								nvgStroke(args.vg);
 							}
+
 						}
 					};
 
@@ -1312,6 +1340,9 @@ struct CrownstepBoardWidget final : Widget {
 						if (overlapsHuman || destinationIndex < 0 || destinationIndex >= BOARD_SIZE) {
 							continue;
 						}
+						if (module->opponentHintsPreviewActive && module->board[size_t(destinationIndex)] != 0) {
+							continue;
+						}
 						bool occupied = module->board[size_t(destinationIndex)] != 0;
 						bool landingAnimation =
 							(module->moveAnimation.active && module->moveAnimation.destinationIndex == destinationIndex)
@@ -1398,6 +1429,48 @@ struct CrownstepBoardWidget final : Widget {
 	}
 };
 
+struct CrownstepStepCounterWidget final : Widget {
+	Crownstep* module = nullptr;
+
+	explicit CrownstepStepCounterWidget(Crownstep* crownstepModule) {
+		module = crownstepModule;
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!module) {
+			return;
+		}
+
+		int totalSteps = module->activeLength();
+		int currentStep = module->displayedStep;
+		currentStep = clamp(currentStep, 0, totalSteps);
+
+		char stepCounterText[64];
+		std::snprintf(stepCounterText, sizeof(stepCounterText), "%d / %d", currentStep, totalSteps);
+
+		const float x = mm2px(Vec(6.6f, 0.f)).x;
+		const float y = mm2px(Vec(0.f, 4.0f)).y;
+		const float w = mm2px(Vec(26.0f, 0.f)).x;
+		const float h = mm2px(Vec(0.f, 4.5f)).y;
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x, y, w, h, 3.5f);
+		nvgFillColor(args.vg, nvgRGBA(10, 12, 14, 186));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 94));
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStroke(args.vg);
+
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFontSize(args.vg, 11.5f);
+		nvgFillColor(args.vg, nvgRGB(242, 228, 204));
+		nvgText(args.vg, x + w * 0.5f, y + h * 0.53f, stepCounterText, nullptr);
+	}
+};
+
 struct CrownstepDifficultyItem final : MenuItem {
 	Crownstep* module = nullptr;
 	int difficulty = 0;
@@ -1443,6 +1516,9 @@ struct CrownstepWidget final : ModuleWidget {
 				boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
 			}
 			addChild(boardWidget);
+			CrownstepStepCounterWidget* stepCounterWidget = new CrownstepStepCounterWidget(module);
+			stepCounterWidget->box = box.zeroPos();
+			addChild(stepCounterWidget);
 
 		// Bottom control layout:
 		// left cluster = inputs, center = knobs/button, right cluster = outputs.
@@ -1537,6 +1613,18 @@ struct CrownstepWidget final : ModuleWidget {
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";
 		menu->addChild(quantizerLabel);
+		menu->addChild(createCheckMenuItem(
+			"Enable Quantization",
+			"",
+			[=]() {
+				return module && module->quantizationEnabled;
+			},
+			[=]() {
+				if (module) {
+					module->quantizationEnabled = !module->quantizationEnabled;
+				}
+			}
+		));
 		menu->addChild(createSubmenuItem("Scale", "", [=](Menu* scaleMenu) {
 			for (int i = 0; i < int(SCALES.size()); ++i) {
 				scaleMenu->addChild(createCheckMenuItem(
@@ -1570,6 +1658,22 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
+		menu->addChild(new MenuSeparator());
+		MenuLabel* pitchLabel = new MenuLabel();
+		pitchLabel->text = "Pitch";
+		menu->addChild(pitchLabel);
+		menu->addChild(createCheckMenuItem(
+			"Bipolar",
+			"",
+			[=]() {
+				return module && module->pitchBipolarEnabled;
+			},
+			[=]() {
+				if (module) {
+					module->pitchBipolarEnabled = !module->pitchBipolarEnabled;
+				}
+			}
+		));
 		menu->addChild(createSubmenuItem("Pitch Data Source", "", [=](Menu* interpretationMenu) {
 			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
 				interpretationMenu->addChild(createCheckMenuItem(
@@ -1602,28 +1706,16 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createCheckMenuItem(
-			"Enable Quantization",
-			"",
-			[=]() {
-				return module && module->quantizationEnabled;
-			},
-			[=]() {
-				if (module) {
-					module->quantizationEnabled = !module->quantizationEnabled;
-				}
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("AI Difficulty", "", [=](Menu* difficultyMenu) {
+			for (int i = 0; i < int(DIFFICULTY_NAMES.size()); ++i) {
+				CrownstepDifficultyItem* item = new CrownstepDifficultyItem();
+				item->text = DIFFICULTY_NAMES[size_t(i)];
+				item->module = module;
+				item->difficulty = i;
+				difficultyMenu->addChild(item);
 			}
-		));
-		MenuLabel* label = new MenuLabel();
-		label->text = "AI Difficulty";
-		menu->addChild(label);
-		for (int i = 0; i < int(DIFFICULTY_NAMES.size()); ++i) {
-			CrownstepDifficultyItem* item = new CrownstepDifficultyItem();
-			item->text = DIFFICULTY_NAMES[size_t(i)];
-			item->module = module;
-			item->difficulty = i;
-			menu->addChild(item);
-		}
+		}));
 	}
 };
 

@@ -485,7 +485,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
-    constexpr int kIntensityBuckets = 12;
+    constexpr int kIntensityBuckets = 16;
     size_t rowCountU = size_t(rowCount);
     if (rowX0.size() != rowCountU) {
       rowX0.assign(rowCountU, lane0CenterX);
@@ -752,9 +752,8 @@ struct TDScopeDisplayWidget final : Widget {
           highG = 112.f;
           highB = 218.f;
           midPoint = 0.5f;
-          // Hold a visible ember band around the midpoint so the 3-stop gradient
-          // reads clearly even with quantized intensity buckets.
-          midHoldHalfWidth = 0.16f;
+          // No midpoint hold: keep color flow continuous through the center.
+          midHoldHalfWidth = 0.f;
           break;
       }
       float r = 0.f;

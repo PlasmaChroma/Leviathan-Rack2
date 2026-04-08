@@ -508,9 +508,9 @@ inline float sampledBoardValueForMove(const Move& move, int interpretationMode, 
 inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {
 	const Scale& scale = SCALES[size_t(std::max(0, std::min(scaleIndex, int(SCALES.size()) - 1)))];
 	int scaleLen = std::max(scale.length, 1);
-	int idx = std::max(0, int(std::lround(std::max(0.f, index))));
-	int scaleDegree = idx % scaleLen;
-	int octave = idx / scaleLen;
+	int idx = int(std::lround(index));
+	int octave = int(std::floor(double(idx) / double(scaleLen)));
+	int scaleDegree = idx - octave * scaleLen;
 	int semitone = scale.semitones[size_t(scaleDegree)] + octave * 12 + wrapSemitone12(rootSemitone);
 	if (isKing) {
 		semitone += 12;
@@ -519,7 +519,7 @@ inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int roo
 }
 
 inline float mapRawPitchFromIndex(float index, bool isKing, float transposeVolts) {
-	float semitone = std::max(0.f, index);
+	float semitone = index;
 	if (isKing) {
 		semitone += 12.f;
 	}
