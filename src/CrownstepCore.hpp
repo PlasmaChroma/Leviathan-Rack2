@@ -11,6 +11,7 @@ namespace crownstep {
 static constexpr int BOARD_SIZE = 32;
 static constexpr int HUMAN_SIDE = 1;
 static constexpr int AI_SIDE = -1;
+using BoardState = std::array<int, BOARD_SIZE>;
 
 struct Scale {
 	const char* name;
@@ -116,8 +117,8 @@ inline int coordToIndex(int row, int col) {
 	return row * 4 + col / 2;
 }
 
-inline std::array<int, BOARD_SIZE> makeInitialBoard() {
-	std::array<int, BOARD_SIZE> board {};
+inline BoardState makeInitialBoard() {
+	BoardState board {};
 	for (int i = 0; i < BOARD_SIZE; ++i) {
 		int row = 0;
 		int col = 0;
@@ -189,7 +190,7 @@ inline std::vector<int> movementDirectionsForPiece(int piece, bool capture) {
 	return directions;
 }
 
-inline void addSimpleMovesForPiece(const std::array<int, BOARD_SIZE>& sourceBoard, int index, std::vector<Move>* moves) {
+inline void addSimpleMovesForPiece(const BoardState& sourceBoard, int index, std::vector<Move>* moves) {
 	if (!moves) {
 		return;
 	}
@@ -246,7 +247,7 @@ inline void collectCapturesRecursive(
 			}
 
 			foundChild = true;
-			std::array<int, BOARD_SIZE> nextBoard = sourceBoard;
+			BoardState nextBoard = sourceBoard;
 			nextBoard[size_t(currentIndex)] = 0;
 			nextBoard[size_t(jumpedIndex)] = 0;
 
@@ -293,7 +294,7 @@ inline void collectCapturesRecursive(
 	}
 }
 
-inline std::vector<Move> generateLegalMovesForSide(const std::array<int, BOARD_SIZE>& sourceBoard, int side) {
+inline std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) {
 	std::vector<Move> captures;
 	std::vector<Move> simpleMoves;
 
@@ -317,8 +318,8 @@ inline std::vector<Move> generateLegalMovesForSide(const std::array<int, BOARD_S
 	return simpleMoves;
 }
 
-inline std::array<int, BOARD_SIZE> applyMoveToBoard(const std::array<int, BOARD_SIZE>& sourceBoard, const Move& move) {
-	std::array<int, BOARD_SIZE> nextBoard = sourceBoard;
+inline BoardState applyMoveToBoard(const BoardState& sourceBoard, const Move& move) {
+	BoardState nextBoard = sourceBoard;
 	if (move.originIndex < 0 || move.originIndex >= BOARD_SIZE || move.destinationIndex < 0 || move.destinationIndex >= BOARD_SIZE) {
 		return nextBoard;
 	}
@@ -336,7 +337,7 @@ inline std::array<int, BOARD_SIZE> applyMoveToBoard(const std::array<int, BOARD_
 	return nextBoard;
 }
 
-inline int evaluateBoardMaterial(const std::array<int, BOARD_SIZE>& board) {
+inline int evaluateBoardMaterial(const BoardState& board) {
 	int score = 0;
 	for (int piece : board) {
 		switch (piece) {
@@ -370,7 +371,7 @@ inline int countCapturePressure(const std::vector<Move>& moves) {
 	return score;
 }
 
-inline int evaluatePosition(const std::array<int, BOARD_SIZE>& sourceBoard) {
+inline int evaluatePosition(const BoardState& sourceBoard) {
 	std::vector<Move> nextAiMoves = generateLegalMovesForSide(sourceBoard, AI_SIDE);
 	std::vector<Move> nextHumanMoves = generateLegalMovesForSide(sourceBoard, HUMAN_SIDE);
 	int score = evaluateBoardMaterial(sourceBoard);
@@ -387,7 +388,7 @@ inline int evaluatePosition(const std::array<int, BOARD_SIZE>& sourceBoard) {
 	return score;
 }
 
-inline int searchScore(const std::array<int, BOARD_SIZE>& sourceBoard, int sideToMove, int depth, int alpha, int beta) {
+inline int searchScore(const BoardState& sourceBoard, int sideToMove, int depth, int alpha, int beta) {
 	std::vector<Move> moves = generateLegalMovesForSide(sourceBoard, sideToMove);
 	if (depth <= 0 || moves.empty()) {
 		int score = evaluatePosition(sourceBoard);
@@ -395,7 +396,7 @@ inline int searchScore(const std::array<int, BOARD_SIZE>& sourceBoard, int sideT
 	}
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
-		std::array<int, BOARD_SIZE> nextBoard = applyMoveToBoard(sourceBoard, move);
+		BoardState nextBoard = applyMoveToBoard(sourceBoard, move);
 		int value = -searchScore(nextBoard, -sideToMove, depth - 1, -beta, -alpha);
 		best = std::max(best, value);
 		alpha = std::max(alpha, value);
@@ -414,7 +415,7 @@ inline int searchDepthForDifficulty(int difficulty) {
 	}
 }
 
-inline Move chooseAiMove(const std::array<int, BOARD_SIZE>& board, int difficulty) {
+inline Move chooseAiMove(const BoardState& board, int difficulty) {
 	std::vector<Move> moves = generateLegalMovesForSide(board, AI_SIDE);
 	if (moves.empty()) {
 		return Move();
@@ -423,7 +424,7 @@ inline Move chooseAiMove(const std::array<int, BOARD_SIZE>& board, int difficult
 	int bestScore = std::numeric_limits<int>::min();
 	int depth = searchDepthForDifficulty(difficulty);
 	for (int i = 0; i < int(moves.size()); ++i) {
-		std::array<int, BOARD_SIZE> nextBoard = applyMoveToBoard(board, moves[size_t(i)]);
+		BoardState nextBoard = applyMoveToBoard(board, moves[size_t(i)]);
 		int score = -searchScore(nextBoard, HUMAN_SIDE, depth - 1, std::numeric_limits<int>::min() / 2,
 			std::numeric_limits<int>::max() / 2);
 		if (score > bestScore) {
@@ -576,6 +577,71 @@ inline int activeLength(int historySize, int sequenceCap) {
 
 inline int activeStartIndex(int historySize, int sequenceCap) {
 	return std::max(0, historySize - activeLength(historySize, sequenceCap));
+}
+
+struct IGameRules {
+	virtual ~IGameRules() {
+	}
+	virtual const char* gameId() const = 0;
+	virtual int humanSide() const = 0;
+	virtual int aiSide() const = 0;
+	virtual int boardCellCount() const = 0;
+	virtual bool indexToCoord(int index, int* row, int* col) const = 0;
+	virtual int coordToIndex(int row, int col) const = 0;
+	virtual BoardState makeInitialBoard() const = 0;
+	virtual std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) const = 0;
+	virtual BoardState applyMoveToBoard(const BoardState& sourceBoard, const Move& move) const = 0;
+	virtual Move chooseAiMove(const BoardState& board, int difficulty) const = 0;
+	virtual int searchDepthForDifficulty(int difficulty) const = 0;
+	virtual int evaluatePosition(const BoardState& sourceBoard) const = 0;
+	virtual int evaluateBoardMaterial(const BoardState& sourceBoard) const = 0;
+};
+
+struct CheckersRules final : IGameRules {
+	const char* gameId() const override {
+		return "checkers";
+	}
+	int humanSide() const override {
+		return HUMAN_SIDE;
+	}
+	int aiSide() const override {
+		return AI_SIDE;
+	}
+	int boardCellCount() const override {
+		return BOARD_SIZE;
+	}
+	bool indexToCoord(int index, int* row, int* col) const override {
+		return crownstep::indexToCoord(index, row, col);
+	}
+	int coordToIndex(int row, int col) const override {
+		return crownstep::coordToIndex(row, col);
+	}
+	BoardState makeInitialBoard() const override {
+		return crownstep::makeInitialBoard();
+	}
+	std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) const override {
+		return crownstep::generateLegalMovesForSide(sourceBoard, side);
+	}
+	BoardState applyMoveToBoard(const BoardState& sourceBoard, const Move& move) const override {
+		return crownstep::applyMoveToBoard(sourceBoard, move);
+	}
+	Move chooseAiMove(const BoardState& board, int difficulty) const override {
+		return crownstep::chooseAiMove(board, difficulty);
+	}
+	int searchDepthForDifficulty(int difficulty) const override {
+		return crownstep::searchDepthForDifficulty(difficulty);
+	}
+	int evaluatePosition(const BoardState& sourceBoard) const override {
+		return crownstep::evaluatePosition(sourceBoard);
+	}
+	int evaluateBoardMaterial(const BoardState& sourceBoard) const override {
+		return crownstep::evaluateBoardMaterial(sourceBoard);
+	}
+};
+
+inline const IGameRules& checkersRules() {
+	static CheckersRules rules;
+	return rules;
 }
 
 } // namespace crownstep

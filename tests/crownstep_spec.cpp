@@ -141,6 +141,18 @@ TestResult testPitchDividerModesScaleBoardValuesAndCenterOffset() {
           "modes full/half/third/quarter"};
 }
 
+TestResult testCheckersRulesAdapterMatchesCoreFunctions() {
+  const crownstep::IGameRules& rules = crownstep::checkersRules();
+  crownstep::BoardState board = rules.makeInitialBoard();
+  std::vector<Move> direct = crownstep::generateLegalMovesForSide(board, crownstep::HUMAN_SIDE);
+  std::vector<Move> adapted = rules.generateLegalMovesForSide(board, rules.humanSide());
+  bool countMatch = direct.size() == adapted.size();
+  bool cellCountMatch = rules.boardCellCount() == crownstep::BOARD_SIZE;
+  bool sideMatch = (rules.humanSide() == crownstep::HUMAN_SIDE) && (rules.aiSide() == crownstep::AI_SIDE);
+  return {"Checkers adapter parity with core APIs", countMatch && cellCountMatch && sideMatch,
+          "moves=" + std::to_string(adapted.size())};
+}
+
 } // namespace
 
 int main() {
@@ -153,6 +165,7 @@ int main() {
   tests.push_back(testSequenceWindowUsesRecentHistorySlice());
   tests.push_back(testAiChoosesAvailableCapture());
   tests.push_back(testPitchDividerModesScaleBoardValuesAndCenterOffset());
+  tests.push_back(testCheckersRulesAdapterMatchesCoreFunctions());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";

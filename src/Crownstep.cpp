@@ -10,6 +10,7 @@
 #include <string>
 
 using crownstep::AI_SIDE;
+using crownstep::BoardState;
 using crownstep::BOARD_SIZE;
 using crownstep::BOARD_VALUE_LAYOUT_NAMES;
 using crownstep::DIFFICULTY_NAMES;
@@ -128,7 +129,7 @@ struct Crownstep : Module {
 		BOARD_TEXTURE_COUNT
 	};
 
-	std::array<int, BOARD_SIZE> board = crownstep::makeInitialBoard();
+	BoardState board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
 	std::vector<Move> moveHistory;
 	std::vector<Move> humanMoves;
@@ -183,6 +184,7 @@ struct Crownstep : Module {
 	float captureFlashSeconds = 0.f;
 	bool modGlideActive = false;
 	bool gameOver = false;
+	const crownstep::IGameRules* gameRules = &crownstep::checkersRules();
 
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -321,6 +323,38 @@ struct Crownstep : Module {
 		return crownstep::wrapSemitone12(total);
 	}
 
+	int humanSide() const {
+		return gameRules ? gameRules->humanSide() : HUMAN_SIDE;
+	}
+
+	int aiSide() const {
+		return gameRules ? gameRules->aiSide() : AI_SIDE;
+	}
+
+	int opposingSide(int side) const {
+		if (side == humanSide()) {
+			return aiSide();
+		}
+		if (side == aiSide()) {
+			return humanSide();
+		}
+		return -side;
+	}
+
+	bool boardIndexToCoord(int index, int* row, int* col) const {
+		if (gameRules) {
+			return gameRules->indexToCoord(index, row, col);
+		}
+		return crownstep::indexToCoord(index, row, col);
+	}
+
+	int boardCoordToIndex(int row, int col) const {
+		if (gameRules) {
+			return gameRules->coordToIndex(row, col);
+		}
+		return crownstep::coordToIndex(row, col);
+	}
+
 	float pitchForMove(const Move& move) {
 		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
 		boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
@@ -346,7 +380,7 @@ struct Crownstep : Module {
 	}
 
 	void startNewGame() {
-		board = crownstep::makeInitialBoard();
+		board = gameRules ? gameRules->makeInitialBoard() : crownstep::makeInitialBoard();
 		history.clear();
 		moveHistory.clear();
 		highlightedDestinations.clear();
@@ -354,7 +388,7 @@ struct Crownstep : Module {
 		selectedSquare = -1;
 		hoveredSquare = -1;
 		lastMove = Move();
-		turnSide = HUMAN_SIDE;
+		turnSide = humanSide();
 		winnerSide = 0;
 		lastMoveSide = 0;
 		gameOver = false;
@@ -365,7 +399,8 @@ struct Crownstep : Module {
 	}
 
 	void setHoveredSquare(int index) {
-		int normalizedIndex = (index >= 0 && index < BOARD_SIZE) ? index : -1;
+		int maxIndex = gameRules ? gameRules->boardCellCount() : BOARD_SIZE;
+		int normalizedIndex = (index >= 0 && index < maxIndex) ? index : -1;
 		if (hoveredSquare == normalizedIndex) {
 			return;
 		}
@@ -373,14 +408,16 @@ struct Crownstep : Module {
 
 		// Hover only influences UI move-hint previewing while the user is
 		// selecting a human move and the game is still active.
-		if (!gameOver && turnSide == HUMAN_SIDE && selectedSquare >= 0) {
+		if (!gameOver && turnSide == humanSide() && selectedSquare >= 0) {
 			refreshLegalMoves();
 		}
 	}
 
 	void refreshLegalMoves() {
-		humanMoves = crownstep::generateLegalMovesForSide(board, HUMAN_SIDE);
-		aiMoves = crownstep::generateLegalMovesForSide(board, AI_SIDE);
+		humanMoves = gameRules ? gameRules->generateLegalMovesForSide(board, humanSide())
+		                      : crownstep::generateLegalMovesForSide(board, humanSide());
+		aiMoves = gameRules ? gameRules->generateLegalMovesForSide(board, aiSide())
+		                    : crownstep::generateLegalMovesForSide(board, aiSide());
 		highlightedDestinations.clear();
 		opponentHighlightedDestinations.clear();
 		opponentHintsPreviewActive = false;
@@ -394,14 +431,16 @@ struct Crownstep : Module {
 					selectedSquare = -1;
 				}
 			}
-		bool showOpponentTips = (selectedSquare >= 0) || (turnSide == AI_SIDE);
+		bool showOpponentTips = (selectedSquare >= 0) || (turnSide == aiSide());
 		const std::vector<Move>* opponentMoveSource = &aiMoves;
 		std::vector<Move> previewAiMoves;
 		if (selectedSquare >= 0 && hoveredSquare >= 0) {
 			for (const Move& move : humanMoves) {
 				if (move.originIndex == selectedSquare && move.destinationIndex == hoveredSquare) {
-					std::array<int, BOARD_SIZE> previewBoard = crownstep::applyMoveToBoard(board, move);
-					previewAiMoves = crownstep::generateLegalMovesForSide(previewBoard, AI_SIDE);
+					BoardState previewBoard =
+						gameRules ? gameRules->applyMoveToBoard(board, move) : crownstep::applyMoveToBoard(board, move);
+					previewAiMoves = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
+					                           : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
 					opponentMoveSource = &previewAiMoves;
 					opponentHintsPreviewActive = true;
 					break;
@@ -420,23 +459,23 @@ struct Crownstep : Module {
 				opponentHighlightedDestinations.push_back(destination);
 			}
 		}
-		const std::vector<Move>& activeMoves = (turnSide == HUMAN_SIDE) ? humanMoves : aiMoves;
+		const std::vector<Move>& activeMoves = (turnSide == humanSide()) ? humanMoves : aiMoves;
 		gameOver = activeMoves.empty();
-		winnerSide = gameOver ? -turnSide : 0;
+		winnerSide = gameOver ? opposingSide(turnSide) : 0;
 	}
 
 	int searchDepthForDifficulty() const {
-		return crownstep::searchDepthForDifficulty(aiDifficulty);
+		return gameRules ? gameRules->searchDepthForDifficulty(aiDifficulty) : crownstep::searchDepthForDifficulty(aiDifficulty);
 	}
 
 	Move chooseAiMove() const {
-		return crownstep::chooseAiMove(board, aiDifficulty);
+		return gameRules ? gameRules->chooseAiMove(board, aiDifficulty) : crownstep::chooseAiMove(board, aiDifficulty);
 	}
 
 	float expressiveModForMove(
 		const Move& move,
-		const std::array<int, BOARD_SIZE>& beforeBoard,
-		const std::array<int, BOARD_SIZE>& afterBoard,
+		const BoardState& beforeBoard,
+		const BoardState& afterBoard,
 		int moverSide
 	) const {
 		auto captureCount = [](const std::vector<Move>& moves) {
@@ -449,7 +488,7 @@ struct Crownstep : Module {
 			return captures;
 		};
 
-		auto pieceCounts = [](const std::array<int, BOARD_SIZE>& sourceBoard, int* men, int* kings) {
+		auto pieceCounts = [](const BoardState& sourceBoard, int* men, int* kings) {
 			int localMen = 0;
 			int localKings = 0;
 			for (int piece : sourceBoard) {
@@ -470,14 +509,18 @@ struct Crownstep : Module {
 
 		float moveEnergy = crownstep::normalizedMoveMod(move);
 
-		int beforeEval = crownstep::evaluatePosition(beforeBoard);
-		int afterEval = crownstep::evaluatePosition(afterBoard);
-		float moverBefore = (moverSide == AI_SIDE) ? float(beforeEval) : -float(beforeEval);
-		float moverAfter = (moverSide == AI_SIDE) ? float(afterEval) : -float(afterEval);
+		int beforeEval = gameRules ? gameRules->evaluatePosition(beforeBoard) : crownstep::evaluatePosition(beforeBoard);
+		int afterEval = gameRules ? gameRules->evaluatePosition(afterBoard) : crownstep::evaluatePosition(afterBoard);
+		float moverBefore = (moverSide == aiSide()) ? float(beforeEval) : -float(beforeEval);
+		float moverAfter = (moverSide == aiSide()) ? float(afterEval) : -float(afterEval);
 		float evalSwingNorm = clamp(std::fabs(moverAfter - moverBefore) / 260.f, 0.f, 1.f);
 
-		std::vector<Move> afterHumanMoves = crownstep::generateLegalMovesForSide(afterBoard, HUMAN_SIDE);
-		std::vector<Move> afterAiMoves = crownstep::generateLegalMovesForSide(afterBoard, AI_SIDE);
+		std::vector<Move> afterHumanMoves =
+			gameRules ? gameRules->generateLegalMovesForSide(afterBoard, humanSide())
+			          : crownstep::generateLegalMovesForSide(afterBoard, humanSide());
+		std::vector<Move> afterAiMoves =
+			gameRules ? gameRules->generateLegalMovesForSide(afterBoard, aiSide())
+			          : crownstep::generateLegalMovesForSide(afterBoard, aiSide());
 		int pressureCaptures = captureCount(afterHumanMoves) + captureCount(afterAiMoves);
 		float pressureNorm = clamp(float(pressureCaptures) / 5.f, 0.f, 1.f);
 
@@ -490,7 +533,9 @@ struct Crownstep : Module {
 		// Lower piece count generally means a more exposed/endgame board state.
 		float phaseNorm = clamp((24.f - (float(men) + float(kings))) / 24.f, 0.f, 1.f);
 
-		float materialNorm = clamp(std::fabs(float(crownstep::evaluateBoardMaterial(afterBoard))) / 900.f, 0.f, 1.f);
+		float materialNorm =
+			clamp(std::fabs(float(gameRules ? gameRules->evaluateBoardMaterial(afterBoard) : crownstep::evaluateBoardMaterial(afterBoard))) / 900.f,
+				0.f, 1.f);
 
 		float boardContext =
 			0.34f * evalSwingNorm + 0.24f * pressureNorm + 0.18f * mobilityDeltaNorm + 0.14f * phaseNorm + 0.10f * materialNorm;
@@ -503,8 +548,9 @@ struct Crownstep : Module {
 		if (move.originIndex < 0 || move.destinationIndex < 0) {
 			return;
 		}
-		const std::array<int, BOARD_SIZE> beforeBoard = board;
-		const std::array<int, BOARD_SIZE> afterBoard = crownstep::applyMoveToBoard(beforeBoard, move);
+		const BoardState beforeBoard = board;
+		const BoardState afterBoard =
+			gameRules ? gameRules->applyMoveToBoard(beforeBoard, move) : crownstep::applyMoveToBoard(beforeBoard, move);
 		beginMoveAnimation(move, beforeBoard);
 		board = afterBoard;
 		lastMove = move;
@@ -515,24 +561,24 @@ struct Crownstep : Module {
 		history.push_back(step);
 		selectedSquare = -1;
 		highlightedDestinations.clear();
-		turnSide = -moverSide;
+		turnSide = opposingSide(moverSide);
 		captureFlashSeconds = move.isCapture ? 0.16f : 0.f;
 		refreshLegalMoves();
 	}
 
 	void maybeRunAiTurn() {
-		if (turnSide != AI_SIDE || gameOver) {
+		if (turnSide != aiSide() || gameOver) {
 			return;
 		}
 		Move move = chooseAiMove();
 		if (move.originIndex < 0) {
 			return;
 		}
-		commitMove(move, AI_SIDE);
+		commitMove(move, aiSide());
 	}
 
 	void onBoardSquarePressed(int index) {
-		if (turnSide != HUMAN_SIDE || gameOver) {
+		if (turnSide != humanSide() || gameOver) {
 			return;
 		}
 		if (index < 0 || index >= BOARD_SIZE) {
@@ -540,7 +586,7 @@ struct Crownstep : Module {
 		}
 
 		int piece = board[size_t(index)];
-		if (crownstep::pieceSide(piece) == HUMAN_SIDE) {
+		if (crownstep::pieceSide(piece) == humanSide()) {
 			selectedSquare = index;
 			refreshLegalMoves();
 			return;
@@ -552,7 +598,7 @@ struct Crownstep : Module {
 
 		for (const Move& move : humanMoves) {
 			if (move.originIndex == selectedSquare && move.destinationIndex == index) {
-				commitMove(move, HUMAN_SIDE);
+				commitMove(move, humanSide());
 				maybeRunAiTurn();
 				return;
 			}
@@ -688,8 +734,8 @@ struct Crownstep : Module {
 		outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
 
 		lights[RUN_LIGHT].setBrightness(0.f);
-		lights[HUMAN_TURN_LIGHT].setBrightness(!gameOver && turnSide == HUMAN_SIDE ? 1.f : 0.f);
-		lights[AI_TURN_LIGHT].setBrightness(!gameOver && turnSide == AI_SIDE ? 1.f : 0.f);
+		lights[HUMAN_TURN_LIGHT].setBrightness(!gameOver && turnSide == humanSide() ? 1.f : 0.f);
+		lights[AI_TURN_LIGHT].setBrightness(!gameOver && turnSide == aiSide() ? 1.f : 0.f);
 	}
 
 	json_t* dataToJson() override {
@@ -758,7 +804,7 @@ struct Crownstep : Module {
 
 		json_t* turnJ = json_object_get(rootJ, "turnSide");
 		if (turnJ) {
-			turnSide = json_integer_value(turnJ) >= 0 ? HUMAN_SIDE : AI_SIDE;
+			turnSide = json_integer_value(turnJ) >= 0 ? humanSide() : aiSide();
 		}
 		json_t* winnerJ = json_object_get(rootJ, "winnerSide");
 		if (winnerJ) {
@@ -824,12 +870,13 @@ struct Crownstep : Module {
 		json_t* lastMoveSideJ = json_object_get(rootJ, "lastMoveSide");
 		if (lastMoveSideJ) {
 			int side = int(json_integer_value(lastMoveSideJ));
-			lastMoveSide = (side > 0) ? HUMAN_SIDE : ((side < 0) ? AI_SIDE : 0);
+			lastMoveSide = (side > 0) ? humanSide() : ((side < 0) ? aiSide() : 0);
 		}
 
 		json_t* boardJ = json_object_get(rootJ, "board");
 		if (boardJ && json_is_array(boardJ)) {
-			for (int i = 0; i < BOARD_SIZE; ++i) {
+			int cellCount = std::min(gameRules ? gameRules->boardCellCount() : BOARD_SIZE, BOARD_SIZE);
+			for (int i = 0; i < cellCount; ++i) {
 				json_t* pieceJ = json_array_get(boardJ, i);
 				if (pieceJ) {
 					board[size_t(i)] = int(json_integer_value(pieceJ));
@@ -887,7 +934,7 @@ struct Crownstep : Module {
 
 		lastMove = moveHistory.empty() ? Move() : moveHistory.back();
 		if (!lastMoveSideJ) {
-			lastMoveSide = moveHistory.empty() ? 0 : -turnSide;
+			lastMoveSide = moveHistory.empty() ? 0 : opposingSide(turnSide);
 		}
 		captureFlashSeconds = 0.f;
 		resetMoveAnimation();
@@ -929,7 +976,7 @@ struct CrownstepBoardWidget final : Widget {
 		float cellHeight = box.size.y / 8.f;
 		int col = clamp(int(pos.x / cellWidth), 0, 7);
 		int row = clamp(int(pos.y / cellHeight), 0, 7);
-		return crownstep::coordToIndex(row, col);
+		return module ? module->boardCoordToIndex(row, col) : crownstep::coordToIndex(row, col);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -1035,11 +1082,13 @@ struct CrownstepBoardWidget final : Widget {
 			}
 		}
 
-			if (module) {
-				if (!module->gameOver && module->selectedSquare >= 0) {
+				if (module) {
+					// Temporary UX tweak: hide AI potential-move hint dots/rings.
+					const bool renderOpponentMoveHints = false;
+					if (!module->gameOver && module->selectedSquare >= 0) {
 					int row = 0;
 					int col = 0;
-					if (crownstep::indexToCoord(module->selectedSquare, &row, &col)) {
+					if (module->boardIndexToCoord(module->selectedSquare, &row, &col)) {
 						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
@@ -1056,7 +1105,7 @@ struct CrownstepBoardWidget final : Widget {
 					for (int destinationIndex : module->highlightedDestinations) {
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1073,8 +1122,8 @@ struct CrownstepBoardWidget final : Widget {
 						nvgFillColor(args.vg, nvgRGB(98, 235, 154));
 						nvgFill(args.vg);
 					}
-					for (int destinationIndex : module->opponentHighlightedDestinations) {
-						bool overlapsHuman = false;
+						if (renderOpponentMoveHints) for (int destinationIndex : module->opponentHighlightedDestinations) {
+							bool overlapsHuman = false;
 						for (int humanDestination : module->highlightedDestinations) {
 							if (humanDestination == destinationIndex) {
 								overlapsHuman = true;
@@ -1086,7 +1135,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
 							continue;
 						}
 						if (module->opponentHintsPreviewActive && module->board[size_t(destinationIndex)] != 0) {
@@ -1108,18 +1157,19 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 				if (!module->gameOver && module->lastMove.originIndex >= 0) {
-					NVGcolor edgeColor = (module->lastMoveSide == HUMAN_SIDE) ? nvgRGB(98, 235, 154) : nvgRGB(255, 213, 79);
+						NVGcolor edgeColor =
+							(module->lastMoveSide == module->humanSide()) ? nvgRGB(98, 235, 154) : nvgRGB(255, 213, 79);
 					for (int highlightIndex : {module->lastMove.originIndex, module->lastMove.destinationIndex}) {
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(highlightIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(highlightIndex, &row, &col)) {
 							continue;
 						}
-						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == HUMAN_SIDE) ? 0.f : 1.5f);
+						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == module->humanSide()) ? 0.f : 1.5f);
 						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 3.8f + phase);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
-						if (module->lastMoveSide == HUMAN_SIDE) {
+						if (module->lastMoveSide == module->humanSide()) {
 							nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(18.f + 34.f * pulse)));
 						}
 						else {
@@ -1136,7 +1186,7 @@ struct CrownstepBoardWidget final : Widget {
 				if (!module->gameOver && module->captureFlashSeconds > 0.f && module->lastMove.destinationIndex >= 0) {
 					int row = 0;
 					int col = 0;
-					if (crownstep::indexToCoord(module->lastMove.destinationIndex, &row, &col)) {
+					if (module->boardIndexToCoord(module->lastMove.destinationIndex, &row, &col)) {
 					float alpha = clamp(module->captureFlashSeconds / 0.16f, 0.f, 1.f);
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, col * cellWidth + 2.f, row * cellHeight + 2.f, cellWidth - 4.f, cellHeight - 4.f);
@@ -1324,7 +1374,7 @@ struct CrownstepBoardWidget final : Widget {
 						return false;
 					};
 
-					const bool showMovablePieceHints = !module->gameOver && module->turnSide == HUMAN_SIDE;
+					const bool showMovablePieceHints = !module->gameOver && module->turnSide == module->humanSide();
 					std::array<uint8_t, BOARD_SIZE> movableOrigins {};
 					if (showMovablePieceHints) {
 						for (const Move& move : module->humanMoves) {
@@ -1344,7 +1394,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(i, &row, &col)) {
+						if (!module->boardIndexToCoord(i, &row, &col)) {
 						continue;
 					}
 					float centerX = (col + 0.5f) * cellWidth;
@@ -1361,7 +1411,7 @@ struct CrownstepBoardWidget final : Widget {
 						int startIndex = queued.path.front();
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(startIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(startIndex, &row, &col)) {
 							continue;
 						}
 						drawPieceAt((col + 0.5f) * cellWidth, (row + 0.5f) * cellHeight, queued.movingPiece, 0.95f);
@@ -1379,7 +1429,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(captureIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(captureIndex, &row, &col)) {
 							continue;
 						}
 						float ghostAlpha = clamp(0.72f - t * 1.45f, 0.f, 0.72f);
@@ -1401,7 +1451,8 @@ struct CrownstepBoardWidget final : Widget {
 					int fromCol = 0;
 					int toRow = 0;
 					int toCol = 0;
-					if (crownstep::indexToCoord(fromIndex, &fromRow, &fromCol) && crownstep::indexToCoord(toIndex, &toRow, &toCol)) {
+					if (module->boardIndexToCoord(fromIndex, &fromRow, &fromCol) &&
+						module->boardIndexToCoord(toIndex, &toRow, &toCol)) {
 						float fromX = (fromCol + 0.5f) * cellWidth;
 						float fromY = (fromRow + 0.5f) * cellHeight;
 						float toX = (toCol + 0.5f) * cellWidth;
@@ -1435,7 +1486,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1450,8 +1501,8 @@ struct CrownstepBoardWidget final : Widget {
 						nvgStroke(args.vg);
 					}
 
-					for (int destinationIndex : module->opponentHighlightedDestinations) {
-						bool overlapsHuman = false;
+						if (renderOpponentMoveHints) for (int destinationIndex : module->opponentHighlightedDestinations) {
+							bool overlapsHuman = false;
 						for (int humanDestination : module->highlightedDestinations) {
 							if (humanDestination == destinationIndex) {
 								overlapsHuman = true;
@@ -1473,7 +1524,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(destinationIndex, &row, &col)) {
+						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1493,19 +1544,23 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
-				// Human-turn assist: ring pieces that have at least one legal move.
-				if (showMovablePieceHints) {
-					for (int i = 0; i < BOARD_SIZE; ++i) {
-						if (!movableOrigins[size_t(i)]) {
-							continue;
-						}
-						int piece = module->board[size_t(i)];
-						if (crownstep::pieceSide(piece) != HUMAN_SIDE) {
-							continue;
-						}
+					// Human-turn assist: ring pieces that have at least one legal move.
+					if (showMovablePieceHints) {
+						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						for (int i = 0; i < BOARD_SIZE; ++i) {
+							if (!movableOrigins[size_t(i)]) {
+								continue;
+							}
+							if (selectedSquareGlowActive && i == module->selectedSquare) {
+								continue;
+							}
+							int piece = module->board[size_t(i)];
+							if (crownstep::pieceSide(piece) != module->humanSide()) {
+								continue;
+							}
 						int row = 0;
 						int col = 0;
-						if (!crownstep::indexToCoord(i, &row, &col)) {
+						if (!module->boardIndexToCoord(i, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
