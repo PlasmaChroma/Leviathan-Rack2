@@ -1420,11 +1420,15 @@ struct CrownstepBoardWidget final : Widget {
 						int fillAlpha = int(255.f * alpha);
 						int strokeAlpha = int(240.f * alpha);
 						bool humanPiece = piece > 0;
-						if (module->isChessMode()) {
-							int pieceType = std::abs(piece);
-							float pieceR = radius * 1.72f;
-							NVGcolor pieceFill = humanPiece ? nvgRGBA(236, 230, 218, fillAlpha) : nvgRGBA(40, 46, 62, fillAlpha);
-							NVGcolor pieceEdge = humanPiece ? nvgRGBA(48, 42, 34, strokeAlpha) : nvgRGBA(224, 230, 244, strokeAlpha);
+							if (module->isChessMode()) {
+								int pieceType = std::abs(piece);
+								float pieceR = radius * 1.72f;
+								const float chessOutlineStroke = 1.1f;
+								const float kingCrossInnerStroke = chessOutlineStroke;
+								const float kingCrossOutlineStroke = 1.95f;
+								NVGcolor pieceFill = humanPiece ? nvgRGBA(238, 232, 214, fillAlpha) : nvgRGBA(34, 36, 44, fillAlpha);
+								NVGcolor pieceEdge = humanPiece ? nvgRGBA(76, 68, 56, strokeAlpha) : nvgRGBA(214, 220, 234, strokeAlpha);
+								NVGcolor pieceDetail = humanPiece ? nvgRGBA(44, 36, 28, fillAlpha) : nvgRGBA(246, 246, 252, fillAlpha);
 
 							// Ground shadow so standalone pieces feel anchored without token discs.
 							nvgBeginPath(args.vg);
@@ -1432,13 +1436,13 @@ struct CrownstepBoardWidget final : Widget {
 							nvgFillColor(args.vg, nvgRGBA(0, 0, 0, int(44.f * alpha)));
 							nvgFill(args.vg);
 
-							auto fillAndStrokeCurrentPath = [&]() {
-								nvgFillColor(args.vg, pieceFill);
-								nvgFill(args.vg);
-								nvgStrokeColor(args.vg, pieceEdge);
-								nvgStrokeWidth(args.vg, 0.95f);
-								nvgStroke(args.vg);
-							};
+								auto fillAndStrokeCurrentPath = [&]() {
+									nvgFillColor(args.vg, pieceFill);
+									nvgFill(args.vg);
+									nvgStrokeColor(args.vg, pieceEdge);
+									nvgStrokeWidth(args.vg, chessOutlineStroke);
+									nvgStroke(args.vg);
+								};
 
 							auto fillBase = [&](float y, float w, float h) {
 								nvgBeginPath(args.vg);
@@ -1452,7 +1456,7 @@ struct CrownstepBoardWidget final : Widget {
 									nvgCircle(args.vg, centerX, centerY - pieceR * 0.24f, pieceR * 0.18f);
 									fillAndStrokeCurrentPath();
 									fillBase(centerY - pieceR * 0.02f, pieceR * 0.34f, pieceR * 0.34f);
-									fillBase(centerY + pieceR * 0.30f, pieceR * 0.72f, pieceR * 0.14f);
+									fillBase(centerY + pieceR * 0.30f, pieceR * 0.58f, pieceR * 0.14f);
 									break;
 								}
 								case crownstep::CHESS_ROOK: {
@@ -1468,18 +1472,30 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								case crownstep::CHESS_KNIGHT: {
 									nvgBeginPath(args.vg);
-									nvgMoveTo(args.vg, centerX - pieceR * 0.36f, centerY + pieceR * 0.33f);
-									nvgLineTo(args.vg, centerX - pieceR * 0.12f, centerY - pieceR * 0.34f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.16f, centerY - pieceR * 0.11f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.03f, centerY + pieceR * 0.00f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.30f, centerY + pieceR * 0.12f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.18f, centerY + pieceR * 0.34f);
+									nvgMoveTo(args.vg, centerX - pieceR * 0.34f, centerY + pieceR * 0.34f);
+									nvgLineTo(args.vg, centerX - pieceR * 0.12f, centerY - pieceR * 0.22f);
+									nvgBezierTo(args.vg,
+										centerX - pieceR * 0.06f, centerY - pieceR * 0.40f,
+										centerX + pieceR * 0.10f, centerY - pieceR * 0.42f,
+										centerX + pieceR * 0.18f, centerY - pieceR * 0.24f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.10f, centerY - pieceR * 0.08f);
+									nvgBezierTo(args.vg,
+										centerX + pieceR * 0.24f, centerY - pieceR * 0.02f,
+										centerX + pieceR * 0.28f, centerY + pieceR * 0.08f,
+										centerX + pieceR * 0.20f, centerY + pieceR * 0.18f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.14f, centerY + pieceR * 0.34f);
 									nvgClosePath(args.vg);
 									fillAndStrokeCurrentPath();
 									nvgBeginPath(args.vg);
-									nvgCircle(args.vg, centerX + pieceR * 0.03f, centerY - pieceR * 0.14f, pieceR * 0.04f);
-									nvgFillColor(args.vg, humanPiece ? nvgRGBA(58, 50, 40, fillAlpha) : nvgRGBA(228, 234, 246, fillAlpha));
+									nvgCircle(args.vg, centerX + pieceR * 0.05f, centerY - pieceR * 0.20f, pieceR * 0.038f);
+									nvgFillColor(args.vg, pieceDetail);
 									nvgFill(args.vg);
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - pieceR * 0.08f, centerY - pieceR * 0.05f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.12f, centerY + pieceR * 0.05f);
+									nvgStrokeColor(args.vg, pieceEdge);
+									nvgStrokeWidth(args.vg, chessOutlineStroke);
+									nvgStroke(args.vg);
 									break;
 								}
 								case crownstep::CHESS_BISHOP: {
@@ -1500,8 +1516,8 @@ struct CrownstepBoardWidget final : Widget {
 									nvgBeginPath(args.vg);
 									nvgMoveTo(args.vg, centerX - pieceR * 0.09f, centerY - pieceR * 0.24f);
 									nvgLineTo(args.vg, centerX + pieceR * 0.08f, centerY - pieceR * 0.08f);
-									nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(58, 50, 40, strokeAlpha) : nvgRGBA(228, 234, 246, strokeAlpha));
-									nvgStrokeWidth(args.vg, 1.15f);
+									nvgStrokeColor(args.vg, pieceDetail);
+									nvgStrokeWidth(args.vg, chessOutlineStroke);
 									nvgStroke(args.vg);
 									fillBase(centerY + pieceR * 0.30f, pieceR * 0.68f, pieceR * 0.14f);
 									break;
@@ -1529,21 +1545,52 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								case crownstep::CHESS_KING:
 								default: {
-									fillBase(centerY + pieceR * 0.30f, pieceR * 0.74f, pieceR * 0.14f);
+									fillBase(centerY + pieceR * 0.30f, pieceR * 0.76f, pieceR * 0.14f);
+
 									nvgBeginPath(args.vg);
-									nvgMoveTo(args.vg, centerX - pieceR * 0.28f, centerY + pieceR * 0.24f);
-									nvgLineTo(args.vg, centerX - pieceR * 0.20f, centerY - pieceR * 0.16f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.20f, centerY - pieceR * 0.16f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.28f, centerY + pieceR * 0.24f);
-									nvgClosePath(args.vg);
+									nvgRoundedRect(args.vg, centerX - pieceR * 0.25f, centerY - pieceR * 0.06f,
+										pieceR * 0.50f, pieceR * 0.34f, pieceR * 0.06f);
 									fillAndStrokeCurrentPath();
+
 									nvgBeginPath(args.vg);
-									nvgMoveTo(args.vg, centerX, centerY - pieceR * 0.38f);
-									nvgLineTo(args.vg, centerX, centerY - pieceR * 0.18f);
-									nvgMoveTo(args.vg, centerX - pieceR * 0.10f, centerY - pieceR * 0.28f);
-									nvgLineTo(args.vg, centerX + pieceR * 0.10f, centerY - pieceR * 0.28f);
-									nvgStrokeColor(args.vg, pieceEdge);
-									nvgStrokeWidth(args.vg, 1.25f);
+									nvgRoundedRect(args.vg, centerX - pieceR * 0.17f, centerY - pieceR * 0.20f,
+										pieceR * 0.34f, pieceR * 0.14f, pieceR * 0.05f);
+									fillAndStrokeCurrentPath();
+
+									nvgBeginPath(args.vg);
+									nvgRoundedRect(args.vg, centerX - pieceR * 0.07f, centerY - pieceR * 0.33f,
+										pieceR * 0.14f, pieceR * 0.11f, pieceR * 0.03f);
+									fillAndStrokeCurrentPath();
+
+									nvgBeginPath(args.vg);
+									nvgCircle(args.vg, centerX, centerY - pieceR * 0.38f, pieceR * 0.065f);
+									fillAndStrokeCurrentPath();
+
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX - pieceR * 0.11f, centerY - pieceR * 0.06f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.11f, centerY - pieceR * 0.06f);
+									nvgStrokeColor(args.vg, pieceDetail);
+									nvgStrokeWidth(args.vg, chessOutlineStroke);
+									nvgStroke(args.vg);
+
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX, centerY - pieceR * 0.54f);
+									nvgLineTo(args.vg, centerX, centerY - pieceR * 0.29f);
+									nvgMoveTo(args.vg, centerX - pieceR * 0.14f, centerY - pieceR * 0.41f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.14f, centerY - pieceR * 0.41f);
+									NVGcolor crossOutline = humanPiece ? nvgRGBA(18, 18, 24, strokeAlpha) : nvgRGBA(246, 246, 252, strokeAlpha);
+									nvgStrokeColor(args.vg, crossOutline);
+									nvgStrokeWidth(args.vg, kingCrossOutlineStroke);
+									nvgStroke(args.vg);
+
+									nvgBeginPath(args.vg);
+									nvgMoveTo(args.vg, centerX, centerY - pieceR * 0.54f);
+									nvgLineTo(args.vg, centerX, centerY - pieceR * 0.29f);
+									nvgMoveTo(args.vg, centerX - pieceR * 0.14f, centerY - pieceR * 0.41f);
+									nvgLineTo(args.vg, centerX + pieceR * 0.14f, centerY - pieceR * 0.41f);
+									NVGcolor crossInner = humanPiece ? nvgRGBA(246, 246, 252, strokeAlpha) : nvgRGBA(18, 18, 24, strokeAlpha);
+									nvgStrokeColor(args.vg, crossInner);
+									nvgStrokeWidth(args.vg, kingCrossInnerStroke);
 									nvgStroke(args.vg);
 									break;
 								}
@@ -1910,25 +1957,25 @@ struct CrownstepBoardWidget final : Widget {
 						if (!module->boardIndexToCoord(i, &row, &col)) {
 							continue;
 						}
-						float centerX = (col + 0.5f) * cellWidth;
-						float centerY = (row + 0.5f) * cellHeight;
-						float phase = float(i) * 0.37f + 0.4f;
-						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + phase);
-						float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
+							float centerX = (col + 0.5f) * cellWidth;
+							float centerY = (row + 0.5f) * cellHeight;
+							float phase = float(i) * 0.37f + 0.4f;
+							float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + phase);
+							float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
 
-						nvgBeginPath(args.vg);
-						nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, nvgRGBA(88, 240, 154, int(38.f + 44.f * pulse)));
-						nvgStrokeWidth(args.vg, 3.6f);
-						nvgStroke(args.vg);
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, ringRadius);
+							nvgStrokeColor(args.vg, nvgRGBA(88, 240, 154, int(38.f + 44.f * pulse)));
+							nvgStrokeWidth(args.vg, 3.6f);
+							nvgStroke(args.vg);
 
-						nvgBeginPath(args.vg);
-						nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(182.f + 58.f * pulse)));
-						nvgStrokeWidth(args.vg, 1.85f);
-						nvgStroke(args.vg);
-					}
-				}
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, ringRadius);
+							nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(182.f + 58.f * pulse)));
+							nvgStrokeWidth(args.vg, 1.85f);
+							nvgStroke(args.vg);
+							}
+						}
 
 				if (module->gameOver) {
 				nvgBeginPath(args.vg);
@@ -2174,6 +2221,15 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
+		menu->addChild(createSubmenuItem("AI Difficulty", "", [=](Menu* difficultyMenu) {
+			for (int i = 0; i < int(DIFFICULTY_NAMES.size()); ++i) {
+				CrownstepDifficultyItem* item = new CrownstepDifficultyItem();
+				item->text = DIFFICULTY_NAMES[size_t(i)];
+				item->module = module;
+				item->difficulty = i;
+				difficultyMenu->addChild(item);
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";
@@ -2305,16 +2361,6 @@ struct CrownstepWidget final : ModuleWidget {
 						}
 					}
 				));
-			}
-		}));
-		menu->addChild(new MenuSeparator());
-		menu->addChild(createSubmenuItem("AI Difficulty", "", [=](Menu* difficultyMenu) {
-			for (int i = 0; i < int(DIFFICULTY_NAMES.size()); ++i) {
-				CrownstepDifficultyItem* item = new CrownstepDifficultyItem();
-				item->text = DIFFICULTY_NAMES[size_t(i)];
-				item->module = module;
-				item->difficulty = i;
-				difficultyMenu->addChild(item);
 			}
 		}));
 	}
