@@ -1422,7 +1422,7 @@ struct CrownstepBoardWidget final : Widget {
 						bool humanPiece = piece > 0;
 						if (module->isChessMode()) {
 							int pieceType = std::abs(piece);
-							float pieceR = radius * 1.45f;
+							float pieceR = radius * 1.72f;
 							NVGcolor pieceFill = humanPiece ? nvgRGBA(236, 230, 218, fillAlpha) : nvgRGBA(40, 46, 62, fillAlpha);
 							NVGcolor pieceEdge = humanPiece ? nvgRGBA(48, 42, 34, strokeAlpha) : nvgRGBA(224, 230, 244, strokeAlpha);
 
