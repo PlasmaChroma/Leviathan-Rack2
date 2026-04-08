@@ -11,7 +11,6 @@
 
 using crownstep::AI_SIDE;
 using crownstep::BoardState;
-using crownstep::BOARD_SIZE;
 using crownstep::BOARD_VALUE_LAYOUT_NAMES;
 using crownstep::DIFFICULTY_NAMES;
 using crownstep::HUMAN_SIDE;
@@ -225,9 +224,10 @@ struct Crownstep : Module {
 		moveAnimationQueue.clear();
 	}
 
-	void beginMoveAnimation(const Move& move, const std::array<int, BOARD_SIZE>& beforeBoard) {
+	void beginMoveAnimation(const Move& move, const BoardState& beforeBoard) {
 		MoveVisualAnimation nextAnimation;
-		if (move.originIndex < 0 || move.originIndex >= BOARD_SIZE || move.destinationIndex < 0 || move.destinationIndex >= BOARD_SIZE) {
+		int cellCount = boardCellCount();
+		if (move.originIndex < 0 || move.originIndex >= cellCount || move.destinationIndex < 0 || move.destinationIndex >= cellCount) {
 			return;
 		}
 
@@ -253,7 +253,7 @@ struct Crownstep : Module {
 
 		for (int captureIndex : move.captured) {
 			nextAnimation.capturedIndices.push_back(captureIndex);
-			if (captureIndex >= 0 && captureIndex < BOARD_SIZE) {
+			if (captureIndex >= 0 && captureIndex < cellCount) {
 				nextAnimation.capturedPieces.push_back(beforeBoard[size_t(captureIndex)]);
 			}
 			else {
@@ -355,6 +355,12 @@ struct Crownstep : Module {
 		return crownstep::coordToIndex(row, col);
 	}
 
+	int boardCellCount() const {
+		int localCount = int(board.size());
+		int rulesCount = gameRules ? gameRules->boardCellCount() : localCount;
+		return std::max(0, std::min(localCount, rulesCount));
+	}
+
 	float pitchForMove(const Move& move) {
 		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
 		boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
@@ -399,7 +405,7 @@ struct Crownstep : Module {
 	}
 
 	void setHoveredSquare(int index) {
-		int maxIndex = gameRules ? gameRules->boardCellCount() : BOARD_SIZE;
+		int maxIndex = boardCellCount();
 		int normalizedIndex = (index >= 0 && index < maxIndex) ? index : -1;
 		if (hoveredSquare == normalizedIndex) {
 			return;
@@ -448,14 +454,14 @@ struct Crownstep : Module {
 			}
 		}
 		if (showOpponentTips) {
-			std::array<bool, BOARD_SIZE> seen {};
-			seen.fill(false);
+			int cellCount = boardCellCount();
+			std::vector<uint8_t> seen(size_t(cellCount), 0u);
 			for (const Move& move : *opponentMoveSource) {
 				int destination = move.destinationIndex;
-				if (destination < 0 || destination >= BOARD_SIZE || seen[size_t(destination)]) {
+				if (destination < 0 || destination >= cellCount || seen[size_t(destination)] != 0u) {
 					continue;
 				}
-				seen[size_t(destination)] = true;
+				seen[size_t(destination)] = 1u;
 				opponentHighlightedDestinations.push_back(destination);
 			}
 		}
@@ -581,7 +587,8 @@ struct Crownstep : Module {
 		if (turnSide != humanSide() || gameOver) {
 			return;
 		}
-		if (index < 0 || index >= BOARD_SIZE) {
+		int cellCount = boardCellCount();
+		if (index < 0 || index >= cellCount) {
 			return;
 		}
 
@@ -875,7 +882,7 @@ struct Crownstep : Module {
 
 		json_t* boardJ = json_object_get(rootJ, "board");
 		if (boardJ && json_is_array(boardJ)) {
-			int cellCount = std::min(gameRules ? gameRules->boardCellCount() : BOARD_SIZE, BOARD_SIZE);
+			int cellCount = boardCellCount();
 			for (int i = 0; i < cellCount; ++i) {
 				json_t* pieceJ = json_array_get(boardJ, i);
 				if (pieceJ) {
@@ -1375,16 +1382,17 @@ struct CrownstepBoardWidget final : Widget {
 					};
 
 					const bool showMovablePieceHints = !module->gameOver && module->turnSide == module->humanSide();
-					std::array<uint8_t, BOARD_SIZE> movableOrigins {};
+					int cellCount = module->boardCellCount();
+					std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
 					if (showMovablePieceHints) {
 						for (const Move& move : module->humanMoves) {
-							if (move.originIndex >= 0 && move.originIndex < BOARD_SIZE) {
+							if (move.originIndex >= 0 && move.originIndex < cellCount) {
 								movableOrigins[size_t(move.originIndex)] = 1u;
 							}
 						}
 					}
 
-					for (int i = 0; i < BOARD_SIZE; ++i) {
+					for (int i = 0; i < cellCount; ++i) {
 						int piece = module->board[size_t(i)];
 						if (piece == 0) {
 							continue;
@@ -1470,13 +1478,13 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
-				// Keep forced/destination hint visibility even when a destination is visually occupied
-				// (e.g. during queued animations) by drawing a top-layer pulse over the piece.
-				if (!module->gameOver) {
-					for (int destinationIndex : module->highlightedDestinations) {
-						if (destinationIndex < 0 || destinationIndex >= BOARD_SIZE) {
-							continue;
-						}
+					// Keep forced/destination hint visibility even when a destination is visually occupied
+					// (e.g. during queued animations) by drawing a top-layer pulse over the piece.
+					if (!module->gameOver) {
+						for (int destinationIndex : module->highlightedDestinations) {
+							if (destinationIndex < 0 || destinationIndex >= cellCount) {
+								continue;
+							}
 						bool occupied = module->board[size_t(destinationIndex)] != 0;
 						bool landingAnimation =
 							(module->moveAnimation.active && module->moveAnimation.destinationIndex == destinationIndex)
@@ -1509,9 +1517,9 @@ struct CrownstepBoardWidget final : Widget {
 								break;
 							}
 						}
-						if (overlapsHuman || destinationIndex < 0 || destinationIndex >= BOARD_SIZE) {
-							continue;
-						}
+							if (overlapsHuman || destinationIndex < 0 || destinationIndex >= cellCount) {
+								continue;
+							}
 						if (module->opponentHintsPreviewActive && module->board[size_t(destinationIndex)] != 0) {
 							continue;
 						}
@@ -1545,12 +1553,12 @@ struct CrownstepBoardWidget final : Widget {
 				}
 
 					// Human-turn assist: ring pieces that have at least one legal move.
-					if (showMovablePieceHints) {
-						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
-						for (int i = 0; i < BOARD_SIZE; ++i) {
-							if (!movableOrigins[size_t(i)]) {
-								continue;
-							}
+						if (showMovablePieceHints) {
+							const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+							for (int i = 0; i < cellCount; ++i) {
+								if (!movableOrigins[size_t(i)]) {
+									continue;
+								}
 							if (selectedSquareGlowActive && i == module->selectedSquare) {
 								continue;
 							}
