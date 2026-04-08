@@ -123,6 +123,24 @@ TestResult testAiChoosesAvailableCapture() {
           "dest=" + std::to_string(move.destinationIndex)};
 }
 
+TestResult testPitchDividerModesScaleBoardValuesAndCenterOffset() {
+  bool pass = true;
+  const float sourceValue = 21.f;
+  const std::array<float, 4> expectedDivided = {{21.f, 10.5f, 7.f, 5.25f}};
+  const std::array<float, 4> expectedCenter = {{15.5f, 7.75f, 5.1666665f, 3.875f}};
+  for (int mode = 0; mode < 4; ++mode) {
+    float divided = crownstep::applyPitchDividerToBoardValue(sourceValue, mode);
+    float center = crownstep::pitchBipolarCenterOffset(mode);
+    if (std::fabs(divided - expectedDivided[size_t(mode)]) > 1e-6f ||
+        std::fabs(center - expectedCenter[size_t(mode)]) > 1e-6f) {
+      pass = false;
+      break;
+    }
+  }
+  return {"Pitch divider modes scale value + bipolar center", pass,
+          "modes full/half/third/quarter"};
+}
+
 } // namespace
 
 int main() {
@@ -134,6 +152,7 @@ int main() {
   tests.push_back(testStepMappingMatchesSpecValues());
   tests.push_back(testSequenceWindowUsesRecentHistorySlice());
   tests.push_back(testAiChoosesAvailableCapture());
+  tests.push_back(testPitchDividerModesScaleBoardValuesAndCenterOffset());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";

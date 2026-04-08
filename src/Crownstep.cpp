@@ -18,11 +18,11 @@ using crownstep::KEY_NAMES;
 using crownstep::Move;
 using crownstep::PITCH_INTERPRETATION_NAMES;
 using crownstep::SCALES;
-using crownstep::SEQ_CAP_NAMES;
-using crownstep::SEQ_CAPS;
 using crownstep::Step;
 
 static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
+static constexpr int SEQ_LENGTH_MIN = 1;
+static constexpr int SEQ_LENGTH_MAX = 64;
 
 static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
 	if (!outRect) {
@@ -72,11 +72,10 @@ static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rec
 	return true;
 }
 
+struct Crownstep;
+
 struct CrownstepSeqLengthQuantity final : ParamQuantity {
-	std::string getDisplayValueString() override {
-		int index = clamp(int(std::round(getValue())), 0, int(SEQ_CAP_NAMES.size()) - 1);
-		return SEQ_CAP_NAMES[size_t(index)];
-	}
+	std::string getDisplayValueString() override;
 };
 
 struct CrownstepScaleQuantity final : ParamQuantity {
@@ -159,6 +158,7 @@ struct Crownstep : Module {
 	bool pitchBipolarEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
+	int pitchDividerMode = 0;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -180,7 +180,8 @@ struct Crownstep : Module {
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-		configParam<CrownstepSeqLengthQuantity>(SEQ_LENGTH_PARAM, 0.f, 4.f, 0.f, "Sequence length");
+		configParam<CrownstepSeqLengthQuantity>(
+			SEQ_LENGTH_PARAM, float(SEQ_LENGTH_MIN), float(SEQ_LENGTH_MAX), float(SEQ_LENGTH_MAX), "Sequence length");
 		configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
 		configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 		configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
@@ -290,8 +291,12 @@ struct Crownstep : Module {
 	}
 
 	int currentSequenceCap() {
-		int index = clamp(int(std::round(params[SEQ_LENGTH_PARAM].getValue())), 0, int(SEQ_CAPS.size()) - 1);
-		return SEQ_CAPS[size_t(index)];
+		int requested = clamp(int(std::round(params[SEQ_LENGTH_PARAM].getValue())), SEQ_LENGTH_MIN, SEQ_LENGTH_MAX);
+		// Max knob turn means full history window.
+		if (requested >= SEQ_LENGTH_MAX) {
+			return 0;
+		}
+		return requested;
 	}
 
 	int currentScaleIndex() {
@@ -311,8 +316,9 @@ struct Crownstep : Module {
 
 	float pitchForMove(const Move& move) {
 		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
+		boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
 		if (pitchBipolarEnabled) {
-			boardValueIndex -= 0.5f * float(BOARD_SIZE - 1);
+			boardValueIndex -= crownstep::pitchBipolarCenterOffset(pitchDividerMode);
 		}
 		if (quantizationEnabled) {
 			return crownstep::mapPitchFromIndex(
@@ -689,6 +695,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "pitchBipolarEnabled", json_boolean(pitchBipolarEnabled));
 		json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 		json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
+		json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -771,10 +778,28 @@ struct Crownstep : Module {
 			pitchInterpretationMode =
 				clamp(int(json_integer_value(pitchInterpretationModeJ)), 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
 		}
+		bool loadedPitchDividerMode = false;
+		json_t* pitchDividerModeJ = json_object_get(rootJ, "pitchDividerMode");
+		if (pitchDividerModeJ) {
+			pitchDividerMode =
+				clamp(int(json_integer_value(pitchDividerModeJ)), 0, int(crownstep::PITCH_DIVIDER_NAMES.size()) - 1);
+			loadedPitchDividerMode = true;
+		}
 		json_t* boardValueLayoutModeJ = json_object_get(rootJ, "boardValueLayoutMode");
 		if (boardValueLayoutModeJ) {
-			boardValueLayoutMode =
-				clamp(int(json_integer_value(boardValueLayoutModeJ)), 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
+			int storedLayoutMode = int(json_integer_value(boardValueLayoutModeJ));
+			// Backward compatibility: legacy /2 interleave layouts (3..5) now
+			// map to base layouts (0..2) with divider set to Half.
+			if (storedLayoutMode >= int(BOARD_VALUE_LAYOUT_NAMES.size()) &&
+				storedLayoutMode < int(BOARD_VALUE_LAYOUT_NAMES.size()) * 2) {
+				boardValueLayoutMode = storedLayoutMode - int(BOARD_VALUE_LAYOUT_NAMES.size());
+				if (!loadedPitchDividerMode) {
+					pitchDividerMode = 1;
+				}
+			}
+			else {
+				boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
+			}
 		}
 		json_t* playheadJ = json_object_get(rootJ, "playhead");
 		if (playheadJ) {
@@ -857,6 +882,22 @@ struct Crownstep : Module {
 		refreshLegalMoves();
 	}
 };
+
+std::string CrownstepSeqLengthQuantity::getDisplayValueString() {
+	int requested = clamp(int(std::round(getValue())), SEQ_LENGTH_MIN, SEQ_LENGTH_MAX);
+	if (requested >= SEQ_LENGTH_MAX) {
+		return "Full";
+	}
+	const Crownstep* crownstepModule = dynamic_cast<const Crownstep*>(module);
+	if (!crownstepModule) {
+		return std::to_string(requested);
+	}
+	int available = int(crownstepModule->history.size());
+	if (available > 0 && requested >= available) {
+		return "Full";
+	}
+	return std::to_string(requested);
+}
 
 struct CrownstepBoardWidget final : Widget {
 	Crownstep* module = nullptr;
@@ -1110,22 +1151,73 @@ struct CrownstepBoardWidget final : Widget {
 						nvgStrokeWidth(args.vg, 1.05f);
 						nvgStroke(args.vg);
 
-						// Tiny radial pips around the edge to imply textured perimeter.
-						for (int pip = 0; pip < 14; ++pip) {
-							float a = float(pip) * (2.f * float(M_PI) / 14.f);
-							float ringX = centerX + std::cos(a) * radius * 0.92f;
-							float ringY = centerY + std::sin(a) * radius * 0.92f;
-							int pipAlpha = (pip & 1) ? int(48.f * alpha) : int(28.f * alpha);
-							if (humanPiece) {
-								nvgFillColor(args.vg, nvgRGBA(255, 214, 188, pipAlpha));
-							}
-							else {
-								nvgFillColor(args.vg, nvgRGBA(170, 170, 180, pipAlpha));
-							}
+						// Checker-like stacked rim: outer annulus plus discrete radial ridge facets.
+						float rimOuterR = radius * 1.01f;
+						float rimInnerR = radius * 0.80f;
+						NVGcolor rimBandColor = humanPiece ? nvgRGBA(112, 38, 30, int(128.f * alpha))
+						                                   : nvgRGBA(26, 26, 32, int(146.f * alpha));
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, rimOuterR);
+						nvgCircle(args.vg, centerX, centerY, rimInnerR);
+						nvgPathWinding(args.vg, NVG_HOLE);
+						nvgFillColor(args.vg, rimBandColor);
+						nvgFill(args.vg);
+
+						const int ridgeCount = 32;
+						float step = 2.f * float(M_PI) / float(ridgeCount);
+						float ridgeSpan = step * 0.56f;
+						float ridgeInnerR = radius * 0.86f;
+						float ridgeOuterR = radius * 1.00f;
+						for (int ridge = 0; ridge < ridgeCount; ++ridge) {
+							float aMid = float(ridge) * step;
+							float a0 = aMid - ridgeSpan * 0.5f;
+							float a1 = aMid + ridgeSpan * 0.5f;
+							float c0 = std::cos(a0);
+							float s0 = std::sin(a0);
+							float c1 = std::cos(a1);
+							float s1 = std::sin(a1);
+							float x0i = centerX + c0 * ridgeInnerR;
+							float y0i = centerY + s0 * ridgeInnerR;
+							float x1i = centerX + c1 * ridgeInnerR;
+							float y1i = centerY + s1 * ridgeInnerR;
+							float x1o = centerX + c1 * ridgeOuterR;
+							float y1o = centerY + s1 * ridgeOuterR;
+							float x0o = centerX + c0 * ridgeOuterR;
+							float y0o = centerY + s0 * ridgeOuterR;
+
+							NVGcolor ridgeFillA = humanPiece ? nvgRGBA(248, 176, 154, int(112.f * alpha))
+							                                 : nvgRGBA(172, 172, 184, int(94.f * alpha));
+							NVGcolor ridgeFillB = humanPiece ? nvgRGBA(198, 104, 86, int(104.f * alpha))
+							                                 : nvgRGBA(112, 112, 122, int(86.f * alpha));
+							NVGcolor ridgeStroke = humanPiece ? nvgRGBA(86, 24, 18, int(110.f * alpha))
+							                                  : nvgRGBA(8, 8, 12, int(116.f * alpha));
+
 							nvgBeginPath(args.vg);
-							nvgCircle(args.vg, ringX, ringY, radius * 0.042f);
+							nvgMoveTo(args.vg, x0i, y0i);
+							nvgLineTo(args.vg, x1i, y1i);
+							nvgLineTo(args.vg, x1o, y1o);
+							nvgLineTo(args.vg, x0o, y0o);
+							nvgClosePath(args.vg);
+							nvgFillColor(args.vg, (ridge & 1) ? ridgeFillA : ridgeFillB);
 							nvgFill(args.vg);
+							nvgStrokeColor(args.vg, ridgeStroke);
+							nvgStrokeWidth(args.vg, 0.34f);
+							nvgStroke(args.vg);
 						}
+
+						// Tie the rim together with thin contour rings.
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, rimOuterR);
+						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(255, 212, 196, int(60.f * alpha))
+						                                  : nvgRGBA(196, 196, 206, int(46.f * alpha)));
+						nvgStrokeWidth(args.vg, 0.70f);
+						nvgStroke(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, centerX, centerY, rimInnerR);
+						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(70, 18, 14, int(82.f * alpha))
+						                                  : nvgRGBA(6, 6, 10, int(96.f * alpha)));
+						nvgStrokeWidth(args.vg, 0.64f);
+						nvgStroke(args.vg);
 
 						// Top sheen.
 						nvgBeginPath(args.vg);
@@ -1589,6 +1681,10 @@ struct CrownstepWidget final : ModuleWidget {
 			newGamePos = Vec(controlX, controlY + controlH * 0.76f);
 		}
 
+		// Keep New Game near the top-right while clearing both the top screw
+		// and the purple horizontal accent line.
+		newGamePos = Vec(78.0f, 6.2f);
+
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(seqPos), module, Crownstep::SEQ_LENGTH_PARAM));
 		addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
 
@@ -1701,6 +1797,22 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->boardValueLayoutMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Divider", "", [=](Menu* dividerMenu) {
+			for (int i = 0; i < int(crownstep::PITCH_DIVIDER_NAMES.size()); ++i) {
+				dividerMenu->addChild(createCheckMenuItem(
+					crownstep::PITCH_DIVIDER_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->pitchDividerMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->pitchDividerMode = i;
 						}
 					}
 				));

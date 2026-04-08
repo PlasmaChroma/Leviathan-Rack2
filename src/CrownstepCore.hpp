@@ -49,6 +49,12 @@ static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 static constexpr std::array<const char*, 3> BOARD_VALUE_LAYOUT_NAMES = {
 	{"Linear", "Serpentine Rows", "Center-Out"}
 };
+static constexpr std::array<const char*, 4> PITCH_DIVIDER_NAMES = {
+	{"Full", "Half", "Third", "Quarter"}
+};
+static constexpr std::array<float, 4> PITCH_DIVIDER_VALUES = {
+	{1.f, 2.f, 3.f, 4.f}
+};
 
 struct Move {
 	int originIndex = -1;
@@ -503,6 +509,19 @@ inline float sampledBoardValueForMove(const Move& move, int interpretationMode, 
 		return 0.5f * (originValue + destinationValue);
 	}
 	return originValue;
+}
+
+inline float pitchDividerForMode(int dividerMode) {
+	int mode = std::max(0, std::min(dividerMode, int(PITCH_DIVIDER_VALUES.size()) - 1));
+	return PITCH_DIVIDER_VALUES[size_t(mode)];
+}
+
+inline float applyPitchDividerToBoardValue(float boardValueIndex, int dividerMode) {
+	return boardValueIndex / pitchDividerForMode(dividerMode);
+}
+
+inline float pitchBipolarCenterOffset(int dividerMode) {
+	return (0.5f * float(BOARD_SIZE - 1)) / pitchDividerForMode(dividerMode);
 }
 
 inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {
