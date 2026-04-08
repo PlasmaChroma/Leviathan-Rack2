@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cmath>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <regex>
@@ -24,6 +25,7 @@ static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
+static constexpr std::array<const char*, 2> GAME_MODE_NAMES = {{"Checkers", "Chess"}};
 
 static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
 	if (!outRect) {
@@ -183,6 +185,11 @@ struct Crownstep : Module {
 		BOARD_TEXTURE_MARBLE,
 		BOARD_TEXTURE_COUNT
 	};
+	enum GameMode {
+		GAME_MODE_CHECKERS = 0,
+		GAME_MODE_CHESS,
+		GAME_MODE_COUNT
+	};
 
 	BoardState board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
@@ -222,6 +229,7 @@ struct Crownstep : Module {
 	int boardValueLayoutMode = 0;
 	int pitchDividerMode = 0;
 	int boardTextureMode = BOARD_TEXTURE_WOOD;
+	int gameMode = GAME_MODE_CHECKERS;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -265,7 +273,20 @@ struct Crownstep : Module {
 		configOutput(MOD_OUTPUT, "Mod");
 		configOutput(EOC_OUTPUT, "End of cycle");
 
-		refreshLegalMoves();
+		setGameMode(GAME_MODE_CHECKERS, true);
+	}
+
+	bool isChessMode() const {
+		return gameRules && std::strcmp(gameRules->gameId(), "chess") == 0;
+	}
+
+	void setGameMode(int mode, bool startFreshGame) {
+		int nextMode = clamp(mode, 0, GAME_MODE_COUNT - 1);
+		gameMode = nextMode;
+		gameRules = (gameMode == GAME_MODE_CHESS) ? &crownstep::chessRules() : &crownstep::checkersRules();
+		if (startFreshGame) {
+			startNewGame();
+		}
 	}
 
 	void resetMoveAnimation() {
@@ -418,10 +439,74 @@ struct Crownstep : Module {
 	}
 
 	float pitchForMove(const Move& move) {
-		float boardValueIndex = crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
+		auto chessBoardValueForIndex = [&](int boardIndex, int layoutMode) {
+			int clamped = clamp(boardIndex, 0, crownstep::CHESS_BOARD_SIZE - 1);
+			int mode = clamp(layoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
+			switch (mode) {
+				case 1: {
+					int row = clamped / 8;
+					int col = clamped % 8;
+					int serpentineCol = (row & 1) ? (7 - col) : col;
+					return row * 8 + serpentineCol;
+				}
+				case 2: {
+					int row = clamped / 8;
+					int col = clamped % 8;
+					float dx = float(col) - 3.5f;
+					float dy = float(row) - 3.5f;
+					float metric = dx * dx + dy * dy + float(row) * 0.01f + float(col) * 0.001f;
+					int rank = 0;
+					for (int i = 0; i < crownstep::CHESS_BOARD_SIZE; ++i) {
+						int ir = i / 8;
+						int ic = i % 8;
+						float idx = float(ic) - 3.5f;
+						float idy = float(ir) - 3.5f;
+						float m = idx * idx + idy * idy + float(ir) * 0.01f + float(ic) * 0.001f;
+						if (m < metric) {
+							rank++;
+						}
+					}
+					return rank;
+				}
+				case 0:
+				default:
+					return clamped;
+			}
+		};
+		auto chessBoardValueForSampledIndex = [&](float sampledIndex, int layoutMode) {
+			float x = clamp(sampledIndex, 0.f, float(crownstep::CHESS_BOARD_SIZE - 1));
+			int low = int(std::floor(x));
+			int high = int(std::ceil(x));
+			float lowValue = float(chessBoardValueForIndex(low, layoutMode));
+			if (high <= low) {
+				return lowValue;
+			}
+			float highValue = float(chessBoardValueForIndex(high, layoutMode));
+			return lowValue + (highValue - lowValue) * (x - float(low));
+		};
+		auto sampledBoardValueForActiveGame = [&]() {
+			if (!isChessMode()) {
+				return crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
+			}
+			int mode = clamp(pitchInterpretationMode, 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
+			float origin = float(clamp(move.originIndex, 0, crownstep::CHESS_BOARD_SIZE - 1));
+			float destination = float(clamp(move.destinationIndex, 0, crownstep::CHESS_BOARD_SIZE - 1));
+			float originValue = chessBoardValueForSampledIndex(origin, boardValueLayoutMode);
+			float destinationValue = chessBoardValueForSampledIndex(destination, boardValueLayoutMode);
+			if (mode == 1) {
+				return destinationValue;
+			}
+			if (mode == 2) {
+				return 0.5f * (originValue + destinationValue);
+			}
+			return originValue;
+		};
+
+		float boardValueIndex = sampledBoardValueForActiveGame();
 		boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
 		if (pitchBipolarEnabled) {
-			boardValueIndex -= crownstep::pitchBipolarCenterOffset(pitchDividerMode);
+			float center = (0.5f * float(boardCellCount() - 1)) / crownstep::pitchDividerForMode(pitchDividerMode);
+			boardValueIndex -= center;
 		}
 		if (quantizationEnabled) {
 			return crownstep::mapPitchFromIndex(
@@ -523,7 +608,9 @@ struct Crownstep : Module {
 		}
 		const std::vector<Move>& activeMoves = (turnSide == humanSide()) ? humanMoves : aiMoves;
 		gameOver = activeMoves.empty();
-		winnerSide = gameOver ? opposingSide(turnSide) : 0;
+		winnerSide = gameOver
+			? (gameRules ? gameRules->winnerForNoLegalMoves(board, turnSide) : opposingSide(turnSide))
+			: 0;
 	}
 
 	int searchDepthForDifficulty() const {
@@ -554,10 +641,13 @@ struct Crownstep : Module {
 			int localMen = 0;
 			int localKings = 0;
 			for (int piece : sourceBoard) {
-				if (piece == 1 || piece == -1) {
+				if (piece == 0) {
+					continue;
+				}
+				if (std::abs(piece) <= 1) {
 					localMen++;
 				}
-				else if (piece == 2 || piece == -2) {
+				else {
 					localKings++;
 				}
 			}
@@ -593,7 +683,8 @@ struct Crownstep : Module {
 		int kings = 0;
 		pieceCounts(afterBoard, &men, &kings);
 		// Lower piece count generally means a more exposed/endgame board state.
-		float phaseNorm = clamp((24.f - (float(men) + float(kings))) / 24.f, 0.f, 1.f);
+		float initialPieceCount = isChessMode() ? 32.f : 24.f;
+		float phaseNorm = clamp((initialPieceCount - (float(men) + float(kings))) / initialPieceCount, 0.f, 1.f);
 
 		float materialNorm =
 			clamp(std::fabs(float(gameRules ? gameRules->evaluateBoardMaterial(afterBoard) : crownstep::evaluateBoardMaterial(afterBoard))) / 900.f,
@@ -813,6 +904,7 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 		json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 		json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
+		json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
 		json_object_set_new(rootJ, "playhead", json_integer(playhead));
 		json_object_set_new(rootJ, "gameOver", json_boolean(gameOver));
 		json_object_set_new(rootJ, "lastMoveSide", json_integer(lastMoveSide));
@@ -864,6 +956,14 @@ struct Crownstep : Module {
 		if (!rootJ) {
 			return;
 		}
+
+		json_t* gameModeJ = json_object_get(rootJ, "gameMode");
+		int loadedGameMode = GAME_MODE_CHECKERS;
+		if (gameModeJ) {
+			loadedGameMode = clamp(int(json_integer_value(gameModeJ)), 0, GAME_MODE_COUNT - 1);
+		}
+		setGameMode(loadedGameMode, false);
+		board = gameRules ? gameRules->makeInitialBoard() : crownstep::makeInitialBoard();
 
 		json_t* turnJ = json_object_get(rootJ, "turnSide");
 		if (turnJ) {
@@ -1267,6 +1367,48 @@ struct CrownstepBoardWidget final : Widget {
 						int fillAlpha = int(255.f * alpha);
 						int strokeAlpha = int(240.f * alpha);
 						bool humanPiece = piece > 0;
+						if (module->isChessMode()) {
+							int pieceType = std::abs(piece);
+							char symbol = '?';
+							switch (pieceType) {
+								case crownstep::CHESS_PAWN: symbol = 'P'; break;
+								case crownstep::CHESS_KNIGHT: symbol = 'N'; break;
+								case crownstep::CHESS_BISHOP: symbol = 'B'; break;
+								case crownstep::CHESS_ROOK: symbol = 'R'; break;
+								case crownstep::CHESS_QUEEN: symbol = 'Q'; break;
+								case crownstep::CHESS_KING: symbol = 'K'; break;
+								default: symbol = '?'; break;
+							}
+							float glyphRadius = std::min(cellWidth, cellHeight) * 0.34f;
+							NVGcolor fillColor = humanPiece ? nvgRGBA(238, 232, 214, fillAlpha) : nvgRGBA(34, 36, 44, fillAlpha);
+							NVGcolor edgeColor = humanPiece ? nvgRGBA(76, 68, 56, strokeAlpha) : nvgRGBA(214, 220, 234, strokeAlpha);
+							NVGcolor textColor = humanPiece ? nvgRGBA(44, 36, 28, fillAlpha) : nvgRGBA(246, 246, 252, fillAlpha);
+
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, glyphRadius);
+							NVGpaint piecePaint = nvgRadialGradient(
+								args.vg,
+								centerX - glyphRadius * 0.2f,
+								centerY - glyphRadius * 0.24f,
+								glyphRadius * 0.16f,
+								glyphRadius * 1.05f,
+								fillColor,
+								humanPiece ? nvgRGBA(194, 182, 154, fillAlpha) : nvgRGBA(8, 10, 16, fillAlpha)
+							);
+							nvgFillPaint(args.vg, piecePaint);
+							nvgFill(args.vg);
+							nvgStrokeColor(args.vg, edgeColor);
+							nvgStrokeWidth(args.vg, 1.35f);
+							nvgStroke(args.vg);
+
+							char text[2] = {symbol, '\0'};
+							nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+							nvgFontSize(args.vg, glyphRadius * 1.20f);
+							nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+							nvgFillColor(args.vg, textColor);
+							nvgText(args.vg, centerX, centerY + glyphRadius * 0.02f, text, nullptr);
+							return;
+						}
 
 						NVGcolor coreInner = humanPiece ? nvgRGBA(237, 112, 94, fillAlpha) : nvgRGBA(78, 78, 86, fillAlpha);
 						NVGcolor coreOuter = humanPiece ? nvgRGBA(152, 46, 38, fillAlpha) : nvgRGBA(12, 12, 16, fillAlpha);
@@ -1871,6 +2013,26 @@ struct CrownstepWidget final : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu);
 		Crownstep* module = dynamic_cast<Crownstep*>(this->module);
+		menu->addChild(new MenuSeparator());
+		MenuLabel* gameLabel = new MenuLabel();
+		gameLabel->text = "Game";
+		menu->addChild(gameLabel);
+		menu->addChild(createSubmenuItem("Mode", "", [=](Menu* gameMenu) {
+			for (int i = 0; i < int(GAME_MODE_NAMES.size()); ++i) {
+				gameMenu->addChild(createCheckMenuItem(
+					GAME_MODE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->gameMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->setGameMode(i, true);
+						}
+					}
+				));
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";

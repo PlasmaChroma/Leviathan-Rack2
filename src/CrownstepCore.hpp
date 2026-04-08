@@ -8,10 +8,20 @@
 
 namespace crownstep {
 
-static constexpr int BOARD_SIZE = 32;
+static constexpr int CHECKERS_BOARD_SIZE = 32;
+static constexpr int CHESS_BOARD_SIZE = 64;
+static constexpr int MAX_BOARD_SIZE = CHESS_BOARD_SIZE;
+static constexpr int BOARD_SIZE = CHECKERS_BOARD_SIZE;
 static constexpr int HUMAN_SIDE = 1;
 static constexpr int AI_SIDE = -1;
-using BoardState = std::array<int, BOARD_SIZE>;
+using BoardState = std::array<int, MAX_BOARD_SIZE>;
+
+static constexpr int CHESS_PAWN = 1;
+static constexpr int CHESS_KNIGHT = 2;
+static constexpr int CHESS_BISHOP = 3;
+static constexpr int CHESS_ROOK = 4;
+static constexpr int CHESS_QUEEN = 5;
+static constexpr int CHESS_KING = 6;
 
 struct Scale {
 	const char* name;
@@ -218,7 +228,7 @@ inline void addSimpleMovesForPiece(const BoardState& sourceBoard, int index, std
 }
 
 inline void collectCapturesRecursive(
-	const std::array<int, BOARD_SIZE>& sourceBoard,
+	const BoardState& sourceBoard,
 	int originIndex,
 	int currentIndex,
 	int currentPiece,
@@ -435,6 +445,451 @@ inline Move chooseAiMove(const BoardState& board, int difficulty) {
 	return moves[size_t(bestIndex)];
 }
 
+inline bool chessIndexToCoord(int index, int* row, int* col) {
+	if (index < 0 || index >= CHESS_BOARD_SIZE) {
+		return false;
+	}
+	if (row) {
+		*row = index / 8;
+	}
+	if (col) {
+		*col = index % 8;
+	}
+	return true;
+}
+
+inline int chessCoordToIndex(int row, int col) {
+	if (row < 0 || row >= 8 || col < 0 || col >= 8) {
+		return -1;
+	}
+	return row * 8 + col;
+}
+
+inline int chessPieceType(int piece) {
+	return std::abs(piece);
+}
+
+inline int chessBackRankPieceTypeForCol(int col) {
+	switch (col) {
+		case 0:
+		case 7: return CHESS_ROOK;
+		case 1:
+		case 6: return CHESS_KNIGHT;
+		case 2:
+		case 5: return CHESS_BISHOP;
+		case 3: return CHESS_QUEEN;
+		case 4: return CHESS_KING;
+		default: return 0;
+	}
+}
+
+inline BoardState chessMakeInitialBoard() {
+	BoardState board {};
+	for (int col = 0; col < 8; ++col) {
+		board[size_t(chessCoordToIndex(0, col))] = -chessBackRankPieceTypeForCol(col);
+		board[size_t(chessCoordToIndex(1, col))] = -CHESS_PAWN;
+		board[size_t(chessCoordToIndex(6, col))] = CHESS_PAWN;
+		board[size_t(chessCoordToIndex(7, col))] = chessBackRankPieceTypeForCol(col);
+	}
+	return board;
+}
+
+inline void chessAppendMove(
+	int originIndex,
+	int destinationIndex,
+	int movingPiece,
+	int capturedIndex,
+	std::vector<Move>* moves
+) {
+	if (!moves) {
+		return;
+	}
+	Move move;
+	move.originIndex = originIndex;
+	move.destinationIndex = destinationIndex;
+	move.path.push_back(destinationIndex);
+	move.isCapture = capturedIndex >= 0;
+	move.isMultiCapture = false;
+	move.isKing = (chessPieceType(movingPiece) == CHESS_KING);
+	if (capturedIndex >= 0) {
+		move.captured.push_back(capturedIndex);
+	}
+	moves->push_back(move);
+}
+
+inline void chessAddPseudoMovesForPiece(const BoardState& board, int index, std::vector<Move>* moves) {
+	if (!moves || index < 0 || index >= CHESS_BOARD_SIZE) {
+		return;
+	}
+	int piece = board[size_t(index)];
+	if (piece == 0) {
+		return;
+	}
+	int side = pieceSide(piece);
+	int row = 0;
+	int col = 0;
+	chessIndexToCoord(index, &row, &col);
+	int type = chessPieceType(piece);
+
+	if (type == CHESS_PAWN) {
+		int forward = (side == HUMAN_SIDE) ? -1 : 1;
+		int startRow = (side == HUMAN_SIDE) ? 6 : 1;
+		int nextRow = row + forward;
+		int nextIndex = chessCoordToIndex(nextRow, col);
+		if (nextIndex >= 0 && board[size_t(nextIndex)] == 0) {
+			chessAppendMove(index, nextIndex, piece, -1, moves);
+			int doubleRow = row + forward * 2;
+			int doubleIndex = chessCoordToIndex(doubleRow, col);
+			if (row == startRow && doubleIndex >= 0 && board[size_t(doubleIndex)] == 0) {
+				chessAppendMove(index, doubleIndex, piece, -1, moves);
+			}
+		}
+		for (int dc : {-1, 1}) {
+			int captureCol = col + dc;
+			int captureIndex = chessCoordToIndex(nextRow, captureCol);
+			if (captureIndex < 0) {
+				continue;
+			}
+			int capturePiece = board[size_t(captureIndex)];
+			if (capturePiece != 0 && pieceSide(capturePiece) == -side) {
+				chessAppendMove(index, captureIndex, piece, captureIndex, moves);
+			}
+		}
+		return;
+	}
+
+	if (type == CHESS_KNIGHT) {
+		static constexpr int kOffsets[8][2] = {
+			{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
+			{1, -2}, {1, 2}, {2, -1}, {2, 1}
+		};
+		for (const auto& offset : kOffsets) {
+			int r = row + offset[0];
+			int c = col + offset[1];
+			int destination = chessCoordToIndex(r, c);
+			if (destination < 0) {
+				continue;
+			}
+			int destinationPiece = board[size_t(destination)];
+			if (destinationPiece == 0) {
+				chessAppendMove(index, destination, piece, -1, moves);
+			}
+			else if (pieceSide(destinationPiece) == -side) {
+				chessAppendMove(index, destination, piece, destination, moves);
+			}
+		}
+		return;
+	}
+
+	auto addSliding = [&](const int directions[][2], int directionCount) {
+		for (int i = 0; i < directionCount; ++i) {
+			int dr = directions[i][0];
+			int dc = directions[i][1];
+			int r = row + dr;
+			int c = col + dc;
+			while (true) {
+				int destination = chessCoordToIndex(r, c);
+				if (destination < 0) {
+					break;
+				}
+				int destinationPiece = board[size_t(destination)];
+				if (destinationPiece == 0) {
+					chessAppendMove(index, destination, piece, -1, moves);
+				}
+				else {
+					if (pieceSide(destinationPiece) == -side) {
+						chessAppendMove(index, destination, piece, destination, moves);
+					}
+					break;
+				}
+				r += dr;
+				c += dc;
+			}
+		}
+	};
+
+	if (type == CHESS_BISHOP || type == CHESS_QUEEN) {
+		static constexpr int kDiagDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+		addSliding(kDiagDirs, 4);
+	}
+	if (type == CHESS_ROOK || type == CHESS_QUEEN) {
+		static constexpr int kOrthoDirs[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+		addSliding(kOrthoDirs, 4);
+	}
+	if (type == CHESS_KING) {
+		for (int dr = -1; dr <= 1; ++dr) {
+			for (int dc = -1; dc <= 1; ++dc) {
+				if (dr == 0 && dc == 0) {
+					continue;
+				}
+				int destination = chessCoordToIndex(row + dr, col + dc);
+				if (destination < 0) {
+					continue;
+				}
+				int destinationPiece = board[size_t(destination)];
+				if (destinationPiece == 0) {
+					chessAppendMove(index, destination, piece, -1, moves);
+				}
+				else if (pieceSide(destinationPiece) == -side) {
+					chessAppendMove(index, destination, piece, destination, moves);
+				}
+			}
+		}
+	}
+}
+
+inline int chessFindKingIndex(const BoardState& board, int side) {
+	const int target = side * CHESS_KING;
+	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
+		if (board[size_t(i)] == target) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+inline bool chessSquareIsAttackedBySide(const BoardState& board, int targetIndex, int attackerSide) {
+	int targetRow = 0;
+	int targetCol = 0;
+	if (!chessIndexToCoord(targetIndex, &targetRow, &targetCol)) {
+		return false;
+	}
+
+	// Pawn attacks.
+	int attackerForward = (attackerSide == HUMAN_SIDE) ? -1 : 1;
+	int pawnRow = targetRow - attackerForward;
+	for (int dc : {-1, 1}) {
+		int pawnCol = targetCol + dc;
+		int pawnIndex = chessCoordToIndex(pawnRow, pawnCol);
+		if (pawnIndex >= 0 && board[size_t(pawnIndex)] == attackerSide * CHESS_PAWN) {
+			return true;
+		}
+	}
+
+	// Knight attacks.
+	static constexpr int kKnightOffsets[8][2] = {
+		{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
+		{1, -2}, {1, 2}, {2, -1}, {2, 1}
+	};
+	for (const auto& offset : kKnightOffsets) {
+		int index = chessCoordToIndex(targetRow + offset[0], targetCol + offset[1]);
+		if (index >= 0 && board[size_t(index)] == attackerSide * CHESS_KNIGHT) {
+			return true;
+		}
+	}
+
+	auto attackedBySlider = [&](const int directions[][2], int directionCount, int sliderA, int sliderB) {
+		for (int i = 0; i < directionCount; ++i) {
+			int dr = directions[i][0];
+			int dc = directions[i][1];
+			int r = targetRow + dr;
+			int c = targetCol + dc;
+			while (true) {
+				int index = chessCoordToIndex(r, c);
+				if (index < 0) {
+					break;
+				}
+				int piece = board[size_t(index)];
+				if (piece != 0) {
+					if (pieceSide(piece) == attackerSide) {
+						int type = chessPieceType(piece);
+						if (type == sliderA || type == sliderB) {
+							return true;
+						}
+					}
+					break;
+				}
+				r += dr;
+				c += dc;
+			}
+		}
+		return false;
+	};
+
+	static constexpr int kDiagDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+	if (attackedBySlider(kDiagDirs, 4, CHESS_BISHOP, CHESS_QUEEN)) {
+		return true;
+	}
+	static constexpr int kOrthoDirs[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+	if (attackedBySlider(kOrthoDirs, 4, CHESS_ROOK, CHESS_QUEEN)) {
+		return true;
+	}
+
+	// King attacks.
+	for (int dr = -1; dr <= 1; ++dr) {
+		for (int dc = -1; dc <= 1; ++dc) {
+			if (dr == 0 && dc == 0) {
+				continue;
+			}
+			int index = chessCoordToIndex(targetRow + dr, targetCol + dc);
+			if (index >= 0 && board[size_t(index)] == attackerSide * CHESS_KING) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+inline bool chessIsKingInCheck(const BoardState& board, int side) {
+	int kingIndex = chessFindKingIndex(board, side);
+	if (kingIndex < 0) {
+		return true;
+	}
+	return chessSquareIsAttackedBySide(board, kingIndex, -side);
+}
+
+inline BoardState chessApplyMoveToBoard(const BoardState& sourceBoard, const Move& move) {
+	BoardState nextBoard = sourceBoard;
+	if (move.originIndex < 0 || move.originIndex >= CHESS_BOARD_SIZE ||
+		move.destinationIndex < 0 || move.destinationIndex >= CHESS_BOARD_SIZE) {
+		return nextBoard;
+	}
+	int movingPiece = nextBoard[size_t(move.originIndex)];
+	if (movingPiece == 0) {
+		return nextBoard;
+	}
+	nextBoard[size_t(move.originIndex)] = 0;
+	for (int captureIndex : move.captured) {
+		if (captureIndex >= 0 && captureIndex < CHESS_BOARD_SIZE) {
+			nextBoard[size_t(captureIndex)] = 0;
+		}
+	}
+	int destinationRow = 0;
+	chessIndexToCoord(move.destinationIndex, &destinationRow, nullptr);
+	if (chessPieceType(movingPiece) == CHESS_PAWN) {
+		bool promote = (pieceSide(movingPiece) == HUMAN_SIDE) ? (destinationRow == 0) : (destinationRow == 7);
+		if (promote) {
+			movingPiece = pieceSide(movingPiece) * CHESS_QUEEN;
+		}
+	}
+	nextBoard[size_t(move.destinationIndex)] = movingPiece;
+	return nextBoard;
+}
+
+inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side) {
+	std::vector<Move> pseudo;
+	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
+		int piece = sourceBoard[size_t(i)];
+		if (piece == 0 || pieceSide(piece) != side) {
+			continue;
+		}
+		chessAddPseudoMovesForPiece(sourceBoard, i, &pseudo);
+	}
+
+	std::vector<Move> legal;
+	legal.reserve(pseudo.size());
+	for (const Move& move : pseudo) {
+		BoardState nextBoard = chessApplyMoveToBoard(sourceBoard, move);
+		if (!chessIsKingInCheck(nextBoard, side)) {
+			legal.push_back(move);
+		}
+	}
+	return legal;
+}
+
+inline int chessPieceMaterialValue(int pieceType) {
+	switch (pieceType) {
+		case CHESS_PAWN: return 100;
+		case CHESS_KNIGHT: return 320;
+		case CHESS_BISHOP: return 330;
+		case CHESS_ROOK: return 500;
+		case CHESS_QUEEN: return 900;
+		case CHESS_KING: return 20000;
+		default: return 0;
+	}
+}
+
+inline int chessEvaluateBoardMaterial(const BoardState& board) {
+	int score = 0;
+	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
+		int piece = board[size_t(i)];
+		if (piece == 0) {
+			continue;
+		}
+		int value = chessPieceMaterialValue(chessPieceType(piece));
+		score += (pieceSide(piece) == AI_SIDE) ? value : -value;
+	}
+	return score;
+}
+
+inline int chessEvaluatePosition(const BoardState& board) {
+	std::vector<Move> aiMoves = chessGenerateLegalMovesForSide(board, AI_SIDE);
+	std::vector<Move> humanMoves = chessGenerateLegalMovesForSide(board, HUMAN_SIDE);
+
+	int score = chessEvaluateBoardMaterial(board);
+	score += int(aiMoves.size()) * 4;
+	score -= int(humanMoves.size()) * 4;
+
+	if (humanMoves.empty()) {
+		score += chessIsKingInCheck(board, HUMAN_SIDE) ? 100000 : 0;
+	}
+	if (aiMoves.empty()) {
+		score -= chessIsKingInCheck(board, AI_SIDE) ? 100000 : 0;
+	}
+	return score;
+}
+
+inline int chessSearchDepthForDifficulty(int difficulty) {
+	switch (std::max(0, std::min(difficulty, 2))) {
+		case 0: return 1;
+		case 2: return 3;
+		default: return 2;
+	}
+}
+
+inline int chessSearchScore(const BoardState& board, int sideToMove, int depth, int alpha, int beta) {
+	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove);
+	if (depth <= 0 || moves.empty()) {
+		int score = chessEvaluatePosition(board);
+		return (sideToMove == AI_SIDE) ? score : -score;
+	}
+	int best = std::numeric_limits<int>::min();
+	for (const Move& move : moves) {
+		BoardState nextBoard = chessApplyMoveToBoard(board, move);
+		int value = -chessSearchScore(nextBoard, -sideToMove, depth - 1, -beta, -alpha);
+		best = std::max(best, value);
+		alpha = std::max(alpha, value);
+		if (alpha >= beta) {
+			break;
+		}
+	}
+	return best;
+}
+
+inline Move chessChooseAiMove(const BoardState& board, int difficulty) {
+	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, AI_SIDE);
+	if (moves.empty()) {
+		return Move();
+	}
+	int depth = chessSearchDepthForDifficulty(difficulty);
+	int bestIndex = 0;
+	int bestScore = std::numeric_limits<int>::min();
+	for (int i = 0; i < int(moves.size()); ++i) {
+		BoardState nextBoard = chessApplyMoveToBoard(board, moves[size_t(i)]);
+		int score = -chessSearchScore(
+			nextBoard,
+			HUMAN_SIDE,
+			depth - 1,
+			std::numeric_limits<int>::min() / 2,
+			std::numeric_limits<int>::max() / 2
+		);
+		// Prefer captures when scores tie to keep the AI active in MVP mode.
+		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+	return moves[size_t(bestIndex)];
+}
+
+inline int chessWinnerForNoLegalMoves(const BoardState& board, int sideToMove) {
+	if (chessIsKingInCheck(board, sideToMove)) {
+		return -sideToMove;
+	}
+	return 0;
+}
+
 inline float interpretPitchIndexForMove(const Move& move, int interpretationMode) {
 	int mode = std::max(0, std::min(interpretationMode, int(PITCH_INTERPRETATION_NAMES.size()) - 1));
 	float origin = float(std::max(0, std::min(move.originIndex, BOARD_SIZE - 1)));
@@ -595,6 +1050,7 @@ struct IGameRules {
 	virtual int searchDepthForDifficulty(int difficulty) const = 0;
 	virtual int evaluatePosition(const BoardState& sourceBoard) const = 0;
 	virtual int evaluateBoardMaterial(const BoardState& sourceBoard) const = 0;
+	virtual int winnerForNoLegalMoves(const BoardState& sourceBoard, int sideToMove) const = 0;
 };
 
 struct CheckersRules final : IGameRules {
@@ -637,10 +1093,63 @@ struct CheckersRules final : IGameRules {
 	int evaluateBoardMaterial(const BoardState& sourceBoard) const override {
 		return crownstep::evaluateBoardMaterial(sourceBoard);
 	}
+	int winnerForNoLegalMoves(const BoardState&, int sideToMove) const override {
+		return -sideToMove;
+	}
+};
+
+struct ChessRules final : IGameRules {
+	const char* gameId() const override {
+		return "chess";
+	}
+	int humanSide() const override {
+		return HUMAN_SIDE;
+	}
+	int aiSide() const override {
+		return AI_SIDE;
+	}
+	int boardCellCount() const override {
+		return CHESS_BOARD_SIZE;
+	}
+	bool indexToCoord(int index, int* row, int* col) const override {
+		return crownstep::chessIndexToCoord(index, row, col);
+	}
+	int coordToIndex(int row, int col) const override {
+		return crownstep::chessCoordToIndex(row, col);
+	}
+	BoardState makeInitialBoard() const override {
+		return crownstep::chessMakeInitialBoard();
+	}
+	std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) const override {
+		return crownstep::chessGenerateLegalMovesForSide(sourceBoard, side);
+	}
+	BoardState applyMoveToBoard(const BoardState& sourceBoard, const Move& move) const override {
+		return crownstep::chessApplyMoveToBoard(sourceBoard, move);
+	}
+	Move chooseAiMove(const BoardState& board, int difficulty) const override {
+		return crownstep::chessChooseAiMove(board, difficulty);
+	}
+	int searchDepthForDifficulty(int difficulty) const override {
+		return crownstep::chessSearchDepthForDifficulty(difficulty);
+	}
+	int evaluatePosition(const BoardState& sourceBoard) const override {
+		return crownstep::chessEvaluatePosition(sourceBoard);
+	}
+	int evaluateBoardMaterial(const BoardState& sourceBoard) const override {
+		return crownstep::chessEvaluateBoardMaterial(sourceBoard);
+	}
+	int winnerForNoLegalMoves(const BoardState& sourceBoard, int sideToMove) const override {
+		return crownstep::chessWinnerForNoLegalMoves(sourceBoard, sideToMove);
+	}
 };
 
 inline const IGameRules& checkersRules() {
 	static CheckersRules rules;
+	return rules;
+}
+
+inline const IGameRules& chessRules() {
+	static ChessRules rules;
 	return rules;
 }
 

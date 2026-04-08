@@ -9,6 +9,7 @@ namespace {
 
 using crownstep::AI_SIDE;
 using crownstep::BOARD_SIZE;
+using crownstep::BoardState;
 using crownstep::HUMAN_SIDE;
 using crownstep::Move;
 
@@ -18,14 +19,14 @@ struct TestResult {
   std::string detail;
 };
 
-std::array<int, BOARD_SIZE> emptyBoard() {
-  std::array<int, BOARD_SIZE> board {};
+BoardState emptyBoard() {
+  BoardState board {};
   board.fill(0);
   return board;
 }
 
 TestResult testInitialBoardHasExpectedPieceCounts() {
-  std::array<int, BOARD_SIZE> board = crownstep::makeInitialBoard();
+  BoardState board = crownstep::makeInitialBoard();
   int human = 0;
   int ai = 0;
   for (int piece : board) {
@@ -42,7 +43,7 @@ TestResult testInitialBoardHasExpectedPieceCounts() {
 }
 
 TestResult testForcedCaptureSuppressesSimpleMoves() {
-  std::array<int, BOARD_SIZE> board = emptyBoard();
+  BoardState board = emptyBoard();
   board[size_t(crownstep::coordToIndex(5, 0))] = 1;
   board[size_t(crownstep::coordToIndex(4, 1))] = -1;
 
@@ -53,7 +54,7 @@ TestResult testForcedCaptureSuppressesSimpleMoves() {
 }
 
 TestResult testMultiCaptureChainIsGeneratedAsSingleMove() {
-  std::array<int, BOARD_SIZE> board = emptyBoard();
+  BoardState board = emptyBoard();
   board[size_t(crownstep::coordToIndex(5, 0))] = 1;
   board[size_t(crownstep::coordToIndex(4, 1))] = -1;
   board[size_t(crownstep::coordToIndex(2, 3))] = -1;
@@ -66,12 +67,12 @@ TestResult testMultiCaptureChainIsGeneratedAsSingleMove() {
 }
 
 TestResult testPromotionSetsKingFlagAndBoardState() {
-  std::array<int, BOARD_SIZE> board = emptyBoard();
+  BoardState board = emptyBoard();
   board[size_t(crownstep::coordToIndex(1, 2))] = 1;
 
   std::vector<Move> moves = crownstep::generateLegalMovesForSide(board, HUMAN_SIDE);
   bool foundPromotion = false;
-  std::array<int, BOARD_SIZE> promotedBoard = board;
+  BoardState promotedBoard = board;
   for (const Move& move : moves) {
     if (move.destinationIndex == crownstep::coordToIndex(0, 1)) {
       foundPromotion = move.isKing;
@@ -113,7 +114,7 @@ TestResult testSequenceWindowUsesRecentHistorySlice() {
 }
 
 TestResult testAiChoosesAvailableCapture() {
-  std::array<int, BOARD_SIZE> board = emptyBoard();
+  BoardState board = emptyBoard();
   board[size_t(crownstep::coordToIndex(2, 1))] = -1;
   board[size_t(crownstep::coordToIndex(3, 2))] = 1;
 
@@ -153,6 +154,104 @@ TestResult testCheckersRulesAdapterMatchesCoreFunctions() {
           "moves=" + std::to_string(adapted.size())};
 }
 
+TestResult testChessInitialBoardAndMoveCount() {
+  const crownstep::IGameRules& rules = crownstep::chessRules();
+  BoardState board = rules.makeInitialBoard();
+  int white = 0;
+  int black = 0;
+  for (int i = 0; i < rules.boardCellCount(); ++i) {
+    int piece = board[size_t(i)];
+    if (piece > 0) {
+      white++;
+    } else if (piece < 0) {
+      black++;
+    }
+  }
+  std::vector<Move> whiteMoves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  bool pass = (white == 16) && (black == 16) && (whiteMoves.size() == 20);
+  return {"Chess initial board has pieces + 20 opening moves", pass,
+          "white=" + std::to_string(white) + " black=" + std::to_string(black) +
+            " moves=" + std::to_string(whiteMoves.size())};
+}
+
+TestResult testChessPinnedPieceCannotExposeKing() {
+  const crownstep::IGameRules& rules = crownstep::chessRules();
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(6, 4))] = crownstep::CHESS_ROOK;
+  board[size_t(crownstep::chessCoordToIndex(0, 4))] = -crownstep::CHESS_ROOK;
+  board[size_t(crownstep::chessCoordToIndex(0, 0))] = -crownstep::CHESS_KING;
+
+  std::vector<Move> moves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  int illegalDestination = crownstep::chessCoordToIndex(6, 5); // e2 -> f2 would expose the king.
+  bool foundIllegal = false;
+  for (const Move& move : moves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(6, 4) && move.destinationIndex == illegalDestination) {
+      foundIllegal = true;
+      break;
+    }
+  }
+  return {"Chess legal filtering prevents pinned-piece self-check", !foundIllegal,
+          "moves=" + std::to_string(moves.size())};
+}
+
+TestResult testChessStalemateIsDraw() {
+  const crownstep::IGameRules& rules = crownstep::chessRules();
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 7))] = crownstep::CHESS_KING;       // Human king h1
+  board[size_t(crownstep::chessCoordToIndex(6, 5))] = -crownstep::CHESS_KING;      // AI king f2
+  board[size_t(crownstep::chessCoordToIndex(5, 6))] = -crownstep::CHESS_QUEEN;     // AI queen g3
+
+  std::vector<Move> humanMoves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  int winner = rules.winnerForNoLegalMoves(board, HUMAN_SIDE);
+  bool pass = humanMoves.empty() && winner == 0;
+  return {"Chess stalemate reports draw winner=0", pass,
+          "moves=" + std::to_string(humanMoves.size()) + " winner=" + std::to_string(winner)};
+}
+
+TestResult testChessCheckmateReportsWinner() {
+  const crownstep::IGameRules& rules = crownstep::chessRules();
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 7))] = crownstep::CHESS_KING;       // Human king h1
+  board[size_t(crownstep::chessCoordToIndex(5, 5))] = -crownstep::CHESS_KING;      // AI king f3
+  board[size_t(crownstep::chessCoordToIndex(6, 6))] = -crownstep::CHESS_QUEEN;     // AI queen g2
+
+  std::vector<Move> humanMoves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  int winner = rules.winnerForNoLegalMoves(board, HUMAN_SIDE);
+  bool pass = humanMoves.empty() && winner == AI_SIDE;
+  return {"Chess checkmate reports opposing winner", pass,
+          "moves=" + std::to_string(humanMoves.size()) + " winner=" + std::to_string(winner)};
+}
+
+TestResult testChessPromotionAutoQueensPawn() {
+  const crownstep::IGameRules& rules = crownstep::chessRules();
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(0, 4))] = -crownstep::CHESS_KING;
+  board[size_t(crownstep::chessCoordToIndex(1, 0))] = crownstep::CHESS_PAWN;
+
+  std::vector<Move> moves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  Move promotionMove;
+  bool found = false;
+  for (const Move& move : moves) {
+    if (move.originIndex == crownstep::chessCoordToIndex(1, 0) &&
+        move.destinationIndex == crownstep::chessCoordToIndex(0, 0)) {
+      promotionMove = move;
+      found = true;
+      break;
+    }
+  }
+  BoardState promoted = found ? rules.applyMoveToBoard(board, promotionMove) : board;
+  int promotedPiece = promoted[size_t(crownstep::chessCoordToIndex(0, 0))];
+  bool pass = found && promotedPiece == crownstep::CHESS_QUEEN;
+  return {"Chess pawn promotion auto-queens", pass,
+          "found=" + std::to_string(found ? 1 : 0) + " piece=" + std::to_string(promotedPiece)};
+}
+
 } // namespace
 
 int main() {
@@ -166,6 +265,11 @@ int main() {
   tests.push_back(testAiChoosesAvailableCapture());
   tests.push_back(testPitchDividerModesScaleBoardValuesAndCenterOffset());
   tests.push_back(testCheckersRulesAdapterMatchesCoreFunctions());
+  tests.push_back(testChessInitialBoardAndMoveCount());
+  tests.push_back(testChessPinnedPieceCannotExposeKing());
+  tests.push_back(testChessStalemateIsDraw());
+  tests.push_back(testChessCheckmateReportsWinner());
+  tests.push_back(testChessPromotionAutoQueensPawn());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";
