@@ -32,9 +32,11 @@ TEST_BINS := \
 	build/tests/temporaldeck_platter_input_spec \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
-	build/tests/crownstep_spec
+	build/tests/crownstep_spec \
+	build/tests/panel_svg_utils_spec \
+	build/tests/crownstep_persistence_spec
 
-.PHONY: test test-build
+.PHONY: test test-build test-odr
 test-build: $(TEST_BINS)
 
 test: test-build
@@ -48,6 +50,26 @@ test: test-build
 	@build/tests/temporaldeck_sample_prep_spec
 	@build/tests/temporaldeck_virtual_integration_spec
 	@build/tests/crownstep_spec
+	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/panel_svg_utils_spec
+	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/crownstep_persistence_spec
+	@$(MAKE) --no-print-directory test-odr
+
+test-odr: plugin.so
+	@set -- $$(nm -C --defined-only plugin.so | awk '\
+		/ modelCrownstep$$/ {mc++} \
+		/ modelTDScope$$/ {mt++} \
+		/ T panel_svg::loadRectFromSvgMm\(/ {rh++} \
+		/ T panel_svg::loadPointFromSvgMm\(/ {ph++} \
+		END {printf "%d %d %d %d", mc+0, mt+0, rh+0, ph+0}'); \
+	model_crownstep_count=$$1; \
+	model_tdscope_count=$$2; \
+	rect_helper_count=$$3; \
+	point_helper_count=$$4; \
+	if [ "$$model_crownstep_count" -ne 1 ] || [ "$$model_tdscope_count" -ne 1 ] || [ "$$rect_helper_count" -ne 1 ] || [ "$$point_helper_count" -ne 1 ]; then \
+		echo "[FAIL] ODR/link symbol uniqueness check :: modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count"; \
+		exit 1; \
+	fi; \
+	echo "[PASS] ODR/link symbol uniqueness check :: modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count"
 
 build/tests:
 	@mkdir -p $@
@@ -81,3 +103,9 @@ build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_in
 
 build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+
+build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp src/Crownstep.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
