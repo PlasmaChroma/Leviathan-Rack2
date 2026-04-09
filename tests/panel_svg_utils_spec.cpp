@@ -85,6 +85,26 @@ TestResult testPointParsesRectCenter() {
             " y=" + std::to_string(point.y)};
 }
 
+TestResult testCircleParsesWithExplicitScale() {
+  const std::string path = makeTempSvgPath("panel_svg_circle_scaled");
+  const std::string svg =
+    R"SVG(<svg xmlns="http://www.w3.org/2000/svg"><circle id="PLATTER_AREA" cx="50.8" cy="53.971752" r="37.031235"/></svg>)SVG";
+  if (!writeTextFile(path, svg)) {
+    return {"Circle parser with scale", false, "failed to write temp SVG"};
+  }
+
+  Vec center;
+  float radius = 0.f;
+  bool ok = panel_svg::loadCircleFromSvg(path, "PLATTER_AREA", &center, &radius, 1.f);
+  bool pass = ok
+    && nearlyEqual(center.x, 50.8f)
+    && nearlyEqual(center.y, 53.971752f)
+    && nearlyEqual(radius, 37.031235f);
+  return {"Circle parser supports explicit unit scale", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) + " cx=" + std::to_string(center.x) +
+            " cy=" + std::to_string(center.y) + " r=" + std::to_string(radius)};
+}
+
 TestResult testMissingElementFailsGracefully() {
   const std::string path = makeTempSvgPath("panel_svg_missing");
   const std::string svg = R"SVG(<svg xmlns="http://www.w3.org/2000/svg"><rect id="SOME_OTHER_ID" x="1" y="1" width="1" height="1"/></svg>)SVG";
@@ -109,6 +129,7 @@ int main() {
   tests.push_back(testRectParsesInMillimeters());
   tests.push_back(testPointParsesCircleCenter());
   tests.push_back(testPointParsesRectCenter());
+  tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
 
   int failed = 0;

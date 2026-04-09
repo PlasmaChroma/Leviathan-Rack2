@@ -1,5 +1,6 @@
 #include "TemporalDeck.hpp"
 #include "TemporalDeckMenuUtils.hpp"
+#include "PanelSvgUtils.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -141,49 +142,11 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   ~TemporalDeckPlatterWidget() override { stopTraceCapture(); }
 };
 
-static bool loadSvgCircleMm(const std::string &svgPath, const std::string &circleId, Vec *outCenterMm,
-                            float *outRadiusMm) {
-  std::ifstream svgFile(svgPath);
-  if (!svgFile.good()) {
-    return false;
-  }
-  std::ostringstream svgBuffer;
-  svgBuffer << svgFile.rdbuf();
-  const std::string svgText = svgBuffer.str();
-
-  const std::regex tagRe("<circle\\b[^>]*\\bid\\s*=\\s*\"" + circleId + "\"[^>]*/?>", std::regex::icase);
-  std::smatch tagMatch;
-  if (!std::regex_search(svgText, tagMatch, tagRe) || tagMatch.empty()) {
-    return false;
-  }
-
-  const std::string tag = tagMatch.str(0);
-  auto parseAttr = [&](const char *attr, float *out) {
-    const std::regex attrRe(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
-    std::smatch attrMatch;
-    if (!std::regex_search(tag, attrMatch, attrRe)) {
-      return false;
-    }
-    *out = std::stof(attrMatch.str(1));
-    return true;
-  };
-
-  float cxMm = 0.f;
-  float cyMm = 0.f;
-  float radiusMm = 0.f;
-  if (!parseAttr("cx", &cxMm) || !parseAttr("cy", &cyMm) || !parseAttr("r", &radiusMm)) {
-    return false;
-  }
-
-  *outCenterMm = Vec(cxMm, cyMm);
-  *outRadiusMm = radiusMm;
-  return true;
-}
-
 static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
   Vec centerMm;
   float radiusMm = 0.f;
-  if (!loadSvgCircleMm(asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm)) {
+  if (!panel_svg::loadCircleFromSvg(
+          asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
     return false;
   }
   centerPx = mm2px(centerMm);

@@ -62,20 +62,28 @@ test: test-build
 
 test-odr: plugin.so
 	@set -- $$(nm -C --defined-only plugin.so | awk '\
+		/ modelIntegralFlux$$/ {mi++} \
+		/ modelProc$$/ {mp++} \
+		/ modelTemporalDeck$$/ {md++} \
 		/ modelCrownstep$$/ {mc++} \
 		/ modelTDScope$$/ {mt++} \
 		/ T panel_svg::loadRectFromSvgMm\(/ {rh++} \
 		/ T panel_svg::loadPointFromSvgMm\(/ {ph++} \
-		END {printf "%d %d %d %d", mc+0, mt+0, rh+0, ph+0}'); \
-	model_crownstep_count=$$1; \
-	model_tdscope_count=$$2; \
-	rect_helper_count=$$3; \
-	point_helper_count=$$4; \
-	if [ "$$model_crownstep_count" -ne 1 ] || [ "$$model_tdscope_count" -ne 1 ] || [ "$$rect_helper_count" -ne 1 ] || [ "$$point_helper_count" -ne 1 ]; then \
-		echo "[FAIL] ODR/link symbol uniqueness check :: modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count"; \
+		/ T panel_svg::loadCircleFromSvg\(/ {ch++} \
+		END {printf "%d %d %d %d %d %d %d %d", mi+0, mp+0, md+0, mc+0, mt+0, rh+0, ph+0, ch+0}'); \
+	model_integralflux_count=$$1; \
+	model_proc_count=$$2; \
+	model_temporaldeck_count=$$3; \
+	model_crownstep_count=$$4; \
+	model_tdscope_count=$$5; \
+	rect_helper_count=$$6; \
+	point_helper_count=$$7; \
+	circle_helper_count=$$8; \
+	if [ "$$model_integralflux_count" -ne 1 ] || [ "$$model_proc_count" -ne 1 ] || [ "$$model_temporaldeck_count" -ne 1 ] || [ "$$model_crownstep_count" -ne 1 ] || [ "$$model_tdscope_count" -ne 1 ] || [ "$$rect_helper_count" -ne 1 ] || [ "$$point_helper_count" -ne 1 ] || [ "$$circle_helper_count" -ne 1 ]; then \
+		echo "[FAIL] ODR/link symbol uniqueness check :: modelIntegralFlux=$$model_integralflux_count modelProc=$$model_proc_count modelTemporalDeck=$$model_temporaldeck_count modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count circleHelper=$$circle_helper_count"; \
 		exit 1; \
 	fi; \
-	echo "[PASS] ODR/link symbol uniqueness check :: modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count"
+	echo "[PASS] ODR/link symbol uniqueness check :: modelIntegralFlux=$$model_integralflux_count modelProc=$$model_proc_count modelTemporalDeck=$$model_temporaldeck_count modelCrownstep=$$model_crownstep_count modelTDScope=$$model_tdscope_count rectHelper=$$rect_helper_count pointHelper=$$point_helper_count circleHelper=$$circle_helper_count"
 
 build/tests:
 	@mkdir -p $@

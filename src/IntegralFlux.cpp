@@ -1,11 +1,9 @@
 #include "plugin.hpp"
+#include "PanelSvgUtils.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
 #include <atomic>
-#include <fstream>
-#include <regex>
-#include <sstream>
 
 
 struct IntegralFlux : Module {
@@ -1292,45 +1290,6 @@ struct WavePreviewWidget : Widget {
 	}
 };
 
-static bool loadPreviewRectMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
-	std::ifstream svgFile(svgPath);
-	if (!svgFile.good()) {
-		return false;
-	}
-	std::ostringstream svgBuffer;
-	svgBuffer << svgFile.rdbuf();
-	const std::string svgText = svgBuffer.str();
-
-	const std::regex rectRegex("<rect\\b[^>]*\\bid\\s*=\\s*\"" + rectId + "\"[^>]*>", std::regex::icase);
-	std::smatch rectMatch;
-	if (!std::regex_search(svgText, rectMatch, rectRegex)) {
-		return false;
-	}
-	const std::string rectTag = rectMatch.str(0);
-
-	auto parseAttrMm = [&](const char* attr, float& outMm) {
-		const std::regex attrRegex(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
-		std::smatch attrMatch;
-		if (!std::regex_search(rectTag, attrMatch, attrRegex)) {
-			return false;
-		}
-		outMm = std::stof(attrMatch.str(1)) * 0.01f;
-		return true;
-	};
-
-	float xMm = 0.f;
-	float yMm = 0.f;
-	float wMm = 0.f;
-	float hMm = 0.f;
-	if (!parseAttrMm("x", xMm) || !parseAttrMm("y", yMm) || !parseAttrMm("width", wMm) || !parseAttrMm("height", hMm)) {
-		return false;
-	}
-
-	outRect->pos = Vec(xMm, yMm);
-	outRect->size = Vec(wMm, hMm);
-	return true;
-}
-
 static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	rect.pos.x += insetMm;
 	rect.pos.y += insetMm;
@@ -1368,7 +1327,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
 			math::Rect previewRectMm;
-			if (loadPreviewRectMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch1Preview->box.pos = mm2px(previewRectMm.pos);
 				ch1Preview->box.size = mm2px(previewRectMm.size);
@@ -1382,7 +1341,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(4);
 			math::Rect previewRectMm;
-			if (loadPreviewRectMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch4Preview->box.pos = mm2px(previewRectMm.pos);
 				ch4Preview->box.size = mm2px(previewRectMm.size);
