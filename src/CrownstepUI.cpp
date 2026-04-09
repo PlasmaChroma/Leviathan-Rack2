@@ -5,6 +5,7 @@ namespace {
 
 constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
+constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
 	{
 		"piece-black-king",
@@ -30,6 +31,8 @@ struct ChessPieceAtlasCache {
 	bool available = false;
 	math::Rect glyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS];
 	bool hasGlyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] {};
+	float rowMaxGlyphHeight[CHESS_ATLAS_ROWS] {};
+	float maxGlyphHeight = 0.f;
 };
 
 int chessAtlasColumnForPieceType(int pieceType) {
@@ -115,12 +118,25 @@ void buildChessPieceAtlasBounds(ChessPieceAtlasCache* cache) {
 	}
 
 	bool complete = true;
+	cache->maxGlyphHeight = 0.f;
 	for (int row = 0; row < CHESS_ATLAS_ROWS; ++row) {
+		float rowMaxGlyphHeight = 0.f;
 		for (int col = 0; col < CHESS_ATLAS_COLS; ++col) {
 			if (!cache->hasGlyphBounds[row][col]) {
 				complete = false;
+				continue;
 			}
+			const float glyphHeight = cache->glyphBounds[row][col].size.y;
+			rowMaxGlyphHeight = std::max(rowMaxGlyphHeight, glyphHeight);
+			cache->maxGlyphHeight = std::max(cache->maxGlyphHeight, glyphHeight);
 		}
+		cache->rowMaxGlyphHeight[row] = rowMaxGlyphHeight;
+		if (rowMaxGlyphHeight <= 0.f) {
+			complete = false;
+		}
+	}
+	if (cache->maxGlyphHeight <= 0.f) {
+		complete = false;
 	}
 	cache->available = complete;
 }
@@ -171,19 +187,32 @@ bool drawChessAtlasPiece(
 	if (src.size.x <= 0.f || src.size.y <= 0.f) {
 		return false;
 	}
+	float scaleRefHeight = 0.f;
+	if (CHESS_ATLAS_SCALE_PER_COLOR) {
+		scaleRefHeight = cache.rowMaxGlyphHeight[row];
+	}
+	else {
+		scaleRefHeight = cache.maxGlyphHeight;
+	}
+	if (scaleRefHeight <= 0.f) {
+		return false;
+	}
 
 	const float targetH = std::min(cellWidth, cellHeight) * 0.90f;
-	const float scale = targetH / src.size.y;
+	// Shared scale preserves the relative sizes authored in the SVG.
+	const float scale = targetH / scaleRefHeight;
 	const float srcCx = src.pos.x + src.size.x * 0.5f;
-	const float srcCy = src.pos.y + src.size.y * 0.5f;
+	const float srcBottomY = src.pos.y + src.size.y;
 	const float yOffset = std::min(cellWidth, cellHeight) * 0.03f;
+	const float baselineY = centerY + targetH * 0.5f + yOffset;
 	const float clipPad = 2.f;
 
 	nvgSave(vg);
 	nvgGlobalAlpha(vg, clamp(alpha, 0.f, 1.f));
-	nvgTranslate(vg, centerX, centerY + yOffset);
+	// Anchor by bottom edge so shorter pieces do not float.
+	nvgTranslate(vg, centerX, baselineY);
 	nvgScale(vg, scale, scale);
-	nvgTranslate(vg, -srcCx, -srcCy);
+	nvgTranslate(vg, -srcCx, -srcBottomY);
 	nvgScissor(
 		vg,
 		src.pos.x - clipPad,
