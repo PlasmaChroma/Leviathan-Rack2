@@ -150,8 +150,18 @@ void Crownstep::process(const ProcessArgs& args) {
 	outputs[MOD_OUTPUT].setVoltage(modOutputVolts);
 	outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
 
-	lights[RUN_LIGHT].setBrightness(0.f);
-	lights[HUMAN_TURN_LIGHT].setBrightness(!gameOver && turnSide == humanSide() ? 1.f : 0.f);
-	lights[AI_TURN_LIGHT].setBrightness(!gameOver && turnSide == aiSide() ? 1.f : 0.f);
-}
+	bool humanLedOn = false;
+	bool aiLedOn = false;
+	if (gameOver) {
+		humanLedOn = (winnerSide == humanSide());
+		aiLedOn = (winnerSide == aiSide());
+	}
+	else {
+		humanLedOn = (turnSide == humanSide());
+		aiLedOn = (turnSide == aiSide());
+	}
 
+	lights[RUN_LIGHT].setBrightness(0.f);
+	lights[HUMAN_TURN_LIGHT].setBrightness(humanLedOn ? 1.f : 0.f);
+	lights[AI_TURN_LIGHT].setBrightness(aiLedOn ? 1.f : 0.f);
+}
