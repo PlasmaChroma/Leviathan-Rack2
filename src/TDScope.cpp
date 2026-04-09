@@ -217,6 +217,7 @@ struct TDScopeDisplayWidget final : Widget {
     float totalSamples = 1.f;
     bool hasData = false;
     int64_t key = std::numeric_limits<int64_t>::min();
+    uint64_t updateSeq = 0;
   };
 
   TDScope *module = nullptr;
@@ -565,19 +566,25 @@ struct TDScopeDisplayWidget final : Widget {
             bucket.totalSamples = liveBucketSpanSamples;
             bucket.key = bucketIndex;
           }
+          if (bucket.updateSeq != msg.publishSeq) {
+            bucket.minNorm = 0.f;
+            bucket.maxNorm = 0.f;
+            bucket.coveredSamples = 0.f;
+            bucket.totalSamples = liveBucketSpanSamples;
+            bucket.hasData = false;
+            bucket.updateSeq = msg.publishSeq;
+          }
 
           if (!bucket.hasData) {
             bucket.minNorm = binMinNorm;
             bucket.maxNorm = binMaxNorm;
             bucket.hasData = true;
-          } else if (bucket.coveredSamples < bucket.totalSamples) {
+          } else {
             bucket.minNorm = std::min(bucket.minNorm, binMinNorm);
             bucket.maxNorm = std::max(bucket.maxNorm, binMaxNorm);
           }
 
-          if (bucket.coveredSamples < bucket.totalSamples) {
-            bucket.coveredSamples = std::min(bucket.totalSamples, bucket.coveredSamples + overlap);
-          }
+          bucket.coveredSamples = std::min(bucket.totalSamples, bucket.coveredSamples + overlap);
         }
       }
     };
