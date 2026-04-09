@@ -5,6 +5,24 @@ namespace {
 
 constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
+constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
+	{
+		"piece-black-king",
+		"piece-black-queen",
+		"piece-black-bishop",
+		"piece-black-knight",
+		"piece-black-rook",
+		"piece-black-pawn"
+	},
+	{
+		"piece-white-king",
+		"piece-white-queen",
+		"piece-white-bishop",
+		"piece-white-knight",
+		"piece-white-rook",
+		"piece-white-pawn"
+	}
+};
 
 struct ChessPieceAtlasCache {
 	std::shared_ptr<Svg> svg;
@@ -51,19 +69,26 @@ void growGlyphBounds(math::Rect* bounds, bool* hasBounds, float minX, float minY
 	bounds->size = Vec(x1 - x0, y1 - y0);
 }
 
+bool svgShapeIdMatchesPiece(const char* shapeId, const char* pieceId) {
+	if (!shapeId || !pieceId || !shapeId[0] || !pieceId[0]) {
+		return false;
+	}
+	const std::string shapeIdText(shapeId);
+	const std::string pieceIdText(pieceId);
+	if (shapeIdText == pieceIdText) {
+		return true;
+	}
+	return shapeIdText.size() > pieceIdText.size()
+		&& shapeIdText.compare(0, pieceIdText.size(), pieceIdText) == 0
+		&& shapeIdText[pieceIdText.size()] == '-';
+}
+
 void buildChessPieceAtlasBounds(ChessPieceAtlasCache* cache) {
 	if (!cache || !cache->svg || !cache->svg->handle) {
 		return;
 	}
 
 	NSVGimage* image = cache->svg->handle;
-	const float imageW = image->width;
-	const float imageH = image->height;
-	if (imageW <= 0.f || imageH <= 0.f) {
-		return;
-	}
-
-	const float rowSplitY = imageH * 0.5f;
 	for (NSVGshape* shape = image->shapes; shape; shape = shape->next) {
 		if (!(shape->flags & NSVG_FLAGS_VISIBLE)) {
 			continue;
@@ -75,16 +100,18 @@ void buildChessPieceAtlasBounds(ChessPieceAtlasCache* cache) {
 		if (!(maxX > minX && maxY > minY)) {
 			continue;
 		}
-
-		float centerX = 0.5f * (minX + maxX);
-		float centerY = 0.5f * (minY + maxY);
-		int row = (centerY < rowSplitY) ? 0 : 1;
-		int col = clamp(int((centerX / imageW) * float(CHESS_ATLAS_COLS)), 0, CHESS_ATLAS_COLS - 1);
-		growGlyphBounds(
-			&cache->glyphBounds[row][col],
-			&cache->hasGlyphBounds[row][col],
-			minX, minY, maxX, maxY
-		);
+		for (int row = 0; row < CHESS_ATLAS_ROWS; ++row) {
+			for (int col = 0; col < CHESS_ATLAS_COLS; ++col) {
+				if (!svgShapeIdMatchesPiece(shape->id, CHESS_ATLAS_PIECE_IDS[row][col])) {
+					continue;
+				}
+				growGlyphBounds(
+					&cache->glyphBounds[row][col],
+					&cache->hasGlyphBounds[row][col],
+					minX, minY, maxX, maxY
+				);
+			}
+		}
 	}
 
 	bool complete = true;
