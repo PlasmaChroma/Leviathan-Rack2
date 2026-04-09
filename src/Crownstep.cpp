@@ -252,7 +252,8 @@ struct Crownstep : Module {
 	float modGlideTargetVolts = 0.f;
 	float modGlideStartSeconds = 0.f;
 	float modGlideDurationSeconds = 0.f;
-	float aiTurnDelayStartSeconds = 0.f;
+	double aiTurnDelayStartSeconds = 0.0;
+	double uiLastServiceSeconds = 0.0;
 	float captureFlashSeconds = 0.f;
 	bool modGlideActive = false;
 	bool aiTurnDelayPending = false;
@@ -281,6 +282,7 @@ struct Crownstep : Module {
 	bool aiWorkerStopRequested = false;
 	bool aiWorkerHasRequest = false;
 	bool aiWorkerHasResult = false;
+	mutable std::recursive_mutex sequenceMutex;
 
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -603,7 +605,41 @@ struct Crownstep : Module {
 		clearAiWorkerQueueState();
 		aiTurnDelayPending = true;
 		aiTurnDelayActive = false;
-		aiTurnDelayStartSeconds = 0.f;
+		aiTurnDelayStartSeconds = 0.0;
+		uiLastServiceSeconds = 0.0;
+	}
+
+	void advanceUiAnimationClock(double nowSeconds) {
+		if (nowSeconds <= 0.0) {
+			return;
+		}
+		if (uiLastServiceSeconds <= 0.0) {
+			uiLastServiceSeconds = nowSeconds;
+			return;
+		}
+		float dt = float(nowSeconds - uiLastServiceSeconds);
+		if (dt < 0.f) {
+			dt = 0.f;
+		}
+		// Clamp to avoid giant jumps after debugger pauses/window stalls.
+		dt = std::min(dt, 0.1f);
+		uiLastServiceSeconds = nowSeconds;
+
+		captureFlashSeconds = std::max(0.f, captureFlashSeconds - dt);
+		if (moveAnimation.active) {
+			moveAnimation.elapsedSeconds += dt;
+			if (moveAnimation.elapsedSeconds >= moveAnimation.durationSeconds) {
+				moveAnimation.active = false;
+				if (!moveAnimationQueue.empty()) {
+					moveAnimation = moveAnimationQueue.front();
+					moveAnimationQueue.erase(moveAnimationQueue.begin());
+				}
+			}
+		}
+		else if (!moveAnimationQueue.empty()) {
+			moveAnimation = moveAnimationQueue.front();
+			moveAnimationQueue.erase(moveAnimationQueue.begin());
+		}
 	}
 
 	int currentSequenceCap() {
@@ -759,8 +795,11 @@ struct Crownstep : Module {
 	void startNewGame() {
 		board = gameRules ? gameRules->makeInitialBoard() : crownstep::makeInitialBoard();
 		chessState = crownstep::chessInitialState();
-		history.clear();
-		moveHistory.clear();
+		{
+			std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+			history.clear();
+			moveHistory.clear();
+		}
 		highlightedDestinations.clear();
 		opponentHighlightedDestinations.clear();
 		selectedSquare = -1;
@@ -971,10 +1010,13 @@ struct Crownstep : Module {
 		}
 		lastMove = move;
 		lastMoveSide = moverSide;
-		moveHistory.push_back(move);
 		Step step = makeStepFromMove(move);
 		step.mod = expressiveModForMove(move, beforeBoard, afterBoard, moverSide);
-		history.push_back(step);
+		{
+			std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+			moveHistory.push_back(move);
+			history.push_back(step);
+		}
 		selectedSquare = -1;
 		highlightedDestinations.clear();
 		turnSide = opposingSide(moverSide);
@@ -985,6 +1027,9 @@ struct Crownstep : Module {
 
 	// UI-thread service: AI search runs in worker thread, UI applies ready moves.
 	void serviceAiTurnFromUiThread() {
+		double nowSeconds = system::getTime();
+		advanceUiAnimationClock(nowSeconds);
+
 		if (gameOver || turnSide != aiSide()) {
 			aiTurnDelayPending = false;
 			aiTurnDelayActive = false;
@@ -993,22 +1038,22 @@ struct Crownstep : Module {
 		}
 
 		if (aiTurnDelayPending) {
-			bool animationsActive = moveAnimation.active || !moveAnimationQueue.empty();
-			if (!aiTurnDelayActive) {
-				if (!animationsActive) {
-					aiTurnDelayActive = true;
-					aiTurnDelayStartSeconds = transportTimeSeconds;
-					// Start AI thinking immediately when the mandatory delay window starts.
-					dispatchAiRequestIfIdle();
+				bool animationsActive = moveAnimation.active || !moveAnimationQueue.empty();
+				if (!aiTurnDelayActive) {
+					if (!animationsActive) {
+						aiTurnDelayActive = true;
+						aiTurnDelayStartSeconds = nowSeconds;
+						// Start AI thinking immediately when the mandatory delay window starts.
+						dispatchAiRequestIfIdle();
+					}
+					return;
 				}
-				return;
-			}
 
-			if (transportTimeSeconds - aiTurnDelayStartSeconds < AI_TURN_DELAY_SECONDS) {
-				// Keep worker busy while we enforce minimum think-time.
-				dispatchAiRequestIfIdle();
-				return;
-			}
+				if (nowSeconds - aiTurnDelayStartSeconds < AI_TURN_DELAY_SECONDS) {
+					// Keep worker busy while we enforce minimum think-time.
+					dispatchAiRequestIfIdle();
+					return;
+				}
 
 			aiTurnDelayPending = false;
 			aiTurnDelayActive = false;
@@ -1070,14 +1115,17 @@ struct Crownstep : Module {
 	}
 
 	int activeLength() {
+		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		return crownstep::activeLength(int(history.size()), currentSequenceCap());
 	}
 
 	int activeStartIndex() {
+		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		return crownstep::activeStartIndex(int(history.size()), currentSequenceCap());
 	}
 
 	float pitchForSequenceIndex(int sequenceIndex) {
+		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		if (sequenceIndex < 0) {
 			return 0.f;
 		}
@@ -1098,6 +1146,7 @@ struct Crownstep : Module {
 	}
 
 	void emitStepAtClockEdge() {
+		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		int length = activeLength();
 		if (length <= 0) {
 			displayedStep = 0;
@@ -1149,21 +1198,6 @@ struct Crownstep : Module {
 
 	void process(const ProcessArgs& args) override {
 		transportTimeSeconds += args.sampleTime;
-		captureFlashSeconds = std::max(0.f, captureFlashSeconds - args.sampleTime);
-		if (moveAnimation.active) {
-			moveAnimation.elapsedSeconds += args.sampleTime;
-			if (moveAnimation.elapsedSeconds >= moveAnimation.durationSeconds) {
-				moveAnimation.active = false;
-				if (!moveAnimationQueue.empty()) {
-					moveAnimation = moveAnimationQueue.front();
-					moveAnimationQueue.erase(moveAnimationQueue.begin());
-				}
-			}
-		}
-		else if (!moveAnimationQueue.empty()) {
-			moveAnimation = moveAnimationQueue.front();
-			moveAnimationQueue.erase(moveAnimationQueue.begin());
-		}
 
 		if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
 			startNewGame();
@@ -1231,37 +1265,43 @@ struct Crownstep : Module {
 		json_object_set_new(rootJ, "board", boardJ);
 
 		json_t* historyJ = json_array();
-		for (const Step& step : history) {
-			json_t* stepJ = json_object();
-			json_object_set_new(stepJ, "pitch", json_real(step.pitch));
-			json_object_set_new(stepJ, "gate", json_boolean(step.gate));
-			json_object_set_new(stepJ, "accent", json_real(step.accent));
-			json_object_set_new(stepJ, "mod", json_real(step.mod));
-			json_array_append_new(historyJ, stepJ);
+		{
+			std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+			for (const Step& step : history) {
+				json_t* stepJ = json_object();
+				json_object_set_new(stepJ, "pitch", json_real(step.pitch));
+				json_object_set_new(stepJ, "gate", json_boolean(step.gate));
+				json_object_set_new(stepJ, "accent", json_real(step.accent));
+				json_object_set_new(stepJ, "mod", json_real(step.mod));
+				json_array_append_new(historyJ, stepJ);
+			}
 		}
 		json_object_set_new(rootJ, "history", historyJ);
 
 		json_t* moveHistoryJ = json_array();
-		for (const Move& move : moveHistory) {
-			json_t* moveJ = json_object();
-			json_object_set_new(moveJ, "origin", json_integer(move.originIndex));
-			json_object_set_new(moveJ, "destination", json_integer(move.destinationIndex));
-			json_object_set_new(moveJ, "isCapture", json_boolean(move.isCapture));
-			json_object_set_new(moveJ, "isMultiCapture", json_boolean(move.isMultiCapture));
-			json_object_set_new(moveJ, "isKing", json_boolean(move.isKing));
+		{
+			std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+			for (const Move& move : moveHistory) {
+				json_t* moveJ = json_object();
+				json_object_set_new(moveJ, "origin", json_integer(move.originIndex));
+				json_object_set_new(moveJ, "destination", json_integer(move.destinationIndex));
+				json_object_set_new(moveJ, "isCapture", json_boolean(move.isCapture));
+				json_object_set_new(moveJ, "isMultiCapture", json_boolean(move.isMultiCapture));
+				json_object_set_new(moveJ, "isKing", json_boolean(move.isKing));
 
-			json_t* pathJ = json_array();
-			for (int index : move.path) {
-				json_array_append_new(pathJ, json_integer(index));
-			}
-			json_object_set_new(moveJ, "path", pathJ);
+				json_t* pathJ = json_array();
+				for (int index : move.path) {
+					json_array_append_new(pathJ, json_integer(index));
+				}
+				json_object_set_new(moveJ, "path", pathJ);
 
-			json_t* capturedJ = json_array();
-			for (int index : move.captured) {
-				json_array_append_new(capturedJ, json_integer(index));
+				json_t* capturedJ = json_array();
+				for (int index : move.captured) {
+					json_array_append_new(capturedJ, json_integer(index));
+				}
+				json_object_set_new(moveJ, "captured", capturedJ);
+				json_array_append_new(moveHistoryJ, moveJ);
 			}
-			json_object_set_new(moveJ, "captured", capturedJ);
-			json_array_append_new(moveHistoryJ, moveJ);
 		}
 		json_object_set_new(rootJ, "moveHistory", moveHistoryJ);
 		return rootJ;
@@ -1386,57 +1426,60 @@ struct Crownstep : Module {
 			chessState = crownstep::chessInitialState();
 		}
 
-		history.clear();
-		json_t* historyJ = json_object_get(rootJ, "history");
-		if (historyJ && json_is_array(historyJ)) {
-			size_t index = 0;
-			json_t* stepJ = nullptr;
-			json_array_foreach(historyJ, index, stepJ) {
-				Step step;
-				step.pitch = float(json_number_value(json_object_get(stepJ, "pitch")));
-				step.gate = json_is_true(json_object_get(stepJ, "gate"));
-				step.accent = float(json_number_value(json_object_get(stepJ, "accent")));
-				step.mod = float(json_number_value(json_object_get(stepJ, "mod")));
-				history.push_back(step);
-			}
-		}
-
-		moveHistory.clear();
-		json_t* moveHistoryJ = json_object_get(rootJ, "moveHistory");
-		if (moveHistoryJ && json_is_array(moveHistoryJ)) {
-			size_t moveIndex = 0;
-			json_t* moveJ = nullptr;
-			json_array_foreach(moveHistoryJ, moveIndex, moveJ) {
-				Move move;
-				move.originIndex = int(json_integer_value(json_object_get(moveJ, "origin")));
-				move.destinationIndex = int(json_integer_value(json_object_get(moveJ, "destination")));
-				move.isCapture = json_is_true(json_object_get(moveJ, "isCapture"));
-				move.isMultiCapture = json_is_true(json_object_get(moveJ, "isMultiCapture"));
-				move.isKing = json_is_true(json_object_get(moveJ, "isKing"));
-
-				json_t* pathJ = json_object_get(moveJ, "path");
-				if (pathJ && json_is_array(pathJ)) {
-					size_t pathIndex = 0;
-					json_t* pathEntryJ = nullptr;
-					json_array_foreach(pathJ, pathIndex, pathEntryJ) {
-						move.path.push_back(int(json_integer_value(pathEntryJ)));
-					}
+		{
+			std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+			history.clear();
+			json_t* historyJ = json_object_get(rootJ, "history");
+			if (historyJ && json_is_array(historyJ)) {
+				size_t index = 0;
+				json_t* stepJ = nullptr;
+				json_array_foreach(historyJ, index, stepJ) {
+					Step step;
+					step.pitch = float(json_number_value(json_object_get(stepJ, "pitch")));
+					step.gate = json_is_true(json_object_get(stepJ, "gate"));
+					step.accent = float(json_number_value(json_object_get(stepJ, "accent")));
+					step.mod = float(json_number_value(json_object_get(stepJ, "mod")));
+					history.push_back(step);
 				}
-				json_t* capturedJ = json_object_get(moveJ, "captured");
-				if (capturedJ && json_is_array(capturedJ)) {
-					size_t captureIndex = 0;
-					json_t* captureEntryJ = nullptr;
-					json_array_foreach(capturedJ, captureIndex, captureEntryJ) {
-						move.captured.push_back(int(json_integer_value(captureEntryJ)));
-					}
-				}
-				moveHistory.push_back(move);
 			}
-		}
 
-		lastMove = moveHistory.empty() ? Move() : moveHistory.back();
-		if (!lastMoveSideJ) {
-			lastMoveSide = moveHistory.empty() ? 0 : opposingSide(turnSide);
+			moveHistory.clear();
+			json_t* moveHistoryJ = json_object_get(rootJ, "moveHistory");
+			if (moveHistoryJ && json_is_array(moveHistoryJ)) {
+				size_t moveIndex = 0;
+				json_t* moveJ = nullptr;
+				json_array_foreach(moveHistoryJ, moveIndex, moveJ) {
+					Move move;
+					move.originIndex = int(json_integer_value(json_object_get(moveJ, "origin")));
+					move.destinationIndex = int(json_integer_value(json_object_get(moveJ, "destination")));
+					move.isCapture = json_is_true(json_object_get(moveJ, "isCapture"));
+					move.isMultiCapture = json_is_true(json_object_get(moveJ, "isMultiCapture"));
+					move.isKing = json_is_true(json_object_get(moveJ, "isKing"));
+
+					json_t* pathJ = json_object_get(moveJ, "path");
+					if (pathJ && json_is_array(pathJ)) {
+						size_t pathIndex = 0;
+						json_t* pathEntryJ = nullptr;
+						json_array_foreach(pathJ, pathIndex, pathEntryJ) {
+							move.path.push_back(int(json_integer_value(pathEntryJ)));
+						}
+					}
+					json_t* capturedJ = json_object_get(moveJ, "captured");
+					if (capturedJ && json_is_array(capturedJ)) {
+						size_t captureIndex = 0;
+						json_t* captureEntryJ = nullptr;
+						json_array_foreach(capturedJ, captureIndex, captureEntryJ) {
+							move.captured.push_back(int(json_integer_value(captureEntryJ)));
+						}
+					}
+					moveHistory.push_back(move);
+				}
+			}
+
+			lastMove = moveHistory.empty() ? Move() : moveHistory.back();
+			if (!lastMoveSideJ) {
+				lastMoveSide = moveHistory.empty() ? 0 : opposingSide(turnSide);
+			}
 		}
 		captureFlashSeconds = 0.f;
 		resetMoveAnimation();
