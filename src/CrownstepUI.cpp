@@ -1,6 +1,176 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
 
+namespace {
+
+constexpr int CHESS_ATLAS_ROWS = 2;
+constexpr int CHESS_ATLAS_COLS = 6;
+
+struct ChessPieceAtlasCache {
+	std::shared_ptr<Svg> svg;
+	bool initialized = false;
+	bool available = false;
+	math::Rect glyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS];
+	bool hasGlyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] {};
+};
+
+int chessAtlasColumnForPieceType(int pieceType) {
+	switch (pieceType) {
+	case crownstep::CHESS_KING:
+		return 0;
+	case crownstep::CHESS_QUEEN:
+		return 1;
+	case crownstep::CHESS_BISHOP:
+		return 2;
+	case crownstep::CHESS_KNIGHT:
+		return 3;
+	case crownstep::CHESS_ROOK:
+		return 4;
+	case crownstep::CHESS_PAWN:
+		return 5;
+	default:
+		return -1;
+	}
+}
+
+void growGlyphBounds(math::Rect* bounds, bool* hasBounds, float minX, float minY, float maxX, float maxY) {
+	if (!bounds || !hasBounds) {
+		return;
+	}
+	if (!*hasBounds) {
+		bounds->pos = Vec(minX, minY);
+		bounds->size = Vec(maxX - minX, maxY - minY);
+		*hasBounds = true;
+		return;
+	}
+	float x0 = std::min(bounds->pos.x, minX);
+	float y0 = std::min(bounds->pos.y, minY);
+	float x1 = std::max(bounds->pos.x + bounds->size.x, maxX);
+	float y1 = std::max(bounds->pos.y + bounds->size.y, maxY);
+	bounds->pos = Vec(x0, y0);
+	bounds->size = Vec(x1 - x0, y1 - y0);
+}
+
+void buildChessPieceAtlasBounds(ChessPieceAtlasCache* cache) {
+	if (!cache || !cache->svg || !cache->svg->handle) {
+		return;
+	}
+
+	NSVGimage* image = cache->svg->handle;
+	const float imageW = image->width;
+	const float imageH = image->height;
+	if (imageW <= 0.f || imageH <= 0.f) {
+		return;
+	}
+
+	const float rowSplitY = imageH * 0.5f;
+	for (NSVGshape* shape = image->shapes; shape; shape = shape->next) {
+		if (!(shape->flags & NSVG_FLAGS_VISIBLE)) {
+			continue;
+		}
+		float minX = shape->bounds[0];
+		float minY = shape->bounds[1];
+		float maxX = shape->bounds[2];
+		float maxY = shape->bounds[3];
+		if (!(maxX > minX && maxY > minY)) {
+			continue;
+		}
+
+		float centerX = 0.5f * (minX + maxX);
+		float centerY = 0.5f * (minY + maxY);
+		int row = (centerY < rowSplitY) ? 0 : 1;
+		int col = clamp(int((centerX / imageW) * float(CHESS_ATLAS_COLS)), 0, CHESS_ATLAS_COLS - 1);
+		growGlyphBounds(
+			&cache->glyphBounds[row][col],
+			&cache->hasGlyphBounds[row][col],
+			minX, minY, maxX, maxY
+		);
+	}
+
+	bool complete = true;
+	for (int row = 0; row < CHESS_ATLAS_ROWS; ++row) {
+		for (int col = 0; col < CHESS_ATLAS_COLS; ++col) {
+			if (!cache->hasGlyphBounds[row][col]) {
+				complete = false;
+			}
+		}
+	}
+	cache->available = complete;
+}
+
+ChessPieceAtlasCache& chessPieceAtlasCache() {
+	static ChessPieceAtlasCache cache;
+	if (!cache.initialized) {
+		cache.initialized = true;
+		try {
+			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/chess.svg"));
+		}
+		catch (...) {
+			cache.svg.reset();
+		}
+		buildChessPieceAtlasBounds(&cache);
+	}
+	return cache;
+}
+
+bool drawChessAtlasPiece(
+	NVGcontext* vg,
+	float centerX,
+	float centerY,
+	float cellWidth,
+	float cellHeight,
+	int piece,
+	float alpha
+) {
+	if (!vg || piece == 0) {
+		return false;
+	}
+	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
+	if (!cache.available || !cache.svg) {
+		return false;
+	}
+
+	int pieceType = std::abs(piece);
+	int col = chessAtlasColumnForPieceType(pieceType);
+	if (col < 0) {
+		return false;
+	}
+	int row = (piece > 0) ? 1 : 0;
+	if (!cache.hasGlyphBounds[row][col]) {
+		return false;
+	}
+
+	const math::Rect src = cache.glyphBounds[row][col];
+	if (src.size.x <= 0.f || src.size.y <= 0.f) {
+		return false;
+	}
+
+	const float targetH = std::min(cellWidth, cellHeight) * 0.90f;
+	const float scale = targetH / src.size.y;
+	const float srcCx = src.pos.x + src.size.x * 0.5f;
+	const float srcCy = src.pos.y + src.size.y * 0.5f;
+	const float yOffset = std::min(cellWidth, cellHeight) * 0.03f;
+	const float clipPad = 2.f;
+
+	nvgSave(vg);
+	nvgGlobalAlpha(vg, clamp(alpha, 0.f, 1.f));
+	nvgTranslate(vg, centerX, centerY + yOffset);
+	nvgScale(vg, scale, scale);
+	nvgTranslate(vg, -srcCx, -srcCy);
+	nvgScissor(
+		vg,
+		src.pos.x - clipPad,
+		src.pos.y - clipPad,
+		src.size.x + clipPad * 2.f,
+		src.size.y + clipPad * 2.f
+	);
+	cache.svg->draw(vg);
+	nvgRestore(vg);
+	return true;
+}
+
+} // namespace
+
 struct CrownstepBoardWidget final : Widget {
 	Crownstep* module = nullptr;
 
@@ -323,6 +493,9 @@ struct CrownstepBoardWidget final : Widget {
 								return;
 							}
 								if (module->isChessMode()) {
+									if (drawChessAtlasPiece(args.vg, centerX, centerY, cellWidth, cellHeight, piece, alpha)) {
+										return;
+									}
 									int pieceType = std::abs(piece);
 									float pieceR = radius * 2.42f;
 									const float chessPieceYOffset = pieceR * 0.03f;
