@@ -29,6 +29,8 @@ using crownstep::Step;
 static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 static constexpr float AI_TURN_DELAY_SECONDS = 0.5f;
 static constexpr float OTHELLO_FLIP_SECONDS_PER_PIECE = 0.1f;
+static constexpr int ROOT_CV_MAX_OFFSET_SEMITONES = 10;
+static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
@@ -258,6 +260,8 @@ struct Crownstep : Module {
 	bool modGlideActive = false;
 	bool aiTurnDelayPending = false;
 	bool aiTurnDelayActive = false;
+	int cachedRootSemitone = 0;
+	bool cachedRootSemitoneValid = false;
 	bool gameOver = false;
 	ChessState chessState = crownstep::chessInitialState();
 	const crownstep::IGameRules* gameRules = &crownstep::checkersRules();
@@ -592,6 +596,7 @@ struct Crownstep : Module {
 			modGlideStartSeconds = transportTimeSeconds;
 			modGlideDurationSeconds = 0.f;
 			modGlideActive = false;
+			cachedRootSemitoneValid = false;
 			cancelAiTurnWork();
 			resetMoveAnimation();
 		}
@@ -662,7 +667,11 @@ struct Crownstep : Module {
 	int rootSemitone() {
 		int knobSemitone = clamp(int(std::round(params[ROOT_PARAM].getValue())), 0, 11);
 		float rootCv = clamp(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
-		int total = knobSemitone + int(std::round(rootCv * 12.f));
+		// Semitone-domain mapping with direct CV anchors:
+		// -10V -> -10 semitones, 0V -> 0 semitones, +10V -> +10 semitones.
+		int cvOffsetSemitones = int(std::lround(rootCv / ROOT_CV_VOLTS_PER_SEMITONE));
+		cvOffsetSemitones = clamp(cvOffsetSemitones, -ROOT_CV_MAX_OFFSET_SEMITONES, ROOT_CV_MAX_OFFSET_SEMITONES);
+		int total = knobSemitone + cvOffsetSemitones;
 		return crownstep::wrapSemitone12(total);
 	}
 
@@ -1145,6 +1154,23 @@ struct Crownstep : Module {
 		return 0.f;
 	}
 
+	void refreshHeldPitchForCurrentStep() {
+		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+		int historySize = int(history.size());
+		int sequenceCap = currentSequenceCap();
+		int length = crownstep::activeLength(historySize, sequenceCap);
+		if (length <= 0) {
+			heldPitch = NO_SEQUENCE_PITCH_VOLTS;
+			return;
+		}
+		if (displayedStep <= 0) {
+			return;
+		}
+		int shownStep = clamp(displayedStep, 1, length);
+		int sequenceIndex = crownstep::activeStartIndex(historySize, sequenceCap) + (shownStep - 1);
+		heldPitch = pitchForSequenceIndex(sequenceIndex);
+	}
+
 	void emitStepAtClockEdge() {
 		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		int length = activeLength();
@@ -1217,6 +1243,16 @@ struct Crownstep : Module {
 			if (running) {
 				emitStepAtClockEdge();
 			}
+		}
+
+		int effectiveRoot = rootSemitone();
+		if (!cachedRootSemitoneValid) {
+			cachedRootSemitone = effectiveRoot;
+			cachedRootSemitoneValid = true;
+		}
+		else if (effectiveRoot != cachedRootSemitone) {
+			cachedRootSemitone = effectiveRoot;
+			refreshHeldPitchForCurrentStep();
 		}
 
 		if (modGlideActive && modGlideDurationSeconds > 0.f) {
@@ -1481,12 +1517,13 @@ struct Crownstep : Module {
 				lastMoveSide = moveHistory.empty() ? 0 : opposingSide(turnSide);
 			}
 		}
-		captureFlashSeconds = 0.f;
-		resetMoveAnimation();
-		refreshLegalMoves();
-		advanceForcedPassesIfNeeded();
-	}
-};
+			captureFlashSeconds = 0.f;
+			resetMoveAnimation();
+			cachedRootSemitoneValid = false;
+			refreshLegalMoves();
+			advanceForcedPassesIfNeeded();
+		}
+	};
 
 std::string CrownstepSeqLengthQuantity::getDisplayValueString() {
 	int requested = clamp(int(std::round(getValue())), SEQ_LENGTH_MIN, SEQ_LENGTH_MAX);

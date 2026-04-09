@@ -118,8 +118,9 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 ### 5.5 ROOT CV IN
 
 * CV input
-* 1V/oct root offset input
-* Combined with Root knob, then quantized to semitone/root domain used by the selected scale
+* Semitone-domain root offset input
+* `-10V -> -10 semitones`, `0V -> 0`, `+10V -> +10 semitones`
+* Combined with Root knob, then wrapped to the 12-note key domain used by the selected scale
 
 ### 5.6 CV Range Policy (v1)
 
