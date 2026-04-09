@@ -2350,19 +2350,17 @@ bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
-  if (!module) {
-    return;
-  }
-  double accessibleLag = std::max(1.0, module->getUiAccessibleLagSamples());
-  double lag = std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag));
+  double accessibleLag = module ? std::max(1.0, module->getUiAccessibleLagSamples()) : 1.0;
+  double lag = module ? std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag)) : 0.0;
   nvgSave(args.vg);
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
   if (APP && APP->window && APP->window->uiFont) {
-    bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+    bool sampleDisplay = module && module->isSampleModeEnabled() && module->hasLoadedSample();
     if (!sampleDisplay) {
       std::string displayText;
-      double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
+      float sampleRate = module ? module->getUiSampleRate() : 44100.f;
+      double lagMs = 1000.0 * lag / std::max(sampleRate, 1.f);
       displayText = string::f("%.0f ms", lagMs);
       // Keep readouts above the arc LED strip so they don't visually collide.
       Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 1.02f));
@@ -2378,8 +2376,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       float topY = centerMm.y - arcRadius * 1.02f;
       float dividerY = topY + 6.2f;
       float bottomY = dividerY + 6.2f;
-      std::string currentText = formatSecondsPrecise(module->getUiSamplePlayheadSeconds());
-      std::string totalText = formatSecondsPrecise(module->getUiSampleDurationSeconds());
+      std::string currentText = formatSecondsPrecise(module ? module->getUiSamplePlayheadSeconds() : 0.f);
+      std::string totalText = formatSecondsPrecise(module ? module->getUiSampleDurationSeconds() : 0.f);
 
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
       nvgFontSize(args.vg, 10.4f);
@@ -2400,7 +2398,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       nvgStrokeWidth(args.vg, 1.0f);
       nvgStroke(args.vg);
 
-      bool loopEnabled = module->isSampleLoopEnabled();
+      bool loopEnabled = module && module->isSampleLoopEnabled();
       NVGcolor loopColor = loopEnabled ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(120, 120, 120, 255);
       Vec loopCenter = sampleLoopIconCenter();
       constexpr float kLoopIconScale = 1.35f;
@@ -2585,13 +2583,14 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
   }
-  if (module && APP && APP->window && APP->window->uiFont) {
+  if (APP && APP->window && APP->window->uiFont) {
     Vec labelPos = armPivot.plus(Vec(0.f, mm2px(Vec(7.8f, 0.f)).x));
+    int cartridgeCharacter = module ? module->getCartridgeCharacter() : TemporalDeck::CARTRIDGE_CLEAN;
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFontSize(args.vg, 11.f);
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-    nvgText(args.vg, labelPos.x, labelPos.y, TemporalDeck::cartridgeLabelFor(module->getCartridgeCharacter()), nullptr);
+    nvgText(args.vg, labelPos.x, labelPos.y, TemporalDeck::cartridgeLabelFor(cartridgeCharacter), nullptr);
   }
   nvgRestore(args.vg);
 }

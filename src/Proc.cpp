@@ -1197,11 +1197,15 @@ struct AmpVoltageReadoutWidget : Widget {
 		if (paramId < 0 || !APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
-		if (!module) {
+		float ampVolts = Proc::DEFAULT_FUNCTION_AMP;
+		if (module && paramId < Proc::PARAMS_LEN) {
+			ampVolts = module->params[paramId].getValue();
+		}
+		else if (paramId != Proc::AMP_PARAM) {
 			return;
 		}
 		char ampText[16];
-		std::snprintf(ampText, sizeof(ampText), "%.1fV", module->params[paramId].getValue());
+		std::snprintf(ampText, sizeof(ampText), "%.1fV", ampVolts);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFontSize(args.vg, 10.0f);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
