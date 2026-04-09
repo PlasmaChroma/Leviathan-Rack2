@@ -1401,12 +1401,19 @@ struct CrownstepWidget final : ModuleWidget {
 				*outPos = pointMm;
 			}
 		};
+		auto applyPointOverrideFallback = [&](const char* primaryId, const char* fallbackId, Vec* outPos) {
+			Vec pointMm;
+			if (panel_svg::loadPointFromSvgMm(panelPath, primaryId, &pointMm)
+				|| panel_svg::loadPointFromSvgMm(panelPath, fallbackId, &pointMm)) {
+				*outPos = pointMm;
+			}
+		};
 		applyPointOverride("SEQ_LENGTH_PARAM", &seqPos);
 		applyPointOverride("NEW_GAME_PARAM", &newGamePos);
 		applyPointOverride("CLOCK_INPUT", &clockPos);
 		applyPointOverride("RESET_INPUT", &resetPos);
 		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
-		applyPointOverride("ROOT_INPUT", &rootCvPos);
+		applyPointOverrideFallback("BIAS_INPUT", "ROOT_INPUT", &rootCvPos);
 		applyPointOverride("PITCH_OUTPUT", &pitchPos);
 		applyPointOverride("ACCENT_OUTPUT", &accentPos);
 		applyPointOverride("MOD_OUTPUT", &modPos);
@@ -1504,7 +1511,7 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
+		menu->addChild(createSubmenuItem("Bias", "", [=](Menu* keyMenu) {
 			for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
 				keyMenu->addChild(createCheckMenuItem(
 					KEY_NAMES[size_t(i)],

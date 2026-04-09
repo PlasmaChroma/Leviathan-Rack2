@@ -5,7 +5,7 @@ Crownstep::Crownstep() {
 
 	configParam<CrownstepSeqLengthQuantity>(
 		SEQ_LENGTH_PARAM, float(SEQ_LENGTH_MIN), float(SEQ_LENGTH_MAX), float(SEQ_LENGTH_MAX), "Sequence length");
-	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
+	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Bias");
 	configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 	configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
@@ -17,7 +17,7 @@ Crownstep::Crownstep() {
 	configInput(CLOCK_INPUT, "Clock");
 	configInput(RESET_INPUT, "Reset");
 	configInput(TRANSPOSE_INPUT, "Transpose");
-	configInput(ROOT_INPUT, "Root");
+	configInput(ROOT_INPUT, "Bias");
 
 	configOutput(PITCH_OUTPUT, "Pitch");
 	configOutput(ACCENT_OUTPUT, "Accent");
@@ -503,6 +503,8 @@ float Crownstep::pitchForMove(const Move& move) {
 	};
 
 	float boardValueIndex = sampledBoardValueForActiveGame();
+	// Bias acts as a raw index-domain offset on the board-derived value.
+	boardValueIndex += float(rootSemitoneLinear());
 	boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
 	if (pitchBipolarEnabled) {
 		float center = (0.5f * float(boardCellCount() - 1)) / crownstep::pitchDividerForMode(pitchDividerMode);
@@ -513,12 +515,11 @@ float Crownstep::pitchForMove(const Move& move) {
 			boardValueIndex,
 			move.isKing,
 			currentScaleIndex(),
-			rootSemitone(),
+			0,
 			transposeVolts()
 		);
 	}
-	float rawTranspose = transposeVolts() + float(rootSemitoneLinear()) / 12.f;
-	return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, rawTranspose);
+	return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, transposeVolts());
 }
 
 Step Crownstep::makeStepFromMove(const Move& move) {
@@ -848,4 +849,3 @@ void Crownstep::onBoardSquarePressed(int index) {
 		}
 	}
 }
-
