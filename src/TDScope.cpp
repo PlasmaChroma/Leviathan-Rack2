@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -209,6 +210,15 @@ struct TDScope final : Module {
 };
 
 struct TDScopeDisplayWidget final : Widget {
+  struct LiveScopeBucket {
+    float minNorm = 0.f;
+    float maxNorm = 0.f;
+    float coveredSamples = 0.f;
+    float totalSamples = 1.f;
+    bool hasData = false;
+    int64_t key = std::numeric_limits<int64_t>::min();
+  };
+
   TDScope *module = nullptr;
   float autoDisplayFullScaleVolts = 5.f;
   bool autoDisplayScaleInitialized = false;
@@ -233,6 +243,13 @@ struct TDScopeDisplayWidget final : Widget {
   int cachedRangeMode = -1;
   bool cachedStereoLayout = false;
   bool cachedGeometryValid = false;
+  std::vector<LiveScopeBucket> liveBucketsLeft;
+  std::vector<LiveScopeBucket> liveBucketsRight;
+  bool liveBucketsInitialized = false;
+  bool liveBucketsStereo = false;
+  int liveBucketCount = 0;
+  float liveBucketSpanSamples = 0.f;
+  uint64_t liveBucketLastPublishSeq = 0;
 
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
@@ -463,6 +480,116 @@ struct TDScopeDisplayWidget final : Widget {
       *maxNorm = clamp((float(bin.max) / 32767.f) * scopeNormGain, -1.f, 1.f);
     };
 
+    auto resetLiveBucketArray = [&](std::vector<LiveScopeBucket> *buckets) {
+      if (!buckets) {
+        return;
+      }
+      buckets->assign(rowCountU, LiveScopeBucket());
+      for (size_t i = 0; i < rowCountU; ++i) {
+        (*buckets)[i].totalSamples = std::max(liveBucketSpanSamples, 1e-6f);
+      }
+    };
+
+    const bool liveMode = !sampleMode;
+    const float requestedLiveBucketSpanSamples = std::max(totalWindowSamples / float(std::max(rowCount, 1)), 1e-6f);
+    if (!liveMode) {
+      liveBucketsInitialized = false;
+      liveBucketLastPublishSeq = 0;
+    } else {
+      bool resetLiveBuckets = !liveBucketsInitialized || liveBucketCount != rowCount || liveBucketsStereo != renderStereo;
+      float bucketSpanDelta = std::fabs(requestedLiveBucketSpanSamples - liveBucketSpanSamples);
+      if (!resetLiveBuckets && bucketSpanDelta > std::max(1e-3f, liveBucketSpanSamples * 0.01f)) {
+        resetLiveBuckets = true;
+      }
+      if (resetLiveBuckets) {
+        liveBucketCount = rowCount;
+        liveBucketSpanSamples = requestedLiveBucketSpanSamples;
+        liveBucketsStereo = renderStereo;
+        resetLiveBucketArray(&liveBucketsLeft);
+        resetLiveBucketArray(&liveBucketsRight);
+        liveBucketsInitialized = true;
+        liveBucketLastPublishSeq = 0;
+      }
+    }
+
+    auto bucketSlotForIndex = [&](int64_t bucketIndex) -> int {
+      if (liveBucketCount <= 0) {
+        return 0;
+      }
+      int64_t mod = bucketIndex % int64_t(liveBucketCount);
+      if (mod < 0) {
+        mod += int64_t(liveBucketCount);
+      }
+      return int(mod);
+    };
+
+    auto ingestLiveLane = [&](const temporaldeck_expander::ScopeBin *scopeData, std::vector<LiveScopeBucket> *buckets) {
+      if (!liveMode || !scopeData || !buckets || liveBucketCount <= 0 || buckets->size() != rowCountU) {
+        return;
+      }
+      for (uint32_t i = 0; i < scopeBinCount; ++i) {
+        const temporaldeck_expander::ScopeBin &bin = scopeData[i];
+        if (!temporaldeck_expander::isScopeBinValid(bin)) {
+          continue;
+        }
+        float binMinNorm = 0.f;
+        float binMaxNorm = 0.f;
+        decodeScopeBin(bin, &binMinNorm, &binMaxNorm);
+
+        float binLagHi = msg.scopeStartLagSamples - float(i) * scopeBinSpanSamples;
+        float binLagLo = binLagHi - scopeBinSpanSamples;
+        float lagMin = std::max(std::min(binLagLo, binLagHi), windowBottomLag);
+        float lagMax = std::min(std::max(binLagLo, binLagHi), windowTopLag);
+        if (!(lagMax > lagMin)) {
+          continue;
+        }
+
+        int64_t bucketIndex0 = int64_t(std::floor(lagMin / liveBucketSpanSamples));
+        int64_t bucketIndex1 = int64_t(std::floor((lagMax - 1e-6f) / liveBucketSpanSamples));
+        if (bucketIndex1 < bucketIndex0) {
+          continue;
+        }
+
+        for (int64_t bucketIndex = bucketIndex0; bucketIndex <= bucketIndex1; ++bucketIndex) {
+          float bucketStart = float(bucketIndex) * liveBucketSpanSamples;
+          float bucketEnd = bucketStart + liveBucketSpanSamples;
+          float overlap = std::min(lagMax, bucketEnd) - std::max(lagMin, bucketStart);
+          if (!(overlap > 0.f)) {
+            continue;
+          }
+
+          int slot = bucketSlotForIndex(bucketIndex);
+          LiveScopeBucket &bucket = (*buckets)[size_t(slot)];
+          if (bucket.key != bucketIndex) {
+            bucket = LiveScopeBucket();
+            bucket.totalSamples = liveBucketSpanSamples;
+            bucket.key = bucketIndex;
+          }
+
+          if (!bucket.hasData) {
+            bucket.minNorm = binMinNorm;
+            bucket.maxNorm = binMaxNorm;
+            bucket.hasData = true;
+          } else if (bucket.coveredSamples < bucket.totalSamples) {
+            bucket.minNorm = std::min(bucket.minNorm, binMinNorm);
+            bucket.maxNorm = std::max(bucket.maxNorm, binMaxNorm);
+          }
+
+          if (bucket.coveredSamples < bucket.totalSamples) {
+            bucket.coveredSamples = std::min(bucket.totalSamples, bucket.coveredSamples + overlap);
+          }
+        }
+      }
+    };
+
+    if (liveMode && msg.publishSeq != liveBucketLastPublishSeq) {
+      ingestLiveLane(msg.scope, &liveBucketsLeft);
+      if (renderStereo) {
+        ingestLiveLane(msg.scopeRight, &liveBucketsRight);
+      }
+      liveBucketLastPublishSeq = msg.publishSeq;
+    }
+
     auto sampleEnvelopeOverInterval = [&](const temporaldeck_expander::ScopeBin *scopeData, float t0, float t1,
                                           float *minNormOut, float *maxNormOut) -> bool {
       float lag0 = windowTopLag + (windowBottomLag - windowTopLag) * clamp(t0, 0.f, 1.f);
@@ -509,9 +636,10 @@ struct TDScopeDisplayWidget final : Widget {
       return true;
     };
 
-    auto rebuildLane = [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
-                           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut,
-                           std::vector<uint8_t> *validOut, std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
+    auto rebuildLaneFromScopeBins =
+      [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
+          std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
+          std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
       if (!x0Out || !x1Out || !visualOut || !validOut || !bucketOut || !holdOut) {
         return;
       }
@@ -573,21 +701,116 @@ struct TDScopeDisplayWidget final : Widget {
       }
     };
 
+    auto rebuildLaneFromLiveBuckets =
+      [&](const std::vector<LiveScopeBucket> *buckets, float laneCenterXLocal, float laneHalfWidthLocal,
+          std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
+          std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
+        if (!buckets || !x0Out || !x1Out || !visualOut || !validOut || !bucketOut || !holdOut || buckets->size() != rowCountU ||
+            liveBucketCount <= 0 || liveBucketSpanSamples <= 0.f) {
+          return;
+        }
+        constexpr uint8_t kGapHoldFrames = 1u;
+        constexpr float kGapIntensityDecay = 0.88f;
+        constexpr float kIntensityGamma = 0.68f;
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          bool prevValid = (*validOut)[idx] != 0u;
+          float prevX0 = (*x0Out)[idx];
+          float prevX1 = (*x1Out)[idx];
+          float prevVisual = (*visualOut)[idx];
+          uint8_t prevHold = (*holdOut)[idx];
+
+          float y = drawTop + float(iy) + 0.5f;
+          rowY[idx] = y;
+          float tMid = clamp((y - drawTop) / yDen, 0.f, 1.f);
+          float lagMid = windowTopLag + (windowBottomLag - windowTopLag) * tMid;
+          int64_t bucketIndex = int64_t(std::floor(lagMid / liveBucketSpanSamples));
+          int slot = bucketSlotForIndex(bucketIndex);
+          const LiveScopeBucket &bucket = (*buckets)[size_t(slot)];
+
+          if (!(bucket.key == bucketIndex && bucket.hasData)) {
+            if (prevValid && prevHold > 0u) {
+              (*x0Out)[idx] = prevX0;
+              (*x1Out)[idx] = prevX1;
+              float carryVisual = clamp(prevVisual * kGapIntensityDecay, 0.f, 1.f);
+              int intensityBucket = int(std::floor(carryVisual * float(kIntensityBuckets)));
+              intensityBucket = clamp(intensityBucket, 0, kIntensityBuckets - 1);
+              (*visualOut)[idx] = carryVisual;
+              (*bucketOut)[idx] = uint8_t(intensityBucket);
+              (*validOut)[idx] = 1u;
+              (*holdOut)[idx] = uint8_t(prevHold - 1u);
+            } else {
+              (*x0Out)[idx] = laneCenterXLocal;
+              (*x1Out)[idx] = laneCenterXLocal;
+              (*visualOut)[idx] = 0.f;
+              (*bucketOut)[idx] = 0u;
+              (*validOut)[idx] = 0u;
+              (*holdOut)[idx] = 0u;
+            }
+            continue;
+          }
+
+          float rowMinNorm = bucket.minNorm;
+          float rowMaxNorm = bucket.maxNorm;
+          float x0 = laneCenterXLocal + rowMinNorm * laneHalfWidthLocal;
+          float x1 = laneCenterXLocal + rowMaxNorm * laneHalfWidthLocal;
+          if (x1 < x0) {
+            std::swap(x0, x1);
+          }
+          (*x0Out)[idx] = x0;
+          (*x1Out)[idx] = x1;
+
+          float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
+          float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
+          float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
+          float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
+          fillFraction = clamp(fillFraction, 0.f, 1.f);
+          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillFraction, 0.f, 1.f);
+          int intensityBucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
+          intensityBucket = clamp(intensityBucket, 0, kIntensityBuckets - 1);
+          (*visualOut)[idx] = visualIntensity;
+          (*bucketOut)[idx] = uint8_t(intensityBucket);
+          (*validOut)[idx] = 1u;
+          (*holdOut)[idx] = kGapHoldFrames;
+        }
+      };
+
     if (shouldRebuild) {
-      rebuildLane(msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
-                  &rowHoldFrames);
-      if (renderStereo) {
-        rebuildLane(
-          msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
-          &rowBucketRight, &rowHoldFramesRight);
+      if (liveMode) {
+        rebuildLaneFromLiveBuckets(
+          &liveBucketsLeft, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
+          &rowHoldFrames);
+        if (renderStereo) {
+          rebuildLaneFromLiveBuckets(
+            &liveBucketsRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
+            &rowBucketRight, &rowHoldFramesRight);
+        } else {
+          std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
+          std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
+          std::fill(rowHoldFramesRight.begin(), rowHoldFramesRight.end(), 0u);
+          for (size_t idx = 0; idx < rowCountU; ++idx) {
+            rowX0Right[idx] = lane1CenterX;
+            rowX1Right[idx] = lane1CenterX;
+            rowBucketRight[idx] = 0u;
+          }
+        }
       } else {
-        std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
-        std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
-        std::fill(rowHoldFramesRight.begin(), rowHoldFramesRight.end(), 0u);
-        for (size_t idx = 0; idx < rowCountU; ++idx) {
-          rowX0Right[idx] = lane1CenterX;
-          rowX1Right[idx] = lane1CenterX;
-          rowBucketRight[idx] = 0u;
+        rebuildLaneFromScopeBins(
+          msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
+          &rowHoldFrames);
+        if (renderStereo) {
+          rebuildLaneFromScopeBins(
+            msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
+            &rowBucketRight, &rowHoldFramesRight);
+        } else {
+          std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
+          std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
+          std::fill(rowHoldFramesRight.begin(), rowHoldFramesRight.end(), 0u);
+          for (size_t idx = 0; idx < rowCountU; ++idx) {
+            rowX0Right[idx] = lane1CenterX;
+            rowX1Right[idx] = lane1CenterX;
+            rowBucketRight[idx] = 0u;
+          }
         }
       }
       cachedPublishSeq = msg.publishSeq;
