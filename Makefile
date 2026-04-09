@@ -36,6 +36,12 @@ TEST_BINS := \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec
 
+CROWNSTEP_MODULE_SOURCES := \
+	src/Crownstep.cpp \
+	src/CrownstepModule.cpp \
+	src/CrownstepPlayback.cpp \
+	src/CrownstepSerialization.cpp
+
 .PHONY: test test-build test-odr
 test-build: $(TEST_BINS)
 
@@ -107,5 +113,5 @@ build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
-build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp src/Crownstep.cpp | build/tests
+build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
