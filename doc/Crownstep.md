@@ -121,6 +121,7 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 * Semitone-domain root offset input
 * `-10V -> -10 semitones`, `0V -> 0`, `+10V -> +10 semitones`
 * Combined with Root knob, then wrapped to the 12-note key domain used by the selected scale
+* In unquantized mode, the same root offset is still applied as a semitone transpose (`semitones / 12V`)
 
 ### 5.6 CV Range Policy (v1)
 

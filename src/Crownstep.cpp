@@ -31,6 +31,7 @@ static constexpr float AI_TURN_DELAY_SECONDS = 0.5f;
 static constexpr float OTHELLO_FLIP_SECONDS_PER_PIECE = 0.1f;
 static constexpr int ROOT_CV_MAX_OFFSET_SEMITONES = 10;
 static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
+static constexpr float TRANSPOSE_CV_ZERO_DEADBAND_VOLTS = 1e-3f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
@@ -260,7 +261,8 @@ struct Crownstep : Module {
 	bool modGlideActive = false;
 	bool aiTurnDelayPending = false;
 	bool aiTurnDelayActive = false;
-	int cachedRootSemitone = 0;
+	int cachedRootSemitoneWrapped = 0;
+	int cachedRootSemitoneLinear = 0;
 	bool cachedRootSemitoneValid = false;
 	bool gameOver = false;
 	ChessState chessState = crownstep::chessInitialState();
@@ -661,17 +663,30 @@ struct Crownstep : Module {
 	}
 
 	float transposeVolts() {
-		return clamp(inputs[TRANSPOSE_INPUT].getVoltage(), -10.f, 10.f);
+		float value = clamp(inputs[TRANSPOSE_INPUT].getVoltage(), -10.f, 10.f);
+		if (std::fabs(value) < TRANSPOSE_CV_ZERO_DEADBAND_VOLTS) {
+			return 0.f;
+		}
+		return value;
 	}
 
-	int rootSemitone() {
-		int knobSemitone = clamp(int(std::round(params[ROOT_PARAM].getValue())), 0, 11);
+	int rootCvOffsetSemitone() {
 		float rootCv = clamp(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
 		// Semitone-domain mapping with direct CV anchors:
 		// -10V -> -10 semitones, 0V -> 0 semitones, +10V -> +10 semitones.
 		int cvOffsetSemitones = int(std::lround(rootCv / ROOT_CV_VOLTS_PER_SEMITONE));
 		cvOffsetSemitones = clamp(cvOffsetSemitones, -ROOT_CV_MAX_OFFSET_SEMITONES, ROOT_CV_MAX_OFFSET_SEMITONES);
-		int total = knobSemitone + cvOffsetSemitones;
+		return cvOffsetSemitones;
+	}
+
+	int rootSemitoneLinear() {
+		int knobSemitone = clamp(int(std::round(params[ROOT_PARAM].getValue())), 0, 11);
+		int cvOffsetSemitones = rootCvOffsetSemitone();
+		return knobSemitone + cvOffsetSemitones;
+	}
+
+	int rootSemitone() {
+		int total = rootSemitoneLinear();
 		return crownstep::wrapSemitone12(total);
 	}
 
@@ -792,7 +807,8 @@ struct Crownstep : Module {
 				transposeVolts()
 			);
 		}
-		return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, transposeVolts());
+		float rawTranspose = transposeVolts() + float(rootSemitoneLinear()) / 12.f;
+		return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, rawTranspose);
 	}
 
 	Step makeStepFromMove(const Move& move) {
@@ -1245,13 +1261,19 @@ struct Crownstep : Module {
 			}
 		}
 
-		int effectiveRoot = rootSemitone();
+		int effectiveRootWrapped = rootSemitone();
+		int effectiveRootLinear = rootSemitoneLinear();
 		if (!cachedRootSemitoneValid) {
-			cachedRootSemitone = effectiveRoot;
+			cachedRootSemitoneWrapped = effectiveRootWrapped;
+			cachedRootSemitoneLinear = effectiveRootLinear;
 			cachedRootSemitoneValid = true;
 		}
-		else if (effectiveRoot != cachedRootSemitone) {
-			cachedRootSemitone = effectiveRoot;
+		else if (
+			effectiveRootWrapped != cachedRootSemitoneWrapped
+			|| effectiveRootLinear != cachedRootSemitoneLinear
+		) {
+			cachedRootSemitoneWrapped = effectiveRootWrapped;
+			cachedRootSemitoneLinear = effectiveRootLinear;
 			refreshHeldPitchForCurrentStep();
 		}
 
