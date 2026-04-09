@@ -3,12 +3,16 @@
 
 #include <cstdio>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <mutex>
 #include <regex>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <condition_variable>
 
 using crownstep::AI_SIDE;
 using crownstep::BoardState;
@@ -23,10 +27,12 @@ using crownstep::SCALES;
 using crownstep::Step;
 
 static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
+static constexpr float AI_TURN_DELAY_SECONDS = 0.5f;
+static constexpr float OTHELLO_FLIP_SECONDS_PER_PIECE = 0.1f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
-static constexpr std::array<const char*, 2> GAME_MODE_NAMES = {{"Checkers", "Chess"}};
+static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Othello"}};
 
 static bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect) {
 	if (!outRect) {
@@ -189,6 +195,7 @@ struct Crownstep : Module {
 	enum GameMode {
 		GAME_MODE_CHECKERS = 0,
 		GAME_MODE_CHESS,
+		GAME_MODE_OTHELLO,
 		GAME_MODE_COUNT
 	};
 
@@ -245,11 +252,35 @@ struct Crownstep : Module {
 	float modGlideTargetVolts = 0.f;
 	float modGlideStartSeconds = 0.f;
 	float modGlideDurationSeconds = 0.f;
+	float aiTurnDelayStartSeconds = 0.f;
 	float captureFlashSeconds = 0.f;
 	bool modGlideActive = false;
+	bool aiTurnDelayPending = false;
+	bool aiTurnDelayActive = false;
 	bool gameOver = false;
 	ChessState chessState = crownstep::chessInitialState();
 	const crownstep::IGameRules* gameRules = &crownstep::checkersRules();
+	struct AiWorkerRequest {
+		uint64_t id = 0;
+		int gameMode = GAME_MODE_CHECKERS;
+		int difficulty = 0;
+		BoardState board {};
+		ChessState chessState = crownstep::chessInitialState();
+	};
+	struct AiWorkerResult {
+		uint64_t id = 0;
+		Move move;
+	};
+	std::thread aiWorkerThread;
+	std::mutex aiWorkerMutex;
+	std::condition_variable aiWorkerCv;
+	AiWorkerRequest aiWorkerRequest;
+	AiWorkerResult aiWorkerResult;
+	uint64_t aiWorkerNextRequestId = 1;
+	uint64_t aiWorkerInFlightRequestId = 0;
+	bool aiWorkerStopRequested = false;
+	bool aiWorkerHasRequest = false;
+	bool aiWorkerHasResult = false;
 
 	Crownstep() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -275,17 +306,153 @@ struct Crownstep : Module {
 		configOutput(MOD_OUTPUT, "Mod");
 		configOutput(EOC_OUTPUT, "End of cycle");
 
+		startAiWorker();
 		setGameMode(GAME_MODE_CHECKERS, true);
+	}
+
+	~Crownstep() override {
+		stopAiWorker();
 	}
 
 	bool isChessMode() const {
 		return gameRules && std::strcmp(gameRules->gameId(), "chess") == 0;
 	}
 
+	bool isOthelloMode() const {
+		return gameRules && std::strcmp(gameRules->gameId(), "othello") == 0;
+	}
+
+	static Move chooseAiMoveForSnapshot(const AiWorkerRequest& request) {
+		switch (request.gameMode) {
+			case GAME_MODE_CHESS:
+				return crownstep::chessChooseAiMove(request.board, request.difficulty, request.chessState);
+			case GAME_MODE_OTHELLO:
+				return crownstep::othelloChooseAiMove(request.board, request.difficulty);
+			case GAME_MODE_CHECKERS:
+			default:
+				return crownstep::chooseAiMove(request.board, request.difficulty);
+		}
+	}
+
+	void runAiWorkerLoop() {
+		while (true) {
+			AiWorkerRequest request;
+			{
+				std::unique_lock<std::mutex> lock(aiWorkerMutex);
+				aiWorkerCv.wait(lock, [&]() {
+					return aiWorkerStopRequested || aiWorkerHasRequest;
+				});
+				if (aiWorkerStopRequested) {
+					return;
+				}
+				request = aiWorkerRequest;
+				aiWorkerHasRequest = false;
+			}
+
+			AiWorkerResult result;
+			result.id = request.id;
+			result.move = chooseAiMoveForSnapshot(request);
+
+			{
+				std::lock_guard<std::mutex> lock(aiWorkerMutex);
+				aiWorkerResult = result;
+				aiWorkerHasResult = true;
+			}
+		}
+	}
+
+	void startAiWorker() {
+		std::lock_guard<std::mutex> lock(aiWorkerMutex);
+		if (aiWorkerThread.joinable()) {
+			return;
+		}
+		aiWorkerStopRequested = false;
+		aiWorkerThread = std::thread([this]() {
+			runAiWorkerLoop();
+		});
+	}
+
+	void stopAiWorker() {
+		{
+			std::lock_guard<std::mutex> lock(aiWorkerMutex);
+			aiWorkerStopRequested = true;
+			aiWorkerHasRequest = false;
+		}
+		aiWorkerCv.notify_all();
+		if (aiWorkerThread.joinable()) {
+			aiWorkerThread.join();
+		}
+	}
+
+	void cancelAiTurnWork() {
+		aiTurnDelayPending = false;
+		aiTurnDelayActive = false;
+		aiTurnDelayStartSeconds = 0.f;
+		std::lock_guard<std::mutex> lock(aiWorkerMutex);
+		aiWorkerHasRequest = false;
+		aiWorkerHasResult = false;
+		aiWorkerInFlightRequestId = 0;
+	}
+
+	void clearAiWorkerQueueState() {
+		std::lock_guard<std::mutex> lock(aiWorkerMutex);
+		aiWorkerHasRequest = false;
+		aiWorkerHasResult = false;
+		aiWorkerInFlightRequestId = 0;
+	}
+
+	bool consumeReadyAiResult(Move* outMove) {
+		if (!outMove) {
+			return false;
+		}
+		std::lock_guard<std::mutex> lock(aiWorkerMutex);
+		if (!aiWorkerHasResult) {
+			return false;
+		}
+		*outMove = aiWorkerResult.move;
+		uint64_t resultId = aiWorkerResult.id;
+		aiWorkerHasResult = false;
+		if (aiWorkerInFlightRequestId != 0 && resultId == aiWorkerInFlightRequestId) {
+			aiWorkerInFlightRequestId = 0;
+			return true;
+		}
+		return false;
+	}
+
+	bool dispatchAiRequestIfIdle() {
+		std::lock_guard<std::mutex> lock(aiWorkerMutex);
+		if (aiWorkerInFlightRequestId != 0 || aiWorkerHasRequest) {
+			return false;
+		}
+		AiWorkerRequest request;
+		request.id = aiWorkerNextRequestId++;
+		request.gameMode = gameMode;
+		request.difficulty = aiDifficulty;
+		request.board = board;
+		request.chessState = chessState;
+		aiWorkerRequest = request;
+		aiWorkerHasRequest = true;
+		aiWorkerInFlightRequestId = request.id;
+		aiWorkerCv.notify_one();
+		return true;
+	}
+
 	void setGameMode(int mode, bool startFreshGame) {
 		int nextMode = clamp(mode, 0, GAME_MODE_COUNT - 1);
+		cancelAiTurnWork();
 		gameMode = nextMode;
-		gameRules = (gameMode == GAME_MODE_CHESS) ? &crownstep::chessRules() : &crownstep::checkersRules();
+		switch (gameMode) {
+			case GAME_MODE_CHESS:
+				gameRules = &crownstep::chessRules();
+				break;
+			case GAME_MODE_OTHELLO:
+				gameRules = &crownstep::othelloRules();
+				break;
+			case GAME_MODE_CHECKERS:
+			default:
+				gameRules = &crownstep::checkersRules();
+				break;
+		}
 		if (startFreshGame) {
 			startNewGame();
 		}
@@ -303,7 +470,7 @@ struct Crownstep : Module {
 		moveAnimationQueue.clear();
 	}
 
-	void beginMoveAnimation(const Move& move, const BoardState& beforeBoard) {
+	void beginMoveAnimation(const Move& move, const BoardState& beforeBoard, int moverSide) {
 		MoveVisualAnimation nextAnimation;
 		int cellCount = boardCellCount();
 		if (move.originIndex < 0 || move.originIndex >= cellCount || move.destinationIndex < 0 || move.destinationIndex >= cellCount) {
@@ -311,6 +478,10 @@ struct Crownstep : Module {
 		}
 
 		int movingPiece = beforeBoard[size_t(move.originIndex)];
+		if (movingPiece == 0 && isOthelloMode()) {
+			// Othello places a new disc on an empty destination square.
+			movingPiece = moverSide;
+		}
 		if (movingPiece == 0) {
 			return;
 		}
@@ -339,6 +510,44 @@ struct Crownstep : Module {
 				nextAnimation.capturedPieces.push_back(0);
 			}
 		}
+		if (isOthelloMode() && !nextAnimation.capturedIndices.empty()) {
+			int destRow = 0;
+			int destCol = 0;
+			boardIndexToCoord(nextAnimation.destinationIndex, &destRow, &destCol);
+			struct OrderedFlip {
+				float dist2 = 0.f;
+				int index = -1;
+				int piece = 0;
+			};
+			std::vector<OrderedFlip> ordered;
+			ordered.reserve(nextAnimation.capturedIndices.size());
+			for (size_t i = 0; i < nextAnimation.capturedIndices.size(); ++i) {
+				int captureIndex = nextAnimation.capturedIndices[i];
+				int capturePiece = (i < nextAnimation.capturedPieces.size()) ? nextAnimation.capturedPieces[i] : 0;
+				int row = 0;
+				int col = 0;
+				boardIndexToCoord(captureIndex, &row, &col);
+				float dr = float(row - destRow);
+				float dc = float(col - destCol);
+				OrderedFlip flip;
+				flip.dist2 = dr * dr + dc * dc;
+				flip.index = captureIndex;
+				flip.piece = capturePiece;
+				ordered.push_back(flip);
+			}
+			std::sort(ordered.begin(), ordered.end(), [](const OrderedFlip& a, const OrderedFlip& b) {
+				if (a.dist2 != b.dist2) {
+					return a.dist2 < b.dist2;
+				}
+				return a.index < b.index;
+			});
+			nextAnimation.capturedIndices.clear();
+			nextAnimation.capturedPieces.clear();
+			for (const OrderedFlip& flip : ordered) {
+				nextAnimation.capturedIndices.push_back(flip.index);
+				nextAnimation.capturedPieces.push_back(flip.piece);
+			}
+		}
 
 		if (nextAnimation.path.size() < 2) {
 			return;
@@ -346,6 +555,12 @@ struct Crownstep : Module {
 
 		float segments = float(nextAnimation.path.size() - 1);
 		nextAnimation.durationSeconds = clamp(0.085f * segments, 0.12f, 0.34f);
+		if (isOthelloMode() && !nextAnimation.capturedIndices.empty()) {
+			nextAnimation.durationSeconds = std::max(
+				nextAnimation.durationSeconds,
+				OTHELLO_FLIP_SECONDS_PER_PIECE * float(nextAnimation.capturedIndices.size())
+			);
+		}
 		nextAnimation.elapsedSeconds = 0.f;
 		nextAnimation.active = true;
 
@@ -371,11 +586,24 @@ struct Crownstep : Module {
 		heldMod = 0.f;
 		modOutputVolts = 0.f;
 		modGlideStartVolts = 0.f;
-		modGlideTargetVolts = 0.f;
-		modGlideStartSeconds = transportTimeSeconds;
-		modGlideDurationSeconds = 0.f;
-		modGlideActive = false;
-		resetMoveAnimation();
+			modGlideTargetVolts = 0.f;
+			modGlideStartSeconds = transportTimeSeconds;
+			modGlideDurationSeconds = 0.f;
+			modGlideActive = false;
+			cancelAiTurnWork();
+			resetMoveAnimation();
+		}
+
+	void armDelayedAiTurnAfterHumanMove() {
+		if (gameOver || turnSide != aiSide()) {
+			aiTurnDelayPending = false;
+			aiTurnDelayActive = false;
+			return;
+		}
+		clearAiWorkerQueueState();
+		aiTurnDelayPending = true;
+		aiTurnDelayActive = false;
+		aiTurnDelayStartSeconds = 0.f;
 	}
 
 	int currentSequenceCap() {
@@ -487,7 +715,7 @@ struct Crownstep : Module {
 			return lowValue + (highValue - lowValue) * (x - float(low));
 		};
 		auto sampledBoardValueForActiveGame = [&]() {
-			if (!isChessMode()) {
+			if (boardCellCount() != crownstep::CHESS_BOARD_SIZE) {
 				return crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
 			}
 			int mode = clamp(pitchInterpretationMode, 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
@@ -546,6 +774,7 @@ struct Crownstep : Module {
 		resetPlayback();
 		resetMoveAnimation();
 		refreshLegalMoves();
+		advanceForcedPassesIfNeeded();
 	}
 
 	void setHoveredSquare(int index) {
@@ -577,16 +806,29 @@ struct Crownstep : Module {
 		highlightedDestinations.clear();
 		opponentHighlightedDestinations.clear();
 		opponentHintsPreviewActive = false;
-		if (selectedSquare >= 0) {
-				for (const Move& move : humanMoves) {
+		if (isOthelloMode() && turnSide == humanSide()) {
+			std::vector<uint8_t> seen(size_t(boardCellCount()), 0u);
+			for (const Move& move : humanMoves) {
+				if (move.destinationIndex < 0 || move.destinationIndex >= boardCellCount()) {
+					continue;
+				}
+				if (seen[size_t(move.destinationIndex)] != 0u) {
+					continue;
+				}
+				seen[size_t(move.destinationIndex)] = 1u;
+				highlightedDestinations.push_back(move.destinationIndex);
+			}
+		}
+		else if (selectedSquare >= 0) {
+			for (const Move& move : humanMoves) {
 				if (move.originIndex == selectedSquare) {
 					highlightedDestinations.push_back(move.destinationIndex);
 				}
 			}
-				if (highlightedDestinations.empty()) {
-					selectedSquare = -1;
-				}
+			if (highlightedDestinations.empty()) {
+				selectedSquare = -1;
 			}
+		}
 		bool showOpponentTips = (selectedSquare >= 0) || (turnSide == aiSide());
 		const std::vector<Move>* opponentMoveSource = &aiMoves;
 		std::vector<Move> previewAiMoves;
@@ -623,21 +865,44 @@ struct Crownstep : Module {
 			}
 		}
 		const std::vector<Move>& activeMoves = (turnSide == humanSide()) ? humanMoves : aiMoves;
-		gameOver = activeMoves.empty();
+		const std::vector<Move>& opposingMoves = (turnSide == humanSide()) ? aiMoves : humanMoves;
+		if (isOthelloMode()) {
+			gameOver = activeMoves.empty() && opposingMoves.empty();
+		}
+		else {
+			gameOver = activeMoves.empty();
+		}
 		winnerSide = gameOver
 			? (gameRules ? gameRules->winnerForNoLegalMoves(board, turnSide) : opposingSide(turnSide))
 			: 0;
 	}
 
-	int searchDepthForDifficulty() const {
-		return gameRules ? gameRules->searchDepthForDifficulty(aiDifficulty) : crownstep::searchDepthForDifficulty(aiDifficulty);
+	void advanceForcedPassesIfNeeded() {
+		if (!isOthelloMode() || gameOver) {
+			return;
+		}
+		for (int i = 0; i < 2; ++i) {
+			const std::vector<Move>& activeMoves = (turnSide == humanSide()) ? humanMoves : aiMoves;
+			const std::vector<Move>& opposingMoves = (turnSide == humanSide()) ? aiMoves : humanMoves;
+			if (!activeMoves.empty() || gameOver) {
+				return;
+			}
+			if (opposingMoves.empty()) {
+				gameOver = true;
+				winnerSide = gameRules ? gameRules->winnerForNoLegalMoves(board, turnSide) : 0;
+				return;
+			}
+			turnSide = opposingSide(turnSide);
+			selectedSquare = -1;
+			hoveredSquare = -1;
+			highlightedDestinations.clear();
+			opponentHighlightedDestinations.clear();
+			refreshLegalMoves();
+		}
 	}
 
-	Move chooseAiMove() const {
-		if (isChessMode()) {
-			return crownstep::chessChooseAiMove(board, aiDifficulty, chessState);
-		}
-		return gameRules ? gameRules->chooseAiMove(board, aiDifficulty) : crownstep::chooseAiMove(board, aiDifficulty);
+	int searchDepthForDifficulty() const {
+		return gameRules ? gameRules->searchDepthForDifficulty(aiDifficulty) : crownstep::searchDepthForDifficulty(aiDifficulty);
 	}
 
 	float expressiveModForMove(
@@ -646,16 +911,6 @@ struct Crownstep : Module {
 		const BoardState& afterBoard,
 		int moverSide
 	) const {
-		auto captureCount = [](const std::vector<Move>& moves) {
-			int captures = 0;
-			for (const Move& candidate : moves) {
-				if (candidate.isCapture) {
-					captures++;
-				}
-			}
-			return captures;
-		};
-
 		auto pieceCounts = [](const BoardState& sourceBoard, int* men, int* kings) {
 			int localMen = 0;
 			int localKings = 0;
@@ -679,24 +934,7 @@ struct Crownstep : Module {
 		};
 
 		float moveEnergy = crownstep::normalizedMoveMod(move);
-
-		int beforeEval = gameRules ? gameRules->evaluatePosition(beforeBoard) : crownstep::evaluatePosition(beforeBoard);
-		int afterEval = gameRules ? gameRules->evaluatePosition(afterBoard) : crownstep::evaluatePosition(afterBoard);
-		float moverBefore = (moverSide == aiSide()) ? float(beforeEval) : -float(beforeEval);
-		float moverAfter = (moverSide == aiSide()) ? float(afterEval) : -float(afterEval);
-		float evalSwingNorm = clamp(std::fabs(moverAfter - moverBefore) / 260.f, 0.f, 1.f);
-
-		std::vector<Move> afterHumanMoves =
-			gameRules ? gameRules->generateLegalMovesForSide(afterBoard, humanSide())
-			          : crownstep::generateLegalMovesForSide(afterBoard, humanSide());
-		std::vector<Move> afterAiMoves =
-			gameRules ? gameRules->generateLegalMovesForSide(afterBoard, aiSide())
-			          : crownstep::generateLegalMovesForSide(afterBoard, aiSide());
-		int pressureCaptures = captureCount(afterHumanMoves) + captureCount(afterAiMoves);
-		float pressureNorm = clamp(float(pressureCaptures) / 5.f, 0.f, 1.f);
-
-		float mobilityDeltaNorm =
-			clamp(std::fabs(float(int(afterHumanMoves.size()) - int(afterAiMoves.size()))) / 12.f, 0.f, 1.f);
+		float captureNorm = clamp(float(move.captured.size()) / 4.f, 0.f, 1.f);
 
 		int men = 0;
 		int kings = 0;
@@ -705,14 +943,13 @@ struct Crownstep : Module {
 		float initialPieceCount = isChessMode() ? 32.f : 24.f;
 		float phaseNorm = clamp((initialPieceCount - (float(men) + float(kings))) / initialPieceCount, 0.f, 1.f);
 
-		float materialNorm =
-			clamp(std::fabs(float(gameRules ? gameRules->evaluateBoardMaterial(afterBoard) : crownstep::evaluateBoardMaterial(afterBoard))) / 900.f,
-				0.f, 1.f);
+		int beforeMaterial = gameRules ? gameRules->evaluateBoardMaterial(beforeBoard) : crownstep::evaluateBoardMaterial(beforeBoard);
+		int afterMaterial = gameRules ? gameRules->evaluateBoardMaterial(afterBoard) : crownstep::evaluateBoardMaterial(afterBoard);
+		float moverMaterialBefore = (moverSide == aiSide()) ? float(beforeMaterial) : -float(beforeMaterial);
+		float moverMaterialAfter = (moverSide == aiSide()) ? float(afterMaterial) : -float(afterMaterial);
+		float materialSwingNorm = clamp(std::fabs(moverMaterialAfter - moverMaterialBefore) / 900.f, 0.f, 1.f);
 
-		float boardContext =
-			0.34f * evalSwingNorm + 0.24f * pressureNorm + 0.18f * mobilityDeltaNorm + 0.14f * phaseNorm + 0.10f * materialNorm;
-
-		float combined = 0.45f * moveEnergy + 0.55f * boardContext;
+		float combined = 0.56f * moveEnergy + 0.20f * materialSwingNorm + 0.14f * captureNorm + 0.10f * phaseNorm;
 		return clamp(combined, 0.f, 1.f);
 	}
 
@@ -724,8 +961,10 @@ struct Crownstep : Module {
 		ChessState nextChessState = chessState;
 		const BoardState afterBoard = isChessMode()
 			? crownstep::chessApplyMoveToBoard(beforeBoard, move, chessState, &nextChessState)
-			: (gameRules ? gameRules->applyMoveToBoard(beforeBoard, move) : crownstep::applyMoveToBoard(beforeBoard, move));
-		beginMoveAnimation(move, beforeBoard);
+			: (isOthelloMode()
+				? crownstep::othelloApplyMoveToBoard(beforeBoard, move, moverSide)
+				: (gameRules ? gameRules->applyMoveToBoard(beforeBoard, move) : crownstep::applyMoveToBoard(beforeBoard, move)));
+		beginMoveAnimation(move, beforeBoard, moverSide);
 		board = afterBoard;
 		if (isChessMode()) {
 			chessState = nextChessState;
@@ -741,17 +980,53 @@ struct Crownstep : Module {
 		turnSide = opposingSide(moverSide);
 		captureFlashSeconds = move.isCapture ? 0.16f : 0.f;
 		refreshLegalMoves();
+		advanceForcedPassesIfNeeded();
 	}
 
-	void maybeRunAiTurn() {
-		if (turnSide != aiSide() || gameOver) {
+	// UI-thread service: AI search runs in worker thread, UI applies ready moves.
+	void serviceAiTurnFromUiThread() {
+		if (gameOver || turnSide != aiSide()) {
+			aiTurnDelayPending = false;
+			aiTurnDelayActive = false;
+			clearAiWorkerQueueState();
 			return;
 		}
-		Move move = chooseAiMove();
-		if (move.originIndex < 0) {
-			return;
+
+		if (aiTurnDelayPending) {
+			bool animationsActive = moveAnimation.active || !moveAnimationQueue.empty();
+			if (!aiTurnDelayActive) {
+				if (!animationsActive) {
+					aiTurnDelayActive = true;
+					aiTurnDelayStartSeconds = transportTimeSeconds;
+					// Start AI thinking immediately when the mandatory delay window starts.
+					dispatchAiRequestIfIdle();
+				}
+				return;
+			}
+
+			if (transportTimeSeconds - aiTurnDelayStartSeconds < AI_TURN_DELAY_SECONDS) {
+				// Keep worker busy while we enforce minimum think-time.
+				dispatchAiRequestIfIdle();
+				return;
+			}
+
+			aiTurnDelayPending = false;
+			aiTurnDelayActive = false;
 		}
-		commitMove(move, aiSide());
+
+		// If we reached AI turn through a path without an armed delay, still dispatch.
+		dispatchAiRequestIfIdle();
+
+		Move readyMove;
+		bool hasReadyMove = consumeReadyAiResult(&readyMove);
+		if (hasReadyMove && !gameOver && turnSide == aiSide()) {
+			if (readyMove.originIndex >= 0 && readyMove.destinationIndex >= 0) {
+				commitMove(readyMove, aiSide());
+			}
+			else if (isOthelloMode()) {
+				advanceForcedPassesIfNeeded();
+			}
+		}
 	}
 
 	void onBoardSquarePressed(int index) {
@@ -760,6 +1035,17 @@ struct Crownstep : Module {
 		}
 		int cellCount = boardCellCount();
 		if (index < 0 || index >= cellCount) {
+			return;
+		}
+
+		if (isOthelloMode()) {
+			for (const Move& move : humanMoves) {
+				if (move.destinationIndex == index) {
+					commitMove(move, humanSide());
+					armDelayedAiTurnAfterHumanMove();
+					return;
+				}
+			}
 			return;
 		}
 
@@ -777,7 +1063,7 @@ struct Crownstep : Module {
 		for (const Move& move : humanMoves) {
 			if (move.originIndex == selectedSquare && move.destinationIndex == index) {
 				commitMove(move, humanSide());
-				maybeRunAiTurn();
+				armDelayedAiTurnAfterHumanMove();
 				return;
 			}
 		}
@@ -1155,6 +1441,7 @@ struct Crownstep : Module {
 		captureFlashSeconds = 0.f;
 		resetMoveAnimation();
 		refreshLegalMoves();
+		advanceForcedPassesIfNeeded();
 	}
 };
 
@@ -1228,6 +1515,7 @@ struct CrownstepBoardWidget final : Widget {
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
+		bool othelloBoard = module && module->isOthelloMode();
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
@@ -1235,7 +1523,28 @@ struct CrownstepBoardWidget final : Widget {
 				float x = col * cellWidth;
 				float y = row * cellHeight;
 				float seed = float((row * 29 + col * 17) % 97) * 0.17f;
-				if (marbleTexture) {
+				if (othelloBoard) {
+					// Othello board: green felt/table look with subtle per-cell variation.
+					float tint = 0.5f + 0.5f * std::sin(seed * 1.7f + float((row + col) & 1) * 0.9f);
+					NVGcolor topColor = nvgRGBA(
+						int(18.f + 8.f * tint),
+						int(104.f + 16.f * tint),
+						int(56.f + 10.f * tint),
+						255
+					);
+					NVGcolor bottomColor = nvgRGBA(
+						int(10.f + 6.f * tint),
+						int(72.f + 11.f * tint),
+						int(40.f + 8.f * tint),
+						255
+					);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
+					nvgFill(args.vg);
+				}
+				else if (marbleTexture) {
 					NVGcolor topColor = dark ? nvgRGB(72, 74, 82) : nvgRGB(208, 212, 222);
 					NVGcolor bottomColor = dark ? nvgRGB(42, 44, 52) : nvgRGB(166, 172, 184);
 					nvgBeginPath(args.vg);
@@ -1296,6 +1605,29 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 			}
+		}
+		if (othelloBoard) {
+			NVGcolor gridColor = nvgRGBA(8, 42, 24, 214);
+			nvgBeginPath(args.vg);
+			for (int i = 0; i <= 8; ++i) {
+				float x = float(i) * cellWidth;
+				nvgMoveTo(args.vg, x, 0.f);
+				nvgLineTo(args.vg, x, box.size.y);
+			}
+			for (int i = 0; i <= 8; ++i) {
+				float y = float(i) * cellHeight;
+				nvgMoveTo(args.vg, 0.f, y);
+				nvgLineTo(args.vg, box.size.x, y);
+			}
+			nvgStrokeColor(args.vg, gridColor);
+			nvgStrokeWidth(args.vg, 1.1f);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.7f, 0.7f, box.size.x - 1.4f, box.size.y - 1.4f);
+			nvgStrokeColor(args.vg, nvgRGBA(4, 24, 14, 228));
+			nvgStrokeWidth(args.vg, 1.6f);
+			nvgStroke(args.vg);
 		}
 
 				if (module) {
@@ -1420,6 +1752,36 @@ struct CrownstepBoardWidget final : Widget {
 						int fillAlpha = int(255.f * alpha);
 						int strokeAlpha = int(240.f * alpha);
 							bool humanPiece = piece > 0;
+							if (module->isOthelloMode()) {
+								float discR = radius * 1.02f;
+								// Human side renders black discs, AI renders white discs.
+								NVGcolor edge = humanPiece ? nvgRGBA(28, 28, 32, strokeAlpha) : nvgRGBA(198, 200, 208, strokeAlpha);
+								NVGcolor high = humanPiece ? nvgRGBA(96, 100, 114, fillAlpha) : nvgRGBA(254, 254, 255, fillAlpha);
+								NVGcolor low = humanPiece ? nvgRGBA(12, 14, 18, fillAlpha) : nvgRGBA(202, 206, 216, fillAlpha);
+
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX, centerY, discR);
+								NVGpaint discPaint = nvgRadialGradient(
+									args.vg,
+									centerX - discR * 0.24f,
+									centerY - discR * 0.26f,
+									discR * 0.12f,
+									discR * 1.05f,
+									high,
+									low
+								);
+								nvgFillPaint(args.vg, discPaint);
+								nvgFill(args.vg);
+								nvgStrokeColor(args.vg, edge);
+								nvgStrokeWidth(args.vg, 1.15f);
+								nvgStroke(args.vg);
+
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX - discR * 0.21f, centerY - discR * 0.24f, discR * 0.28f);
+								nvgFillColor(args.vg, nvgRGBA(255, 255, 255, int(40.f * alpha)));
+								nvgFill(args.vg);
+								return;
+							}
 								if (module->isChessMode()) {
 									int pieceType = std::abs(piece);
 									float pieceR = radius * 2.55f;
@@ -1780,6 +2142,25 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						return false;
 					};
+					auto drawPieceAtScaled = [&](float centerX, float centerY, int piece, float alpha, float scaleX, float scaleY) {
+						nvgSave(args.vg);
+						nvgTranslate(args.vg, centerX, centerY);
+						nvgScale(args.vg, scaleX, scaleY);
+						nvgTranslate(args.vg, -centerX, -centerY);
+						drawPieceAt(centerX, centerY, piece, alpha);
+						nvgRestore(args.vg);
+					};
+					auto isActiveAnimatedCaptureIndex = [&](int index) {
+						if (!module->isOthelloMode() || !module->moveAnimation.active) {
+							return false;
+						}
+						for (int captureIndex : module->moveAnimation.capturedIndices) {
+							if (captureIndex == index) {
+								return true;
+							}
+						}
+						return false;
+					};
 
 					const bool showMovablePieceHints = !module->gameOver && module->turnSide == module->humanSide();
 					int cellCount = module->boardCellCount();
@@ -1795,6 +2176,9 @@ struct CrownstepBoardWidget final : Widget {
 					for (int i = 0; i < cellCount; ++i) {
 						int piece = module->board[size_t(i)];
 						if (piece == 0) {
+							continue;
+						}
+						if (isActiveAnimatedCaptureIndex(i)) {
 							continue;
 						}
 						if ((module->moveAnimation.active && i == module->moveAnimation.destinationIndex) || indexIsQueuedDestination(i)) {
@@ -1840,8 +2224,42 @@ struct CrownstepBoardWidget final : Widget {
 						if (!module->boardIndexToCoord(captureIndex, &row, &col)) {
 							continue;
 						}
-						float ghostAlpha = clamp(0.72f - t * 1.45f, 0.f, 0.72f);
-						drawPieceAt((col + 0.5f) * cellWidth, (row + 0.5f) * cellHeight, capturedPiece, ghostAlpha);
+						float centerX = (col + 0.5f) * cellWidth;
+						float centerY = (row + 0.5f) * cellHeight;
+						if (module->isOthelloMode()) {
+							int flippedPiece = module->board[size_t(captureIndex)];
+							if (flippedPiece == 0) {
+								flippedPiece = -capturedPiece;
+							}
+							float flipStart = OTHELLO_FLIP_SECONDS_PER_PIECE * float(i);
+							float flipEnd = flipStart + OTHELLO_FLIP_SECONDS_PER_PIECE;
+							if (module->moveAnimation.elapsedSeconds <= flipStart) {
+								drawPieceAt(centerX, centerY, capturedPiece, 1.f);
+								continue;
+							}
+							if (module->moveAnimation.elapsedSeconds >= flipEnd) {
+								drawPieceAt(centerX, centerY, flippedPiece, 1.f);
+								continue;
+							}
+							float local = clamp(
+								(module->moveAnimation.elapsedSeconds - flipStart) / OTHELLO_FLIP_SECONDS_PER_PIECE,
+								0.f,
+								1.f
+							);
+							float firstHalf = clamp(local * 2.f, 0.f, 1.f);
+							float secondHalf = clamp((local - 0.5f) * 2.f, 0.f, 1.f);
+							float widthScale = std::max(0.06f, std::fabs(std::cos(local * float(M_PI))));
+							if (local < 0.5f) {
+								drawPieceAtScaled(centerX, centerY, capturedPiece, 1.f - 0.2f * firstHalf, widthScale, 1.f);
+							}
+							else {
+								drawPieceAtScaled(centerX, centerY, flippedPiece, 0.8f + 0.2f * secondHalf, widthScale, 1.f);
+							}
+						}
+						else {
+							float ghostAlpha = clamp(0.72f - t * 1.45f, 0.f, 0.72f);
+							drawPieceAt(centerX, centerY, capturedPiece, ghostAlpha);
+						}
 					}
 
 					int segments = int(module->moveAnimation.path.size()) - 1;
@@ -2210,6 +2628,14 @@ struct CrownstepWidget final : ModuleWidget {
 
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
+	}
+
+	void step() override {
+		ModuleWidget::step();
+		Crownstep* crownstepModule = dynamic_cast<Crownstep*>(module);
+		if (crownstepModule) {
+			crownstepModule->serviceAiTurnFromUiThread();
+		}
 	}
 
 	void appendContextMenu(Menu* menu) override {

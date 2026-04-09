@@ -10,6 +10,7 @@ namespace crownstep {
 
 static constexpr int CHECKERS_BOARD_SIZE = 32;
 static constexpr int CHESS_BOARD_SIZE = 64;
+static constexpr int OTHELLO_BOARD_SIZE = 64;
 static constexpr int MAX_BOARD_SIZE = CHESS_BOARD_SIZE;
 static constexpr int BOARD_SIZE = CHECKERS_BOARD_SIZE;
 static constexpr int HUMAN_SIDE = 1;
@@ -1104,6 +1105,246 @@ inline int chessWinnerForNoLegalMoves(const BoardState& board, int sideToMove) {
 	return 0;
 }
 
+inline bool othelloIndexToCoord(int index, int* row, int* col) {
+	return chessIndexToCoord(index, row, col);
+}
+
+inline int othelloCoordToIndex(int row, int col) {
+	return chessCoordToIndex(row, col);
+}
+
+inline BoardState othelloMakeInitialBoard() {
+	BoardState board {};
+	// Human is black, AI is white.
+	board[size_t(othelloCoordToIndex(3, 3))] = AI_SIDE;
+	board[size_t(othelloCoordToIndex(3, 4))] = HUMAN_SIDE;
+	board[size_t(othelloCoordToIndex(4, 3))] = HUMAN_SIDE;
+	board[size_t(othelloCoordToIndex(4, 4))] = AI_SIDE;
+	return board;
+}
+
+inline bool othelloCollectDirectionFlips(
+	const BoardState& board,
+	int side,
+	int row,
+	int col,
+	int dr,
+	int dc,
+	std::vector<int>* flips
+) {
+	if (!flips) {
+		return false;
+	}
+	std::vector<int> local;
+	int r = row + dr;
+	int c = col + dc;
+	while (true) {
+		int idx = othelloCoordToIndex(r, c);
+		if (idx < 0) {
+			return false;
+		}
+		int piece = board[size_t(idx)];
+		if (piece == 0) {
+			return false;
+		}
+		if (piece == side) {
+			if (local.empty()) {
+				return false;
+			}
+			flips->insert(flips->end(), local.begin(), local.end());
+			return true;
+		}
+		local.push_back(idx);
+		r += dr;
+		c += dc;
+	}
+}
+
+inline std::vector<Move> othelloGenerateLegalMovesForSide(const BoardState& board, int side) {
+	std::vector<Move> moves;
+	for (int row = 0; row < 8; ++row) {
+		for (int col = 0; col < 8; ++col) {
+			int destination = othelloCoordToIndex(row, col);
+			if (destination < 0 || board[size_t(destination)] != 0) {
+				continue;
+			}
+			std::vector<int> flips;
+			for (int dr = -1; dr <= 1; ++dr) {
+				for (int dc = -1; dc <= 1; ++dc) {
+					if (dr == 0 && dc == 0) {
+						continue;
+					}
+					othelloCollectDirectionFlips(board, side, row, col, dr, dc, &flips);
+				}
+			}
+			if (flips.empty()) {
+				continue;
+			}
+			Move move;
+			move.originIndex = destination;
+			move.destinationIndex = destination;
+			move.path.push_back(destination);
+			move.captured = flips;
+			move.isCapture = true;
+			move.isMultiCapture = flips.size() > 1;
+			move.isKing = false;
+			moves.push_back(move);
+		}
+	}
+	return moves;
+}
+
+inline BoardState othelloApplyMoveToBoard(const BoardState& sourceBoard, const Move& move, int sideToMove) {
+	BoardState nextBoard = sourceBoard;
+	if (move.destinationIndex < 0 || move.destinationIndex >= OTHELLO_BOARD_SIZE) {
+		return nextBoard;
+	}
+	if (nextBoard[size_t(move.destinationIndex)] != 0) {
+		return nextBoard;
+	}
+	nextBoard[size_t(move.destinationIndex)] = sideToMove;
+	for (int captureIndex : move.captured) {
+		if (captureIndex >= 0 && captureIndex < OTHELLO_BOARD_SIZE) {
+			nextBoard[size_t(captureIndex)] = sideToMove;
+		}
+	}
+	return nextBoard;
+}
+
+inline BoardState othelloApplyMoveToBoard(const BoardState& sourceBoard, const Move& move) {
+	int sideToMove = HUMAN_SIDE;
+	if (!move.captured.empty()) {
+		int capturedIndex = move.captured.front();
+		if (capturedIndex >= 0 && capturedIndex < OTHELLO_BOARD_SIZE) {
+			int capturedPiece = sourceBoard[size_t(capturedIndex)];
+			if (capturedPiece != 0) {
+				sideToMove = -pieceSide(capturedPiece);
+			}
+		}
+	}
+	else if (move.originIndex >= 0 && move.originIndex < OTHELLO_BOARD_SIZE) {
+		int piece = sourceBoard[size_t(move.originIndex)];
+		if (piece != 0) {
+			sideToMove = pieceSide(piece);
+		}
+	}
+	return othelloApplyMoveToBoard(sourceBoard, move, sideToMove);
+}
+
+inline int othelloCountPiecesForSide(const BoardState& board, int side) {
+	int count = 0;
+	for (int i = 0; i < OTHELLO_BOARD_SIZE; ++i) {
+		if (board[size_t(i)] == side) {
+			count++;
+		}
+	}
+	return count;
+}
+
+inline int othelloCornerScore(const BoardState& board) {
+	int score = 0;
+	for (int index : {othelloCoordToIndex(0, 0), othelloCoordToIndex(0, 7), othelloCoordToIndex(7, 0), othelloCoordToIndex(7, 7)}) {
+		if (index < 0) {
+			continue;
+		}
+		int piece = board[size_t(index)];
+		if (piece == AI_SIDE) {
+			score += 30;
+		}
+		else if (piece == HUMAN_SIDE) {
+			score -= 30;
+		}
+	}
+	return score;
+}
+
+inline int othelloEvaluateBoardMaterial(const BoardState& board) {
+	int aiCount = othelloCountPiecesForSide(board, AI_SIDE);
+	int humanCount = othelloCountPiecesForSide(board, HUMAN_SIDE);
+	return (aiCount - humanCount) * 8;
+}
+
+inline int othelloEvaluatePosition(const BoardState& board) {
+	std::vector<Move> aiMoves = othelloGenerateLegalMovesForSide(board, AI_SIDE);
+	std::vector<Move> humanMoves = othelloGenerateLegalMovesForSide(board, HUMAN_SIDE);
+	int score = othelloEvaluateBoardMaterial(board);
+	score += int(aiMoves.size()) * 6;
+	score -= int(humanMoves.size()) * 6;
+	score += othelloCornerScore(board);
+	return score;
+}
+
+inline int othelloSearchDepthForDifficulty(int difficulty) {
+	switch (std::max(0, std::min(difficulty, 2))) {
+		case 0: return 1;
+		case 2: return 3;
+		default: return 2;
+	}
+}
+
+inline int othelloSearchScore(const BoardState& board, int sideToMove, int depth, int alpha, int beta) {
+	std::vector<Move> moves = othelloGenerateLegalMovesForSide(board, sideToMove);
+	std::vector<Move> opponentMoves = othelloGenerateLegalMovesForSide(board, -sideToMove);
+	if (depth <= 0 || (moves.empty() && opponentMoves.empty())) {
+		int score = othelloEvaluatePosition(board);
+		return (sideToMove == AI_SIDE) ? score : -score;
+	}
+
+	if (moves.empty()) {
+		return -othelloSearchScore(board, -sideToMove, depth - 1, -beta, -alpha);
+	}
+
+	int best = std::numeric_limits<int>::min();
+	for (const Move& move : moves) {
+		BoardState nextBoard = othelloApplyMoveToBoard(board, move, sideToMove);
+		int value = -othelloSearchScore(nextBoard, -sideToMove, depth - 1, -beta, -alpha);
+		best = std::max(best, value);
+		alpha = std::max(alpha, value);
+		if (alpha >= beta) {
+			break;
+		}
+	}
+	return best;
+}
+
+inline Move othelloChooseAiMove(const BoardState& board, int difficulty) {
+	std::vector<Move> moves = othelloGenerateLegalMovesForSide(board, AI_SIDE);
+	if (moves.empty()) {
+		return Move();
+	}
+	int depth = othelloSearchDepthForDifficulty(difficulty);
+	int bestIndex = 0;
+	int bestScore = std::numeric_limits<int>::min();
+	for (int i = 0; i < int(moves.size()); ++i) {
+		BoardState nextBoard = othelloApplyMoveToBoard(board, moves[size_t(i)], AI_SIDE);
+		int score = -othelloSearchScore(
+			nextBoard,
+			HUMAN_SIDE,
+			depth - 1,
+			std::numeric_limits<int>::min() / 2,
+			std::numeric_limits<int>::max() / 2
+		);
+		int flipBonus = int(moves[size_t(i)].captured.size());
+		if (score > bestScore || (score == bestScore && flipBonus > int(moves[size_t(bestIndex)].captured.size()))) {
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+	return moves[size_t(bestIndex)];
+}
+
+inline int othelloWinnerForNoLegalMoves(const BoardState& board) {
+	int humanCount = othelloCountPiecesForSide(board, HUMAN_SIDE);
+	int aiCount = othelloCountPiecesForSide(board, AI_SIDE);
+	if (humanCount > aiCount) {
+		return HUMAN_SIDE;
+	}
+	if (aiCount > humanCount) {
+		return AI_SIDE;
+	}
+	return 0;
+}
+
 inline float interpretPitchIndexForMove(const Move& move, int interpretationMode) {
 	int mode = std::max(0, std::min(interpretationMode, int(PITCH_INTERPRETATION_NAMES.size()) - 1));
 	float origin = float(std::max(0, std::min(move.originIndex, BOARD_SIZE - 1)));
@@ -1357,6 +1598,51 @@ struct ChessRules final : IGameRules {
 	}
 };
 
+struct OthelloRules final : IGameRules {
+	const char* gameId() const override {
+		return "othello";
+	}
+	int humanSide() const override {
+		return HUMAN_SIDE;
+	}
+	int aiSide() const override {
+		return AI_SIDE;
+	}
+	int boardCellCount() const override {
+		return OTHELLO_BOARD_SIZE;
+	}
+	bool indexToCoord(int index, int* row, int* col) const override {
+		return crownstep::othelloIndexToCoord(index, row, col);
+	}
+	int coordToIndex(int row, int col) const override {
+		return crownstep::othelloCoordToIndex(row, col);
+	}
+	BoardState makeInitialBoard() const override {
+		return crownstep::othelloMakeInitialBoard();
+	}
+	std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) const override {
+		return crownstep::othelloGenerateLegalMovesForSide(sourceBoard, side);
+	}
+	BoardState applyMoveToBoard(const BoardState& sourceBoard, const Move& move) const override {
+		return crownstep::othelloApplyMoveToBoard(sourceBoard, move);
+	}
+	Move chooseAiMove(const BoardState& board, int difficulty) const override {
+		return crownstep::othelloChooseAiMove(board, difficulty);
+	}
+	int searchDepthForDifficulty(int difficulty) const override {
+		return crownstep::othelloSearchDepthForDifficulty(difficulty);
+	}
+	int evaluatePosition(const BoardState& sourceBoard) const override {
+		return crownstep::othelloEvaluatePosition(sourceBoard);
+	}
+	int evaluateBoardMaterial(const BoardState& sourceBoard) const override {
+		return crownstep::othelloEvaluateBoardMaterial(sourceBoard);
+	}
+	int winnerForNoLegalMoves(const BoardState& sourceBoard, int) const override {
+		return crownstep::othelloWinnerForNoLegalMoves(sourceBoard);
+	}
+};
+
 inline const IGameRules& checkersRules() {
 	static CheckersRules rules;
 	return rules;
@@ -1364,6 +1650,11 @@ inline const IGameRules& checkersRules() {
 
 inline const IGameRules& chessRules() {
 	static ChessRules rules;
+	return rules;
+}
+
+inline const IGameRules& othelloRules() {
+	static OthelloRules rules;
 	return rules;
 }
 

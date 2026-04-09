@@ -366,6 +366,60 @@ TestResult testChessEnPassantImmediateCapture() {
             " ep=" + std::to_string(foundEnPassant ? 1 : 0)};
 }
 
+TestResult testOthelloInitialBoardAndMoves() {
+  const crownstep::IGameRules& rules = crownstep::othelloRules();
+  BoardState board = rules.makeInitialBoard();
+  int human = 0;
+  int ai = 0;
+  for (int i = 0; i < rules.boardCellCount(); ++i) {
+    int piece = board[size_t(i)];
+    if (piece == HUMAN_SIDE) {
+      human++;
+    } else if (piece == AI_SIDE) {
+      ai++;
+    }
+  }
+  std::vector<Move> moves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  bool pass = (human == 2) && (ai == 2) && (moves.size() == 4);
+  return {"Othello initial board has 2 discs per side + 4 legal moves", pass,
+          "human=" + std::to_string(human) + " ai=" + std::to_string(ai) +
+            " moves=" + std::to_string(moves.size())};
+}
+
+TestResult testOthelloMoveFlipsBracketedDiscs() {
+  const crownstep::IGameRules& rules = crownstep::othelloRules();
+  BoardState board = rules.makeInitialBoard();
+  std::vector<Move> moves = rules.generateLegalMovesForSide(board, HUMAN_SIDE);
+  int target = crownstep::othelloCoordToIndex(2, 3);
+  Move chosen;
+  bool found = false;
+  for (const Move& move : moves) {
+    if (move.destinationIndex == target) {
+      chosen = move;
+      found = true;
+      break;
+    }
+  }
+  BoardState after = found ? crownstep::othelloApplyMoveToBoard(board, chosen, HUMAN_SIDE) : board;
+  bool placed = after[size_t(target)] == HUMAN_SIDE;
+  bool flipped = after[size_t(crownstep::othelloCoordToIndex(3, 3))] == HUMAN_SIDE;
+  bool pass = found && placed && flipped && chosen.isCapture && !chosen.captured.empty();
+  return {"Othello move places disc and flips bracketed line", pass,
+          "found=" + std::to_string(found ? 1 : 0) +
+            " flips=" + std::to_string(chosen.captured.size())};
+}
+
+TestResult testOthelloWinnerByDiscCount() {
+  BoardState board {};
+  board.fill(0);
+  board[size_t(crownstep::othelloCoordToIndex(0, 0))] = HUMAN_SIDE;
+  board[size_t(crownstep::othelloCoordToIndex(0, 1))] = HUMAN_SIDE;
+  board[size_t(crownstep::othelloCoordToIndex(0, 2))] = AI_SIDE;
+  int winner = crownstep::othelloWinnerForNoLegalMoves(board);
+  return {"Othello winner resolution uses disc majority", winner == HUMAN_SIDE,
+          "winner=" + std::to_string(winner)};
+}
+
 } // namespace
 
 int main() {
@@ -387,6 +441,9 @@ int main() {
   tests.push_back(testChessKingCannotCaptureEnemyKing());
   tests.push_back(testChessCastlingMovesAndRookShift());
   tests.push_back(testChessEnPassantImmediateCapture());
+  tests.push_back(testOthelloInitialBoardAndMoves());
+  tests.push_back(testOthelloMoveFlipsBracketedDiscs());
+  tests.push_back(testOthelloWinnerByDiscCount());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";
