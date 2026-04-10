@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.0" width="600.000000pt" height="400.000000pt" viewBox="0 0 600.000000 400.000000" preserveAspectRatio="xMidYMid meet">
   <g id="chess-piece-atlas" transform="translate(0.000000,400.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
-    <g id="pieces-black" stroke="#ffffff" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <g id="pieces-black" stroke="#ffffff" stroke-width="30" stroke-linejoin="round" stroke-linecap="round">
       <g id="piece-black-king">
         <path id="piece-black-king-part-1" d="M770 3456 c0 -30 -3 -35 -27 -38 -24 -3 -28 -8 -31 -40 -3 -34 -1 -37 25 -40 22 -2 29 -9 31 -30 3 -24 0 -28 -22 -28 -14 0 -48 -5 -77 -11 -112 -24 -117 -77 -24 -271 l37 -78 144 0 145 0 43 93 c53 113 71 179 55 208 -14 28 -66 48 -140 56 -57 6 -60 7 -57 32 2 20 9 27 31 29 24 3 27 7 27 43 0 37 -2 39 -30 39 -28 0 -30 3 -30 35 l0 35 -50 0 -50 0 0 -34z" />
         <path id="piece-black-king-part-2" d="M624 2886 c-3 -8 -4 -23 -2 -33 3 -17 18 -18 202 -18 175 0 200 2 209 17 8 12 7 21 -2 32 -19 23 -399 24 -407 2z" />
@@ -30,13 +30,13 @@
       </g>
       <g id="piece-black-pawn">
         <path id="piece-black-pawn-part-1" d="M5260 2919 c-66 -26 -95 -91 -66 -148 31 -58 104 -77 162 -42 67 41 63 138 -8 181 -36 22 -51 24 -88 9z" />
-        <path id="piece-black-pawn-part-2" d="M5154 2685 c-14 -36 13 -45 140 -45 128 0 150 6 144 36 -3 17 -15 19 -141 22 -116 2 -138 0 -143 -13z" />
+        <path id="piece-black-pawn-part-2" stroke-width="26" d="M5154 2685 c-14 -36 13 -45 140 -45 128 0 150 6 144 36 -3 17 -15 19 -141 22 -116 2 -138 0 -143 -13z" />
         <path id="piece-black-pawn-part-3" d="M5197 2623 c-3 -5 -10 -35 -17 -68 -6 -33 -20 -93 -31 -133 -28 -103 -30 -102 146 -102 177 0 177 0 146 103 -11 39 -24 95 -27 122 -11 85 -12 85 -119 85 -51 0 -96 -3 -98 -7z" />
         <path id="piece-black-pawn-part-4" d="M5138 2303 c-10 -2 -21 -17 -24 -31 -13 -58 -18 -69 -55 -118 -43 -57 -50 -101 -21 -127 16 -15 50 -17 264 -17 225 0 246 2 261 18 32 35 19 77 -40 142 -21 23 -43 77 -43 107 0 26 -42 33 -182 32 -79 -1 -151 -3 -160 -6z" />
       </g>
     </g>
 
-    <g id="pieces-white" transform="translate(0,-1750)" fill="#ffffff" stroke="#000000" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <g id="pieces-white" transform="translate(0,-1750)" fill="#ffffff" stroke="#000000" stroke-width="30" stroke-linejoin="round" stroke-linecap="round">
       <g id="piece-white-king">
         <path id="piece-white-king-part-1" d="M770 3456 c0 -30 -3 -35 -27 -38 -24 -3 -28 -8 -31 -40 -3 -34 -1 -37 25 -40 22 -2 29 -9 31 -30 3 -24 0 -28 -22 -28 -14 0 -48 -5 -77 -11 -112 -24 -117 -77 -24 -271 l37 -78 144 0 145 0 43 93 c53 113 71 179 55 208 -14 28 -66 48 -140 56 -57 6 -60 7 -57 32 2 20 9 27 31 29 24 3 27 7 27 43 0 37 -2 39 -30 39 -28 0 -30 3 -30 35 l0 35 -50 0 -50 0 0 -34z" />
         <path id="piece-white-king-part-2" d="M624 2886 c-3 -8 -4 -23 -2 -33 3 -17 18 -18 202 -18 175 0 200 2 209 17 8 12 7 21 -2 32 -19 23 -399 24 -407 2z" />
@@ -66,7 +66,7 @@
       </g>
       <g id="piece-white-pawn">
         <path id="piece-white-pawn-part-1" d="M5260 2919 c-66 -26 -95 -91 -66 -148 31 -58 104 -77 162 -42 67 41 63 138 -8 181 -36 22 -51 24 -88 9z" />
-        <path id="piece-white-pawn-part-2" d="M5154 2685 c-14 -36 13 -45 140 -45 128 0 150 6 144 36 -3 17 -15 19 -141 22 -116 2 -138 0 -143 -13z" />
+        <path id="piece-white-pawn-part-2" stroke-width="26" d="M5154 2685 c-14 -36 13 -45 140 -45 128 0 150 6 144 36 -3 17 -15 19 -141 22 -116 2 -138 0 -143 -13z" />
         <path id="piece-white-pawn-part-3" d="M5197 2623 c-3 -5 -10 -35 -17 -68 -6 -33 -20 -93 -31 -133 -28 -103 -30 -102 146 -102 177 0 177 0 146 103 -11 39 -24 95 -27 122 -11 85 -12 85 -119 85 -51 0 -96 -3 -98 -7z" />
         <path id="piece-white-pawn-part-4" d="M5138 2303 c-10 -2 -21 -17 -24 -31 -13 -58 -18 -69 -55 -118 -43 -57 -50 -101 -21 -127 16 -15 50 -17 264 -17 225 0 246 2 261 18 32 35 19 77 -40 142 -21 23 -43 77 -43 107 0 26 -42 33 -182 32 -79 -1 -151 -3 -160 -6z" />
       </g>

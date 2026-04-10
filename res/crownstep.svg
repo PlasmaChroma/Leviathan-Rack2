@@ -890,7 +890,7 @@
         
       </g><g
    id="components"
-   style="display:none"><circle
+   style="display:inline"><circle
      id="SEQ_LENGTH_PARAM"
      cx="3321.3044"
      cy="11559.068"
@@ -898,7 +898,7 @@
      r="295" /><circle
      id="NEW_GAME_PARAM"
      cx="7170"
-     cy="455.45532"
+     cy="415.5"
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.5"
      r="170" /><ellipse
      id="CLOCK_INPUT"

@@ -57,10 +57,6 @@ void Crownstep::emitStepAtClockEdge() {
 		heldAccent = 0.f;
 		heldMod = 0.f;
 		modOutputVolts = 0.f;
-		modGlideStartVolts = 0.f;
-		modGlideTargetVolts = 0.f;
-		modGlideDurationSeconds = 0.f;
-		modGlideActive = false;
 		playhead = 0;
 		return;
 	}
@@ -72,25 +68,7 @@ void Crownstep::emitStepAtClockEdge() {
 	heldPitch = pitchForSequenceIndex(sequenceIndex);
 	heldAccent = step.accent;
 	heldMod = step.mod * 10.f;
-	if (previousClockPeriodSeconds > 0.f) {
-		modGlideStartVolts = modOutputVolts;
-		modGlideTargetVolts = heldMod;
-		modGlideStartSeconds = transportTimeSeconds;
-		modGlideDurationSeconds = previousClockPeriodSeconds;
-		modGlideActive = std::fabs(modGlideTargetVolts - modGlideStartVolts) > 1e-6f;
-		if (!modGlideActive) {
-			modOutputVolts = modGlideTargetVolts;
-		}
-	}
-	else {
-		// Before we have a valid clock period, snap directly.
-		modGlideStartVolts = heldMod;
-		modGlideTargetVolts = heldMod;
-		modGlideStartSeconds = transportTimeSeconds;
-		modGlideDurationSeconds = 0.f;
-		modGlideActive = false;
-		modOutputVolts = heldMod;
-	}
+	modOutputVolts = heldMod;
 
 	playhead++;
 	if (playhead >= length) {
@@ -113,10 +91,6 @@ void Crownstep::process(const ProcessArgs& args) {
 
 	bool running = true;
 	if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
-		if (lastClockEdgeSeconds >= 0.f) {
-			previousClockPeriodSeconds = std::max(transportTimeSeconds - lastClockEdgeSeconds, 1e-6f);
-		}
-		lastClockEdgeSeconds = transportTimeSeconds;
 		if (running) {
 			emitStepAtClockEdge();
 		}
@@ -138,13 +112,6 @@ void Crownstep::process(const ProcessArgs& args) {
 		refreshHeldPitchForCurrentStep();
 	}
 
-	if (modGlideActive && modGlideDurationSeconds > 0.f) {
-		float t = clamp((transportTimeSeconds - modGlideStartSeconds) / modGlideDurationSeconds, 0.f, 1.f);
-		modOutputVolts = modGlideStartVolts + (modGlideTargetVolts - modGlideStartVolts) * t;
-		if (t >= 1.f) {
-			modGlideActive = false;
-		}
-	}
 	outputs[PITCH_OUTPUT].setVoltage(heldPitch);
 	outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
 	outputs[MOD_OUTPUT].setVoltage(modOutputVolts);

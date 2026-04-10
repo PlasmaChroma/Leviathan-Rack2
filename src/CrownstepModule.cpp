@@ -297,21 +297,14 @@ void Crownstep::onReset() {
 void Crownstep::resetPlayback() {
 	playhead = 0;
 	displayedStep = 0;
-	lastClockEdgeSeconds = -1.f;
-	previousClockPeriodSeconds = -1.f;
 	heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 	heldAccent = 0.f;
 	heldMod = 0.f;
 	modOutputVolts = 0.f;
-	modGlideStartVolts = 0.f;
-		modGlideTargetVolts = 0.f;
-		modGlideStartSeconds = transportTimeSeconds;
-		modGlideDurationSeconds = 0.f;
-		modGlideActive = false;
-		cachedRootSemitoneValid = false;
-		cancelAiTurnWork();
-		resetMoveAnimation();
-	}
+	cachedRootSemitoneValid = false;
+	cancelAiTurnWork();
+	resetMoveAnimation();
+}
 
 void Crownstep::armDelayedAiTurnAfterHumanMove() {
 	if (gameOver || turnSide != aiSide()) {
@@ -525,6 +518,11 @@ float Crownstep::pitchForMove(const Move& move) {
 Step Crownstep::makeStepFromMove(const Move& move) {
 	Step step = crownstep::makeStepFromMove(move, currentScaleIndex(), rootSemitone(), transposeVolts());
 	step.pitch = pitchForMove(move);
+	if (isOthelloMode()) {
+		// Reversi accent: 1 flipped disc is baseline (0V), then +0.5V per extra flipped disc.
+		int flipped = std::max(0, int(move.captured.size()));
+		step.accent = 0.5f * float(std::max(0, flipped - 1));
+	}
 	return step;
 }
 
@@ -747,6 +745,36 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 	lastMove = move;
 	lastMoveSide = moverSide;
 	Step step = makeStepFromMove(move);
+	if (isChessMode()) {
+		float captureAccent = 0.f;
+		for (int captureIndex : move.captured) {
+			if (captureIndex < 0 || captureIndex >= crownstep::CHESS_BOARD_SIZE) {
+				continue;
+			}
+			int capturedPiece = beforeBoard[size_t(captureIndex)];
+			if (capturedPiece == 0) {
+				continue;
+			}
+			switch (crownstep::chessPieceType(capturedPiece)) {
+				case crownstep::CHESS_PAWN:
+					captureAccent += 1.f;
+					break;
+				case crownstep::CHESS_KNIGHT:
+				case crownstep::CHESS_BISHOP:
+					captureAccent += 3.f;
+					break;
+				case crownstep::CHESS_ROOK:
+					captureAccent += 5.f;
+					break;
+				case crownstep::CHESS_QUEEN:
+					captureAccent += 9.f;
+					break;
+				default:
+					break;
+			}
+		}
+		step.accent = captureAccent;
+	}
 	step.mod = expressiveModForMove(move, beforeBoard, afterBoard, moverSide);
 	{
 		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);

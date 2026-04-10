@@ -343,6 +343,7 @@ struct CrownstepBoardWidget final : Widget {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
 				bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
+				bool fabricTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC;
 				float x = col * cellWidth;
 				float y = row * cellHeight;
 				float seed = float((row * 29 + col * 17) % 97) * 0.17f;
@@ -394,6 +395,45 @@ struct CrownstepBoardWidget final : Widget {
 						nvgBezierTo(args.vg, x + cellWidth * 0.30f, y0 - 1.1f, x + cellWidth * 0.65f, y1 + 1.1f, x + cellWidth - 0.8f, y1);
 						nvgStrokeColor(args.vg, veinColor);
 						nvgStrokeWidth(args.vg, 0.62f + 0.12f * float(vein & 1));
+						nvgStroke(args.vg);
+					}
+				}
+				else if (fabricTexture) {
+					NVGcolor topColor = dark ? nvgRGB(34, 118, 54) : nvgRGB(236, 244, 236);
+					NVGcolor bottomColor = dark ? nvgRGB(18, 82, 38) : nvgRGB(206, 220, 206);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
+					nvgFill(args.vg);
+
+					// Subtle cloth weave to keep the fabric board readable without heavy draw cost.
+					NVGcolor weaveA = dark ? nvgRGBA(255, 255, 255, 14) : nvgRGBA(26, 48, 26, 14);
+					NVGcolor weaveB = dark ? nvgRGBA(8, 26, 10, 18) : nvgRGBA(255, 255, 255, 20);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint weavePaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, weaveA, weaveB);
+					nvgFillPaint(args.vg, weavePaint);
+					nvgFill(args.vg);
+
+					for (int stripe = 0; stripe < 2; ++stripe) {
+						float t = (stripe + 1.f) / 3.f;
+						float vx = x + t * cellWidth;
+						float hy = y + t * cellHeight;
+						NVGcolor stripeColor = dark ? nvgRGBA(224, 255, 224, 22) : nvgRGBA(16, 38, 16, 18);
+
+						nvgBeginPath(args.vg);
+						nvgMoveTo(args.vg, vx, y + 0.7f);
+						nvgLineTo(args.vg, vx, y + cellHeight - 0.7f);
+						nvgStrokeColor(args.vg, stripeColor);
+						nvgStrokeWidth(args.vg, 0.55f);
+						nvgStroke(args.vg);
+
+						nvgBeginPath(args.vg);
+						nvgMoveTo(args.vg, x + 0.7f, hy);
+						nvgLineTo(args.vg, x + cellWidth - 0.7f, hy);
+						nvgStrokeColor(args.vg, stripeColor);
+						nvgStrokeWidth(args.vg, 0.55f);
 						nvgStroke(args.vg);
 					}
 				}
@@ -1554,22 +1594,24 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Board Texture", "", [=](Menu* textureMenu) {
-			for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
-				textureMenu->addChild(createCheckMenuItem(
-					BOARD_TEXTURE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->boardTextureMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->boardTextureMode = i;
+		if (!module || !module->isOthelloMode()) {
+			menu->addChild(createSubmenuItem("Board Texture", "", [=](Menu* textureMenu) {
+				for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
+					textureMenu->addChild(createCheckMenuItem(
+						BOARD_TEXTURE_NAMES[size_t(i)],
+						"",
+						[=]() {
+							return module && module->boardTextureMode == i;
+						},
+						[=]() {
+							if (module) {
+								module->boardTextureMode = i;
+							}
 						}
-					}
-				));
-			}
-		}));
+					));
+				}
+			}));
+		}
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";

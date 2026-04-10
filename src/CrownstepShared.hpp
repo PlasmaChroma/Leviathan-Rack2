@@ -33,8 +33,8 @@ static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
 static constexpr float TRANSPOSE_CV_ZERO_DEADBAND_VOLTS = 1e-3f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
-static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
-static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Othello"}};
+static constexpr std::array<const char*, 3> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric"}};
+static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
 static constexpr std::array<const char*, 2> HIGHLIGHT_MODE_NAMES = {{"Ring", "Off"}};
 
 struct Crownstep;
@@ -89,6 +89,7 @@ struct Crownstep : Module {
 	enum BoardTextureMode {
 		BOARD_TEXTURE_WOOD = 0,
 		BOARD_TEXTURE_MARBLE,
+		BOARD_TEXTURE_FABRIC,
 		BOARD_TEXTURE_COUNT
 	};
 	enum GameMode {
@@ -147,20 +148,13 @@ struct Crownstep : Module {
 	int playhead = 0;
 	int displayedStep = 0;
 	float transportTimeSeconds = 0.f;
-	float lastClockEdgeSeconds = -1.f;
-	float previousClockPeriodSeconds = -1.f;
 	float heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
 	float modOutputVolts = 0.f;
-	float modGlideStartVolts = 0.f;
-	float modGlideTargetVolts = 0.f;
-	float modGlideStartSeconds = 0.f;
-	float modGlideDurationSeconds = 0.f;
 	double aiTurnDelayStartSeconds = 0.0;
 	double uiLastServiceSeconds = 0.0;
 	float captureFlashSeconds = 0.f;
-	bool modGlideActive = false;
 	bool aiTurnDelayPending = false;
 	bool aiTurnDelayActive = false;
 	int cachedRootSemitoneWrapped = 0;
