@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.0" width="600.000000pt" height="400.000000pt" viewBox="0 0 600.000000 400.000000" preserveAspectRatio="xMidYMid meet">
   <g id="chess-piece-atlas" transform="translate(0.000000,400.000000) scale(0.100000,-0.100000)" fill="#000000" stroke="none">
-    <g id="pieces-black">
+    <g id="pieces-black" stroke="#ffffff" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
       <g id="piece-black-king">
         <path id="piece-black-king-part-1" d="M770 3456 c0 -30 -3 -35 -27 -38 -24 -3 -28 -8 -31 -40 -3 -34 -1 -37 25 -40 22 -2 29 -9 31 -30 3 -24 0 -28 -22 -28 -14 0 -48 -5 -77 -11 -112 -24 -117 -77 -24 -271 l37 -78 144 0 145 0 43 93 c53 113 71 179 55 208 -14 28 -66 48 -140 56 -57 6 -60 7 -57 32 2 20 9 27 31 29 24 3 27 7 27 43 0 37 -2 39 -30 39 -28 0 -30 3 -30 35 l0 35 -50 0 -50 0 0 -34z" />
         <path id="piece-black-king-part-2" d="M624 2886 c-3 -8 -4 -23 -2 -33 3 -17 18 -18 202 -18 175 0 200 2 209 17 8 12 7 21 -2 32 -19 23 -399 24 -407 2z" />
@@ -36,7 +36,7 @@
       </g>
     </g>
 
-    <g id="pieces-white" transform="translate(0,-1750)" fill="#ffffff">
+    <g id="pieces-white" transform="translate(0,-1750)" fill="#ffffff" stroke="#000000" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
       <g id="piece-white-king">
         <path id="piece-white-king-part-1" d="M770 3456 c0 -30 -3 -35 -27 -38 -24 -3 -28 -8 -31 -40 -3 -34 -1 -37 25 -40 22 -2 29 -9 31 -30 3 -24 0 -28 -22 -28 -14 0 -48 -5 -77 -11 -112 -24 -117 -77 -24 -271 l37 -78 144 0 145 0 43 93 c53 113 71 179 55 208 -14 28 -66 48 -140 56 -57 6 -60 7 -57 32 2 20 9 27 31 29 24 3 27 7 27 43 0 37 -2 39 -30 39 -28 0 -30 3 -30 35 l0 35 -50 0 -50 0 0 -34z" />
         <path id="piece-white-king-part-2" d="M624 2886 c-3 -8 -4 -23 -2 -33 3 -17 18 -18 202 -18 175 0 200 2 209 17 8 12 7 21 -2 32 -19 23 -399 24 -407 2z" />
