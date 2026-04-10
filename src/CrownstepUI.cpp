@@ -764,7 +764,6 @@ struct CrownstepBoardWidget final : Widget {
 						int fillAlpha = int(255.f * alpha);
 						int strokeAlpha = int(240.f * alpha);
 							int pieceSide = crownstep::pieceSide(piece);
-							bool humanPiece = (pieceSide == module->humanSide());
 							bool positivePiece = (pieceSide == HUMAN_SIDE);
 								if (module->isOthelloMode()) {
 									float discR = radius * 1.02f;
@@ -815,10 +814,10 @@ struct CrownstepBoardWidget final : Widget {
 									const float chessOutlineStroke = 1.08f;
 									const float kingCrossInnerStroke = chessOutlineStroke;
 									const float kingCrossOutlineStroke = 1.92f;
-									NVGcolor pieceFill = humanPiece ? nvgRGBA(238, 232, 214, fillAlpha) : nvgRGBA(34, 36, 44, fillAlpha);
-									NVGcolor pieceEdge = humanPiece ? nvgRGBA(76, 68, 56, strokeAlpha) : nvgRGBA(214, 220, 234, strokeAlpha);
-									NVGcolor pieceDetail = humanPiece ? nvgRGBA(44, 36, 28, fillAlpha) : nvgRGBA(246, 246, 252, fillAlpha);
-									NVGcolor pieceContrast = humanPiece ? nvgRGBA(24, 24, 30, strokeAlpha) : nvgRGBA(250, 250, 255, strokeAlpha);
+									NVGcolor pieceFill = positivePiece ? nvgRGBA(238, 232, 214, fillAlpha) : nvgRGBA(34, 36, 44, fillAlpha);
+									NVGcolor pieceEdge = positivePiece ? nvgRGBA(76, 68, 56, strokeAlpha) : nvgRGBA(214, 220, 234, strokeAlpha);
+									NVGcolor pieceDetail = positivePiece ? nvgRGBA(44, 36, 28, fillAlpha) : nvgRGBA(246, 246, 252, fillAlpha);
+									NVGcolor pieceContrast = positivePiece ? nvgRGBA(24, 24, 30, strokeAlpha) : nvgRGBA(250, 250, 255, strokeAlpha);
 									float baseY = centerY + pieceR * 0.29f;
 									nvgSave(args.vg);
 									nvgTranslate(args.vg, centerX, 0.f);
@@ -1024,7 +1023,7 @@ struct CrownstepBoardWidget final : Widget {
 										nvgLineTo(args.vg, centerX, centerY - pieceR * 0.40f);
 										nvgMoveTo(args.vg, centerX - pieceR * 0.13f, centerY - pieceR * 0.53f);
 										nvgLineTo(args.vg, centerX + pieceR * 0.13f, centerY - pieceR * 0.53f);
-										NVGcolor crossInner = humanPiece ? nvgRGBA(246, 246, 252, strokeAlpha) : nvgRGBA(18, 18, 24, strokeAlpha);
+										NVGcolor crossInner = positivePiece ? nvgRGBA(246, 246, 252, strokeAlpha) : nvgRGBA(18, 18, 24, strokeAlpha);
 										nvgStrokeColor(args.vg, crossInner);
 										nvgStrokeWidth(args.vg, kingCrossInnerStroke);
 										nvgStroke(args.vg);
