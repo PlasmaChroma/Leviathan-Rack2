@@ -35,7 +35,7 @@ static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 3> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric"}};
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
-static constexpr std::array<const char*, 2> HIGHLIGHT_MODE_NAMES = {{"Ring", "Off"}};
+static constexpr std::array<const char*, 3> HIGHLIGHT_MODE_NAMES = {{"Ring", "Glow", "Off"}};
 
 struct Crownstep;
 
@@ -100,6 +100,7 @@ struct Crownstep : Module {
 	};
 	enum HighlightMode {
 		HIGHLIGHT_RING = 0,
+		HIGHLIGHT_GLOW,
 		HIGHLIGHT_OFF,
 		HIGHLIGHT_COUNT
 	};

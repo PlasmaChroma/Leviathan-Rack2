@@ -494,13 +494,15 @@ struct CrownstepBoardWidget final : Widget {
 		}
 
 				if (module) {
+					// Keep animation phase numerically stable during very long sessions.
+					float animTime = float(std::fmod(double(module->transportTimeSeconds), 4096.0));
 					// Temporary UX tweak: hide AI potential-move hint dots/rings.
 					const bool renderOpponentMoveHints = false;
 					if (!module->gameOver && module->selectedSquare >= 0) {
 					int row = 0;
 					int col = 0;
 					if (module->boardIndexToCoord(module->selectedSquare, &row, &col)) {
-						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + 0.8f);
+						float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
 						nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(24.f + 48.f * pulse)));
@@ -522,7 +524,7 @@ struct CrownstepBoardWidget final : Widget {
 						float centerX = (col + 0.5f) * cellWidth;
 						float centerY = (row + 0.5f) * cellHeight;
 						float phase = float(destinationIndex) * 0.43f;
-						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.4f + phase);
+						float breath = 0.5f + 0.5f * std::sin(animTime * 4.4f + phase);
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.17f + 0.06f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
@@ -555,7 +557,7 @@ struct CrownstepBoardWidget final : Widget {
 						float centerX = (col + 0.5f) * cellWidth;
 						float centerY = (row + 0.5f) * cellHeight;
 						float phase = float(destinationIndex) * 0.39f + 1.7f;
-						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.1f + phase);
+						float breath = 0.5f + 0.5f * std::sin(animTime * 4.1f + phase);
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.16f + 0.055f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
@@ -577,7 +579,7 @@ struct CrownstepBoardWidget final : Widget {
 							continue;
 						}
 						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == module->humanSide()) ? 0.f : 1.5f);
-						float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 3.8f + phase);
+						float pulse = 0.5f + 0.5f * std::sin(animTime * 3.8f + phase);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
 						if (module->lastMoveSide == module->humanSide()) {
@@ -1060,16 +1062,20 @@ struct CrownstepBoardWidget final : Widget {
 						return false;
 					};
 
-						const bool showMovablePieceHints =
-							module->highlightMode == Crownstep::HIGHLIGHT_RING
-							&& !module->gameOver
-							&& module->turnSide == module->humanSide();
-					int cellCount = module->boardCellCount();
-					std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
-					if (showMovablePieceHints) {
-						for (const Move& move : module->humanMoves) {
-							if (move.originIndex >= 0 && move.originIndex < cellCount) {
-								movableOrigins[size_t(move.originIndex)] = 1u;
+						const bool highlightActive =
+							!module->gameOver
+							&& module->turnSide == module->humanSide()
+							&& module->highlightMode != Crownstep::HIGHLIGHT_OFF;
+						const bool showMovablePieceRingHints =
+							highlightActive && module->highlightMode == Crownstep::HIGHLIGHT_RING;
+						const bool showMovablePieceGlowHints =
+							highlightActive && module->highlightMode == Crownstep::HIGHLIGHT_GLOW;
+						int cellCount = module->boardCellCount();
+						std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
+						if (highlightActive) {
+							for (const Move& move : module->humanMoves) {
+								if (move.originIndex >= 0 && move.originIndex < cellCount) {
+									movableOrigins[size_t(move.originIndex)] = 1u;
 							}
 						}
 					}
@@ -1219,7 +1225,7 @@ struct CrownstepBoardWidget final : Widget {
 						float centerX = (col + 0.5f) * cellWidth;
 						float centerY = (row + 0.5f) * cellHeight;
 						float phase = float(destinationIndex) * 0.43f + 0.9f;
-						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.8f + phase);
+						float breath = 0.5f + 0.5f * std::sin(animTime * 4.8f + phase);
 						float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, ringRadius);
@@ -1257,7 +1263,7 @@ struct CrownstepBoardWidget final : Widget {
 						float centerX = (col + 0.5f) * cellWidth;
 						float centerY = (row + 0.5f) * cellHeight;
 						float phase = float(destinationIndex) * 0.39f + 2.2f;
-						float breath = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.2f + phase);
+						float breath = 0.5f + 0.5f * std::sin(animTime * 4.2f + phase);
 						float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, ringRadius);
@@ -1271,13 +1277,47 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
-					// Human-turn assist: ring pieces that have at least one legal move.
-						if (showMovablePieceHints) {
-							const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
-							for (int i = 0; i < cellCount; ++i) {
-								if (!movableOrigins[size_t(i)]) {
-									continue;
-								}
+					// Human-turn assist glow mode: dim all occupied piece squares, and
+					// breathe brighter on squares containing movable human pieces.
+					if (showMovablePieceGlowHints) {
+						for (int i = 0; i < cellCount; ++i) {
+							int piece = module->board[size_t(i)];
+							if (piece == 0) {
+								continue;
+							}
+							int row = 0;
+							int col = 0;
+							if (!module->boardIndexToCoord(i, &row, &col)) {
+								continue;
+							}
+							float x = col * cellWidth;
+							float y = row * cellHeight;
+							bool movableHumanPiece =
+								movableOrigins[size_t(i)] && crownstep::pieceSide(piece) == module->humanSide();
+							float phase = float(i) * 0.37f + 0.4f;
+							float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
+
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, x + 1.6f, y + 1.6f, cellWidth - 3.2f, cellHeight - 3.2f, 2.0f);
+							nvgFillColor(args.vg, nvgRGBA(0, 0, 0, movableHumanPiece ? 30 : 62));
+							nvgFill(args.vg);
+
+							if (movableHumanPiece) {
+								nvgBeginPath(args.vg);
+								nvgRoundedRect(args.vg, x + 2.2f, y + 2.2f, cellWidth - 4.4f, cellHeight - 4.4f, 1.8f);
+								nvgFillColor(args.vg, nvgRGBA(146, 255, 190, int(22.f + 36.f * pulse)));
+								nvgFill(args.vg);
+							}
+						}
+					}
+
+					// Human-turn assist ring mode: pulse rings on movable pieces.
+					if (showMovablePieceRingHints) {
+						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						for (int i = 0; i < cellCount; ++i) {
+							if (!movableOrigins[size_t(i)]) {
+								continue;
+							}
 							if (selectedSquareGlowActive && i == module->selectedSquare) {
 								continue;
 							}
@@ -1285,15 +1325,15 @@ struct CrownstepBoardWidget final : Widget {
 							if (crownstep::pieceSide(piece) != module->humanSide()) {
 								continue;
 							}
-						int row = 0;
-						int col = 0;
-						if (!module->boardIndexToCoord(i, &row, &col)) {
-							continue;
-						}
+							int row = 0;
+							int col = 0;
+							if (!module->boardIndexToCoord(i, &row, &col)) {
+								continue;
+							}
 							float centerX = (col + 0.5f) * cellWidth;
 							float centerY = (row + 0.5f) * cellHeight;
 							float phase = float(i) * 0.37f + 0.4f;
-							float pulse = 0.5f + 0.5f * std::sin(module->transportTimeSeconds * 4.6f + phase);
+							float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
 
 							nvgBeginPath(args.vg);
@@ -1307,8 +1347,8 @@ struct CrownstepBoardWidget final : Widget {
 							nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(182.f + 58.f * pulse)));
 							nvgStrokeWidth(args.vg, 1.85f);
 							nvgStroke(args.vg);
-							}
 						}
+					}
 
 				if (module->gameOver) {
 				nvgBeginPath(args.vg);
@@ -1351,10 +1391,10 @@ struct CrownstepStepCounterWidget final : Widget {
 		char stepCounterText[64];
 		std::snprintf(stepCounterText, sizeof(stepCounterText), "%d / %d", currentStep, totalSteps);
 
-		const float x = mm2px(Vec(6.6f, 0.f)).x;
-		const float y = mm2px(Vec(0.f, 4.0f)).y;
-		const float w = mm2px(Vec(26.0f, 0.f)).x;
-		const float h = mm2px(Vec(0.f, 4.5f)).y;
+		const float x = 0.f;
+		const float y = 0.f;
+		const float w = box.size.x;
+		const float h = box.size.y;
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x, y, w, h, 3.5f);
@@ -1415,12 +1455,28 @@ struct CrownstepWidget final : ModuleWidget {
 				boardWidget->box.size = mm2px(boardRectMm.size);
 			}
 			else {
-				boardWidget->box.pos = mm2px(Vec(5.5f, 11.f));
-				boardWidget->box.size = mm2px(Vec(80.5f, 80.5f));
+				boardRectMm = math::Rect(Vec(5.5f, 11.f), Vec(80.5f, 80.5f));
+				boardWidget->box.pos = mm2px(boardRectMm.pos);
+				boardWidget->box.size = mm2px(boardRectMm.size);
 			}
 			addChild(boardWidget);
+
+			// Step counter: anchored by SVG point (STEP_COUNTER).
+			const float stepCounterWidthMm = 26.0f;
+			const float stepCounterHeightMm = 4.5f;
+			Vec stepCounterCenterMm(45.72f, 100.3f);
+			panel_svg::loadPointFromSvgMm(panelPath, "STEP_COUNTER", &stepCounterCenterMm);
+			math::Rect stepCounterRectMm(
+				Vec(
+					stepCounterCenterMm.x - stepCounterWidthMm * 0.5f,
+					stepCounterCenterMm.y - stepCounterHeightMm * 0.5f
+				),
+				Vec(stepCounterWidthMm, stepCounterHeightMm)
+			);
+
 			CrownstepStepCounterWidget* stepCounterWidget = new CrownstepStepCounterWidget(module);
-			stepCounterWidget->box = box.zeroPos();
+			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
+			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
 			addChild(stepCounterWidget);
 
 		// Bottom control layout:
