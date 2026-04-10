@@ -125,6 +125,9 @@ struct TemporalDeck final : Module {
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
   float getUiSampleRate() const;
+  float getUiScopePreviewCostUs() const;
+  int getUiScopePreviewStride() const;
+  bool isUiScopePreviewMetricValid() const;
   float getUiPlatterAngle() const;
   bool isUiFreezeLatched() const;
   bool isSampleModeEnabled() const;

@@ -235,8 +235,6 @@ struct TDScopeDisplayWidget final : Widget {
   std::vector<float> rowY;
   std::vector<uint8_t> rowValid;
   std::vector<uint8_t> rowValidRight;
-  std::vector<uint8_t> rowBucket;
-  std::vector<uint8_t> rowBucketRight;
   std::vector<uint8_t> rowHoldFrames;
   std::vector<uint8_t> rowHoldFramesRight;
   uint64_t cachedPublishSeq = 0;
@@ -462,7 +460,6 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
-    constexpr int kIntensityBuckets = 16;
     size_t rowCountU = size_t(rowCount);
     if (rowX0.size() != rowCountU) {
       rowX0.assign(rowCountU, lane0CenterX);
@@ -474,8 +471,6 @@ struct TDScopeDisplayWidget final : Widget {
       rowY.assign(rowCountU, 0.f);
       rowValid.assign(rowCountU, 0u);
       rowValidRight.assign(rowCountU, 0u);
-      rowBucket.assign(rowCountU, 0u);
-      rowBucketRight.assign(rowCountU, 0u);
       rowHoldFrames.assign(rowCountU, 0u);
       rowHoldFramesRight.assign(rowCountU, 0u);
       cachedGeometryValid = false;
@@ -654,8 +649,8 @@ struct TDScopeDisplayWidget final : Widget {
     auto rebuildLaneFromScopeBins =
       [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
-          std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
-      if (!x0Out || !x1Out || !visualOut || !validOut || !bucketOut || !holdOut) {
+          std::vector<uint8_t> *holdOut) {
+      if (!x0Out || !x1Out || !visualOut || !validOut || !holdOut) {
         return;
       }
       constexpr uint8_t kRowTailHoldFrames = 2u;
@@ -678,17 +673,13 @@ struct TDScopeDisplayWidget final : Widget {
             (*x0Out)[idx] = prevX0;
             (*x1Out)[idx] = prevX1;
             float carryVisual = clamp(prevVisual * kRowTailIntensityDecay, 0.f, 1.f);
-            int bucket = int(std::floor(carryVisual * float(kIntensityBuckets)));
-            bucket = clamp(bucket, 0, kIntensityBuckets - 1);
             (*visualOut)[idx] = carryVisual;
-            (*bucketOut)[idx] = uint8_t(bucket);
             (*validOut)[idx] = 1u;
             (*holdOut)[idx] = uint8_t(prevHold - 1u);
           } else {
             (*x0Out)[idx] = laneCenterXLocal;
             (*x1Out)[idx] = laneCenterXLocal;
             (*visualOut)[idx] = 0.f;
-            (*bucketOut)[idx] = 0u;
             (*validOut)[idx] = 0u;
             (*holdOut)[idx] = 0u;
           }
@@ -707,10 +698,7 @@ struct TDScopeDisplayWidget final : Widget {
         float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
         constexpr float kIntensityGamma = 0.68f;
         float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f, 0.f, 1.f);
-        int bucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
-        bucket = clamp(bucket, 0, kIntensityBuckets - 1);
         (*visualOut)[idx] = visualIntensity;
-        (*bucketOut)[idx] = uint8_t(bucket);
         (*validOut)[idx] = 1u;
         (*holdOut)[idx] = kRowTailHoldFrames;
       }
@@ -719,8 +707,8 @@ struct TDScopeDisplayWidget final : Widget {
     auto rebuildLaneFromLiveBuckets =
       [&](const std::vector<LiveScopeBucket> *buckets, float laneCenterXLocal, float laneHalfWidthLocal,
           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
-          std::vector<uint8_t> *bucketOut, std::vector<uint8_t> *holdOut) {
-        if (!buckets || !x0Out || !x1Out || !visualOut || !validOut || !bucketOut || !holdOut || buckets->size() != rowCountU ||
+          std::vector<uint8_t> *holdOut) {
+        if (!buckets || !x0Out || !x1Out || !visualOut || !validOut || !holdOut || buckets->size() != rowCountU ||
             liveBucketCount <= 0 || liveBucketSpanSamples <= 0.f) {
           return;
         }
@@ -748,17 +736,13 @@ struct TDScopeDisplayWidget final : Widget {
               (*x0Out)[idx] = prevX0;
               (*x1Out)[idx] = prevX1;
               float carryVisual = clamp(prevVisual * kGapIntensityDecay, 0.f, 1.f);
-              int intensityBucket = int(std::floor(carryVisual * float(kIntensityBuckets)));
-              intensityBucket = clamp(intensityBucket, 0, kIntensityBuckets - 1);
               (*visualOut)[idx] = carryVisual;
-              (*bucketOut)[idx] = uint8_t(intensityBucket);
               (*validOut)[idx] = 1u;
               (*holdOut)[idx] = uint8_t(prevHold - 1u);
             } else {
               (*x0Out)[idx] = laneCenterXLocal;
               (*x1Out)[idx] = laneCenterXLocal;
               (*visualOut)[idx] = 0.f;
-              (*bucketOut)[idx] = 0u;
               (*validOut)[idx] = 0u;
               (*holdOut)[idx] = 0u;
             }
@@ -781,10 +765,7 @@ struct TDScopeDisplayWidget final : Widget {
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           fillFraction = clamp(fillFraction, 0.f, 1.f);
           float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillFraction, 0.f, 1.f);
-          int intensityBucket = int(std::floor(visualIntensity * float(kIntensityBuckets)));
-          intensityBucket = clamp(intensityBucket, 0, kIntensityBuckets - 1);
           (*visualOut)[idx] = visualIntensity;
-          (*bucketOut)[idx] = uint8_t(intensityBucket);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
         }
@@ -793,12 +774,11 @@ struct TDScopeDisplayWidget final : Widget {
     if (shouldRebuild) {
       if (liveMode) {
         rebuildLaneFromLiveBuckets(
-          &liveBucketsLeft, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
-          &rowHoldFrames);
+          &liveBucketsLeft, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
         if (renderStereo) {
           rebuildLaneFromLiveBuckets(
             &liveBucketsRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
-            &rowBucketRight, &rowHoldFramesRight);
+            &rowHoldFramesRight);
         } else {
           std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
           std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
@@ -806,17 +786,15 @@ struct TDScopeDisplayWidget final : Widget {
           for (size_t idx = 0; idx < rowCountU; ++idx) {
             rowX0Right[idx] = lane1CenterX;
             rowX1Right[idx] = lane1CenterX;
-            rowBucketRight[idx] = 0u;
           }
         }
       } else {
         rebuildLaneFromScopeBins(
-          msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowBucket,
-          &rowHoldFrames);
+          msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
         if (renderStereo) {
           rebuildLaneFromScopeBins(
             msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
-            &rowBucketRight, &rowHoldFramesRight);
+            &rowHoldFramesRight);
         } else {
           std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
           std::fill(rowVisualIntensityRight.begin(), rowVisualIntensityRight.end(), 0.f);
@@ -824,7 +802,6 @@ struct TDScopeDisplayWidget final : Widget {
           for (size_t idx = 0; idx < rowCountU; ++idx) {
             rowX0Right[idx] = lane1CenterX;
             rowX1Right[idx] = lane1CenterX;
-            rowBucketRight[idx] = 0u;
           }
         }
       }
@@ -1008,124 +985,73 @@ struct TDScopeDisplayWidget final : Widget {
       return nvgRGBA(rq, gq, bq, alpha);
     };
 
-    std::array<float, kIntensityBuckets> mainWidth {};
-    std::array<float, kIntensityBuckets> connectWidth {};
-    std::array<float, kIntensityBuckets> boostWidth {};
-    std::array<NVGcolor, kIntensityBuckets> mainColor {};
-    std::array<NVGcolor, kIntensityBuckets> connectColor {};
-    std::array<NVGcolor, kIntensityBuckets> boostColor {};
-    std::array<uint8_t, kIntensityBuckets> bucketHasBoost {};
-    for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-      float visual = (float(bucket) + 0.5f) / float(kIntensityBuckets);
-      mainWidth[size_t(bucket)] = 0.78f + 0.62f * visual;
-      connectWidth[size_t(bucket)] = 0.58f + 0.40f * visual;
-      mainColor[size_t(bucket)] =
-        gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
-      connectColor[size_t(bucket)] =
-        gradientColorForIntensity(visual, uint8_t(std::lround(88.f + 92.f * visual)));
-      if (visual > 0.86f) {
-        float boostT = clamp((visual - 0.86f) / 0.14f, 0.f, 1.f);
-        boostColor[size_t(bucket)] = gradientColorForIntensity(1.f, uint8_t(std::lround(52.f + 108.f * boostT)));
-        boostWidth[size_t(bucket)] = mainWidth[size_t(bucket)] + 0.34f;
-        bucketHasBoost[size_t(bucket)] = 1u;
-      }
-    }
-
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
 
     auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
-                        const std::vector<uint8_t> &valid, const std::vector<uint8_t> &bucketByRow, float laneCenterXForConnectors) {
-      // Batch horizontal bars by quantized intensity bucket.
-      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-        bool havePath = false;
+                        const std::vector<uint8_t> &valid, float laneCenterXForConnectors) {
+      // Continuous gradient rendering: draw each row and connector using its
+      // actual visual intensity, rather than quantizing to discrete buckets.
+      bool prevValid = false;
+      float prevX0 = laneCenterXForConnectors;
+      float prevX1 = laneCenterXForConnectors;
+      float prevY = drawTop + 0.5f;
+      float prevVisual = 0.f;
+      for (int iy = 0; iy < rowCount; ++iy) {
+        size_t idx = size_t(iy);
+        if (!valid[idx]) {
+          prevValid = false;
+          continue;
+        }
+
+        float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+        float mainW = 0.78f + 0.62f * visual;
+        NVGcolor mainC = gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
+
         nvgBeginPath(args.vg);
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!valid[idx] || bucketByRow[idx] != uint8_t(bucket)) {
-            continue;
-          }
+        nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+        nvgLineTo(args.vg, x1[idx], rowY[idx]);
+        nvgStrokeColor(args.vg, mainC);
+        nvgStrokeWidth(args.vg, mainW);
+        nvgStroke(args.vg);
+
+        if (visual > 0.86f) {
+          float boostT = clamp((visual - 0.86f) / 0.14f, 0.f, 1.f);
+          NVGcolor boostC = gradientColorForIntensity(1.f, uint8_t(std::lround(52.f + 108.f * boostT)));
+          nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, x0[idx], rowY[idx]);
           nvgLineTo(args.vg, x1[idx], rowY[idx]);
-          havePath = true;
+          nvgStrokeColor(args.vg, boostC);
+          nvgStrokeWidth(args.vg, mainW + 0.34f);
+          nvgStroke(args.vg);
         }
-        if (!havePath) {
-          continue;
-        }
-        nvgStrokeColor(args.vg, mainColor[size_t(bucket)]);
-        nvgStrokeWidth(args.vg, mainWidth[size_t(bucket)]);
-        nvgStroke(args.vg);
-      }
 
-      // Optional bright core pass for the highest-intensity buckets.
-      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-        if (!bucketHasBoost[size_t(bucket)]) {
-          continue;
-        }
-        bool havePath = false;
-        nvgBeginPath(args.vg);
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!valid[idx] || bucketByRow[idx] != uint8_t(bucket)) {
-            continue;
-          }
-          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+        if (prevValid) {
+          float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+          NVGcolor connectC =
+            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual)));
+          float connectW = 0.58f + 0.40f * connectVisual;
+          nvgBeginPath(args.vg);
+          nvgMoveTo(args.vg, prevX0, prevY);
+          nvgLineTo(args.vg, x0[idx], rowY[idx]);
+          nvgMoveTo(args.vg, prevX1, prevY);
           nvgLineTo(args.vg, x1[idx], rowY[idx]);
-          havePath = true;
+          nvgStrokeColor(args.vg, connectC);
+          nvgStrokeWidth(args.vg, connectW);
+          nvgStroke(args.vg);
         }
-        if (!havePath) {
-          continue;
-        }
-        nvgStrokeColor(args.vg, boostColor[size_t(bucket)]);
-        nvgStrokeWidth(args.vg, boostWidth[size_t(bucket)]);
-        nvgStroke(args.vg);
-      }
 
-      // Batch connector lines by the average intensity of adjacent rows.
-      for (int bucket = 0; bucket < kIntensityBuckets; ++bucket) {
-        bool havePath = false;
-        bool prevValid = false;
-        float prevX0 = laneCenterXForConnectors;
-        float prevX1 = laneCenterXForConnectors;
-        float prevY = drawTop + 0.5f;
-        float prevVisual = 0.f;
-        nvgBeginPath(args.vg);
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!valid[idx]) {
-            prevValid = false;
-            continue;
-          }
-          if (prevValid) {
-            float connectVisual = clamp(0.5f * (prevVisual + visualIntensity[idx]), 0.f, 1.f);
-            int connectBucket = int(std::floor(connectVisual * float(kIntensityBuckets)));
-            connectBucket = clamp(connectBucket, 0, kIntensityBuckets - 1);
-            if (connectBucket == bucket) {
-              nvgMoveTo(args.vg, prevX0, prevY);
-              nvgLineTo(args.vg, x0[idx], rowY[idx]);
-              nvgMoveTo(args.vg, prevX1, prevY);
-              nvgLineTo(args.vg, x1[idx], rowY[idx]);
-              havePath = true;
-            }
-          }
-          prevX0 = x0[idx];
-          prevX1 = x1[idx];
-          prevY = rowY[idx];
-          prevVisual = visualIntensity[idx];
-          prevValid = true;
-        }
-        if (!havePath) {
-          continue;
-        }
-        nvgStrokeColor(args.vg, connectColor[size_t(bucket)]);
-        nvgStrokeWidth(args.vg, connectWidth[size_t(bucket)]);
-        nvgStroke(args.vg);
+        prevX0 = x0[idx];
+        prevX1 = x1[idx];
+        prevY = rowY[idx];
+        prevVisual = visual;
+        prevValid = true;
       }
     };
 
-    drawLane(rowX0, rowX1, rowVisualIntensity, rowValid, rowBucket, lane0CenterX);
+    drawLane(rowX0, rowX1, rowVisualIntensity, rowValid, lane0CenterX);
     if (renderStereo) {
-      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, rowBucketRight, lane1CenterX);
+      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, lane1CenterX);
 
       // Draw subtle lane divider for stereo side-by-side view.
       float dividerX = laneWidth + laneGap * 0.5f;

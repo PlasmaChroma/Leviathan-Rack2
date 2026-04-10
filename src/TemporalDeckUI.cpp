@@ -3269,6 +3269,33 @@ struct TemporalDeckWidget : ModuleWidget {
     } else {
       ModuleWidget::draw(args);
     }
+
+    if (deckModule) {
+      bool metricValid = deckModule->isUiScopePreviewMetricValid();
+      if (linkedToScope || metricValid) {
+        bool hqEnabled = deckModule->isHighQualityScopePreviewEnabled();
+        std::string perfLabel;
+        if (metricValid) {
+          perfLabel = string::f(
+            "%s %.0fus s%d",
+            hqEnabled ? "HQ" : "NQ",
+            std::max(0.f, deckModule->getUiScopePreviewCostUs()),
+            std::max(0, deckModule->getUiScopePreviewStride())
+          );
+        } else {
+          perfLabel = hqEnabled ? "HQ --" : "NQ --";
+        }
+
+        float textX = box.size.x - mm2px(0.55f);
+        float textY = mm2px(21.0f);
+        nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgFontSize(args.vg, 6.7f);
+        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, metricValid ? 164 : 128));
+        nvgText(args.vg, textX + 0.65f, textY + 0.65f, perfLabel.c_str(), nullptr);
+        nvgFillColor(args.vg, metricValid ? nvgRGBA(232, 242, 250, 212) : nvgRGBA(168, 184, 198, 180));
+        nvgText(args.vg, textX, textY, perfLabel.c_str(), nullptr);
+      }
+    }
   }
 
   void step() override {
@@ -3478,10 +3505,6 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
-      menu->addChild(createCheckMenuItem(
-        "HQ scope preview", "Higher CPU",
-        [=]() { return module->isHighQualityScopePreviewEnabled(); },
-        [=]() { module->setHighQualityScopePreviewEnabled(!module->isHighQualityScopePreviewEnabled()); }));
       menu->addChild(createSubmenuItem("Gate+Pos mode", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(

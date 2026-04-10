@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -632,6 +633,9 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
+  std::atomic<float> uiScopePreviewCostUs{0.f};
+  std::atomic<int> uiScopePreviewStride{0};
+  std::atomic<bool> uiScopePreviewMetricValid{false};
   std::atomic<float> uiPlatterAngle{0.f};
   std::atomic<bool> uiFreezeLatched{false};
   std::atomic<bool> uiSampleModeEnabled{false};
@@ -661,7 +665,7 @@ struct TemporalDeck::Impl {
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
-  bool highQualityScopePreviewEnabled = false;
+  bool highQualityScopePreviewEnabled = true;
   std::string customPlatterArtPath;
   bool pendingInitialPlatterArtSelection = true;
 };
@@ -886,7 +890,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
-  json_t *highQualityScopePreviewJ = json_object_get(root, "highQualityScopePreviewEnabled");
   json_t *platterArtModeJ = json_object_get(root, "platterArtMode");
   json_t *platterBrightnessModeJ = json_object_get(root, "platterBrightnessMode");
   json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
@@ -927,9 +930,8 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (sampleLoopEnabledJ) {
     impl->sampleLoopEnabled.store(json_boolean_value(sampleLoopEnabledJ), std::memory_order_relaxed);
   }
-  if (highQualityScopePreviewJ) {
-    impl->highQualityScopePreviewEnabled = json_boolean_value(highQualityScopePreviewJ);
-  }
+  // HQ scope preview is now the fixed/default path.
+  impl->highQualityScopePreviewEnabled = true;
   impl->sampleLifecycle.setSampleAutoPlayOnLoad(true);
   if (platterArtModeJ) {
     impl->platterArtMode =
@@ -1160,6 +1162,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         float scopeBinSpanSamples = 1.f;
         uint32_t scopeBinCount = 0u;
         ScopeWindowParams scopeParams;
+        auto scopePreviewMeasureStart = std::chrono::steady_clock::now();
         bool haveScopeParams = computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestPosOverride, impl->highQualityScopePreviewEnabled,
@@ -1183,6 +1186,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
           impl->expanderScopeCacheMono.valid = false;
           impl->expanderScopeCacheRight.valid = false;
         }
+        auto scopePreviewMeasureEnd = std::chrono::steady_clock::now();
+        float scopePreviewMeasureUs =
+          float(std::chrono::duration_cast<std::chrono::microseconds>(scopePreviewMeasureEnd - scopePreviewMeasureStart).count());
+        float previousMeasureUs = impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
+        float smoothedMeasureUs =
+          (previousMeasureUs > 0.f) ? (previousMeasureUs + (scopePreviewMeasureUs - previousMeasureUs) * 0.25f) : scopePreviewMeasureUs;
+        impl->uiScopePreviewCostUs.store(smoothedMeasureUs, std::memory_order_relaxed);
+        impl->uiScopePreviewStride.store(haveScopeParams ? std::max(0, scopeParams.scopeStride) : 0, std::memory_order_relaxed);
+        impl->uiScopePreviewMetricValid.store(haveScopeParams, std::memory_order_relaxed);
         uint32_t flags = 0;
         if (frame.sampleMode) {
           flags |= temporaldeck_expander::FLAG_SAMPLE_MODE;
@@ -1230,6 +1242,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
         impl->expanderPreviewValid = scopeReady;
       } else {
         impl->expanderPreviewValid = false;
+        impl->uiScopePreviewMetricValid.store(false, std::memory_order_relaxed);
+        impl->uiScopePreviewStride.store(0, std::memory_order_relaxed);
       }
     }
   } else {
@@ -1240,6 +1254,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->expanderScopeLagHoldActive = false;
     impl->expanderScopeNewestPosHoldActive = false;
     impl->expanderRequestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
+    impl->uiScopePreviewMetricValid.store(false, std::memory_order_relaxed);
+    impl->uiScopePreviewStride.store(0, std::memory_order_relaxed);
   }
   impl->expanderWasConnected = expanderConnected;
   bool expanderReady = expanderConnected && impl->expanderPreviewValid;
@@ -1284,6 +1300,18 @@ double TemporalDeck::getUiAccessibleLagSamples() const {
 
 float TemporalDeck::getUiSampleRate() const {
   return impl->uiSampleRate.load(std::memory_order_relaxed);
+}
+
+float TemporalDeck::getUiScopePreviewCostUs() const {
+  return impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
+}
+
+int TemporalDeck::getUiScopePreviewStride() const {
+  return impl->uiScopePreviewStride.load(std::memory_order_relaxed);
+}
+
+bool TemporalDeck::isUiScopePreviewMetricValid() const {
+  return impl->uiScopePreviewMetricValid.load(std::memory_order_relaxed);
 }
 
 float TemporalDeck::getUiPlatterAngle() const {
