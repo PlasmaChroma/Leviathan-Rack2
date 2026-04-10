@@ -35,6 +35,7 @@ static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 2> BOARD_TEXTURE_NAMES = {{"Wood", "Marble"}};
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Othello"}};
+static constexpr std::array<const char*, 2> HIGHLIGHT_MODE_NAMES = {{"Ring", "Off"}};
 
 struct Crownstep;
 
@@ -96,6 +97,11 @@ struct Crownstep : Module {
 		GAME_MODE_OTHELLO,
 		GAME_MODE_COUNT
 	};
+	enum HighlightMode {
+		HIGHLIGHT_RING = 0,
+		HIGHLIGHT_OFF,
+		HIGHLIGHT_COUNT
+	};
 
 	BoardState board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
@@ -136,6 +142,7 @@ struct Crownstep : Module {
 	int pitchDividerMode = 0;
 	int boardTextureMode = BOARD_TEXTURE_WOOD;
 	int gameMode = GAME_MODE_CHECKERS;
+	int highlightMode = HIGHLIGHT_RING;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;

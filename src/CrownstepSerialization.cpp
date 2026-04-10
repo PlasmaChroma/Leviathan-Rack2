@@ -13,6 +13,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 	json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
+	json_object_set_new(rootJ, "highlightMode", json_integer(highlightMode));
 	json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
 	json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
 	json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
@@ -140,6 +141,10 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	json_t* boardTextureModeJ = json_object_get(rootJ, "boardTextureMode");
 	if (boardTextureModeJ) {
 		boardTextureMode = clamp(int(json_integer_value(boardTextureModeJ)), 0, int(BOARD_TEXTURE_NAMES.size()) - 1);
+	}
+	json_t* highlightModeJ = json_object_get(rootJ, "highlightMode");
+	if (highlightModeJ) {
+		highlightMode = clamp(int(json_integer_value(highlightModeJ)), 0, HIGHLIGHT_COUNT - 1);
 	}
 	json_t* playheadJ = json_object_get(rootJ, "playhead");
 	if (playheadJ) {

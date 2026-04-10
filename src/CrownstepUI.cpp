@@ -1,10 +1,15 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
 
+#define NANOSVGRAST_IMPLEMENTATION
+#include <nanosvgrast.h>
+
 namespace {
 
 constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
+constexpr bool CHESS_ATLAS_ENABLED = true;
+constexpr float CHESS_ATLAS_RASTER_SCALE = 2.f;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
 	{
@@ -29,6 +34,11 @@ struct ChessPieceAtlasCache {
 	std::shared_ptr<Svg> svg;
 	bool initialized = false;
 	bool available = false;
+	NVGcontext* rasterImageVg = nullptr;
+	int rasterImageHandle = -1;
+	int rasterImageWidth = 0;
+	int rasterImageHeight = 0;
+	float rasterScale = 1.f;
 	math::Rect glyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS];
 	bool hasGlyphBounds[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] {};
 	float rowMaxGlyphHeight[CHESS_ATLAS_ROWS] {};
@@ -156,6 +166,48 @@ ChessPieceAtlasCache& chessPieceAtlasCache() {
 	return cache;
 }
 
+bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cache) {
+	if (!vg || !cache || !cache->available || !cache->svg || !cache->svg->handle) {
+		return false;
+	}
+	if (cache->rasterImageHandle >= 0 && cache->rasterImageVg == vg) {
+		return true;
+	}
+
+	NSVGimage* image = cache->svg->handle;
+	int rasterWidth = std::max(1, int(std::ceil(image->width * CHESS_ATLAS_RASTER_SCALE)));
+	int rasterHeight = std::max(1, int(std::ceil(image->height * CHESS_ATLAS_RASTER_SCALE)));
+	std::vector<unsigned char> pixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
+
+	NSVGrasterizer* rasterizer = nsvgCreateRasterizer();
+	if (!rasterizer) {
+		return false;
+	}
+	nsvgRasterize(
+		rasterizer,
+		image,
+		0.f,
+		0.f,
+		CHESS_ATLAS_RASTER_SCALE,
+		pixels.data(),
+		rasterWidth,
+		rasterHeight,
+		rasterWidth * 4
+	);
+	nsvgDeleteRasterizer(rasterizer);
+
+	int imageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, NVG_IMAGE_GENERATE_MIPMAPS, pixels.data());
+	if (imageHandle < 0) {
+		return false;
+	}
+	cache->rasterImageVg = vg;
+	cache->rasterImageHandle = imageHandle;
+	cache->rasterImageWidth = rasterWidth;
+	cache->rasterImageHeight = rasterHeight;
+	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
+	return true;
+}
+
 bool drawChessAtlasPiece(
 	NVGcontext* vg,
 	float centerX,
@@ -169,7 +221,7 @@ bool drawChessAtlasPiece(
 		return false;
 	}
 	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
-	if (!cache.available || !cache.svg) {
+	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache)) {
 		return false;
 	}
 
@@ -199,28 +251,33 @@ bool drawChessAtlasPiece(
 	}
 
 	const float targetH = std::min(cellWidth, cellHeight) * 0.90f;
-	// Shared scale preserves the relative sizes authored in the SVG.
 	const float scale = targetH / scaleRefHeight;
-	const float srcCx = src.pos.x + src.size.x * 0.5f;
-	const float srcBottomY = src.pos.y + src.size.y;
+	const float drawWidth = src.size.x * scale;
+	const float drawHeight = src.size.y * scale;
 	const float yOffset = std::min(cellWidth, cellHeight) * 0.03f;
 	const float baselineY = centerY + targetH * 0.5f + yOffset;
-	const float clipPad = 2.f;
+	const float x = centerX - drawWidth * 0.5f;
+	const float y = baselineY - drawHeight;
+	const float atlasDrawWidth = cache.svg->handle->width * scale;
+	const float atlasDrawHeight = cache.svg->handle->height * scale;
+	const float patternX = x - src.pos.x * scale;
+	const float patternY = y - src.pos.y * scale;
 
 	nvgSave(vg);
-	nvgGlobalAlpha(vg, clamp(alpha, 0.f, 1.f));
-	// Anchor by bottom edge so shorter pieces do not float.
-	nvgTranslate(vg, centerX, baselineY);
-	nvgScale(vg, scale, scale);
-	nvgTranslate(vg, -srcCx, -srcBottomY);
-	nvgScissor(
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	NVGpaint imagePaint = nvgImagePattern(
 		vg,
-		src.pos.x - clipPad,
-		src.pos.y - clipPad,
-		src.size.x + clipPad * 2.f,
-		src.size.y + clipPad * 2.f
+		patternX,
+		patternY,
+		atlasDrawWidth,
+		atlasDrawHeight,
+		0.f,
+		cache.rasterImageHandle,
+		clamp(alpha, 0.f, 1.f)
 	);
-	cache.svg->draw(vg);
+	nvgFillPaint(vg, imagePaint);
+	nvgFill(vg);
 	nvgRestore(vg);
 	return true;
 }
@@ -549,7 +606,7 @@ struct CrownstepBoardWidget final : Widget {
 								return;
 							}
 								if (module->isChessMode()) {
-									if (drawChessAtlasPiece(args.vg, centerX, centerY, cellWidth, cellHeight, piece, alpha)) {
+									if (CHESS_ATLAS_ENABLED && drawChessAtlasPiece(args.vg, centerX, centerY, cellWidth, cellHeight, piece, alpha)) {
 										return;
 									}
 									int pieceType = std::abs(piece);
@@ -963,7 +1020,10 @@ struct CrownstepBoardWidget final : Widget {
 						return false;
 					};
 
-					const bool showMovablePieceHints = !module->gameOver && module->turnSide == module->humanSide();
+						const bool showMovablePieceHints =
+							module->highlightMode == Crownstep::HIGHLIGHT_RING
+							&& !module->gameOver
+							&& module->turnSide == module->humanSide();
 					int cellCount = module->boardCellCount();
 					std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
 					if (showMovablePieceHints) {
@@ -1478,6 +1538,38 @@ struct CrownstepWidget final : ModuleWidget {
 				difficultyMenu->addChild(item);
 			}
 		}));
+		menu->addChild(createSubmenuItem("Highlight", "", [=](Menu* highlightMenu) {
+			for (int i = 0; i < int(HIGHLIGHT_MODE_NAMES.size()); ++i) {
+				highlightMenu->addChild(createCheckMenuItem(
+					HIGHLIGHT_MODE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->highlightMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->highlightMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Board Texture", "", [=](Menu* textureMenu) {
+			for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
+				textureMenu->addChild(createCheckMenuItem(
+					BOARD_TEXTURE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->boardTextureMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->boardTextureMode = i;
+						}
+					}
+				));
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";
@@ -1511,7 +1603,7 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Bias", "", [=](Menu* keyMenu) {
+		menu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
 			for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
 				keyMenu->addChild(createCheckMenuItem(
 					KEY_NAMES[size_t(i)],
@@ -1586,26 +1678,6 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->pitchDividerMode = i;
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(new MenuSeparator());
-		MenuLabel* boardLabel = new MenuLabel();
-		boardLabel->text = "Board";
-		menu->addChild(boardLabel);
-		menu->addChild(createSubmenuItem("Texture", "", [=](Menu* textureMenu) {
-			for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
-				textureMenu->addChild(createCheckMenuItem(
-					BOARD_TEXTURE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->boardTextureMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->boardTextureMode = i;
 						}
 					}
 				));

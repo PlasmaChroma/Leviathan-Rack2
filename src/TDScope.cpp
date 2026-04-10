@@ -443,14 +443,22 @@ struct TDScopeDisplayWidget final : Widget {
     if (lowSignalWindow) {
       readHeadY = drawTop + 0.5f * yDen + 0.5f;
     }
-    // Keep the full multi-line read-head band visible near window edges.
+    // Keep the full multi-line read-head band visible near window edges,
+    // and allow a slight downward nudge at the live "now" position.
     constexpr float kReadHeadHalfBandPx = 2.f;
+    constexpr float kReadHeadNowNudgePx = 0.45f;
+    float readHeadDrawY = readHeadY;
+    if (!sampleMode) {
+      float nowProximity = clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
+      readHeadDrawY += kReadHeadNowNudgePx * nowProximity;
+    }
     float minReadHeadY = drawTop + kReadHeadHalfBandPx + 0.5f;
-    float maxReadHeadY = drawBottom - kReadHeadHalfBandPx - 0.5f;
+    // Slightly looser lower bound so the "now" nudge can sit lower without clipping.
+    float maxReadHeadY = drawBottom - kReadHeadHalfBandPx;
     if (maxReadHeadY >= minReadHeadY) {
-      readHeadY = clamp(readHeadY, minReadHeadY, maxReadHeadY);
+      readHeadDrawY = clamp(readHeadDrawY, minReadHeadY, maxReadHeadY);
     } else {
-      readHeadY = 0.5f * (drawTop + drawBottom);
+      readHeadDrawY = 0.5f * (drawTop + drawBottom);
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = std::max(1, int(std::ceil(drawHeight)));
@@ -1142,11 +1150,11 @@ struct TDScopeDisplayWidget final : Widget {
       };
 
       // Full-width center core plus vertical feather.
-      drawReadHeadLine(readHeadY - 2.f, 64, 1.f);
-      drawReadHeadLine(readHeadY + 2.f, 64, 1.f);
-      drawReadHeadLine(readHeadY - 1.f, 148, 1.f);
-      drawReadHeadLine(readHeadY + 1.f, 148, 1.f);
-      drawReadHeadLine(readHeadY, 255, 1.15f);
+      drawReadHeadLine(readHeadDrawY - 2.f, 64, 1.f);
+      drawReadHeadLine(readHeadDrawY + 2.f, 64, 1.f);
+      drawReadHeadLine(readHeadDrawY - 1.f, 148, 1.f);
+      drawReadHeadLine(readHeadDrawY + 1.f, 148, 1.f);
+      drawReadHeadLine(readHeadDrawY, 255, 1.15f);
     }
     nvgResetScissor(args.vg);
     nvgRestore(args.vg);
