@@ -2001,6 +2001,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					if (i == s.playbackIndex) {
 						nvgBeginPath(args.vg);
 						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
+						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 118));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
 						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
 						nvgStrokeWidth(args.vg, 1.0f);
 						nvgStroke(args.vg);
@@ -2010,13 +2014,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			else if (mode == VisualMode::COMPRESSED) {
 				int segCount = std::min(24, s.activeLength);
 				segCount = std::max(1, segCount);
-				int group = int(std::ceil(float(s.activeLength) / float(segCount)));
 				float gap = 0.8f;
 				float segW = (stripW - gap * float(segCount - 1)) / float(segCount);
 				segW = std::max(1.f, segW);
 				for (int seg = 0; seg < segCount; ++seg) {
-					int begin = seg * group;
-					int end = std::min(s.activeLength, begin + group);
+					int begin = int(std::floor(float(seg) * float(s.activeLength) / float(segCount)));
+					int end = int(std::floor(float(seg + 1) * float(s.activeLength) / float(segCount)));
+					end = std::max(end, begin + 1);
+					end = std::min(end, s.activeLength);
 					if (begin >= end) {
 						continue;
 					}
@@ -2031,6 +2036,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgFillColor(args.vg, nvgRGBA(106, 146, 178, int(68.f + 142.f * avg)));
 					nvgFill(args.vg);
 					if (s.playbackIndex >= begin && s.playbackIndex < end) {
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
+						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
+						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
 						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
@@ -2061,6 +2070,17 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
 					nvgFillColor(args.vg, nvgRGBA(98, 142, 176, int(62.f + 150.f * avg)));
 					nvgFill(args.vg);
+					if (s.playbackIndex >= begin && s.playbackIndex < end) {
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
+						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
+						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
+						nvgStrokeWidth(args.vg, 1.0f);
+						nvgStroke(args.vg);
+					}
 				}
 			}
 		}
