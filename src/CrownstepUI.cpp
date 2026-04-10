@@ -1559,11 +1559,275 @@ struct CrownstepBoardWidget final : Widget {
 	}
 };
 
-struct CrownstepStepCounterWidget final : Widget {
+struct CrownRibbonWidget final : OpaqueWidget {
 	Crownstep* module = nullptr;
+	int hoverZone = 0; // -1 left, 0 center, +1 right
+	int lastRecentCap = 16;
+	Vec lastHoverPos = Vec(0.f, 0.f);
+	bool capDragActive = false;
+	Vec capDragLocal = Vec(0.f, 0.f);
 
-	explicit CrownstepStepCounterWidget(Crownstep* crownstepModule) {
+	enum class VisualMode {
+		DISCRETE,
+		COMPRESSED,
+		BUCKETED
+	};
+
+	struct RibbonState {
+		int historySize = 0;
+		int activeStart = 0;
+		int activeLength = 0;
+		int playbackIndex = -1;
+		int capValue = 0; // 0 means FULL
+		bool fullMode = true;
+		float eventFlash = 0.f;
+		std::vector<float> stepWeight;
+	};
+
+	static constexpr int PRESET_COUNT = 4;
+	static constexpr int PRESET_CAP_VALUES[PRESET_COUNT] = {0, 8, 16, 32};
+
+	explicit CrownRibbonWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
+	}
+
+	VisualMode chooseMode(int activeLength) const {
+		if (activeLength <= 16) {
+			return VisualMode::DISCRETE;
+		}
+		if (activeLength <= 48) {
+			return VisualMode::COMPRESSED;
+		}
+		return VisualMode::BUCKETED;
+	}
+
+	int zoneForPos(Vec localPos) const {
+		if (localPos.x < box.size.x * 0.33f) {
+			return -1;
+		}
+		if (localPos.x > box.size.x * 0.67f) {
+			return 1;
+		}
+		return 0;
+	}
+
+	int capValueFromModule() const {
+		if (!module) {
+			return 0;
+		}
+		int cap = module->currentSequenceCap();
+		return std::max(0, cap);
+	}
+
+	int presetIndexForCapValue(int capValue) const {
+		if (capValue <= 0) {
+			return 0;
+		}
+		int bestIndex = 1;
+		int bestDist = std::abs(PRESET_CAP_VALUES[1] - capValue);
+		for (int i = 2; i < PRESET_COUNT; ++i) {
+			int dist = std::abs(PRESET_CAP_VALUES[i] - capValue);
+			if (dist < bestDist) {
+				bestDist = dist;
+				bestIndex = i;
+			}
+		}
+		return bestIndex;
+	}
+
+	int currentPresetIndex() const {
+		return presetIndexForCapValue(capValueFromModule());
+	}
+
+	int presetIndexForLocalX(float x) const {
+		float innerW = std::max(1.f, box.size.x - 4.f);
+		float norm = clamp((x - 2.f) / innerW, 0.f, 1.f);
+		int index = int(std::round(norm * float(PRESET_COUNT - 1)));
+		return clamp(index, 0, PRESET_COUNT - 1);
+	}
+
+	void applyPresetIndex(int presetIndex) {
+		if (!module) {
+			return;
+		}
+		int idx = clamp(presetIndex, 0, PRESET_COUNT - 1);
+		int capValue = PRESET_CAP_VALUES[idx];
+		if (capValue > 0) {
+			lastRecentCap = capValue;
+			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(capValue));
+		}
+		else {
+			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
+		}
+	}
+
+	void nudgePreset(int dir) {
+		int current = currentPresetIndex();
+		int next = current;
+		if (dir > 0) {
+			next = std::min(current + 1, PRESET_COUNT - 1);
+		}
+		else if (dir < 0) {
+			next = std::max(current - 1, 0);
+		}
+		applyPresetIndex(next);
+	}
+
+	void toggleFullVsRecent() {
+		int capValue = capValueFromModule();
+		if (capValue <= 0) {
+			applyPresetIndex(presetIndexForCapValue(lastRecentCap));
+		}
+		else {
+			lastRecentCap = capValue;
+			applyPresetIndex(0);
+		}
+	}
+
+	RibbonState pullState() const {
+		RibbonState s;
+		if (!module) {
+			return s;
+		}
+
+		s.activeLength = std::max(0, module->activeLength());
+		s.activeStart = std::max(0, module->activeStartIndex());
+		s.capValue = capValueFromModule();
+		s.fullMode = (s.capValue == 0);
+		if (s.activeLength > 0) {
+			s.playbackIndex = clamp(module->displayedStep - 1, 0, s.activeLength - 1);
+		}
+		s.eventFlash = clamp(module->captureFlashSeconds / 0.16f, 0.f, 1.f);
+
+		std::lock_guard<std::recursive_mutex> lock(module->sequenceMutex);
+		s.historySize = int(module->moveHistory.size());
+		s.stepWeight.assign(size_t(s.activeLength), 0.15f);
+		for (int i = 0; i < s.activeLength; ++i) {
+			int absIndex = s.activeStart + i;
+			float w = 0.18f;
+			if (absIndex >= 0 && absIndex < int(module->history.size())) {
+				const Step& step = module->history[size_t(absIndex)];
+				w += clamp(step.accent * 0.14f, 0.f, 0.42f);
+			}
+			if (absIndex >= 0 && absIndex < int(module->moveHistory.size())) {
+				const Move& move = module->moveHistory[size_t(absIndex)];
+				if (move.isCapture) {
+					w += 0.16f;
+				}
+				if (move.isMultiCapture) {
+					w += 0.14f;
+				}
+				if (move.isKing) {
+					w += 0.18f;
+				}
+			}
+			s.stepWeight[size_t(i)] = clamp(w, 0.10f, 1.f);
+		}
+		return s;
+	}
+
+	void onHover(const event::Hover& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+			hoverZone = 0;
+			Widget::onHover(e);
+			return;
+		}
+		lastHoverPos = e.pos;
+		hoverZone = zoneForPos(e.pos);
+		OpaqueWidget::onHover(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+			hoverZone = 0;
+			Widget::onLeave(e);
+			return;
+		}
+		hoverZone = 0;
+		OpaqueWidget::onLeave(e);
+	}
+
+	void onHoverScroll(const event::HoverScroll& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+			Widget::onHoverScroll(e);
+			return;
+		}
+		int mods = (APP && APP->window) ? APP->window->getMods() : 0;
+		if ((mods & RACK_MOD_CTRL) != 0) {
+			Widget::onHoverScroll(e);
+			return;
+		}
+		float scroll = -e.scrollDelta.y;
+		if (std::fabs(scroll) < 1e-4f) {
+			Widget::onHoverScroll(e);
+			return;
+		}
+		nudgePreset((scroll > 0.f) ? 1 : -1);
+		e.consume(this);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+			Widget::onButton(e);
+			return;
+		}
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			Widget::onButton(e);
+			return;
+		}
+		int zone = zoneForPos(e.pos);
+		if (zone < 0) {
+			nudgePreset(-1);
+		}
+		else if (zone > 0) {
+			nudgePreset(1);
+		}
+		else {
+			toggleFullVsRecent();
+		}
+		e.consume(this);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			Widget::onDragStart(e);
+			return;
+		}
+		capDragActive = true;
+		capDragLocal = lastHoverPos;
+		int presetIndex = presetIndexForLocalX(capDragLocal.x);
+		applyPresetIndex(presetIndex);
+		e.consume(this);
+	}
+
+	void onDragMove(const event::DragMove& e) override {
+		if (!capDragActive || !module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			Widget::onDragMove(e);
+			return;
+		}
+		capDragLocal = capDragLocal.plus(e.mouseDelta);
+		capDragLocal.x = clamp(capDragLocal.x, 0.f, box.size.x);
+		int presetIndex = presetIndexForLocalX(capDragLocal.x);
+		applyPresetIndex(presetIndex);
+		e.consume(this);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		if (!capDragActive || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			Widget::onDragEnd(e);
+			return;
+		}
+		capDragActive = false;
+		e.consume(this);
+	}
+
+	void onDoubleClick(const event::DoubleClick& e) override {
+		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+			Widget::onDoubleClick(e);
+			return;
+		}
+		toggleFullVsRecent();
+		e.consume(this);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1571,35 +1835,317 @@ struct CrownstepStepCounterWidget final : Widget {
 			return;
 		}
 
-		int totalSteps = module->activeLength();
-		int currentStep = module->displayedStep;
-		currentStep = clamp(currentStep, 0, totalSteps);
-
-		char stepCounterText[64];
-		std::snprintf(stepCounterText, sizeof(stepCounterText), "%d / %d", currentStep, totalSteps);
+		RibbonState s = pullState();
+		int currentStep = (s.activeLength > 0 && s.playbackIndex >= 0) ? (s.playbackIndex + 1) : 0;
+		int totalSteps = s.activeLength;
 
 		const float x = 0.f;
 		const float y = 0.f;
 		const float w = box.size.x;
 		const float h = box.size.y;
+		const float pad = 2.f;
+
+		if (module->stepCounterStyle == Crownstep::STEP_COUNTER_BASIC) {
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x, y, w, h, 3.5f);
+			nvgFillColor(args.vg, nvgRGBA(10, 12, 14, 186));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.0f);
+			nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 94));
+			nvgStrokeWidth(args.vg, 1.0f);
+			nvgStroke(args.vg);
+
+			char stepCounterText[64];
+			std::snprintf(stepCounterText, sizeof(stepCounterText), "%d / %d", currentStep, totalSteps);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFontSize(args.vg, 11.5f);
+			nvgFillColor(args.vg, nvgRGB(242, 228, 204));
+			nvgText(args.vg, x + w * 0.5f, y + h * 0.53f, stepCounterText, nullptr);
+			return;
+		}
 
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x, y, w, h, 3.5f);
-		nvgFillColor(args.vg, nvgRGBA(10, 12, 14, 186));
+		nvgRoundedRect(args.vg, x, y, w, h, 4.f);
+		nvgFillColor(args.vg, nvgRGBA(9, 11, 14, 194));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.0f);
-		nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 94));
+		nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.5f);
+		nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 102));
 		nvgStrokeWidth(args.vg, 1.0f);
 		nvgStroke(args.vg);
 
+		float badgeH = std::max(7.5f, h * 0.28f);
+		float textH = std::max(8.f, h * 0.30f);
+		float ribbonTop = y + badgeH + 1.5f;
+		float ribbonBottom = y + h - textH - 1.5f;
+		float ribbonH = std::max(4.f, ribbonBottom - ribbonTop);
+		float stripX = x + pad;
+		float stripW = std::max(6.f, w - 2.f * pad);
+		float historyH = std::max(2.6f, ribbonH * 0.45f);
+		float historyY = ribbonTop;
+		float loopY = historyY + historyH + 1.f;
+		float loopH = std::max(2.f, ribbonTop + ribbonH - loopY);
+
+		// Badge.
+		char badgeText[16];
+		if (s.fullMode) {
+			std::snprintf(badgeText, sizeof(badgeText), "FULL");
+		}
+		else {
+			std::snprintf(badgeText, sizeof(badgeText), "R%d", s.capValue);
+		}
+		float badgeW = 26.f;
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + pad, y + 1.f, badgeW, badgeH - 1.5f, 2.4f);
+		nvgFillColor(args.vg, nvgRGBA(26, 38, 48, 204));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + pad, y + 1.f, badgeW, badgeH - 1.5f, 2.4f);
+		nvgStrokeColor(args.vg, nvgRGBA(146, 198, 236, 128));
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStroke(args.vg);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFontSize(args.vg, 11.5f);
+		nvgFontSize(args.vg, 8.1f);
+		nvgFillColor(args.vg, nvgRGB(198, 230, 254));
+		nvgText(args.vg, x + pad + badgeW * 0.5f, y + badgeH * 0.5f, badgeText, nullptr);
+
+		// Full-history base strip.
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, stripX, historyY, stripW, historyH, 1.6f);
+		nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
+		nvgFill(args.vg);
+		if (s.historySize > 0) {
+			float startNorm = 0.f;
+			float endNorm = 1.f;
+			if (!s.fullMode && s.historySize > 0) {
+				startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
+				endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
+			}
+			float activeX = stripX + stripW * startNorm;
+			float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+			if (s.fullMode) {
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
+				NVGpaint fullPaint = nvgLinearGradient(
+					args.vg,
+					activeX,
+					historyY,
+					activeX,
+					historyY + historyH,
+					nvgRGBA(106, 182, 210, 204),
+					nvgRGBA(76, 126, 170, 188)
+				);
+				nvgFillPaint(args.vg, fullPaint);
+				nvgFill(args.vg);
+			}
+			else {
+				// Dim non-active history more aggressively so RECENT window reads clearly.
+				if (activeX > stripX + 0.5f) {
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, stripX, historyY + 0.3f, activeX - stripX, std::max(1.f, historyH - 0.6f), 1.1f);
+					nvgFillColor(args.vg, nvgRGBA(12, 16, 20, 168));
+					nvgFill(args.vg);
+				}
+				float rightX = activeX + activeW;
+				float rightW = (stripX + stripW) - rightX;
+				if (rightW > 0.5f) {
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, rightX, historyY + 0.3f, rightW, std::max(1.f, historyH - 0.6f), 1.1f);
+					nvgFillColor(args.vg, nvgRGBA(12, 16, 20, 168));
+					nvgFill(args.vg);
+				}
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
+				NVGpaint recentPaint = nvgLinearGradient(
+					args.vg,
+					activeX,
+					historyY,
+					activeX,
+					historyY + historyH,
+					nvgRGBA(110, 198, 238, 232),
+					nvgRGBA(74, 138, 204, 212)
+				);
+				nvgFillPaint(args.vg, recentPaint);
+				nvgFill(args.vg);
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
+				nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 198));
+				nvgStrokeWidth(args.vg, 0.85f);
+				nvgStroke(args.vg);
+			}
+		}
+
+		// Loop detail strip.
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, stripX, loopY, stripW, loopH, 1.4f);
+		nvgFillColor(args.vg, nvgRGBA(18, 24, 30, 188));
+		nvgFill(args.vg);
+
+		if (s.activeLength > 0) {
+			VisualMode mode = chooseMode(s.activeLength);
+			if (mode == VisualMode::DISCRETE) {
+				float gap = 1.2f;
+				float cellW = (stripW - gap * float(s.activeLength - 1)) / float(s.activeLength);
+				cellW = std::max(1.f, cellW);
+				for (int i = 0; i < s.activeLength; ++i) {
+					float cx = stripX + float(i) * (cellW + gap);
+					float alpha = 70.f + 130.f * s.stepWeight[size_t(i)];
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, cx, loopY + 0.35f, cellW, std::max(0.8f, loopH - 0.7f), 1.f);
+					nvgFillColor(args.vg, nvgRGBA(116, 156, 184, int(alpha)));
+					nvgFill(args.vg);
+					if (i == s.playbackIndex) {
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
+						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
+						nvgStrokeWidth(args.vg, 1.0f);
+						nvgStroke(args.vg);
+					}
+				}
+			}
+			else if (mode == VisualMode::COMPRESSED) {
+				int segCount = std::min(24, s.activeLength);
+				segCount = std::max(1, segCount);
+				int group = int(std::ceil(float(s.activeLength) / float(segCount)));
+				float gap = 0.8f;
+				float segW = (stripW - gap * float(segCount - 1)) / float(segCount);
+				segW = std::max(1.f, segW);
+				for (int seg = 0; seg < segCount; ++seg) {
+					int begin = seg * group;
+					int end = std::min(s.activeLength, begin + group);
+					if (begin >= end) {
+						continue;
+					}
+					float avg = 0.f;
+					for (int i = begin; i < end; ++i) {
+						avg += s.stepWeight[size_t(i)];
+					}
+					avg /= float(end - begin);
+					float sx = stripX + float(seg) * (segW + gap);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, sx, loopY + 0.35f, segW, std::max(0.8f, loopH - 0.7f), 0.8f);
+					nvgFillColor(args.vg, nvgRGBA(106, 146, 178, int(68.f + 142.f * avg)));
+					nvgFill(args.vg);
+					if (s.playbackIndex >= begin && s.playbackIndex < end) {
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
+						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
+						nvgStrokeWidth(args.vg, 1.0f);
+						nvgStroke(args.vg);
+					}
+				}
+			}
+			else {
+				int bucketCount = 24;
+				float gap = 0.7f;
+				float bucketW = (stripW - gap * float(bucketCount - 1)) / float(bucketCount);
+				bucketW = std::max(0.85f, bucketW);
+				for (int b = 0; b < bucketCount; ++b) {
+					int begin = int(std::floor(float(b) * float(s.activeLength) / float(bucketCount)));
+					int end = int(std::floor(float(b + 1) * float(s.activeLength) / float(bucketCount)));
+					end = std::max(end, begin + 1);
+					end = std::min(end, s.activeLength);
+					float avg = 0.f;
+					for (int i = begin; i < end; ++i) {
+						avg += s.stepWeight[size_t(i)];
+					}
+					avg /= float(std::max(1, end - begin));
+					float height = std::max(0.8f, (loopH - 0.7f) * (0.28f + 0.72f * avg));
+					float bx = stripX + float(b) * (bucketW + gap);
+					float by = loopY + loopH - 0.35f - height;
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
+					nvgFillColor(args.vg, nvgRGBA(98, 142, 176, int(62.f + 150.f * avg)));
+					nvgFill(args.vg);
+				}
+			}
+		}
+
+		// Current marker in history strip.
+		if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
+			int absPlaybackIndex = clamp(s.activeStart + s.playbackIndex, 0, std::max(0, s.historySize - 1));
+			float norm = (s.historySize <= 1) ? 0.f : (float(absPlaybackIndex) / float(s.historySize - 1));
+			float mx = stripX + stripW * norm;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, mx, historyY - 0.4f);
+			nvgLineTo(args.vg, mx, historyY + historyH + 0.4f);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 176, 250));
+			nvgStrokeWidth(args.vg, 1.15f);
+			nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, mx, historyY - 0.1f, 1.6f);
+			nvgFillColor(args.vg, nvgRGBA(255, 220, 140, 248));
+			nvgFill(args.vg);
+
+			// Crown-shaped cap on the playhead marker.
+			float crownW = 5.4f;
+			float crownH = 2.6f;
+			float crownTop = historyY - crownH - 2.4f;
+			float bandY = crownTop + crownH * 0.64f;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, mx - crownW * 0.50f, bandY);
+			nvgLineTo(args.vg, mx - crownW * 0.33f, crownTop + crownH * 0.30f);
+			nvgLineTo(args.vg, mx - crownW * 0.12f, bandY - crownH * 0.34f);
+			nvgLineTo(args.vg, mx, crownTop);
+			nvgLineTo(args.vg, mx + crownW * 0.12f, bandY - crownH * 0.34f);
+			nvgLineTo(args.vg, mx + crownW * 0.33f, crownTop + crownH * 0.30f);
+			nvgLineTo(args.vg, mx + crownW * 0.50f, bandY);
+			nvgLineTo(args.vg, mx + crownW * 0.50f, bandY + crownH * 0.30f);
+			nvgLineTo(args.vg, mx - crownW * 0.50f, bandY + crownH * 0.30f);
+			nvgClosePath(args.vg);
+			NVGpaint crownPaint = nvgLinearGradient(
+				args.vg,
+				mx,
+				crownTop,
+				mx,
+				bandY + crownH * 0.30f,
+				nvgRGBA(255, 236, 164, 248),
+				nvgRGBA(238, 186, 74, 246)
+			);
+			nvgFillPaint(args.vg, crownPaint);
+			nvgFill(args.vg);
+			nvgStrokeColor(args.vg, nvgRGBA(146, 104, 42, 220));
+			nvgStrokeWidth(args.vg, 0.55f);
+			nvgStroke(args.vg);
+		}
+
+		// Numbers.
+		char mainText[40];
+		char subText[40];
+		std::snprintf(mainText, sizeof(mainText), "%02d / %d", currentStep, totalSteps);
+		if (s.fullMode) {
+			std::snprintf(subText, sizeof(subText), "FULL %d", s.historySize);
+		}
+		else {
+			std::snprintf(subText, sizeof(subText), "of %d", s.historySize);
+		}
+
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFontSize(args.vg, 8.8f);
 		nvgFillColor(args.vg, nvgRGB(242, 228, 204));
-		nvgText(args.vg, x + w * 0.5f, y + h * 0.53f, stepCounterText, nullptr);
+		nvgText(args.vg, x + w * 0.5f, y + h - textH * 0.60f, mainText, nullptr);
+
+		nvgFontSize(args.vg, 6.7f);
+		nvgFillColor(args.vg, nvgRGBA(206, 222, 238, 196));
+		nvgText(args.vg, x + w * 0.83f, y + h - textH * 0.22f, subText, nullptr);
+
+		// Hover affordance.
+		if (hoverZone != 0) {
+			float hw = w * 0.33f;
+			float hx = (hoverZone < 0) ? x : (x + w - hw);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, hx + 0.4f, y + 0.4f, hw - 0.8f, h - 0.8f, 3.2f);
+			nvgStrokeColor(args.vg, nvgRGBA(164, 212, 244, 62));
+			nvgStrokeWidth(args.vg, 0.85f);
+			nvgStroke(args.vg);
+		}
 	}
 };
+
+constexpr int CrownRibbonWidget::PRESET_CAP_VALUES[CrownRibbonWidget::PRESET_COUNT];
 
 struct CrownstepDifficultyItem final : MenuItem {
 	Crownstep* module = nullptr;
@@ -1648,9 +2194,9 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 			addChild(boardWidget);
 
-			// Step counter: anchored by SVG point (STEP_COUNTER).
-			const float stepCounterWidthMm = 26.0f;
-			const float stepCounterHeightMm = 4.5f;
+			// Crown ribbon: anchored by SVG point (STEP_COUNTER).
+			const float stepCounterWidthMm = 32.0f;
+			const float stepCounterHeightMm = 7.2f;
 			Vec stepCounterCenterMm(45.72f, 100.3f);
 			panel_svg::loadPointFromSvgMm(panelPath, "STEP_COUNTER", &stepCounterCenterMm);
 			math::Rect stepCounterRectMm(
@@ -1661,7 +2207,7 @@ struct CrownstepWidget final : ModuleWidget {
 				Vec(stepCounterWidthMm, stepCounterHeightMm)
 			);
 
-			CrownstepStepCounterWidget* stepCounterWidget = new CrownstepStepCounterWidget(module);
+			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
 			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
 			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
 			addChild(stepCounterWidget);
@@ -1872,6 +2418,22 @@ struct CrownstepWidget final : ModuleWidget {
 				}
 			}));
 		}
+		menu->addChild(createSubmenuItem("StepCounter", "", [=](Menu* counterMenu) {
+			for (int i = 0; i < int(STEP_COUNTER_STYLE_NAMES.size()); ++i) {
+				counterMenu->addChild(createCheckMenuItem(
+					STEP_COUNTER_STYLE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->stepCounterStyle == i;
+					},
+					[=]() {
+						if (module) {
+							module->stepCounterStyle = i;
+						}
+					}
+				));
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";

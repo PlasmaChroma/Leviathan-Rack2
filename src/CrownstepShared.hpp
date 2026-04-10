@@ -37,6 +37,7 @@ static constexpr std::array<const char*, 3> BOARD_TEXTURE_NAMES = {{"Wood", "Mar
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
 static constexpr std::array<const char*, 3> HIGHLIGHT_MODE_NAMES = {{"Ring", "Glow", "Off"}};
 static constexpr std::array<const char*, 2> PLAYER_MODE_NAMES = {{"Cause", "Effect"}};
+static constexpr std::array<const char*, 2> STEP_COUNTER_STYLE_NAMES = {{"Ribbon", "Basic"}};
 
 struct Crownstep;
 
@@ -110,6 +111,11 @@ struct Crownstep : Module {
 		PLAYER_FOLLOW,
 		PLAYER_MODE_COUNT
 	};
+	enum StepCounterStyle {
+		STEP_COUNTER_RIBBON = 0,
+		STEP_COUNTER_BASIC,
+		STEP_COUNTER_STYLE_COUNT
+	};
 
 	BoardState board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
@@ -152,6 +158,7 @@ struct Crownstep : Module {
 	int gameMode = GAME_MODE_CHECKERS;
 	int highlightMode = HIGHLIGHT_RING;
 	int playerMode = PLAYER_INIT;
+	int stepCounterStyle = STEP_COUNTER_RIBBON;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
