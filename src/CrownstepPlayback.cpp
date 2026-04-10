@@ -58,6 +58,7 @@ void Crownstep::emitStepAtClockEdge() {
 		heldMod = 0.f;
 		modOutputVolts = 0.f;
 		playhead = 0;
+		eocGateHigh = false;
 		return;
 	}
 
@@ -73,7 +74,7 @@ void Crownstep::emitStepAtClockEdge() {
 	playhead++;
 	if (playhead >= length) {
 		playhead = 0;
-		eocPulse.trigger(1e-3f);
+		eocGateHigh = true;
 	}
 }
 
@@ -87,11 +88,15 @@ void Crownstep::process(const ProcessArgs& args) {
 	if (resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
 		playhead = 0;
 		displayedStep = 0;
+		eocGateHigh = false;
 	}
 
 	bool running = true;
 	if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
 		if (running) {
+			// Hold EoC high until the next clock edge, then clear before
+			// advancing so non-wrap steps read low.
+			eocGateHigh = false;
 			emitStepAtClockEdge();
 		}
 	}
@@ -115,7 +120,7 @@ void Crownstep::process(const ProcessArgs& args) {
 	outputs[PITCH_OUTPUT].setVoltage(heldPitch);
 	outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
 	outputs[MOD_OUTPUT].setVoltage(modOutputVolts);
-	outputs[EOC_OUTPUT].setVoltage(eocPulse.process(args.sampleTime) ? 10.f : 0.f);
+	outputs[EOC_OUTPUT].setVoltage(eocGateHigh ? 10.f : 0.f);
 
 	bool humanLedOn = false;
 	bool aiLedOn = false;

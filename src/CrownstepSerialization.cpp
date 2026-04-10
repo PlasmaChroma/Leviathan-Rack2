@@ -14,6 +14,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 	json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
 	json_object_set_new(rootJ, "highlightMode", json_integer(highlightMode));
+	json_object_set_new(rootJ, "playerMode", json_integer(playerMode));
 	json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
 	json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
 	json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
@@ -84,10 +85,15 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	}
 	setGameMode(loadedGameMode, false);
 	board = gameRules ? gameRules->makeInitialBoard() : crownstep::makeInitialBoard();
+	json_t* playerModeJ = json_object_get(rootJ, "playerMode");
+	if (playerModeJ) {
+		playerMode = clamp(int(json_integer_value(playerModeJ)), 0, PLAYER_MODE_COUNT - 1);
+	}
 
 	json_t* turnJ = json_object_get(rootJ, "turnSide");
 	if (turnJ) {
-		turnSide = json_integer_value(turnJ) >= 0 ? humanSide() : aiSide();
+		int side = int(json_integer_value(turnJ));
+		turnSide = (side > 0) ? HUMAN_SIDE : ((side < 0) ? AI_SIDE : (gameRules ? gameRules->humanSide() : HUMAN_SIDE));
 	}
 	json_t* winnerJ = json_object_get(rootJ, "winnerSide");
 	if (winnerJ) {
@@ -157,7 +163,7 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	json_t* lastMoveSideJ = json_object_get(rootJ, "lastMoveSide");
 	if (lastMoveSideJ) {
 		int side = int(json_integer_value(lastMoveSideJ));
-		lastMoveSide = (side > 0) ? humanSide() : ((side < 0) ? aiSide() : 0);
+		lastMoveSide = (side > 0) ? HUMAN_SIDE : ((side < 0) ? AI_SIDE : 0);
 	}
 
 	json_t* boardJ = json_object_get(rootJ, "board");

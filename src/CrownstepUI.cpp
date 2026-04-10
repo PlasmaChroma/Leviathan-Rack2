@@ -366,10 +366,8 @@ bool drawChessAtlasPieceHalo(
 
 	const float minCell = std::min(cellWidth, cellHeight);
 	const float pulse01 = clamp(pulse, 0.f, 1.f);
-	const float outerGrow = minCell * (0.070f + 0.020f * pulse01);
-	const float innerGrow = minCell * (0.036f + 0.012f * pulse01);
-	const float outerAlpha = 0.20f + 0.18f * pulse01;
-	const float innerAlpha = 0.42f + 0.24f * pulse01;
+	const float bandGrow = minCell * (0.032f + 0.010f * pulse01);
+	const float bandAlpha = 0.62f + 0.24f * pulse01;
 
 	auto drawLayer = [&](float grow, float layerAlpha) {
 		float x = spec.x - grow;
@@ -400,8 +398,7 @@ bool drawChessAtlasPieceHalo(
 	};
 
 	nvgSave(vg);
-	drawLayer(outerGrow, outerAlpha);
-	drawLayer(innerGrow, innerAlpha);
+	drawLayer(bandGrow, bandAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -426,6 +423,14 @@ struct CrownstepBoardWidget final : Widget {
 		float cellHeight = box.size.y / 8.f;
 		int col = clamp(int(pos.x / cellWidth), 0, 7);
 		int row = clamp(int(pos.y / cellHeight), 0, 7);
+		bool rotateBoardForHumanPerspective =
+			module
+			&& module->humanSide() == AI_SIDE
+			&& (module->gameMode == Crownstep::GAME_MODE_CHECKERS || module->isChessMode());
+		if (rotateBoardForHumanPerspective) {
+			row = 7 - row;
+			col = 7 - col;
+		}
 		return module ? module->boardCoordToIndex(row, col) : crownstep::coordToIndex(row, col);
 	}
 
@@ -462,6 +467,24 @@ struct CrownstepBoardWidget final : Widget {
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
+		const bool rotateBoardForHumanPerspective =
+			module
+			&& module->humanSide() == AI_SIDE
+			&& (module->gameMode == Crownstep::GAME_MODE_CHECKERS || module->isChessMode());
+		auto viewRowColFromBoardIndex = [&](int index, int* row, int* col) {
+			if (!module || !module->boardIndexToCoord(index, row, col)) {
+				return false;
+			}
+			if (rotateBoardForHumanPerspective) {
+				if (row) {
+					*row = 7 - *row;
+				}
+				if (col) {
+					*col = 7 - *col;
+				}
+			}
+			return true;
+		};
 		bool othelloBoard = module && module->isOthelloMode();
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
@@ -625,7 +648,7 @@ struct CrownstepBoardWidget final : Widget {
 					if (!module->gameOver && module->selectedSquare >= 0) {
 					int row = 0;
 					int col = 0;
-					if (module->boardIndexToCoord(module->selectedSquare, &row, &col)) {
+					if (viewRowColFromBoardIndex(module->selectedSquare, &row, &col)) {
 						float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
@@ -642,7 +665,7 @@ struct CrownstepBoardWidget final : Widget {
 					for (int destinationIndex : module->highlightedDestinations) {
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -672,7 +695,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
 						if (module->opponentHintsPreviewActive && module->board[size_t(destinationIndex)] != 0) {
@@ -699,7 +722,7 @@ struct CrownstepBoardWidget final : Widget {
 					for (int highlightIndex : {module->lastMove.originIndex, module->lastMove.destinationIndex}) {
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(highlightIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(highlightIndex, &row, &col)) {
 							continue;
 						}
 						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == module->humanSide()) ? 0.f : 1.5f);
@@ -723,7 +746,7 @@ struct CrownstepBoardWidget final : Widget {
 				if (!module->gameOver && module->captureFlashSeconds > 0.f && module->lastMove.destinationIndex >= 0) {
 					int row = 0;
 					int col = 0;
-					if (module->boardIndexToCoord(module->lastMove.destinationIndex, &row, &col)) {
+					if (viewRowColFromBoardIndex(module->lastMove.destinationIndex, &row, &col)) {
 					float alpha = clamp(module->captureFlashSeconds / 0.16f, 0.f, 1.f);
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, col * cellWidth + 2.f, row * cellHeight + 2.f, cellWidth - 4.f, cellHeight - 4.f);
@@ -740,13 +763,16 @@ struct CrownstepBoardWidget final : Widget {
 						float radius = std::min(cellWidth, cellHeight) * 0.36f;
 						int fillAlpha = int(255.f * alpha);
 						int strokeAlpha = int(240.f * alpha);
-							bool humanPiece = piece > 0;
-							if (module->isOthelloMode()) {
-								float discR = radius * 1.02f;
-								// Human side renders black discs, AI renders white discs.
-								NVGcolor edge = humanPiece ? nvgRGBA(28, 28, 32, strokeAlpha) : nvgRGBA(198, 200, 208, strokeAlpha);
-								NVGcolor high = humanPiece ? nvgRGBA(96, 100, 114, fillAlpha) : nvgRGBA(254, 254, 255, fillAlpha);
-								NVGcolor low = humanPiece ? nvgRGBA(12, 14, 18, fillAlpha) : nvgRGBA(202, 206, 216, fillAlpha);
+							int pieceSide = crownstep::pieceSide(piece);
+							bool humanPiece = (pieceSide == module->humanSide());
+							bool positivePiece = (pieceSide == HUMAN_SIDE);
+								if (module->isOthelloMode()) {
+									float discR = radius * 1.02f;
+									// Othello disc colors map to board side sign:
+									// +1 side = black, -1 side = white.
+									NVGcolor edge = positivePiece ? nvgRGBA(28, 28, 32, strokeAlpha) : nvgRGBA(198, 200, 208, strokeAlpha);
+									NVGcolor high = positivePiece ? nvgRGBA(96, 100, 114, fillAlpha) : nvgRGBA(254, 254, 255, fillAlpha);
+									NVGcolor low = positivePiece ? nvgRGBA(12, 14, 18, fillAlpha) : nvgRGBA(202, 206, 216, fillAlpha);
 
 								nvgBeginPath(args.vg);
 								nvgCircle(args.vg, centerX, centerY, discR);
@@ -1009,10 +1035,11 @@ struct CrownstepBoardWidget final : Widget {
 									return;
 								}
 
-						NVGcolor coreInner = humanPiece ? nvgRGBA(237, 112, 94, fillAlpha) : nvgRGBA(78, 78, 86, fillAlpha);
-						NVGcolor coreOuter = humanPiece ? nvgRGBA(152, 46, 38, fillAlpha) : nvgRGBA(12, 12, 16, fillAlpha);
-						NVGcolor rimBright = humanPiece ? nvgRGBA(255, 228, 208, strokeAlpha) : nvgRGBA(210, 210, 216, strokeAlpha);
-						NVGcolor rimDark = humanPiece ? nvgRGBA(82, 22, 16, int(210.f * alpha)) : nvgRGBA(6, 6, 9, int(215.f * alpha));
+						// Checkers palette: player side is black, opponent side is red.
+						NVGcolor coreInner = humanPiece ? nvgRGBA(78, 78, 86, fillAlpha) : nvgRGBA(237, 112, 94, fillAlpha);
+						NVGcolor coreOuter = humanPiece ? nvgRGBA(12, 12, 16, fillAlpha) : nvgRGBA(152, 46, 38, fillAlpha);
+						NVGcolor rimBright = humanPiece ? nvgRGBA(210, 210, 216, strokeAlpha) : nvgRGBA(255, 228, 208, strokeAlpha);
+						NVGcolor rimDark = humanPiece ? nvgRGBA(6, 6, 9, int(215.f * alpha)) : nvgRGBA(82, 22, 16, int(210.f * alpha));
 
 						// Base disc with beveled radial falloff.
 						nvgBeginPath(args.vg);
@@ -1037,8 +1064,8 @@ struct CrownstepBoardWidget final : Widget {
 						// Checker-like stacked rim: outer annulus plus discrete radial ridge facets.
 						float rimOuterR = radius * 1.01f;
 						float rimInnerR = radius * 0.80f;
-						NVGcolor rimBandColor = humanPiece ? nvgRGBA(112, 38, 30, int(128.f * alpha))
-						                                   : nvgRGBA(26, 26, 32, int(146.f * alpha));
+						NVGcolor rimBandColor = humanPiece ? nvgRGBA(26, 26, 32, int(146.f * alpha))
+						                                   : nvgRGBA(112, 38, 30, int(128.f * alpha));
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimOuterR);
 						nvgCircle(args.vg, centerX, centerY, rimInnerR);
@@ -1068,12 +1095,12 @@ struct CrownstepBoardWidget final : Widget {
 							float x0o = centerX + c0 * ridgeOuterR;
 							float y0o = centerY + s0 * ridgeOuterR;
 
-							NVGcolor ridgeFillA = humanPiece ? nvgRGBA(248, 176, 154, int(112.f * alpha))
-							                                 : nvgRGBA(172, 172, 184, int(94.f * alpha));
-							NVGcolor ridgeFillB = humanPiece ? nvgRGBA(198, 104, 86, int(104.f * alpha))
-							                                 : nvgRGBA(112, 112, 122, int(86.f * alpha));
-							NVGcolor ridgeStroke = humanPiece ? nvgRGBA(86, 24, 18, int(110.f * alpha))
-							                                  : nvgRGBA(8, 8, 12, int(116.f * alpha));
+							NVGcolor ridgeFillA = humanPiece ? nvgRGBA(172, 172, 184, int(94.f * alpha))
+							                                 : nvgRGBA(248, 176, 154, int(112.f * alpha));
+							NVGcolor ridgeFillB = humanPiece ? nvgRGBA(112, 112, 122, int(86.f * alpha))
+							                                 : nvgRGBA(198, 104, 86, int(104.f * alpha));
+							NVGcolor ridgeStroke = humanPiece ? nvgRGBA(8, 8, 12, int(116.f * alpha))
+							                                  : nvgRGBA(86, 24, 18, int(110.f * alpha));
 
 							nvgBeginPath(args.vg);
 							nvgMoveTo(args.vg, x0i, y0i);
@@ -1091,14 +1118,14 @@ struct CrownstepBoardWidget final : Widget {
 						// Tie the rim together with thin contour rings.
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimOuterR);
-						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(255, 212, 196, int(60.f * alpha))
-						                                  : nvgRGBA(196, 196, 206, int(46.f * alpha)));
+						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(196, 196, 206, int(46.f * alpha))
+						                                  : nvgRGBA(255, 212, 196, int(60.f * alpha)));
 						nvgStrokeWidth(args.vg, 0.70f);
 						nvgStroke(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimInnerR);
-						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(70, 18, 14, int(82.f * alpha))
-						                                  : nvgRGBA(6, 6, 10, int(96.f * alpha)));
+						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(6, 6, 10, int(96.f * alpha))
+						                                  : nvgRGBA(70, 18, 14, int(82.f * alpha)));
 						nvgStrokeWidth(args.vg, 0.64f);
 						nvgStroke(args.vg);
 
@@ -1217,8 +1244,7 @@ struct CrownstepBoardWidget final : Widget {
 						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
 						auto drawPieceGlowHalo = [&](float centerX, float centerY, int piece, float pulse) {
 							float minCell = std::min(cellWidth, cellHeight);
-							NVGcolor outerColor = nvgRGBA(255, 255, 255, int(24.f + 32.f * pulse));
-							NVGcolor innerColor = nvgRGBA(255, 255, 255, int(92.f + 104.f * pulse));
+							NVGcolor bandColor = nvgRGBA(255, 255, 255, int(154.f + 88.f * pulse));
 
 							if (module->isChessMode()) {
 								if (CHESS_ATLAS_ENABLED) {
@@ -1240,35 +1266,31 @@ struct CrownstepBoardWidget final : Widget {
 
 								nvgBeginPath(args.vg);
 								nvgRoundedRect(args.vg, haloX, haloY, haloW, haloH, corner);
-								nvgStrokeColor(args.vg, outerColor);
-								nvgStrokeWidth(args.vg, 6.8f);
-								nvgStroke(args.vg);
-
-								nvgBeginPath(args.vg);
-								nvgRoundedRect(args.vg, haloX, haloY, haloW, haloH, corner);
-								nvgStrokeColor(args.vg, innerColor);
-								nvgStrokeWidth(args.vg, 2.5f);
-								nvgStroke(args.vg);
-
-								nvgBeginPath(args.vg);
-								nvgEllipse(args.vg, centerX, centerY + minCell * 0.30f, minCell * 0.23f, minCell * 0.09f);
-								nvgStrokeColor(args.vg, innerColor);
-								nvgStrokeWidth(args.vg, 1.6f);
+								nvgStrokeColor(args.vg, bandColor);
+								nvgStrokeWidth(args.vg, 3.2f);
 								nvgStroke(args.vg);
 							}
 							else {
-								float haloR = minCell * 0.37f;
+								// Checkers/Othello glow: fixed-size radial-fade halo band.
+								float innerR = minCell * 0.352f;
+								float outerR = minCell * 0.404f;
+								NVGcolor fadeInner = nvgRGBA(255, 255, 255, int(88.f + 106.f * pulse));
+								NVGcolor fadeOuter = nvgRGBA(255, 255, 255, 0);
+								NVGpaint haloPaint = nvgRadialGradient(
+									args.vg,
+									centerX,
+									centerY,
+									innerR,
+									outerR,
+									fadeInner,
+									fadeOuter
+								);
 								nvgBeginPath(args.vg);
-								nvgCircle(args.vg, centerX, centerY, haloR);
-								nvgStrokeColor(args.vg, outerColor);
-								nvgStrokeWidth(args.vg, 6.4f);
-								nvgStroke(args.vg);
-
-								nvgBeginPath(args.vg);
-								nvgCircle(args.vg, centerX, centerY, haloR);
-								nvgStrokeColor(args.vg, innerColor);
-								nvgStrokeWidth(args.vg, 2.35f);
-								nvgStroke(args.vg);
+								nvgCircle(args.vg, centerX, centerY, outerR);
+								nvgCircle(args.vg, centerX, centerY, innerR * 0.965f);
+								nvgPathWinding(args.vg, NVG_HOLE);
+								nvgFillPaint(args.vg, haloPaint);
+								nvgFill(args.vg);
 							}
 						};
 
@@ -1285,7 +1307,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(i, &row, &col)) {
+						if (!viewRowColFromBoardIndex(i, &row, &col)) {
 						continue;
 					}
 							float centerX = (col + 0.5f) * cellWidth;
@@ -1310,7 +1332,7 @@ struct CrownstepBoardWidget final : Widget {
 						int startIndex = queued.path.front();
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(startIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(startIndex, &row, &col)) {
 							continue;
 						}
 						drawPieceAt((col + 0.5f) * cellWidth, (row + 0.5f) * cellHeight, queued.movingPiece, 0.95f);
@@ -1328,7 +1350,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(captureIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(captureIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1384,8 +1406,8 @@ struct CrownstepBoardWidget final : Widget {
 					int fromCol = 0;
 					int toRow = 0;
 					int toCol = 0;
-					if (module->boardIndexToCoord(fromIndex, &fromRow, &fromCol) &&
-						module->boardIndexToCoord(toIndex, &toRow, &toCol)) {
+					if (viewRowColFromBoardIndex(fromIndex, &fromRow, &fromCol) &&
+						viewRowColFromBoardIndex(toIndex, &toRow, &toCol)) {
 						float fromX = (fromCol + 0.5f) * cellWidth;
 						float fromY = (fromRow + 0.5f) * cellHeight;
 						float toX = (toCol + 0.5f) * cellWidth;
@@ -1419,7 +1441,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1457,7 +1479,7 @@ struct CrownstepBoardWidget final : Widget {
 						}
 						int row = 0;
 						int col = 0;
-						if (!module->boardIndexToCoord(destinationIndex, &row, &col)) {
+						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
 						float centerX = (col + 0.5f) * cellWidth;
@@ -1492,7 +1514,7 @@ struct CrownstepBoardWidget final : Widget {
 							}
 							int row = 0;
 							int col = 0;
-							if (!module->boardIndexToCoord(i, &row, &col)) {
+							if (!viewRowColFromBoardIndex(i, &row, &col)) {
 								continue;
 							}
 							float centerX = (col + 0.5f) * cellWidth;
@@ -1785,6 +1807,23 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->setGameMode(i, true);
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Player", "", [=](Menu* playerMenu) {
+			for (int i = 0; i < int(PLAYER_MODE_NAMES.size()); ++i) {
+				playerMenu->addChild(createCheckMenuItem(
+					PLAYER_MODE_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->playerMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->playerMode = i;
+							module->startNewGame();
 						}
 					}
 				));

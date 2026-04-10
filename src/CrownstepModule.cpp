@@ -1,5 +1,177 @@
 #include "CrownstepShared.hpp"
 
+namespace {
+
+int sideAwareScoreForSide(int scoreFromNegativePerspective, int maximizingSide) {
+	return (maximizingSide == AI_SIDE) ? scoreFromNegativePerspective : -scoreFromNegativePerspective;
+}
+
+int checkersEvaluateForSide(const BoardState& board, int maximizingSide) {
+	return sideAwareScoreForSide(crownstep::evaluatePosition(board), maximizingSide);
+}
+
+int checkersSearchForSide(const BoardState& board, int sideToMove, int maximizingSide, int depth, int alpha, int beta) {
+	std::vector<Move> moves = crownstep::generateLegalMovesForSide(board, sideToMove);
+	if (depth <= 0 || moves.empty()) {
+		int eval = checkersEvaluateForSide(board, maximizingSide);
+		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	int best = std::numeric_limits<int>::min();
+	for (const Move& move : moves) {
+		BoardState nextBoard = crownstep::applyMoveToBoard(board, move);
+		int value = -checkersSearchForSide(nextBoard, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+		best = std::max(best, value);
+		alpha = std::max(alpha, value);
+		if (alpha >= beta) {
+			break;
+		}
+	}
+	return best;
+}
+
+Move chooseCheckersMoveForSide(const BoardState& board, int difficulty, int aiSide) {
+	std::vector<Move> moves = crownstep::generateLegalMovesForSide(board, aiSide);
+	if (moves.empty()) {
+		return Move();
+	}
+	int depth = crownstep::searchDepthForDifficulty(difficulty);
+	int bestIndex = 0;
+	int bestScore = std::numeric_limits<int>::min();
+	for (int i = 0; i < int(moves.size()); ++i) {
+		BoardState nextBoard = crownstep::applyMoveToBoard(board, moves[size_t(i)]);
+		int score = -checkersSearchForSide(
+			nextBoard,
+			-aiSide,
+			aiSide,
+			depth - 1,
+			std::numeric_limits<int>::min() / 2,
+			std::numeric_limits<int>::max() / 2
+		);
+		if (score > bestScore) {
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+	return moves[size_t(bestIndex)];
+}
+
+int chessEvaluateForSide(const BoardState& board, const ChessState& state, int maximizingSide) {
+	return sideAwareScoreForSide(crownstep::chessEvaluatePosition(board, state), maximizingSide);
+}
+
+int chessSearchForSide(
+	const BoardState& board,
+	const ChessState& state,
+	int sideToMove,
+	int maximizingSide,
+	int depth,
+	int alpha,
+	int beta
+) {
+	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, sideToMove, state);
+	if (depth <= 0 || moves.empty()) {
+		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	int best = std::numeric_limits<int>::min();
+	for (const Move& move : moves) {
+		ChessState nextState;
+		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, move, state, &nextState);
+		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+		best = std::max(best, value);
+		alpha = std::max(alpha, value);
+		if (alpha >= beta) {
+			break;
+		}
+	}
+	return best;
+}
+
+Move chooseChessMoveForSide(const BoardState& board, int difficulty, const ChessState& state, int aiSide) {
+	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, aiSide, state);
+	if (moves.empty()) {
+		return Move();
+	}
+	int depth = crownstep::chessSearchDepthForDifficulty(difficulty);
+	int bestIndex = 0;
+	int bestScore = std::numeric_limits<int>::min();
+	for (int i = 0; i < int(moves.size()); ++i) {
+		ChessState nextState;
+		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
+		int score = -chessSearchForSide(
+			nextBoard,
+			nextState,
+			-aiSide,
+			aiSide,
+			depth - 1,
+			std::numeric_limits<int>::min() / 2,
+			std::numeric_limits<int>::max() / 2
+		);
+		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+	return moves[size_t(bestIndex)];
+}
+
+int othelloEvaluateForSide(const BoardState& board, int maximizingSide) {
+	return sideAwareScoreForSide(crownstep::othelloEvaluatePosition(board), maximizingSide);
+}
+
+int othelloSearchForSide(const BoardState& board, int sideToMove, int maximizingSide, int depth, int alpha, int beta) {
+	std::vector<Move> moves = crownstep::othelloGenerateLegalMovesForSide(board, sideToMove);
+	std::vector<Move> opponentMoves = crownstep::othelloGenerateLegalMovesForSide(board, -sideToMove);
+	if (depth <= 0 || (moves.empty() && opponentMoves.empty())) {
+		int eval = othelloEvaluateForSide(board, maximizingSide);
+		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	if (moves.empty()) {
+		return -othelloSearchForSide(board, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+	}
+
+	int best = std::numeric_limits<int>::min();
+	for (const Move& move : moves) {
+		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, move, sideToMove);
+		int value = -othelloSearchForSide(nextBoard, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+		best = std::max(best, value);
+		alpha = std::max(alpha, value);
+		if (alpha >= beta) {
+			break;
+		}
+	}
+	return best;
+}
+
+Move chooseOthelloMoveForSide(const BoardState& board, int difficulty, int aiSide) {
+	std::vector<Move> moves = crownstep::othelloGenerateLegalMovesForSide(board, aiSide);
+	if (moves.empty()) {
+		return Move();
+	}
+	int depth = crownstep::othelloSearchDepthForDifficulty(difficulty);
+	int bestIndex = 0;
+	int bestScore = std::numeric_limits<int>::min();
+	for (int i = 0; i < int(moves.size()); ++i) {
+		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, moves[size_t(i)], aiSide);
+		int score = -othelloSearchForSide(
+			nextBoard,
+			-aiSide,
+			aiSide,
+			depth - 1,
+			std::numeric_limits<int>::min() / 2,
+			std::numeric_limits<int>::max() / 2
+		);
+		int flipBonus = int(moves[size_t(i)].captured.size());
+		if (score > bestScore || (score == bestScore && flipBonus > int(moves[size_t(bestIndex)].captured.size()))) {
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+	return moves[size_t(bestIndex)];
+}
+
+} // namespace
+
 Crownstep::Crownstep() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
@@ -41,14 +213,15 @@ bool Crownstep::isOthelloMode() const {
 }
 
 Move Crownstep::chooseAiMoveForSnapshot(const AiWorkerRequest& request) {
+	int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
 	switch (request.gameMode) {
 		case GAME_MODE_CHESS:
-			return crownstep::chessChooseAiMove(request.board, request.difficulty, request.chessState);
+			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide);
 		case GAME_MODE_OTHELLO:
-			return crownstep::othelloChooseAiMove(request.board, request.difficulty);
+			return chooseOthelloMoveForSide(request.board, request.difficulty, requestAiSide);
 		case GAME_MODE_CHECKERS:
 		default:
-			return crownstep::chooseAiMove(request.board, request.difficulty);
+			return chooseCheckersMoveForSide(request.board, request.difficulty, requestAiSide);
 	}
 }
 
@@ -146,6 +319,7 @@ bool Crownstep::dispatchAiRequestIfIdle() {
 	request.id = aiWorkerNextRequestId++;
 	request.gameMode = gameMode;
 	request.difficulty = aiDifficulty;
+	request.aiSide = aiSide();
 	request.board = board;
 	request.chessState = chessState;
 	aiWorkerRequest = request;
@@ -301,6 +475,7 @@ void Crownstep::resetPlayback() {
 	heldAccent = 0.f;
 	heldMod = 0.f;
 	modOutputVolts = 0.f;
+	eocGateHigh = false;
 	cachedRootSemitoneValid = false;
 	cancelAiTurnWork();
 	resetMoveAnimation();
@@ -394,11 +569,19 @@ int Crownstep::rootSemitone() {
 }
 
 int Crownstep::humanSide() const {
-	return gameRules ? gameRules->humanSide() : HUMAN_SIDE;
+	bool followMode = (playerMode == PLAYER_FOLLOW);
+	if (!gameRules) {
+		return followMode ? AI_SIDE : HUMAN_SIDE;
+	}
+	return followMode ? gameRules->aiSide() : gameRules->humanSide();
 }
 
 int Crownstep::aiSide() const {
-	return gameRules ? gameRules->aiSide() : AI_SIDE;
+	bool followMode = (playerMode == PLAYER_FOLLOW);
+	if (!gameRules) {
+		return followMode ? HUMAN_SIDE : AI_SIDE;
+	}
+	return followMode ? gameRules->humanSide() : gameRules->aiSide();
 }
 
 int Crownstep::opposingSide(int side) const {
@@ -539,7 +722,8 @@ void Crownstep::startNewGame() {
 	selectedSquare = -1;
 	hoveredSquare = -1;
 	lastMove = Move();
-	turnSide = humanSide();
+	// Init: player is initial side. Follow: AI is initial side.
+	turnSide = gameRules ? gameRules->humanSide() : HUMAN_SIDE;
 	winnerSide = 0;
 	lastMoveSide = 0;
 	gameOver = false;

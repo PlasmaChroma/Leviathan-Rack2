@@ -36,6 +36,7 @@ static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 3> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric"}};
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
 static constexpr std::array<const char*, 3> HIGHLIGHT_MODE_NAMES = {{"Ring", "Glow", "Off"}};
+static constexpr std::array<const char*, 2> PLAYER_MODE_NAMES = {{"Cause", "Effect"}};
 
 struct Crownstep;
 
@@ -104,6 +105,11 @@ struct Crownstep : Module {
 		HIGHLIGHT_OFF,
 		HIGHLIGHT_COUNT
 	};
+	enum PlayerMode {
+		PLAYER_INIT = 0,
+		PLAYER_FOLLOW,
+		PLAYER_MODE_COUNT
+	};
 
 	BoardState board = crownstep::makeInitialBoard();
 	std::vector<Step> history;
@@ -129,7 +135,7 @@ struct Crownstep : Module {
 	dsp::SchmittTrigger clockTrigger;
 	dsp::SchmittTrigger resetTrigger;
 	dsp::SchmittTrigger newGameTrigger;
-	dsp::PulseGenerator eocPulse;
+	bool eocGateHigh = false;
 
 	int selectedSquare = -1;
 	int hoveredSquare = -1;
@@ -145,6 +151,7 @@ struct Crownstep : Module {
 	int boardTextureMode = BOARD_TEXTURE_WOOD;
 	int gameMode = GAME_MODE_CHECKERS;
 	int highlightMode = HIGHLIGHT_RING;
+	int playerMode = PLAYER_INIT;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -168,6 +175,7 @@ struct Crownstep : Module {
 		uint64_t id = 0;
 		int gameMode = GAME_MODE_CHECKERS;
 		int difficulty = 0;
+		int aiSide = AI_SIDE;
 		BoardState board {};
 		ChessState chessState = crownstep::chessInitialState();
 	};
