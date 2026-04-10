@@ -569,19 +569,13 @@ int Crownstep::rootSemitone() {
 }
 
 int Crownstep::humanSide() const {
-	bool followMode = (playerMode == PLAYER_FOLLOW);
-	if (!gameRules) {
-		return followMode ? AI_SIDE : HUMAN_SIDE;
-	}
-	return followMode ? gameRules->aiSide() : gameRules->humanSide();
+	// Player side selection is a module-level control and should stay
+	// deterministic across games, independent of rule-provider internals.
+	return (playerMode == PLAYER_FOLLOW) ? AI_SIDE : HUMAN_SIDE;
 }
 
 int Crownstep::aiSide() const {
-	bool followMode = (playerMode == PLAYER_FOLLOW);
-	if (!gameRules) {
-		return followMode ? HUMAN_SIDE : AI_SIDE;
-	}
-	return followMode ? gameRules->humanSide() : gameRules->aiSide();
+	return -humanSide();
 }
 
 int Crownstep::opposingSide(int side) const {

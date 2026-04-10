@@ -1035,11 +1035,13 @@ struct CrownstepBoardWidget final : Widget {
 									return;
 								}
 
-						// Checkers palette: player side is black, opponent side is red.
-						NVGcolor coreInner = humanPiece ? nvgRGBA(78, 78, 86, fillAlpha) : nvgRGBA(237, 112, 94, fillAlpha);
-						NVGcolor coreOuter = humanPiece ? nvgRGBA(12, 12, 16, fillAlpha) : nvgRGBA(152, 46, 38, fillAlpha);
-						NVGcolor rimBright = humanPiece ? nvgRGBA(210, 210, 216, strokeAlpha) : nvgRGBA(255, 228, 208, strokeAlpha);
-						NVGcolor rimDark = humanPiece ? nvgRGBA(6, 6, 9, int(215.f * alpha)) : nvgRGBA(82, 22, 16, int(210.f * alpha));
+						// Checkers palette is tied to board side sign so Cause/Effect can
+						// swap piece color while rotation still keeps the player at bottom.
+						// + side = red pieces, - side = black pieces.
+						NVGcolor coreInner = positivePiece ? nvgRGBA(237, 112, 94, fillAlpha) : nvgRGBA(78, 78, 86, fillAlpha);
+						NVGcolor coreOuter = positivePiece ? nvgRGBA(152, 46, 38, fillAlpha) : nvgRGBA(12, 12, 16, fillAlpha);
+						NVGcolor rimBright = positivePiece ? nvgRGBA(255, 228, 208, strokeAlpha) : nvgRGBA(210, 210, 216, strokeAlpha);
+						NVGcolor rimDark = positivePiece ? nvgRGBA(82, 22, 16, int(210.f * alpha)) : nvgRGBA(6, 6, 9, int(215.f * alpha));
 
 						// Base disc with beveled radial falloff.
 						nvgBeginPath(args.vg);
@@ -1064,8 +1066,8 @@ struct CrownstepBoardWidget final : Widget {
 						// Checker-like stacked rim: outer annulus plus discrete radial ridge facets.
 						float rimOuterR = radius * 1.01f;
 						float rimInnerR = radius * 0.80f;
-						NVGcolor rimBandColor = humanPiece ? nvgRGBA(26, 26, 32, int(146.f * alpha))
-						                                   : nvgRGBA(112, 38, 30, int(128.f * alpha));
+						NVGcolor rimBandColor = positivePiece ? nvgRGBA(112, 38, 30, int(128.f * alpha))
+						                                      : nvgRGBA(26, 26, 32, int(146.f * alpha));
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimOuterR);
 						nvgCircle(args.vg, centerX, centerY, rimInnerR);
@@ -1095,12 +1097,12 @@ struct CrownstepBoardWidget final : Widget {
 							float x0o = centerX + c0 * ridgeOuterR;
 							float y0o = centerY + s0 * ridgeOuterR;
 
-							NVGcolor ridgeFillA = humanPiece ? nvgRGBA(172, 172, 184, int(94.f * alpha))
-							                                 : nvgRGBA(248, 176, 154, int(112.f * alpha));
-							NVGcolor ridgeFillB = humanPiece ? nvgRGBA(112, 112, 122, int(86.f * alpha))
-							                                 : nvgRGBA(198, 104, 86, int(104.f * alpha));
-							NVGcolor ridgeStroke = humanPiece ? nvgRGBA(8, 8, 12, int(116.f * alpha))
-							                                  : nvgRGBA(86, 24, 18, int(110.f * alpha));
+							NVGcolor ridgeFillA = positivePiece ? nvgRGBA(248, 176, 154, int(112.f * alpha))
+							                                    : nvgRGBA(172, 172, 184, int(94.f * alpha));
+							NVGcolor ridgeFillB = positivePiece ? nvgRGBA(198, 104, 86, int(104.f * alpha))
+							                                    : nvgRGBA(112, 112, 122, int(86.f * alpha));
+							NVGcolor ridgeStroke = positivePiece ? nvgRGBA(86, 24, 18, int(110.f * alpha))
+							                                     : nvgRGBA(8, 8, 12, int(116.f * alpha));
 
 							nvgBeginPath(args.vg);
 							nvgMoveTo(args.vg, x0i, y0i);
@@ -1118,14 +1120,14 @@ struct CrownstepBoardWidget final : Widget {
 						// Tie the rim together with thin contour rings.
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimOuterR);
-						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(196, 196, 206, int(46.f * alpha))
-						                                  : nvgRGBA(255, 212, 196, int(60.f * alpha)));
+						nvgStrokeColor(args.vg, positivePiece ? nvgRGBA(255, 212, 196, int(60.f * alpha))
+						                                      : nvgRGBA(196, 196, 206, int(46.f * alpha)));
 						nvgStrokeWidth(args.vg, 0.70f);
 						nvgStroke(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, rimInnerR);
-						nvgStrokeColor(args.vg, humanPiece ? nvgRGBA(6, 6, 10, int(96.f * alpha))
-						                                  : nvgRGBA(70, 18, 14, int(82.f * alpha)));
+						nvgStrokeColor(args.vg, positivePiece ? nvgRGBA(70, 18, 14, int(82.f * alpha))
+						                                      : nvgRGBA(6, 6, 10, int(96.f * alpha)));
 						nvgStrokeWidth(args.vg, 0.64f);
 						nvgStroke(args.vg);
 
@@ -2372,6 +2374,7 @@ struct CrownstepWidget final : ModuleWidget {
 					},
 					[=]() {
 						if (module) {
+							module->cancelAiTurnWork();
 							module->playerMode = i;
 							module->startNewGame();
 						}
