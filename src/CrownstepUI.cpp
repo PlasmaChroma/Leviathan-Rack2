@@ -2194,18 +2194,22 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 			addChild(boardWidget);
 
-			// Crown ribbon: anchored by SVG point (STEP_COUNTER).
-			const float stepCounterWidthMm = 32.0f;
-			const float stepCounterHeightMm = 7.2f;
-			Vec stepCounterCenterMm(45.72f, 100.3f);
-			panel_svg::loadPointFromSvgMm(panelPath, "STEP_COUNTER", &stepCounterCenterMm);
-			math::Rect stepCounterRectMm(
-				Vec(
-					stepCounterCenterMm.x - stepCounterWidthMm * 0.5f,
-					stepCounterCenterMm.y - stepCounterHeightMm * 0.5f
-				),
-				Vec(stepCounterWidthMm, stepCounterHeightMm)
-			);
+			// Crown ribbon: anchored by SVG rect (STEP_COUNTER).
+			math::Rect stepCounterRectMm;
+			if (!panel_svg::loadRectFromSvgMm(panelPath, "STEP_COUNTER", &stepCounterRectMm)) {
+				// Fallback for older panels that used a point anchor.
+				const float fallbackWidthMm = 32.0f;
+				const float fallbackHeightMm = 7.2f;
+				Vec stepCounterCenterMm(45.72f, 100.3f);
+				panel_svg::loadPointFromSvgMm(panelPath, "STEP_COUNTER", &stepCounterCenterMm);
+				stepCounterRectMm = math::Rect(
+					Vec(
+						stepCounterCenterMm.x - fallbackWidthMm * 0.5f,
+						stepCounterCenterMm.y - fallbackHeightMm * 0.5f
+					),
+					Vec(fallbackWidthMm, fallbackHeightMm)
+				);
+			}
 
 			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
 			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);

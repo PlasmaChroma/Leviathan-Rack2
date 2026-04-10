@@ -277,9 +277,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="201.63031"
-   inkscape:cy="309.5717"
+   inkscape:zoom="6.7473656"
+   inkscape:cx="165.8425"
+   inkscape:cy="445.4331"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -562,10 +562,10 @@
         
       </g><g
    id="components"
-   style="display:none"><circle
+   style="display:inline"><circle
      id="SEQ_LENGTH_PARAM"
-     cx="3321.3044"
-     cy="11559.068"
+     cx="3309.5405"
+     cy="12451.39"
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.5"
      r="295" /><circle
      id="NEW_GAME_PARAM"
@@ -632,12 +632,13 @@
      cy="9967.4004"
      rx="115"
      ry="121"
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><circle
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><rect
      id="STEP_COUNTER"
-     cx="4572"
-     cy="10620"
-     r="120"
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /></g><rect
+     x="2701.4314"
+     y="10122.755"
+     width="3882.3035"
+     height="2065.001"
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:4.89265" /></g><rect
    id="BOARD_AREA"
    x="152"
    y="950"
