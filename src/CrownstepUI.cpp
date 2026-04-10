@@ -9,6 +9,7 @@ namespace {
 constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
 constexpr bool CHESS_ATLAS_ENABLED = true;
+constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
 constexpr float CHESS_ATLAS_RASTER_SCALE = 2.f;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
@@ -36,6 +37,8 @@ struct ChessPieceAtlasCache {
 	bool available = false;
 	NVGcontext* rasterImageVg = nullptr;
 	int rasterImageHandle = -1;
+	NVGcontext* rasterMaskImageVg = nullptr;
+	int rasterMaskImageHandle = -1;
 	int rasterImageWidth = 0;
 	int rasterImageHeight = 0;
 	float rasterScale = 1.f;
@@ -170,7 +173,10 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (!vg || !cache || !cache->available || !cache->svg || !cache->svg->handle) {
 		return false;
 	}
-	if (cache->rasterImageHandle >= 0 && cache->rasterImageVg == vg) {
+	if (cache->rasterImageHandle >= 0
+		&& cache->rasterImageVg == vg
+		&& cache->rasterMaskImageHandle >= 0
+		&& cache->rasterMaskImageVg == vg) {
 		return true;
 	}
 
@@ -200,31 +206,52 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (imageHandle < 0) {
 		return false;
 	}
+	std::vector<unsigned char> maskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
+	for (size_t i = 0, n = size_t(rasterWidth) * size_t(rasterHeight); i < n; ++i) {
+		unsigned char a = pixels[i * 4 + 3];
+		maskPixels[i * 4 + 0] = 255u;
+		maskPixels[i * 4 + 1] = 255u;
+		maskPixels[i * 4 + 2] = 255u;
+		maskPixels[i * 4 + 3] = a;
+	}
+	int maskImageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, NVG_IMAGE_GENERATE_MIPMAPS, maskPixels.data());
+	if (maskImageHandle < 0) {
+		return false;
+	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
+	cache->rasterMaskImageVg = vg;
+	cache->rasterMaskImageHandle = maskImageHandle;
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
 	return true;
 }
 
-bool drawChessAtlasPiece(
-	NVGcontext* vg,
+struct ChessAtlasDrawSpec {
+	math::Rect src;
+	float drawWidth = 0.f;
+	float drawHeight = 0.f;
+	float x = 0.f;
+	float y = 0.f;
+	float atlasDrawWidth = 0.f;
+	float atlasDrawHeight = 0.f;
+	float patternX = 0.f;
+	float patternY = 0.f;
+};
+
+bool buildChessAtlasDrawSpec(
+	const ChessPieceAtlasCache& cache,
 	float centerX,
 	float centerY,
 	float cellWidth,
 	float cellHeight,
 	int piece,
-	float alpha
+	ChessAtlasDrawSpec* spec
 ) {
-	if (!vg || piece == 0) {
+	if (!spec || piece == 0) {
 		return false;
 	}
-	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
-	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache)) {
-		return false;
-	}
-
 	int pieceType = std::abs(piece);
 	int col = chessAtlasColumnForPieceType(pieceType);
 	if (col < 0) {
@@ -246,7 +273,7 @@ bool drawChessAtlasPiece(
 	else {
 		scaleRefHeight = cache.maxGlyphHeight;
 	}
-	if (scaleRefHeight <= 0.f) {
+	if (scaleRefHeight <= 0.f || !cache.svg || !cache.svg->handle) {
 		return false;
 	}
 
@@ -263,21 +290,118 @@ bool drawChessAtlasPiece(
 	const float patternX = x - src.pos.x * scale;
 	const float patternY = y - src.pos.y * scale;
 
+	spec->src = src;
+	spec->drawWidth = drawWidth;
+	spec->drawHeight = drawHeight;
+	spec->x = x;
+	spec->y = y;
+	spec->atlasDrawWidth = atlasDrawWidth;
+	spec->atlasDrawHeight = atlasDrawHeight;
+	spec->patternX = patternX;
+	spec->patternY = patternY;
+	return true;
+}
+
+bool drawChessAtlasPiece(
+	NVGcontext* vg,
+	float centerX,
+	float centerY,
+	float cellWidth,
+	float cellHeight,
+	int piece,
+	float alpha
+) {
+	if (!vg || piece == 0) {
+		return false;
+	}
+	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
+	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache)) {
+		return false;
+	}
+	ChessAtlasDrawSpec spec;
+	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
+		return false;
+	}
+
 	nvgSave(vg);
 	nvgBeginPath(vg);
-	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgRect(vg, spec.x, spec.y, spec.drawWidth, spec.drawHeight);
 	NVGpaint imagePaint = nvgImagePattern(
 		vg,
-		patternX,
-		patternY,
-		atlasDrawWidth,
-		atlasDrawHeight,
+		spec.patternX,
+		spec.patternY,
+		spec.atlasDrawWidth,
+		spec.atlasDrawHeight,
 		0.f,
 		cache.rasterImageHandle,
 		clamp(alpha, 0.f, 1.f)
 	);
 	nvgFillPaint(vg, imagePaint);
 	nvgFill(vg);
+	nvgRestore(vg);
+	return true;
+}
+
+bool drawChessAtlasPieceHalo(
+	NVGcontext* vg,
+	float centerX,
+	float centerY,
+	float cellWidth,
+	float cellHeight,
+	int piece,
+	float pulse
+) {
+	if (!vg || piece == 0) {
+		return false;
+	}
+	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
+	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache) || cache.rasterMaskImageHandle < 0) {
+		return false;
+	}
+
+	ChessAtlasDrawSpec spec;
+	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
+		return false;
+	}
+
+	const float minCell = std::min(cellWidth, cellHeight);
+	const float pulse01 = clamp(pulse, 0.f, 1.f);
+	const float outerGrow = minCell * (0.070f + 0.020f * pulse01);
+	const float innerGrow = minCell * (0.036f + 0.012f * pulse01);
+	const float outerAlpha = 0.20f + 0.18f * pulse01;
+	const float innerAlpha = 0.42f + 0.24f * pulse01;
+
+	auto drawLayer = [&](float grow, float layerAlpha) {
+		float x = spec.x - grow;
+		float y = spec.y - grow;
+		float w = spec.drawWidth + 2.f * grow;
+		float h = spec.drawHeight + 2.f * grow;
+		float scaleX = w / spec.src.size.x;
+		float scaleY = h / spec.src.size.y;
+		float atlasW = cache.svg->handle->width * scaleX;
+		float atlasH = cache.svg->handle->height * scaleY;
+		float patternX = x - spec.src.pos.x * scaleX;
+		float patternY = y - spec.src.pos.y * scaleY;
+
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, w, h);
+		NVGpaint haloPaint = nvgImagePattern(
+			vg,
+			patternX,
+			patternY,
+			atlasW,
+			atlasH,
+			0.f,
+			cache.rasterMaskImageHandle,
+			clamp(layerAlpha, 0.f, 1.f)
+		);
+		nvgFillPaint(vg, haloPaint);
+		nvgFill(vg);
+	};
+
+	nvgSave(vg);
+	drawLayer(outerGrow, outerAlpha);
+	drawLayer(innerGrow, innerAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -648,8 +772,16 @@ struct CrownstepBoardWidget final : Widget {
 								return;
 							}
 								if (module->isChessMode()) {
-									if (CHESS_ATLAS_ENABLED && drawChessAtlasPiece(args.vg, centerX, centerY, cellWidth, cellHeight, piece, alpha)) {
-										return;
+									if (CHESS_ATLAS_ENABLED) {
+										nvgSave(args.vg);
+										nvgTranslate(args.vg, centerX, 0.f);
+										nvgScale(args.vg, CHESS_HORIZONTAL_SCALE, 1.f);
+										nvgTranslate(args.vg, -centerX, 0.f);
+										bool drewAtlas = drawChessAtlasPiece(args.vg, centerX, centerY, cellWidth, cellHeight, piece, alpha);
+										nvgRestore(args.vg);
+										if (drewAtlas) {
+											return;
+										}
 									}
 									int pieceType = std::abs(piece);
 									float pieceR = radius * 2.42f;
@@ -663,6 +795,9 @@ struct CrownstepBoardWidget final : Widget {
 									NVGcolor pieceContrast = humanPiece ? nvgRGBA(24, 24, 30, strokeAlpha) : nvgRGBA(250, 250, 255, strokeAlpha);
 									float baseY = centerY + pieceR * 0.29f;
 									nvgSave(args.vg);
+									nvgTranslate(args.vg, centerX, 0.f);
+									nvgScale(args.vg, CHESS_HORIZONTAL_SCALE, 1.f);
+									nvgTranslate(args.vg, -centerX, 0.f);
 									nvgTranslate(args.vg, 0.f, chessPieceYOffset);
 
 									auto fillAndStrokeCurrentPath = [&]() {
@@ -1076,13 +1211,70 @@ struct CrownstepBoardWidget final : Widget {
 							for (const Move& move : module->humanMoves) {
 								if (move.originIndex >= 0 && move.originIndex < cellCount) {
 									movableOrigins[size_t(move.originIndex)] = 1u;
+								}
 							}
 						}
-					}
+						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						auto drawPieceGlowHalo = [&](float centerX, float centerY, int piece, float pulse) {
+							float minCell = std::min(cellWidth, cellHeight);
+							NVGcolor outerColor = nvgRGBA(255, 255, 255, int(24.f + 32.f * pulse));
+							NVGcolor innerColor = nvgRGBA(255, 255, 255, int(92.f + 104.f * pulse));
 
-					for (int i = 0; i < cellCount; ++i) {
-						int piece = module->board[size_t(i)];
-						if (piece == 0) {
+							if (module->isChessMode()) {
+								if (CHESS_ATLAS_ENABLED) {
+									nvgSave(args.vg);
+									nvgTranslate(args.vg, centerX, 0.f);
+									nvgScale(args.vg, CHESS_HORIZONTAL_SCALE, 1.f);
+									nvgTranslate(args.vg, -centerX, 0.f);
+									bool drewAtlasHalo = drawChessAtlasPieceHalo(args.vg, centerX, centerY, cellWidth, cellHeight, piece, pulse);
+									nvgRestore(args.vg);
+									if (drewAtlasHalo) {
+										return;
+									}
+								}
+								float haloW = minCell * 0.62f;
+								float haloH = minCell * 0.88f;
+								float haloX = centerX - haloW * 0.5f;
+								float haloY = centerY - haloH * 0.58f;
+								float corner = minCell * 0.19f;
+
+								nvgBeginPath(args.vg);
+								nvgRoundedRect(args.vg, haloX, haloY, haloW, haloH, corner);
+								nvgStrokeColor(args.vg, outerColor);
+								nvgStrokeWidth(args.vg, 6.8f);
+								nvgStroke(args.vg);
+
+								nvgBeginPath(args.vg);
+								nvgRoundedRect(args.vg, haloX, haloY, haloW, haloH, corner);
+								nvgStrokeColor(args.vg, innerColor);
+								nvgStrokeWidth(args.vg, 2.5f);
+								nvgStroke(args.vg);
+
+								nvgBeginPath(args.vg);
+								nvgEllipse(args.vg, centerX, centerY + minCell * 0.30f, minCell * 0.23f, minCell * 0.09f);
+								nvgStrokeColor(args.vg, innerColor);
+								nvgStrokeWidth(args.vg, 1.6f);
+								nvgStroke(args.vg);
+							}
+							else {
+								float haloR = minCell * 0.37f;
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX, centerY, haloR);
+								nvgStrokeColor(args.vg, outerColor);
+								nvgStrokeWidth(args.vg, 6.4f);
+								nvgStroke(args.vg);
+
+								nvgBeginPath(args.vg);
+								nvgCircle(args.vg, centerX, centerY, haloR);
+								nvgStrokeColor(args.vg, innerColor);
+								nvgStrokeWidth(args.vg, 2.35f);
+								nvgStroke(args.vg);
+							}
+						};
+
+						for (int i = 0; i < cellCount; ++i) {
+							int piece = module->board[size_t(i)];
+							if (piece == 0) {
 							continue;
 						}
 						if (isActiveAnimatedCaptureIndex(i)) {
@@ -1096,10 +1288,18 @@ struct CrownstepBoardWidget final : Widget {
 						if (!module->boardIndexToCoord(i, &row, &col)) {
 						continue;
 					}
-					float centerX = (col + 0.5f) * cellWidth;
-						float centerY = (row + 0.5f) * cellHeight;
-						drawPieceAt(centerX, centerY, piece, 1.f);
-					}
+							float centerX = (col + 0.5f) * cellWidth;
+							float centerY = (row + 0.5f) * cellHeight;
+							if (showMovablePieceGlowHints
+								&& movableOrigins[size_t(i)]
+								&& crownstep::pieceSide(piece) == module->humanSide()
+								&& !(selectedSquareGlowActive && i == module->selectedSquare)) {
+								float phase = float(i) * 0.37f + 0.4f;
+								float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
+								drawPieceGlowHalo(centerX, centerY, piece, pulse);
+							}
+							drawPieceAt(centerX, centerY, piece, 1.f);
+						}
 
 					// Staged queued moves: keep the queued moving piece visible at its start cell
 					// until that queued animation becomes active, preventing destination teleport.
@@ -1277,43 +1477,8 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
-					// Human-turn assist glow mode: dim all occupied piece squares, and
-					// breathe brighter on squares containing movable human pieces.
-					if (showMovablePieceGlowHints) {
-						for (int i = 0; i < cellCount; ++i) {
-							int piece = module->board[size_t(i)];
-							if (piece == 0) {
-								continue;
-							}
-							int row = 0;
-							int col = 0;
-							if (!module->boardIndexToCoord(i, &row, &col)) {
-								continue;
-							}
-							float x = col * cellWidth;
-							float y = row * cellHeight;
-							bool movableHumanPiece =
-								movableOrigins[size_t(i)] && crownstep::pieceSide(piece) == module->humanSide();
-							float phase = float(i) * 0.37f + 0.4f;
-							float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
-
-							nvgBeginPath(args.vg);
-							nvgRoundedRect(args.vg, x + 1.6f, y + 1.6f, cellWidth - 3.2f, cellHeight - 3.2f, 2.0f);
-							nvgFillColor(args.vg, nvgRGBA(0, 0, 0, movableHumanPiece ? 30 : 62));
-							nvgFill(args.vg);
-
-							if (movableHumanPiece) {
-								nvgBeginPath(args.vg);
-								nvgRoundedRect(args.vg, x + 2.2f, y + 2.2f, cellWidth - 4.4f, cellHeight - 4.4f, 1.8f);
-								nvgFillColor(args.vg, nvgRGBA(146, 255, 190, int(22.f + 36.f * pulse)));
-								nvgFill(args.vg);
-							}
-						}
-					}
-
 					// Human-turn assist ring mode: pulse rings on movable pieces.
-					if (showMovablePieceRingHints) {
-						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						if (showMovablePieceRingHints) {
 						for (int i = 0; i < cellCount; ++i) {
 							if (!movableOrigins[size_t(i)]) {
 								continue;
