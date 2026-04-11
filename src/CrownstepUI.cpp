@@ -41,6 +41,8 @@ struct ChessPieceAtlasCache {
 	int rasterMaskImageHandle = -1;
 	NVGcontext* rasterMaskGreenImageVg = nullptr;
 	int rasterMaskGreenImageHandle = -1;
+	NVGcontext* rasterMaskGreenDarkImageVg = nullptr;
+	int rasterMaskGreenDarkImageHandle = -1;
 	int rasterImageWidth = 0;
 	int rasterImageHeight = 0;
 	float rasterScale = 1.f;
@@ -180,7 +182,9 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		&& cache->rasterMaskImageHandle >= 0
 		&& cache->rasterMaskImageVg == vg
 		&& cache->rasterMaskGreenImageHandle >= 0
-		&& cache->rasterMaskGreenImageVg == vg) {
+		&& cache->rasterMaskGreenImageVg == vg
+		&& cache->rasterMaskGreenDarkImageHandle >= 0
+		&& cache->rasterMaskGreenDarkImageVg == vg) {
 		return true;
 	}
 
@@ -240,12 +244,32 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (greenMaskImageHandle < 0) {
 		return false;
 	}
+	std::vector<unsigned char> greenDarkMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
+	for (size_t i = 0, n = size_t(rasterWidth) * size_t(rasterHeight); i < n; ++i) {
+		unsigned char a = pixels[i * 4 + 3];
+		greenDarkMaskPixels[i * 4 + 0] = 40u;
+		greenDarkMaskPixels[i * 4 + 1] = 168u;
+		greenDarkMaskPixels[i * 4 + 2] = 104u;
+		greenDarkMaskPixels[i * 4 + 3] = a;
+	}
+	int greenDarkMaskImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		greenDarkMaskPixels.data()
+	);
+	if (greenDarkMaskImageHandle < 0) {
+		return false;
+	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
 	cache->rasterMaskImageVg = vg;
 	cache->rasterMaskImageHandle = maskImageHandle;
 	cache->rasterMaskGreenImageVg = vg;
 	cache->rasterMaskGreenImageHandle = greenMaskImageHandle;
+	cache->rasterMaskGreenDarkImageVg = vg;
+	cache->rasterMaskGreenDarkImageHandle = greenDarkMaskImageHandle;
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
@@ -443,7 +467,8 @@ bool drawChessAtlasPieceRingContour(
 	if (!cache.available
 		|| !cache.svg
 		|| !ensureChessPieceAtlasRasterImage(vg, &cache)
-		|| cache.rasterMaskGreenImageHandle < 0) {
+		|| cache.rasterMaskGreenImageHandle < 0
+		|| cache.rasterMaskGreenDarkImageHandle < 0) {
 		return false;
 	}
 
@@ -454,12 +479,15 @@ bool drawChessAtlasPieceRingContour(
 
 	const float minCell = std::min(cellWidth, cellHeight);
 	const float pulse01 = clamp(pulse, 0.f, 1.f);
-	const float outerGrow = minCell * (0.020f + 0.036f * pulse01);
-	const float innerGrow = outerGrow * 0.64f;
-	const float outerAlpha = 0.26f + 0.24f * pulse01;
-	const float innerAlpha = 0.72f + 0.20f * pulse01;
+	// Keep contour tight but bold enough to match checkers ring presence.
+	const float outerGrow = minCell * (0.014f + 0.014f * pulse01);
+	const float innerGrow = outerGrow * 0.70f;
+	const float coreGrow = outerGrow * 0.40f;
+	const float outerAlpha = 0.78f + 0.14f * pulse01;
+	const float innerAlpha = 0.94f + 0.05f * pulse01;
+	const float coreAlpha = 1.00f;
 
-	auto drawContourLayer = [&](float grow, float alpha) {
+	auto drawContourLayer = [&](int imageHandle, float grow, float alpha) {
 		float x = spec.x - grow;
 		float y = spec.y - grow;
 		float w = spec.drawWidth + 2.f * grow;
@@ -480,7 +508,7 @@ bool drawChessAtlasPieceRingContour(
 			atlasW,
 			atlasH,
 			0.f,
-			cache.rasterMaskGreenImageHandle,
+			imageHandle,
 			clamp(alpha, 0.f, 1.f)
 		);
 		nvgFillPaint(vg, contourPaint);
@@ -488,8 +516,10 @@ bool drawChessAtlasPieceRingContour(
 	};
 
 	nvgSave(vg);
-	drawContourLayer(outerGrow, outerAlpha);
-	drawContourLayer(innerGrow, innerAlpha);
+	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow * 1.22f, outerAlpha * 0.62f);
+	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow, outerAlpha);
+	drawContourLayer(cache.rasterMaskGreenImageHandle, innerGrow, innerAlpha);
+	drawContourLayer(cache.rasterMaskGreenImageHandle, coreGrow, coreAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -1641,6 +1671,7 @@ struct CrownstepBoardWidget final : Widget {
 								float centerY = (row + 0.5f) * cellHeight;
 								float phase = float(i) * 0.37f + 0.4f;
 								float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
+								bool useChessFallbackContour = false;
 								if (module->isChessMode()) {
 									bool drewContour = false;
 									if (CHESS_ATLAS_ENABLED) {
@@ -1664,6 +1695,26 @@ struct CrownstepBoardWidget final : Widget {
 										drawPieceAt(centerX, centerY, piece, 1.f);
 										continue;
 									}
+									useChessFallbackContour = true;
+								}
+								if (useChessFallbackContour) {
+									float minCell = std::min(cellWidth, cellHeight);
+									float ringW = minCell * (0.58f + 0.018f * pulse);
+									float ringH = minCell * (0.86f + 0.024f * pulse);
+									float ringX = centerX - ringW * 0.5f;
+									float ringY = centerY - ringH * 0.58f;
+									float corner = minCell * 0.18f;
+									nvgBeginPath(args.vg);
+									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
+									nvgStrokeColor(args.vg, nvgRGBA(40, 168, 104, int(168.f + 46.f * pulse)));
+									nvgStrokeWidth(args.vg, 2.85f);
+									nvgStroke(args.vg);
+									nvgBeginPath(args.vg);
+									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
+									nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(210.f + 36.f * pulse)));
+									nvgStrokeWidth(args.vg, 1.48f);
+									nvgStroke(args.vg);
+									continue;
 								}
 								float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
 
