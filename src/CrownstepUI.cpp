@@ -3,6 +3,7 @@
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
+#include <cmath>
 
 namespace {
 
@@ -10,7 +11,11 @@ constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
 constexpr bool CHESS_ATLAS_ENABLED = true;
 constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
-constexpr float CHESS_ATLAS_RASTER_SCALE = 2.f;
+constexpr float CHESS_ATLAS_RASTER_SCALE = 3.f;
+constexpr unsigned char CHESS_MASK_SOLID_ALPHA_THRESHOLD = 24u;
+constexpr float CHESS_ATLAS_ALPHA_GAMMA = 0.92f;
+constexpr int CHESS_ATLAS_IMAGE_FLAGS = NVG_IMAGE_GENERATE_MIPMAPS;
+constexpr int CHESS_ATLAS_MASK_FLAGS = 0;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
 	{
@@ -226,7 +231,20 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	);
 	nsvgDeleteRasterizer(rasterizer);
 
-	int imageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, NVG_IMAGE_GENERATE_MIPMAPS, pixels.data());
+	// Boost edge coverage slightly so thin SVG strokes survive Rack's runtime
+	// resampling and do not appear too faint versus the source SVG.
+	for (size_t i = 0, n = size_t(rasterWidth) * size_t(rasterHeight); i < n; ++i) {
+		unsigned char a = pixels[i * 4 + 3];
+		if (a == 0u || a == 255u) {
+			continue;
+		}
+		float af = float(a) / 255.f;
+		float boosted = std::pow(af, CHESS_ATLAS_ALPHA_GAMMA);
+		pixels[i * 4 + 3] = (unsigned char) clamp(std::round(boosted * 255.f), 1.f, 255.f);
+	}
+
+	// Keep mipmaps on the base piece atlas for smoother perceived edges at panel scale.
+	int imageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_IMAGE_FLAGS, pixels.data());
 	if (imageHandle < 0) {
 		return false;
 	}
@@ -238,7 +256,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		maskPixels[i * 4 + 2] = 255u;
 		maskPixels[i * 4 + 3] = a;
 	}
-	int maskImageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, NVG_IMAGE_GENERATE_MIPMAPS, maskPixels.data());
+	int maskImageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_MASK_FLAGS, maskPixels.data());
 	if (maskImageHandle < 0) {
 		return false;
 	}
@@ -254,7 +272,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		greenMaskPixels.data()
 	);
 	if (greenMaskImageHandle < 0) {
@@ -272,7 +290,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		greenDarkMaskPixels.data()
 	);
 	if (greenDarkMaskImageHandle < 0) {
@@ -286,7 +304,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	std::vector<int> queue;
 	queue.reserve(pixelCount / 8u);
 	for (size_t i = 0; i < pixelCount; ++i) {
-		solid[i] = (pixels[i * 4 + 3] > 8u) ? 1u : 0u;
+		solid[i] = (pixels[i * 4 + 3] > CHESS_MASK_SOLID_ALPHA_THRESHOLD) ? 1u : 0u;
 	}
 	auto tryEnqueueOutside = [&](int x, int y) {
 		if (x < 0 || y < 0 || x >= rasterWidth || y >= rasterHeight) {
@@ -340,7 +358,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		silhouetteGreenMaskPixels.data()
 	);
 	if (silhouetteGreenMaskImageHandle < 0) {
@@ -350,7 +368,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		silhouetteGreenDarkMaskPixels.data()
 	);
 	if (silhouetteGreenDarkMaskImageHandle < 0) {
@@ -445,7 +463,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		ringBandGreenPixels.data()
 	);
 	if (ringBandGreenImageHandle < 0) {
@@ -455,7 +473,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		vg,
 		rasterWidth,
 		rasterHeight,
-		NVG_IMAGE_GENERATE_MIPMAPS,
+		CHESS_ATLAS_MASK_FLAGS,
 		ringShellGreenDarkPixels.data()
 	);
 	if (ringShellGreenDarkImageHandle < 0) {
