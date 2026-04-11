@@ -3287,7 +3287,9 @@ struct TemporalDeckWidget : ModuleWidget {
         }
 
         float textX = box.size.x - mm2px(0.55f);
-        float textY = mm2px(21.0f);
+        // Keep perf debug readout clear of sample-mode time/fraction labels.
+        bool sampleReadoutActive = deckModule->isSampleModeEnabled() && deckModule->hasLoadedSample();
+        float textY = sampleReadoutActive ? mm2px(31.0f) : mm2px(21.0f);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
         nvgFontSize(args.vg, 6.7f);
         nvgFillColor(args.vg, nvgRGBA(0, 0, 0, metricValid ? 164 : 128));

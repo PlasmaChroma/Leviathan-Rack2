@@ -1783,6 +1783,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			&& localPos.y <= (layout.historyY + layout.historyH);
 	}
 
+	Vec currentLocalMousePos() const {
+		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+			return lastHoverPos;
+		}
+		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
+	}
+
 	int clipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
 		if (historySize <= 0) {
 			return 0;
@@ -2014,6 +2021,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onButton(e);
 			return;
 		}
+		lastHoverPos = e.pos;
+		capDragLocal = e.pos;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 			if (pointInHistoryStrip(e.pos, layout)) {
@@ -2031,7 +2040,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			return;
 		}
 		capDragActive = true;
-		capDragLocal = lastHoverPos;
+		capDragLocal = currentLocalMousePos();
+		lastHoverPos = capDragLocal;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		capDragTrimMode = pointInHistoryStrip(capDragLocal, layout);
@@ -2050,8 +2060,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onDragMove(e);
 			return;
 		}
-		capDragLocal = capDragLocal.plus(e.mouseDelta);
+		capDragLocal = currentLocalMousePos();
 		capDragLocal.x = clamp(capDragLocal.x, 0.f, box.size.x);
+		capDragLocal.y = clamp(capDragLocal.y, 0.f, box.size.y);
+		lastHoverPos = capDragLocal;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (capDragTrimMode) {
