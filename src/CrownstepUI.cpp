@@ -43,6 +43,14 @@ struct ChessPieceAtlasCache {
 	int rasterMaskGreenImageHandle = -1;
 	NVGcontext* rasterMaskGreenDarkImageVg = nullptr;
 	int rasterMaskGreenDarkImageHandle = -1;
+	NVGcontext* rasterMaskSilhouetteGreenImageVg = nullptr;
+	int rasterMaskSilhouetteGreenImageHandle = -1;
+	NVGcontext* rasterMaskSilhouetteGreenDarkImageVg = nullptr;
+	int rasterMaskSilhouetteGreenDarkImageHandle = -1;
+	NVGcontext* rasterRingBandGreenImageVg = nullptr;
+	int rasterRingBandGreenImageHandle = -1;
+	NVGcontext* rasterRingShellGreenDarkImageVg = nullptr;
+	int rasterRingShellGreenDarkImageHandle = -1;
 	int rasterImageWidth = 0;
 	int rasterImageHeight = 0;
 	float rasterScale = 1.f;
@@ -184,7 +192,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		&& cache->rasterMaskGreenImageHandle >= 0
 		&& cache->rasterMaskGreenImageVg == vg
 		&& cache->rasterMaskGreenDarkImageHandle >= 0
-		&& cache->rasterMaskGreenDarkImageVg == vg) {
+		&& cache->rasterMaskGreenDarkImageVg == vg
+		&& cache->rasterMaskSilhouetteGreenImageHandle >= 0
+		&& cache->rasterMaskSilhouetteGreenImageVg == vg
+		&& cache->rasterMaskSilhouetteGreenDarkImageHandle >= 0
+		&& cache->rasterMaskSilhouetteGreenDarkImageVg == vg
+		&& cache->rasterRingBandGreenImageHandle >= 0
+		&& cache->rasterRingBandGreenImageVg == vg
+		&& cache->rasterRingShellGreenDarkImageHandle >= 0
+		&& cache->rasterRingShellGreenDarkImageVg == vg) {
 		return true;
 	}
 
@@ -262,6 +278,189 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (greenDarkMaskImageHandle < 0) {
 		return false;
 	}
+	// Build a silhouette alpha mask where internal transparent "holes" are filled,
+	// so ring contours stay strictly outside the piece outline.
+	const size_t pixelCount = size_t(rasterWidth) * size_t(rasterHeight);
+	std::vector<uint8_t> solid(pixelCount, 0u);
+	std::vector<uint8_t> outside(pixelCount, 0u);
+	std::vector<int> queue;
+	queue.reserve(pixelCount / 8u);
+	for (size_t i = 0; i < pixelCount; ++i) {
+		solid[i] = (pixels[i * 4 + 3] > 8u) ? 1u : 0u;
+	}
+	auto tryEnqueueOutside = [&](int x, int y) {
+		if (x < 0 || y < 0 || x >= rasterWidth || y >= rasterHeight) {
+			return;
+		}
+		size_t idx = size_t(y) * size_t(rasterWidth) + size_t(x);
+		if (solid[idx] || outside[idx]) {
+			return;
+		}
+		outside[idx] = 1u;
+		queue.push_back(int(idx));
+	};
+	for (int x = 0; x < rasterWidth; ++x) {
+		tryEnqueueOutside(x, 0);
+		tryEnqueueOutside(x, rasterHeight - 1);
+	}
+	for (int y = 0; y < rasterHeight; ++y) {
+		tryEnqueueOutside(0, y);
+		tryEnqueueOutside(rasterWidth - 1, y);
+	}
+	for (size_t head = 0; head < queue.size(); ++head) {
+		int idx = queue[head];
+		int x = idx % rasterWidth;
+		int y = idx / rasterWidth;
+		tryEnqueueOutside(x - 1, y);
+		tryEnqueueOutside(x + 1, y);
+		tryEnqueueOutside(x, y - 1);
+		tryEnqueueOutside(x, y + 1);
+	}
+	std::vector<unsigned char> silhouetteGreenMaskPixels(pixelCount * size_t(4), 0u);
+	std::vector<unsigned char> silhouetteGreenDarkMaskPixels(pixelCount * size_t(4), 0u);
+	for (size_t i = 0; i < pixelCount; ++i) {
+		unsigned char srcA = pixels[i * 4 + 3];
+		unsigned char silhouetteA = 0u;
+		if (solid[i]) {
+			silhouetteA = srcA;
+		}
+		else if (!outside[i]) {
+			silhouetteA = 255u;
+		}
+		silhouetteGreenMaskPixels[i * 4 + 0] = 98u;
+		silhouetteGreenMaskPixels[i * 4 + 1] = 235u;
+		silhouetteGreenMaskPixels[i * 4 + 2] = 154u;
+		silhouetteGreenMaskPixels[i * 4 + 3] = silhouetteA;
+		silhouetteGreenDarkMaskPixels[i * 4 + 0] = 40u;
+		silhouetteGreenDarkMaskPixels[i * 4 + 1] = 168u;
+		silhouetteGreenDarkMaskPixels[i * 4 + 2] = 104u;
+		silhouetteGreenDarkMaskPixels[i * 4 + 3] = silhouetteA;
+	}
+	int silhouetteGreenMaskImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		silhouetteGreenMaskPixels.data()
+	);
+	if (silhouetteGreenMaskImageHandle < 0) {
+		return false;
+	}
+	int silhouetteGreenDarkMaskImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		silhouetteGreenDarkMaskPixels.data()
+	);
+	if (silhouetteGreenDarkMaskImageHandle < 0) {
+		return false;
+	}
+	// Build distance-based external contour bands (offset from silhouette).
+	// This approximates a uniform normal-distance offset around the piece.
+	std::vector<float> outsideDist(pixelCount, 1e9f);
+	for (size_t i = 0; i < pixelCount; ++i) {
+		if (!outside[i]) {
+			outsideDist[i] = 0.f;
+		}
+	}
+	const float kDiag = 1.41421356f;
+	for (int y = 0; y < rasterHeight; ++y) {
+		for (int x = 0; x < rasterWidth; ++x) {
+			size_t idx = size_t(y) * size_t(rasterWidth) + size_t(x);
+			if (!outside[idx]) {
+				continue;
+			}
+			float d = outsideDist[idx];
+			if (x > 0) {
+				d = std::min(d, outsideDist[idx - 1] + 1.f);
+			}
+			if (y > 0) {
+				d = std::min(d, outsideDist[idx - size_t(rasterWidth)] + 1.f);
+			}
+			if (x > 0 && y > 0) {
+				d = std::min(d, outsideDist[idx - size_t(rasterWidth) - 1] + kDiag);
+			}
+			if (x + 1 < rasterWidth && y > 0) {
+				d = std::min(d, outsideDist[idx - size_t(rasterWidth) + 1] + kDiag);
+			}
+			outsideDist[idx] = d;
+		}
+	}
+	for (int y = rasterHeight - 1; y >= 0; --y) {
+		for (int x = rasterWidth - 1; x >= 0; --x) {
+			size_t idx = size_t(y) * size_t(rasterWidth) + size_t(x);
+			if (!outside[idx]) {
+				continue;
+			}
+			float d = outsideDist[idx];
+			if (x + 1 < rasterWidth) {
+				d = std::min(d, outsideDist[idx + 1] + 1.f);
+			}
+			if (y + 1 < rasterHeight) {
+				d = std::min(d, outsideDist[idx + size_t(rasterWidth)] + 1.f);
+			}
+			if (x + 1 < rasterWidth && y + 1 < rasterHeight) {
+				d = std::min(d, outsideDist[idx + size_t(rasterWidth) + 1] + kDiag);
+			}
+			if (x > 0 && y + 1 < rasterHeight) {
+				d = std::min(d, outsideDist[idx + size_t(rasterWidth) - 1] + kDiag);
+			}
+			outsideDist[idx] = d;
+		}
+	}
+	auto smoothstep01 = [](float t) {
+		t = clamp(t, 0.f, 1.f);
+		return t * t * (3.f - 2.f * t);
+	};
+	// Distance windows in raster pixels. Keep these intentionally broad so
+	// ring mode reads with similar reach to checkers.
+	const float bandInPx = 2.2f;
+	const float bandOutPx = 13.4f;
+	const float shellInPx = 12.4f;
+	const float shellOutPx = 20.8f;
+	std::vector<unsigned char> ringBandGreenPixels(pixelCount * size_t(4), 0u);
+	std::vector<unsigned char> ringShellGreenDarkPixels(pixelCount * size_t(4), 0u);
+	for (size_t i = 0; i < pixelCount; ++i) {
+		if (!outside[i]) {
+			continue;
+		}
+		float d = outsideDist[i];
+		float bandEnter = smoothstep01((d - bandInPx) / 1.6f);
+		float bandExit = smoothstep01((bandOutPx - d) / 1.6f);
+		float bandA = clamp(bandEnter * bandExit, 0.f, 1.f);
+		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
+		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
+		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
+		ringBandGreenPixels[i * 4 + 0] = 98u;
+		ringBandGreenPixels[i * 4 + 1] = 235u;
+		ringBandGreenPixels[i * 4 + 2] = 154u;
+		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(255.f * bandA, 0.f, 255.f);
+		ringShellGreenDarkPixels[i * 4 + 0] = 40u;
+		ringShellGreenDarkPixels[i * 4 + 1] = 168u;
+		ringShellGreenDarkPixels[i * 4 + 2] = 104u;
+		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(208.f * shellA, 0.f, 255.f);
+	}
+	int ringBandGreenImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		ringBandGreenPixels.data()
+	);
+	if (ringBandGreenImageHandle < 0) {
+		return false;
+	}
+	int ringShellGreenDarkImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		ringShellGreenDarkPixels.data()
+	);
+	if (ringShellGreenDarkImageHandle < 0) {
+		return false;
+	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
 	cache->rasterMaskImageVg = vg;
@@ -270,6 +469,14 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	cache->rasterMaskGreenImageHandle = greenMaskImageHandle;
 	cache->rasterMaskGreenDarkImageVg = vg;
 	cache->rasterMaskGreenDarkImageHandle = greenDarkMaskImageHandle;
+	cache->rasterMaskSilhouetteGreenImageVg = vg;
+	cache->rasterMaskSilhouetteGreenImageHandle = silhouetteGreenMaskImageHandle;
+	cache->rasterMaskSilhouetteGreenDarkImageVg = vg;
+	cache->rasterMaskSilhouetteGreenDarkImageHandle = silhouetteGreenDarkMaskImageHandle;
+	cache->rasterRingBandGreenImageVg = vg;
+	cache->rasterRingBandGreenImageHandle = ringBandGreenImageHandle;
+	cache->rasterRingShellGreenDarkImageVg = vg;
+	cache->rasterRingShellGreenDarkImageHandle = ringShellGreenDarkImageHandle;
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
@@ -460,6 +667,7 @@ bool drawChessAtlasPieceRingContour(
 	int piece,
 	float pulse
 ) {
+	(void)pulse;
 	if (!vg || piece == 0) {
 		return false;
 	}
@@ -467,8 +675,8 @@ bool drawChessAtlasPieceRingContour(
 	if (!cache.available
 		|| !cache.svg
 		|| !ensureChessPieceAtlasRasterImage(vg, &cache)
-		|| cache.rasterMaskGreenImageHandle < 0
-		|| cache.rasterMaskGreenDarkImageHandle < 0) {
+		|| cache.rasterRingBandGreenImageHandle < 0
+		|| cache.rasterRingShellGreenDarkImageHandle < 0) {
 		return false;
 	}
 
@@ -477,50 +685,39 @@ bool drawChessAtlasPieceRingContour(
 		return false;
 	}
 
-	const float minCell = std::min(cellWidth, cellHeight);
-	const float pulse01 = clamp(pulse, 0.f, 1.f);
-	// Checkers-like contour motion:
-	// near-in phase almost kisses the piece edge, then expands outward.
-	const float outerGrow = minCell * (0.004f + 0.062f * pulse01);
-	const float innerGrow = outerGrow * 0.72f;
-	const float coreGrow = outerGrow * 0.44f;
-	const float outerAlpha = 0.80f + 0.14f * pulse01;
-	const float innerAlpha = 0.94f + 0.05f * pulse01;
-	const float coreAlpha = 1.00f;
+	// Draw precomputed distance-field contour masks without scaling distortion:
+	// only expand the destination rect while keeping atlas mapping scale fixed.
+	float atlasScale = spec.atlasDrawWidth / std::max(1.f, cache.svg->handle->width);
+	float pxToScreen = atlasScale / std::max(0.001f, CHESS_ATLAS_RASTER_SCALE);
+	// Must cover the largest precomputed raster-distance shell extents.
+	float shellMargin = 21.0f * pxToScreen;
+	float bandMargin = 13.8f * pxToScreen;
 
-	auto drawContourLayer = [&](int imageHandle, float grow, float alpha) {
-		float x = spec.x - grow;
-		float y = spec.y - grow;
-		float w = spec.drawWidth + 2.f * grow;
-		float h = spec.drawHeight + 2.f * grow;
-		float scaleX = w / spec.src.size.x;
-		float scaleY = h / spec.src.size.y;
-		float atlasW = cache.svg->handle->width * scaleX;
-		float atlasH = cache.svg->handle->height * scaleY;
-		float patternX = x - spec.src.pos.x * scaleX;
-		float patternY = y - spec.src.pos.y * scaleY;
+	auto drawRingMaskLayer = [&](int imageHandle, float margin, float alpha) {
+		float x = spec.x - margin;
+		float y = spec.y - margin;
+		float w = spec.drawWidth + 2.f * margin;
+		float h = spec.drawHeight + 2.f * margin;
 
 		nvgBeginPath(vg);
 		nvgRect(vg, x, y, w, h);
-		NVGpaint contourPaint = nvgImagePattern(
+		NVGpaint ringPaint = nvgImagePattern(
 			vg,
-			patternX,
-			patternY,
-			atlasW,
-			atlasH,
+			spec.patternX,
+			spec.patternY,
+			spec.atlasDrawWidth,
+			spec.atlasDrawHeight,
 			0.f,
 			imageHandle,
 			clamp(alpha, 0.f, 1.f)
 		);
-		nvgFillPaint(vg, contourPaint);
+		nvgFillPaint(vg, ringPaint);
 		nvgFill(vg);
 	};
 
 	nvgSave(vg);
-	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow * 1.24f, outerAlpha * 0.62f);
-	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow, outerAlpha);
-	drawContourLayer(cache.rasterMaskGreenImageHandle, innerGrow, innerAlpha);
-	drawContourLayer(cache.rasterMaskGreenImageHandle, coreGrow, coreAlpha);
+	drawRingMaskLayer(cache.rasterRingShellGreenDarkImageHandle, shellMargin, 1.f);
+	drawRingMaskLayer(cache.rasterRingBandGreenImageHandle, bandMargin, 1.f);
 	nvgRestore(vg);
 	return true;
 }
@@ -1393,6 +1590,8 @@ struct CrownstepBoardWidget final : Widget {
 							}
 						}
 						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						const float sharedRingPulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.4f);
+						const float sharedOpponentRingPulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 1.6f);
 						auto drawPieceGlowHalo = [&](float centerX, float centerY, int piece, float pulse) {
 							float minCell = std::min(cellWidth, cellHeight);
 							NVGcolor bandColor = nvgRGBA(255, 255, 255, int(154.f + 88.f * pulse));
@@ -1595,13 +1794,14 @@ struct CrownstepBoardWidget final : Widget {
 						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
-						float centerX = (col + 0.5f) * cellWidth;
-						float centerY = (row + 0.5f) * cellHeight;
-						float phase = float(destinationIndex) * 0.43f + 0.9f;
-						float breath = 0.5f + 0.5f * std::sin(animTime * 4.8f + phase);
-						float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
-						nvgBeginPath(args.vg);
-						nvgCircle(args.vg, centerX, centerY, ringRadius);
+							float centerX = (col + 0.5f) * cellWidth;
+							float centerY = (row + 0.5f) * cellHeight;
+							float breath = showMovablePieceRingHints
+								? sharedRingPulse
+								: (0.5f + 0.5f * std::sin(animTime * 4.8f + float(destinationIndex) * 0.43f + 0.9f));
+							float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, ringRadius);
 						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(186.f + 62.f * breath)));
 						nvgStrokeWidth(args.vg, 1.9f);
 						nvgStroke(args.vg);
@@ -1633,13 +1833,14 @@ struct CrownstepBoardWidget final : Widget {
 						if (!viewRowColFromBoardIndex(destinationIndex, &row, &col)) {
 							continue;
 						}
-						float centerX = (col + 0.5f) * cellWidth;
-						float centerY = (row + 0.5f) * cellHeight;
-						float phase = float(destinationIndex) * 0.39f + 2.2f;
-						float breath = 0.5f + 0.5f * std::sin(animTime * 4.2f + phase);
-						float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
-						nvgBeginPath(args.vg);
-						nvgCircle(args.vg, centerX, centerY, ringRadius);
+							float centerX = (col + 0.5f) * cellWidth;
+							float centerY = (row + 0.5f) * cellHeight;
+							float breath = showMovablePieceRingHints
+								? sharedOpponentRingPulse
+								: (0.5f + 0.5f * std::sin(animTime * 4.2f + float(destinationIndex) * 0.39f + 2.2f));
+							float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
+							nvgBeginPath(args.vg);
+							nvgCircle(args.vg, centerX, centerY, ringRadius);
 						nvgStrokeColor(args.vg, nvgRGBA(255, 213, 79, int(180.f + 68.f * breath)));
 						nvgStrokeWidth(args.vg, 1.85f);
 						nvgStroke(args.vg);
@@ -1667,12 +1868,11 @@ struct CrownstepBoardWidget final : Widget {
 							int col = 0;
 							if (!viewRowColFromBoardIndex(i, &row, &col)) {
 								continue;
-							}
-								float centerX = (col + 0.5f) * cellWidth;
-								float centerY = (row + 0.5f) * cellHeight;
-								float phase = float(i) * 0.37f + 0.4f;
-								float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
-								bool useChessFallbackContour = false;
+								}
+									float centerX = (col + 0.5f) * cellWidth;
+									float centerY = (row + 0.5f) * cellHeight;
+									float pulse = sharedRingPulse;
+									bool useChessFallbackContour = false;
 								if (module->isChessMode()) {
 									bool drewContour = false;
 									if (CHESS_ATLAS_ENABLED) {
@@ -1700,20 +1900,24 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								if (useChessFallbackContour) {
 									float minCell = std::min(cellWidth, cellHeight);
-									float ringW = minCell * (0.56f + 0.10f * pulse);
-									float ringH = minCell * (0.82f + 0.16f * pulse);
+									float ringW = minCell * 0.64f;
+									float ringH = minCell * 0.95f;
 									float ringX = centerX - ringW * 0.5f;
 									float ringY = centerY - ringH * 0.58f;
 									float corner = minCell * 0.18f;
+									float outerStroke = std::max(2.1f, minCell * 0.115f);
+									float innerStroke = std::max(1.5f, minCell * 0.082f);
+									// Fixed contour shell.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, nvgRGBA(40, 168, 104, int(168.f + 46.f * pulse)));
-									nvgStrokeWidth(args.vg, 3.55f);
+									nvgStrokeColor(args.vg, nvgRGBA(40, 168, 104, 172));
+									nvgStrokeWidth(args.vg, outerStroke);
 									nvgStroke(args.vg);
+									// Fixed bright band keeps contour solid at all pulse phases.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(210.f + 36.f * pulse)));
-									nvgStrokeWidth(args.vg, 1.98f);
+									nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, 244));
+									nvgStrokeWidth(args.vg, innerStroke);
 									nvgStroke(args.vg);
 									continue;
 								}
@@ -2205,15 +2409,15 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		// Full-history base strip.
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, stripX, historyY, stripW, historyH, 1.6f);
-		nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
-		nvgFill(args.vg);
-			if (s.historySize > 0) {
-				float startNorm = 0.f;
-				float endNorm = 1.f;
-			if (!s.fullMode && s.historySize > 0) {
-				startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
-				endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
-			}
+			nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
+			nvgFill(args.vg);
+				if (s.historySize > 0) {
+					float startNorm = 0.f;
+					float endNorm = 1.f;
+				if (!s.fullMode && s.historySize > 0) {
+					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
+					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
+				}
 				float activeX = stripX + stripW * startNorm;
 				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
 				auto makeBrandActivePaint = [&](int alphaA, int alphaB) {
@@ -2327,14 +2531,23 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				}
 			}
 
-			// Current marker in history strip.
-			if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
-			int absPlaybackIndex = clamp(s.activeStart + s.playbackIndex, 0, std::max(0, s.historySize - 1));
-			float norm = (s.historySize <= 1) ? 0.f : (float(absPlaybackIndex) / float(s.historySize - 1));
-			float mx = stripX + stripW * norm;
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, mx, historyY - 0.4f);
-			nvgLineTo(args.vg, mx, historyY + historyH + 0.4f);
+				// Current marker in history strip.
+				if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
+				// Tie crown/line marker to local playback position within the
+				// currently highlighted (purple) active window.
+				float startNorm = 0.f;
+				float endNorm = 1.f;
+				if (!s.fullMode && s.historySize > 0) {
+					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
+					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
+				}
+				float activeX = stripX + stripW * startNorm;
+				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				float localNorm = (s.activeLength <= 1) ? 0.f : (float(s.playbackIndex) / float(s.activeLength - 1));
+				float mx = activeX + activeW * clamp(localNorm, 0.f, 1.f);
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, mx, historyY - 0.4f);
+				nvgLineTo(args.vg, mx, historyY + historyH + 0.4f);
 			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 176, 250));
 			nvgStrokeWidth(args.vg, 1.15f);
 			nvgStroke(args.vg);
