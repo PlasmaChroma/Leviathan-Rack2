@@ -74,7 +74,9 @@ void Crownstep::emitStepAtClockEdge() {
 	playhead++;
 	if (playhead >= length) {
 		playhead = 0;
-		eocGateHigh = true;
+		if (length > 1) {
+			eocGateHigh = true;
+		}
 	}
 }
 
@@ -89,6 +91,9 @@ void Crownstep::process(const ProcessArgs& args) {
 		playhead = 0;
 		displayedStep = 0;
 		eocGateHigh = false;
+		eocActivityPulseRequests.store(0, std::memory_order_relaxed);
+		eocActivityPulseQueued = 0;
+		eocActivityPulseRemainingSeconds = 0.f;
 	}
 
 	bool running = true;
@@ -117,10 +122,30 @@ void Crownstep::process(const ProcessArgs& args) {
 		refreshHeldPitchForCurrentStep();
 	}
 
+	int requestedActivityPulses = eocActivityPulseRequests.exchange(0, std::memory_order_relaxed);
+	if (requestedActivityPulses > 0) {
+		eocActivityPulseQueued += requestedActivityPulses;
+	}
+	bool sequenceLengthOneMode = (currentSequenceCap() == 1);
+	if (!sequenceLengthOneMode) {
+		eocActivityPulseQueued = 0;
+		eocActivityPulseRemainingSeconds = 0.f;
+	}
+	else {
+		if (eocActivityPulseRemainingSeconds <= 0.f && eocActivityPulseQueued > 0) {
+			eocActivityPulseRemainingSeconds = EOC_ACTIVITY_PULSE_SECONDS;
+			--eocActivityPulseQueued;
+		}
+		if (eocActivityPulseRemainingSeconds > 0.f) {
+			eocActivityPulseRemainingSeconds = std::max(0.f, eocActivityPulseRemainingSeconds - args.sampleTime);
+		}
+	}
+	bool eocOutputHigh = sequenceLengthOneMode ? (eocActivityPulseRemainingSeconds > 0.f) : eocGateHigh;
+
 	outputs[PITCH_OUTPUT].setVoltage(heldPitch);
 	outputs[ACCENT_OUTPUT].setVoltage(heldAccent);
 	outputs[MOD_OUTPUT].setVoltage(modOutputVolts);
-	outputs[EOC_OUTPUT].setVoltage(eocGateHigh ? 10.f : 0.f);
+	outputs[EOC_OUTPUT].setVoltage(eocOutputHigh ? 10.f : 0.f);
 
 	bool humanLedOn = false;
 	bool aiLedOn = false;

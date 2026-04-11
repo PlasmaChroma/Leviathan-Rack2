@@ -476,6 +476,9 @@ void Crownstep::resetPlayback() {
 	heldMod = 0.f;
 	modOutputVolts = 0.f;
 	eocGateHigh = false;
+	eocActivityPulseRequests.store(0, std::memory_order_relaxed);
+	eocActivityPulseQueued = 0;
+	eocActivityPulseRemainingSeconds = 0.f;
 	cachedRootSemitoneValid = false;
 	cancelAiTurnWork();
 	resetMoveAnimation();
@@ -980,6 +983,9 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		moveHistory.push_back(move);
 		history.push_back(step);
+	}
+	if (currentSequenceCap() == 1) {
+		eocActivityPulseRequests.fetch_add(1, std::memory_order_relaxed);
 	}
 	selectedSquare = -1;
 	highlightedDestinations.clear();

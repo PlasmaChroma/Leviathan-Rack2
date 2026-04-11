@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -27,6 +28,7 @@ using crownstep::Step;
 
 static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 static constexpr float AI_TURN_DELAY_SECONDS = 0.5f;
+static constexpr float EOC_ACTIVITY_PULSE_SECONDS = 0.25f;
 static constexpr float OTHELLO_FLIP_SECONDS_PER_PIECE = 0.1f;
 static constexpr int ROOT_CV_MAX_OFFSET_SEMITONES = 10;
 static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
@@ -142,6 +144,9 @@ struct Crownstep : Module {
 	dsp::SchmittTrigger resetTrigger;
 	dsp::SchmittTrigger newGameTrigger;
 	bool eocGateHigh = false;
+	std::atomic<int> eocActivityPulseRequests {0};
+	int eocActivityPulseQueued = 0;
+	float eocActivityPulseRemainingSeconds = 0.f;
 
 	int selectedSquare = -1;
 	int hoveredSquare = -1;

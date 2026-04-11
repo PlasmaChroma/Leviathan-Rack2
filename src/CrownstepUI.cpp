@@ -1708,7 +1708,6 @@ struct CrownstepBoardWidget final : Widget {
 
 struct CrownRibbonWidget final : OpaqueWidget {
 	Crownstep* module = nullptr;
-	int hoverZone = 0; // -1 left, 0 center, +1 right
 	int lastRecentCap = 16;
 	Vec lastHoverPos = Vec(0.f, 0.f);
 	bool capDragActive = false;
@@ -1824,16 +1823,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 	void applyClipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) {
 		applyClipCount(clipCountForLocalX(localX, historySize, layout));
-	}
-
-	int zoneForPos(Vec localPos) const {
-		if (localPos.x < box.size.x * 0.33f) {
-			return -1;
-		}
-		if (localPos.x > box.size.x * 0.67f) {
-			return 1;
-		}
-		return 0;
 	}
 
 	int capValueFromModule() const {
@@ -1979,22 +1968,18 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 	void onHover(const event::Hover& e) override {
 		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
-			hoverZone = 0;
 			Widget::onHover(e);
 			return;
 		}
 		lastHoverPos = e.pos;
-		hoverZone = zoneForPos(e.pos);
 		OpaqueWidget::onHover(e);
 	}
 
 	void onLeave(const event::Leave& e) override {
 		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
-			hoverZone = 0;
 			Widget::onLeave(e);
 			return;
 		}
-		hoverZone = 0;
 		OpaqueWidget::onLeave(e);
 	}
 
@@ -2031,23 +2016,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
-		if (pointInHistoryStrip(e.pos, layout)) {
-			applyClipCountForLocalX(e.pos.x, s.historySize, layout);
-			e.consume(this);
+			if (pointInHistoryStrip(e.pos, layout)) {
+				applyClipCountForLocalX(e.pos.x, s.historySize, layout);
+				e.consume(this);
+				return;
+			}
+			Widget::onButton(e);
 			return;
 		}
-		int zone = zoneForPos(e.pos);
-		if (zone < 0) {
-			nudgePreset(-1);
-		}
-		else if (zone > 0) {
-			nudgePreset(1);
-		}
-		else {
-			toggleFullVsRecent();
-		}
-		e.consume(this);
-	}
 
 	void onDragStart(const event::DragStart& e) override {
 		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
@@ -2167,30 +2143,33 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		nvgRoundedRect(args.vg, stripX, historyY, stripW, historyH, 1.6f);
 		nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
 		nvgFill(args.vg);
-		if (s.historySize > 0) {
-			float startNorm = 0.f;
-			float endNorm = 1.f;
+			if (s.historySize > 0) {
+				float startNorm = 0.f;
+				float endNorm = 1.f;
 			if (!s.fullMode && s.historySize > 0) {
 				startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
 				endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
 			}
-			float activeX = stripX + stripW * startNorm;
-			float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
-			if (s.fullMode) {
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
-				NVGpaint fullPaint = nvgLinearGradient(
-					args.vg,
-					activeX,
-					historyY,
-					activeX,
-					historyY + historyH,
-					nvgRGBA(106, 182, 210, 204),
-					nvgRGBA(76, 126, 170, 188)
-				);
-				nvgFillPaint(args.vg, fullPaint);
-				nvgFill(args.vg);
-			}
+				float activeX = stripX + stripW * startNorm;
+				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				auto makeBrandActivePaint = [&](int alphaA, int alphaB) {
+					return nvgLinearGradient(
+						args.vg,
+						activeX,
+						historyY,
+						activeX + activeW,
+						historyY,
+						nvgRGBA(122, 92, 255, alphaA), // #7a5cff
+						nvgRGBA(28, 204, 217, alphaB)  // #1cccd9
+					);
+				};
+				if (s.fullMode) {
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
+					NVGpaint fullPaint = makeBrandActivePaint(214, 206);
+					nvgFillPaint(args.vg, fullPaint);
+					nvgFill(args.vg);
+				}
 			else {
 				// Dim non-active history more aggressively so RECENT window reads clearly.
 				if (activeX > stripX + 0.5f) {
@@ -2206,21 +2185,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgRoundedRect(args.vg, rightX, historyY + 0.3f, rightW, std::max(1.f, historyH - 0.6f), 1.1f);
 					nvgFillColor(args.vg, nvgRGBA(12, 16, 20, 168));
 					nvgFill(args.vg);
-				}
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
-				NVGpaint recentPaint = nvgLinearGradient(
-					args.vg,
-					activeX,
-					historyY,
-					activeX,
-					historyY + historyH,
-					nvgRGBA(110, 198, 238, 232),
-					nvgRGBA(74, 138, 204, 212)
-				);
-				nvgFillPaint(args.vg, recentPaint);
-				nvgFill(args.vg);
-				nvgBeginPath(args.vg);
+					}
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
+					NVGpaint recentPaint = makeBrandActivePaint(238, 228);
+					nvgFillPaint(args.vg, recentPaint);
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
 				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
 				nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 198));
 				nvgStrokeWidth(args.vg, 0.85f);
@@ -2388,18 +2359,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgText(args.vg, bx + padX, by + padY, clipText, nullptr);
 				}
 
-				// Hover affordance.
-			if (hoverZone != 0) {
-				float hw = w * 0.33f;
-			float hx = (hoverZone < 0) ? x : (x + w - hw);
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, hx + 0.4f, y + 0.4f, hw - 0.8f, h - 0.8f, 3.2f);
-			nvgStrokeColor(args.vg, nvgRGBA(164, 212, 244, 62));
-			nvgStrokeWidth(args.vg, 0.85f);
-			nvgStroke(args.vg);
 		}
-	}
-};
+	};
 
 constexpr int CrownRibbonWidget::PRESET_CAP_VALUES[CrownRibbonWidget::PRESET_COUNT];
 
@@ -2486,8 +2447,7 @@ struct CrownstepWidget final : ModuleWidget {
 			return Vec(rect.pos.x + rect.size.x * u, rect.pos.y + rect.size.y * v);
 		};
 
-		Vec seqPos(43.f, 101.5f);
-		Vec newGamePos(43.f, 114.0f);
+			Vec newGamePos(43.f, 114.0f);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
@@ -2539,9 +2499,8 @@ struct CrownstepWidget final : ModuleWidget {
 					controlH = outputsAreaMm.size.y;
 				}
 			}
-			seqPos = Vec(controlX, controlY + controlH * 0.28f);
-			newGamePos = Vec(controlX, controlY + controlH * 0.76f);
-		}
+				newGamePos = Vec(controlX, controlY + controlH * 0.76f);
+			}
 
 		// Prefer explicit component anchors from the SVG "components" layer.
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
@@ -2557,8 +2516,7 @@ struct CrownstepWidget final : ModuleWidget {
 				*outPos = pointMm;
 			}
 		};
-		applyPointOverride("SEQ_LENGTH_PARAM", &seqPos);
-		applyPointOverride("NEW_GAME_PARAM", &newGamePos);
+			applyPointOverride("NEW_GAME_PARAM", &newGamePos);
 		applyPointOverride("CLOCK_INPUT", &clockPos);
 		applyPointOverride("RESET_INPUT", &resetPos);
 		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
@@ -2570,8 +2528,9 @@ struct CrownstepWidget final : ModuleWidget {
 		applyPointOverride("HUMAN_TURN_LIGHT", &humanLightPos);
 		applyPointOverride("AI_TURN_LIGHT", &aiLightPos);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(seqPos), module, Crownstep::SEQ_LENGTH_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
+			// Runtime sequence length is controlled by the ribbon widget trim interactions.
+			addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
