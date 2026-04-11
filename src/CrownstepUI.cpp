@@ -479,11 +479,12 @@ bool drawChessAtlasPieceRingContour(
 
 	const float minCell = std::min(cellWidth, cellHeight);
 	const float pulse01 = clamp(pulse, 0.f, 1.f);
-	// Keep contour tight but bold enough to match checkers ring presence.
-	const float outerGrow = minCell * (0.014f + 0.014f * pulse01);
-	const float innerGrow = outerGrow * 0.70f;
-	const float coreGrow = outerGrow * 0.40f;
-	const float outerAlpha = 0.78f + 0.14f * pulse01;
+	// Checkers-like contour motion:
+	// near-in phase almost kisses the piece edge, then expands outward.
+	const float outerGrow = minCell * (0.004f + 0.062f * pulse01);
+	const float innerGrow = outerGrow * 0.72f;
+	const float coreGrow = outerGrow * 0.44f;
+	const float outerAlpha = 0.80f + 0.14f * pulse01;
 	const float innerAlpha = 0.94f + 0.05f * pulse01;
 	const float coreAlpha = 1.00f;
 
@@ -516,7 +517,7 @@ bool drawChessAtlasPieceRingContour(
 	};
 
 	nvgSave(vg);
-	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow * 1.22f, outerAlpha * 0.62f);
+	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow * 1.24f, outerAlpha * 0.62f);
 	drawContourLayer(cache.rasterMaskGreenDarkImageHandle, outerGrow, outerAlpha);
 	drawContourLayer(cache.rasterMaskGreenImageHandle, innerGrow, innerAlpha);
 	drawContourLayer(cache.rasterMaskGreenImageHandle, coreGrow, coreAlpha);
@@ -1699,20 +1700,20 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								if (useChessFallbackContour) {
 									float minCell = std::min(cellWidth, cellHeight);
-									float ringW = minCell * (0.58f + 0.018f * pulse);
-									float ringH = minCell * (0.86f + 0.024f * pulse);
+									float ringW = minCell * (0.56f + 0.10f * pulse);
+									float ringH = minCell * (0.82f + 0.16f * pulse);
 									float ringX = centerX - ringW * 0.5f;
 									float ringY = centerY - ringH * 0.58f;
 									float corner = minCell * 0.18f;
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
 									nvgStrokeColor(args.vg, nvgRGBA(40, 168, 104, int(168.f + 46.f * pulse)));
-									nvgStrokeWidth(args.vg, 2.85f);
+									nvgStrokeWidth(args.vg, 3.55f);
 									nvgStroke(args.vg);
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
 									nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(210.f + 36.f * pulse)));
-									nvgStrokeWidth(args.vg, 1.48f);
+									nvgStrokeWidth(args.vg, 1.98f);
 									nvgStroke(args.vg);
 									continue;
 								}
