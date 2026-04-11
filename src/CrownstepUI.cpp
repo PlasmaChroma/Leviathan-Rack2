@@ -39,6 +39,8 @@ struct ChessPieceAtlasCache {
 	int rasterImageHandle = -1;
 	NVGcontext* rasterMaskImageVg = nullptr;
 	int rasterMaskImageHandle = -1;
+	NVGcontext* rasterMaskGreenImageVg = nullptr;
+	int rasterMaskGreenImageHandle = -1;
 	int rasterImageWidth = 0;
 	int rasterImageHeight = 0;
 	float rasterScale = 1.f;
@@ -176,7 +178,9 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (cache->rasterImageHandle >= 0
 		&& cache->rasterImageVg == vg
 		&& cache->rasterMaskImageHandle >= 0
-		&& cache->rasterMaskImageVg == vg) {
+		&& cache->rasterMaskImageVg == vg
+		&& cache->rasterMaskGreenImageHandle >= 0
+		&& cache->rasterMaskGreenImageVg == vg) {
 		return true;
 	}
 
@@ -218,10 +222,30 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (maskImageHandle < 0) {
 		return false;
 	}
+	std::vector<unsigned char> greenMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
+	for (size_t i = 0, n = size_t(rasterWidth) * size_t(rasterHeight); i < n; ++i) {
+		unsigned char a = pixels[i * 4 + 3];
+		greenMaskPixels[i * 4 + 0] = 98u;
+		greenMaskPixels[i * 4 + 1] = 235u;
+		greenMaskPixels[i * 4 + 2] = 154u;
+		greenMaskPixels[i * 4 + 3] = a;
+	}
+	int greenMaskImageHandle = nvgCreateImageRGBA(
+		vg,
+		rasterWidth,
+		rasterHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		greenMaskPixels.data()
+	);
+	if (greenMaskImageHandle < 0) {
+		return false;
+	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
 	cache->rasterMaskImageVg = vg;
 	cache->rasterMaskImageHandle = maskImageHandle;
+	cache->rasterMaskGreenImageVg = vg;
+	cache->rasterMaskGreenImageHandle = greenMaskImageHandle;
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
@@ -399,6 +423,73 @@ bool drawChessAtlasPieceHalo(
 
 	nvgSave(vg);
 	drawLayer(bandGrow, bandAlpha);
+	nvgRestore(vg);
+	return true;
+}
+
+bool drawChessAtlasPieceRingContour(
+	NVGcontext* vg,
+	float centerX,
+	float centerY,
+	float cellWidth,
+	float cellHeight,
+	int piece,
+	float pulse
+) {
+	if (!vg || piece == 0) {
+		return false;
+	}
+	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
+	if (!cache.available
+		|| !cache.svg
+		|| !ensureChessPieceAtlasRasterImage(vg, &cache)
+		|| cache.rasterMaskGreenImageHandle < 0) {
+		return false;
+	}
+
+	ChessAtlasDrawSpec spec;
+	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
+		return false;
+	}
+
+	const float minCell = std::min(cellWidth, cellHeight);
+	const float pulse01 = clamp(pulse, 0.f, 1.f);
+	const float outerGrow = minCell * (0.020f + 0.036f * pulse01);
+	const float innerGrow = outerGrow * 0.64f;
+	const float outerAlpha = 0.26f + 0.24f * pulse01;
+	const float innerAlpha = 0.72f + 0.20f * pulse01;
+
+	auto drawContourLayer = [&](float grow, float alpha) {
+		float x = spec.x - grow;
+		float y = spec.y - grow;
+		float w = spec.drawWidth + 2.f * grow;
+		float h = spec.drawHeight + 2.f * grow;
+		float scaleX = w / spec.src.size.x;
+		float scaleY = h / spec.src.size.y;
+		float atlasW = cache.svg->handle->width * scaleX;
+		float atlasH = cache.svg->handle->height * scaleY;
+		float patternX = x - spec.src.pos.x * scaleX;
+		float patternY = y - spec.src.pos.y * scaleY;
+
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, w, h);
+		NVGpaint contourPaint = nvgImagePattern(
+			vg,
+			patternX,
+			patternY,
+			atlasW,
+			atlasH,
+			0.f,
+			cache.rasterMaskGreenImageHandle,
+			clamp(alpha, 0.f, 1.f)
+		);
+		nvgFillPaint(vg, contourPaint);
+		nvgFill(vg);
+	};
+
+	nvgSave(vg);
+	drawContourLayer(outerGrow, outerAlpha);
+	drawContourLayer(innerGrow, innerAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -640,9 +731,37 @@ struct CrownstepBoardWidget final : Widget {
 			nvgStroke(args.vg);
 		}
 
-				if (module) {
-					// Keep animation phase numerically stable during very long sessions.
-					float animTime = float(std::fmod(double(module->transportTimeSeconds), 4096.0));
+					if (module) {
+						auto drawCellPitchOverlay = [&]() {
+							if (!module->showCellPitchOverlay) {
+								return;
+							}
+							float valueFontSize = std::max(5.2f, std::min(cellWidth, cellHeight) * 0.19f);
+							int cellCount = module->boardCellCount();
+							for (int boardIndex = 0; boardIndex < cellCount; ++boardIndex) {
+								int row = 0;
+								int col = 0;
+								if (!viewRowColFromBoardIndex(boardIndex, &row, &col)) {
+									continue;
+								}
+								float valueVolts = module->pitchPreviewForBoardIndex(boardIndex);
+								char valueText[24];
+								std::snprintf(valueText, sizeof(valueText), "%.2f", valueVolts);
+								float textX = col * cellWidth + 1.6f;
+								float textY = row * cellHeight + 1.8f;
+								bool darkSquare = othelloBoard || (((row + col) & 1) == 1);
+								NVGcolor textColor = darkSquare ? nvgRGBA(242, 246, 252, 224) : nvgRGBA(20, 24, 30, 220);
+								NVGcolor shadowColor = darkSquare ? nvgRGBA(8, 10, 14, 186) : nvgRGBA(252, 252, 255, 158);
+								nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+								nvgFontSize(args.vg, valueFontSize);
+								nvgFillColor(args.vg, shadowColor);
+								nvgText(args.vg, textX + 0.55f, textY + 0.55f, valueText, nullptr);
+								nvgFillColor(args.vg, textColor);
+								nvgText(args.vg, textX, textY, valueText, nullptr);
+							}
+						};
+						// Keep animation phase numerically stable during very long sessions.
+						float animTime = float(std::fmod(double(module->transportTimeSeconds), 4096.0));
 					// Temporary UX tweak: hide AI potential-move hint dots/rings.
 					const bool renderOpponentMoveHints = false;
 					if (!module->gameOver && module->selectedSquare >= 0) {
@@ -1500,9 +1619,9 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 
-					// Human-turn assist ring mode: pulse rings on movable pieces.
-						if (showMovablePieceRingHints) {
-						for (int i = 0; i < cellCount; ++i) {
+						// Human-turn assist ring mode: pulse rings on movable pieces.
+							if (showMovablePieceRingHints) {
+							for (int i = 0; i < cellCount; ++i) {
 							if (!movableOrigins[size_t(i)]) {
 								continue;
 							}
@@ -1518,11 +1637,35 @@ struct CrownstepBoardWidget final : Widget {
 							if (!viewRowColFromBoardIndex(i, &row, &col)) {
 								continue;
 							}
-							float centerX = (col + 0.5f) * cellWidth;
-							float centerY = (row + 0.5f) * cellHeight;
-							float phase = float(i) * 0.37f + 0.4f;
-							float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
-							float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
+								float centerX = (col + 0.5f) * cellWidth;
+								float centerY = (row + 0.5f) * cellHeight;
+								float phase = float(i) * 0.37f + 0.4f;
+								float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
+								if (module->isChessMode()) {
+									bool drewContour = false;
+									if (CHESS_ATLAS_ENABLED) {
+										nvgSave(args.vg);
+										nvgTranslate(args.vg, centerX, 0.f);
+										nvgScale(args.vg, CHESS_HORIZONTAL_SCALE, 1.f);
+										nvgTranslate(args.vg, -centerX, 0.f);
+										drewContour = drawChessAtlasPieceRingContour(
+											args.vg,
+											centerX,
+											centerY,
+											cellWidth,
+											cellHeight,
+											piece,
+											pulse
+										);
+										nvgRestore(args.vg);
+									}
+									if (drewContour) {
+										// Keep contour as an outline by repainting the normal piece on top.
+										drawPieceAt(centerX, centerY, piece, 1.f);
+										continue;
+									}
+								}
+								float ringRadius = std::min(cellWidth, cellHeight) * (0.43f + 0.03f * pulse);
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
@@ -1538,9 +1681,9 @@ struct CrownstepBoardWidget final : Widget {
 						}
 					}
 
-				if (module->gameOver) {
-				nvgBeginPath(args.vg);
-				nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+					if (module->gameOver) {
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 				nvgFillColor(args.vg, nvgRGBA(8, 8, 10, 92));
 				nvgFill(args.vg);
 				nvgBeginPath(args.vg);
@@ -1551,11 +1694,14 @@ struct CrownstepBoardWidget final : Widget {
 				nvgFontSize(args.vg, 15.f);
 				nvgFillColor(args.vg, nvgRGB(244, 229, 206));
 				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.47f, "Game Complete", nullptr);
-				nvgFontSize(args.vg, 10.5f);
-				nvgFillColor(args.vg, nvgRGB(213, 189, 160));
-				nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback Mode", nullptr);
+					nvgFontSize(args.vg, 10.5f);
+					nvgFillColor(args.vg, nvgRGB(213, 189, 160));
+					nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.545f, "Playback Mode", nullptr);
+				}
+
+					// Always render value labels last so they sit on top of all board visuals.
+					drawCellPitchOverlay();
 			}
-		}
 		nvgRestore(args.vg);
 	}
 };
@@ -1566,12 +1712,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	int lastRecentCap = 16;
 	Vec lastHoverPos = Vec(0.f, 0.f);
 	bool capDragActive = false;
+	bool capDragTrimMode = false;
 	Vec capDragLocal = Vec(0.f, 0.f);
 
 	enum class VisualMode {
 		DISCRETE,
-		COMPRESSED,
-		BUCKETED
+		COMPRESSED
 	};
 
 	struct RibbonState {
@@ -1585,6 +1731,16 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		std::vector<float> stepWeight;
 	};
 
+	struct RibbonLayout {
+		bool compact = false;
+		float stripX = 0.f;
+		float stripW = 0.f;
+		float historyY = 0.f;
+		float historyH = 0.f;
+		float loopY = 0.f;
+		float loopH = 0.f;
+	};
+
 	static constexpr int PRESET_COUNT = 4;
 	static constexpr int PRESET_CAP_VALUES[PRESET_COUNT] = {0, 8, 16, 32};
 
@@ -1593,13 +1749,81 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	VisualMode chooseMode(int activeLength) const {
-		if (activeLength <= 16) {
+		if (activeLength <= 64) {
 			return VisualMode::DISCRETE;
 		}
-		if (activeLength <= 48) {
-			return VisualMode::COMPRESSED;
+		return VisualMode::COMPRESSED;
+	}
+
+	RibbonLayout computeLayout() const {
+		RibbonLayout layout;
+		const float h = box.size.y;
+		const float w = box.size.x;
+		const float pad = 2.f;
+		layout.compact = (h <= 23.f) || ((w / std::max(1.f, h)) >= 5.f && h <= 28.f);
+		// Reserve extra headroom in non-compact mode so the crown cap above
+		// the history playhead stays fully inside the widget bounds.
+		float ribbonTop = layout.compact ? 0.9f : 5.2f;
+		float ribbonBottom = h - 1.0f;
+		float ribbonH = std::max(4.f, ribbonBottom - ribbonTop);
+		float stripGap = 0.8f;
+		float stripHalfH = std::max(2.2f, (ribbonH - stripGap) * 0.5f);
+		layout.stripX = pad;
+		layout.stripW = std::max(6.f, w - 2.f * pad);
+		layout.historyY = ribbonTop;
+		layout.historyH = stripHalfH;
+		layout.loopY = layout.historyY + layout.historyH + stripGap;
+		layout.loopH = stripHalfH;
+		return layout;
+	}
+
+	bool pointInHistoryStrip(Vec localPos, const RibbonLayout& layout) const {
+		return localPos.x >= layout.stripX
+			&& localPos.x <= (layout.stripX + layout.stripW)
+			&& localPos.y >= layout.historyY
+			&& localPos.y <= (layout.historyY + layout.historyH);
+	}
+
+	int clipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
+		if (historySize <= 0) {
+			return 0;
 		}
-		return VisualMode::BUCKETED;
+		float norm = clamp((localX - layout.stripX) / std::max(1.f, layout.stripW), 0.f, 1.f);
+		// Left edge = FULL. Across the rest of the bar map linearly (historySize-1)..1.
+		if (norm <= 1e-4f) {
+			return 0; // Full
+		}
+		const int maxRecent = std::max(1, historySize - 1);
+		int target = int(std::lround((1.f - norm) * float(std::max(0, maxRecent - 1)))) + 1;
+		target = clamp(target, 1, maxRecent);
+		return target;
+	}
+
+	void applyClipCount(int clipCount) {
+		if (!module) {
+			return;
+		}
+		if (clipCount <= 0) {
+			module->sequenceCapOverride = 0;
+			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
+		}
+		else {
+			int clipped = std::max(1, clipCount);
+			lastRecentCap = clipped;
+			if (clipped <= (SEQ_LENGTH_MAX - 1)) {
+				module->sequenceCapOverride = -1;
+				module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(clipped));
+			}
+			else {
+				module->sequenceCapOverride = clipped;
+				// Keep knob parked at Full when cap exceeds knob's native range.
+				module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
+			}
+		}
+	}
+
+	void applyClipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) {
+		applyClipCount(clipCountForLocalX(localX, historySize, layout));
 	}
 
 	int zoneForPos(Vec localPos) const {
@@ -1655,9 +1879,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		int capValue = PRESET_CAP_VALUES[idx];
 		if (capValue > 0) {
 			lastRecentCap = capValue;
+			module->sequenceCapOverride = -1;
 			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(capValue));
 		}
 		else {
+			module->sequenceCapOverride = -1;
 			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
 		}
 	}
@@ -1672,6 +1898,30 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			next = std::max(current - 1, 0);
 		}
 		applyPresetIndex(next);
+	}
+
+	void nudgeClipCount(int dir, int historySize) {
+		if (!module || historySize <= 0 || dir == 0) {
+			return;
+		}
+		int cap = capValueFromModule();
+		if (cap <= 0) {
+			// From FULL, decreasing moves to historySize-1; increasing stays FULL.
+			if (dir < 0) {
+				applyClipCount(std::max(1, historySize - 1));
+			}
+			else {
+				applyClipCount(0);
+			}
+			return;
+		}
+		int next = cap + dir;
+		if (next >= historySize) {
+			applyClipCount(0); // Full
+			return;
+		}
+		next = clamp(next, 1, std::max(1, historySize - 1));
+		applyClipCount(next);
 	}
 
 	void toggleFullVsRecent() {
@@ -1763,7 +2013,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onHoverScroll(e);
 			return;
 		}
-		nudgePreset((scroll > 0.f) ? 1 : -1);
+		RibbonState s = pullState();
+		int stepDir = (scroll > 0.f) ? 1 : -1;
+		// One sequence-step per wheel event, regardless of scroll magnitude.
+		nudgeClipCount(stepDir, s.historySize);
 		e.consume(this);
 	}
 
@@ -1774,6 +2027,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
 			Widget::onButton(e);
+			return;
+		}
+		RibbonLayout layout = computeLayout();
+		RibbonState s = pullState();
+		if (pointInHistoryStrip(e.pos, layout)) {
+			applyClipCountForLocalX(e.pos.x, s.historySize, layout);
+			e.consume(this);
 			return;
 		}
 		int zone = zoneForPos(e.pos);
@@ -1796,8 +2056,16 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		capDragActive = true;
 		capDragLocal = lastHoverPos;
-		int presetIndex = presetIndexForLocalX(capDragLocal.x);
-		applyPresetIndex(presetIndex);
+		RibbonLayout layout = computeLayout();
+		RibbonState s = pullState();
+		capDragTrimMode = pointInHistoryStrip(capDragLocal, layout);
+		if (capDragTrimMode) {
+			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+		}
+		else {
+			int presetIndex = presetIndexForLocalX(capDragLocal.x);
+			applyPresetIndex(presetIndex);
+		}
 		e.consume(this);
 	}
 
@@ -1808,8 +2076,15 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		capDragLocal = capDragLocal.plus(e.mouseDelta);
 		capDragLocal.x = clamp(capDragLocal.x, 0.f, box.size.x);
-		int presetIndex = presetIndexForLocalX(capDragLocal.x);
-		applyPresetIndex(presetIndex);
+		RibbonLayout layout = computeLayout();
+		RibbonState s = pullState();
+		if (capDragTrimMode) {
+			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+		}
+		else {
+			int presetIndex = presetIndexForLocalX(capDragLocal.x);
+			applyPresetIndex(presetIndex);
+		}
 		e.consume(this);
 	}
 
@@ -1819,6 +2094,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			return;
 		}
 		capDragActive = false;
+		capDragTrimMode = false;
 		e.consume(this);
 	}
 
@@ -1840,11 +2116,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		int currentStep = (s.activeLength > 0 && s.playbackIndex >= 0) ? (s.playbackIndex + 1) : 0;
 		int totalSteps = s.activeLength;
 
-		const float x = 0.f;
-		const float y = 0.f;
-		const float w = box.size.x;
-		const float h = box.size.y;
-		const float pad = 2.f;
+			const float x = 0.f;
+			const float y = 0.f;
+			const float w = box.size.x;
+			const float h = box.size.y;
 
 		if (module->stepCounterStyle == Crownstep::STEP_COUNTER_BASIC) {
 			nvgBeginPath(args.vg);
@@ -1878,40 +2153,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		nvgStrokeWidth(args.vg, 1.0f);
 		nvgStroke(args.vg);
 
-		float badgeH = std::max(7.5f, h * 0.28f);
-		float textH = std::max(8.f, h * 0.30f);
-		float ribbonTop = y + badgeH + 1.5f;
-		float ribbonBottom = y + h - textH - 1.5f;
-		float ribbonH = std::max(4.f, ribbonBottom - ribbonTop);
-		float stripX = x + pad;
-		float stripW = std::max(6.f, w - 2.f * pad);
-		float historyH = std::max(2.6f, ribbonH * 0.45f);
-		float historyY = ribbonTop;
-		float loopY = historyY + historyH + 1.f;
-		float loopH = std::max(2.f, ribbonTop + ribbonH - loopY);
-
-		// Badge.
-		char badgeText[16];
-		if (s.fullMode) {
-			std::snprintf(badgeText, sizeof(badgeText), "FULL");
-		}
-		else {
-			std::snprintf(badgeText, sizeof(badgeText), "R%d", s.capValue);
-		}
-		float badgeW = 26.f;
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + pad, y + 1.f, badgeW, badgeH - 1.5f, 2.4f);
-		nvgFillColor(args.vg, nvgRGBA(26, 38, 48, 204));
-		nvgFill(args.vg);
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + pad, y + 1.f, badgeW, badgeH - 1.5f, 2.4f);
-		nvgStrokeColor(args.vg, nvgRGBA(146, 198, 236, 128));
-		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStroke(args.vg);
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFontSize(args.vg, 8.1f);
-		nvgFillColor(args.vg, nvgRGB(198, 230, 254));
-		nvgText(args.vg, x + pad + badgeW * 0.5f, y + badgeH * 0.5f, badgeText, nullptr);
+				RibbonLayout layout = computeLayout();
+				const bool compactLayout = layout.compact;
+				float stripX = x + layout.stripX;
+				float stripW = layout.stripW;
+				float historyY = y + layout.historyY;
+				float historyH = layout.historyH;
+				float loopY = y + layout.loopY;
+				float loopH = layout.loopH;
 
 		// Full-history base strip.
 		nvgBeginPath(args.vg);
@@ -1985,21 +2234,20 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		nvgFillColor(args.vg, nvgRGBA(18, 24, 30, 188));
 		nvgFill(args.vg);
 
-		if (s.activeLength > 0) {
-			VisualMode mode = chooseMode(s.activeLength);
-			if (mode == VisualMode::DISCRETE) {
-				float gap = 1.2f;
-				float cellW = (stripW - gap * float(s.activeLength - 1)) / float(s.activeLength);
-				cellW = std::max(1.f, cellW);
-				for (int i = 0; i < s.activeLength; ++i) {
-					float cx = stripX + float(i) * (cellW + gap);
-					float alpha = 70.f + 130.f * s.stepWeight[size_t(i)];
-					nvgBeginPath(args.vg);
-					nvgRoundedRect(args.vg, cx, loopY + 0.35f, cellW, std::max(0.8f, loopH - 0.7f), 1.f);
-					nvgFillColor(args.vg, nvgRGBA(116, 156, 184, int(alpha)));
-					nvgFill(args.vg);
-					if (i == s.playbackIndex) {
+			if (s.activeLength > 0) {
+				VisualMode mode = chooseMode(s.activeLength);
+				if (mode == VisualMode::DISCRETE) {
+					float gap = 1.2f;
+					float cellW = (stripW - gap * float(s.activeLength - 1)) / float(s.activeLength);
+					cellW = std::max(1.f, cellW);
+					for (int i = 0; i < s.activeLength; ++i) {
+						float cx = stripX + float(i) * (cellW + gap);
 						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, cx, loopY + 0.35f, cellW, std::max(0.8f, loopH - 0.7f), 1.f);
+						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
+						nvgFill(args.vg);
+						if (i == s.playbackIndex) {
+							nvgBeginPath(args.vg);
 						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
 						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 118));
 						nvgFill(args.vg);
@@ -2010,83 +2258,42 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgStroke(args.vg);
 					}
 				}
-			}
-			else if (mode == VisualMode::COMPRESSED) {
-				int segCount = std::min(24, s.activeLength);
-				segCount = std::max(1, segCount);
-				float gap = 0.8f;
-				float segW = (stripW - gap * float(segCount - 1)) / float(segCount);
-				segW = std::max(1.f, segW);
-				for (int seg = 0; seg < segCount; ++seg) {
-					int begin = int(std::floor(float(seg) * float(s.activeLength) / float(segCount)));
-					int end = int(std::floor(float(seg + 1) * float(s.activeLength) / float(segCount)));
+				}
+				else if (mode == VisualMode::COMPRESSED) {
+					int segCount = std::max(1, 64);
+					float gap = 0.55f;
+					float segW = (stripW - gap * float(segCount - 1)) / float(segCount);
+					segW = std::max(1.f, segW);
+					for (int seg = 0; seg < segCount; ++seg) {
+						int begin = int(std::floor(float(seg) * float(s.activeLength) / float(segCount)));
+						int end = int(std::floor(float(seg + 1) * float(s.activeLength) / float(segCount)));
 					end = std::max(end, begin + 1);
 					end = std::min(end, s.activeLength);
-					if (begin >= end) {
-						continue;
-					}
-					float avg = 0.f;
-					for (int i = begin; i < end; ++i) {
-						avg += s.stepWeight[size_t(i)];
-					}
-					avg /= float(end - begin);
-					float sx = stripX + float(seg) * (segW + gap);
-					nvgBeginPath(args.vg);
-					nvgRoundedRect(args.vg, sx, loopY + 0.35f, segW, std::max(0.8f, loopH - 0.7f), 0.8f);
-					nvgFillColor(args.vg, nvgRGBA(106, 146, 178, int(68.f + 142.f * avg)));
-					nvgFill(args.vg);
-					if (s.playbackIndex >= begin && s.playbackIndex < end) {
+						if (begin >= end) {
+							continue;
+						}
+						float sx = stripX + float(seg) * (segW + gap);
 						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, sx, loopY + 0.35f, segW, std::max(0.8f, loopH - 0.7f), 0.8f);
+						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
+						nvgFill(args.vg);
+						if (s.playbackIndex >= begin && s.playbackIndex < end) {
+							nvgBeginPath(args.vg);
 						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
 						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
 						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-						nvgStrokeWidth(args.vg, 1.0f);
-						nvgStroke(args.vg);
+							nvgStrokeWidth(args.vg, 1.0f);
+							nvgStroke(args.vg);
+						}
 					}
 				}
 			}
-			else {
-				int bucketCount = 24;
-				float gap = 0.7f;
-				float bucketW = (stripW - gap * float(bucketCount - 1)) / float(bucketCount);
-				bucketW = std::max(0.85f, bucketW);
-				for (int b = 0; b < bucketCount; ++b) {
-					int begin = int(std::floor(float(b) * float(s.activeLength) / float(bucketCount)));
-					int end = int(std::floor(float(b + 1) * float(s.activeLength) / float(bucketCount)));
-					end = std::max(end, begin + 1);
-					end = std::min(end, s.activeLength);
-					float avg = 0.f;
-					for (int i = begin; i < end; ++i) {
-						avg += s.stepWeight[size_t(i)];
-					}
-					avg /= float(std::max(1, end - begin));
-					float height = std::max(0.8f, (loopH - 0.7f) * (0.28f + 0.72f * avg));
-					float bx = stripX + float(b) * (bucketW + gap);
-					float by = loopY + loopH - 0.35f - height;
-					nvgBeginPath(args.vg);
-					nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
-					nvgFillColor(args.vg, nvgRGBA(98, 142, 176, int(62.f + 150.f * avg)));
-					nvgFill(args.vg);
-					if (s.playbackIndex >= begin && s.playbackIndex < end) {
-						nvgBeginPath(args.vg);
-						nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
-						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
-						nvgFill(args.vg);
-						nvgBeginPath(args.vg);
-						nvgRoundedRect(args.vg, bx, by, bucketW, height, 0.6f);
-						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-						nvgStrokeWidth(args.vg, 1.0f);
-						nvgStroke(args.vg);
-					}
-				}
-			}
-		}
 
-		// Current marker in history strip.
-		if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
+			// Current marker in history strip.
+			if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
 			int absPlaybackIndex = clamp(s.activeStart + s.playbackIndex, 0, std::max(0, s.historySize - 1));
 			float norm = (s.historySize <= 1) ? 0.f : (float(absPlaybackIndex) / float(s.historySize - 1));
 			float mx = stripX + stripW * norm;
@@ -2101,61 +2308,89 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgFillColor(args.vg, nvgRGBA(255, 220, 140, 248));
 			nvgFill(args.vg);
 
-			// Crown-shaped cap on the playhead marker.
-			float crownW = 5.4f;
-			float crownH = 2.6f;
-			float crownTop = historyY - crownH - 2.4f;
-			float bandY = crownTop + crownH * 0.64f;
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, mx - crownW * 0.50f, bandY);
-			nvgLineTo(args.vg, mx - crownW * 0.33f, crownTop + crownH * 0.30f);
-			nvgLineTo(args.vg, mx - crownW * 0.12f, bandY - crownH * 0.34f);
-			nvgLineTo(args.vg, mx, crownTop);
-			nvgLineTo(args.vg, mx + crownW * 0.12f, bandY - crownH * 0.34f);
-			nvgLineTo(args.vg, mx + crownW * 0.33f, crownTop + crownH * 0.30f);
-			nvgLineTo(args.vg, mx + crownW * 0.50f, bandY);
-			nvgLineTo(args.vg, mx + crownW * 0.50f, bandY + crownH * 0.30f);
-			nvgLineTo(args.vg, mx - crownW * 0.50f, bandY + crownH * 0.30f);
-			nvgClosePath(args.vg);
-			NVGpaint crownPaint = nvgLinearGradient(
-				args.vg,
-				mx,
-				crownTop,
-				mx,
-				bandY + crownH * 0.30f,
-				nvgRGBA(255, 236, 164, 248),
-				nvgRGBA(238, 186, 74, 246)
-			);
-			nvgFillPaint(args.vg, crownPaint);
-			nvgFill(args.vg);
-			nvgStrokeColor(args.vg, nvgRGBA(146, 104, 42, 220));
-			nvgStrokeWidth(args.vg, 0.55f);
-			nvgStroke(args.vg);
-		}
+			if (!compactLayout) {
+				// Crown-shaped cap on the playhead marker.
+				float crownW = 5.4f;
+				float crownH = 2.6f;
+				float crownTop = historyY - crownH - 2.4f;
+				float bandY = crownTop + crownH * 0.64f;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, mx - crownW * 0.50f, bandY);
+				nvgLineTo(args.vg, mx - crownW * 0.33f, crownTop + crownH * 0.30f);
+				nvgLineTo(args.vg, mx - crownW * 0.12f, bandY - crownH * 0.34f);
+				nvgLineTo(args.vg, mx, crownTop);
+				nvgLineTo(args.vg, mx + crownW * 0.12f, bandY - crownH * 0.34f);
+				nvgLineTo(args.vg, mx + crownW * 0.33f, crownTop + crownH * 0.30f);
+				nvgLineTo(args.vg, mx + crownW * 0.50f, bandY);
+				nvgLineTo(args.vg, mx + crownW * 0.50f, bandY + crownH * 0.30f);
+				nvgLineTo(args.vg, mx - crownW * 0.50f, bandY + crownH * 0.30f);
+				nvgClosePath(args.vg);
+				NVGpaint crownPaint = nvgLinearGradient(
+					args.vg,
+					mx,
+					crownTop,
+					mx,
+					bandY + crownH * 0.30f,
+					nvgRGBA(255, 236, 164, 248),
+					nvgRGBA(238, 186, 74, 246)
+				);
+				nvgFillPaint(args.vg, crownPaint);
+				nvgFill(args.vg);
+				nvgStrokeColor(args.vg, nvgRGBA(146, 104, 42, 220));
+				nvgStrokeWidth(args.vg, 0.55f);
+				nvgStroke(args.vg);
+				}
+			}
 
-		// Numbers.
-		char mainText[40];
-		char subText[40];
-		std::snprintf(mainText, sizeof(mainText), "%02d / %d", currentStep, totalSteps);
-		if (s.fullMode) {
-			std::snprintf(subText, sizeof(subText), "FULL %d", s.historySize);
-		}
-		else {
-			std::snprintf(subText, sizeof(subText), "of %d", s.historySize);
-		}
+			// Centered status text inside the top (history) strip.
+			char ribbonText[40];
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d/%d (%d)", currentStep, totalSteps, s.historySize);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFontSize(args.vg, compactLayout ? 6.0f : 7.1f);
+				nvgFillColor(args.vg, nvgRGBA(14, 20, 28, 166));
+				nvgText(args.vg, stripX + stripW * 0.5f + 0.45f, historyY + historyH * 0.5f + 0.45f, ribbonText, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(228, 244, 255, 232));
+				nvgText(args.vg, stripX + stripW * 0.5f, historyY + historyH * 0.5f, ribbonText, nullptr);
 
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFontSize(args.vg, 8.8f);
-		nvgFillColor(args.vg, nvgRGB(242, 228, 204));
-		nvgText(args.vg, x + w * 0.5f, y + h - textH * 0.60f, mainText, nullptr);
+				// Hover preview tooltip: prospective clip length when clicking the blue history strip.
+				Vec tooltipLocal = capDragActive ? capDragLocal : lastHoverPos;
+				bool previewClip = (s.historySize > 0)
+					&& (pointInHistoryStrip(tooltipLocal, layout) || (capDragActive && capDragTrimMode));
+				if (previewClip) {
+					int clipCount = clipCountForLocalX(tooltipLocal.x, s.historySize, layout);
+					int shownCount = (clipCount <= 0) ? s.historySize : clipCount;
+					char clipText[32];
+					std::snprintf(clipText, sizeof(clipText), "Clip: %d", shownCount);
+					float fontSize = compactLayout ? 6.2f : 7.0f;
+					float textBounds[4];
+					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+					nvgFontSize(args.vg, fontSize);
+					nvgTextBounds(args.vg, 0.f, 0.f, clipText, nullptr, textBounds);
+					float textW = textBounds[2] - textBounds[0];
+					float textH = textBounds[3] - textBounds[1];
+					float padX = 4.f;
+					float padY = 2.8f;
+					float bubbleW = textW + padX * 2.f;
+					float bubbleH = textH + padY * 2.f;
+					float bx = clamp(tooltipLocal.x + 10.f, 1.f, std::max(1.f, w - bubbleW - 1.f));
+					float by = clamp(tooltipLocal.y - bubbleH - 5.f, 1.f, std::max(1.f, h - bubbleH - 1.f));
 
-		nvgFontSize(args.vg, 6.7f);
-		nvgFillColor(args.vg, nvgRGBA(206, 222, 238, 196));
-		nvgText(args.vg, x + w * 0.83f, y + h - textH * 0.22f, subText, nullptr);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, bx, by, bubbleW, bubbleH, 2.6f);
+					nvgFillColor(args.vg, nvgRGBA(14, 18, 24, 228));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, bx, by, bubbleW, bubbleH, 2.6f);
+					nvgStrokeColor(args.vg, nvgRGBA(146, 198, 236, 158));
+					nvgStrokeWidth(args.vg, 0.9f);
+					nvgStroke(args.vg);
+					nvgFillColor(args.vg, nvgRGBA(228, 244, 255, 240));
+					nvgText(args.vg, bx + padX, by + padY, clipText, nullptr);
+				}
 
-		// Hover affordance.
-		if (hoverZone != 0) {
-			float hw = w * 0.33f;
+				// Hover affordance.
+			if (hoverZone != 0) {
+				float hw = w * 0.33f;
 			float hx = (hoverZone < 0) ? x : (x + w - hw);
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, hx + 0.4f, y + 0.4f, hw - 0.8f, h - 0.8f, 3.2f);
@@ -2513,6 +2748,18 @@ struct CrownstepWidget final : ModuleWidget {
 		MenuLabel* pitchLabel = new MenuLabel();
 		pitchLabel->text = "Pitch";
 		menu->addChild(pitchLabel);
+		menu->addChild(createCheckMenuItem(
+			"Show Cell Pitch Values",
+			"",
+			[=]() {
+				return module && module->showCellPitchOverlay;
+			},
+			[=]() {
+				if (module) {
+					module->showCellPitchOverlay = !module->showCellPitchOverlay;
+				}
+			}
+		));
 		menu->addChild(createCheckMenuItem(
 			"Bipolar",
 			"",

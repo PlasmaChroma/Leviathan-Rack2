@@ -11,11 +11,13 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 	json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
+	json_object_set_new(rootJ, "showCellPitchOverlay", json_boolean(showCellPitchOverlay));
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 	json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
 	json_object_set_new(rootJ, "highlightMode", json_integer(highlightMode));
 	json_object_set_new(rootJ, "playerMode", json_integer(playerMode));
 	json_object_set_new(rootJ, "stepCounterStyle", json_integer(stepCounterStyle));
+	json_object_set_new(rootJ, "sequenceCapOverride", json_integer(sequenceCapOverride));
 	json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
 	json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
 	json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
@@ -129,6 +131,10 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			clamp(int(json_integer_value(pitchDividerModeJ)), 0, int(crownstep::PITCH_DIVIDER_NAMES.size()) - 1);
 		loadedPitchDividerMode = true;
 	}
+	json_t* showCellPitchOverlayJ = json_object_get(rootJ, "showCellPitchOverlay");
+	if (showCellPitchOverlayJ) {
+		showCellPitchOverlay = json_is_true(showCellPitchOverlayJ);
+	}
 	json_t* boardValueLayoutModeJ = json_object_get(rootJ, "boardValueLayoutMode");
 	if (boardValueLayoutModeJ) {
 		int storedLayoutMode = int(json_integer_value(boardValueLayoutModeJ));
@@ -156,6 +162,13 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	json_t* stepCounterStyleJ = json_object_get(rootJ, "stepCounterStyle");
 	if (stepCounterStyleJ) {
 		stepCounterStyle = clamp(int(json_integer_value(stepCounterStyleJ)), 0, STEP_COUNTER_STYLE_COUNT - 1);
+	}
+	json_t* sequenceCapOverrideJ = json_object_get(rootJ, "sequenceCapOverride");
+	if (sequenceCapOverrideJ) {
+		sequenceCapOverride = int(json_integer_value(sequenceCapOverrideJ));
+		if (sequenceCapOverride < -1) {
+			sequenceCapOverride = -1;
+		}
 	}
 	json_t* playheadJ = json_object_get(rootJ, "playhead");
 	if (playheadJ) {

@@ -529,6 +529,15 @@ void Crownstep::advanceUiAnimationClock(double nowSeconds) {
 
 int Crownstep::currentSequenceCap() {
 	int requested = clamp(int(std::round(params[SEQ_LENGTH_PARAM].getValue())), SEQ_LENGTH_MIN, SEQ_LENGTH_MAX);
+	if (sequenceCapOverride >= 0) {
+		// If user moves the physical knob off "Full", hand control back to knob mode.
+		if (requested < SEQ_LENGTH_MAX && sequenceCapOverride > (SEQ_LENGTH_MAX - 1)) {
+			sequenceCapOverride = -1;
+		}
+		else {
+			return sequenceCapOverride;
+		}
+	}
 	// Max knob turn means full history window.
 	if (requested >= SEQ_LENGTH_MAX) {
 		return 0;
@@ -606,6 +615,19 @@ int Crownstep::boardCellCount() const {
 	int localCount = int(board.size());
 	int rulesCount = gameRules ? gameRules->boardCellCount() : localCount;
 	return std::max(0, std::min(localCount, rulesCount));
+}
+
+float Crownstep::pitchPreviewForBoardIndex(int boardIndex) {
+	int cellCount = boardCellCount();
+	if (cellCount <= 0) {
+		return NO_SEQUENCE_PITCH_VOLTS;
+	}
+	Move previewMove;
+	int clampedIndex = clamp(boardIndex, 0, cellCount - 1);
+	previewMove.originIndex = clampedIndex;
+	previewMove.destinationIndex = clampedIndex;
+	previewMove.isKing = false;
+	return pitchForMove(previewMove);
 }
 
 float Crownstep::pitchForMove(const Move& move) {

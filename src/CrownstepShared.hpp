@@ -154,11 +154,13 @@ struct Crownstep : Module {
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
 	int pitchDividerMode = 0;
+	bool showCellPitchOverlay = false;
 	int boardTextureMode = BOARD_TEXTURE_WOOD;
 	int gameMode = GAME_MODE_CHECKERS;
 	int highlightMode = HIGHLIGHT_RING;
 	int playerMode = PLAYER_INIT;
 	int stepCounterStyle = STEP_COUNTER_RIBBON;
+	int sequenceCapOverride = -1; // -1: use knob, 0: full, >0: explicit recent-window cap
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -244,6 +246,7 @@ struct Crownstep : Module {
 	int boardCoordToIndex(int row, int col) const;
 	int boardCellCount() const;
 
+	float pitchPreviewForBoardIndex(int boardIndex);
 	float pitchForMove(const Move& move);
 	Step makeStepFromMove(const Move& move);
 
