@@ -307,6 +307,18 @@ struct TemporalDeckBuffer {
   }
 };
 
+struct LiveScopeEnvelopeBlock {
+  int64_t key = -1;
+  float minL = 0.f;
+  float maxL = 0.f;
+  float minR = 0.f;
+  float maxR = 0.f;
+  float minMid = 0.f;
+  float maxMid = 0.f;
+  int sampleCount = 0;
+  bool hasData = false;
+};
+
 struct TemporalDeckEngine {
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
@@ -373,6 +385,7 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
   static constexpr float kLofiModControlRateHz = 3000.f;
+  static constexpr int kLiveScopeEnvelopeBlockSamples = 32;
 
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
@@ -553,6 +566,8 @@ struct TemporalDeckEngine {
   float prevBaseSpeed = 1.f;
   temporaldeck_expander::PreviewAccumulator preview;
   uint64_t bufferGeneration = 1;
+  std::vector<LiveScopeEnvelopeBlock> liveScopeEnvelope;
+  uint64_t liveScopeEnvelopeWriteCount = 0;
 
   void resetPreviewAccumulator(uint32_t capacityFrames = 0u) {
     uint32_t effectiveCapacity = capacityFrames > 0u ? capacityFrames : uint32_t(std::max(1, buffer.size));
@@ -583,11 +598,129 @@ struct TemporalDeckEngine {
     }
   }
 
+  void resetLiveScopeEnvelope() {
+    int blockCount = std::max(1, (buffer.size + kLiveScopeEnvelopeBlockSamples - 1) / kLiveScopeEnvelopeBlockSamples + 4);
+    liveScopeEnvelope.assign(size_t(blockCount), LiveScopeEnvelopeBlock());
+    liveScopeEnvelopeWriteCount = 0;
+  }
+
+  void pushLiveScopeEnvelopeSample(float inL, float inR) {
+    if (liveScopeEnvelope.empty()) {
+      resetLiveScopeEnvelope();
+    }
+    if (liveScopeEnvelope.empty()) {
+      return;
+    }
+    uint64_t sampleIndex = liveScopeEnvelopeWriteCount;
+    int64_t blockKey = int64_t(sampleIndex / uint64_t(kLiveScopeEnvelopeBlockSamples));
+    size_t slot = size_t(uint64_t(blockKey) % uint64_t(liveScopeEnvelope.size()));
+    LiveScopeEnvelopeBlock &block = liveScopeEnvelope[slot];
+    float mid = 0.5f * (inL + inR);
+    if (block.key != blockKey || !block.hasData) {
+      block = LiveScopeEnvelopeBlock();
+      block.key = blockKey;
+      block.minL = block.maxL = inL;
+      block.minR = block.maxR = inR;
+      block.minMid = block.maxMid = mid;
+      block.sampleCount = 1;
+      block.hasData = true;
+    } else {
+      block.minL = std::min(block.minL, inL);
+      block.maxL = std::max(block.maxL, inL);
+      block.minR = std::min(block.minR, inR);
+      block.maxR = std::max(block.maxR, inR);
+      block.minMid = std::min(block.minMid, mid);
+      block.maxMid = std::max(block.maxMid, mid);
+      block.sampleCount += 1;
+    }
+    liveScopeEnvelopeWriteCount += 1;
+  }
+
+  double newestReadableAbsolutePos() const {
+    if (sampleModeEnabled && sampleLoaded) {
+      return std::max(0.0, double(sampleFrames - 1));
+    }
+    if (liveScopeEnvelopeWriteCount == 0u) {
+      return 0.0;
+    }
+    return double(liveScopeEnvelopeWriteCount - 1u);
+  }
+
+  bool readLiveScopeEnvelopeRange(double newestAbsolutePos, float lagLow, float lagHigh, int channelMode,
+                                  float *minOut, float *maxOut) const {
+    if (!minOut || !maxOut || liveScopeEnvelope.empty() || liveScopeEnvelopeWriteCount == 0u || buffer.filled <= 0) {
+      return false;
+    }
+    float overlapLow = std::max(0.f, std::min(lagLow, lagHigh));
+    float overlapHigh = std::max(lagLow, lagHigh);
+    if (!(overlapHigh >= overlapLow)) {
+      return false;
+    }
+
+    double newestAvailableAbs = double(liveScopeEnvelopeWriteCount - 1u);
+    double oldestAvailableAbs = newestAvailableAbs - double(std::max(0, buffer.filled - 1));
+    double absLow = newestAbsolutePos - double(overlapHigh);
+    double absHigh = newestAbsolutePos - double(overlapLow);
+    if (absHigh < oldestAvailableAbs || absLow > newestAvailableAbs) {
+      return false;
+    }
+    absLow = std::max(absLow, oldestAvailableAbs);
+    absHigh = std::min(absHigh, newestAvailableAbs);
+    if (!(absHigh >= absLow)) {
+      return false;
+    }
+
+    int64_t blockKey0 = int64_t(std::floor(absLow / double(kLiveScopeEnvelopeBlockSamples)));
+    int64_t blockKey1 = int64_t(std::floor(absHigh / double(kLiveScopeEnvelopeBlockSamples)));
+    bool any = false;
+    float rangeMin = 0.f;
+    float rangeMax = 0.f;
+    for (int64_t blockKey = blockKey0; blockKey <= blockKey1; ++blockKey) {
+      size_t slot = size_t(uint64_t(blockKey) % uint64_t(liveScopeEnvelope.size()));
+      const LiveScopeEnvelopeBlock &block = liveScopeEnvelope[slot];
+      if (block.key != blockKey || !block.hasData) {
+        continue;
+      }
+      float blockMin = 0.f;
+      float blockMax = 0.f;
+      switch (channelMode) {
+      case 0:
+        blockMin = block.minL;
+        blockMax = block.maxL;
+        break;
+      case 1:
+        blockMin = block.minR;
+        blockMax = block.maxR;
+        break;
+      case 2:
+      default:
+        blockMin = block.minMid;
+        blockMax = block.maxMid;
+        break;
+      }
+      if (!any) {
+        rangeMin = blockMin;
+        rangeMax = blockMax;
+        any = true;
+      } else {
+        rangeMin = std::min(rangeMin, blockMin);
+        rangeMax = std::max(rangeMax, blockMax);
+      }
+    }
+    if (!any) {
+      return false;
+    }
+    *minOut = rangeMin;
+    *maxOut = rangeMax;
+    return true;
+  }
+
   void reset(float sr, bool resetBuffer = true) {
     sampleRate = sr;
     if (resetBuffer) {
       buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
       resetPreviewAccumulator();
+      resetLiveScopeEnvelope();
       bumpBufferGeneration();
     }
     sampleLoaded = false;
@@ -1508,6 +1641,7 @@ struct TemporalDeckEngine {
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
     resetPreviewAccumulator();
+    resetLiveScopeEnvelope();
     bumpBufferGeneration();
     if (sampleFrames <= 0) {
       return;
@@ -1559,6 +1693,7 @@ struct TemporalDeckEngine {
     sampleFrames = std::max(0, std::min(frames, buffer.size));
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    resetLiveScopeEnvelope();
     rebuildPreviewFromCurrentSample();
     bumpBufferGeneration();
   }
@@ -2608,6 +2743,7 @@ struct TemporalDeckEngine {
         writeL = inL + outL * feedback;
         writeR = inR + outR * feedback;
       }
+      pushLiveScopeEnvelopeSample(writeL, writeR);
       buffer.write(writeL, writeR);
       preview.pushMonoSample(0.5f * (writeL + writeR));
       writeAdvanced = true;

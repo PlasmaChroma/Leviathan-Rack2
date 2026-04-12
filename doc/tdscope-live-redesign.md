@@ -104,11 +104,11 @@ This should replace the current per-bin raw-audio resampling path for live mode.
 ## Phase Plan
 
 ### Phase 1: Baseline live envelope ring
-- [ ] Add a Level 0 live min/max ring alongside the current live audio ring.
-- [ ] Accumulate min/max envelopes incrementally as audio arrives.
-- [ ] Track stable timeline identity for envelope blocks.
-- [ ] Add a live preview path that reads Level 0 summaries instead of rescanning raw audio.
-- [ ] Keep sample-mode path unchanged initially.
+- [x] Add a Level 0 live min/max ring alongside the current live audio ring.
+- [x] Accumulate min/max envelopes incrementally as audio arrives.
+- [x] Track stable timeline identity for envelope blocks.
+- [x] Add a live preview path that reads Level 0 summaries instead of rescanning raw audio.
+- [x] Keep sample-mode path unchanged initially.
 
 ### Phase 2: Replace live query-time reconstruction
 - [ ] Route `LIVE` scope preview publish away from `evaluateScopeBinAtIndex()` raw-tap scanning.
@@ -165,12 +165,32 @@ Implement only a Level 0 live summary ring first.
 
 That is enough to validate the model before introducing a full pyramid.
 
+### Current first-cut details
+- Level 0 block size is currently `32` live samples per summary block.
+- Each block stores:
+  - left min/max
+  - right min/max
+  - mid min/max
+  - absolute block key
+- Live scope query now prefers these persistent summaries first.
+- Raw-tap reconstruction remains available as a fallback path if the summary query cannot satisfy a bin.
+- Live shifted-bin cache reuse is temporarily disabled while the new absolute-timeline summary path settles.
+
 ## Progress Log
 
 - 2026-04-11: Created live redesign tracker.
 - 2026-04-11: Confirmed current live scope cost is fundamentally higher by design because `LIVE` preview rebuilds bins from raw buffer reads and adds a second live-only sampling phase in `evaluateScopeBinAtIndex()`.
 - 2026-04-11: Chosen architecture direction: persistent rolling live envelope summaries, treating live preview as a continuously extending sample-like buffer query.
+- 2026-04-11: Implemented Phase 1 first cut:
+  - added a Level 0 live envelope ring in `TemporalDeckEngine`
+  - update path runs incrementally on live writes
+  - introduced absolute live sample position tracking for scope queries
+  - live scope bins now query Level 0 summaries before falling back to legacy raw reconstruction
+  - temporarily disabled live shifted-bin cache reuse to avoid mixing wrapped and absolute timeline assumptions during the transition
+- 2026-04-11: Verified compile for `TemporalDeck.cpp` and `TDScope.cpp`.
 
 ## Change Log
 
 - Added `tdscope-live-redesign.md` as the working design/progress doc for the `TD.Scope` live-mode efficiency redesign.
+- Added Level 0 live envelope summaries to `src/TemporalDeckEngine.hpp`.
+- Switched live scope query in `src/TemporalDeck.cpp` to prefer persistent Level 0 summaries.
