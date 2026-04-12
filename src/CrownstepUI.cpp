@@ -2831,11 +2831,16 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgFontSize(args.vg, compactLayout ? 6.0f : 7.1f);
 			float textX = stripX + stripW * 0.5f;
 			float textY = historyY + historyH * 0.5f;
-			nvgFillColor(args.vg, nvgRGBA(6, 10, 16, 132));
-			nvgText(args.vg, textX + 0.58f, textY + 0.62f, ribbonText, nullptr);
-			nvgFillColor(args.vg, nvgRGBA(10, 14, 20, 176));
-			nvgText(args.vg, textX + 0.20f, textY + 0.22f, ribbonText, nullptr);
-			nvgFillColor(args.vg, nvgRGBA(238, 248, 255, 242));
+			nvgFillColor(args.vg, nvgRGBA(4, 8, 14, 156));
+			nvgText(args.vg, textX + 0.60f, textY + 0.64f, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(8, 12, 18, 176));
+			nvgText(args.vg, textX - 0.28f, textY, ribbonText, nullptr);
+			nvgText(args.vg, textX + 0.28f, textY, ribbonText, nullptr);
+			nvgText(args.vg, textX, textY - 0.24f, ribbonText, nullptr);
+			nvgText(args.vg, textX, textY + 0.24f, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(8, 12, 18, 220));
+			nvgText(args.vg, textX + 0.18f, textY + 0.20f, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(255, 244, 220, 246));
 			nvgText(args.vg, textX, textY, ribbonText, nullptr);
 
 			if (s.historySize > 0) {
@@ -2845,9 +2850,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				float fullY = textY;
 				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 				nvgFontSize(args.vg, compactLayout ? 5.6f : 6.3f);
-				nvgFillColor(args.vg, nvgRGBA(6, 10, 16, 124));
+				nvgFillColor(args.vg, nvgRGBA(4, 8, 14, 142));
 				nvgText(args.vg, fullX + 0.46f, fullY + 0.50f, fullText, nullptr);
-				nvgFillColor(args.vg, nvgRGBA(224, 238, 248, 210));
+				nvgFillColor(args.vg, nvgRGBA(8, 12, 18, 160));
+				nvgText(args.vg, fullX - 0.20f, fullY, fullText, nullptr);
+				nvgText(args.vg, fullX + 0.20f, fullY, fullText, nullptr);
+				nvgText(args.vg, fullX, fullY - 0.20f, fullText, nullptr);
+				nvgText(args.vg, fullX, fullY + 0.20f, fullText, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(255, 242, 214, 226));
 				nvgText(args.vg, fullX, fullY, fullText, nullptr);
 			}
 
