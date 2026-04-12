@@ -610,8 +610,10 @@ static std::string joinInventoryRelativePath(const std::string &basePath, const 
 }
 
 static constexpr int kExpandedMenuIdOffset = 10000;
-static const char *kVinylExpansionBaseUrl =
-  "https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/main/Vinyl";
+static std::string vinylExpansionBaseUrl() {
+  const char *branch = isDragonKingDebugEnabled() ? "test" : "main";
+  return std::string("https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/") + branch + "/Vinyl";
+}
 static std::atomic<int> gExpandedVinylSyncDepth {0};
 static std::atomic<bool> gExpandedVinylDownloadRunning {false};
 static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
@@ -1734,7 +1736,8 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
 
   const std::string inventoryPath = system::join(tempRoot, "expanded.json");
-  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/expanded.json?" + cacheBuster;
+  const std::string baseUrl = vinylExpansionBaseUrl();
+  const std::string inventoryUrl = baseUrl + "/expanded.json?" + cacheBuster;
   if (!network::requestDownload(inventoryUrl, inventoryPath)) {
     system::removeRecursively(tempRoot);
     if (errorOut) {
@@ -1796,7 +1799,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
       }
       gExpandedVinylDownloadCurrentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
       std::string encodedFile = network::encodeUrl(item->file);
-      std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
+      std::string fileUrl = baseUrl + "/" + encodedFile + "?" + cacheBuster;
       std::string filePath = system::join(tempRoot, item->file);
       if (!network::requestDownload(fileUrl, filePath)) {
         if (errorOut) {

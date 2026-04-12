@@ -294,9 +294,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="80.48445"
-   inkscape:cy="139.79981"
+   inkscape:zoom="4.771108"
+   inkscape:cx="62.668881"
+   inkscape:cy="371.2974"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -665,11 +665,11 @@
      ry="121"
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><rect
      id="STEP_COUNTER"
-     x="18.4"
+     x="28.400002"
      y="9780.5"
-     width="9107.4004"
+     width="9087.4004"
      height="1212.8"
-     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:5.09889" /></g><rect
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:5.09329" /></g><rect
    id="BOARD_AREA"
    x="142"
    y="890"

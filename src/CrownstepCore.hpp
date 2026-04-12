@@ -66,8 +66,8 @@ static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal
 static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
 };
-static constexpr std::array<const char*, 3> BOARD_VALUE_LAYOUT_NAMES = {
-	{"Linear", "Serpentine Rows", "Center-Out"}
+static constexpr std::array<const char*, 5> BOARD_VALUE_LAYOUT_NAMES = {
+	{"Center-Out", "Linear", "Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)"}
 };
 static constexpr std::array<const char*, 4> PITCH_DIVIDER_NAMES = {
 	{"Full", "Half", "Third", "Quarter"}
@@ -1368,17 +1368,31 @@ inline float boardCenterMetric(int boardIndex) {
 	return dx * dx + dy * dy + float(row) * 0.01f + float(col) * 0.001f;
 }
 
+inline int serpentineDiagonalRank(int row, int col, int rowCount, int colCount) {
+	int diagonal = row + col;
+	int rank = 0;
+	for (int d = 0; d < diagonal; ++d) {
+		int rowMin = std::max(0, d - (colCount - 1));
+		int rowMax = std::min(rowCount - 1, d);
+		rank += rowMax - rowMin + 1;
+	}
+	int rowMin = std::max(0, diagonal - (colCount - 1));
+	int rowMax = std::min(rowCount - 1, diagonal);
+	int pos = row - rowMin;
+	int count = rowMax - rowMin + 1;
+	if (diagonal & 1) {
+		pos = count - 1 - pos;
+	}
+	return rank + pos;
+}
+
 inline int boardValueForIndex(int boardIndex, int layoutMode) {
 	int index = std::max(0, std::min(boardIndex, BOARD_SIZE - 1));
 	int mode = std::max(0, std::min(layoutMode, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1));
+	int row = index / 4;
+	int posInRow = index % 4;
 	switch (mode) {
-		case 1: {
-			int row = index / 4;
-			int posInRow = index % 4;
-			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
-			return row * 4 + serpentinePos;
-		}
-		case 2: {
+		case 0: {
 			float metric = boardCenterMetric(index);
 			int rank = 0;
 			for (int i = 0; i < BOARD_SIZE; ++i) {
@@ -1388,7 +1402,17 @@ inline int boardValueForIndex(int boardIndex, int layoutMode) {
 			}
 			return rank;
 		}
-		case 0:
+		case 2: {
+			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
+			return row * 4 + serpentinePos;
+		}
+		case 3: {
+			int serpentineRow = (posInRow & 1) ? (7 - row) : row;
+			return posInRow * 8 + serpentineRow;
+		}
+		case 4:
+			return serpentineDiagonalRank(row, posInRow, 8, 4);
+		case 1:
 		default:
 			return index;
 	}

@@ -18,3 +18,12 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - In WSL context: prefer validating behavior with focused tests (e.g. `build/tests/crownstep_spec`) and source-level checks.
 - In real Linux context: include full plugin build verification.
+
+# Release Compatibility Note
+
+- `Integral Flux`, `Proc`, and `Temporal Deck` are released modules.
+- Changes to those modules must be made with backward compatibility in mind, especially:
+  - patch/state serialization
+  - parameter/input/output/light IDs and ordering
+  - user-visible behavior that existing patches may rely on
+- `Crownstep` and `TD.Scope` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.

@@ -2848,7 +2848,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 			// Centered status text inside the top (history) strip.
 			char ribbonText[40];
-			std::snprintf(ribbonText, sizeof(ribbonText), "%d/%d", currentStep, totalSteps);
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d / %d", currentStep, totalSteps);
 			char fullText[24];
 			std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
 			float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
@@ -3053,6 +3053,7 @@ struct CrownstepWidget final : ModuleWidget {
 		};
 
 			Vec newGamePos(43.f, 114.0f);
+		Vec debugAddMovesPos(8.5f, 18.5f);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
@@ -3136,6 +3137,9 @@ struct CrownstepWidget final : ModuleWidget {
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
 			addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+			if (isDragonKingDebugEnabled()) {
+				addParam(createParamCentered<LEDButton>(mm2px(debugAddMovesPos), module, Crownstep::DEBUG_ADD_MOVES_PARAM));
+			}
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));

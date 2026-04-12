@@ -68,6 +68,7 @@ struct Crownstep : Module {
 		SCALE_PARAM,
 		RUN_PARAM,
 		NEW_GAME_PARAM,
+		DEBUG_ADD_MOVES_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -143,6 +144,7 @@ struct Crownstep : Module {
 	dsp::SchmittTrigger clockTrigger;
 	dsp::SchmittTrigger resetTrigger;
 	dsp::SchmittTrigger newGameTrigger;
+	dsp::SchmittTrigger debugAddMovesTrigger;
 	bool eocGateHigh = false;
 	std::atomic<int> eocActivityPulseRequests {0};
 	int eocActivityPulseQueued = 0;
@@ -254,6 +256,7 @@ struct Crownstep : Module {
 	float pitchPreviewForBoardIndex(int boardIndex);
 	float pitchForMove(const Move& move);
 	Step makeStepFromMove(const Move& move);
+	void appendDebugRandomMoves(int count = 10);
 
 	void startNewGame();
 	void setHoveredSquare(int index);

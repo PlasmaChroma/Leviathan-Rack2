@@ -86,6 +86,9 @@ void Crownstep::process(const ProcessArgs& args) {
 	if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
 		startNewGame();
 	}
+	if (debugAddMovesTrigger.process(params[DEBUG_ADD_MOVES_PARAM].getValue())) {
+		appendDebugRandomMoves(10);
+	}
 
 	if (resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
 		playhead = 0;

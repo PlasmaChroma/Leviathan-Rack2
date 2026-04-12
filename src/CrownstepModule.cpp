@@ -181,6 +181,7 @@ Crownstep::Crownstep() {
 	configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 	configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
+	configParam(DEBUG_ADD_MOVES_PARAM, 0.f, 1.f, 0.f, "Add 10 random moves");
 
 	paramQuantities[SEQ_LENGTH_PARAM]->snapEnabled = true;
 	paramQuantities[ROOT_PARAM]->snapEnabled = true;
@@ -637,16 +638,10 @@ float Crownstep::pitchForMove(const Move& move) {
 	auto chessBoardValueForIndex = [&](int boardIndex, int layoutMode) {
 		int clamped = clamp(boardIndex, 0, crownstep::CHESS_BOARD_SIZE - 1);
 		int mode = clamp(layoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
+		int row = clamped / 8;
+		int col = clamped % 8;
 		switch (mode) {
-			case 1: {
-				int row = clamped / 8;
-				int col = clamped % 8;
-				int serpentineCol = (row & 1) ? (7 - col) : col;
-				return row * 8 + serpentineCol;
-			}
-			case 2: {
-				int row = clamped / 8;
-				int col = clamped % 8;
+			case 0: {
 				float dx = float(col) - 3.5f;
 				float dy = float(row) - 3.5f;
 				float metric = dx * dx + dy * dy + float(row) * 0.01f + float(col) * 0.001f;
@@ -663,7 +658,17 @@ float Crownstep::pitchForMove(const Move& move) {
 				}
 				return rank;
 			}
-			case 0:
+			case 2: {
+				int serpentineCol = (row & 1) ? (7 - col) : col;
+				return row * 8 + serpentineCol;
+			}
+			case 3: {
+				int serpentineRow = (col & 1) ? (7 - row) : row;
+				return col * 8 + serpentineRow;
+			}
+			case 4:
+				return crownstep::serpentineDiagonalRank(row, col, 8, 8);
+			case 1:
 			default:
 				return clamped;
 		}
@@ -726,6 +731,28 @@ Step Crownstep::makeStepFromMove(const Move& move) {
 		step.accent = 0.5f * float(std::max(0, flipped - 1));
 	}
 	return step;
+}
+
+void Crownstep::appendDebugRandomMoves(int count) {
+	int cellCount = boardCellCount();
+	if (cellCount <= 0 || count <= 0) {
+		return;
+	}
+
+	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+	for (int i = 0; i < count; ++i) {
+		Move move;
+		move.originIndex = int(random::u32() % uint32_t(cellCount));
+		move.destinationIndex = int(random::u32() % uint32_t(cellCount));
+		if (cellCount > 1 && move.destinationIndex == move.originIndex) {
+			move.destinationIndex = (move.destinationIndex + 1 + int(random::u32() % uint32_t(cellCount - 1))) % cellCount;
+		}
+		move.isCapture = ((random::u32() & 3u) == 0u);
+		move.isMultiCapture = false;
+		move.isKing = ((random::u32() & 7u) == 0u);
+		moveHistory.push_back(move);
+		history.push_back(makeStepFromMove(move));
+	}
 }
 
 void Crownstep::startNewGame() {
