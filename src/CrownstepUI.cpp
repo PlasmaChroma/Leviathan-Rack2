@@ -2045,7 +2045,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout;
 		const float h = box.size.y;
 		const float w = box.size.x;
-		const float pad = 2.f;
+		const float pad = 0.f;
 		layout.compact = (h <= 23.f) || ((w / std::max(1.f, h)) >= 5.f && h <= 28.f);
 		// Reserve extra headroom in non-compact mode so the crown cap above
 		// the history playhead stays fully inside the widget bounds.
@@ -2525,12 +2525,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		nvgFillColor(args.vg, nvgRGBA(9, 11, 14, 194));
 		nvgFill(args.vg);
 
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.5f);
-		nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 102));
-		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStroke(args.vg);
-
 				RibbonLayout layout = computeLayout();
 				const bool compactLayout = layout.compact;
 				float stripX = x + layout.stripX;
@@ -2566,8 +2560,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						historyY,
 						activeX + activeW,
 						historyY,
-						nvgRGBA(122, 92, 255, alphaA), // #7a5cff
-						nvgRGBA(28, 204, 217, alphaB)  // #1cccd9
+						nvgRGBA(85, 64, 178, alphaA),  // darkened #7a5cff
+						nvgRGBA(20, 143, 152, alphaB)  // darkened #1cccd9
 					);
 				};
 				if (s.fullMode) {
@@ -2576,6 +2570,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					NVGpaint fullPaint = makeBrandActivePaint(214, 206);
 					nvgFillPaint(args.vg, fullPaint);
 					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
+					nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 176));
+					nvgStrokeWidth(args.vg, 0.85f);
+					nvgStroke(args.vg);
 				}
 			else {
 				// Dim non-active history more aggressively so RECENT window reads clearly.
@@ -2787,6 +2786,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
 				float localNorm = (s.activeLength <= 1) ? 0.f : (float(s.playbackIndex) / float(s.activeLength - 1));
 				float mx = activeX + activeW * clamp(localNorm, 0.f, 1.f);
+				float markerCy = historyY - 0.1f;
 				nvgBeginPath(args.vg);
 				nvgMoveTo(args.vg, mx, historyY - 0.4f);
 				nvgLineTo(args.vg, mx, historyY + historyH + 0.4f);
@@ -2794,33 +2794,47 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgStrokeWidth(args.vg, 1.15f);
 			nvgStroke(args.vg);
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, mx, historyY - 0.1f, 1.6f);
-			nvgFillColor(args.vg, nvgRGBA(255, 220, 140, 248));
+			nvgCircle(args.vg, mx, markerCy, compactLayout ? 1.7f : 1.9f);
+			NVGpaint markerPaint = nvgLinearGradient(
+				args.vg,
+				mx,
+				markerCy - 1.8f,
+				mx,
+				markerCy + 1.8f,
+				nvgRGBA(255, 237, 172, 250),
+				nvgRGBA(240, 182, 78, 248)
+			);
+			nvgFillPaint(args.vg, markerPaint);
 			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, mx, markerCy, compactLayout ? 1.7f : 1.9f);
+			nvgStrokeColor(args.vg, nvgRGBA(146, 104, 42, 216));
+			nvgStrokeWidth(args.vg, 0.55f);
+			nvgStroke(args.vg);
 
 			if (!compactLayout) {
-				// Crown-shaped cap on the playhead marker.
-				float crownW = 5.4f;
-				float crownH = 2.6f;
-				float crownTop = historyY - crownH - 2.4f;
-				float bandY = crownTop + crownH * 0.64f;
+				// Integrated crown rising out of the round playhead badge.
+				float crownW = 5.8f;
+				float crownH = 4.0f;
+				float crownBaseY = markerCy - 0.35f;
+				float crownTop = crownBaseY - crownH;
 				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, mx - crownW * 0.50f, bandY);
-				nvgLineTo(args.vg, mx - crownW * 0.33f, crownTop + crownH * 0.30f);
-				nvgLineTo(args.vg, mx - crownW * 0.12f, bandY - crownH * 0.34f);
+				nvgMoveTo(args.vg, mx - crownW * 0.42f, crownBaseY);
+				nvgLineTo(args.vg, mx - crownW * 0.34f, crownTop + crownH * 0.34f);
+				nvgLineTo(args.vg, mx - crownW * 0.16f, crownBaseY - crownH * 0.30f);
 				nvgLineTo(args.vg, mx, crownTop);
-				nvgLineTo(args.vg, mx + crownW * 0.12f, bandY - crownH * 0.34f);
-				nvgLineTo(args.vg, mx + crownW * 0.33f, crownTop + crownH * 0.30f);
-				nvgLineTo(args.vg, mx + crownW * 0.50f, bandY);
-				nvgLineTo(args.vg, mx + crownW * 0.50f, bandY + crownH * 0.30f);
-				nvgLineTo(args.vg, mx - crownW * 0.50f, bandY + crownH * 0.30f);
+				nvgLineTo(args.vg, mx + crownW * 0.16f, crownBaseY - crownH * 0.30f);
+				nvgLineTo(args.vg, mx + crownW * 0.34f, crownTop + crownH * 0.34f);
+				nvgLineTo(args.vg, mx + crownW * 0.42f, crownBaseY);
+				nvgLineTo(args.vg, mx + crownW * 0.28f, crownBaseY + crownH * 0.14f);
+				nvgLineTo(args.vg, mx - crownW * 0.28f, crownBaseY + crownH * 0.14f);
 				nvgClosePath(args.vg);
 				NVGpaint crownPaint = nvgLinearGradient(
 					args.vg,
 					mx,
 					crownTop,
 					mx,
-					bandY + crownH * 0.30f,
+					crownBaseY + crownH * 0.16f,
 					nvgRGBA(255, 236, 164, 248),
 					nvgRGBA(238, 186, 74, 246)
 				);
@@ -3129,7 +3143,7 @@ struct CrownstepWidget final : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
+		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
 	}
 
