@@ -111,9 +111,9 @@ This should replace the current per-bin raw-audio resampling path for live mode.
 - [x] Keep sample-mode path unchanged initially.
 
 ### Phase 2: Replace live query-time reconstruction
-- [ ] Route `LIVE` scope preview publish away from `evaluateScopeBinAtIndex()` raw-tap scanning.
-- [ ] Remove or sharply reduce the live-only second lattice phase.
-- [ ] Preserve visual stability near `NOW`.
+- [x] Route `LIVE` scope preview publish away from `evaluateScopeBinAtIndex()` raw-tap scanning.
+- [x] Remove or sharply reduce the live-only second lattice phase.
+- [x] Preserve visual stability near `NOW`.
 
 ### Phase 3: Optional multiresolution levels
 - [ ] Add 1-2 coarser aggregation levels above Level 0.
@@ -172,9 +172,9 @@ That is enough to validate the model before introducing a full pyramid.
   - right min/max
   - mid min/max
   - absolute block key
-- Live scope query now prefers these persistent summaries first.
-- Raw-tap reconstruction remains available as a fallback path if the summary query cannot satisfy a bin.
-- Live shifted-bin cache reuse is temporarily disabled while the new absolute-timeline summary path settles.
+- Live scope query now reads these persistent summaries directly.
+- Live-mode raw-tap preview reconstruction has been removed from the active query path.
+- Live shifted-bin cache reuse remains disabled because the summary path no longer depends on wrapped raw-buffer shift assumptions.
 
 ## Progress Log
 
@@ -185,12 +185,18 @@ That is enough to validate the model before introducing a full pyramid.
   - added a Level 0 live envelope ring in `TemporalDeckEngine`
   - update path runs incrementally on live writes
   - introduced absolute live sample position tracking for scope queries
-  - live scope bins now query Level 0 summaries before falling back to legacy raw reconstruction
-  - temporarily disabled live shifted-bin cache reuse to avoid mixing wrapped and absolute timeline assumptions during the transition
+  - live scope bins now query Level 0 summaries directly
+  - disabled live shifted-bin cache reuse because the summary path uses an absolute live timeline rather than wrapped raw-buffer shifts
 - 2026-04-11: Verified compile for `TemporalDeck.cpp` and `TDScope.cpp`.
+- 2026-04-12: Completed Phase 2 cleanup:
+  - removed live-mode raw-tap preview fallback from `evaluateScopeBinAtIndex()`
+  - removed the live-only second lattice phase
+  - confirmed user-observed live-mode result around `HQ 80us s6`
+  - confirmed visual quality remained good and subjectively improved
 
 ## Change Log
 
 - Added `tdscope-live-redesign.md` as the working design/progress doc for the `TD.Scope` live-mode efficiency redesign.
 - Added Level 0 live envelope summaries to `src/TemporalDeckEngine.hpp`.
 - Switched live scope query in `src/TemporalDeck.cpp` to prefer persistent Level 0 summaries.
+- Removed live-mode raw preview reconstruction and the extra live-only second-phase scope sampling pass from `src/TemporalDeck.cpp`.

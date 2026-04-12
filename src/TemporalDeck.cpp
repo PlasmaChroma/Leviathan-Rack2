@@ -270,11 +270,13 @@ static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const Scop
   float minMono = 0.f;
   float maxMono = 0.f;
   if (!params.sampleMode) {
-    if (engine.readLiveScopeEnvelopeRange(params.newestLiveAbsolutePos, overlapLow, overlapHigh, channelMode, &minMono, &maxMono)) {
-      outBin->min = temporaldeck_expander::quantizePreviewSample(minMono);
-      outBin->max = temporaldeck_expander::quantizePreviewSample(maxMono);
-      return true;
+    if (!engine.readLiveScopeEnvelopeRange(params.newestLiveAbsolutePos, overlapLow, overlapHigh, channelMode, &minMono, &maxMono)) {
+      *outBin = temporaldeck_expander::makeEmptyScopeBin();
+      return false;
     }
+    outBin->min = temporaldeck_expander::quantizePreviewSample(minMono);
+    outBin->max = temporaldeck_expander::quantizePreviewSample(maxMono);
+    return true;
   }
   int lastAccumulatedLag = std::numeric_limits<int>::min();
   auto accumulateLag = [&](int lag) {
@@ -310,15 +312,6 @@ static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const Scop
   int alignedLag = ((firstLag + params.scopeStride - 1) / params.scopeStride) * params.scopeStride;
   for (int lag = alignedLag; lag <= lastLag; lag += params.scopeStride) {
     accumulateLag(lag);
-  }
-  // Add a second phase pass when decimating to reduce peak shimmer from
-  // lattice phase changes as the window advances ("dancing peaks").
-  if (!params.sampleMode && params.scopeStride > 1) {
-    int phaseOffset = std::max(1, params.scopeStride / 2);
-    int alignedLagPhase2 = alignedLag + phaseOffset;
-    for (int lag = alignedLagPhase2; lag <= lastLag; lag += params.scopeStride) {
-      accumulateLag(lag);
-    }
   }
   accumulateLag(lastLag);
 
