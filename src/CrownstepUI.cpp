@@ -2124,10 +2124,17 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (historySize <= 0) {
 			return 0;
 		}
-		// Reserve visible end-zones for FULL and LIVE GAME so both extremes are
-		// practical to hit without requiring pixel-perfect hover.
-		float fullZonePx = clamp(layout.stripW * 0.035f, 5.f, 14.f);
-		float liveZonePx = clamp(layout.stripW * 0.030f, 4.f, 11.f);
+		// For short histories, let FULL and LIVE GAME use their natural state
+		// widths. Once those become too narrow to hit comfortably, enforce a
+		// minimum edge zone.
+		float naturalStateW = layout.stripW / float(std::max(1, historySize));
+		float minFullZonePx = clamp(layout.stripW * 0.035f, 5.f, 14.f);
+		float minLiveZonePx = clamp(layout.stripW * 0.030f, 4.f, 11.f);
+		float fullZonePx = std::min(layout.stripW, std::max(naturalStateW, minFullZonePx));
+		float liveZonePx = 0.f;
+		if (historySize > 1) {
+			liveZonePx = std::min(std::max(0.f, layout.stripW - fullZonePx), std::max(naturalStateW, minLiveZonePx));
+		}
 		if (localX <= layout.stripX + fullZonePx) {
 			return 0; // Full
 		}
@@ -2136,12 +2143,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		float usableW = std::max(1.f, layout.stripW - fullZonePx - liveZonePx);
 		float norm = clamp((localX - (layout.stripX + fullZonePx)) / usableW, 0.f, 1.f);
-		// After the FULL zone, map linearly from (historySize-1) down to 1.
 		const int maxRecent = std::max(1, historySize - 1);
-		const int mappedRecentMax = std::max(2, maxRecent);
-		int target = int(std::lround((1.f - norm) * float(std::max(0, mappedRecentMax - 2)))) + 2;
-		target = clamp(target, 1, maxRecent);
-		return target;
+		const int middleStateCount = std::max(0, maxRecent - 1); // counts 2..maxRecent
+		if (middleStateCount <= 0) {
+			return maxRecent;
+		}
+		int bucket = clamp(int(std::floor((1.f - norm) * float(middleStateCount))), 0, middleStateCount - 1);
+		return clamp(2 + bucket, 2, maxRecent);
 	}
 
 	void formatWindowPreviewText(int clipCount, int historySize, char* outText, size_t outSize) const {
@@ -2827,44 +2835,48 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			// Centered status text inside the top (history) strip.
 			char ribbonText[40];
 			std::snprintf(ribbonText, sizeof(ribbonText), "%d/%d", currentStep, totalSteps);
-			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFontSize(args.vg, compactLayout ? 6.0f : 7.1f);
-			float textX = stripX + stripW * 0.5f;
+			char fullText[24];
+			std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
+			float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
 			float textY = historyY + historyH * 0.5f;
-			float outlineDx = compactLayout ? 0.22f : 0.28f;
-			float outlineDy = compactLayout ? 0.20f : 0.26f;
-			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 190));
-			nvgText(args.vg, textX - outlineDx, textY, ribbonText, nullptr);
-			nvgText(args.vg, textX + outlineDx, textY, ribbonText, nullptr);
-			nvgText(args.vg, textX, textY - outlineDy, ribbonText, nullptr);
-			nvgText(args.vg, textX, textY + outlineDy, ribbonText, nullptr);
-			nvgText(args.vg, textX - outlineDx, textY - outlineDy, ribbonText, nullptr);
-			nvgText(args.vg, textX + outlineDx, textY - outlineDy, ribbonText, nullptr);
-			nvgText(args.vg, textX - outlineDx, textY + outlineDy, ribbonText, nullptr);
-			nvgText(args.vg, textX + outlineDx, textY + outlineDy, ribbonText, nullptr);
-			nvgFillColor(args.vg, nvgRGBA(255, 244, 220, 246));
+			float fullMaxW = std::max(10.f, stripW * (compactLayout ? 0.18f : 0.16f));
+			float textBounds[4];
+			float sharedFontSize = compactLayout ? 7.2f : 8.4f;
+			float fullMeasuredW = 0.f;
+			float reservedLeftW = 0.f;
+			for (int i = 0; i < 9; ++i) {
+				nvgFontSize(args.vg, sharedFontSize);
+				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+				nvgTextBounds(args.vg, 0.f, 0.f, fullText, nullptr, textBounds);
+				fullMeasuredW = textBounds[2] - textBounds[0];
+				reservedLeftW = std::max(fullMaxW, fullMeasuredW) + (compactLayout ? 4.1f : 5.0f);
+				float centerMaxW = std::max(14.f, stripW - reservedLeftW - (compactLayout ? 4.5f : 5.5f));
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+				nvgTextBounds(args.vg, 0.f, 0.f, ribbonText, nullptr, textBounds);
+				float ribbonW = textBounds[2] - textBounds[0];
+				if ((fullMeasuredW <= fullMaxW && ribbonW <= centerMaxW && sharedFontSize <= historyH * 0.95f + 0.1f) || sharedFontSize <= 5.6f) {
+					break;
+				}
+				sharedFontSize -= 0.3f;
+			}
+
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			float textX = stripX + stripW * 0.5f;
+			nvgFontSize(args.vg, sharedFontSize);
+			float shadowDx = compactLayout ? 0.42f : 0.50f;
+			float shadowDy = compactLayout ? 0.48f : 0.56f;
+			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 156));
+			nvgText(args.vg, textX + shadowDx, textY + shadowDy, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 242));
 			nvgText(args.vg, textX, textY, ribbonText, nullptr);
 
 			if (s.historySize > 0) {
-				char fullText[24];
-				std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
-				float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
-				float fullY = textY;
 				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-				nvgFontSize(args.vg, compactLayout ? 5.6f : 6.3f);
-				float fullOutlineDx = compactLayout ? 0.18f : 0.22f;
-				float fullOutlineDy = compactLayout ? 0.16f : 0.20f;
-				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 176));
-				nvgText(args.vg, fullX - fullOutlineDx, fullY, fullText, nullptr);
-				nvgText(args.vg, fullX + fullOutlineDx, fullY, fullText, nullptr);
-				nvgText(args.vg, fullX, fullY - fullOutlineDy, fullText, nullptr);
-				nvgText(args.vg, fullX, fullY + fullOutlineDy, fullText, nullptr);
-				nvgText(args.vg, fullX - fullOutlineDx, fullY - fullOutlineDy, fullText, nullptr);
-				nvgText(args.vg, fullX + fullOutlineDx, fullY - fullOutlineDy, fullText, nullptr);
-				nvgText(args.vg, fullX - fullOutlineDx, fullY + fullOutlineDy, fullText, nullptr);
-				nvgText(args.vg, fullX + fullOutlineDx, fullY + fullOutlineDy, fullText, nullptr);
-				nvgFillColor(args.vg, nvgRGBA(255, 242, 214, 226));
-				nvgText(args.vg, fullX, fullY, fullText, nullptr);
+				nvgFontSize(args.vg, sharedFontSize);
+				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 156));
+				nvgText(args.vg, fullX + shadowDx, textY + shadowDy, fullText, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 236));
+				nvgText(args.vg, fullX, textY, fullText, nullptr);
 			}
 
 				// Hover preview tooltip: prospective clip length when clicking the blue history strip.
