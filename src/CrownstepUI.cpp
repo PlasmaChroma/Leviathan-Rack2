@@ -2826,13 +2826,30 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 			// Centered status text inside the top (history) strip.
 			char ribbonText[40];
-			std::snprintf(ribbonText, sizeof(ribbonText), "%d/%d (%d)", currentStep, totalSteps, s.historySize);
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d/%d", currentStep, totalSteps);
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 			nvgFontSize(args.vg, compactLayout ? 6.0f : 7.1f);
-				nvgFillColor(args.vg, nvgRGBA(14, 20, 28, 166));
-				nvgText(args.vg, stripX + stripW * 0.5f + 0.45f, historyY + historyH * 0.5f + 0.45f, ribbonText, nullptr);
-				nvgFillColor(args.vg, nvgRGBA(228, 244, 255, 232));
-				nvgText(args.vg, stripX + stripW * 0.5f, historyY + historyH * 0.5f, ribbonText, nullptr);
+			float textX = stripX + stripW * 0.5f;
+			float textY = historyY + historyH * 0.5f;
+			nvgFillColor(args.vg, nvgRGBA(6, 10, 16, 132));
+			nvgText(args.vg, textX + 0.58f, textY + 0.62f, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(10, 14, 20, 176));
+			nvgText(args.vg, textX + 0.20f, textY + 0.22f, ribbonText, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(238, 248, 255, 242));
+			nvgText(args.vg, textX, textY, ribbonText, nullptr);
+
+			if (s.historySize > 0) {
+				char fullText[24];
+				std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
+				float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
+				float fullY = textY;
+				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+				nvgFontSize(args.vg, compactLayout ? 5.6f : 6.3f);
+				nvgFillColor(args.vg, nvgRGBA(6, 10, 16, 124));
+				nvgText(args.vg, fullX + 0.46f, fullY + 0.50f, fullText, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(224, 238, 248, 210));
+				nvgText(args.vg, fullX, fullY, fullText, nullptr);
+			}
 
 				// Hover preview tooltip: prospective clip length when clicking the blue history strip.
 				Vec tooltipLocal = capDragActive ? capDragLocal : lastHoverPos;

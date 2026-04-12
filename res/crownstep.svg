@@ -263,7 +263,8 @@
    y1="11396.22"
    x2="10164.704"
    y2="11396.22"
-   gradientUnits="userSpaceOnUse" /><linearGradient
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(0.99986712,0,0,1.0521843,0.74088648,-564.61563)" /><linearGradient
    inkscape:collect="always"
    xlink:href="#linearGradient20"
    id="linearGradient35"
@@ -293,15 +294,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="135.46027"
-   inkscape:cy="90.257448"
+   inkscape:zoom="4.771108"
+   inkscape:cx="173.96378"
+   inkscape:cy="400.64069"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g58"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -387,48 +388,48 @@
    inkscape:label="Frame"
    style="display:inline">
         <rect
-   x="1026.5507"
-   y="11984.583"
-   width="4357.3501"
-   height="1262.3041"
-   rx="178.47784"
-   ry="178.47784"
+   x="1026.0244"
+   y="12044.202"
+   width="4358.4023"
+   height="1203.173"
+   rx="178.52095"
+   ry="170.11723"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="44.6194"
+   stroke-width="43.5671"
    id="frame_left"
    style="opacity:0.33;fill:#5740bf;fill-opacity:1"
    inkscape:label="inputs" />
         
         <rect
-   x="5769.8032"
-   y="11978.032"
-   width="4354.7324"
-   height="1259.6925"
-   rx="191.69414"
-   ry="186.13347"
+   x="5769.2461"
+   y="12037.65"
+   width="4355.8472"
+   height="1200.6312"
+   rx="191.74321"
+   ry="177.40651"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="47.2233"
+   stroke-width="46.1089"
    id="outputs"
    style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /><rect
-   x="1010.3315"
-   y="10831.264"
-   width="9130.7607"
-   height="1129.9122"
-   rx="47.209511"
-   ry="47.193146"
+   x="1010.9381"
+   y="10831.871"
+   width="9129.5479"
+   height="1188.876"
+   rx="47.203239"
+   ry="49.655888"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="47.2233"
+   stroke-width="48.4366"
    id="outputs-3"
-   style="display:inline;opacity:0.33;fill:url(#linearGradient34)"
+   style="display:none;opacity:0.33;fill:url(#linearGradient34)"
    inkscape:label="under_widget_blend" />
         
       </g>
@@ -592,7 +593,7 @@
         
       </g><g
    id="components"
-   style="display:inline"><circle
+   style="display:none"><circle
      id="SEQ_LENGTH_PARAM"
      cx="330.28824"
      cy="12531.324"
@@ -653,22 +654,22 @@
      style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" /><ellipse
      id="HUMAN_TURN_LIGHT"
      cx="4570.2002"
-     cy="11117.448"
+     cy="11457.4"
      rx="115"
      ry="121"
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><ellipse
      id="AI_TURN_LIGHT"
      cx="4570.2002"
-     cy="11411.354"
+     cy="11751.306"
      rx="115"
      ry="121"
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.606" /><rect
      id="STEP_COUNTER"
      x="18.4"
-     y="9810.5"
+     y="9780.5"
      width="9107.4004"
-     height="1122.8262"
-     style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:4.90613" /></g><rect
+     height="1212.8"
+     style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:5.09889" /></g><rect
    id="BOARD_AREA"
    x="152"
    y="890"
