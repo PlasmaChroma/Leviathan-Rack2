@@ -431,12 +431,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		t = clamp(t, 0.f, 1.f);
 		return t * t * (3.f - 2.f * t);
 	};
-	// Distance windows in raster pixels. Keep these intentionally broad so
-	// ring mode reads with similar reach to checkers.
-	const float bandInPx = 2.2f;
-	const float bandOutPx = 13.4f;
-	const float shellInPx = 12.4f;
-	const float shellOutPx = 20.8f;
+	// Distance windows in raster pixels. Bias toward a slightly broader bright band
+	// so the contour reads bold without needing a washed-out high alpha.
+	const float bandInPx = 2.0f;
+	const float bandOutPx = 14.8f;
+	const float shellInPx = 13.0f;
+	const float shellOutPx = 22.6f;
 	std::vector<unsigned char> ringBandGreenPixels(pixelCount * size_t(4), 0u);
 	std::vector<unsigned char> ringShellGreenDarkPixels(pixelCount * size_t(4), 0u);
 	for (size_t i = 0; i < pixelCount; ++i) {
@@ -450,14 +450,14 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
 		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
 		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
-		ringBandGreenPixels[i * 4 + 0] = 98u;
-		ringBandGreenPixels[i * 4 + 1] = 235u;
-		ringBandGreenPixels[i * 4 + 2] = 154u;
-		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(255.f * bandA, 0.f, 255.f);
-		ringShellGreenDarkPixels[i * 4 + 0] = 40u;
-		ringShellGreenDarkPixels[i * 4 + 1] = 168u;
-		ringShellGreenDarkPixels[i * 4 + 2] = 104u;
-		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(208.f * shellA, 0.f, 255.f);
+		ringBandGreenPixels[i * 4 + 0] = 70u;
+		ringBandGreenPixels[i * 4 + 1] = 224u;
+		ringBandGreenPixels[i * 4 + 2] = 132u;
+		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(236.f * bandA, 0.f, 255.f);
+		ringShellGreenDarkPixels[i * 4 + 0] = 28u;
+		ringShellGreenDarkPixels[i * 4 + 1] = 148u;
+		ringShellGreenDarkPixels[i * 4 + 2] = 86u;
+		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(176.f * shellA, 0.f, 255.f);
 	}
 	int ringBandGreenImageHandle = nvgCreateImageRGBA(
 		vg,
@@ -685,7 +685,6 @@ bool drawChessAtlasPieceRingContour(
 	int piece,
 	float pulse
 ) {
-	(void)pulse;
 	if (!vg || piece == 0) {
 		return false;
 	}
@@ -703,13 +702,19 @@ bool drawChessAtlasPieceRingContour(
 		return false;
 	}
 
-	// Draw precomputed distance-field contour masks without scaling distortion:
-	// only expand the destination rect while keeping atlas mapping scale fixed.
+	// Draw precomputed distance-field contour masks with fixed atlas mapping.
+	// Only the revealed outer margin breathes, which avoids shape-specific edge
+	// artifacts from rescaling the contour texture itself.
 	float atlasScale = spec.atlasDrawWidth / std::max(1.f, cache.svg->handle->width);
 	float pxToScreen = atlasScale / std::max(0.001f, CHESS_ATLAS_RASTER_SCALE);
 	// Must cover the largest precomputed raster-distance shell extents.
 	float shellMargin = 21.0f * pxToScreen;
 	float bandMargin = 13.8f * pxToScreen;
+	float pulse01 = clamp(pulse, 0.f, 1.f);
+	float shellPulseMargin = shellMargin + pxToScreen * (1.0f + 4.6f * pulse01);
+	float bandPulseMargin = bandMargin + pxToScreen * (0.6f + 3.3f * pulse01);
+	float shellAlpha = 0.16f + 0.24f * pulse01;
+	float bandAlpha = 0.58f + 0.20f * pulse01;
 
 	auto drawRingMaskLayer = [&](int imageHandle, float margin, float alpha) {
 		float x = spec.x - margin;
@@ -734,8 +739,8 @@ bool drawChessAtlasPieceRingContour(
 	};
 
 	nvgSave(vg);
-	drawRingMaskLayer(cache.rasterRingShellGreenDarkImageHandle, shellMargin, 1.f);
-	drawRingMaskLayer(cache.rasterRingBandGreenImageHandle, bandMargin, 1.f);
+	drawRingMaskLayer(cache.rasterRingShellGreenDarkImageHandle, shellPulseMargin, shellAlpha);
+	drawRingMaskLayer(cache.rasterRingBandGreenImageHandle, bandPulseMargin, bandAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -1990,6 +1995,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 	enum class VisualMode {
 		DISCRETE,
+		DOUBLE_ROW,
+		TRIPLE_ROW,
 		COMPRESSED
 	};
 
@@ -2025,6 +2032,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (activeLength <= 64) {
 			return VisualMode::DISCRETE;
 		}
+		if (activeLength <= 128) {
+			return VisualMode::DOUBLE_ROW;
+		}
+		if (activeLength <= 192) {
+			return VisualMode::TRIPLE_ROW;
+		}
 		return VisualMode::COMPRESSED;
 	}
 
@@ -2057,6 +2070,49 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			&& localPos.y <= (layout.historyY + layout.historyH);
 	}
 
+	bool pointInLoopStrip(Vec localPos, const RibbonLayout& layout) const {
+		return localPos.x >= layout.stripX
+			&& localPos.x <= (layout.stripX + layout.stripW)
+			&& localPos.y >= layout.loopY
+			&& localPos.y <= (layout.loopY + layout.loopH);
+	}
+
+	float loopButtonWidth(const RibbonLayout& layout) const {
+		return clamp(layout.loopH * 1.7f, layout.compact ? 7.f : 8.f, layout.compact ? 10.f : 13.f);
+	}
+
+	float loopButtonGap(const RibbonLayout& layout) const {
+		return layout.compact ? 1.0f : 1.4f;
+	}
+
+	bool pointInLoopMinusButton(Vec localPos, const RibbonLayout& layout) const {
+		if (!pointInLoopStrip(localPos, layout)) {
+			return false;
+		}
+		float buttonW = loopButtonWidth(layout);
+		return localPos.x <= (layout.stripX + buttonW);
+	}
+
+	bool pointInLoopPlusButton(Vec localPos, const RibbonLayout& layout) const {
+		if (!pointInLoopStrip(localPos, layout)) {
+			return false;
+		}
+		float buttonW = loopButtonWidth(layout);
+		return localPos.x >= (layout.stripX + layout.stripW - buttonW);
+	}
+
+	float loopDataX(const RibbonLayout& layout) const {
+		float buttonW = loopButtonWidth(layout);
+		float gap = loopButtonGap(layout);
+		return layout.stripX + buttonW + gap;
+	}
+
+	float loopDataW(const RibbonLayout& layout) const {
+		float buttonW = loopButtonWidth(layout);
+		float gap = loopButtonGap(layout);
+		return std::max(6.f, layout.stripW - 2.f * (buttonW + gap));
+	}
+
 	Vec currentLocalMousePos() const {
 		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
 			return lastHoverPos;
@@ -2068,15 +2124,54 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (historySize <= 0) {
 			return 0;
 		}
-		float norm = clamp((localX - layout.stripX) / std::max(1.f, layout.stripW), 0.f, 1.f);
-		// Left edge = FULL. Across the rest of the bar map linearly (historySize-1)..1.
-		if (norm <= 1e-4f) {
+		// Reserve visible end-zones for FULL and LIVE GAME so both extremes are
+		// practical to hit without requiring pixel-perfect hover.
+		float fullZonePx = clamp(layout.stripW * 0.035f, 5.f, 14.f);
+		float liveZonePx = clamp(layout.stripW * 0.030f, 4.f, 11.f);
+		if (localX <= layout.stripX + fullZonePx) {
 			return 0; // Full
 		}
+		if (historySize > 1 && localX >= (layout.stripX + layout.stripW - liveZonePx)) {
+			return 1; // Live Game
+		}
+		float usableW = std::max(1.f, layout.stripW - fullZonePx - liveZonePx);
+		float norm = clamp((localX - (layout.stripX + fullZonePx)) / usableW, 0.f, 1.f);
+		// After the FULL zone, map linearly from (historySize-1) down to 1.
 		const int maxRecent = std::max(1, historySize - 1);
-		int target = int(std::lround((1.f - norm) * float(std::max(0, maxRecent - 1)))) + 1;
+		const int mappedRecentMax = std::max(2, maxRecent);
+		int target = int(std::lround((1.f - norm) * float(std::max(0, mappedRecentMax - 2)))) + 2;
 		target = clamp(target, 1, maxRecent);
 		return target;
+	}
+
+	void formatWindowPreviewText(int clipCount, int historySize, char* outText, size_t outSize) const {
+		if (!outText || outSize == 0) {
+			return;
+		}
+		if (clipCount <= 0 || clipCount >= historySize) {
+			std::snprintf(outText, outSize, "Window: Full");
+			return;
+		}
+		if (clipCount <= 1) {
+			std::snprintf(outText, outSize, "Window: Live Game");
+			return;
+		}
+		std::snprintf(outText, outSize, "Window: %d", clipCount);
+	}
+
+	int nudgedClipCountPreview(int dir, int historySize) const {
+		if (!module || historySize <= 0 || dir == 0) {
+			return capValueFromModule();
+		}
+		int cap = capValueFromModule();
+		if (cap <= 0) {
+			return (dir < 0) ? std::max(1, historySize - 1) : 0;
+		}
+		int next = cap + dir;
+		if (next >= historySize) {
+			return 0;
+		}
+		return clamp(next, 1, std::max(1, historySize - 1));
 	}
 
 	void applyClipCount(int clipCount) {
@@ -2299,14 +2394,24 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		capDragLocal = e.pos;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
-			if (pointInHistoryStrip(e.pos, layout)) {
-				applyClipCountForLocalX(e.pos.x, s.historySize, layout);
-				e.consume(this);
-				return;
-			}
-			Widget::onButton(e);
+		if (pointInHistoryStrip(e.pos, layout)) {
+			applyClipCountForLocalX(e.pos.x, s.historySize, layout);
+			e.consume(this);
 			return;
 		}
+		if (pointInLoopMinusButton(e.pos, layout)) {
+			nudgeClipCount(-1, s.historySize);
+			e.consume(this);
+			return;
+		}
+		if (pointInLoopPlusButton(e.pos, layout)) {
+			nudgeClipCount(1, s.historySize);
+			e.consume(this);
+			return;
+		}
+		Widget::onButton(e);
+		return;
+	}
 
 	void onDragStart(const event::DragStart& e) override {
 		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
@@ -2323,8 +2428,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
 		}
 		else {
-			int presetIndex = presetIndexForLocalX(capDragLocal.x);
-			applyPresetIndex(presetIndex);
+			capDragActive = false;
+			e.consume(this);
+			return;
 		}
 		e.consume(this);
 	}
@@ -2343,10 +2449,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (capDragTrimMode) {
 			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
 		}
-		else {
-			int presetIndex = presetIndexForLocalX(capDragLocal.x);
-			applyPresetIndex(presetIndex);
-		}
 		e.consume(this);
 	}
 
@@ -2363,6 +2465,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	void onDoubleClick(const event::DoubleClick& e) override {
 		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
 			Widget::onDoubleClick(e);
+			return;
+		}
+		RibbonLayout layout = computeLayout();
+		Vec localPos = currentLocalMousePos();
+		if (!pointInHistoryStrip(localPos, layout)) {
+			e.consume(this);
 			return;
 		}
 		toggleFullVsRecent();
@@ -2423,6 +2531,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				float historyH = layout.historyH;
 				float loopY = y + layout.loopY;
 				float loopH = layout.loopH;
+				float loopButtonW = loopButtonWidth(layout);
+				float loopCenterX = loopDataX(layout);
+				float loopCenterW = loopDataW(layout);
+				bool hoverMinus = pointInLoopMinusButton(lastHoverPos, layout);
+				bool hoverPlus = pointInLoopPlusButton(lastHoverPos, layout);
 
 		// Full-history base strip.
 		nvgBeginPath(args.vg);
@@ -2491,14 +2604,38 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		nvgFillColor(args.vg, nvgRGBA(18, 24, 30, 188));
 		nvgFill(args.vg);
 
+		auto drawLoopButton = [&](float bx, const char* label, bool hovered) {
+			float by = loopY + 0.25f;
+			float bh = std::max(1.f, loopH - 0.5f);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, bx, by, loopButtonW, bh, 1.1f);
+			nvgFillColor(args.vg, hovered ? nvgRGBA(34, 46, 58, 224) : nvgRGBA(25, 34, 44, 210));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, bx, by, loopButtonW, bh, 1.1f);
+			nvgStrokeColor(args.vg, hovered ? nvgRGBA(176, 224, 255, 196) : nvgRGBA(108, 140, 168, 142));
+			nvgStrokeWidth(args.vg, 0.8f);
+			nvgStroke(args.vg);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			float glyphSize = compactLayout ? 7.0f : 8.3f;
+			if (label && label[0] == '-' && label[1] == '\0') {
+				glyphSize += compactLayout ? 1.0f : 1.35f;
+			}
+			nvgFontSize(args.vg, glyphSize);
+			nvgFillColor(args.vg, hovered ? nvgRGBA(238, 248, 255, 244) : nvgRGBA(198, 216, 232, 222));
+			nvgText(args.vg, bx + loopButtonW * 0.5f, loopY + loopH * 0.53f, label, nullptr);
+		};
+		drawLoopButton(stripX, "-", hoverMinus);
+		drawLoopButton(stripX + stripW - loopButtonW, "+", hoverPlus);
+
 			if (s.activeLength > 0) {
 				VisualMode mode = chooseMode(s.activeLength);
 				if (mode == VisualMode::DISCRETE) {
 					float gap = 1.2f;
-					float cellW = (stripW - gap * float(s.activeLength - 1)) / float(s.activeLength);
+					float cellW = (loopCenterW - gap * float(s.activeLength - 1)) / float(s.activeLength);
 					cellW = std::max(1.f, cellW);
 					for (int i = 0; i < s.activeLength; ++i) {
-						float cx = stripX + float(i) * (cellW + gap);
+						float cx = loopCenterX + float(i) * (cellW + gap);
 						nvgBeginPath(args.vg);
 						nvgRoundedRect(args.vg, cx, loopY + 0.35f, cellW, std::max(0.8f, loopH - 0.7f), 1.f);
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
@@ -2513,13 +2650,73 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
 						nvgStrokeWidth(args.vg, 1.0f);
 						nvgStroke(args.vg);
+						}
 					}
 				}
+				else if (mode == VisualMode::DOUBLE_ROW) {
+					const int colsPerRow = 64;
+					float colGap = compactLayout ? 0.45f : 0.55f;
+					float rowGap = compactLayout ? 0.55f : 0.8f;
+					float cellW = (loopCenterW - colGap * float(colsPerRow - 1)) / float(colsPerRow);
+					cellW = std::max(1.f, cellW);
+					float cellH = (loopH - rowGap - 0.7f) * 0.5f;
+					cellH = std::max(0.7f, cellH);
+					for (int i = 0; i < s.activeLength; ++i) {
+						int row = i / colsPerRow;
+						int col = i % colsPerRow;
+						float cx = loopCenterX + float(col) * (cellW + colGap);
+						float cy = loopY + 0.35f + float(row) * (cellH + rowGap);
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, cx, cy, cellW, cellH, 0.7f);
+						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
+						nvgFill(args.vg);
+						if (i == s.playbackIndex) {
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
+							nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
+							nvgFill(args.vg);
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
+							nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
+							nvgStrokeWidth(args.vg, 0.95f);
+							nvgStroke(args.vg);
+						}
+					}
+				}
+				else if (mode == VisualMode::TRIPLE_ROW) {
+					const int colsPerRow = 64;
+					float colGap = compactLayout ? 0.45f : 0.55f;
+					float rowGap = compactLayout ? 0.40f : 0.55f;
+					float cellW = (loopCenterW - colGap * float(colsPerRow - 1)) / float(colsPerRow);
+					cellW = std::max(1.f, cellW);
+					float cellH = (loopH - 0.7f - rowGap * 2.f) / 3.f;
+					cellH = std::max(0.48f, cellH);
+					for (int i = 0; i < s.activeLength; ++i) {
+						int row = i / colsPerRow;
+						int col = i % colsPerRow;
+						float cx = loopCenterX + float(col) * (cellW + colGap);
+						float cy = loopY + 0.35f + float(row) * (cellH + rowGap);
+						nvgBeginPath(args.vg);
+						nvgRoundedRect(args.vg, cx, cy, cellW, cellH, 0.55f);
+						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
+						nvgFill(args.vg);
+						if (i == s.playbackIndex) {
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
+							nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 122));
+							nvgFill(args.vg);
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
+							nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
+							nvgStrokeWidth(args.vg, 0.8f);
+							nvgStroke(args.vg);
+						}
+					}
 				}
 				else if (mode == VisualMode::COMPRESSED) {
 					int segCount = std::max(1, 64);
 					float gap = 0.55f;
-					float segW = (stripW - gap * float(segCount - 1)) / float(segCount);
+					float segW = (loopCenterW - gap * float(segCount - 1)) / float(segCount);
 					segW = std::max(1.f, segW);
 					for (int seg = 0; seg < segCount; ++seg) {
 						int begin = int(std::floor(float(seg) * float(s.activeLength) / float(segCount)));
@@ -2529,7 +2726,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						if (begin >= end) {
 							continue;
 						}
-						float sx = stripX + float(seg) * (segW + gap);
+						float sx = loopCenterX + float(seg) * (segW + gap);
 						nvgBeginPath(args.vg);
 						nvgRoundedRect(args.vg, sx, loopY + 0.35f, segW, std::max(0.8f, loopH - 0.7f), 0.8f);
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
@@ -2624,9 +2821,40 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					&& (pointInHistoryStrip(tooltipLocal, layout) || (capDragActive && capDragTrimMode));
 				if (previewClip) {
 					int clipCount = clipCountForLocalX(tooltipLocal.x, s.historySize, layout);
-					int shownCount = (clipCount <= 0) ? s.historySize : clipCount;
-					char clipText[32];
-					std::snprintf(clipText, sizeof(clipText), "Clip: %d", shownCount);
+					char clipText[48];
+					formatWindowPreviewText(clipCount, s.historySize, clipText, sizeof(clipText));
+					float fontSize = compactLayout ? 6.2f : 7.0f;
+					float textBounds[4];
+					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+					nvgFontSize(args.vg, fontSize);
+					nvgTextBounds(args.vg, 0.f, 0.f, clipText, nullptr, textBounds);
+					float textW = textBounds[2] - textBounds[0];
+					float textH = textBounds[3] - textBounds[1];
+					float padX = 4.f;
+					float padY = 2.8f;
+					float bubbleW = textW + padX * 2.f;
+					float bubbleH = textH + padY * 2.f;
+					float bx = clamp(tooltipLocal.x + 10.f, 1.f, std::max(1.f, w - bubbleW - 1.f));
+					float by = clamp(tooltipLocal.y - bubbleH - 5.f, 1.f, std::max(1.f, h - bubbleH - 1.f));
+
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, bx, by, bubbleW, bubbleH, 2.6f);
+					nvgFillColor(args.vg, nvgRGBA(14, 18, 24, 228));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, bx, by, bubbleW, bubbleH, 2.6f);
+					nvgStrokeColor(args.vg, nvgRGBA(146, 198, 236, 158));
+					nvgStrokeWidth(args.vg, 0.9f);
+					nvgStroke(args.vg);
+					nvgFillColor(args.vg, nvgRGBA(228, 244, 255, 240));
+					nvgText(args.vg, bx + padX, by + padY, clipText, nullptr);
+				}
+				else if (s.historySize > 0 && (pointInLoopMinusButton(tooltipLocal, layout) || pointInLoopPlusButton(tooltipLocal, layout))) {
+					int previewCount = pointInLoopMinusButton(tooltipLocal, layout)
+						? nudgedClipCountPreview(-1, s.historySize)
+						: nudgedClipCountPreview(1, s.historySize);
+					char clipText[48];
+					formatWindowPreviewText(previewCount, s.historySize, clipText, sizeof(clipText));
 					float fontSize = compactLayout ? 6.2f : 7.0f;
 					float textBounds[4];
 					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
