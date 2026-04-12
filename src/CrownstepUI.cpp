@@ -2893,10 +2893,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				nvgText(args.vg, fullX, textY, fullText, nullptr);
 			}
 
-				// Hover preview tooltip: prospective clip length when clicking the blue history strip.
-				Vec tooltipLocal = capDragActive ? capDragLocal : lastHoverPos;
+				// Hover preview tooltip: only show while the mouse is actively over
+				// the ribbon, or while an active trim drag is in progress.
+				Vec hoverLocal = currentLocalMousePos();
+				bool hoverInRibbon = pointInHistoryStrip(hoverLocal, layout) || pointInLoopStrip(hoverLocal, layout);
+				Vec tooltipLocal = capDragActive ? capDragLocal : hoverLocal;
 				bool previewClip = (s.historySize > 0)
-					&& (pointInHistoryStrip(tooltipLocal, layout) || (capDragActive && capDragTrimMode));
+					&& ((capDragActive && capDragTrimMode) || pointInHistoryStrip(tooltipLocal, layout));
 				if (previewClip) {
 					int clipCount = clipCountForLocalX(tooltipLocal.x, s.historySize, layout);
 					char clipText[48];
@@ -2927,7 +2930,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgFillColor(args.vg, nvgRGBA(228, 244, 255, 240));
 					nvgText(args.vg, bx + padX, by + padY, clipText, nullptr);
 				}
-				else if (s.historySize > 0 && (pointInLoopMinusButton(tooltipLocal, layout) || pointInLoopPlusButton(tooltipLocal, layout))) {
+				else if (s.historySize > 0 && hoverInRibbon
+					&& (pointInLoopMinusButton(tooltipLocal, layout) || pointInLoopPlusButton(tooltipLocal, layout))) {
 					int previewCount = pointInLoopMinusButton(tooltipLocal, layout)
 						? nudgedClipCountPreview(-1, s.historySize)
 						: nudgedClipCountPreview(1, s.historySize);

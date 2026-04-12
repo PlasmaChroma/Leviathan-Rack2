@@ -621,6 +621,20 @@ static std::atomic<int> gExpandedVinylDownloadCurrentIndex {0};
 static std::atomic<int> gExpandedVinylDownloadTotalFiles {0};
 static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
 static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
+static std::mutex gExpandedVinylDownloadThreadMutex;
+static std::thread gExpandedVinylDownloadThread;
+static std::atomic<bool> gExpandedVinylDownloadThreadFinished {false};
+
+struct ScopedExpandedVinylDownloadThreadCleanup {
+  ~ScopedExpandedVinylDownloadThreadCleanup() {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+    if (gExpandedVinylDownloadThread.joinable()) {
+      gExpandedVinylDownloadThread.join();
+    }
+  }
+};
+
+static ScopedExpandedVinylDownloadThreadCleanup gScopedExpandedVinylDownloadThreadCleanup;
 
 static bool isExpandedVinylSyncActive() {
   return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
@@ -638,6 +652,17 @@ static std::string expandedVinylSyncLabel() {
     return string::f("SYNC (%d/%d)", current, total);
   }
   return "SYNC";
+}
+
+static void finalizeExpandedVinylDownloadThreadIfFinished() {
+  if (!gExpandedVinylDownloadThreadFinished.load(std::memory_order_acquire)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+  if (gExpandedVinylDownloadThread.joinable()) {
+    gExpandedVinylDownloadThread.join();
+  }
+  gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
 }
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
@@ -1811,6 +1836,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
 }
 
 static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
+  finalizeExpandedVinylDownloadThreadIfFinished();
   bool expected = false;
   if (!gExpandedVinylDownloadRunning.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
     if (errorOut) {
@@ -1825,23 +1851,32 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
     std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
     gExpandedVinylDownloadResultError.clear();
   }
-  std::thread([]() {
-    std::string error;
-    int fileCount = 0;
-    bool ok = downloadExpandedVinylInventory(&error, &fileCount);
-    {
-      std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-      gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+  {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+    if (gExpandedVinylDownloadThread.joinable()) {
+      gExpandedVinylDownloadThread.join();
     }
-    gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-    gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
-    gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
-    gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
-  }).detach();
+    gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
+    gExpandedVinylDownloadThread = std::thread([]() {
+      std::string error;
+      int fileCount = 0;
+      bool ok = downloadExpandedVinylInventory(&error, &fileCount);
+      {
+        std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
+        gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+      }
+      gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+      gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
+      gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
+      gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
+      gExpandedVinylDownloadThreadFinished.store(true, std::memory_order_release);
+    });
+  }
   return true;
 }
 
 static void pumpExpandedVinylDownloadNotifications() {
+  finalizeExpandedVinylDownloadThreadIfFinished();
   if (!gExpandedVinylDownloadResultPending.exchange(false, std::memory_order_relaxed)) {
     return;
   }
