@@ -2035,10 +2035,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (activeLength <= 128) {
 			return VisualMode::DOUBLE_ROW;
 		}
-		if (activeLength <= 192) {
-			return VisualMode::TRIPLE_ROW;
-		}
-		return VisualMode::COMPRESSED;
+		// Keep exact step rendering beyond 128 and let density increase smoothly.
+		// If we need a non-exact fallback later, it should be chosen from pixel
+		// constraints, not from a hard step-count threshold.
+		return VisualMode::TRIPLE_ROW;
 	}
 
 	RibbonLayout computeLayout() const {
@@ -2627,6 +2627,57 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		};
 		drawLoopButton(stripX, "-", hoverMinus);
 		drawLoopButton(stripX + stripW - loopButtonW, "+", hoverPlus);
+		auto drawActiveLoopMarker = [&](float hx, float hy, float hw, float hh, float radius) {
+			float shadowGrow = compactLayout ? 0.22f : 0.30f;
+			float innerInset = compactLayout ? 0.18f : 0.24f;
+			float hotInsetX = compactLayout ? 0.24f : 0.32f;
+			float hotInsetY = compactLayout ? 0.10f : 0.14f;
+			float hotH = std::max(0.24f, hh * 0.34f);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, hx - shadowGrow, hy - shadowGrow, hw + shadowGrow * 2.f, hh + shadowGrow * 2.f, radius + shadowGrow);
+			nvgFillColor(args.vg, nvgRGBA(10, 14, 20, 206));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, hx, hy, hw, hh, radius);
+			NVGpaint activePaint = nvgLinearGradient(
+				args.vg,
+				hx,
+				hy,
+				hx,
+				hy + hh,
+				nvgRGBA(255, 236, 148, 238),
+				nvgRGBA(236, 160, 48, 230)
+			);
+			nvgFillPaint(args.vg, activePaint);
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(
+				args.vg,
+				hx + hotInsetX,
+				hy + hotInsetY,
+				std::max(0.30f, hw - hotInsetX * 2.f),
+				hotH,
+				std::max(0.16f, radius * 0.62f)
+			);
+			nvgFillColor(args.vg, nvgRGBA(255, 247, 220, 176));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(
+				args.vg,
+				hx + innerInset,
+				hy + innerInset,
+				std::max(0.34f, hw - innerInset * 2.f),
+				std::max(0.34f, hh - innerInset * 2.f),
+				std::max(0.18f, radius * 0.78f)
+			);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 246, 214, 248));
+			nvgStrokeWidth(args.vg, compactLayout ? 0.7f : 0.9f);
+			nvgStroke(args.vg);
+		};
 
 			if (s.activeLength > 0) {
 				VisualMode mode = chooseMode(s.activeLength);
@@ -2641,15 +2692,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
 						nvgFill(args.vg);
 						if (i == s.playbackIndex) {
-							nvgBeginPath(args.vg);
-						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
-						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 118));
-						nvgFill(args.vg);
-						nvgBeginPath(args.vg);
-						nvgRoundedRect(args.vg, cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
-						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-						nvgStrokeWidth(args.vg, 1.0f);
-						nvgStroke(args.vg);
+							drawActiveLoopMarker(cx - 0.2f, loopY + 0.2f, cellW + 0.4f, std::max(1.f, loopH - 0.4f), 1.f);
 						}
 					}
 				}
@@ -2671,15 +2714,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
 						nvgFill(args.vg);
 						if (i == s.playbackIndex) {
-							nvgBeginPath(args.vg);
-							nvgRoundedRect(args.vg, cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
-							nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
-							nvgFill(args.vg);
-							nvgBeginPath(args.vg);
-							nvgRoundedRect(args.vg, cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
-							nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-							nvgStrokeWidth(args.vg, 0.95f);
-							nvgStroke(args.vg);
+							drawActiveLoopMarker(cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
 						}
 					}
 				}
@@ -2701,15 +2736,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
 						nvgFill(args.vg);
 						if (i == s.playbackIndex) {
-							nvgBeginPath(args.vg);
-							nvgRoundedRect(args.vg, cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
-							nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 122));
-							nvgFill(args.vg);
-							nvgBeginPath(args.vg);
-							nvgRoundedRect(args.vg, cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
-							nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-							nvgStrokeWidth(args.vg, 0.8f);
-							nvgStroke(args.vg);
+							drawActiveLoopMarker(cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
 						}
 					}
 				}
@@ -2732,15 +2759,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
 						nvgFill(args.vg);
 						if (s.playbackIndex >= begin && s.playbackIndex < end) {
-							nvgBeginPath(args.vg);
-						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
-						nvgFillColor(args.vg, nvgRGBA(255, 214, 96, 120));
-						nvgFill(args.vg);
-						nvgBeginPath(args.vg);
-						nvgRect(args.vg, sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f));
-						nvgStrokeColor(args.vg, nvgRGBA(255, 232, 170, 244));
-							nvgStrokeWidth(args.vg, 1.0f);
-							nvgStroke(args.vg);
+							drawActiveLoopMarker(sx, loopY + 0.2f, std::max(1.f, segW), std::max(1.f, loopH - 0.4f), 0.6f);
 						}
 					}
 				}
