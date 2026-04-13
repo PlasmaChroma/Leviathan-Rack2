@@ -161,7 +161,7 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	}
 	json_t* stepCounterStyleJ = json_object_get(rootJ, "stepCounterStyle");
 	if (stepCounterStyleJ) {
-		stepCounterStyle = clamp(int(json_integer_value(stepCounterStyleJ)), 0, STEP_COUNTER_STYLE_COUNT - 1);
+		stepCounterStyle = STEP_COUNTER_RIBBON;
 	}
 	json_t* sequenceCapOverrideJ = json_object_get(rootJ, "sequenceCapOverride");
 	if (sequenceCapOverrideJ) {

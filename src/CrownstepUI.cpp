@@ -2348,7 +2348,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onHover(const event::Hover& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+		if (!module) {
 			Widget::onHover(e);
 			return;
 		}
@@ -2357,7 +2357,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onLeave(const event::Leave& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+		if (!module) {
 			Widget::onLeave(e);
 			return;
 		}
@@ -2365,7 +2365,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onHoverScroll(const event::HoverScroll& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+		if (!module) {
 			Widget::onHoverScroll(e);
 			return;
 		}
@@ -2387,7 +2387,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onButton(const event::Button& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+		if (!module) {
 			Widget::onButton(e);
 			return;
 		}
@@ -2419,7 +2419,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onDragStart(const event::DragStart& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 			Widget::onDragStart(e);
 			return;
 		}
@@ -2441,7 +2441,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onDragMove(const event::DragMove& e) override {
-		if (!capDragActive || !module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		if (!capDragActive || !module || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 			Widget::onDragMove(e);
 			return;
 		}
@@ -2468,7 +2468,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void onDoubleClick(const event::DoubleClick& e) override {
-		if (!module || module->stepCounterStyle != Crownstep::STEP_COUNTER_RIBBON) {
+		if (!module) {
 			Widget::onDoubleClick(e);
 			return;
 		}
@@ -2496,27 +2496,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			const float w = box.size.x;
 			const float h = box.size.y;
 
-		if (module->stepCounterStyle == Crownstep::STEP_COUNTER_BASIC) {
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x, y, w, h, 3.5f);
-			nvgFillColor(args.vg, nvgRGBA(10, 12, 14, 186));
-			nvgFill(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, w - 1.f, h - 1.f, 3.0f);
-			nvgStrokeColor(args.vg, nvgRGBA(236, 222, 198, 94));
-			nvgStrokeWidth(args.vg, 1.0f);
-			nvgStroke(args.vg);
-
-			char stepCounterText[64];
-			std::snprintf(stepCounterText, sizeof(stepCounterText), "%d / %d", currentStep, totalSteps);
-			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFontSize(args.vg, 11.5f);
-			nvgFillColor(args.vg, nvgRGB(242, 228, 204));
-			nvgText(args.vg, x + w * 0.5f, y + h * 0.53f, stepCounterText, nullptr);
-			return;
-		}
-
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x, y, w, h, 4.f);
 		nvgFillColor(args.vg, nvgRGBA(9, 11, 14, 194));
@@ -2533,8 +2512,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				float loopButtonW = loopButtonWidth(layout);
 				float loopCenterX = loopDataX(layout);
 				float loopCenterW = loopDataW(layout);
-				bool hoverMinus = pointInLoopMinusButton(lastHoverPos, layout);
-				bool hoverPlus = pointInLoopPlusButton(lastHoverPos, layout);
+				Vec drawMouseLocal = currentLocalMousePos();
+				bool hoverMinus = pointInLoopMinusButton(drawMouseLocal, layout);
+				bool hoverPlus = pointInLoopPlusButton(drawMouseLocal, layout);
 
 		// Full-history base strip.
 		nvgBeginPath(args.vg);
@@ -2564,7 +2544,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				if (s.fullMode) {
 					nvgBeginPath(args.vg);
 					nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
-					NVGpaint fullPaint = makeBrandActivePaint(214, 206);
+					NVGpaint fullPaint = makeBrandActivePaint(238, 228);
 					nvgFillPaint(args.vg, fullPaint);
 					nvgFill(args.vg);
 					nvgBeginPath(args.vg);
@@ -3322,22 +3302,6 @@ struct CrownstepWidget final : ModuleWidget {
 				}
 			}));
 		}
-		menu->addChild(createSubmenuItem("StepCounter", "", [=](Menu* counterMenu) {
-			for (int i = 0; i < int(STEP_COUNTER_STYLE_NAMES.size()); ++i) {
-				counterMenu->addChild(createCheckMenuItem(
-					STEP_COUNTER_STYLE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->stepCounterStyle == i;
-					},
-					[=]() {
-						if (module) {
-							module->stepCounterStyle = i;
-						}
-					}
-				));
-			}
-		}));
 		menu->addChild(new MenuSeparator());
 		MenuLabel* quantizerLabel = new MenuLabel();
 		quantizerLabel->text = "Quantizer";
@@ -3415,23 +3379,7 @@ struct CrownstepWidget final : ModuleWidget {
 				}
 			}
 		));
-		menu->addChild(createSubmenuItem("Pitch Data Source", "", [=](Menu* interpretationMenu) {
-			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
-				interpretationMenu->addChild(createCheckMenuItem(
-					PITCH_INTERPRETATION_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->pitchInterpretationMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->pitchInterpretationMode = i;
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("Board Value Layout", "", [=](Menu* valueLayoutMenu) {
+		menu->addChild(createSubmenuItem("Board Layout", "", [=](Menu* valueLayoutMenu) {
 			for (int i = 0; i < int(BOARD_VALUE_LAYOUT_NAMES.size()); ++i) {
 				valueLayoutMenu->addChild(createCheckMenuItem(
 					BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
@@ -3442,6 +3390,22 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->boardValueLayoutMode = i;
+						}
+					}
+				));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Source", "", [=](Menu* interpretationMenu) {
+			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
+				interpretationMenu->addChild(createCheckMenuItem(
+					PITCH_INTERPRETATION_NAMES[size_t(i)],
+					"",
+					[=]() {
+						return module && module->pitchInterpretationMode == i;
+					},
+					[=]() {
+						if (module) {
+							module->pitchInterpretationMode = i;
 						}
 					}
 				));
