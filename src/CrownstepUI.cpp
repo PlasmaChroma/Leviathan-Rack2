@@ -1996,7 +1996,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	enum class VisualMode {
 		DISCRETE,
 		DOUBLE_ROW,
-		TRIPLE_ROW,
+		CHUNKED_64,
 		COMPRESSED
 	};
 
@@ -2035,10 +2035,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (activeLength <= 128) {
 			return VisualMode::DOUBLE_ROW;
 		}
-		// Keep exact step rendering beyond 128 and let density increase smoothly.
-		// If we need a non-exact fallback later, it should be chosen from pixel
-		// constraints, not from a hard step-count threshold.
-		return VisualMode::TRIPLE_ROW;
+		return VisualMode::CHUNKED_64;
 	}
 
 	RibbonLayout computeLayout() const {
@@ -2566,13 +2563,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				};
 				if (s.fullMode) {
 					nvgBeginPath(args.vg);
-					nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
+					nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
 					NVGpaint fullPaint = makeBrandActivePaint(214, 206);
 					nvgFillPaint(args.vg, fullPaint);
 					nvgFill(args.vg);
 					nvgBeginPath(args.vg);
-					nvgRoundedRect(args.vg, activeX, historyY + 0.35f, activeW, std::max(1.f, historyH - 0.7f), 1.2f);
-					nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 176));
+					nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
+					nvgStrokeColor(args.vg, nvgRGBA(255, 214, 122, 190));
 					nvgStrokeWidth(args.vg, 0.85f);
 					nvgStroke(args.vg);
 				}
@@ -2685,6 +2682,57 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgStrokeWidth(args.vg, compactLayout ? 0.7f : 0.9f);
 			nvgStroke(args.vg);
 		};
+		auto drawChunkLoopMarker = [&](float hx, float hy, float hw, float hh, float radius) {
+			float shadowGrow = compactLayout ? 0.22f : 0.30f;
+			float innerInset = compactLayout ? 0.18f : 0.24f;
+			float hotInsetX = compactLayout ? 0.24f : 0.32f;
+			float hotInsetY = compactLayout ? 0.10f : 0.14f;
+			float hotH = std::max(0.24f, hh * 0.34f);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, hx - shadowGrow, hy - shadowGrow, hw + shadowGrow * 2.f, hh + shadowGrow * 2.f, radius + shadowGrow);
+			nvgFillColor(args.vg, nvgRGBA(8, 18, 24, 210));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, hx, hy, hw, hh, radius);
+			NVGpaint activePaint = nvgLinearGradient(
+				args.vg,
+				hx,
+				hy,
+				hx,
+				hy + hh,
+				nvgRGBA(110, 232, 255, 236),
+				nvgRGBA(26, 178, 214, 228)
+			);
+			nvgFillPaint(args.vg, activePaint);
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(
+				args.vg,
+				hx + hotInsetX,
+				hy + hotInsetY,
+				std::max(0.30f, hw - hotInsetX * 2.f),
+				hotH,
+				std::max(0.16f, radius * 0.62f)
+			);
+			nvgFillColor(args.vg, nvgRGBA(220, 250, 255, 170));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(
+				args.vg,
+				hx + innerInset,
+				hy + innerInset,
+				std::max(0.34f, hw - innerInset * 2.f),
+				std::max(0.34f, hh - innerInset * 2.f),
+				std::max(0.18f, radius * 0.78f)
+			);
+			nvgStrokeColor(args.vg, nvgRGBA(210, 248, 255, 244));
+			nvgStrokeWidth(args.vg, compactLayout ? 0.7f : 0.9f);
+			nvgStroke(args.vg);
+		};
 
 			if (s.activeLength > 0) {
 				VisualMode mode = chooseMode(s.activeLength);
@@ -2705,7 +2753,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				}
 				else if (mode == VisualMode::DOUBLE_ROW) {
 					const int colsPerRow = 64;
-					float colGap = compactLayout ? 0.45f : 0.55f;
+					float colGap = 1.2f;
 					float rowGap = compactLayout ? 0.55f : 0.8f;
 					float cellW = (loopCenterW - colGap * float(colsPerRow - 1)) / float(colsPerRow);
 					cellW = std::max(1.f, cellW);
@@ -2725,25 +2773,52 @@ struct CrownRibbonWidget final : OpaqueWidget {
 						}
 					}
 				}
-				else if (mode == VisualMode::TRIPLE_ROW) {
-					const int colsPerRow = 64;
-					float colGap = compactLayout ? 0.45f : 0.55f;
-					float rowGap = compactLayout ? 0.40f : 0.55f;
-					float cellW = (loopCenterW - colGap * float(colsPerRow - 1)) / float(colsPerRow);
-					cellW = std::max(1.f, cellW);
-					float cellH = (loopH - 0.7f - rowGap * 2.f) / 3.f;
-					cellH = std::max(0.48f, cellH);
-					for (int i = 0; i < s.activeLength; ++i) {
-						int row = i / colsPerRow;
-						int col = i % colsPerRow;
-						float cx = loopCenterX + float(col) * (cellW + colGap);
-						float cy = loopY + 0.35f + float(row) * (cellH + rowGap);
-						nvgBeginPath(args.vg);
-						nvgRoundedRect(args.vg, cx, cy, cellW, cellH, 0.55f);
-						nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
-						nvgFill(args.vg);
-						if (i == s.playbackIndex) {
-							drawActiveLoopMarker(cx - 0.15f, cy - 0.10f, cellW + 0.3f, cellH + 0.2f, 0.6f);
+				else if (mode == VisualMode::CHUNKED_64) {
+					const int chunkSize = 64;
+					int chunkCount = std::max(1, (s.activeLength + chunkSize - 1) / chunkSize);
+					int chunkIndex = clamp(s.playbackIndex / chunkSize, 0, std::max(0, chunkCount - 1));
+					int localIndex = clamp(s.playbackIndex - chunkIndex * chunkSize, 0, chunkSize - 1);
+					int chunkLength = std::min(chunkSize, std::max(0, s.activeLength - chunkIndex * chunkSize));
+
+					float rowGap = compactLayout ? 0.55f : 0.8f;
+					float cellH = (loopH - rowGap - 0.7f) * 0.5f;
+					cellH = std::max(0.7f, cellH);
+
+					// Top row: fixed 64-slot local view for the current chunk.
+					{
+						const int cols = 64;
+						float colGap = 1.2f;
+						float cellW = (loopCenterW - colGap * float(cols - 1)) / float(cols);
+						cellW = std::max(1.f, cellW);
+						float cy = loopY + 0.35f;
+						for (int i = 0; i < cols; ++i) {
+							float cx = loopCenterX + float(i) * (cellW + colGap);
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx, cy, cellW, cellH, 0.7f);
+							int alpha = (i < chunkLength) ? 178 : 68;
+							nvgFillColor(args.vg, nvgRGBA(112, 152, 184, alpha));
+							nvgFill(args.vg);
+							if (i == localIndex) {
+								drawActiveLoopMarker(cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
+							}
+						}
+					}
+
+					// Bottom row: progress through total chunk count (activeLength / 64).
+					{
+						float colGap = compactLayout ? 0.65f : 0.85f;
+						float cellW = (loopCenterW - colGap * float(std::max(0, chunkCount - 1))) / float(std::max(1, chunkCount));
+						cellW = std::max(1.f, cellW);
+						float cy = loopY + 0.35f + cellH + rowGap;
+						for (int i = 0; i < chunkCount; ++i) {
+							float cx = loopCenterX + float(i) * (cellW + colGap);
+							nvgBeginPath(args.vg);
+							nvgRoundedRect(args.vg, cx, cy, cellW, cellH, 0.7f);
+							nvgFillColor(args.vg, nvgRGBA(112, 152, 184, 178));
+							nvgFill(args.vg);
+							if (i == chunkIndex) {
+								drawChunkLoopMarker(cx - 0.2f, cy - 0.15f, cellW + 0.4f, cellH + 0.3f, 0.8f);
+							}
 						}
 					}
 				}
@@ -3053,7 +3128,7 @@ struct CrownstepWidget final : ModuleWidget {
 		};
 
 			Vec newGamePos(43.f, 114.0f);
-		Vec debugAddMovesPos(8.5f, 18.5f);
+		Vec debugAddMovesPos(5.08f, 5.08f);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
