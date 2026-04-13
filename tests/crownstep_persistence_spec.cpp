@@ -30,6 +30,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
   source.aiDifficulty = 2;
   source.quantizationEnabled = false;
   source.pitchBipolarEnabled = true;
+  source.melodicBiasEnabled = true;
   source.pitchInterpretationMode = 2;
   source.boardValueLayoutMode = 1;
   source.pitchDividerMode = 3;
@@ -91,6 +92,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
   bool aiDifficultyOk = loaded.aiDifficulty == source.aiDifficulty;
   bool quantizationOk = loaded.quantizationEnabled == source.quantizationEnabled;
   bool pitchBipolarOk = loaded.pitchBipolarEnabled == source.pitchBipolarEnabled;
+  bool melodicBiasOk = loaded.melodicBiasEnabled == source.melodicBiasEnabled;
   bool pitchInterpretationOk = loaded.pitchInterpretationMode == source.pitchInterpretationMode;
   bool boardValueLayoutOk = loaded.boardValueLayoutMode == source.boardValueLayoutMode;
   bool pitchDividerOk = loaded.pitchDividerMode == source.pitchDividerMode;
@@ -106,6 +108,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
     aiDifficultyOk &&
     quantizationOk &&
     pitchBipolarOk &&
+    melodicBiasOk &&
     pitchInterpretationOk &&
     boardValueLayoutOk &&
     pitchDividerOk &&
@@ -156,6 +159,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " aiDifficultyOk=" + std::to_string(aiDifficultyOk ? 1 : 0) +
             " quantizationOk=" + std::to_string(quantizationOk ? 1 : 0) +
             " pitchBipolarOk=" + std::to_string(pitchBipolarOk ? 1 : 0) +
+            " melodicBiasOk=" + std::to_string(melodicBiasOk ? 1 : 0) +
             " pitchInterpretationOk=" + std::to_string(pitchInterpretationOk ? 1 : 0) +
             " boardValueLayoutOk=" + std::to_string(boardValueLayoutOk ? 1 : 0) +
             " pitchDividerOk=" + std::to_string(pitchDividerOk ? 1 : 0) +

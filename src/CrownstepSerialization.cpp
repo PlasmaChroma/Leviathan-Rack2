@@ -8,6 +8,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "aiDifficulty", json_integer(aiDifficulty));
 	json_object_set_new(rootJ, "quantizationEnabled", json_boolean(quantizationEnabled));
 	json_object_set_new(rootJ, "pitchBipolarEnabled", json_boolean(pitchBipolarEnabled));
+	json_object_set_new(rootJ, "melodicBiasEnabled", json_boolean(melodicBiasEnabled));
 	json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 	json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
@@ -118,6 +119,10 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	json_t* pitchBipolarEnabledJ = json_object_get(rootJ, "pitchBipolarEnabled");
 	if (pitchBipolarEnabledJ) {
 		pitchBipolarEnabled = json_is_true(pitchBipolarEnabledJ);
+	}
+	json_t* melodicBiasEnabledJ = json_object_get(rootJ, "melodicBiasEnabled");
+	if (melodicBiasEnabledJ) {
+		melodicBiasEnabled = json_is_true(melodicBiasEnabledJ);
 	}
 	json_t* pitchInterpretationModeJ = json_object_get(rootJ, "pitchInterpretationMode");
 	if (pitchInterpretationModeJ) {

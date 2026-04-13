@@ -634,7 +634,7 @@ float Crownstep::pitchPreviewForBoardIndex(int boardIndex) {
 	return pitchForMove(previewMove);
 }
 
-float Crownstep::pitchForMove(const Move& move) {
+float Crownstep::boardValueIndexForMove(const Move& move) {
 	auto chessBoardValueForIndex = [&](int boardIndex, int layoutMode) {
 		int clamped = clamp(boardIndex, 0, crownstep::CHESS_BOARD_SIZE - 1);
 		int mode = clamp(layoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
@@ -710,16 +710,44 @@ float Crownstep::pitchForMove(const Move& move) {
 		float center = (0.5f * float(boardCellCount() - 1)) / crownstep::pitchDividerForMode(pitchDividerMode);
 		boardValueIndex -= center;
 	}
+	return boardValueIndex;
+}
+
+float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing) {
 	if (quantizationEnabled) {
 		return crownstep::mapPitchFromIndex(
 			boardValueIndex,
-			move.isKing,
+			isKing,
 			currentScaleIndex(),
 			0,
 			transposeVolts()
 		);
 	}
-	return crownstep::mapRawPitchFromIndex(boardValueIndex, move.isKing, transposeVolts());
+	return crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts());
+}
+
+float Crownstep::applyMelodicBiasToBoardValueIndex(float previousBoardValueIndex, float currentBoardValueIndex, const Move& move) const {
+	float delta = currentBoardValueIndex - previousBoardValueIndex;
+	float absDelta = std::fabs(delta);
+	if (absDelta <= 0.f) {
+		return currentBoardValueIndex;
+	}
+
+	float freeSemitones = 2.f;
+	float fullSemitones = 10.f;
+	float deltaNorm = clamp((absDelta - freeSemitones) / (fullSemitones - freeSemitones), 0.f, 1.f);
+	float pathEnergy = clamp(float(std::max(0, int(move.path.size()) - 1)) / 4.f, 0.f, 1.f);
+	float captureEnergy = clamp(float(move.captured.size()) / 6.f, 0.f, 1.f);
+	float moveEnergy = clamp(0.6f * crownstep::normalizedMoveMod(move) + 0.25f * pathEnergy + 0.15f * captureEnergy, 0.f, 1.f);
+	float maxPull = 0.7f;
+	float pull = deltaNorm * maxPull * (1.f - 0.8f * moveEnergy);
+	float biasedDelta = delta * (1.f - pull);
+	return previousBoardValueIndex + biasedDelta;
+}
+
+float Crownstep::pitchForMove(const Move& move) {
+	float boardValueIndex = boardValueIndexForMove(move);
+	return mapPitchFromBoardValueIndex(boardValueIndex, move.isKing);
 }
 
 Step Crownstep::makeStepFromMove(const Move& move) {
@@ -977,6 +1005,8 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 	Step step = makeStepFromMove(move);
 	if (isChessMode()) {
 		float captureAccent = 0.f;
+		// Standard chess captures at most one piece per move; iterate generically
+		// to stay compatible with potential future variants/encodings.
 		for (int captureIndex : move.captured) {
 			if (captureIndex < 0 || captureIndex >= crownstep::CHESS_BOARD_SIZE) {
 				continue;

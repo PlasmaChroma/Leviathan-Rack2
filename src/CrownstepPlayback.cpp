@@ -20,7 +20,13 @@ float Crownstep::pitchForSequenceIndex(int sequenceIndex) {
 	// and quantization settings are applied live at playback time.
 	if (sequenceIndex < int(moveHistory.size())) {
 		const Move& move = moveHistory[size_t(sequenceIndex)];
-		return pitchForMove(move);
+		float boardValueIndex = boardValueIndexForMove(move);
+		if (melodicBiasEnabled && sequenceIndex > 0) {
+			const Move& previousMove = moveHistory[size_t(sequenceIndex - 1)];
+			float previousBoardValueIndex = boardValueIndexForMove(previousMove);
+			boardValueIndex = applyMelodicBiasToBoardValueIndex(previousBoardValueIndex, boardValueIndex, move);
+		}
+		return mapPitchFromBoardValueIndex(boardValueIndex, move.isKing);
 	}
 
 	// Backward compatibility for older saves that may not contain moveHistory.

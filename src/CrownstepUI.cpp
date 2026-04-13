@@ -3299,6 +3299,19 @@ struct CrownstepWidget final : ModuleWidget {
 				}
 			}
 		));
+		menu->addChild(createCheckMenuItem(
+			"Melodic Bias",
+			"",
+			[=]() {
+				return module && module->melodicBiasEnabled;
+			},
+			[=]() {
+				if (module) {
+					module->melodicBiasEnabled = !module->melodicBiasEnabled;
+					module->refreshHeldPitchForCurrentStep();
+				}
+			}
+		));
 		menu->addChild(createSubmenuItem("Board Layout", "", [=](Menu* valueLayoutMenu) {
 			for (int i = 0; i < int(BOARD_VALUE_LAYOUT_NAMES.size()); ++i) {
 				valueLayoutMenu->addChild(createCheckMenuItem(

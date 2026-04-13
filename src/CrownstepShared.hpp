@@ -157,6 +157,7 @@ struct Crownstep : Module {
 	int aiDifficulty = 1;
 	bool quantizationEnabled = true;
 	bool pitchBipolarEnabled = false;
+	bool melodicBiasEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
 	int pitchDividerMode = 0;
@@ -251,6 +252,9 @@ struct Crownstep : Module {
 	bool boardIndexToCoord(int index, int* row, int* col) const;
 	int boardCoordToIndex(int row, int col) const;
 	int boardCellCount() const;
+	float boardValueIndexForMove(const Move& move);
+	float mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing);
+	float applyMelodicBiasToBoardValueIndex(float previousBoardValueIndex, float currentBoardValueIndex, const Move& move) const;
 
 	float pitchPreviewForBoardIndex(int boardIndex);
 	float pitchForMove(const Move& move);
