@@ -1,4 +1,4 @@
-# Belgrad-Inspired Dual‑Peak Multimode SVF for VCV Rack With Real‑Time Curve + Spectrum Preview
+# Bifurx (Leviathan): Belgrad-Inspired Dual-Peak Multimode SVF for VCV Rack With Real-Time Curve + Spectrum Preview
 
 ## What the manual specifies about interface and behavior
 
@@ -27,6 +27,10 @@ Finally, the manual includes explicit copyright restrictions on copying/distribu
 ## Scope and requirements for the VCV Rack module
 
 This section treats your request as an implementable spec for a code assistant (Codex-style), while staying faithful to the manual’s I/O semantics and the front‑panel workflow.
+
+Module naming for the Leviathan plugin family:
+
+- Module name: **Bifurx**
 
 Core goals (first release, mono):
 
@@ -197,8 +201,8 @@ Rack’s widget API centers on overriding `draw(const DrawArgs&)` and (optionall
 
 We will implement:
 
-- `BelgradLikeModule : rack::engine::Module`
-- `BelgradLikeWidget : rack::app::ModuleWidget`
+- `BifurxModule : rack::engine::Module`
+- `BifurxWidget : rack::app::ModuleWidget`
 - `ResponseDisplay : rack::widget::Widget` (or TransparentWidget-like) nested inside a `FramebufferWidget`
 
 We will use an SVG panel as the base (standard Rack approach), via `SvgWidget`/ThemedSvgPanel patterns. citeturn6view2
