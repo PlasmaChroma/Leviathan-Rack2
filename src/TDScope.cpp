@@ -254,12 +254,38 @@ struct TDScopeDisplayWidget final : Widget {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
 
+    auto drawStatusMessage = [&](const char* line1, const char* line2) {
+      if (!APP || !APP->window || !APP->window->uiFont) {
+        return;
+      }
+      const float centerX = box.size.x * 0.5f;
+      const float centerY = box.size.y * 0.5f;
+      const float fontSize1 = 12.f;
+      const float fontSize2 = 14.f;
+      const float lineGap = 9.f;
+
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+
+      nvgFontSize(args.vg, fontSize1);
+      nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
+      nvgText(args.vg, centerX, centerY - lineGap, line1, nullptr);
+
+      nvgFontSize(args.vg, fontSize2);
+      nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
+      nvgText(args.vg, centerX, centerY + lineGap, line2, nullptr);
+      nvgRestore(args.vg);
+    };
+
     if (!module) {
+      drawStatusMessage("Attach to", "Temporal Deck");
       return;
     }
 
     temporaldeck_expander::HostToDisplay msg;
     if (!module->readSnapshotForUi(&msg) || !linkActive || !previewValid) {
+      drawStatusMessage(linkActive ? "Waiting for" : "Attach to", "Temporal Deck");
       return;
     }
 
