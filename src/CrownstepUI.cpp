@@ -450,14 +450,14 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
 		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
 		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
-		ringBandGreenPixels[i * 4 + 0] = 70u;
-		ringBandGreenPixels[i * 4 + 1] = 224u;
-		ringBandGreenPixels[i * 4 + 2] = 132u;
-		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(236.f * bandA, 0.f, 255.f);
-		ringShellGreenDarkPixels[i * 4 + 0] = 28u;
-		ringShellGreenDarkPixels[i * 4 + 1] = 148u;
-		ringShellGreenDarkPixels[i * 4 + 2] = 86u;
-		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(176.f * shellA, 0.f, 255.f);
+		ringBandGreenPixels[i * 4 + 0] = 98u;
+		ringBandGreenPixels[i * 4 + 1] = 235u;
+		ringBandGreenPixels[i * 4 + 2] = 154u;
+		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(248.f * bandA, 0.f, 255.f);
+		ringShellGreenDarkPixels[i * 4 + 0] = 40u;
+		ringShellGreenDarkPixels[i * 4 + 1] = 168u;
+		ringShellGreenDarkPixels[i * 4 + 2] = 104u;
+		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(192.f * shellA, 0.f, 255.f);
 	}
 	int ringBandGreenImageHandle = nvgCreateImageRGBA(
 		vg,
@@ -708,13 +708,13 @@ bool drawChessAtlasPieceRingContour(
 	float atlasScale = spec.atlasDrawWidth / std::max(1.f, cache.svg->handle->width);
 	float pxToScreen = atlasScale / std::max(0.001f, CHESS_ATLAS_RASTER_SCALE);
 	// Must cover the largest precomputed raster-distance shell extents.
-	float shellMargin = 21.0f * pxToScreen;
-	float bandMargin = 13.8f * pxToScreen;
+	float shellMargin = 23.0f * pxToScreen;
+	float bandMargin = 15.2f * pxToScreen;
 	float pulse01 = clamp(pulse, 0.f, 1.f);
-	float shellPulseMargin = shellMargin + pxToScreen * (1.0f + 4.6f * pulse01);
-	float bandPulseMargin = bandMargin + pxToScreen * (0.6f + 3.3f * pulse01);
-	float shellAlpha = 0.16f + 0.24f * pulse01;
-	float bandAlpha = 0.58f + 0.20f * pulse01;
+	float shellPulseMargin = shellMargin + pxToScreen * (1.2f + 5.0f * pulse01);
+	float bandPulseMargin = bandMargin + pxToScreen * (0.8f + 3.7f * pulse01);
+	float shellAlpha = 0.24f + 0.28f * pulse01;
+	float bandAlpha = 0.78f + 0.18f * pulse01;
 
 	auto drawRingMaskLayer = [&](int imageHandle, float margin, float alpha) {
 		float x = spec.x - margin;
