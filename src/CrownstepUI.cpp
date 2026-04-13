@@ -24,6 +24,20 @@ const std::shared_ptr<Image>& crownstepWoodBoardImage() {
 		attempted = true;
 		if (APP && APP->window) {
 			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/wood.png"));
+			INFO("Crownstep wood image load: handle=%d", (image && image->handle >= 0) ? image->handle : -1);
+		}
+	}
+	return image;
+}
+
+const std::shared_ptr<Image>& crownstepMarbleBoardImage() {
+	static std::shared_ptr<Image> image;
+	static bool attempted = false;
+	if (!attempted) {
+		attempted = true;
+		if (APP && APP->window) {
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/marble.png"));
+			INFO("Crownstep marble image load: handle=%d", (image && image->handle >= 0) ? image->handle : -1);
 		}
 	}
 	return image;
@@ -757,6 +771,15 @@ struct CrownstepBoardWidget final : Widget {
 
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
+		static int loggedTextureMode = -999;
+		if (module && loggedTextureMode != module->boardTextureMode) {
+			loggedTextureMode = module->boardTextureMode;
+			INFO("Crownstep draw: boardTextureMode=%d name='%s'",
+				loggedTextureMode,
+				(loggedTextureMode >= 0 && loggedTextureMode < int(BOARD_TEXTURE_NAMES.size()))
+					? BOARD_TEXTURE_NAMES[size_t(loggedTextureMode)]
+					: "unknown");
+		}
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
@@ -780,8 +803,25 @@ struct CrownstepBoardWidget final : Widget {
 		};
 		bool othelloBoard = module && module->isOthelloMode();
 		const bool woodTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
+		const bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 		const std::shared_ptr<Image>& woodBoardImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardImage() : std::shared_ptr<Image>();
+		const std::shared_ptr<Image>& marbleBoardImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardImage() : std::shared_ptr<Image>();
 		const bool hasWoodBoardImage = woodBoardImage && woodBoardImage->handle >= 0;
+		const bool hasMarbleBoardImage = marbleBoardImage && marbleBoardImage->handle >= 0;
+		static int loggedTextureStateMode = -999;
+		if (module && loggedTextureStateMode != module->boardTextureMode) {
+			loggedTextureStateMode = module->boardTextureMode;
+			INFO(
+				"Crownstep render texture state: mode=%d wood=%d marble=%d fabric=%d hasWoodImage=%d hasMarbleImage=%d othello=%d",
+				module->boardTextureMode,
+				woodTexture ? 1 : 0,
+				marbleTexture ? 1 : 0,
+				(module->boardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC) ? 1 : 0,
+				hasWoodBoardImage ? 1 : 0,
+				hasMarbleBoardImage ? 1 : 0,
+				othelloBoard ? 1 : 0
+			);
+		}
 		if (hasWoodBoardImage) {
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -798,10 +838,25 @@ struct CrownstepBoardWidget final : Widget {
 			nvgFillPaint(args.vg, boardPaint);
 			nvgFill(args.vg);
 		}
+		else if (hasMarbleBoardImage) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			NVGpaint boardPaint = nvgImagePattern(
+				args.vg,
+				0.f,
+				0.f,
+				box.size.x,
+				box.size.y,
+				0.f,
+				marbleBoardImage->handle,
+				1.f
+			);
+			nvgFillPaint(args.vg, boardPaint);
+			nvgFill(args.vg);
+		}
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
-				bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 				bool fabricTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC;
 				float x = col * cellWidth;
 				float y = row * cellHeight;
@@ -827,7 +882,7 @@ struct CrownstepBoardWidget final : Widget {
 					nvgFillPaint(args.vg, basePaint);
 					nvgFill(args.vg);
 				}
-				else if (marbleTexture) {
+				else if (marbleTexture && !hasMarbleBoardImage) {
 					NVGcolor topColor = dark ? nvgRGB(72, 74, 82) : nvgRGB(208, 212, 222);
 					NVGcolor bottomColor = dark ? nvgRGB(42, 44, 52) : nvgRGB(166, 172, 184);
 					nvgBeginPath(args.vg);
@@ -856,6 +911,9 @@ struct CrownstepBoardWidget final : Widget {
 						nvgStrokeWidth(args.vg, 0.62f + 0.12f * float(vein & 1));
 						nvgStroke(args.vg);
 					}
+				}
+				else if (marbleTexture) {
+					// Full-board marble bitmap already painted above.
 				}
 				else if (fabricTexture) {
 					NVGcolor topColor = dark ? nvgRGB(34, 118, 54) : nvgRGB(236, 244, 236);
@@ -896,7 +954,7 @@ struct CrownstepBoardWidget final : Widget {
 						nvgStroke(args.vg);
 					}
 				}
-				else {
+				else if (woodTexture) {
 					if (hasWoodBoardImage) {
 						NVGcolor sheenLeft = dark ? nvgRGBA(255, 226, 176, 18) : nvgRGBA(255, 244, 214, 30);
 						NVGcolor sheenRight = dark ? nvgRGBA(28, 16, 8, 18) : nvgRGBA(92, 62, 36, 20);
@@ -935,6 +993,36 @@ struct CrownstepBoardWidget final : Widget {
 							nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
 							nvgFill(args.vg);
 						}
+					}
+				}
+				else {
+					NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
+					NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
+					nvgFill(args.vg);
+
+					NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
+					NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
+					nvgFillPaint(args.vg, sheenPaint);
+					nvgFill(args.vg);
+
+					for (int grain = 0; grain < 4; ++grain) {
+						float t = (grain + 1) / 5.f;
+						float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
+						float thickness = 0.5f + 0.15f * float(grain & 1);
+						int alpha = dark ? 28 : 24;
+
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
+						nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+						nvgFill(args.vg);
 					}
 				}
 			}
