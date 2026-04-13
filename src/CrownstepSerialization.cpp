@@ -157,7 +157,17 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	}
 	json_t* highlightModeJ = json_object_get(rootJ, "highlightMode");
 	if (highlightModeJ) {
-		highlightMode = clamp(int(json_integer_value(highlightModeJ)), 0, HIGHLIGHT_COUNT - 1);
+		int storedHighlightMode = int(json_integer_value(highlightModeJ));
+		// Legacy mapping: 0 Ring, 1 Glow, 2 Off -> 0 Outline, 1 Off.
+		if (storedHighlightMode <= 0) {
+			highlightMode = HIGHLIGHT_RING;
+		}
+		else if (storedHighlightMode == 1) {
+			highlightMode = HIGHLIGHT_RING;
+		}
+		else {
+			highlightMode = HIGHLIGHT_OFF;
+		}
 	}
 	json_t* stepCounterStyleJ = json_object_get(rootJ, "stepCounterStyle");
 	if (stepCounterStyleJ) {

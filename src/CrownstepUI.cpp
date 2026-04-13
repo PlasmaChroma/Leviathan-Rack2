@@ -615,67 +615,6 @@ bool drawChessAtlasPiece(
 	return true;
 }
 
-bool drawChessAtlasPieceHalo(
-	NVGcontext* vg,
-	float centerX,
-	float centerY,
-	float cellWidth,
-	float cellHeight,
-	int piece,
-	float pulse
-) {
-	if (!vg || piece == 0) {
-		return false;
-	}
-	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
-	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache) || cache.rasterMaskImageHandle < 0) {
-		return false;
-	}
-
-	ChessAtlasDrawSpec spec;
-	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
-		return false;
-	}
-
-	const float minCell = std::min(cellWidth, cellHeight);
-	const float pulse01 = clamp(pulse, 0.f, 1.f);
-	const float bandGrow = minCell * (0.032f + 0.010f * pulse01);
-	const float bandAlpha = 0.62f + 0.24f * pulse01;
-
-	auto drawLayer = [&](float grow, float layerAlpha) {
-		float x = spec.x - grow;
-		float y = spec.y - grow;
-		float w = spec.drawWidth + 2.f * grow;
-		float h = spec.drawHeight + 2.f * grow;
-		float scaleX = w / spec.src.size.x;
-		float scaleY = h / spec.src.size.y;
-		float atlasW = cache.svg->handle->width * scaleX;
-		float atlasH = cache.svg->handle->height * scaleY;
-		float patternX = x - spec.src.pos.x * scaleX;
-		float patternY = y - spec.src.pos.y * scaleY;
-
-		nvgBeginPath(vg);
-		nvgRect(vg, x, y, w, h);
-		NVGpaint haloPaint = nvgImagePattern(
-			vg,
-			patternX,
-			patternY,
-			atlasW,
-			atlasH,
-			0.f,
-			cache.rasterMaskImageHandle,
-			clamp(layerAlpha, 0.f, 1.f)
-		);
-		nvgFillPaint(vg, haloPaint);
-		nvgFill(vg);
-	};
-
-	nvgSave(vg);
-	drawLayer(bandGrow, bandAlpha);
-	nvgRestore(vg);
-	return true;
-}
-
 bool drawChessAtlasPieceRingContour(
 	NVGcontext* vg,
 	float centerX,
@@ -1601,8 +1540,6 @@ struct CrownstepBoardWidget final : Widget {
 							&& module->highlightMode != Crownstep::HIGHLIGHT_OFF;
 						const bool showMovablePieceRingHints =
 							highlightActive && module->highlightMode == Crownstep::HIGHLIGHT_RING;
-						const bool showMovablePieceGlowHints =
-							highlightActive && module->highlightMode == Crownstep::HIGHLIGHT_GLOW;
 						int cellCount = module->boardCellCount();
 						std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
 						if (highlightActive) {
@@ -1612,60 +1549,9 @@ struct CrownstepBoardWidget final : Widget {
 								}
 							}
 						}
-						const bool selectedSquareGlowActive = !module->gameOver && module->selectedSquare >= 0;
+						const bool selectedSquareHighlightActive = !module->gameOver && module->selectedSquare >= 0;
 						const float sharedRingPulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.4f);
 						const float sharedOpponentRingPulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 1.6f);
-						auto drawPieceGlowHalo = [&](float centerX, float centerY, int piece, float pulse) {
-							float minCell = std::min(cellWidth, cellHeight);
-							NVGcolor bandColor = nvgRGBA(255, 255, 255, int(154.f + 88.f * pulse));
-
-							if (module->isChessMode()) {
-								if (CHESS_ATLAS_ENABLED) {
-									nvgSave(args.vg);
-									nvgTranslate(args.vg, centerX, 0.f);
-									nvgScale(args.vg, CHESS_HORIZONTAL_SCALE, 1.f);
-									nvgTranslate(args.vg, -centerX, 0.f);
-									bool drewAtlasHalo = drawChessAtlasPieceHalo(args.vg, centerX, centerY, cellWidth, cellHeight, piece, pulse);
-									nvgRestore(args.vg);
-									if (drewAtlasHalo) {
-										return;
-									}
-								}
-								float haloW = minCell * 0.62f;
-								float haloH = minCell * 0.88f;
-								float haloX = centerX - haloW * 0.5f;
-								float haloY = centerY - haloH * 0.58f;
-								float corner = minCell * 0.19f;
-
-								nvgBeginPath(args.vg);
-								nvgRoundedRect(args.vg, haloX, haloY, haloW, haloH, corner);
-								nvgStrokeColor(args.vg, bandColor);
-								nvgStrokeWidth(args.vg, 3.2f);
-								nvgStroke(args.vg);
-							}
-							else {
-								// Checkers/Othello glow: fixed-size radial-fade halo band.
-								float innerR = minCell * 0.352f;
-								float outerR = minCell * 0.404f;
-								NVGcolor fadeInner = nvgRGBA(255, 255, 255, int(88.f + 106.f * pulse));
-								NVGcolor fadeOuter = nvgRGBA(255, 255, 255, 0);
-								NVGpaint haloPaint = nvgRadialGradient(
-									args.vg,
-									centerX,
-									centerY,
-									innerR,
-									outerR,
-									fadeInner,
-									fadeOuter
-								);
-								nvgBeginPath(args.vg);
-								nvgCircle(args.vg, centerX, centerY, outerR);
-								nvgCircle(args.vg, centerX, centerY, innerR * 0.965f);
-								nvgPathWinding(args.vg, NVG_HOLE);
-								nvgFillPaint(args.vg, haloPaint);
-								nvgFill(args.vg);
-							}
-						};
 
 						for (int i = 0; i < cellCount; ++i) {
 							int piece = module->board[size_t(i)];
@@ -1685,14 +1571,6 @@ struct CrownstepBoardWidget final : Widget {
 					}
 							float centerX = (col + 0.5f) * cellWidth;
 							float centerY = (row + 0.5f) * cellHeight;
-							if (showMovablePieceGlowHints
-								&& movableOrigins[size_t(i)]
-								&& crownstep::pieceSide(piece) == module->humanSide()
-								&& !(selectedSquareGlowActive && i == module->selectedSquare)) {
-								float phase = float(i) * 0.37f + 0.4f;
-								float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + phase);
-								drawPieceGlowHalo(centerX, centerY, piece, pulse);
-							}
 							drawPieceAt(centerX, centerY, piece, 1.f);
 						}
 
@@ -1880,7 +1758,7 @@ struct CrownstepBoardWidget final : Widget {
 							if (!movableOrigins[size_t(i)]) {
 								continue;
 							}
-							if (selectedSquareGlowActive && i == module->selectedSquare) {
+							if (selectedSquareHighlightActive && i == module->selectedSquare) {
 								continue;
 							}
 							int piece = module->board[size_t(i)];
@@ -3268,7 +3146,7 @@ struct CrownstepWidget final : ModuleWidget {
 				difficultyMenu->addChild(item);
 			}
 		}));
-		menu->addChild(createSubmenuItem("Highlight", "", [=](Menu* highlightMenu) {
+		menu->addChild(createSubmenuItem("Piece Highlight", "", [=](Menu* highlightMenu) {
 			for (int i = 0; i < int(HIGHLIGHT_MODE_NAMES.size()); ++i) {
 				highlightMenu->addChild(createCheckMenuItem(
 					HIGHLIGHT_MODE_NAMES[size_t(i)],
