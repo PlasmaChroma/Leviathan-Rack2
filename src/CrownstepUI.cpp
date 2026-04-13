@@ -17,6 +17,18 @@ constexpr float CHESS_ATLAS_ALPHA_GAMMA = 0.92f;
 constexpr int CHESS_ATLAS_IMAGE_FLAGS = NVG_IMAGE_GENERATE_MIPMAPS;
 constexpr int CHESS_ATLAS_MASK_FLAGS = 0;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
+const std::shared_ptr<Image>& crownstepWoodBoardImage() {
+	static std::shared_ptr<Image> image;
+	static bool attempted = false;
+	if (!attempted) {
+		attempted = true;
+		if (APP && APP->window) {
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/wood.png"));
+		}
+	}
+	return image;
+}
+
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
 	{
 		"piece-black-king",
@@ -763,10 +775,29 @@ struct CrownstepBoardWidget final : Widget {
 				if (col) {
 					*col = 7 - *col;
 				}
-			}
+		}
 			return true;
 		};
 		bool othelloBoard = module && module->isOthelloMode();
+		const bool woodTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
+		const std::shared_ptr<Image>& woodBoardImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardImage() : std::shared_ptr<Image>();
+		const bool hasWoodBoardImage = woodBoardImage && woodBoardImage->handle >= 0;
+		if (hasWoodBoardImage) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			NVGpaint boardPaint = nvgImagePattern(
+				args.vg,
+				0.f,
+				0.f,
+				box.size.x,
+				box.size.y,
+				0.f,
+				woodBoardImage->handle,
+				1.f
+			);
+			nvgFillPaint(args.vg, boardPaint);
+			nvgFill(args.vg);
+		}
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
@@ -866,33 +897,44 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 				else {
-					NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
-					NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
-
-					nvgBeginPath(args.vg);
-					nvgRect(args.vg, x, y, cellWidth, cellHeight);
-					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
-					nvgFillPaint(args.vg, basePaint);
-					nvgFill(args.vg);
-
-					NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
-					NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
-					nvgBeginPath(args.vg);
-					nvgRect(args.vg, x, y, cellWidth, cellHeight);
-					NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
-					nvgFillPaint(args.vg, sheenPaint);
-					nvgFill(args.vg);
-
-					for (int grain = 0; grain < 4; ++grain) {
-						float t = (grain + 1) / 5.f;
-						float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
-						float thickness = 0.5f + 0.15f * float(grain & 1);
-						int alpha = dark ? 28 : 24;
+					if (hasWoodBoardImage) {
+						NVGcolor sheenLeft = dark ? nvgRGBA(255, 226, 176, 18) : nvgRGBA(255, 244, 214, 30);
+						NVGcolor sheenRight = dark ? nvgRGBA(28, 16, 8, 18) : nvgRGBA(92, 62, 36, 20);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, x, y, cellWidth, cellHeight);
+						NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
+						nvgFillPaint(args.vg, sheenPaint);
+						nvgFill(args.vg);
+					}
+					else {
+						NVGcolor topColor = dark ? nvgRGB(112, 78, 50) : nvgRGB(224, 198, 160);
+						NVGcolor bottomColor = dark ? nvgRGB(72, 46, 30) : nvgRGB(186, 147, 102);
 
 						nvgBeginPath(args.vg);
-						nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
-						nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+						nvgRect(args.vg, x, y, cellWidth, cellHeight);
+						NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+						nvgFillPaint(args.vg, basePaint);
 						nvgFill(args.vg);
+
+						NVGcolor sheenLeft = dark ? nvgRGBA(255, 216, 156, 20) : nvgRGBA(255, 236, 198, 34);
+						NVGcolor sheenRight = dark ? nvgRGBA(40, 20, 8, 22) : nvgRGBA(76, 48, 24, 24);
+						nvgBeginPath(args.vg);
+						nvgRect(args.vg, x, y, cellWidth, cellHeight);
+						NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y, sheenLeft, sheenRight);
+						nvgFillPaint(args.vg, sheenPaint);
+						nvgFill(args.vg);
+
+						for (int grain = 0; grain < 4; ++grain) {
+							float t = (grain + 1) / 5.f;
+							float grainY = y + t * cellHeight + std::sin(seed + t * 6.28318f) * 0.65f;
+							float thickness = 0.5f + 0.15f * float(grain & 1);
+							int alpha = dark ? 28 : 24;
+
+							nvgBeginPath(args.vg);
+							nvgRect(args.vg, x + 0.65f, grainY, cellWidth - 1.3f, thickness);
+							nvgFillColor(args.vg, nvgRGBA(255, 224, 170, alpha));
+							nvgFill(args.vg);
+						}
 					}
 				}
 			}
