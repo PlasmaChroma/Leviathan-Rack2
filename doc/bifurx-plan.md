@@ -55,6 +55,8 @@ Bifurx should feel like:
 - a performable dual-peak filter first
 - a visually explanatory module second
 - an original Leviathan module, not a literal visual clone
+- a "color box" where saturation and distortion are core features, not secondary
+- a high-sensitivity instrument where "everything you do matters"—no dead zones or flat parameter regions
 
 Critical identity correction from demo analysis:
 - Bifurx should not be treated as “two filters” in user-facing behavior
@@ -70,6 +72,7 @@ It does need to satisfy:
 - stable modulation
 - useful response preview
 - no obvious CPU or UI pathology
+- dual oscillator behavior with musical V/OCT tracking
 
 ## Engineering Assumptions
 
@@ -78,7 +81,7 @@ It does need to satisfy:
 Use two digital SVF cores as the baseline.
 
 Recommended baseline for v1:
-- TPT/state-variable style core
+- TPT/state-variable style core (Zavalishin style) to support audio-rate modulation and nonlinearities
 - per-core outputs available internally:
   - lowpass
   - bandpass
@@ -86,9 +89,14 @@ Recommended baseline for v1:
   - notch
 - symmetric frequency detune around a shared center frequency
 - treat the two cores as a coupled system, not as two independent processors that are merely mixed together
+- ensure phase-accurate combinations in parallel/serial paths to preserve phaser-like movement in notch modes
 
 Design implication:
 - SPAN, BALANCE, RESO, and TITO should all strengthen the sense of interacting peaks
+- TITO should be implemented as an explicit signal routing change:
+  - CLEAN: standard topology
+  - SM (Self-Mod): internal core feedback loops
+  - XM (Cross-Mod): mutual inter-core modulation
 - anti-pattern: independent-core design where interaction is weak and only the final mix stage creates apparent complexity
 
 ### Display Strategy
@@ -151,9 +159,9 @@ The following values are now frozen for v1 implementation.
 - Intended behavior:
   - near `0.0`: near-muted / very low drive
   - around `0.5`: approximately unity for a typical Rack `±5 V` audio signal
-  - near `1.0`: strong pre-filter drive / overdrive
+  - near `1.0`: strong pre-filter drive / overdrive ("hair" and "growl")
 - Notes:
-  - this is a gain/drive control, not a bipolar trim
+  - this is a gain/drive/tone control, not a bipolar trim
   - perceptually, this should behave as a tone/drive control, not just an amplitude trim
   - pre-filter saturation is part of the v1 identity, not an optional afterthought
 
@@ -165,12 +173,13 @@ The following values are now frozen for v1 implementation.
 - Target behavior:
   - lower and middle range should be musically usable
   - upper range should reach self-oscillation-like behavior in at least some modes
+  - resonance threshold is allowed to vary by mode (not normalized)
 
 ### SPAN
 
 - Stored parameter range: `0..1`
 - Default: `0.0`
-- Mapping: nonlinear
+- Mapping: nonlinear power curve (finer control near zero)
 - Internal domain: `0 .. 8 octaves`
 - Notes:
   - symmetric detune around center frequency
@@ -185,7 +194,7 @@ The following values are now frozen for v1 implementation.
 - Notes:
   - normalized symmetric skew domain
   - used internally to bias lower vs upper peak dominance
-  - should be implemented as energy redistribution, not a simple final crossfade between core outputs
+  - should be implemented as energy redistribution (affecting both gain and resonance/Q), not a simple final crossfade between core outputs
 
 ### FM AMT
 
@@ -328,7 +337,8 @@ Recommended implementation:
 `BALANCE` should skew the relative dominance of the lower and upper peaks.
 
 Recommended v1 behavior:
-- balance affects per-core resonance or per-core output weighting
+- balance affects per-core resonance/Q AND per-core output weighting
+- implement as energy redistribution across the spectrum
 - keep the behavior symmetrical around center
 
 ### Resonance
@@ -345,19 +355,22 @@ Implementation note:
 
 Recommended v1 behavior:
 - modest clean range at lower settings
-- saturating pre-filter drive at higher settings
+- saturating pre-filter drive at higher settings ("color box" approach)
+- saturation should interact with resonance peaks
 
 ### TITO
 
 Three states:
-- neutral
-- self-mod
-- cross-mod
+- neutral (CLEAN)
+- self-mod (SM)
+- cross-mod (XM)
 
 v1 goal:
-- make each state audibly distinct
-- do not over-promise exact hardware equivalence
-- treat TITO as a routing/coupling topology switch, not a flavor/distortion knob
+- make each state audibly distinct through topology changes
+- CLEAN: standard parallel/serial routing
+- SM: internal resonance feedback modulation within each core
+- XM: inter-core audio-rate modulation (Core A modulates B, B modulates A)
+- treat TITO as a coupling topology switch, not just a flavor/distortion knob
 
 ## Mode Mapping Plan
 
@@ -365,17 +378,17 @@ The 10 modes should be implemented as explicit topology selections over the two 
 
 Planned v1 mode mapping:
 - `LL`: LP into LP cascade
-- `LB`: LP + BP parallel blend
-- `NL`: LP with subtractive notch character
-- `NN`: notch into notch cascade
-- `LH`: LP + HP parallel blend
+- `LB`: LP + BP parallel blend (with phase-accurate cancellation gaps)
+- `NL`: LP with subtractive notch character (tuned below main cutoff)
+- `NN`: notch into notch cascade (phaser-like movement)
+- `LH`: LP + HP parallel blend (variable-width band-rejection)
 - `BB`: BP + BP dual-formant blend
-- `HH`: HP into LP bandpass window
-- `HN`: HP with subtractive notch character
-- `BH`: BP + HP parallel blend
+- `HH`: HP into LP bandpass window (flat-top at high SPAN)
+- `HN`: HP with subtractive notch character (tuned above HP corner)
+- `BH`: BP + HP parallel blend (lower formant + cancellation gap)
 - `HL`: HP into HP cascade
 
-This mapping should be coded clearly and independently from UI naming so it can be tuned later.
+This mapping should be coded clearly and independently from UI naming so it can be tuned later. Critical: ensure phase-accurate combinations to maintain characteristic "gap" and "phaser" movement.
 
 ## DSP Implementation Phases
 
@@ -540,15 +553,17 @@ Mitigation:
 Bifurx v1 is acceptable when:
 - all controls and ports are wired and behave coherently
 - all 10 modes produce distinct and musically useful responses, including notch-family modes that retain convincing phase-like motion
-- SPAN creates an intelligible dual-peak split and the preview makes it legible when one or both peaks approach or leave the audible band
-- BALANCE meaningfully redistributes energy between the two peaks rather than behaving like a simple output mix
+- SPAN creates an intelligible dual-peak split and feels like a "timbre morph" rather than a simple detune
+- BALANCE meaningfully redistributes energy (gain and Q) between the two peaks rather than behaving like a simple output mix
 - RESO can reach strong resonant behavior and at least some self-oscillation-like states, with mode-dependent thresholds preserved
-- TITO states are audibly different because their coupling/routing behavior is different
+- TITO states are audibly different through explicit routing changes (Self-Mod vs Cross-Mod)
+- module tracks V/OCT reasonably (approx 5 octaves) in self-oscillation, behaving as a dual sine oscillator
+- system remains stable under "pinging" (fast transient excitation) through V/OCT or FM inputs
 - response curve updates correctly with mode and control changes
 - spectrum overlay reads as useful rather than decorative noise
 - module performs reliably in Rack without UI hitching or DSP instability
 - frequency modulation remains stable under fast modulation and does not zipper under normal audio-rate use
-- fast transient/ping-style excitation remains stable and musically usable
+- the module conveys a high-sensitivity "instrument" feel where parameter interactions are continuously expressive
 
 ## Post-v1 Roadmap
 
