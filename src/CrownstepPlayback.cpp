@@ -82,6 +82,9 @@ void Crownstep::emitStepAtClockEdge() {
 
 void Crownstep::process(const ProcessArgs& args) {
 	transportTimeSeconds += args.sampleTime;
+	if (transportTimeSeconds >= 4096.0) {
+		transportTimeSeconds = std::fmod(transportTimeSeconds, 4096.0);
+	}
 
 	if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
 		startNewGame();

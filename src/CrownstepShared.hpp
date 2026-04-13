@@ -171,7 +171,7 @@ struct Crownstep : Module {
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
-	float transportTimeSeconds = 0.f;
+	double transportTimeSeconds = 0.0;
 	float heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 	float heldAccent = 0.f;
 	float heldMod = 0.f;
