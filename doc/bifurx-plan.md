@@ -99,6 +99,7 @@ That means:
 - the preview curve is based on the current mode/parameter state
 - nonlinear/TITO coloration is not required to be fully represented in the line curve
 - the live FFT overlay can communicate actual signal modification separately
+- the preview should make the audible-band placement of the two peaks legible, especially when SPAN pushes one or both peaks toward subsonic or ultrasonic regions
 
 This keeps the display tractable and honest.
 
@@ -253,6 +254,17 @@ The following observations should guide tuning decisions during implementation.
 - High resonance should allow two-tone / dual-peak oscillatory behavior in at least some modes
 - BALANCE and SPAN should still matter in that regime
 
+### Additional Calibration From Second Demo Pass
+
+- SPAN can easily move one or both peaks outside the audible range
+- FREQ and SPAN must be treated as a coupled navigation system, not independent axes
+- the preview should help the user understand where the two peaks sit relative to the audible band
+- BALANCE should track low-vs-high prominence perceptually, not core identity mechanically
+- resonance threshold is allowed to vary by mode and should not be normalized away
+- double-notch / notch-family modes should retain phase-like movement character rather than sounding like sterile static cuts
+- pinging / transient excitation is a legitimate use case and should remain stable
+- layered FM plus internal coupling should remain musically usable, not collapse into zipper noise or obvious digital breakage
+
 ## Concrete v1 Module Surface
 
 ### Parameters
@@ -323,6 +335,10 @@ Recommended v1 behavior:
 
 `RESO` controls the overall resonant emphasis and should support self-oscillation-like behavior in at least some modes.
 
+Implementation note:
+- resonance threshold is allowed to vary by mode
+- v1 should not artificially normalize self-oscillation onset across modes
+
 ### Level
 
 `LEVEL` is both input trim and overdrive entrance.
@@ -388,6 +404,7 @@ Requirements:
 - based on nominal linear transfer behavior
 - should respond immediately to parameter changes
 - should not allocate or do heavy work in the audio thread
+- should make the two peak locations readable relative to the audible band so SPAN/FREQ navigation stays intelligible
 
 ### Phase 3: Input Drive And Nonlinear Character
 
@@ -522,15 +539,16 @@ Mitigation:
 
 Bifurx v1 is acceptable when:
 - all controls and ports are wired and behave coherently
-- all 10 modes produce distinct and musically useful responses
-- SPAN creates an intelligible dual-peak split
+- all 10 modes produce distinct and musically useful responses, including notch-family modes that retain convincing phase-like motion
+- SPAN creates an intelligible dual-peak split and the preview makes it legible when one or both peaks approach or leave the audible band
 - BALANCE meaningfully redistributes energy between the two peaks rather than behaving like a simple output mix
-- RESO can reach strong resonant behavior and at least some self-oscillation-like states
+- RESO can reach strong resonant behavior and at least some self-oscillation-like states, with mode-dependent thresholds preserved
 - TITO states are audibly different because their coupling/routing behavior is different
 - response curve updates correctly with mode and control changes
 - spectrum overlay reads as useful rather than decorative noise
 - module performs reliably in Rack without UI hitching or DSP instability
 - frequency modulation remains stable under fast modulation and does not zipper under normal audio-rate use
+- fast transient/ping-style excitation remains stable and musically usable
 
 ## Post-v1 Roadmap
 
