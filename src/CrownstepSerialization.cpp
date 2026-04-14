@@ -11,6 +11,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "melodicBiasEnabled", json_boolean(melodicBiasEnabled));
 	json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 	json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
+	json_object_set_new(rootJ, "boardValueLayoutInverted", json_boolean(boardValueLayoutInverted));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 	json_object_set_new(rootJ, "showCellPitchOverlay", json_boolean(showCellPitchOverlay));
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
@@ -156,23 +157,17 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
 		}
 	}
+	json_t* boardValueLayoutInvertedJ = json_object_get(rootJ, "boardValueLayoutInverted");
+	if (boardValueLayoutInvertedJ) {
+		boardValueLayoutInverted = json_is_true(boardValueLayoutInvertedJ);
+	}
 	json_t* boardTextureModeJ = json_object_get(rootJ, "boardTextureMode");
 	if (boardTextureModeJ) {
 		boardTextureMode = clamp(int(json_integer_value(boardTextureModeJ)), 0, int(BOARD_TEXTURE_NAMES.size()) - 1);
 	}
 	json_t* highlightModeJ = json_object_get(rootJ, "highlightMode");
 	if (highlightModeJ) {
-		int storedHighlightMode = int(json_integer_value(highlightModeJ));
-		// Legacy mapping: 0 Ring, 1 Glow, 2 Off -> 0 Outline, 1 Off.
-		if (storedHighlightMode <= 0) {
-			highlightMode = HIGHLIGHT_RING;
-		}
-		else if (storedHighlightMode == 1) {
-			highlightMode = HIGHLIGHT_RING;
-		}
-		else {
-			highlightMode = HIGHLIGHT_OFF;
-		}
+		highlightMode = clamp(int(json_integer_value(highlightModeJ)), 0, HIGHLIGHT_COUNT - 1);
 	}
 	json_t* stepCounterStyleJ = json_object_get(rootJ, "stepCounterStyle");
 	if (stepCounterStyleJ) {

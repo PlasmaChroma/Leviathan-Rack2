@@ -658,15 +658,19 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 				}
 				return rank;
 			}
-			case 2: {
+			case 2:
+				return col * 8 + row;
+			case 3:
+				return crownstep::serpentineDiagonalRank(row, col, 8, 8);
+			case 4: {
 				int serpentineCol = (row & 1) ? (7 - col) : col;
 				return row * 8 + serpentineCol;
 			}
-			case 3: {
+			case 5: {
 				int serpentineRow = (col & 1) ? (7 - row) : row;
 				return col * 8 + serpentineRow;
 			}
-			case 4:
+			case 6:
 				return crownstep::serpentineDiagonalRank(row, col, 8, 8);
 			case 1:
 			default:
@@ -703,6 +707,9 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 	};
 
 	float boardValueIndex = sampledBoardValueForActiveGame();
+	if (boardValueLayoutInverted) {
+		boardValueIndex = float(boardCellCount() - 1) - boardValueIndex;
+	}
 	// Bias acts as a raw index-domain offset on the board-derived value.
 	boardValueIndex += float(rootSemitoneLinear());
 	boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
@@ -1138,5 +1145,10 @@ void Crownstep::onBoardSquarePressed(int index) {
 			armDelayedAiTurnAfterHumanMove();
 			return;
 		}
+	}
+
+	if (piece == 0) {
+		selectedSquare = -1;
+		refreshLegalMoves();
 	}
 }

@@ -66,8 +66,9 @@ static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal
 static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
 };
-static constexpr std::array<const char*, 5> BOARD_VALUE_LAYOUT_NAMES = {
-	{"Center-Out", "Linear", "Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)"}
+static constexpr std::array<const char*, 7> BOARD_VALUE_LAYOUT_NAMES = {
+	{"Center-Out", "Linear (Horizontal)", "Linear (Vertical)", "Linear (Diagonal)",
+		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)"}
 };
 static constexpr std::array<const char*, 4> PITCH_DIVIDER_NAMES = {
 	{"Full", "Half", "Third", "Quarter"}
@@ -1402,15 +1403,19 @@ inline int boardValueForIndex(int boardIndex, int layoutMode) {
 			}
 			return rank;
 		}
-		case 2: {
+		case 2:
+			return posInRow * 8 + row;
+		case 3:
+			return serpentineDiagonalRank(row, posInRow, 8, 4);
+		case 4: {
 			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
 			return row * 4 + serpentinePos;
 		}
-		case 3: {
+		case 5: {
 			int serpentineRow = (posInRow & 1) ? (7 - row) : row;
 			return posInRow * 8 + serpentineRow;
 		}
-		case 4:
+		case 6:
 			return serpentineDiagonalRank(row, posInRow, 8, 4);
 		case 1:
 		default:

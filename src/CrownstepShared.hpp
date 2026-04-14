@@ -37,7 +37,7 @@ static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
 static constexpr std::array<const char*, 3> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric"}};
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
-static constexpr std::array<const char*, 2> HIGHLIGHT_MODE_NAMES = {{"Outline", "Off"}};
+static constexpr std::array<const char*, 4> HIGHLIGHT_MODE_NAMES = {{"Purple", "Cyan", "Green", "Off"}};
 static constexpr std::array<const char*, 2> PLAYER_MODE_NAMES = {{"Cause", "Effect"}};
 static constexpr std::array<const char*, 2> STEP_COUNTER_STYLE_NAMES = {{"Ribbon", "Basic"}};
 
@@ -104,7 +104,9 @@ struct Crownstep : Module {
 		GAME_MODE_COUNT
 	};
 	enum HighlightMode {
-		HIGHLIGHT_RING = 0,
+		HIGHLIGHT_PURPLE = 0,
+		HIGHLIGHT_CYAN,
+		HIGHLIGHT_GREEN,
 		HIGHLIGHT_OFF,
 		HIGHLIGHT_COUNT
 	};
@@ -160,11 +162,12 @@ struct Crownstep : Module {
 	bool melodicBiasEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
+	bool boardValueLayoutInverted = false;
 	int pitchDividerMode = 0;
 	bool showCellPitchOverlay = false;
 	int boardTextureMode = BOARD_TEXTURE_WOOD;
 	int gameMode = GAME_MODE_CHECKERS;
-	int highlightMode = HIGHLIGHT_RING;
+	int highlightMode = HIGHLIGHT_GREEN;
 	int playerMode = PLAYER_INIT;
 	int stepCounterStyle = STEP_COUNTER_RIBBON;
 	int sequenceCapOverride = -1; // -1: use knob, 0: full, >0: explicit recent-window cap

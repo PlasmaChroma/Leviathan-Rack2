@@ -9,6 +9,7 @@ namespace {
 
 constexpr int CHESS_ATLAS_ROWS = 2;
 constexpr int CHESS_ATLAS_COLS = 6;
+constexpr int HIGHLIGHT_COLOR_COUNT = 3;
 constexpr bool CHESS_ATLAS_ENABLED = true;
 constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
 constexpr float CHESS_ATLAS_RASTER_SCALE = 3.f;
@@ -17,6 +18,56 @@ constexpr float CHESS_ATLAS_ALPHA_GAMMA = 0.92f;
 constexpr int CHESS_ATLAS_IMAGE_FLAGS = NVG_IMAGE_GENERATE_MIPMAPS;
 constexpr int CHESS_ATLAS_MASK_FLAGS = 0;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
+
+struct HighlightPalette {
+	uint8_t shellR;
+	uint8_t shellG;
+	uint8_t shellB;
+	uint8_t bandR;
+	uint8_t bandG;
+	uint8_t bandB;
+	uint8_t glowR;
+	uint8_t glowG;
+	uint8_t glowB;
+};
+
+constexpr HighlightPalette HIGHLIGHT_PALETTES[HIGHLIGHT_COLOR_COUNT] = {
+	{112u, 72u, 184u, 198u, 150u, 255u, 184u, 132u, 255u},
+	{26u, 178u, 214u, 110u, 232u, 255u, 96u, 222u, 248u},
+	{40u, 168u, 104u, 98u, 235u, 154u, 88u, 240u, 154u},
+};
+
+inline int highlightPaletteIndexForMode(int highlightMode) {
+	switch (highlightMode) {
+	case Crownstep::HIGHLIGHT_PURPLE:
+		return 0;
+	case Crownstep::HIGHLIGHT_CYAN:
+		return 1;
+	case Crownstep::HIGHLIGHT_GREEN:
+	default:
+		return 2;
+	}
+}
+
+inline HighlightPalette highlightPaletteForMode(int highlightMode) {
+	return HIGHLIGHT_PALETTES[highlightPaletteIndexForMode(highlightMode)];
+}
+
+inline NVGcolor highlightShellColor(int highlightMode, int alpha) {
+	const HighlightPalette palette = highlightPaletteForMode(highlightMode);
+	return nvgRGBA(palette.shellR, palette.shellG, palette.shellB, alpha);
+}
+
+inline NVGcolor highlightBandColor(int highlightMode, int alpha) {
+	const HighlightPalette palette = highlightPaletteForMode(highlightMode);
+	return nvgRGBA(palette.bandR, palette.bandG, palette.bandB, alpha);
+}
+
+inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
+	const HighlightPalette palette = highlightPaletteForMode(highlightMode);
+	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
+}
+
 const std::shared_ptr<Image>& crownstepWoodBoardImage() {
 	static std::shared_ptr<Image> image;
 	static bool attempted = false;
@@ -24,7 +75,6 @@ const std::shared_ptr<Image>& crownstepWoodBoardImage() {
 		attempted = true;
 		if (APP && APP->window) {
 			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/wood.png"));
-			INFO("Crownstep wood image load: handle=%d", (image && image->handle >= 0) ? image->handle : -1);
 		}
 	}
 	return image;
@@ -37,7 +87,6 @@ const std::shared_ptr<Image>& crownstepMarbleBoardImage() {
 		attempted = true;
 		if (APP && APP->window) {
 			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/marble.png"));
-			INFO("Crownstep marble image load: handle=%d", (image && image->handle >= 0) ? image->handle : -1);
 		}
 	}
 	return image;
@@ -63,6 +112,10 @@ constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] 
 };
 
 struct ChessPieceAtlasCache {
+	ChessPieceAtlasCache() {
+		rasterRingBandImageHandle.fill(-1);
+		rasterRingShellImageHandle.fill(-1);
+	}
 	std::shared_ptr<Svg> svg;
 	bool initialized = false;
 	bool available = false;
@@ -78,10 +131,10 @@ struct ChessPieceAtlasCache {
 	int rasterMaskSilhouetteGreenImageHandle = -1;
 	NVGcontext* rasterMaskSilhouetteGreenDarkImageVg = nullptr;
 	int rasterMaskSilhouetteGreenDarkImageHandle = -1;
-	NVGcontext* rasterRingBandGreenImageVg = nullptr;
-	int rasterRingBandGreenImageHandle = -1;
-	NVGcontext* rasterRingShellGreenDarkImageVg = nullptr;
-	int rasterRingShellGreenDarkImageHandle = -1;
+	std::array<NVGcontext*, HIGHLIGHT_COLOR_COUNT> rasterRingBandImageVg {};
+	std::array<int, HIGHLIGHT_COLOR_COUNT> rasterRingBandImageHandle {};
+	std::array<NVGcontext*, HIGHLIGHT_COLOR_COUNT> rasterRingShellImageVg {};
+	std::array<int, HIGHLIGHT_COLOR_COUNT> rasterRingShellImageHandle {};
 	int rasterImageWidth = 0;
 	int rasterImageHeight = 0;
 	float rasterScale = 1.f;
@@ -227,12 +280,18 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		&& cache->rasterMaskSilhouetteGreenImageHandle >= 0
 		&& cache->rasterMaskSilhouetteGreenImageVg == vg
 		&& cache->rasterMaskSilhouetteGreenDarkImageHandle >= 0
-		&& cache->rasterMaskSilhouetteGreenDarkImageVg == vg
-		&& cache->rasterRingBandGreenImageHandle >= 0
-		&& cache->rasterRingBandGreenImageVg == vg
-		&& cache->rasterRingShellGreenDarkImageHandle >= 0
-		&& cache->rasterRingShellGreenDarkImageVg == vg) {
-		return true;
+		&& cache->rasterMaskSilhouetteGreenDarkImageVg == vg) {
+		bool haveAllRingVariants = true;
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			haveAllRingVariants = haveAllRingVariants
+				&& cache->rasterRingBandImageHandle[size_t(colorIndex)] >= 0
+				&& cache->rasterRingBandImageVg[size_t(colorIndex)] == vg
+				&& cache->rasterRingShellImageHandle[size_t(colorIndex)] >= 0
+				&& cache->rasterRingShellImageVg[size_t(colorIndex)] == vg;
+		}
+		if (haveAllRingVariants) {
+			return true;
+		}
 	}
 
 	NSVGimage* image = cache->svg->handle;
@@ -463,8 +522,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	const float bandOutPx = 14.8f;
 	const float shellInPx = 13.0f;
 	const float shellOutPx = 22.6f;
-	std::vector<unsigned char> ringBandGreenPixels(pixelCount * size_t(4), 0u);
-	std::vector<unsigned char> ringShellGreenDarkPixels(pixelCount * size_t(4), 0u);
+	std::array<std::vector<unsigned char>, HIGHLIGHT_COLOR_COUNT> ringBandPixels;
+	std::array<std::vector<unsigned char>, HIGHLIGHT_COLOR_COUNT> ringShellPixels;
+	for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+		ringBandPixels[size_t(colorIndex)].assign(pixelCount * size_t(4), 0u);
+		ringShellPixels[size_t(colorIndex)].assign(pixelCount * size_t(4), 0u);
+	}
 	for (size_t i = 0; i < pixelCount; ++i) {
 		if (!outside[i]) {
 			continue;
@@ -476,34 +539,43 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
 		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
 		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
-		ringBandGreenPixels[i * 4 + 0] = 98u;
-		ringBandGreenPixels[i * 4 + 1] = 235u;
-		ringBandGreenPixels[i * 4 + 2] = 154u;
-		ringBandGreenPixels[i * 4 + 3] = (unsigned char) clamp(248.f * bandA, 0.f, 255.f);
-		ringShellGreenDarkPixels[i * 4 + 0] = 40u;
-		ringShellGreenDarkPixels[i * 4 + 1] = 168u;
-		ringShellGreenDarkPixels[i * 4 + 2] = 104u;
-		ringShellGreenDarkPixels[i * 4 + 3] = (unsigned char) clamp(192.f * shellA, 0.f, 255.f);
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			const HighlightPalette palette = HIGHLIGHT_PALETTES[size_t(colorIndex)];
+			ringBandPixels[size_t(colorIndex)][i * 4 + 0] = palette.bandR;
+			ringBandPixels[size_t(colorIndex)][i * 4 + 1] = palette.bandG;
+			ringBandPixels[size_t(colorIndex)][i * 4 + 2] = palette.bandB;
+			ringBandPixels[size_t(colorIndex)][i * 4 + 3] = (unsigned char) clamp(248.f * bandA, 0.f, 255.f);
+			ringShellPixels[size_t(colorIndex)][i * 4 + 0] = palette.shellR;
+			ringShellPixels[size_t(colorIndex)][i * 4 + 1] = palette.shellG;
+			ringShellPixels[size_t(colorIndex)][i * 4 + 2] = palette.shellB;
+			ringShellPixels[size_t(colorIndex)][i * 4 + 3] = (unsigned char) clamp(192.f * shellA, 0.f, 255.f);
+		}
 	}
-	int ringBandGreenImageHandle = nvgCreateImageRGBA(
-		vg,
-		rasterWidth,
-		rasterHeight,
-		CHESS_ATLAS_MASK_FLAGS,
-		ringBandGreenPixels.data()
-	);
-	if (ringBandGreenImageHandle < 0) {
-		return false;
-	}
-	int ringShellGreenDarkImageHandle = nvgCreateImageRGBA(
-		vg,
-		rasterWidth,
-		rasterHeight,
-		CHESS_ATLAS_MASK_FLAGS,
-		ringShellGreenDarkPixels.data()
-	);
-	if (ringShellGreenDarkImageHandle < 0) {
-		return false;
+	for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+		int ringBandImageHandle = nvgCreateImageRGBA(
+			vg,
+			rasterWidth,
+			rasterHeight,
+			CHESS_ATLAS_MASK_FLAGS,
+			ringBandPixels[size_t(colorIndex)].data()
+		);
+		if (ringBandImageHandle < 0) {
+			return false;
+		}
+		int ringShellImageHandle = nvgCreateImageRGBA(
+			vg,
+			rasterWidth,
+			rasterHeight,
+			CHESS_ATLAS_MASK_FLAGS,
+			ringShellPixels[size_t(colorIndex)].data()
+		);
+		if (ringShellImageHandle < 0) {
+			return false;
+		}
+		cache->rasterRingBandImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingBandImageHandle[size_t(colorIndex)] = ringBandImageHandle;
+		cache->rasterRingShellImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingShellImageHandle[size_t(colorIndex)] = ringShellImageHandle;
 	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
@@ -517,10 +589,6 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	cache->rasterMaskSilhouetteGreenImageHandle = silhouetteGreenMaskImageHandle;
 	cache->rasterMaskSilhouetteGreenDarkImageVg = vg;
 	cache->rasterMaskSilhouetteGreenDarkImageHandle = silhouetteGreenDarkMaskImageHandle;
-	cache->rasterRingBandGreenImageVg = vg;
-	cache->rasterRingBandGreenImageHandle = ringBandGreenImageHandle;
-	cache->rasterRingShellGreenDarkImageVg = vg;
-	cache->rasterRingShellGreenDarkImageHandle = ringShellGreenDarkImageHandle;
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
@@ -648,6 +716,7 @@ bool drawChessAtlasPieceRingContour(
 	float cellWidth,
 	float cellHeight,
 	int piece,
+	int highlightMode,
 	float pulse
 ) {
 	if (!vg || piece == 0) {
@@ -657,8 +726,12 @@ bool drawChessAtlasPieceRingContour(
 	if (!cache.available
 		|| !cache.svg
 		|| !ensureChessPieceAtlasRasterImage(vg, &cache)
-		|| cache.rasterRingBandGreenImageHandle < 0
-		|| cache.rasterRingShellGreenDarkImageHandle < 0) {
+		|| highlightMode == Crownstep::HIGHLIGHT_OFF) {
+		return false;
+	}
+	const int paletteIndex = highlightPaletteIndexForMode(highlightMode);
+	if (cache.rasterRingBandImageHandle[size_t(paletteIndex)] < 0
+		|| cache.rasterRingShellImageHandle[size_t(paletteIndex)] < 0) {
 		return false;
 	}
 
@@ -673,11 +746,11 @@ bool drawChessAtlasPieceRingContour(
 	float atlasScale = spec.atlasDrawWidth / std::max(1.f, cache.svg->handle->width);
 	float pxToScreen = atlasScale / std::max(0.001f, CHESS_ATLAS_RASTER_SCALE);
 	// Must cover the largest precomputed raster-distance shell extents.
-	float shellMargin = 23.0f * pxToScreen;
-	float bandMargin = 15.2f * pxToScreen;
+	float shellMargin = 25.5f * pxToScreen;
+	float bandMargin = 16.4f * pxToScreen;
 	float pulse01 = clamp(pulse, 0.f, 1.f);
-	float shellPulseMargin = shellMargin + pxToScreen * (1.2f + 5.0f * pulse01);
-	float bandPulseMargin = bandMargin + pxToScreen * (0.8f + 3.7f * pulse01);
+	float shellPulseMargin = shellMargin + pxToScreen * (1.3f + 5.3f * pulse01);
+	float bandPulseMargin = bandMargin + pxToScreen * (0.9f + 3.9f * pulse01);
 	float shellAlpha = 0.24f + 0.28f * pulse01;
 	float bandAlpha = 0.78f + 0.18f * pulse01;
 
@@ -704,8 +777,8 @@ bool drawChessAtlasPieceRingContour(
 	};
 
 	nvgSave(vg);
-	drawRingMaskLayer(cache.rasterRingShellGreenDarkImageHandle, shellPulseMargin, shellAlpha);
-	drawRingMaskLayer(cache.rasterRingBandGreenImageHandle, bandPulseMargin, bandAlpha);
+	drawRingMaskLayer(cache.rasterRingShellImageHandle[size_t(paletteIndex)], shellPulseMargin, shellAlpha);
+	drawRingMaskLayer(cache.rasterRingBandImageHandle[size_t(paletteIndex)], bandPulseMargin, bandAlpha);
 	nvgRestore(vg);
 	return true;
 }
@@ -752,6 +825,12 @@ struct CrownstepBoardWidget final : Widget {
 			e.consume(this);
 			return;
 		}
+		if (!module->isChessMode() && !module->isOthelloMode() && module->selectedSquare >= 0) {
+			module->selectedSquare = -1;
+			module->refreshLegalMoves();
+			e.consume(this);
+			return;
+		}
 		Widget::onButton(e);
 	}
 
@@ -771,15 +850,6 @@ struct CrownstepBoardWidget final : Widget {
 
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
-		static int loggedTextureMode = -999;
-		if (module && loggedTextureMode != module->boardTextureMode) {
-			loggedTextureMode = module->boardTextureMode;
-			INFO("Crownstep draw: boardTextureMode=%d name='%s'",
-				loggedTextureMode,
-				(loggedTextureMode >= 0 && loggedTextureMode < int(BOARD_TEXTURE_NAMES.size()))
-					? BOARD_TEXTURE_NAMES[size_t(loggedTextureMode)]
-					: "unknown");
-		}
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
@@ -808,20 +878,6 @@ struct CrownstepBoardWidget final : Widget {
 		const std::shared_ptr<Image>& marbleBoardImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardImage() : std::shared_ptr<Image>();
 		const bool hasWoodBoardImage = woodBoardImage && woodBoardImage->handle >= 0;
 		const bool hasMarbleBoardImage = marbleBoardImage && marbleBoardImage->handle >= 0;
-		static int loggedTextureStateMode = -999;
-		if (module && loggedTextureStateMode != module->boardTextureMode) {
-			loggedTextureStateMode = module->boardTextureMode;
-			INFO(
-				"Crownstep render texture state: mode=%d wood=%d marble=%d fabric=%d hasWoodImage=%d hasMarbleImage=%d othello=%d",
-				module->boardTextureMode,
-				woodTexture ? 1 : 0,
-				marbleTexture ? 1 : 0,
-				(module->boardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC) ? 1 : 0,
-				hasWoodBoardImage ? 1 : 0,
-				hasMarbleBoardImage ? 1 : 0,
-				othelloBoard ? 1 : 0
-			);
-		}
 		if (hasWoodBoardImage) {
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -1082,25 +1138,26 @@ struct CrownstepBoardWidget final : Widget {
 						};
 						// Keep animation phase numerically stable during very long sessions.
 						float animTime = float(std::fmod(double(module->transportTimeSeconds), 4096.0));
+					const bool highlightVisible = module->highlightMode != Crownstep::HIGHLIGHT_OFF;
 					// Temporary UX tweak: hide AI potential-move hint dots/rings.
 					const bool renderOpponentMoveHints = false;
-					if (!module->gameOver && module->selectedSquare >= 0) {
+					if (highlightVisible && !module->gameOver && module->selectedSquare >= 0) {
 					int row = 0;
 					int col = 0;
 					if (viewRowColFromBoardIndex(module->selectedSquare, &row, &col)) {
 						float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
-						nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(24.f + 48.f * pulse)));
+						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(24.f + 48.f * pulse)));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(188.f + 54.f * pulse)));
+						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(188.f + 54.f * pulse)));
 						nvgStrokeWidth(args.vg, 2.15f);
 						nvgStroke(args.vg);
 					}
 				}
-				if (!module->gameOver) {
+				if (highlightVisible && !module->gameOver) {
 					for (int destinationIndex : module->highlightedDestinations) {
 						int row = 0;
 						int col = 0;
@@ -1114,11 +1171,11 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.17f + 0.06f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(44.f + 50.f * breath)));
+						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(44.f + 50.f * breath)));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.105f);
-						nvgFillColor(args.vg, nvgRGB(98, 235, 154));
+						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
 						nvgFill(args.vg);
 					}
 						if (renderOpponentMoveHints) for (int destinationIndex : module->opponentHighlightedDestinations) {
@@ -1147,29 +1204,27 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.16f + 0.055f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(36.f + 48.f * breath)));
+						nvgFillColor(args.vg, highlightShellColor(module->highlightMode, int(36.f + 48.f * breath)));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.092f);
-						nvgFillColor(args.vg, nvgRGB(255, 213, 79));
+						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
 						nvgFill(args.vg);
 					}
 				}
 				if (!module->gameOver && module->lastMove.originIndex >= 0) {
-						NVGcolor edgeColor =
-							(module->lastMoveSide == module->humanSide()) ? nvgRGB(98, 235, 154) : nvgRGB(255, 213, 79);
 					for (int highlightIndex : {module->lastMove.originIndex, module->lastMove.destinationIndex}) {
 						int row = 0;
 						int col = 0;
 						if (!viewRowColFromBoardIndex(highlightIndex, &row, &col)) {
 							continue;
 						}
-						float phase = float(highlightIndex) * 0.34f + ((module->lastMoveSide == module->humanSide()) ? 0.f : 1.5f);
+						float phase = float(highlightIndex) * 0.34f;
 						float pulse = 0.5f + 0.5f * std::sin(animTime * 3.8f + phase);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
 						if (module->lastMoveSide == module->humanSide()) {
-							nvgFillColor(args.vg, nvgRGBA(88, 240, 154, int(18.f + 34.f * pulse)));
+							nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(20.f + 38.f * pulse)));
 						}
 						else {
 							nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(18.f + 34.f * pulse)));
@@ -1177,7 +1232,12 @@ struct CrownstepBoardWidget final : Widget {
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth + 1.f, row * cellHeight + 1.f, cellWidth - 2.f, cellHeight - 2.f);
-						nvgStrokeColor(args.vg, edgeColor);
+						if (module->lastMoveSide == module->humanSide()) {
+							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(192.f + 48.f * pulse)));
+						}
+						else {
+							nvgStrokeColor(args.vg, nvgRGB(255, 213, 79));
+						}
 						nvgStrokeWidth(args.vg, 2.0f);
 						nvgStroke(args.vg);
 					}
@@ -1669,7 +1729,7 @@ struct CrownstepBoardWidget final : Widget {
 							&& module->turnSide == module->humanSide()
 							&& module->highlightMode != Crownstep::HIGHLIGHT_OFF;
 						const bool showMovablePieceRingHints =
-							highlightActive && module->highlightMode == Crownstep::HIGHLIGHT_RING;
+							highlightActive;
 						int cellCount = module->boardCellCount();
 						std::vector<uint8_t> movableOrigins(size_t(cellCount), 0u);
 						if (highlightActive) {
@@ -1808,7 +1868,7 @@ struct CrownstepBoardWidget final : Widget {
 
 					// Keep forced/destination hint visibility even when a destination is visually occupied
 					// (e.g. during queued animations) by drawing a top-layer pulse over the piece.
-					if (!module->gameOver) {
+					if (!module->gameOver && module->highlightMode != Crownstep::HIGHLIGHT_OFF) {
 						for (int destinationIndex : module->highlightedDestinations) {
 							if (destinationIndex < 0 || destinationIndex >= cellCount) {
 								continue;
@@ -1833,7 +1893,7 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(186.f + 62.f * breath)));
+						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(186.f + 62.f * breath)));
 						nvgStrokeWidth(args.vg, 1.9f);
 						nvgStroke(args.vg);
 					}
@@ -1872,12 +1932,12 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, nvgRGBA(255, 213, 79, int(180.f + 68.f * breath)));
+						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(180.f + 68.f * breath)));
 						nvgStrokeWidth(args.vg, 1.85f);
 						nvgStroke(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.062f);
-						nvgFillColor(args.vg, nvgRGBA(255, 222, 128, int(190.f + 56.f * breath)));
+						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(190.f + 56.f * breath)));
 						nvgFill(args.vg);
 					}
 				}
@@ -1918,6 +1978,7 @@ struct CrownstepBoardWidget final : Widget {
 											cellWidth,
 											cellHeight,
 											piece,
+											module->highlightMode,
 											pulse
 										);
 										nvgRestore(args.vg);
@@ -1941,13 +2002,13 @@ struct CrownstepBoardWidget final : Widget {
 									// Fixed contour shell.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, nvgRGBA(40, 168, 104, 172));
+									nvgStrokeColor(args.vg, highlightShellColor(module->highlightMode, 172));
 									nvgStrokeWidth(args.vg, outerStroke);
 									nvgStroke(args.vg);
 									// Fixed bright band keeps contour solid at all pulse phases.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, 244));
+									nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, 244));
 									nvgStrokeWidth(args.vg, innerStroke);
 									nvgStroke(args.vg);
 									continue;
@@ -1956,13 +2017,13 @@ struct CrownstepBoardWidget final : Widget {
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, nvgRGBA(88, 240, 154, int(38.f + 44.f * pulse)));
+							nvgStrokeColor(args.vg, highlightGlowColor(module->highlightMode, int(38.f + 44.f * pulse)));
 							nvgStrokeWidth(args.vg, 3.6f);
 							nvgStroke(args.vg);
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, nvgRGBA(98, 235, 154, int(182.f + 58.f * pulse)));
+							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(182.f + 58.f * pulse)));
 							nvgStrokeWidth(args.vg, 1.85f);
 							nvgStroke(args.vg);
 						}
@@ -3276,7 +3337,7 @@ struct CrownstepWidget final : ModuleWidget {
 				difficultyMenu->addChild(item);
 			}
 		}));
-		menu->addChild(createSubmenuItem("Piece Highlight", "", [=](Menu* highlightMenu) {
+		menu->addChild(createSubmenuItem("Highlight", "", [=](Menu* highlightMenu) {
 			for (int i = 0; i < int(HIGHLIGHT_MODE_NAMES.size()); ++i) {
 				highlightMenu->addChild(createCheckMenuItem(
 					HIGHLIGHT_MODE_NAMES[size_t(i)],
@@ -3401,20 +3462,73 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 		));
 		menu->addChild(createSubmenuItem("Board Layout", "", [=](Menu* valueLayoutMenu) {
-			for (int i = 0; i < int(BOARD_VALUE_LAYOUT_NAMES.size()); ++i) {
-				valueLayoutMenu->addChild(createCheckMenuItem(
-					BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->boardValueLayoutMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->boardValueLayoutMode = i;
-						}
+			MenuLabel* currentLayoutLabel = new MenuLabel();
+			currentLayoutLabel->text = module
+				? std::string("Current: ") + BOARD_VALUE_LAYOUT_NAMES[size_t(clamp(
+					module->boardValueLayoutMode,
+					0,
+					int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1
+				))] + (module->boardValueLayoutInverted ? " (Inverted)" : "")
+				: "Current: Center-Out";
+			valueLayoutMenu->addChild(currentLayoutLabel);
+			valueLayoutMenu->addChild(new MenuSeparator());
+			valueLayoutMenu->addChild(createCheckMenuItem(
+				"Inverted",
+				"",
+				[=]() {
+					return module && module->boardValueLayoutInverted;
+				},
+				[=]() {
+					if (module) {
+						module->boardValueLayoutInverted = !module->boardValueLayoutInverted;
 					}
-				));
-			}
+				}
+			));
+			valueLayoutMenu->addChild(new MenuSeparator());
+			valueLayoutMenu->addChild(createCheckMenuItem(
+				BOARD_VALUE_LAYOUT_NAMES[0],
+				"",
+				[=]() {
+					return module && module->boardValueLayoutMode == 0;
+				},
+				[=]() {
+					if (module) {
+						module->boardValueLayoutMode = 0;
+					}
+				}
+			));
+			valueLayoutMenu->addChild(createSubmenuItem("Linear", "", [=](Menu* linearMenu) {
+				for (int i : {1, 2, 3}) {
+					linearMenu->addChild(createCheckMenuItem(
+						BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
+						"",
+						[=]() {
+							return module && module->boardValueLayoutMode == i;
+						},
+						[=]() {
+							if (module) {
+								module->boardValueLayoutMode = i;
+							}
+						}
+					));
+				}
+			}));
+			valueLayoutMenu->addChild(createSubmenuItem("Serpentine", "", [=](Menu* serpentineMenu) {
+				for (int i : {4, 5, 6}) {
+					serpentineMenu->addChild(createCheckMenuItem(
+						BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
+						"",
+						[=]() {
+							return module && module->boardValueLayoutMode == i;
+						},
+						[=]() {
+							if (module) {
+								module->boardValueLayoutMode = i;
+							}
+						}
+					));
+				}
+			}));
 		}));
 		menu->addChild(createSubmenuItem("Source", "", [=](Menu* interpretationMenu) {
 			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
