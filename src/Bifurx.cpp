@@ -852,9 +852,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgStroke(args.vg);
 
 	if (hasOverlay) {
-		const NVGcolor purple = nvgRGB(132, 72, 255);
-		const NVGcolor cyan = nvgRGB(0, 255, 255);
-		const NVGcolor white = nvgRGB(228, 232, 236);
+		const NVGcolor purple = nvgRGB(122, 92, 255);
+		const NVGcolor cyan = nvgRGB(28, 204, 217);
+		const NVGcolor white = nvgRGB(206, 210, 216);
 		nvgShapeAntiAlias(args.vg, 0);
 
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
@@ -869,12 +869,12 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			const float negAmount = clamp01(-avgDeltaDb / 18.f);
 			NVGcolor tint = white;
 			if (posAmount > 0.f) {
-				tint = mixColor(tint, cyan, clamp01(posAmount * 1.25f));
+				tint = mixColor(tint, cyan, clamp01(posAmount * 1.40f));
 			}
 			if (negAmount > 0.f) {
-				tint = mixColor(tint, purple, negAmount);
+				tint = mixColor(tint, purple, clamp01(negAmount * 1.25f));
 			}
-			NVGcolor fill = mixColor(white, tint, 0.65f + 0.35f * energyAmount);
+			NVGcolor fill = mixColor(white, tint, 0.55f + 0.45f * energyAmount);
 			fill.a = 1.f;
 			const float spectrumY0 = spectrumYForDbfs(overlayOutputDbfs[i]);
 			const float spectrumY1 = spectrumYForDbfs(overlayOutputDbfs[i + 1]);
