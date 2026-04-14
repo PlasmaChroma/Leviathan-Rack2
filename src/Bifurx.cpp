@@ -840,8 +840,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 	nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-	char topLabel[20];
-	std::snprintf(topLabel, sizeof(topLabel), "%+05.1f dBFS", displayMaxDbfs);
+	char valueLabel[12];
+	std::snprintf(valueLabel, sizeof(valueLabel), "%+.1f", displayMaxDbfs);
+	if ((valueLabel[0] == '+' || valueLabel[0] == '-') && valueLabel[1] == '0' && valueLabel[2] == '.') {
+		std::memmove(valueLabel + 1, valueLabel + 2, std::strlen(valueLabel + 2) + 1);
+	}
+	char topLabel[24];
+	std::snprintf(topLabel, sizeof(topLabel), "%5s dBFS", valueLabel);
 	nvgText(args.vg, 1.5f, 1.f, topLabel, nullptr);
 
 	nvgBeginPath(args.vg);
@@ -855,7 +860,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		const NVGcolor purple = nvgRGB(122, 92, 255);
 		const NVGcolor cyan = nvgRGB(28, 204, 217);
 		const NVGcolor white = nvgRGB(206, 210, 216);
-		nvgShapeAntiAlias(args.vg, 0);
+		nvgShapeAntiAlias(args.vg, 1);
 
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgDeltaDb = 0.5f * (overlayDb[i] + overlayDb[i + 1]);
@@ -903,23 +908,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			nvgFillColor(args.vg, fill);
 			nvgFill(args.vg);
 		}
-		nvgShapeAntiAlias(args.vg, 1);
-
-		nvgBeginPath(args.vg);
-		for (int i = 0; i < kCurvePointCount; ++i) {
-			const float y = spectrumYForDbfs(overlayOutputDbfs[i]);
-			if (i == 0) {
-				nvgMoveTo(args.vg, curveX[i], y);
-			}
-			else {
-				nvgLineTo(args.vg, curveX[i], y);
-			}
-		}
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 110));
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgStrokeWidth(args.vg, 1.1f);
-		nvgStroke(args.vg);
 	}
 
 	nvgBeginPath(args.vg);
@@ -1040,7 +1028,7 @@ struct BifurxWidget final : ModuleWidget {
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(modePosMm), module, Bifurx::MODE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(levelPosMm), module, Bifurx::LEVEL_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(freqPosMm), module, Bifurx::FREQ_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPosMm), module, Bifurx::FREQ_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(resoPosMm), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(balancePosMm), module, Bifurx::BALANCE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(spanPosMm), module, Bifurx::SPAN_PARAM));
