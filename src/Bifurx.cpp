@@ -297,15 +297,19 @@ struct BifurxSpectrumWidget final : Widget {
 	float curveDb[kCurvePointCount];
 	float curveTargetDb[kCurvePointCount];
 	float overlayDb[kCurvePointCount];
+	float overlayTargetDb[kCurvePointCount];
 	float overlayOutputDbfs[kCurvePointCount];
+	float overlayTargetOutputDbfs[kCurvePointCount];
 	float curveX[kCurvePointCount];
 	float curveY[kCurvePointCount];
 	float bottomY = 0.f;
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
+	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
 	bool hasOverlay = false;
 	bool hasCurveTarget = false;
+	bool hasOverlayTarget = false;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
 
@@ -594,7 +598,9 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 		curveDb[i] = -36.f;
 		curveTargetDb[i] = -36.f;
 		overlayDb[i] = 0.f;
+		overlayTargetDb[i] = 0.f;
 		overlayOutputDbfs[i] = kOverlayDbfsFloor;
+		overlayTargetOutputDbfs[i] = kOverlayDbfsFloor;
 	}
 }
 
@@ -639,6 +645,36 @@ void BifurxSpectrumWidget::step() {
 		dirty = dirty || curveAnimating;
 	}
 
+	if (hasOverlayTarget) {
+		bool overlayAnimating = false;
+		const float overlayDbSmoothing = 0.13f;
+		const float overlayLevelSmoothing = 0.11f;
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			const float prevDb = overlayDb[i];
+			const float nextDb = mixf(prevDb, overlayTargetDb[i], overlayDbSmoothing);
+			overlayDb[i] = nextDb;
+			if (std::fabs(nextDb - prevDb) > 0.02f) {
+				overlayAnimating = true;
+			}
+
+			const float prevLevel = overlayOutputDbfs[i];
+			const float nextLevel = mixf(prevLevel, overlayTargetOutputDbfs[i], overlayLevelSmoothing);
+			overlayOutputDbfs[i] = nextLevel;
+			if (std::fabs(nextLevel - prevLevel) > 0.02f) {
+				overlayAnimating = true;
+			}
+		}
+
+		const float prevTop = displayTopDbfs;
+		const float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.12f : 0.04f;
+		displayTopDbfs = mixf(prevTop, displayTopTargetDbfs, topSmoothing);
+		if (std::fabs(displayTopDbfs - prevTop) > 0.02f) {
+			overlayAnimating = true;
+		}
+
+		dirty = dirty || overlayAnimating;
+	}
+
 	if (dirty && framebuffer) {
 		framebuffer->setDirty();
 	}
@@ -677,7 +713,6 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * sampleRate);
 	const float amplitudeScale = 4.f / float(kFftSize);
-	const float smoothing = hasOverlay ? 0.35f : 1.f;
 
 	for (int i = 0; i < kFftSize; ++i) {
 		fftInputTime[i] = frame.input[i] * window[i];
@@ -689,15 +724,15 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 
 	float binDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
-	float framePeakDbfs = kOverlayDbfsFloor;
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float inputAmp = amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
 		const float outputAmp = amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
 		binDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (inputAmp + 1e-6f)), -24.f, 24.f);
 		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
-		framePeakDbfs = std::max(framePeakDbfs, binOutputDbfs[bin]);
 	}
 
+	float sampledDeltaDb[kCurvePointCount];
+	float sampledOutputDbfs[kCurvePointCount];
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
 		const float hz = logFrequencyAt(x01, minHz, maxHz);
@@ -705,16 +740,31 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		const int binA = int(std::floor(binPosition));
 		const int binB = std::min(binA + 1, kFftSize / 2);
 		const float frac = binPosition - float(binA);
-		const float targetDeltaDb = mixf(binDeltaDb[binA], binDeltaDb[binB], frac);
-		const float targetOutputDbfs = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
-
-		overlayDb[i] = mixf(overlayDb[i], targetDeltaDb, smoothing);
-		overlayOutputDbfs[i] = mixf(overlayOutputDbfs[i], targetOutputDbfs, smoothing);
+		sampledDeltaDb[i] = mixf(binDeltaDb[binA], binDeltaDb[binB], frac);
+		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
 	}
 
-	const float targetTopDbfs = clamp(framePeakDbfs + 3.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
-	const float topSmoothing = (targetTopDbfs > displayTopDbfs) ? 0.28f : 0.08f;
-	displayTopDbfs = mixf(displayTopDbfs, targetTopDbfs, topSmoothing);
+	float framePeakDbfs = kOverlayDbfsFloor;
+	const float targetSmoothing = hasOverlayTarget ? 0.20f : 1.f;
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const int left = std::max(0, i - 1);
+		const int right = std::min(kCurvePointCount - 1, i + 1);
+		const float smoothDeltaDb = 0.18f * sampledDeltaDb[left] + 0.64f * sampledDeltaDb[i] + 0.18f * sampledDeltaDb[right];
+		const float smoothOutputDbfs = 0.18f * sampledOutputDbfs[left] + 0.64f * sampledOutputDbfs[i] + 0.18f * sampledOutputDbfs[right];
+		overlayTargetDb[i] = mixf(overlayTargetDb[i], smoothDeltaDb, targetSmoothing);
+		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
+		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
+	}
+
+	if (!hasOverlayTarget) {
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			overlayDb[i] = overlayTargetDb[i];
+			overlayOutputDbfs[i] = overlayTargetOutputDbfs[i];
+		}
+		hasOverlayTarget = true;
+	}
+
+	displayTopTargetDbfs = clamp(framePeakDbfs + 6.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
@@ -807,34 +857,51 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	if (hasOverlay) {
 		const NVGcolor purple = nvgRGB(132, 72, 255);
-		const NVGcolor cyan = nvgRGB(48, 222, 255);
+		const NVGcolor cyan = nvgRGB(0, 255, 255);
 		const NVGcolor white = nvgRGB(255, 255, 255);
+		nvgShapeAntiAlias(args.vg, 0);
 
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgDeltaDb = 0.5f * (overlayDb[i] + overlayDb[i + 1]);
 			const float avgOutputDbfs = 0.5f * (overlayOutputDbfs[i] + overlayOutputDbfs[i + 1]);
-			const float effectAmount = clamp01(std::fabs(avgDeltaDb) / 18.f);
 			const float energyAmount = clamp01(rescale(avgOutputDbfs, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
-			const float alpha = effectAmount * effectAmount * (0.15f + 0.85f * energyAmount);
-			if (alpha <= 0.005f) {
+			if (energyAmount <= 0.005f) {
 				continue;
 			}
 
-			const NVGcolor tone = (avgDeltaDb >= 0.f) ? cyan : purple;
-			NVGcolor fill = mixColor(white, tone, 0.25f + 0.75f * effectAmount);
+			const float posAmount = clamp01(avgDeltaDb / 18.f);
+			const float negAmount = clamp01(-avgDeltaDb / 18.f);
+			NVGcolor tint = white;
+			if (posAmount > 0.f) {
+				tint = mixColor(tint, cyan, clamp01(posAmount * 1.25f));
+			}
+			if (negAmount > 0.f) {
+				tint = mixColor(tint, purple, negAmount);
+			}
+			NVGcolor fill = mixColor(white, tint, 0.65f + 0.35f * energyAmount);
 			fill.a = 1.f;
 			const float spectrumY0 = spectrumYForDbfs(overlayOutputDbfs[i]);
 			const float spectrumY1 = spectrumYForDbfs(overlayOutputDbfs[i + 1]);
+			const float seamPad = 0.45f;
+			float x0 = curveX[i];
+			float x1 = curveX[i + 1];
+			if (i > 0) {
+				x0 -= seamPad;
+			}
+			if (i < kCurvePointCount - 2) {
+				x1 += seamPad;
+			}
 
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, curveX[i], spectrumY0);
-			nvgLineTo(args.vg, curveX[i + 1], spectrumY1);
-			nvgLineTo(args.vg, curveX[i + 1], spectrumBottomY);
-			nvgLineTo(args.vg, curveX[i], spectrumBottomY);
+			nvgMoveTo(args.vg, x0, spectrumY0);
+			nvgLineTo(args.vg, x1, spectrumY1);
+			nvgLineTo(args.vg, x1, spectrumBottomY);
+			nvgLineTo(args.vg, x0, spectrumBottomY);
 			nvgClosePath(args.vg);
 			nvgFillColor(args.vg, fill);
 			nvgFill(args.vg);
 		}
+		nvgShapeAntiAlias(args.vg, 1);
 	}
 
 	nvgBeginPath(args.vg);
