@@ -63,6 +63,17 @@
         "Sequencer"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Bifurx",
+      "name": "Bifurx",
+      "description": "Dual-peak multimode filter with live response and spectrum preview.",
+      "tags": [
+        "Filter",
+        "Distortion",
+        "Visualizer"
+      ],
+      "hidden": false
     }
   ]
 }

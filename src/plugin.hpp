@@ -14,6 +14,7 @@ extern Model* modelProc;
 extern Model* modelTemporalDeck;
 extern Model* modelTDScope;
 extern Model* modelCrownstep;
+extern Model* modelBifurx;
 
 // Runtime feature flag: enabled when `res/dragonking.txt` exists.
 bool isDragonKingDebugEnabled();
