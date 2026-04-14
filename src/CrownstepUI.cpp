@@ -74,7 +74,7 @@ const std::shared_ptr<Image>& crownstepWoodBoardImage() {
 	if (!attempted) {
 		attempted = true;
 		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/wood.png"));
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/wood.jpg"));
 		}
 	}
 	return image;
@@ -86,7 +86,7 @@ const std::shared_ptr<Image>& crownstepMarbleBoardImage() {
 	if (!attempted) {
 		attempted = true;
 		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/marble.png"));
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble.jpg"));
 		}
 	}
 	return image;
