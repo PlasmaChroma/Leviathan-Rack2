@@ -11,6 +11,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "melodicBiasEnabled", json_boolean(melodicBiasEnabled));
 	json_object_set_new(rootJ, "pitchInterpretationMode", json_integer(pitchInterpretationMode));
 	json_object_set_new(rootJ, "boardValueLayoutMode", json_integer(boardValueLayoutMode));
+	json_object_set_new(rootJ, "boardValueRandomSeed", json_integer(json_int_t(boardValueRandomSeed)));
 	json_object_set_new(rootJ, "boardValueLayoutInverted", json_boolean(boardValueLayoutInverted));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
 	json_object_set_new(rootJ, "showCellPitchOverlay", json_boolean(showCellPitchOverlay));
@@ -146,15 +147,21 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 		int storedLayoutMode = int(json_integer_value(boardValueLayoutModeJ));
 		// Backward compatibility: legacy /2 interleave layouts (3..5) now
 		// map to base layouts (0..2) with divider set to Half.
-		if (storedLayoutMode >= int(BOARD_VALUE_LAYOUT_NAMES.size()) &&
-			storedLayoutMode < int(BOARD_VALUE_LAYOUT_NAMES.size()) * 2) {
-			boardValueLayoutMode = storedLayoutMode - int(BOARD_VALUE_LAYOUT_NAMES.size());
-			if (!loadedPitchDividerMode) {
-				pitchDividerMode = 1;
-			}
+		if (!loadedPitchDividerMode &&
+			storedLayoutMode >= crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT &&
+			storedLayoutMode < crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT * 2) {
+			boardValueLayoutMode = storedLayoutMode - crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT;
+			pitchDividerMode = 1;
 		}
 		else {
 			boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
+		}
+	}
+	json_t* boardValueRandomSeedJ = json_object_get(rootJ, "boardValueRandomSeed");
+	if (boardValueRandomSeedJ) {
+		boardValueRandomSeed = uint32_t(json_integer_value(boardValueRandomSeedJ));
+		if (boardValueRandomSeed == 0u) {
+			boardValueRandomSeed = 1u;
 		}
 	}
 	json_t* boardValueLayoutInvertedJ = json_object_get(rootJ, "boardValueLayoutInverted");

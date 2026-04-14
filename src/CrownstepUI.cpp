@@ -3464,6 +3464,7 @@ struct CrownstepWidget final : ModuleWidget {
 				[=]() {
 					if (module) {
 						module->boardValueLayoutInverted = !module->boardValueLayoutInverted;
+						module->refreshHeldPitchForCurrentStep();
 					}
 				}
 			));
@@ -3477,6 +3478,7 @@ struct CrownstepWidget final : ModuleWidget {
 				[=]() {
 					if (module) {
 						module->boardValueLayoutMode = 0;
+						module->refreshHeldPitchForCurrentStep();
 					}
 				}
 			));
@@ -3491,6 +3493,7 @@ struct CrownstepWidget final : ModuleWidget {
 						[=]() {
 							if (module) {
 								module->boardValueLayoutMode = i;
+								module->refreshHeldPitchForCurrentStep();
 							}
 						}
 					));
@@ -3507,11 +3510,22 @@ struct CrownstepWidget final : ModuleWidget {
 						[=]() {
 							if (module) {
 								module->boardValueLayoutMode = i;
+								module->refreshHeldPitchForCurrentStep();
 							}
 						}
 					));
 				}
 			}));
+			valueLayoutMenu->addChild(createMenuItem(
+				"Randomize",
+				"",
+				[=]() {
+					if (module) {
+						module->boardValueLayoutMode = crownstep::BOARD_VALUE_LAYOUT_RANDOM;
+						module->randomizeBoardValueLayout();
+					}
+				}
+			));
 		}));
 		menu->addChild(createSubmenuItem("Source", "", [=](Menu* interpretationMenu) {
 			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
@@ -3537,12 +3551,13 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						return module && module->pitchDividerMode == i;
 					},
-					[=]() {
-						if (module) {
-							module->pitchDividerMode = i;
+						[=]() {
+							if (module) {
+								module->pitchDividerMode = i;
+								module->refreshHeldPitchForCurrentStep();
+							}
 						}
-					}
-				));
+					));
 			}
 		}));
 	}

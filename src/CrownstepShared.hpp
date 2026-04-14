@@ -9,6 +9,7 @@
 #include <cstring>
 #include <exception>
 #include <atomic>
+#include <array>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -163,6 +164,7 @@ struct Crownstep : Module {
 	bool melodicBiasEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
+	uint32_t boardValueRandomSeed = 1u;
 	bool boardValueLayoutInverted = false;
 	int pitchDividerMode = 0;
 	bool showCellPitchOverlay = false;
@@ -281,10 +283,18 @@ struct Crownstep : Module {
 	int activeStartIndex();
 	float pitchForSequenceIndex(int sequenceIndex);
 	void refreshHeldPitchForCurrentStep();
+	void randomizeBoardValueLayout();
 	void emitStepAtClockEdge();
 
 	void process(const ProcessArgs& args) override;
 
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* rootJ) override;
+
+private:
+	std::array<int, crownstep::MAX_BOARD_SIZE> randomBoardValueMap {};
+	uint32_t randomBoardValueMapSeed = 0u;
+	int randomBoardValueMapCellCount = -1;
+	void rebuildRandomBoardValueMap();
+	float randomBoardValueForSampledIndex(float sampledIndex);
 };

@@ -66,9 +66,11 @@ static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal
 static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
 };
-static constexpr std::array<const char*, 7> BOARD_VALUE_LAYOUT_NAMES = {
+static constexpr int LEGACY_BOARD_VALUE_LAYOUT_COUNT = 7;
+static constexpr int BOARD_VALUE_LAYOUT_RANDOM = 7;
+static constexpr std::array<const char*, 8> BOARD_VALUE_LAYOUT_NAMES = {
 	{"Center-Out", "Linear (Horizontal)", "Linear (Vertical)", "Linear (Diagonal)",
-		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)"}
+		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)", "Random"}
 };
 static constexpr std::array<const char*, 4> PITCH_DIVIDER_NAMES = {
 	{"Full", "Half", "Third", "Quarter"}

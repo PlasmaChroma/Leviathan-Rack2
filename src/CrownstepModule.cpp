@@ -1,4 +1,5 @@
 #include "CrownstepShared.hpp"
+#include <random>
 
 namespace {
 
@@ -198,6 +199,7 @@ Crownstep::Crownstep() {
 	configOutput(EOC_OUTPUT, "End of cycle");
 
 	startAiWorker();
+	randomizeBoardValueLayout();
 	setGameMode(GAME_MODE_CHECKERS, true);
 }
 
@@ -621,6 +623,49 @@ int Crownstep::boardCellCount() const {
 	return std::max(0, std::min(localCount, rulesCount));
 }
 
+void Crownstep::rebuildRandomBoardValueMap() {
+	int cellCount = boardCellCount();
+	for (int i = 0; i < crownstep::MAX_BOARD_SIZE; ++i) {
+		randomBoardValueMap[size_t(i)] = i;
+	}
+	if (cellCount > 1) {
+		std::mt19937 rng(boardValueRandomSeed);
+		std::shuffle(randomBoardValueMap.begin(), randomBoardValueMap.begin() + cellCount, rng);
+	}
+	randomBoardValueMapSeed = boardValueRandomSeed;
+	randomBoardValueMapCellCount = cellCount;
+}
+
+float Crownstep::randomBoardValueForSampledIndex(float sampledIndex) {
+	int cellCount = boardCellCount();
+	if (cellCount <= 0) {
+		return 0.f;
+	}
+	if (randomBoardValueMapSeed != boardValueRandomSeed || randomBoardValueMapCellCount != cellCount) {
+		rebuildRandomBoardValueMap();
+	}
+	float x = clamp(sampledIndex, 0.f, float(cellCount - 1));
+	int low = int(std::floor(x));
+	int high = int(std::ceil(x));
+	float lowValue = float(randomBoardValueMap[size_t(low)]);
+	if (high <= low) {
+		return lowValue;
+	}
+	float highValue = float(randomBoardValueMap[size_t(high)]);
+	return lowValue + (highValue - lowValue) * (x - float(low));
+}
+
+void Crownstep::randomizeBoardValueLayout() {
+	boardValueRandomSeed = random::u32();
+	if (boardValueRandomSeed == 0u) {
+		boardValueRandomSeed = 1u;
+	}
+	randomBoardValueMapSeed = 0u;
+	randomBoardValueMapCellCount = -1;
+	rebuildRandomBoardValueMap();
+	refreshHeldPitchForCurrentStep();
+}
+
 float Crownstep::pitchPreviewForBoardIndex(int boardIndex) {
 	int cellCount = boardCellCount();
 	if (cellCount <= 0) {
@@ -689,6 +734,20 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 		return lowValue + (highValue - lowValue) * (x - float(low));
 	};
 	auto sampledBoardValueForActiveGame = [&]() {
+		if (boardValueLayoutMode == crownstep::BOARD_VALUE_LAYOUT_RANDOM) {
+			int mode = clamp(pitchInterpretationMode, 0, int(PITCH_INTERPRETATION_NAMES.size()) - 1);
+			float origin = float(clamp(move.originIndex, 0, boardCellCount() - 1));
+			float destination = float(clamp(move.destinationIndex, 0, boardCellCount() - 1));
+			float originValue = randomBoardValueForSampledIndex(origin);
+			float destinationValue = randomBoardValueForSampledIndex(destination);
+			if (mode == 1) {
+				return destinationValue;
+			}
+			if (mode == 2) {
+				return 0.5f * (originValue + destinationValue);
+			}
+			return originValue;
+		}
 		if (boardCellCount() != crownstep::CHESS_BOARD_SIZE) {
 			return crownstep::sampledBoardValueForMove(move, pitchInterpretationMode, boardValueLayoutMode);
 		}
