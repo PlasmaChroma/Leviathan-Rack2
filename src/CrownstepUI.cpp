@@ -870,6 +870,7 @@ struct CrownstepBoardWidget final : Widget {
 		bool othelloBoard = module && module->isOthelloMode();
 		const bool woodTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
+		const bool redBlackTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
 		const std::shared_ptr<Image>& woodBoardTileImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardTileImage() : std::shared_ptr<Image>();
 		const std::shared_ptr<Image>& marbleBoardTileImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardTileImage() : std::shared_ptr<Image>();
 		const bool hasWoodBoardTileImage = woodBoardTileImage && woodBoardTileImage->handle >= 0;
@@ -956,6 +957,24 @@ struct CrownstepBoardWidget final : Widget {
 				}
 				else if (marbleTexture) {
 					// Tiled marble bitmap already painted above.
+				}
+				else if (redBlackTexture) {
+					NVGcolor topColor = dark ? nvgRGB(32, 32, 36) : nvgRGB(136, 26, 32);
+					NVGcolor bottomColor = dark ? nvgRGB(14, 14, 18) : nvgRGB(88, 12, 18);
+					NVGcolor sheenA = dark ? nvgRGBA(255, 255, 255, 14) : nvgRGBA(255, 212, 214, 18);
+					NVGcolor sheenB = dark ? nvgRGBA(0, 0, 0, 22) : nvgRGBA(38, 4, 6, 18);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
+					nvgFill(args.vg);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, sheenA, sheenB);
+					nvgFillPaint(args.vg, sheenPaint);
+					nvgFill(args.vg);
 				}
 				else if (fabricTexture) {
 					NVGcolor topColor = dark ? nvgRGB(34, 118, 54) : nvgRGB(236, 244, 236);
