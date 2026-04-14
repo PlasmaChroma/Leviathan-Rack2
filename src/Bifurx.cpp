@@ -17,7 +17,7 @@ constexpr float kDefaultPanelWidthMm = 71.12f;
 constexpr float kDefaultPanelHeightMm = 128.5f;
 constexpr float kPi = 3.14159265358979323846f;
 constexpr int kCurvePointCount = 257;
-constexpr int kFftSize = 2048;
+constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
 constexpr int kGuideCount = 4;
@@ -778,11 +778,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		return;
 	}
 
-	const float padX = std::max(4.f, w * 0.02f);
+	const float padX = 0.f;
 	const float padY = std::max(4.f, h * 0.035f);
-	const float scaleLabelW = std::max(13.f, w * 0.03f);
-	const float scaleGap = std::max(6.f, w * 0.016f);
-	const float plotX = padX + scaleLabelW + scaleGap;
+	const float plotX = padX;
 	const float usableW = std::max(1.f, w - plotX - padX);
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
@@ -838,15 +836,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	}
 
-	nvgFontSize(args.vg, std::max(6.5f, h * 0.055f));
+	nvgFontSize(args.vg, std::max(7.f, h * 0.05f));
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 92));
-	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-	for (int tickDb = tickStartDb; tickDb <= tickEndDb; tickDb += 3) {
-		char dbLabel[8];
-		std::snprintf(dbLabel, sizeof(dbLabel), "%d", tickDb);
-		nvgText(args.vg, padX + scaleLabelW - 1.f, spectrumYForDbfs(float(tickDb)), dbLabel, nullptr);
-	}
+	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+	nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+	char topLabel[20];
+	std::snprintf(topLabel, sizeof(topLabel), "%+05.1f dBFS", displayMaxDbfs);
+	nvgText(args.vg, 1.5f, 1.f, topLabel, nullptr);
 
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
@@ -858,7 +854,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	if (hasOverlay) {
 		const NVGcolor purple = nvgRGB(132, 72, 255);
 		const NVGcolor cyan = nvgRGB(0, 255, 255);
-		const NVGcolor white = nvgRGB(255, 255, 255);
+		const NVGcolor white = nvgRGB(228, 232, 236);
 		nvgShapeAntiAlias(args.vg, 0);
 
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
@@ -888,7 +884,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			if (i > 0) {
 				x0 -= seamPad;
 			}
+			else {
+				x0 -= seamPad;
+			}
 			if (i < kCurvePointCount - 2) {
+				x1 += seamPad;
+			}
+			else {
 				x1 += seamPad;
 			}
 
@@ -902,6 +904,22 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			nvgFill(args.vg);
 		}
 		nvgShapeAntiAlias(args.vg, 1);
+
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			const float y = spectrumYForDbfs(overlayOutputDbfs[i]);
+			if (i == 0) {
+				nvgMoveTo(args.vg, curveX[i], y);
+			}
+			else {
+				nvgLineTo(args.vg, curveX[i], y);
+			}
+		}
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 110));
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStrokeWidth(args.vg, 1.1f);
+		nvgStroke(args.vg);
 	}
 
 	nvgBeginPath(args.vg);
