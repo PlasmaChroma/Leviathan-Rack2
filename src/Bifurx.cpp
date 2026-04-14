@@ -22,6 +22,9 @@ constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
 constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
+constexpr int kBifurxModeCount = 10;
+constexpr int kBifurxModeParamIndex = 0;
+const char* const kBifurxModeLabels[kBifurxModeCount] = {"LL", "LB", "NL", "NN", "LH", "BB", "HH", "HN", "BH", "HL"};
 constexpr float kResponseMinDb = -36.f;
 constexpr float kResponseMaxDb = 30.f;
 constexpr float kOverlayDbfsFloor = -96.f;
@@ -49,10 +52,6 @@ float softClip(float x) {
 
 float mixf(float a, float b, float t) {
 	return a + (b - a) * t;
-}
-
-float clampDb(float db) {
-	return clamp(db, kResponseMinDb, kResponseMaxDb);
 }
 
 float logPosition(float hz, float minHz, float maxHz) {
@@ -327,6 +326,54 @@ struct BananutBlack : app::SvgPort {
 	}
 };
 
+void drawModeStepCaption(const Widget::DrawArgs& args, const Vec& size, const char* caption) {
+	if (!APP || !APP->window || !APP->window->uiFont) {
+		return;
+	}
+	nvgFontSize(args.vg, 8.f);
+	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
+	nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+	nvgText(args.vg, 0.5f * size.x, 0.5f * size.y + 0.2f, caption, nullptr);
+}
+
+struct BifurxModeLeftButton final : TL1105 {
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		drawModeStepCaption(args, box.size, "<-");
+	}
+};
+
+struct BifurxModeRightButton final : TL1105 {
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		drawModeStepCaption(args, box.size, "->");
+	}
+};
+
+struct BifurxModeReadoutWidget final : Widget {
+	Module* module = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+
+		int mode = 0;
+		if (module) {
+			mode = clamp(int(std::round(module->params[kBifurxModeParamIndex].getValue())), 0, kBifurxModeCount - 1);
+		}
+
+		char label[24];
+		std::snprintf(label, sizeof(label), "Mode: %s", kBifurxModeLabels[mode]);
+		nvgFontSize(args.vg, std::max(8.f, box.size.y * 0.62f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(214, 222, 232, 238));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, label, nullptr);
+	}
+};
+
 } // namespace
 
 struct Bifurx final : Module {
@@ -340,6 +387,8 @@ struct Bifurx final : Module {
 		FM_AMT_PARAM,
 		SPAN_CV_ATTEN_PARAM,
 		TITO_PARAM,
+		MODE_LEFT_PARAM,
+		MODE_RIGHT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -374,6 +423,8 @@ struct Bifurx final : Module {
 	int analysisWritePos = 0;
 	int analysisFilled = 0;
 	int analysisHopCounter = 0;
+	dsp::SchmittTrigger modeLeftTrigger;
+	dsp::SchmittTrigger modeRightTrigger;
 	BifurxAnalysisFrame analysisFrames[2];
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
@@ -381,17 +432,20 @@ struct Bifurx final : Module {
 	Bifurx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-		configSwitch(MODE_PARAM, 0.f, 9.f, 0.f,
-			"Mode",
-			{"LL", "LB", "NL", "NN", "LH", "BB", "HH", "HN", "BH", "HL"});
+			configSwitch(MODE_PARAM, 0.f, 9.f, 0.f,
+				"Mode",
+				{kBifurxModeLabels[0], kBifurxModeLabels[1], kBifurxModeLabels[2], kBifurxModeLabels[3], kBifurxModeLabels[4],
+					kBifurxModeLabels[5], kBifurxModeLabels[6], kBifurxModeLabels[7], kBifurxModeLabels[8], kBifurxModeLabels[9]});
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level");
 		configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency");
-		configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance");
-		configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance");
-		configParam(SPAN_PARAM, 0.f, 1.f, 0.f, "Span");
-		configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount");
-		configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator");
-		configSwitch(TITO_PARAM, 0.f, 2.f, 1.f, "TITO", {"XM", "Clean", "SM"});
+			configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance");
+			configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance");
+			configParam(SPAN_PARAM, 0.f, 1.f, 0.5f, "Span");
+			configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount");
+			configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator");
+			configSwitch(TITO_PARAM, 0.f, 2.f, 1.f, "TITO", {"XM", "Clean", "SM"});
+			configButton(MODE_LEFT_PARAM, "Mode previous");
+			configButton(MODE_RIGHT_PARAM, "Mode next");
 
 		configInput(IN_INPUT, "Signal In");
 		configInput(VOCT_INPUT, "V/Oct");
@@ -442,10 +496,19 @@ struct Bifurx final : Module {
 		}
 	}
 
-	void process(const ProcessArgs& args) override {
-		const float in = inputs[IN_INPUT].getVoltage();
-		const float level = params[LEVEL_PARAM].getValue();
-		const float drive = levelDriveGain(level);
+		void process(const ProcessArgs& args) override {
+			if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) {
+				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
+				params[MODE_PARAM].setValue(float((currentMode + 9) % 10));
+			}
+			if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) {
+				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
+				params[MODE_PARAM].setValue(float((currentMode + 1) % 10));
+			}
+
+			const float in = inputs[IN_INPUT].getVoltage();
+			const float level = params[LEVEL_PARAM].getValue();
+			const float drive = levelDriveGain(level);
 		const float voct = inputs[VOCT_INPUT].getVoltage();
 		const float fmAmt = params[FM_AMT_PARAM].getValue();
 		const float fm = clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) * fmAmt;
@@ -693,7 +756,7 @@ void BifurxSpectrumWidget::updateCurveCache() {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
 		const float hz = logFrequencyAt(x01, minHz, maxHz);
 		const float mag = std::abs(previewModelResponse(model, hz));
-		curveTargetDb[i] = clampDb(20.f * std::log10(std::max(mag, 1e-5f)));
+		curveTargetDb[i] = 20.f * std::log10(std::max(mag, 1e-5f));
 	}
 
 	if (!hasCurveTarget) {
@@ -745,12 +808,14 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	}
 
 	float framePeakDbfs = kOverlayDbfsFloor;
+	float frameSmoothedOutputDbfs[kCurvePointCount];
 	const float targetSmoothing = hasOverlayTarget ? 0.20f : 1.f;
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const int left = std::max(0, i - 1);
 		const int right = std::min(kCurvePointCount - 1, i + 1);
 		const float smoothDeltaDb = 0.18f * sampledDeltaDb[left] + 0.64f * sampledDeltaDb[i] + 0.18f * sampledDeltaDb[right];
 		const float smoothOutputDbfs = 0.18f * sampledOutputDbfs[left] + 0.64f * sampledOutputDbfs[i] + 0.18f * sampledOutputDbfs[right];
+		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
 		overlayTargetDb[i] = mixf(overlayTargetDb[i], smoothDeltaDb, targetSmoothing);
 		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
 		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
@@ -764,7 +829,16 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		hasOverlayTarget = true;
 	}
 
-	displayTopTargetDbfs = clamp(framePeakDbfs + 6.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
+	// Use a robust upper reference so isolated spikes don't collapse the full display range.
+	float sortedOutputDbfs[kCurvePointCount];
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
+	}
+	const int p95Index = int(0.95f * float(kCurvePointCount - 1));
+	std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
+	const float p95Dbfs = sortedOutputDbfs[p95Index];
+	const float robustTopRefDbfs = std::max(p95Dbfs, framePeakDbfs - 18.f);
+	displayTopTargetDbfs = clamp(robustTopRefDbfs + 6.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
@@ -790,7 +864,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float displayMaxDbfs = displayTopDbfs;
 	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 	auto responseYForDb = [&](float db) {
-		return rescale(clampDb(db), kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
+		return rescale(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
 	};
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
@@ -800,7 +874,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	}
 
 	nvgSave(args.vg);
-	nvgScissor(args.vg, 0.f, 0.f, w, h);
+	const float clipInset = 0.8f;
+	nvgScissor(args.vg, clipInset, clipInset, std::max(0.f, w - 2.f * clipInset), std::max(0.f, h - 2.f * clipInset));
 
 	nvgBeginPath(args.vg);
 	nvgRect(args.vg, 0.f, 0.f, w, h);
@@ -984,6 +1059,13 @@ struct BifurxWidget final : ModuleWidget {
 		spectrumFb->addChild(spectrum);
 		addChild(spectrumFb);
 
+		math::Rect modeReadoutRectMm(Vec(spectrumRectMm.pos.x, spectrumRectMm.pos.y + spectrumRectMm.size.y + 0.9f), Vec(spectrumRectMm.size.x, 4.2f));
+		BifurxModeReadoutWidget* modeReadout = new BifurxModeReadoutWidget();
+		modeReadout->module = module;
+		modeReadout->box.pos = mm2px(modeReadoutRectMm.pos);
+		modeReadout->box.size = mm2px(modeReadoutRectMm.size);
+		addChild(modeReadout);
+
 		Vec modePosMm(13.4f, 22.0f);
 		Vec levelPosMm(13.4f, 41.0f);
 		Vec resoPosMm(13.4f, 60.0f);
@@ -1026,8 +1108,11 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
 		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(modePosMm), module, Bifurx::MODE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(levelPosMm), module, Bifurx::LEVEL_PARAM));
+			Vec modeLeftPosMm = modePosMm.plus(Vec(-3.9f, 0.f));
+			Vec modeRightPosMm = modePosMm.plus(Vec(3.9f, 0.f));
+			addParam(createParamCentered<BifurxModeLeftButton>(mm2px(modeLeftPosMm), module, Bifurx::MODE_LEFT_PARAM));
+			addParam(createParamCentered<BifurxModeRightButton>(mm2px(modeRightPosMm), module, Bifurx::MODE_RIGHT_PARAM));
+			addParam(createParamCentered<RoundBlackKnob>(mm2px(levelPosMm), module, Bifurx::LEVEL_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPosMm), module, Bifurx::FREQ_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(resoPosMm), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(balancePosMm), module, Bifurx::BALANCE_PARAM));
