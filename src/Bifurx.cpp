@@ -24,7 +24,18 @@ constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxModeParamIndex = 0;
-const char* const kBifurxModeLabels[kBifurxModeCount] = {"LL", "LB", "NL", "NN", "LH", "BB", "HH", "HN", "BH", "HL"};
+const char* const kBifurxModeLabels[kBifurxModeCount] = {
+	"Low + Low",
+	"Low + Band",
+	"Notch + Low",
+	"Notch + Notch",
+	"Low + High",
+	"Band + Band",
+	"High + High",
+	"High + Notch",
+	"Band + High",
+	"High + Low"
+};
 constexpr float kResponseMinDb = -36.f;
 constexpr float kResponseMaxDb = 30.f;
 constexpr float kOverlayDbfsFloor = -96.f;
@@ -340,14 +351,14 @@ void drawModeStepCaption(const Widget::DrawArgs& args, const Vec& size, const ch
 struct BifurxModeLeftButton final : TL1105 {
 	void draw(const DrawArgs& args) override {
 		TL1105::draw(args);
-		drawModeStepCaption(args, box.size, "<-");
+		drawModeStepCaption(args, box.size, "<");
 	}
 };
 
 struct BifurxModeRightButton final : TL1105 {
 	void draw(const DrawArgs& args) override {
 		TL1105::draw(args);
-		drawModeStepCaption(args, box.size, "->");
+		drawModeStepCaption(args, box.size, ">");
 	}
 };
 

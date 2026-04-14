@@ -256,15 +256,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="133.83001"
-   inkscape:cy="17.340101"
+   inkscape:zoom="2.385554"
+   inkscape:cx="128.90088"
+   inkscape:cy="379.99559"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="1978"
    inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="panel_labels_reworked"
+   inkscape:current-layer="panel_art"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -345,7 +345,16 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" /></g>
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" /></g><path
+   d="m 3543.4757,11534.378 0.036,-2584.1258"
+   stroke="url(#accentGrad)"
+   stroke-width="40.7513"
+   stroke-linecap="round"
+   opacity="0.55"
+   fill="none"
+   id="top_horizontal_line-7"
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
+   sodipodi:nodetypes="cc" />
     
     
     
@@ -486,7 +495,7 @@
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="RESO_PARAM"
-     cx="1340"
+     cx="1651.4443"
      cy="10300.01"
      rx="294.84427"
      ry="295.80988" /><circle
@@ -498,7 +507,7 @@
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="TITO_PARAM"
      cx="5770"
-     cy="6500.0098"
+     cy="6750.0098"
      rx="294.84427"
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
@@ -549,7 +558,7 @@
      ry="405.17142" /><ellipse
      style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
      id="VOCT_INPUT"
-     cx="1634.9987"
+     cx="3544.9988"
      cy="11499.972"
      rx="398.39865"
      ry="405.17142" /><ellipse
@@ -561,7 +570,7 @@
      ry="405.17142" /><ellipse
      style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
      id="RESO_CV_INPUT"
-     cx="3544.9985"
+     cx="1634.9987"
      cy="11499.972"
      rx="398.39865"
      ry="405.17142" /><ellipse
