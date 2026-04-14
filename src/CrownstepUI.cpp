@@ -68,25 +68,25 @@ inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
 	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
 }
 
-const std::shared_ptr<Image>& crownstepWoodBoardImage() {
+const std::shared_ptr<Image>& crownstepWoodBoardTileImage() {
 	static std::shared_ptr<Image> image;
 	static bool attempted = false;
 	if (!attempted) {
 		attempted = true;
 		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/wood.jpg"));
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/wood_4.jpg"));
 		}
 	}
 	return image;
 }
 
-const std::shared_ptr<Image>& crownstepMarbleBoardImage() {
+const std::shared_ptr<Image>& crownstepMarbleBoardTileImage() {
 	static std::shared_ptr<Image> image;
 	static bool attempted = false;
 	if (!attempted) {
 		attempted = true;
 		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble.jpg"));
+			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble_4.jpg"));
 		}
 	}
 	return image;
@@ -874,41 +874,31 @@ struct CrownstepBoardWidget final : Widget {
 		bool othelloBoard = module && module->isOthelloMode();
 		const bool woodTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
-		const std::shared_ptr<Image>& woodBoardImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardImage() : std::shared_ptr<Image>();
-		const std::shared_ptr<Image>& marbleBoardImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardImage() : std::shared_ptr<Image>();
-		const bool hasWoodBoardImage = woodBoardImage && woodBoardImage->handle >= 0;
-		const bool hasMarbleBoardImage = marbleBoardImage && marbleBoardImage->handle >= 0;
-		if (hasWoodBoardImage) {
+		const std::shared_ptr<Image>& woodBoardTileImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardTileImage() : std::shared_ptr<Image>();
+		const std::shared_ptr<Image>& marbleBoardTileImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardTileImage() : std::shared_ptr<Image>();
+		const bool hasWoodBoardTileImage = woodBoardTileImage && woodBoardTileImage->handle >= 0;
+		const bool hasMarbleBoardTileImage = marbleBoardTileImage && marbleBoardTileImage->handle >= 0;
+		auto paintBoardBitmap = [&](int imageHandle) {
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 			NVGpaint boardPaint = nvgImagePattern(
 				args.vg,
 				0.f,
 				0.f,
-				box.size.x,
-				box.size.y,
+				box.size.x * 0.5f,
+				box.size.y * 0.5f,
 				0.f,
-				woodBoardImage->handle,
+				imageHandle,
 				1.f
 			);
 			nvgFillPaint(args.vg, boardPaint);
 			nvgFill(args.vg);
+		};
+		if (hasWoodBoardTileImage) {
+			paintBoardBitmap(woodBoardTileImage->handle);
 		}
-		else if (hasMarbleBoardImage) {
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-			NVGpaint boardPaint = nvgImagePattern(
-				args.vg,
-				0.f,
-				0.f,
-				box.size.x,
-				box.size.y,
-				0.f,
-				marbleBoardImage->handle,
-				1.f
-			);
-			nvgFillPaint(args.vg, boardPaint);
-			nvgFill(args.vg);
+		else if (hasMarbleBoardTileImage) {
+			paintBoardBitmap(marbleBoardTileImage->handle);
 		}
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
@@ -938,7 +928,7 @@ struct CrownstepBoardWidget final : Widget {
 					nvgFillPaint(args.vg, basePaint);
 					nvgFill(args.vg);
 				}
-				else if (marbleTexture && !hasMarbleBoardImage) {
+				else if (marbleTexture && !hasMarbleBoardTileImage) {
 					NVGcolor topColor = dark ? nvgRGB(72, 74, 82) : nvgRGB(208, 212, 222);
 					NVGcolor bottomColor = dark ? nvgRGB(42, 44, 52) : nvgRGB(166, 172, 184);
 					nvgBeginPath(args.vg);
@@ -969,7 +959,7 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 				else if (marbleTexture) {
-					// Full-board marble bitmap already painted above.
+					// Tiled marble bitmap already painted above.
 				}
 				else if (fabricTexture) {
 					NVGcolor topColor = dark ? nvgRGB(34, 118, 54) : nvgRGB(236, 244, 236);
@@ -1011,7 +1001,7 @@ struct CrownstepBoardWidget final : Widget {
 					}
 				}
 				else if (woodTexture) {
-					if (hasWoodBoardImage) {
+					if (hasWoodBoardTileImage) {
 						NVGcolor sheenLeft = dark ? nvgRGBA(255, 226, 176, 18) : nvgRGBA(255, 244, 214, 30);
 						NVGcolor sheenRight = dark ? nvgRGBA(28, 16, 8, 18) : nvgRGBA(92, 62, 36, 20);
 						nvgBeginPath(args.vg);

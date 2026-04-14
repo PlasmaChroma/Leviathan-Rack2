@@ -580,21 +580,47 @@ Not part of the first implementation, but should remain architecture-compatible:
 
 - [x] Research/spec doc exists in `doc/Bifurx.md`
 - [x] Initial implementation plan created
-- [ ] v1 control/default ranges frozen
-- [ ] SVG/component layout created
-- [ ] Module scaffolded
-- [ ] Dual-core SVF baseline implemented
-- [ ] Mode topology mapping implemented
-- [ ] Response curve display implemented
-- [ ] TITO/nonlinear character implemented
-- [ ] FFT spectrum overlay implemented
+- [x] v1 control/default ranges frozen
+- [x] SVG/component layout created
+- [x] Module scaffolded
+- [x] Dual-core SVF baseline implemented
+- [x] Mode topology mapping implemented
+- [x] Response curve display implemented
+- [x] TITO/nonlinear character implemented
+- [x] FFT spectrum overlay implemented
 - [ ] Tuning/validation pass completed
+
+### Implemented So Far
+
+- `src/Bifurx.cpp` now contains a working dual-core TPT SVF baseline with the planned 10 mode topologies
+- `LEVEL` now acts as a pre-filter drive stage instead of simple passthrough gain
+- `FREQ`, `SPAN`, `BALANCE`, `RESO`, `FM AMT`, and `SPAN CV ATTEN` are mapped into active DSP behavior
+- `TITO` now changes internal coupling behavior:
+  - `CLEAN`: no internal modulation coupling
+  - `SM`: self-modulates each core
+  - `XM`: cross-modulates between cores
+- the preview line now renders a nominal log-frequency filter response
+- the preview also includes an FFT-derived overlay comparing input vs output:
+  - purple tones for attenuation / reduction
+  - cyan tones for amplification / boost
+  - faint log-frequency guides at `10`, `100`, `1k`, `10k`
+- the preview is cached behind a framebuffer and updated from published analysis snapshots to keep UI cost bounded
+
+### Remaining Work
+
+- tune per-mode gains, cancellation amounts, and resonance/Q voicing by ear
+- verify self-oscillation behavior and improve V/OCT tracking in the high-resonance regime
+- refine FFT overlay smoothing/alpha behavior based on real use in Rack
+- validate performance and subjective feel under fast FM, pinging, and aggressive SPAN/BALANCE motion
+- decide whether horizontal dB guides or additional preview options are still needed
 
 ## Recommended Immediate Next Step
 
-Before code generation:
-- create `res/Bifurx.svg` using the frozen v1 parameter spec in this plan
-- then scaffold the module from the SVG
-- then implement the linear dual-core baseline before nonlinear/TITO work
+Current recommended next step:
+- run a tuning pass inside Rack focused on:
+  - mode-to-mode gain balance
+  - self-oscillation threshold and stability
+  - TITO voicing
+  - overlay readability under real signals
 
-That is the most efficient path from spec to implementation.
+The implementation has moved past scaffolding; the main work now is calibration, validation, and polish.
