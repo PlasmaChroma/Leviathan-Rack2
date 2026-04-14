@@ -24,8 +24,11 @@ constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr float kResponseMinDb = -36.f;
 constexpr float kResponseMaxDb = 30.f;
-constexpr float kMeterMinDbfs = -24.f;
-constexpr float kMeterMaxDbfs = 0.f;
+constexpr float kOverlayDbfsFloor = -96.f;
+constexpr float kOverlayDbfsCeiling = 6.f;
+constexpr float kDisplayDbfsSpan = 30.f;
+constexpr float kDisplayTopDbfsFloor = -36.f;
+constexpr float kDisplayTopDbfsCeiling = 0.f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -50,10 +53,6 @@ float mixf(float a, float b, float t) {
 
 float clampDb(float db) {
 	return clamp(db, kResponseMinDb, kResponseMaxDb);
-}
-
-float responseDbToY(float db, float curveBaseY, float usableH) {
-	return curveBaseY - rescale(clampDb(db), kResponseMinDb, kResponseMaxDb, 0.f, usableH * 0.82f);
 }
 
 float logPosition(float hz, float minHz, float maxHz) {
@@ -296,14 +295,17 @@ struct BifurxSpectrumWidget final : Widget {
 	alignas(16) float fftInputFreq[2 * kFftSize];
 	alignas(16) float fftOutputFreq[2 * kFftSize];
 	float curveDb[kCurvePointCount];
+	float curveTargetDb[kCurvePointCount];
 	float overlayDb[kCurvePointCount];
 	float overlayOutputDbfs[kCurvePointCount];
 	float curveX[kCurvePointCount];
 	float curveY[kCurvePointCount];
 	float bottomY = 0.f;
+	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
 	bool hasOverlay = false;
+	bool hasCurveTarget = false;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
 
@@ -590,8 +592,9 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 	}
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		curveDb[i] = -36.f;
+		curveTargetDb[i] = -36.f;
 		overlayDb[i] = 0.f;
-		overlayOutputDbfs[i] = kMeterMinDbfs;
+		overlayOutputDbfs[i] = kOverlayDbfsFloor;
 	}
 }
 
@@ -622,6 +625,20 @@ void BifurxSpectrumWidget::step() {
 		dirty = true;
 	}
 
+	if (hasCurveTarget) {
+		bool curveAnimating = false;
+		const float curveSmoothing = 0.24f;
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			const float prev = curveDb[i];
+			const float next = mixf(prev, curveTargetDb[i], curveSmoothing);
+			curveDb[i] = next;
+			if (std::fabs(next - prev) > 0.01f) {
+				curveAnimating = true;
+			}
+		}
+		dirty = dirty || curveAnimating;
+	}
+
 	if (dirty && framebuffer) {
 		framebuffer->setDirty();
 	}
@@ -640,7 +657,14 @@ void BifurxSpectrumWidget::updateCurveCache() {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
 		const float hz = logFrequencyAt(x01, minHz, maxHz);
 		const float mag = std::abs(previewModelResponse(model, hz));
-		curveDb[i] = clampDb(20.f * std::log10(std::max(mag, 1e-5f)));
+		curveTargetDb[i] = clampDb(20.f * std::log10(std::max(mag, 1e-5f)));
+	}
+
+	if (!hasCurveTarget) {
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			curveDb[i] = curveTargetDb[i];
+		}
+		hasCurveTarget = true;
 	}
 }
 
@@ -665,11 +689,13 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 
 	float binDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
+	float framePeakDbfs = kOverlayDbfsFloor;
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float inputAmp = amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
 		const float outputAmp = amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
 		binDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (inputAmp + 1e-6f)), -24.f, 24.f);
-		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kMeterMinDbfs, kMeterMaxDbfs);
+		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
+		framePeakDbfs = std::max(framePeakDbfs, binOutputDbfs[bin]);
 	}
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
@@ -685,6 +711,10 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		overlayDb[i] = mixf(overlayDb[i], targetDeltaDb, smoothing);
 		overlayOutputDbfs[i] = mixf(overlayOutputDbfs[i], targetOutputDbfs, smoothing);
 	}
+
+	const float targetTopDbfs = clamp(framePeakDbfs + 3.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
+	const float topSmoothing = (targetTopDbfs > displayTopDbfs) ? 0.28f : 0.08f;
+	displayTopDbfs = mixf(displayTopDbfs, targetTopDbfs, topSmoothing);
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
@@ -704,18 +734,21 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float scaleGap = std::max(6.f, w * 0.016f);
 	const float plotX = padX + scaleLabelW + scaleGap;
 	const float usableW = std::max(1.f, w - plotX - padX);
-	const float usableH = std::max(1.f, h - 2.f * padY);
-	const float curveBaseY = padY + usableH * 0.90f;
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
 	bottomY = h - padY * 0.15f;
 	const float spectrumTopY = padY * 0.35f;
 	const float spectrumBottomY = bottomY;
+	const float displayMaxDbfs = displayTopDbfs;
+	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
+	auto responseYForDb = [&](float db) {
+		return rescale(clampDb(db), kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
+	};
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
 		curveX[i] = plotX + usableW * x01;
-		curveY[i] = responseDbToY(curveDb[i], curveBaseY, usableH);
+		curveY[i] = responseYForDb(curveDb[i]);
 	}
 
 	nvgSave(args.vg);
@@ -740,16 +773,18 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	}
 
 	auto spectrumYForDbfs = [&](float dbfs) {
-		return rescale(clamp(dbfs, kMeterMinDbfs, kMeterMaxDbfs), kMeterMinDbfs, kMeterMaxDbfs, spectrumBottomY, spectrumTopY);
+		return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY);
 	};
 
-	for (int tickDb = int(kMeterMinDbfs); tickDb <= int(kMeterMaxDbfs); tickDb += 3) {
+	const int tickStartDb = int(std::floor(displayMinDbfs / 3.f)) * 3;
+	const int tickEndDb = int(std::ceil(displayMaxDbfs / 3.f)) * 3;
+	for (int tickDb = tickStartDb; tickDb <= tickEndDb; tickDb += 3) {
 		const float y = spectrumYForDbfs(float(tickDb));
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, plotX, y);
 		nvgLineTo(args.vg, plotX + usableW, y);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, (tickDb == 0) ? 34 : 14));
-		nvgStrokeWidth(args.vg, (tickDb == 0) ? 1.f : 0.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, (tickDb == 0) ? 34 : 12));
+		nvgStrokeWidth(args.vg, (tickDb == 0) ? 1.f : 0.65f);
 		nvgStroke(args.vg);
 	}
 
@@ -757,15 +792,15 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 92));
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-	for (int tickDb = int(kMeterMinDbfs); tickDb <= int(kMeterMaxDbfs); tickDb += 3) {
+	for (int tickDb = tickStartDb; tickDb <= tickEndDb; tickDb += 3) {
 		char dbLabel[8];
 		std::snprintf(dbLabel, sizeof(dbLabel), "%d", tickDb);
 		nvgText(args.vg, padX + scaleLabelW - 1.f, spectrumYForDbfs(float(tickDb)), dbLabel, nullptr);
 	}
 
 	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, plotX, curveBaseY);
-	nvgLineTo(args.vg, plotX + usableW, curveBaseY);
+	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
+	nvgLineTo(args.vg, plotX + usableW, responseYForDb(0.f));
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
 	nvgStrokeWidth(args.vg, 1.2f);
 	nvgStroke(args.vg);
@@ -779,7 +814,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			const float avgDeltaDb = 0.5f * (overlayDb[i] + overlayDb[i + 1]);
 			const float avgOutputDbfs = 0.5f * (overlayOutputDbfs[i] + overlayOutputDbfs[i + 1]);
 			const float effectAmount = clamp01(std::fabs(avgDeltaDb) / 18.f);
-			const float energyAmount = clamp01(rescale(avgOutputDbfs, kMeterMinDbfs, kMeterMaxDbfs, 0.f, 1.f));
+			const float energyAmount = clamp01(rescale(avgOutputDbfs, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 			const float alpha = effectAmount * effectAmount * (0.15f + 0.85f * energyAmount);
 			if (alpha <= 0.005f) {
 				continue;
@@ -787,7 +822,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 			const NVGcolor tone = (avgDeltaDb >= 0.f) ? cyan : purple;
 			NVGcolor fill = mixColor(white, tone, 0.25f + 0.75f * effectAmount);
-			fill.a = 0.30f + 0.50f * alpha;
+			fill.a = 1.f;
 			const float spectrumY0 = spectrumYForDbfs(overlayOutputDbfs[i]);
 			const float spectrumY1 = spectrumYForDbfs(overlayOutputDbfs[i + 1]);
 
@@ -831,28 +866,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStrokeWidth(args.vg, 1.35f);
 	nvgStroke(args.vg);
-
-	nvgFontSize(args.vg, std::max(8.f, h * 0.075f));
-	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 90));
-	nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-	for (int i = 0; i < kGuideCount; ++i) {
-		if (kGuideFreqs[i] >= maxHz) {
-			continue;
-		}
-		const float guideX = plotX + usableW * logPosition(kGuideFreqs[i], minHz, maxHz);
-		const char* label = nullptr;
-		switch (i) {
-			case 0: label = "20"; break;
-			case 1: label = "100"; break;
-			case 2: label = "1k"; break;
-			case 3: label = "10k"; break;
-			default: break;
-		}
-		if (label) {
-			nvgText(args.vg, guideX, bottomY - 2.f, label, nullptr);
-		}
-	}
 
 	nvgResetScissor(args.vg);
 	nvgRestore(args.vg);
