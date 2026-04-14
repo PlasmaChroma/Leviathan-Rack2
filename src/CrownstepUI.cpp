@@ -68,28 +68,18 @@ inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
 	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
 }
 
-const std::shared_ptr<Image>& crownstepWoodBoardTileImage() {
-	static std::shared_ptr<Image> image;
-	static bool attempted = false;
-	if (!attempted) {
-		attempted = true;
-		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/wood_4.jpg"));
-		}
+std::shared_ptr<Image> crownstepWoodBoardTileImage() {
+	if (!APP || !APP->window) {
+		return std::shared_ptr<Image>();
 	}
-	return image;
+	return APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/wood_4.jpg"));
 }
 
-const std::shared_ptr<Image>& crownstepMarbleBoardTileImage() {
-	static std::shared_ptr<Image> image;
-	static bool attempted = false;
-	if (!attempted) {
-		attempted = true;
-		if (APP && APP->window) {
-			image = APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble_4.jpg"));
-		}
+std::shared_ptr<Image> crownstepMarbleBoardTileImage() {
+	if (!APP || !APP->window) {
+		return std::shared_ptr<Image>();
 	}
-	return image;
+	return APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble_4.jpg"));
 }
 
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
