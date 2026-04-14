@@ -68,6 +68,12 @@ inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
 	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
 }
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
+
 std::shared_ptr<Image> crownstepWoodBoardTileImage() {
 	if (!APP || !APP->window) {
 		return std::shared_ptr<Image>();
@@ -3250,10 +3256,10 @@ struct CrownstepWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));

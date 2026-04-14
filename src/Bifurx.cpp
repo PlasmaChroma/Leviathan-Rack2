@@ -311,6 +311,12 @@ struct BifurxSpectrumWidget final : Widget {
 	void draw(const DrawArgs& args) override;
 };
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
+
 } // namespace
 
 struct Bifurx final : Module {
@@ -906,8 +912,8 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(resoPosMm), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(balancePosMm), module, Bifurx::BALANCE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(spanPosMm), module, Bifurx::SPAN_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(fmAmtPosMm), module, Bifurx::FM_AMT_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM));
+		addParam(createParamCentered<VCVSlider>(mm2px(fmAmtPosMm), module, Bifurx::FM_AMT_PARAM));
+		addParam(createParamCentered<VCVSlider>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM));
 		addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(inPosMm), module, Bifurx::IN_INPUT));
@@ -916,7 +922,7 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(resoCvPosMm), module, Bifurx::RESO_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(balanceCvPosMm), module, Bifurx::BALANCE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(spanCvPosMm), module, Bifurx::SPAN_CV_INPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_LIGHT));
