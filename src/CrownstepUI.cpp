@@ -977,43 +977,21 @@ struct CrownstepBoardWidget final : Widget {
 					nvgFill(args.vg);
 				}
 				else if (fabricTexture) {
-					NVGcolor topColor = dark ? nvgRGB(34, 118, 54) : nvgRGB(236, 244, 236);
-					NVGcolor bottomColor = dark ? nvgRGB(18, 82, 38) : nvgRGB(206, 220, 206);
+					NVGcolor topColor = dark ? nvgRGB(42, 124, 62) : nvgRGB(236, 243, 234);
+					NVGcolor bottomColor = dark ? nvgRGB(16, 74, 34) : nvgRGB(208, 220, 204);
+					NVGcolor washA = dark ? nvgRGBA(255, 255, 255, 12) : nvgRGBA(255, 255, 255, 16);
+					NVGcolor washB = dark ? nvgRGBA(8, 28, 12, 18) : nvgRGBA(72, 94, 70, 14);
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, x, y, cellWidth, cellHeight);
 					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
 					nvgFillPaint(args.vg, basePaint);
 					nvgFill(args.vg);
 
-					// Subtle cloth weave to keep the fabric board readable without heavy draw cost.
-					NVGcolor weaveA = dark ? nvgRGBA(255, 255, 255, 14) : nvgRGBA(26, 48, 26, 14);
-					NVGcolor weaveB = dark ? nvgRGBA(8, 26, 10, 18) : nvgRGBA(255, 255, 255, 20);
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, x, y, cellWidth, cellHeight);
-					NVGpaint weavePaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, weaveA, weaveB);
-					nvgFillPaint(args.vg, weavePaint);
+					NVGpaint washPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, washA, washB);
+					nvgFillPaint(args.vg, washPaint);
 					nvgFill(args.vg);
-
-					for (int stripe = 0; stripe < 2; ++stripe) {
-						float t = (stripe + 1.f) / 3.f;
-						float vx = x + t * cellWidth;
-						float hy = y + t * cellHeight;
-						NVGcolor stripeColor = dark ? nvgRGBA(224, 255, 224, 22) : nvgRGBA(16, 38, 16, 18);
-
-						nvgBeginPath(args.vg);
-						nvgMoveTo(args.vg, vx, y + 0.7f);
-						nvgLineTo(args.vg, vx, y + cellHeight - 0.7f);
-						nvgStrokeColor(args.vg, stripeColor);
-						nvgStrokeWidth(args.vg, 0.55f);
-						nvgStroke(args.vg);
-
-						nvgBeginPath(args.vg);
-						nvgMoveTo(args.vg, x + 0.7f, hy);
-						nvgLineTo(args.vg, x + cellWidth - 0.7f, hy);
-						nvgStrokeColor(args.vg, stripeColor);
-						nvgStrokeWidth(args.vg, 0.55f);
-						nvgStroke(args.vg);
-					}
 				}
 				else if (woodTexture) {
 					if (hasWoodBoardTileImage) {
