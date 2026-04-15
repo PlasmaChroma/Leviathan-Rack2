@@ -47,6 +47,8 @@ constexpr float kOverlayDbfsCeiling = 6.f;
 constexpr float kDisplayDbfsSpan = 30.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
+constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
+constexpr float kDisplayPeakHeadroomDb = 0.6f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -430,6 +432,7 @@ struct BifurxSpectrumWidget final : Widget {
 	float bottomY = 0.f;
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+	bool lastFftScaleDynamic = true;
 	float cachedAxisSampleRate = 0.f;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
@@ -576,6 +579,7 @@ struct Bifurx final : Module {
 	BifurxAnalysisFrame analysisFrames[2];
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
+	bool fftScaleDynamic = true;
 
 	Bifurx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -608,6 +612,20 @@ struct Bifurx final : Module {
 		paramQuantities[TITO_PARAM]->snapEnabled = true;
 		previewPublishDivider.setDivision(128);
 		controlUpdateDivider.setDivision(16);
+	}
+
+	json_t* dataToJson() override {
+		json_t* root = Module::dataToJson();
+		json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
+		return root;
+	}
+
+	void dataFromJson(json_t* root) override {
+		Module::dataFromJson(root);
+		json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
+		if (fftScaleDynamicJ) {
+			fftScaleDynamic = json_is_true(fftScaleDynamicJ);
+		}
 	}
 
 	void publishPreviewState(const BifurxPreviewState& state) {
@@ -1009,6 +1027,15 @@ void BifurxSpectrumWidget::step() {
 	}
 
 	bool dirty = false;
+	const bool fftScaleDynamicNow = module->fftScaleDynamic;
+	if (fftScaleDynamicNow != lastFftScaleDynamic) {
+		lastFftScaleDynamic = fftScaleDynamicNow;
+		if (!fftScaleDynamicNow) {
+			displayTopDbfs = kDisplayTopDbfsCeiling;
+			displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+		}
+		dirty = true;
+	}
 
 	const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
 	if (previewSeq != lastPreviewSeq) {
@@ -1065,7 +1092,11 @@ void BifurxSpectrumWidget::step() {
 		}
 
 		const float prevTop = displayTopDbfs;
-		const float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
+		float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
+		if (module && module->fftScaleDynamic && displayTopTargetDbfs > prevTop) {
+			// Fast attack in dynamic mode so short peaks stay in-frame.
+			topSmoothing = 0.70f;
+		}
 		displayTopDbfs = mixf(prevTop, displayTopTargetDbfs, topSmoothing);
 		if (std::fabs(displayTopDbfs - prevTop) > 0.02f) {
 			overlayAnimating = true;
@@ -1159,16 +1190,22 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		hasOverlayTarget = true;
 	}
 
-	// Use a robust upper reference so isolated spikes don't collapse the full display range.
-	float sortedOutputDbfs[kCurvePointCount];
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
+	if (module && !module->fftScaleDynamic) {
+		displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	}
-	const int p95Index = int(0.95f * float(kCurvePointCount - 1));
-	std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
-	const float p95Dbfs = sortedOutputDbfs[p95Index];
-	const float robustTopRefDbfs = std::max(p95Dbfs, framePeakDbfs - 18.f);
-	displayTopTargetDbfs = clamp(robustTopRefDbfs + 6.f, kDisplayTopDbfsFloor, kDisplayTopDbfsCeiling);
+	else {
+		// Use a robust upper reference so isolated spikes don't collapse the full display range.
+		float sortedOutputDbfs[kCurvePointCount];
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
+		}
+		const int p95Index = int(0.95f * float(kCurvePointCount - 1));
+		std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
+		const float p95Dbfs = sortedOutputDbfs[p95Index];
+		const float robustTopRefDbfs = std::max(p95Dbfs, framePeakDbfs - 18.f);
+		const float desiredTopDbfs = std::max(robustTopRefDbfs + 6.f, framePeakDbfs + kDisplayPeakHeadroomDb);
+		displayTopTargetDbfs = clamp(desiredTopDbfs, kDisplayTopDbfsFloor, kDisplayTopDynamicCeilingDbfs);
+	}
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
@@ -1284,6 +1321,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-10.f));
 	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-1.f));
 	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsCeiling));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDynamicCeilingDbfs));
 	const float topLabelRightX = 1.5f + topLabelReservedWidth;
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 	nvgText(args.vg, topLabelRightX, 1.f, topLabel, nullptr);
@@ -1611,7 +1649,19 @@ struct BifurxWidget final : ModuleWidget {
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_LIGHT));
-		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_LIGHT));
+			addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_LIGHT));
+		}
+
+	void appendContextMenu(Menu* menu) override {
+		ModuleWidget::appendContextMenu(menu);
+
+		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
+		if (!bifurx) {
+			return;
+		}
+
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 	}
 };
 
