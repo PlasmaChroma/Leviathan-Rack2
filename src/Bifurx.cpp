@@ -23,7 +23,7 @@ constexpr float kFreqLog2Span = 12.7731392f; // log2(28000 / 4)
 constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
-constexpr int kFftHopSize = kFftSize / 2;
+constexpr int kFftHopSize = kFftSize / 4;
 constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
@@ -1046,8 +1046,8 @@ void BifurxSpectrumWidget::step() {
 
 	if (hasOverlayTarget) {
 		bool overlayAnimating = false;
-		const float overlayDbSmoothing = 0.13f;
-		const float overlayLevelSmoothing = 0.11f;
+		const float overlayDbSmoothing = 0.22f;
+		const float overlayLevelSmoothing = 0.20f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			const float prevDb = overlayDb[i];
 			const float nextDb = mixf(prevDb, overlayTargetDb[i], overlayDbSmoothing);
@@ -1065,7 +1065,7 @@ void BifurxSpectrumWidget::step() {
 		}
 
 		const float prevTop = displayTopDbfs;
-		const float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.12f : 0.04f;
+		const float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
 		displayTopDbfs = mixf(prevTop, displayTopTargetDbfs, topSmoothing);
 		if (std::fabs(displayTopDbfs - prevTop) > 0.02f) {
 			overlayAnimating = true;
@@ -1139,12 +1139,12 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 
 	float framePeakDbfs = kOverlayDbfsFloor;
 	float frameSmoothedOutputDbfs[kCurvePointCount];
-	const float targetSmoothing = hasOverlayTarget ? 0.20f : 1.f;
+	const float targetSmoothing = hasOverlayTarget ? 0.45f : 1.f;
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const int left = std::max(0, i - 1);
 		const int right = std::min(kCurvePointCount - 1, i + 1);
-		const float smoothDeltaDb = 0.18f * sampledDeltaDb[left] + 0.64f * sampledDeltaDb[i] + 0.18f * sampledDeltaDb[right];
-		const float smoothOutputDbfs = 0.18f * sampledOutputDbfs[left] + 0.64f * sampledOutputDbfs[i] + 0.18f * sampledOutputDbfs[right];
+		const float smoothDeltaDb = 0.12f * sampledDeltaDb[left] + 0.76f * sampledDeltaDb[i] + 0.12f * sampledDeltaDb[right];
+		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
 		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
 		overlayTargetDb[i] = mixf(overlayTargetDb[i], smoothDeltaDb, targetSmoothing);
 		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
@@ -1266,17 +1266,27 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 	auto compactSignedLabel = [](float value, char* out, size_t outSize) {
 		std::snprintf(out, outSize, "%+.1f", value);
-		if ((out[0] == '+' || out[0] == '-') && out[1] == '0' && out[2] == '.') {
-			std::memmove(out + 1, out + 2, std::strlen(out + 2) + 1);
-		}
 	};
 
-	nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 	char valueLabel[12];
 	compactSignedLabel(displayMaxDbfs, valueLabel, sizeof(valueLabel));
 	char topLabel[24];
 	std::snprintf(topLabel, sizeof(topLabel), "%5s dBFS", valueLabel);
-	nvgText(args.vg, 1.5f, 1.f, topLabel, nullptr);
+	auto measureTopLabelWidthForValue = [&](float db) {
+		char sampleValue[12];
+		compactSignedLabel(db, sampleValue, sizeof(sampleValue));
+		char sampleLabel[24];
+		std::snprintf(sampleLabel, sizeof(sampleLabel), "%5s dBFS", sampleValue);
+		return nvgTextBounds(args.vg, 0.f, 0.f, sampleLabel, nullptr, nullptr);
+	};
+	float topLabelReservedWidth = 0.f;
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsFloor));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-10.f));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-1.f));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsCeiling));
+	const float topLabelRightX = 1.5f + topLabelReservedWidth;
+	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgText(args.vg, topLabelRightX, 1.f, topLabel, nullptr);
 
 	char curveMinLabel[12];
 	char curveMaxLabel[12];
