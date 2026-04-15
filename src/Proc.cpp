@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdio>
 #include <atomic>
+#include <limits>
 
 
 struct Proc : Module {
@@ -468,6 +469,8 @@ struct Proc : Module {
 
 		if (knobChanged) {
 			state.interactiveHold = PREVIEW_INTERACTIVE_HOLD;
+			// Push an immediate preview refresh on manual interaction.
+			state.timer = PREVIEW_INTERACTIVE_INTERVAL;
 		}
 		if (state.interactiveHold > 0.f) {
 			state.interactiveHold = std::max(0.f, state.interactiveHold - dt);
@@ -475,7 +478,7 @@ struct Proc : Module {
 		state.timer += dt;
 
 		float interval = (state.interactiveHold > 0.f) ? PREVIEW_INTERACTIVE_INTERVAL : PREVIEW_CV_INTERVAL;
-		bool changed = !state.sentOnce || previewChangedMeaningfully(
+		bool changed = knobChanged || !state.sentOnce || previewChangedMeaningfully(
 			riseTime, state.lastRiseSent,
 			fallTime, state.lastFallSent,
 			curveSigned, state.lastCurveSent
@@ -612,6 +615,7 @@ struct Proc : Module {
 		float riseCv = inputs[cfg.riseCvInput].getVoltage();
 		float fallCv = inputs[cfg.fallCvInput].getVoltage();
 		float bothCv = inputs[cfg.bothCvInput].getVoltage();
+		bool shapeKnobChanged = std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS;
 		if (!ch.stageTimeValid || timingTick) {
 			// Recompute times only when a relevant source changed.
 			bool stageTimeDirty = !ch.stageTimeValid
@@ -699,6 +703,13 @@ struct Proc : Module {
 			ch.cachedShapeSigned = shapeSigned;
 			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
 			ch.warpScaleValid = true;
+		}
+		if (shapeKnobChanged && ch.phase != CHANNEL_IDLE) {
+			// Re-anchor phase to current output whenever curve changes so the tracer
+			// location is invalidated/recomputed against the updated curve shape.
+			float range = std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
+			float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
+			ch.phasePos = (ch.phase == CHANNEL_RISE) ? x : (1.f - x);
 		}
 		float scale = ch.cachedWarpScale;
 
@@ -1162,8 +1173,23 @@ struct WavePreviewWidget : Widget {
 			float bottom = std::max(top + 1.f, h - drawPad);
 			float drawW = right - left;
 			float drawH = bottom - top;
-			float x = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-			float y = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
+			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
+			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
+			// Keep the marker locked to the drawn curve while still honoring
+			// both audio-space Y (dotYNorm) and phase-space X (dotXNorm).
+			int bestIndex = 0;
+			float bestCost = std::numeric_limits<float>::infinity();
+			for (int i = 0; i < POINT_COUNT; ++i) {
+				float dy = std::fabs(points[i].y - targetY);
+				float dx = std::fabs(points[i].x - targetX);
+				float cost = dy + 0.15f * dx;
+				if (cost < bestCost) {
+					bestCost = cost;
+					bestIndex = i;
+				}
+			}
+			float x = points[bestIndex].x;
+			float y = points[bestIndex].y;
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, DOT_RADIUS);
 			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));

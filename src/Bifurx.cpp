@@ -113,6 +113,28 @@ NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	return out;
 }
 
+void formatFrequencyLabel(float hz, char* out, size_t outSize) {
+	const float safeHz = std::max(hz, 0.f);
+	if (safeHz >= 1000.f) {
+		if (safeHz >= 10000.f) {
+			std::snprintf(out, outSize, "%.1fkHz", safeHz / 1000.f);
+		}
+		else {
+			std::snprintf(out, outSize, "%.2fkHz", safeHz / 1000.f);
+		}
+		return;
+	}
+	if (safeHz >= 100.f) {
+		std::snprintf(out, outSize, "%.0fHz", safeHz);
+		return;
+	}
+	if (safeHz >= 10.f) {
+		std::snprintf(out, outSize, "%.1fHz", safeHz);
+		return;
+	}
+	std::snprintf(out, outSize, "%.2fHz", safeHz);
+}
+
 struct SvfOutputs {
 	float lp = 0.f;
 	float bp = 0.f;
@@ -1020,9 +1042,11 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float usableW = std::max(1.f, w - plotX - padX);
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
-	bottomY = h - padY * 0.15f;
+	const float labelBandHeight = std::max(6.2f, h * 0.095f);
+	const float labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f;
-	const float spectrumBottomY = bottomY;
+	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(1.1f, h * 0.01f));
+	bottomY = spectrumBottomY;
 	const float displayMaxDbfs = displayTopDbfs;
 	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 	auto responseYForDb = [&](float db) {
@@ -1043,6 +1067,22 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgRect(args.vg, 0.f, 0.f, w, h);
 	nvgFillColor(args.vg, nvgRGBA(7, 10, 14, 26));
 	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, labelBandTop, w, h - labelBandTop);
+	nvgFillColor(args.vg, nvgRGBA(4, 7, 11, 208));
+	nvgFill(args.vg);
+	nvgBeginPath(args.vg);
+	nvgMoveTo(args.vg, 0.f, labelBandTop);
+	nvgLineTo(args.vg, w, labelBandTop);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 20));
+	nvgStrokeWidth(args.vg, 1.f);
+	nvgStroke(args.vg);
+
+	// Clip plot rendering above the bottom label strip so the curve/overlay
+	// never dives into the label area.
+	nvgSave(args.vg);
+	nvgScissor(args.vg, plotX, 0.f, usableW, std::max(1.f, spectrumBottomY));
 
 	for (int i = 0; i < kGuideCount; ++i) {
 		if (kGuideFreqs[i] >= maxHz) {
@@ -1177,6 +1217,89 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgStrokeWidth(args.vg, 1.35f);
 	nvgStroke(args.vg);
 
+	nvgRestore(args.vg);
+
+	struct PeakMarker {
+		float x = 0.f;
+		float yCurve = 0.f;
+		float yMarker = 0.f;
+		float hz = 0.f;
+		char label[16] = {};
+	};
+	auto findMarkerForTarget = [&](float targetHz) {
+		PeakMarker marker;
+		const float targetX01 = logPosition(clamp(targetHz, minHz, maxHz), minHz, maxHz);
+		const int idxTarget = clamp(
+			int(std::round(targetX01 * float(kCurvePointCount - 1))),
+			0,
+			kCurvePointCount - 1
+		);
+		const int searchRadius = std::max(6, kCurvePointCount / 80);
+		int bestIndex = idxTarget;
+		float bestDb = curveDb[idxTarget];
+		for (int i = std::max(0, idxTarget - searchRadius); i <= std::min(kCurvePointCount - 1, idxTarget + searchRadius); ++i) {
+			if (curveDb[i] > bestDb) {
+				bestDb = curveDb[i];
+				bestIndex = i;
+			}
+		}
+		const float markerRadius = 2.3f;
+		marker.x = curveX[bestIndex];
+		marker.yCurve = curveY[bestIndex];
+		marker.yMarker = std::max(spectrumTopY + markerRadius + 0.4f, marker.yCurve - (markerRadius + 0.2f));
+		marker.hz = curveHz[bestIndex];
+		formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label));
+		return marker;
+	};
+
+	PeakMarker peaks[2];
+	peaks[0] = findMarkerForTarget(previewState.freqA);
+	peaks[1] = findMarkerForTarget(previewState.freqB);
+	float labelX[2] = {peaks[0].x, peaks[1].x};
+	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
+	const int rightIndex = 1 - leftIndex;
+	const float minLabelSeparation = std::max(30.f, w * 0.18f);
+	const float needed = minLabelSeparation - (labelX[rightIndex] - labelX[leftIndex]);
+	if (needed > 0.f) {
+		labelX[leftIndex] -= 0.5f * needed;
+		labelX[rightIndex] += 0.5f * needed;
+	}
+	const float labelMargin = std::max(18.f, w * 0.08f);
+	labelX[0] = clamp(labelX[0], plotX + labelMargin, plotX + usableW - labelMargin);
+	labelX[1] = clamp(labelX[1], plotX + labelMargin, plotX + usableW - labelMargin);
+
+	const float guideYBottom = labelBandTop + std::min(5.f, 0.35f * labelBandHeight);
+	for (int i = 0; i < 2; ++i) {
+		const float markerRadius = 2.3f;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, peaks[i].x, peaks[i].yMarker + markerRadius + 0.45f);
+		nvgLineTo(args.vg, peaks[i].x, guideYBottom);
+		nvgStrokeColor(args.vg, nvgRGBA(246, 250, 255, 170));
+		nvgStrokeWidth(args.vg, 1.1f);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, markerRadius);
+		nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, markerRadius + 0.95f);
+		nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStroke(args.vg);
+	}
+
+	nvgFontSize(args.vg, std::max(7.f, h * 0.055f));
+	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+	nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+	for (int i = 0; i < 2; ++i) {
+		const float textY = labelBandTop + 0.58f * labelBandHeight;
+		nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
+		nvgText(args.vg, labelX[i], textY + 0.75f, peaks[i].label, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
+		nvgText(args.vg, labelX[i], textY, peaks[i].label, nullptr);
+	}
+
 	nvgResetScissor(args.vg);
 	nvgRestore(args.vg);
 }
@@ -1270,8 +1393,8 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
 		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
 
-			Vec modeLeftPosMm = modePosMm.plus(Vec(-3.9f, 0.f));
-			Vec modeRightPosMm = modePosMm.plus(Vec(3.9f, 0.f));
+			Vec modeLeftPosMm = modePosMm.plus(Vec(-2.5f, 0.f));
+			Vec modeRightPosMm = modePosMm.plus(Vec(2.5f, 0.f));
 			addParam(createParamCentered<BifurxModeLeftButton>(mm2px(modeLeftPosMm), module, Bifurx::MODE_LEFT_PARAM));
 			addParam(createParamCentered<BifurxModeRightButton>(mm2px(modeRightPosMm), module, Bifurx::MODE_RIGHT_PARAM));
 			addParam(createParamCentered<RoundBlackKnob>(mm2px(levelPosMm), module, Bifurx::LEVEL_PARAM));
