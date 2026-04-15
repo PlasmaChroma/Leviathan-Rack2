@@ -574,6 +574,39 @@ Not part of the first implementation, but should remain architecture-compatible:
 - polyphonic processing refinement
 - alternate preview modes
 
+## Research Report Triage (ChatGPT + Gemini, April 2026)
+
+### Fit Assessment
+
+- [x] `Bifurx-ChatGPT-Improve.md` aligns with the current module architecture (dual-SVF filter + preview/overlay).
+- [ ] `Bifurx-Gemini-Improve.md` is mostly aligned with a different product concept (chaotic map oscillator), not the current Bifurx filter implementation.
+
+### Do Next (High Value, In-Scope)
+
+- [ ] Add `configBypass(IN_INPUT, OUT_OUTPUT)` in the module constructor.
+  - `configBypass` defines the signal route Rack uses when the module is bypassed/disabled.
+  - For Bifurx this means: when bypassed, `IN` is routed directly to `OUT` so the signal chain stays continuous.
+- [ ] Add lightweight NaN/Inf containment at key I/O boundaries.
+- [ ] Centralize mode-combine constants/formulas so audio path and preview path cannot drift.
+- [ ] Optimize analysis-frame publish path (reduce avoidable per-sample overhead and simplify ring copy path).
+- [ ] Create a focused tuning checklist for resonance/TITO/mode gain balancing with repeatable test patches.
+
+### Do Later (Useful, But Not Blocking Current Tuning)
+
+- [ ] Add a context-menu toggle for analyzer/FFT overlay enablement.
+- [ ] Move sample-rate-dependent cache refresh into `onSampleRateChange()` where appropriate.
+- [ ] Add CI/dev safety passes (ASan/UBSan/TSan) and a minimal DSP stress harness.
+- [ ] Consider splitting `Bifurx.cpp` into smaller DSP/UI units after tuning stabilizes.
+
+### Not Applicable To Current Bifurx Direction
+
+- [ ] Logistic/Tent/Henon chaotic-engine conversion work.
+- [ ] ADAA applied to chaotic-map iteration path.
+- [ ] Encryption-oriented expander/scrambler features.
+- [ ] Chaos-specific gate/trigger derivations from map state.
+
+These may be valid for a future chaos module, but they are intentionally excluded from this Bifurx filter track.
+
 ## Progress Tracker
 
 ### Current Status
