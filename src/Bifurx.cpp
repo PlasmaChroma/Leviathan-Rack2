@@ -536,8 +536,10 @@ struct Bifurx final : Module {
 		OUTPUTS_LEN
 	};
 	enum LightId {
-		FM_AMT_LIGHT,
-		SPAN_CV_ATTEN_LIGHT,
+		FM_AMT_POS_LIGHT,
+		FM_AMT_NEG_LIGHT,
+		SPAN_CV_ATTEN_POS_LIGHT,
+		SPAN_CV_ATTEN_NEG_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -965,10 +967,15 @@ struct Bifurx final : Module {
 
 		pushAnalysisSample(drivenIn, out);
 
-		lights[FM_AMT_LIGHT].setBrightness(std::fabs(params[FM_AMT_PARAM].getValue()));
-		lights[SPAN_CV_ATTEN_LIGHT].setBrightness(std::fabs(params[SPAN_CV_ATTEN_PARAM].getValue()));
-	}
-};
+			const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f);
+			lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f));
+			lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
+
+			const float spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
+			lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f));
+			lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
+		}
+	};
 
 namespace {
 
@@ -1648,8 +1655,10 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(spanCvPosMm), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_LIGHT));
-			addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_LIGHT));
+			addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_POS_LIGHT));
+			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_NEG_LIGHT));
+			addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_POS_LIGHT));
+			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_NEG_LIGHT));
 		}
 
 	void appendContextMenu(Menu* menu) override {
