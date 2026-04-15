@@ -1045,7 +1045,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float labelBandHeight = std::max(6.2f, h * 0.095f);
 	const float labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f;
-	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(1.1f, h * 0.01f));
+	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.45f, h * 0.004f));
 	bottomY = spectrumBottomY;
 	const float displayMaxDbfs = displayTopDbfs;
 	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
@@ -1219,42 +1219,39 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	nvgRestore(args.vg);
 
+	const BifurxPreviewModel markerModel = makePreviewModel(previewState);
+
 	struct PeakMarker {
 		float x = 0.f;
 		float yCurve = 0.f;
 		float yMarker = 0.f;
 		float hz = 0.f;
+		bool visible = false;
 		char label[16] = {};
 	};
-	auto findMarkerForTarget = [&](float targetHz) {
+	auto buildMarkerAtFrequency = [&](float targetHz) {
 		PeakMarker marker;
-		const float targetX01 = logPosition(clamp(targetHz, minHz, maxHz), minHz, maxHz);
-		const int idxTarget = clamp(
-			int(std::round(targetX01 * float(kCurvePointCount - 1))),
-			0,
-			kCurvePointCount - 1
-		);
-		const int searchRadius = std::max(6, kCurvePointCount / 80);
-		int bestIndex = idxTarget;
-		float bestDb = curveDb[idxTarget];
-		for (int i = std::max(0, idxTarget - searchRadius); i <= std::min(kCurvePointCount - 1, idxTarget + searchRadius); ++i) {
-			if (curveDb[i] > bestDb) {
-				bestDb = curveDb[i];
-				bestIndex = i;
-			}
-		}
+		const float clampedHz = clamp(targetHz, minHz, maxHz);
+		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
+		const float mag = std::abs(previewModelResponse(markerModel, clampedHz));
+		const float curveDbAtFreq = clamp(20.f * std::log10(std::max(mag, 1e-5f)), kResponseMinDb, kResponseMaxDb);
 		const float markerRadius = 2.3f;
-		marker.x = curveX[bestIndex];
-		marker.yCurve = curveY[bestIndex];
-		marker.yMarker = std::max(spectrumTopY + markerRadius + 0.4f, marker.yCurve - (markerRadius + 0.2f));
-		marker.hz = curveHz[bestIndex];
+		marker.x = plotX + usableW * targetX01;
+		marker.yCurve = responseYForDb(curveDbAtFreq);
+		marker.yMarker = clamp(
+			marker.yCurve - (markerRadius + 0.2f),
+			spectrumTopY + markerRadius + 0.4f,
+			spectrumBottomY - markerRadius - 0.4f
+		);
+		marker.hz = clampedHz;
+		marker.visible = marker.yCurve <= (spectrumBottomY - 0.35f);
 		formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label));
 		return marker;
 	};
 
 	PeakMarker peaks[2];
-	peaks[0] = findMarkerForTarget(previewState.freqA);
-	peaks[1] = findMarkerForTarget(previewState.freqB);
+	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
+	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
 	const int rightIndex = 1 - leftIndex;
@@ -1270,6 +1267,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	const float guideYBottom = labelBandTop + std::min(5.f, 0.35f * labelBandHeight);
 	for (int i = 0; i < 2; ++i) {
+		if (!peaks[i].visible) {
+			continue;
+		}
 		const float markerRadius = 2.3f;
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, peaks[i].x, peaks[i].yMarker + markerRadius + 0.45f);
