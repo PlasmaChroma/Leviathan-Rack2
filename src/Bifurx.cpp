@@ -26,6 +26,11 @@ constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 4;
+constexpr int kPreviewPublishFastDivision = 128;
+constexpr int kPreviewPublishSlowDivision = 256;
+constexpr int kPreviewAdaptiveCooldownSamples = 64;
+constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
+constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
 constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
@@ -605,6 +610,7 @@ struct Bifurx final : Module {
 	float previewFilterAlpha = 0.f;
 	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
+	int previewAdaptiveCooldown = 0;
 	bool controlFastCacheValid = false;
 	float cachedDampingA = 0.7f;
 	float cachedDampingB = 0.7f;
@@ -658,8 +664,8 @@ struct Bifurx final : Module {
 
 		paramQuantities[MODE_PARAM]->snapEnabled = true;
 		paramQuantities[TITO_PARAM]->snapEnabled = true;
-		previewPublishDivider.setDivision(128);
-		previewPublishSlowDivider.setDivision(1024);
+		previewPublishDivider.setDivision(kPreviewPublishFastDivision);
+		previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision);
 		controlUpdateDivider.setDivision(16);
 	}
 
@@ -1023,7 +1029,33 @@ struct Bifurx final : Module {
 		previewState.spanOct = spanOct;
 		previewState.freqParamNorm = freqParamNorm;
 		previewState.voctCv = voctCv;
-		const bool previewPublishTick = previewPitchCvConnected ? previewPublishSlowDivider.process() : previewPublishDivider.process();
+		if (!previewPitchCvConnected) {
+			previewAdaptiveCooldown = 0;
+		}
+		else if (previewAdaptiveCooldown > 0) {
+			previewAdaptiveCooldown--;
+		}
+
+		bool adaptivePreviewTick = false;
+		if (previewPitchCvConnected && hasLastPreviewState && previewAdaptiveCooldown <= 0) {
+			const float freqMoveAOct =
+				std::fabs(std::log2(std::max(previewState.freqA, 1.f) / std::max(lastPreviewState.freqA, 1.f)));
+			const float freqMoveBOct =
+				std::fabs(std::log2(std::max(previewState.freqB, 1.f) / std::max(lastPreviewState.freqB, 1.f)));
+			const float spanMoveOct = std::fabs(previewState.spanOct - lastPreviewState.spanOct);
+			const bool rapidPreviewMove =
+				(freqMoveAOct > kPreviewAdaptiveOctaveThreshold) ||
+				(freqMoveBOct > kPreviewAdaptiveOctaveThreshold) ||
+				(spanMoveOct > kPreviewAdaptiveSpanOctThreshold);
+			if (rapidPreviewMove) {
+				adaptivePreviewTick = true;
+				previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples;
+			}
+		}
+
+		const bool periodicPreviewTick =
+			previewPitchCvConnected ? previewPublishSlowDivider.process() : previewPublishDivider.process();
+		const bool previewPublishTick = periodicPreviewTick || adaptivePreviewTick;
 		if (!hasLastPreviewState || (previewPublishTick && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
 		}
