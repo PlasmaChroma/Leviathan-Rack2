@@ -56,6 +56,7 @@ constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
 constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
 constexpr float kDisplayPeakHeadroomDb = 0.6f;
+constexpr float kCurveVisualSlewDbPerSec = 210.f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -1285,9 +1286,19 @@ void BifurxSpectrumWidget::step() {
 	if (hasCurveTarget) {
 		bool curveAnimating = false;
 		const float curveSmoothing = 0.24f;
+		float uiFrameSec = 1.f / 60.f;
+		if (APP && APP->window) {
+			const float frameSec = float(APP->window->getLastFrameDuration());
+			if (std::isfinite(frameSec) && frameSec > 0.f) {
+				uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
+			}
+		}
+		const float curveMaxStepDb = std::max(0.25f, kCurveVisualSlewDbPerSec * uiFrameSec);
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			const float prev = curveDb[i];
-			const float next = mixf(prev, curveTargetDb[i], curveSmoothing);
+			float delta = (curveTargetDb[i] - prev) * curveSmoothing;
+			delta = clamp(delta, -curveMaxStepDb, curveMaxStepDb);
+			const float next = prev + delta;
 			curveDb[i] = next;
 			if (std::fabs(next - prev) > 0.01f) {
 				curveAnimating = true;
