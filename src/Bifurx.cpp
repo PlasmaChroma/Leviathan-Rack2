@@ -73,6 +73,10 @@ float softClip(float x) {
 	return std::tanh(x);
 }
 
+float sanitizeFinite(float x, float fallback = 0.f) {
+	return std::isfinite(x) ? x : fallback;
+}
+
 float mixf(float a, float b, float t) {
 	return a + (b - a) * t;
 }
@@ -202,6 +206,13 @@ struct TptSvf {
 	}
 };
 
+void sanitizeCoreState(TptSvf& core) {
+	if (!std::isfinite(core.ic1eq) || !std::isfinite(core.ic2eq)) {
+		core.ic1eq = 0.f;
+		core.ic2eq = 0.f;
+	}
+}
+
 struct DisplayBiquad {
 	float b0 = 0.f;
 	float b1 = 0.f;
@@ -263,6 +274,39 @@ DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int typ
 	biquad.a1 = a1 / a0;
 	biquad.a2 = a2 / a0;
 	return biquad;
+}
+
+template <typename T>
+T combineModeResponse(
+	int mode,
+	const T& lpA,
+	const T& bpA,
+	const T& hpA,
+	const T& ntA,
+	const T& lpB,
+	const T& bpB,
+	const T& hpB,
+	const T& ntB,
+	const T& cascadeLp,
+	const T& cascadeNotch,
+	const T& cascadeHpToLp,
+	const T& cascadeHpToHp,
+	float wA,
+	float wB
+) {
+	switch (mode) {
+		case 0: return cascadeLp;
+		case 1: return T(0.95f) * T(wA) * lpA + T(1.05f) * T(wB) * bpB - T(0.12f) * (bpA + bpB);
+		case 2: return T(1.05f) * T(wB) * lpB - T(0.55f) * T(wA) * bpA;
+		case 3: return cascadeNotch;
+		case 4: return T(0.95f) * T(wA) * lpA + T(0.95f) * T(wB) * hpB;
+		case 5: return T(1.15f) * (T(wA) * bpA + T(wB) * bpB);
+		case 6: return cascadeHpToLp;
+		case 7: return T(1.05f) * T(wA) * hpA - T(0.55f) * T(wB) * bpB;
+		case 8: return T(1.12f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.10f) * (hpA + bpB);
+		case 9: return cascadeHpToHp;
+		default: return T(1.f);
+	}
 }
 
 struct BifurxPreviewState {
@@ -351,20 +395,17 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	const std::complex<float> bpB = model.bandB.response(omega);
 	const std::complex<float> hpB = model.highB.response(omega);
 	const std::complex<float> ntB = model.notchB.response(omega);
-
-	switch (model.mode) {
-		case 0: return lpB * lpA;
-		case 1: return 0.95f * model.wA * lpA + 1.05f * model.wB * bpB - 0.12f * (bpA + bpB);
-		case 2: return 1.05f * model.wB * lpB - 0.55f * model.wA * bpA;
-		case 3: return ntB * ntA;
-		case 4: return 0.95f * model.wA * lpA + 0.95f * model.wB * hpB;
-		case 5: return 1.15f * (model.wA * bpA + model.wB * bpB);
-		case 6: return lpB * hpA;
-		case 7: return 1.05f * model.wA * hpA - 0.55f * model.wB * bpB;
-		case 8: return 1.12f * model.wA * bpA + 0.92f * model.wB * hpB - 0.10f * (hpA + bpB);
-		case 9: return hpB * hpA;
-		default: return std::complex<float>(1.f, 0.f);
-	}
+	const std::complex<float> cascadeLp = lpB * lpA;
+	const std::complex<float> cascadeNotch = ntB * ntA;
+	const std::complex<float> cascadeHpToLp = lpB * hpA;
+	const std::complex<float> cascadeHpToHp = hpB * hpA;
+	return combineModeResponse<std::complex<float>>(
+		model.mode,
+		lpA, bpA, hpA, ntA,
+		lpB, bpB, hpB, ntB,
+		cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
+		model.wA, model.wB
+	);
 }
 
 struct BifurxSpectrumWidget final : Widget {
@@ -529,6 +570,7 @@ struct Bifurx final : Module {
 	int analysisWritePos = 0;
 	int analysisFilled = 0;
 	int analysisHopCounter = 0;
+	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
 	BifurxAnalysisFrame analysisFrames[2];
@@ -560,6 +602,7 @@ struct Bifurx final : Module {
 		configInput(BALANCE_CV_INPUT, "Balance CV");
 		configInput(SPAN_CV_INPUT, "Span CV");
 		configOutput(OUT_OUTPUT, "Signal Out");
+		configBypass(IN_INPUT, OUT_OUTPUT);
 
 		paramQuantities[MODE_PARAM]->snapEnabled = true;
 		paramQuantities[TITO_PARAM]->snapEnabled = true;
@@ -577,33 +620,57 @@ struct Bifurx final : Module {
 	}
 
 	void publishAnalysisFrame() {
-		int writeIndex = 1 - analysisPublishedIndex.load(std::memory_order_relaxed);
-		for (int i = 0; i < kFftSize; ++i) {
-			int sourceIndex = (analysisWritePos + i) % kFftSize;
-			analysisFrames[writeIndex].input[i] = analysisInputHistory[sourceIndex];
-			analysisFrames[writeIndex].output[i] = analysisOutputHistory[sourceIndex];
-		}
+		const int writeIndex = 1 - analysisPublishedIndex.load(std::memory_order_relaxed);
+		const int start = analysisWritePos;
+		const int firstCount = kFftSize - start;
+		const int secondCount = start;
+
+		std::memcpy(
+			analysisFrames[writeIndex].input,
+			analysisInputHistory + start,
+			size_t(firstCount) * sizeof(float)
+		);
+		std::memcpy(
+			analysisFrames[writeIndex].input + firstCount,
+			analysisInputHistory,
+			size_t(secondCount) * sizeof(float)
+		);
+		std::memcpy(
+			analysisFrames[writeIndex].output,
+			analysisOutputHistory + start,
+			size_t(firstCount) * sizeof(float)
+		);
+		std::memcpy(
+			analysisFrames[writeIndex].output + firstCount,
+			analysisOutputHistory,
+			size_t(secondCount) * sizeof(float)
+		);
+
 		analysisPublishedIndex.store(writeIndex, std::memory_order_release);
 		analysisPublishSeq.fetch_add(1, std::memory_order_release);
 	}
 
 	void pushAnalysisSample(float inputSample, float outputSample) {
-		analysisInputHistory[analysisWritePos] = inputSample;
-		analysisOutputHistory[analysisWritePos] = outputSample;
+		analysisInputHistory[analysisWritePos] = sanitizeFinite(inputSample);
+		analysisOutputHistory[analysisWritePos] = sanitizeFinite(outputSample);
 		analysisWritePos = (analysisWritePos + 1) % kFftSize;
 		if (analysisFilled < kFftSize) {
 			analysisFilled++;
 		}
 		if (analysisFilled == kFftSize) {
 			analysisHopCounter++;
-			if (analysisPublishSeq.load(std::memory_order_relaxed) == 0 || analysisHopCounter >= kFftHopSize) {
+			if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) {
 				analysisHopCounter = 0;
 				publishAnalysisFrame();
+				analysisPublishedOnce = true;
 			}
 		}
 	}
 
 	void process(const ProcessArgs& args) override {
+			sanitizeCoreState(coreA);
+			sanitizeCoreState(coreB);
+
 			if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) {
 				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
 				params[MODE_PARAM].setValue(float((currentMode + 9) % 10));
@@ -613,7 +680,7 @@ struct Bifurx final : Module {
 				params[MODE_PARAM].setValue(float((currentMode + 1) % 10));
 			}
 
-			const float in = inputs[IN_INPUT].getVoltage();
+			const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
 			const float level = params[LEVEL_PARAM].getValue();
 			const float drive = levelDriveGain(level);
 		const int mode = int(std::round(params[MODE_PARAM].getValue()));
@@ -727,57 +794,118 @@ struct Bifurx final : Module {
 			case 0: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(a.lp);
-				modeOut = b.lp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					b.lp, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 1: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 0.95f * wA * a.lp + 1.05f * wB * b.bp - 0.12f * (a.bp + b.bp);
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 2: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 1.05f * wB * b.lp - 0.55f * wA * a.bp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 3: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(a.notch);
-				modeOut = b.notch;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, b.notch, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 4: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 0.95f * wA * a.lp + 0.95f * wB * b.hp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 5: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 1.15f * (wA * a.bp + wB * b.bp);
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 6: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(a.hp);
-				modeOut = b.lp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, b.lp, 0.f,
+					wA, wB
+				);
 			} break;
 			case 7: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 1.05f * wA * a.hp - 0.55f * wB * b.bp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 8: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(excitation);
-				modeOut = 1.12f * wA * a.bp + 0.92f * wB * b.hp - 0.10f * (a.hp + b.bp);
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, 0.f,
+					wA, wB
+				);
 			} break;
 			case 9:
 			default: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(a.hp);
-				modeOut = b.hp;
+				modeOut = combineModeResponse<float>(
+					mode,
+					a.lp, a.bp, a.hp, a.notch,
+					b.lp, b.bp, b.hp, b.notch,
+					0.f, 0.f, 0.f, b.hp,
+					wA, wB
+				);
 			} break;
 		}
 
-		const float out = 5.5f * softClip(modeOut / 5.5f);
+		const float safeModeOut = sanitizeFinite(modeOut);
+		const float out = sanitizeFinite(5.5f * softClip(safeModeOut / 5.5f));
 		outputs[OUT_OUTPUT].setChannels(1);
 		outputs[OUT_OUTPUT].setVoltage(out);
 

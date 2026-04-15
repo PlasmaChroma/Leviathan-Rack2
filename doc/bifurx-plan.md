@@ -583,13 +583,34 @@ Not part of the first implementation, but should remain architecture-compatible:
 
 ### Do Next (High Value, In-Scope)
 
-- [ ] Add `configBypass(IN_INPUT, OUT_OUTPUT)` in the module constructor.
+- [x] Add `configBypass(IN_INPUT, OUT_OUTPUT)` in the module constructor.
   - `configBypass` defines the signal route Rack uses when the module is bypassed/disabled.
   - For Bifurx this means: when bypassed, `IN` is routed directly to `OUT` so the signal chain stays continuous.
-- [ ] Add lightweight NaN/Inf containment at key I/O boundaries.
-- [ ] Centralize mode-combine constants/formulas so audio path and preview path cannot drift.
-- [ ] Optimize analysis-frame publish path (reduce avoidable per-sample overhead and simplify ring copy path).
-- [ ] Create a focused tuning checklist for resonance/TITO/mode gain balancing with repeatable test patches.
+- [x] Add lightweight NaN/Inf containment at key I/O boundaries.
+- [x] Centralize mode-combine constants/formulas so audio path and preview path cannot drift.
+- [x] Optimize analysis-frame publish path (reduce avoidable per-sample overhead and simplify ring copy path).
+- [x] Create a focused tuning checklist for resonance/TITO/mode gain balancing with repeatable test patches.
+
+### Focused Tuning Checklist (Repeatable)
+
+Reference patch set (create and keep under `patches/bifurx-tuning/`):
+- [ ] `01-mode-gain-baseline.vcv` (steady saw at moderate level, sweep MODE)
+- [ ] `02-resonance-thresholds.vcv` (fixed input + RESO sweeps per mode)
+- [ ] `03-tito-contrast.vcv` (`CLEAN` vs `SM` vs `XM` with same control positions)
+- [ ] `04-fast-fm-stability.vcv` (audio-rate FM stress)
+- [ ] `05-span-balance-extremes.vcv` (edge-case SPAN/BALANCE navigation)
+- [ ] `06-ping-response.vcv` (transient excitation behavior)
+
+Per-run evaluation steps:
+- [ ] Keep Rack sample rate fixed for a full pass (e.g. 48 kHz), then repeat at 96 kHz.
+- [ ] Record mode-by-mode perceived loudness deltas and identify trim targets.
+- [ ] Record RESO onset points for strong ringing/self-oscillation behavior by mode.
+- [ ] Compare TITO states at matched settings and note whether differences are routing-character, not only distortion amount.
+- [ ] Confirm fast FM and ping tests remain stable (no zippering, no runaway, no NaN behavior).
+- [ ] Capture before/after short audio clips for any coefficient or voicing changes.
+
+Change-control rule for tuning:
+- [ ] Any change to mode constants, resonance mapping, or TITO coupling must be rechecked against the six reference patches above before merge.
 
 ### Do Later (Useful, But Not Blocking Current Tuning)
 
