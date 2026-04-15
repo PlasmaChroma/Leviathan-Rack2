@@ -40,8 +40,8 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Band + High",
 	"High + Low"
 };
-constexpr float kResponseMinDb = -36.f;
-constexpr float kResponseMaxDb = 30.f;
+constexpr float kResponseMinDb = -48.f;
+constexpr float kResponseMaxDb = 48.f;
 constexpr float kOverlayDbfsFloor = -96.f;
 constexpr float kOverlayDbfsCeiling = 6.f;
 constexpr float kDisplayDbfsSpan = 30.f;
@@ -91,6 +91,23 @@ float logPosition(float hz, float minHz, float maxHz) {
 
 float logFrequencyAt(float x01, float minHz, float maxHz) {
 	return minHz * std::pow(maxHz / minHz, clamp01(x01));
+}
+
+float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, float topY) {
+	const float clampedDb = clamp(db, minDb, maxDb);
+	const float midY = 0.5f * (bottomY + topY);
+
+	if (clampedDb >= 0.f) {
+		if (maxDb <= 1e-6f) {
+			return midY;
+		}
+		return rescale(clampedDb, 0.f, maxDb, midY, topY);
+	}
+
+	if (minDb >= -1e-6f) {
+		return midY;
+	}
+	return rescale(clampedDb, minDb, 0.f, bottomY, midY);
 }
 
 float resoToDamping(float resoNorm) {
@@ -827,8 +844,8 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 		window[i] = 0.5f - 0.5f * std::cos(2.f * kPi * float(i) / float(kFftSize - 1));
 	}
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		curveDb[i] = -36.f;
-		curveTargetDb[i] = -36.f;
+		curveDb[i] = kResponseMinDb;
+		curveTargetDb[i] = kResponseMinDb;
 		overlayDb[i] = 0.f;
 		overlayTargetDb[i] = 0.f;
 		overlayOutputDbfs[i] = kOverlayDbfsFloor;
@@ -944,7 +961,8 @@ void BifurxSpectrumWidget::updateCurveCache() {
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float mag = std::abs(previewModelResponse(model, curveHz[i]));
-		curveTargetDb[i] = 20.f * std::log10(std::max(mag, 1e-5f));
+		const float db = 20.f * std::log10(std::max(mag, 1e-5f));
+		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
 	}
 
 	if (!hasCurveTarget) {
@@ -1049,8 +1067,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	bottomY = spectrumBottomY;
 	const float displayMaxDbfs = displayTopDbfs;
 	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
+	const float responseMinDb = kResponseMinDb;
+	const float responseMaxDb = kResponseMaxDb;
 	auto responseYForDb = [&](float db) {
-		return rescale(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
+		return responseYForDbDisplay(db, responseMinDb, responseMaxDb, spectrumBottomY, spectrumTopY);
 	};
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
@@ -1116,15 +1136,28 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFontSize(args.vg, std::max(7.f, h * 0.05f));
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+	auto compactSignedLabel = [](float value, char* out, size_t outSize) {
+		std::snprintf(out, outSize, "%+.1f", value);
+		if ((out[0] == '+' || out[0] == '-') && out[1] == '0' && out[2] == '.') {
+			std::memmove(out + 1, out + 2, std::strlen(out + 2) + 1);
+		}
+	};
+
 	nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 	char valueLabel[12];
-	std::snprintf(valueLabel, sizeof(valueLabel), "%+.1f", displayMaxDbfs);
-	if ((valueLabel[0] == '+' || valueLabel[0] == '-') && valueLabel[1] == '0' && valueLabel[2] == '.') {
-		std::memmove(valueLabel + 1, valueLabel + 2, std::strlen(valueLabel + 2) + 1);
-	}
+	compactSignedLabel(displayMaxDbfs, valueLabel, sizeof(valueLabel));
 	char topLabel[24];
 	std::snprintf(topLabel, sizeof(topLabel), "%5s dBFS", valueLabel);
 	nvgText(args.vg, 1.5f, 1.f, topLabel, nullptr);
+
+	char curveMinLabel[12];
+	char curveMaxLabel[12];
+	compactSignedLabel(responseMinDb, curveMinLabel, sizeof(curveMinLabel));
+	compactSignedLabel(responseMaxDb, curveMaxLabel, sizeof(curveMaxLabel));
+	char curveRangeLabel[40];
+	std::snprintf(curveRangeLabel, sizeof(curveRangeLabel), "Curve %s/%s dB", curveMinLabel, curveMaxLabel);
+	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgText(args.vg, w - 1.5f, 1.f, curveRangeLabel, nullptr);
 
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
@@ -1219,8 +1252,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	nvgRestore(args.vg);
 
-	const BifurxPreviewModel markerModel = makePreviewModel(previewState);
-
 	struct PeakMarker {
 		float x = 0.f;
 		float yCurve = 0.f;
@@ -1233,13 +1264,15 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		PeakMarker marker;
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
-		const float mag = std::abs(previewModelResponse(markerModel, clampedHz));
-		const float curveDbAtFreq = clamp(20.f * std::log10(std::max(mag, 1e-5f)), kResponseMinDb, kResponseMaxDb);
 		const float markerRadius = 2.3f;
+		const float curveIndex = targetX01 * float(kCurvePointCount - 1);
+		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
+		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
+		const float t = curveIndex - float(i0);
 		marker.x = plotX + usableW * targetX01;
-		marker.yCurve = responseYForDb(curveDbAtFreq);
+		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
 		marker.yMarker = clamp(
-			marker.yCurve - (markerRadius + 0.2f),
+			marker.yCurve,
 			spectrumTopY + markerRadius + 0.4f,
 			spectrumBottomY - markerRadius - 0.4f
 		);
