@@ -31,6 +31,8 @@ constexpr int kPreviewPublishSlowDivision = 256;
 constexpr int kPreviewAdaptiveCooldownSamples = 64;
 constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
 constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
+constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
+constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
@@ -56,7 +58,7 @@ constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
 constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
 constexpr float kDisplayPeakHeadroomDb = 0.6f;
-constexpr float kCurveVisualSlewDbPerSec = 210.f;
+constexpr float kCurveVisualSlewDbPerSec = 170.f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -611,6 +613,10 @@ struct Bifurx final : Module {
 	float previewFilterAlpha = 0.f;
 	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
+	float previewPrevTargetFreqA = 440.f;
+	float previewPrevTargetFreqB = 440.f;
+	bool previewTargetMotionInitialized = false;
+	int previewTargetStillSamples = 0;
 	int previewAdaptiveCooldown = 0;
 	bool controlFastCacheValid = false;
 	float cachedDampingA = 0.7f;
@@ -994,6 +1000,27 @@ struct Bifurx final : Module {
 		const float previewTargetBalance = balance;
 		const bool previewPitchCvConnected = inputs[VOCT_INPUT].isConnected() || inputs[FM_INPUT].isConnected();
 		const float previewSmoothingAlpha = previewPitchCvConnected ? previewFilterAlphaSlow : previewFilterAlpha;
+		if (!previewTargetMotionInitialized) {
+			previewPrevTargetFreqA = previewTargetFreqA;
+			previewPrevTargetFreqB = previewTargetFreqB;
+			previewTargetStillSamples = 0;
+			previewTargetMotionInitialized = true;
+		}
+		const float targetMotionAOct =
+			std::fabs(std::log2(std::max(previewTargetFreqA, 1.f) / std::max(previewPrevTargetFreqA, 1.f)));
+		const float targetMotionBOct =
+			std::fabs(std::log2(std::max(previewTargetFreqB, 1.f) / std::max(previewPrevTargetFreqB, 1.f)));
+		const float targetMotionOct = std::max(targetMotionAOct, targetMotionBOct);
+		if (targetMotionOct <= kPreviewInstantSettleMotionOctThreshold) {
+			previewTargetStillSamples++;
+		}
+		else {
+			previewTargetStillSamples = 0;
+		}
+		const bool previewInstantSettleNow = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
+		previewPrevTargetFreqA = previewTargetFreqA;
+		previewPrevTargetFreqB = previewTargetFreqB;
+
 		if (!previewFilterInitialized) {
 			previewFreqAFiltered = previewTargetFreqA;
 			previewFreqBFiltered = previewTargetFreqB;
@@ -1001,6 +1028,15 @@ struct Bifurx final : Module {
 			previewQBFiltered = previewTargetQB;
 			previewBalanceFiltered = previewTargetBalance;
 			previewFilterInitialized = true;
+		}
+		else if (previewInstantSettleNow) {
+			// Once control motion is effectively still, snap preview to current
+			// target so the notch settles immediately at the held position.
+			previewFreqAFiltered = previewTargetFreqA;
+			previewFreqBFiltered = previewTargetFreqB;
+			previewQAFiltered = previewTargetQA;
+			previewQBFiltered = previewTargetQB;
+			previewBalanceFiltered = previewTargetBalance;
 		}
 		else {
 			// Keep the preview stable by tracking nominal control state, not
@@ -1285,7 +1321,7 @@ void BifurxSpectrumWidget::step() {
 
 	if (hasCurveTarget) {
 		bool curveAnimating = false;
-		const float curveSmoothing = 0.24f;
+		const float curveSmoothing = 0.20f;
 		float uiFrameSec = 1.f / 60.f;
 		if (APP && APP->window) {
 			const float frameSec = float(APP->window->getLastFrameDuration());
