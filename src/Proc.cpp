@@ -590,8 +590,18 @@ struct Proc : Module {
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
+		bool retriggerFromFall = false;
 		if (!haltHigh && trigRise && ch.trigRearmSec <= 0.f && ch.phase != CHANNEL_RISE) {
+			retriggerFromFall = (ch.phase == CHANNEL_FALL);
 			triggerFunction(ch);
+			if (retriggerFromFall) {
+				// Manual behavior: trigger can reset only during FALL, restarting from cycle start.
+				float prevOut = ch.out;
+				ch.out = FUNCTION_V_MIN;
+				if (bandlimitedSignalOutputs) {
+					insertSignalTransition(ch, ch.out - prevOut, 1e-6f);
+				}
+			}
 			trigAccepted = true;
 			ch.trigRearmSec = 1.f / std::max(MAX_TRIGGER_HZ, 1.f);
 		}
@@ -753,11 +763,7 @@ struct Proc : Module {
 					float overshoot = std::max(ch.phasePos - 1.f, 0.f);
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = CHANNEL_FALL;
-					float prevOut = ch.out;
-					ch.out = FG_V_MAX;
-					if (bandlimitedSignalOutputs) {
-						insertSignalTransition(ch, ch.out - prevOut, f);
-					}
+					// Keep output continuous at rise->fall boundary (no hard snap to max).
 					updateGateOutputs(ch.phase == cfg.gateHighPhase, ch.phase == CHANNEL_RISE, f);
 				}
 			}
@@ -808,19 +814,6 @@ struct Proc : Module {
 			ch.slewDir = 0;
 			ch.out = 0.f;
 		}
-
-		bool fgDotVisible = (ch.phase != CHANNEL_IDLE);
-		float dotXNorm = 0.f;
-		if (fgDotVisible) {
-			float total = std::max(riseTime + fallTime, 1e-6f);
-			if (ch.phase == CHANNEL_RISE) {
-				dotXNorm = clamp((ch.phasePos * riseTime) / total, 0.f, 1.f);
-			} else if (ch.phase == CHANNEL_FALL) {
-				dotXNorm = clamp((riseTime + ch.phasePos * fallTime) / total, 0.f, 1.f);
-			}
-		}
-		float dotYNorm = clamp((ch.out - FUNCTION_V_MIN) / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f), 0.f, 1.f);
-		publishPreviewDot(previewShared, fgDotVisible, dotXNorm, dotYNorm);
 
 		ChannelResult result;
 		result.cycleOn = cycleOn;
@@ -928,6 +921,28 @@ struct Proc : Module {
 		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
 		float outRendered = channel.out * channel.signalOutputGain
 			+ (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+		auto computeDotX = [](const ChannelState& ch) {
+			if (ch.phase == CHANNEL_IDLE) {
+				return 0.f;
+			}
+			float rise = std::max(ch.activeRiseTime, 1e-6f);
+			float fall = std::max(ch.activeFallTime, 1e-6f);
+			float total = rise + fall;
+			if (ch.phase == CHANNEL_RISE) {
+				return clamp((ch.phasePos * rise) / total, 0.f, 1.f);
+			}
+			if (ch.phase == CHANNEL_FALL) {
+				return clamp((rise + ch.phasePos * fall) / total, 0.f, 1.f);
+			}
+			return 0.f;
+		};
+		float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
+		publishPreviewDot(
+			previewState,
+			channel.phase != CHANNEL_IDLE,
+			computeDotX(channel),
+			(channel.out - FUNCTION_V_MIN) * outRangeInv
+		);
 		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
 		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
 		float negOut = -outRendered;
@@ -1106,10 +1121,14 @@ struct WavePreviewWidget : Widget {
 		dotYNorm = previewDotYNorm;
 		// Displayed frequency reflects the currently effective cycle period.
 		lastFreqHz = 1.f / std::max(riseTime + fallTime, 1e-6f);
-		if (lastFreqHz >= DOT_HIDE_MIN_HZ) {
+		// Always hide when FG is inactive; frequency hysteresis only applies while active.
+		if (!previewDotVisible) {
+			dotVisible = false;
+		}
+		else if (lastFreqHz >= DOT_HIDE_MIN_HZ) {
 			dotVisible = false;
 		} else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
-			dotVisible = previewDotVisible;
+			dotVisible = true;
 		}
 		if (!pointsValid || version != lastVersion) {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
@@ -1135,18 +1154,16 @@ struct WavePreviewWidget : Widget {
 		}
 		if (pointsValid && dotVisible) {
 			float w = std::max(box.size.x, 1.f);
+			float h = std::max(box.size.y, 1.f);
 			float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
 			float left = drawPad;
+			float top = drawPad;
 			float right = std::max(left + 1.f, w - drawPad);
+			float bottom = std::max(top + 1.f, h - drawPad);
 			float drawW = right - left;
+			float drawH = bottom - top;
 			float x = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-			// Keep the marker visually glued to the rendered waveform by sampling
-			// directly from the preview polyline instead of a separately published y.
-			float idx = clamp(dotXNorm, 0.f, 1.f) * float(POINT_COUNT - 1);
-			int i0 = clamp(int(std::floor(idx)), 0, POINT_COUNT - 1);
-			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
-			float f = idx - float(i0);
-			float y = points[i0].y + (points[i1].y - points[i0].y) * f;
+			float y = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, DOT_RADIUS);
 			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
