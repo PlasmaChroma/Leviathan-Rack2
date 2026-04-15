@@ -324,6 +324,13 @@ struct BifurxPreviewState {
 	float qA = 1.f;
 	float qB = 1.f;
 	float balance = 0.f;
+	float balanceTarget = 0.f;
+	float resoNorm = 0.f;
+	float spanParamNorm = 0.5f;
+	float spanCvNorm = 0.f;
+	float spanAtten = 0.f;
+	float spanNorm = 0.5f;
+	float spanOct = 0.f;
 	float freqParamNorm = 0.5f;
 	float voctCv = 0.f;
 	int mode = 0;
@@ -449,7 +456,7 @@ struct BifurxSpectrumWidget final : Widget {
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	bool lastFftScaleDynamic = true;
-	int curveDebugLogDecimator = 0;
+	double lastCurveDebugLogTimeSec = -1.0;
 	float cachedAxisSampleRate = 0.f;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
@@ -466,7 +473,16 @@ struct BifurxSpectrumWidget final : Widget {
 	void syncCurveDebugCaptureState();
 	void startCurveDebugCapture();
 	void stopCurveDebugCapture();
-	void logCurveDebugSample(const BifurxPreviewState& state, float peakAX, float peakAY, float peakBX, float peakBY);
+	void logCurveDebugSample(
+		const BifurxPreviewState& state,
+		float peakAX,
+		float peakAYCurve,
+		float peakAYMarker,
+		float peakBX,
+		float peakBYCurve,
+		float peakBYMarker,
+		float uiFrameMs
+	);
 	void updateAxisCache();
 	void updateCurveCache();
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
@@ -737,6 +753,20 @@ struct Bifurx final : Module {
 			const float drive = levelDriveGain(level);
 		const int mode = int(std::round(params[MODE_PARAM].getValue()));
 		const int tito = int(std::round(params[TITO_PARAM].getValue()));
+		const float freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
+		const float voctCv = inputs[VOCT_INPUT].isConnected() ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f);
+		const float fmCv = inputs[FM_INPUT].isConnected() ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		const float fm = fmCv * fmAmt;
+		const float resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f;
+		const float resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
+		const float balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f;
+		const float balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
+		const float spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
+		const float spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
+		const float spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
+		const float spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
+		const float spanOct = 8.f * shapedSpan(spanNorm);
 		const bool fastPathEligible = (tito == 1)
 			&& !inputs[VOCT_INPUT].isConnected()
 			&& !inputs[FM_INPUT].isConnected()
@@ -757,26 +787,10 @@ struct Bifurx final : Module {
 		float wA = cachedWA;
 		float wB = cachedWB;
 		float balance = cachedBalance;
-		const float resoNorm = clamp(
-			params[RESO_PARAM].getValue() + clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f,
-			0.f, 1.f
-		);
 
 		if (updateFastControls) {
-			const float voct = inputs[VOCT_INPUT].getVoltage();
-			const float fmAmt = params[FM_AMT_PARAM].getValue();
-			const float fm = clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) * fmAmt;
-			const float resoCv = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f;
-			const float balanceCv = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f;
-			const float spanCv = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
-			const float spanNorm = clamp(
-				params[SPAN_PARAM].getValue() + 0.5f * params[SPAN_CV_ATTEN_PARAM].getValue() * spanCv,
-				0.f, 1.f);
-			const float spanOct = 8.f * shapedSpan(spanNorm);
-			balance = clamp(params[BALANCE_PARAM].getValue() + balanceCv, -1.f, 1.f);
-			const float resoNorm = clamp(params[RESO_PARAM].getValue() + resoCv, 0.f, 1.f);
-			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * clamp01(params[FREQ_PARAM].getValue()))
-				* fastExp2(voct + fm);
+			balance = balanceNorm;
+			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
 			freqA0 = centerHz * fastExp2(-0.5f * spanOct);
 			freqB0 = centerHz * fastExp2(0.5f * spanOct);
 			const float baseDamping = resoToDamping(resoNorm);
@@ -996,8 +1010,15 @@ struct Bifurx final : Module {
 		previewState.qB = previewQBFiltered;
 		previewState.mode = mode;
 		previewState.balance = previewBalanceFiltered;
-		previewState.freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
-		previewState.voctCv = inputs[VOCT_INPUT].isConnected() ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		previewState.balanceTarget = balanceNorm;
+		previewState.resoNorm = resoNorm;
+		previewState.spanParamNorm = spanParamNorm;
+		previewState.spanCvNorm = spanCvNorm;
+		previewState.spanAtten = spanAtten;
+		previewState.spanNorm = spanNorm;
+		previewState.spanOct = spanOct;
+		previewState.freqParamNorm = freqParamNorm;
+		previewState.voctCv = voctCv;
 		const bool previewPublishTick = previewPitchCvConnected ? previewPublishSlowDivider.process() : previewPublishDivider.process();
 		if (!hasLastPreviewState || (previewPublishTick && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
@@ -1005,11 +1026,9 @@ struct Bifurx final : Module {
 
 		pushAnalysisSample(drivenIn, out);
 
-			const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f);
 			lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f));
 			lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
 
-			const float spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
 			lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f));
 			lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
 		}
@@ -1079,12 +1098,18 @@ void BifurxSpectrumWidget::startCurveDebugCapture() {
 
 	curveDebugRecorder.file.setf(std::ios::fixed);
 	curveDebugRecorder.file << std::setprecision(6);
-	curveDebugRecorder.file << "# Bifurx curve debug trace v1\n";
+	curveDebugRecorder.file << "# Bifurx curve debug trace v2\n";
 	curveDebugRecorder.file << "# Start when curve debug logging is enabled, stop when it is disabled\n";
-	curveDebugRecorder.file << "seq,t_sec,mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,peak_a_x,peak_a_y,peak_b_x,peak_b_y\n";
+	curveDebugRecorder.file
+		<< "seq,t_sec,mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,"
+		   "reso_norm,balance_target,balance_filtered,"
+		   "span_param,span_cv,span_atten,span_norm,span_oct,"
+		   "peak_a_x,peak_a_y_curve,peak_a_y_marker,"
+		   "peak_b_x,peak_b_y_curve,peak_b_y_marker,ui_frame_ms\n";
 	curveDebugRecorder.startTimeSec = system::getTime();
 	curveDebugRecorder.sequence = 0;
 	curveDebugRecorder.active = true;
+	lastCurveDebugLogTimeSec = -1.0;
 	INFO("Bifurx: curve debug capture started: %s", curveDebugRecorder.path.c_str());
 }
 
@@ -1102,14 +1127,18 @@ void BifurxSpectrumWidget::stopCurveDebugCapture() {
 	curveDebugRecorder.startTimeSec = 0.0;
 	curveDebugRecorder.sequence = 0;
 	curveDebugRecorder.path.clear();
+	lastCurveDebugLogTimeSec = -1.0;
 }
 
 void BifurxSpectrumWidget::logCurveDebugSample(
 	const BifurxPreviewState& state,
 	float peakAX,
-	float peakAY,
+	float peakAYCurve,
+	float peakAYMarker,
 	float peakBX,
-	float peakBY
+	float peakBYCurve,
+	float peakBYMarker,
+	float uiFrameMs
 ) {
 	if (!module || !curveDebugRecorder.active || !curveDebugRecorder.file.good()) {
 		return;
@@ -1124,10 +1153,25 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 		<< state.voctCv << ","
 		<< state.freqA << ","
 		<< state.freqB << ","
+		<< state.resoNorm << ","
+		<< state.balanceTarget << ","
+		<< state.balance << ","
+		<< state.spanParamNorm << ","
+		<< state.spanCvNorm << ","
+		<< state.spanAtten << ","
+		<< state.spanNorm << ","
+		<< state.spanOct << ","
 		<< peakAX << ","
-		<< peakAY << ","
+		<< peakAYCurve << ","
+		<< peakAYMarker << ","
 		<< peakBX << ","
-		<< peakBY << "\n";
+		<< peakBYCurve << ","
+		<< peakBYMarker << ","
+		<< uiFrameMs << "\n";
+
+	if ((curveDebugRecorder.sequence % 120u) == 0u) {
+		curveDebugRecorder.file.flush();
+	}
 }
 
 void BifurxSpectrumWidget::updateAxisCache() {
@@ -1594,19 +1638,27 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
 	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
 	if (module && module->curveDebugLogging) {
-		curveDebugLogDecimator++;
-		// Throttle debug output to keep logs readable during modulation tests.
-		if (curveDebugLogDecimator >= 30) {
-			curveDebugLogDecimator = 0;
+		const double nowSec = system::getTime();
+		const double minIntervalSec = 1.0 / 60.0;
+		if (lastCurveDebugLogTimeSec < 0.0 || (nowSec - lastCurveDebugLogTimeSec) >= minIntervalSec) {
+			lastCurveDebugLogTimeSec = nowSec;
+			float uiFrameMs = NAN;
+			if (APP && APP->window) {
+				const double frameSec = APP->window->getLastFrameDuration();
+				if (std::isfinite(frameSec) && frameSec > 0.0) {
+					uiFrameMs = float(frameSec * 1000.0);
+				}
+			}
 			logCurveDebugSample(
 				previewState,
-				peaks[0].x, peaks[0].yMarker,
-				peaks[1].x, peaks[1].yMarker
+				peaks[0].x, peaks[0].yCurve, peaks[0].yMarker,
+				peaks[1].x, peaks[1].yCurve, peaks[1].yMarker,
+				uiFrameMs
 			);
 		}
 	}
-	else {
-		curveDebugLogDecimator = 0;
+	else if (lastCurveDebugLogTimeSec >= 0.0) {
+		lastCurveDebugLogTimeSec = -1.0;
 	}
 
 	float labelX[2] = {peaks[0].x, peaks[1].x};
