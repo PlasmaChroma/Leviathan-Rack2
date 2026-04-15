@@ -1060,10 +1060,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float usableW = std::max(1.f, w - plotX - padX);
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
-	const float labelBandHeight = std::max(6.2f, h * 0.095f);
+	const float labelBandHeight = std::max(5.8f, h * 0.082f);
 	const float labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f;
-	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.45f, h * 0.004f));
+	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.20f, h * 0.002f));
 	bottomY = spectrumBottomY;
 	const float displayMaxDbfs = displayTopDbfs;
 	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
@@ -1288,17 +1288,31 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
 	const int rightIndex = 1 - leftIndex;
-	const float minLabelSeparation = std::max(30.f, w * 0.18f);
-	const float needed = minLabelSeparation - (labelX[rightIndex] - labelX[leftIndex]);
-	if (needed > 0.f) {
-		labelX[leftIndex] -= 0.5f * needed;
-		labelX[rightIndex] += 0.5f * needed;
-	}
 	const float labelMargin = std::max(18.f, w * 0.08f);
-	labelX[0] = clamp(labelX[0], plotX + labelMargin, plotX + usableW - labelMargin);
-	labelX[1] = clamp(labelX[1], plotX + labelMargin, plotX + usableW - labelMargin);
+	const float minLabelSeparation = std::max(30.f, w * 0.18f);
+	const float minX = plotX + labelMargin;
+	const float maxX = plotX + usableW - labelMargin;
+	const float availableSpan = std::max(0.f, maxX - minX);
+	const float targetSeparation = std::min(minLabelSeparation, availableSpan);
+	const float center = 0.5f * (labelX[leftIndex] + labelX[rightIndex]);
+	float leftX = center - 0.5f * targetSeparation;
+	float rightX = center + 0.5f * targetSeparation;
+	if (leftX < minX) {
+		const float shift = minX - leftX;
+		leftX += shift;
+		rightX += shift;
+	}
+	if (rightX > maxX) {
+		const float shift = rightX - maxX;
+		leftX -= shift;
+		rightX -= shift;
+	}
+	leftX = clamp(leftX, minX, maxX);
+	rightX = clamp(rightX, minX, maxX);
+	labelX[leftIndex] = leftX;
+	labelX[rightIndex] = rightX;
 
-	const float guideYBottom = labelBandTop + std::min(5.f, 0.35f * labelBandHeight);
+	const float guideYBottom = labelBandTop + std::min(3.5f, 0.26f * labelBandHeight);
 	for (int i = 0; i < 2; ++i) {
 		if (!peaks[i].visible) {
 			continue;
@@ -1326,7 +1340,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 	for (int i = 0; i < 2; ++i) {
-		const float textY = labelBandTop + 0.58f * labelBandHeight;
+		const float textY = labelBandTop + 0.66f * labelBandHeight;
 		nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
 		nvgText(args.vg, labelX[i], textY + 0.75f, peaks[i].label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
