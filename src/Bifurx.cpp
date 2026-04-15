@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <fstream>
+#include <iomanip>
 
 struct Bifurx;
 
@@ -60,6 +62,10 @@ float fastExp2(float x) {
 
 float fastExp(float x) {
 	return fastExp2(x * kLog2e);
+}
+
+std::string bifurxUserRootPath() {
+	return system::join(asset::user(), "Leviathan/Bifurx");
 }
 
 float shapedSpan(float value) {
@@ -318,6 +324,8 @@ struct BifurxPreviewState {
 	float qA = 1.f;
 	float qB = 1.f;
 	float balance = 0.f;
+	float freqParamNorm = 0.5f;
+	float voctCv = 0.f;
 	int mode = 0;
 };
 
@@ -411,6 +419,14 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 }
 
 struct BifurxSpectrumWidget final : Widget {
+	struct CurveDebugRecorder {
+		bool active = false;
+		std::ofstream file;
+		std::string path;
+		double startTimeSec = 0.0;
+		uint64_t sequence = 0;
+	};
+
 	Bifurx* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
 	dsp::RealFFT fft;
@@ -433,6 +449,7 @@ struct BifurxSpectrumWidget final : Widget {
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	bool lastFftScaleDynamic = true;
+	int curveDebugLogDecimator = 0;
 	float cachedAxisSampleRate = 0.f;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
@@ -441,9 +458,15 @@ struct BifurxSpectrumWidget final : Widget {
 	bool hasOverlayTarget = false;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
+	CurveDebugRecorder curveDebugRecorder;
 
 	BifurxSpectrumWidget();
+	~BifurxSpectrumWidget() override;
 	void step() override;
+	void syncCurveDebugCaptureState();
+	void startCurveDebugCapture();
+	void stopCurveDebugCapture();
+	void logCurveDebugSample(const BifurxPreviewState& state, float peakAX, float peakAY, float peakBX, float peakBY);
 	void updateAxisCache();
 	void updateCurveCache();
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
@@ -546,6 +569,7 @@ struct Bifurx final : Module {
 	TptSvf coreA;
 	TptSvf coreB;
 	dsp::ClockDivider previewPublishDivider;
+	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
 	BifurxPreviewState lastPreviewState;
 	bool hasLastPreviewState = false;
@@ -559,6 +583,7 @@ struct Bifurx final : Module {
 	float previewBalanceFiltered = 0.f;
 	bool previewFilterInitialized = false;
 	float previewFilterAlpha = 0.f;
+	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
 	bool controlFastCacheValid = false;
 	float cachedDampingA = 0.7f;
@@ -582,6 +607,7 @@ struct Bifurx final : Module {
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
+	bool curveDebugLogging = false;
 
 	Bifurx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -613,12 +639,14 @@ struct Bifurx final : Module {
 		paramQuantities[MODE_PARAM]->snapEnabled = true;
 		paramQuantities[TITO_PARAM]->snapEnabled = true;
 		previewPublishDivider.setDivision(128);
+		previewPublishSlowDivider.setDivision(1024);
 		controlUpdateDivider.setDivision(16);
 	}
 
 	json_t* dataToJson() override {
 		json_t* root = Module::dataToJson();
 		json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
+		json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 		return root;
 	}
 
@@ -627,6 +655,10 @@ struct Bifurx final : Module {
 		json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 		if (fftScaleDynamicJ) {
 			fftScaleDynamic = json_is_true(fftScaleDynamicJ);
+		}
+		json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
+		if (curveDebugLoggingJ) {
+			curveDebugLogging = json_is_true(curveDebugLoggingJ);
 		}
 	}
 
@@ -714,6 +746,7 @@ struct Bifurx final : Module {
 		const bool updateFastControls = !controlFastCacheValid || !fastPathEligible || controlUpdateDivider.process();
 		if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) {
 			previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f);
+			previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f);
 			previewFilterAlphaSampleRate = args.sampleRate;
 		}
 
@@ -934,6 +967,8 @@ struct Bifurx final : Module {
 		const float previewTargetQA = 1.f / std::max(dampingA, 0.05f);
 		const float previewTargetQB = 1.f / std::max(dampingB, 0.05f);
 		const float previewTargetBalance = balance;
+		const bool previewPitchCvConnected = inputs[VOCT_INPUT].isConnected() || inputs[FM_INPUT].isConnected();
+		const float previewSmoothingAlpha = previewPitchCvConnected ? previewFilterAlphaSlow : previewFilterAlpha;
 		if (!previewFilterInitialized) {
 			previewFreqAFiltered = previewTargetFreqA;
 			previewFreqBFiltered = previewTargetFreqB;
@@ -945,7 +980,7 @@ struct Bifurx final : Module {
 		else {
 			// Keep the preview stable by tracking nominal control state, not
 			// instantaneous audio-rate modulation/coupling in the DSP core.
-				const float a = previewFilterAlpha;
+				const float a = previewSmoothingAlpha;
 				previewFreqAFiltered += a * (previewTargetFreqA - previewFreqAFiltered);
 				previewFreqBFiltered += a * (previewTargetFreqB - previewFreqBFiltered);
 				previewQAFiltered += a * (previewTargetQA - previewQAFiltered);
@@ -961,7 +996,10 @@ struct Bifurx final : Module {
 		previewState.qB = previewQBFiltered;
 		previewState.mode = mode;
 		previewState.balance = previewBalanceFiltered;
-		if (!hasLastPreviewState || (previewPublishDivider.process() && previewStatesDiffer(previewState, lastPreviewState))) {
+		previewState.freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
+		previewState.voctCv = inputs[VOCT_INPUT].isConnected() ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		const bool previewPublishTick = previewPitchCvConnected ? previewPublishSlowDivider.process() : previewPublishDivider.process();
+		if (!hasLastPreviewState || (previewPublishTick && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
 		}
 
@@ -1006,6 +1044,92 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 	}
 }
 
+BifurxSpectrumWidget::~BifurxSpectrumWidget() {
+	stopCurveDebugCapture();
+}
+
+void BifurxSpectrumWidget::syncCurveDebugCaptureState() {
+	if (!module) {
+		stopCurveDebugCapture();
+		return;
+	}
+	if (!module->curveDebugLogging) {
+		stopCurveDebugCapture();
+		return;
+	}
+	startCurveDebugCapture();
+}
+
+void BifurxSpectrumWidget::startCurveDebugCapture() {
+	if (!module || curveDebugRecorder.active) {
+		return;
+	}
+
+	std::string traceDir = system::join(bifurxUserRootPath(), "curve_debug");
+	system::createDirectories(traceDir);
+	const long long stampMs = (long long) std::llround(system::getUnixTime() * 1000.0);
+	const std::string filename = "curve_debug_" + std::to_string(stampMs) + ".csv";
+	curveDebugRecorder.path = system::join(traceDir, filename);
+	curveDebugRecorder.file.open(curveDebugRecorder.path.c_str(), std::ios::out | std::ios::trunc);
+	if (!curveDebugRecorder.file.good()) {
+		WARN("Bifurx: failed to open curve debug file: %s", curveDebugRecorder.path.c_str());
+		curveDebugRecorder.path.clear();
+		return;
+	}
+
+	curveDebugRecorder.file.setf(std::ios::fixed);
+	curveDebugRecorder.file << std::setprecision(6);
+	curveDebugRecorder.file << "# Bifurx curve debug trace v1\n";
+	curveDebugRecorder.file << "# Start when curve debug logging is enabled, stop when it is disabled\n";
+	curveDebugRecorder.file << "seq,t_sec,mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,peak_a_x,peak_a_y,peak_b_x,peak_b_y\n";
+	curveDebugRecorder.startTimeSec = system::getTime();
+	curveDebugRecorder.sequence = 0;
+	curveDebugRecorder.active = true;
+	INFO("Bifurx: curve debug capture started: %s", curveDebugRecorder.path.c_str());
+}
+
+void BifurxSpectrumWidget::stopCurveDebugCapture() {
+	if (!curveDebugRecorder.active) {
+		return;
+	}
+
+	if (curveDebugRecorder.file.good()) {
+		curveDebugRecorder.file.flush();
+		curveDebugRecorder.file.close();
+	}
+	INFO("Bifurx: curve debug capture saved: %s", curveDebugRecorder.path.c_str());
+	curveDebugRecorder.active = false;
+	curveDebugRecorder.startTimeSec = 0.0;
+	curveDebugRecorder.sequence = 0;
+	curveDebugRecorder.path.clear();
+}
+
+void BifurxSpectrumWidget::logCurveDebugSample(
+	const BifurxPreviewState& state,
+	float peakAX,
+	float peakAY,
+	float peakBX,
+	float peakBY
+) {
+	if (!module || !curveDebugRecorder.active || !curveDebugRecorder.file.good()) {
+		return;
+	}
+
+	const double tSec = std::max(0.0, system::getTime() - curveDebugRecorder.startTimeSec);
+	curveDebugRecorder.file
+		<< curveDebugRecorder.sequence++ << ","
+		<< tSec << ","
+		<< state.mode << ","
+		<< state.freqParamNorm << ","
+		<< state.voctCv << ","
+		<< state.freqA << ","
+		<< state.freqB << ","
+		<< peakAX << ","
+		<< peakAY << ","
+		<< peakBX << ","
+		<< peakBY << "\n";
+}
+
 void BifurxSpectrumWidget::updateAxisCache() {
 	if (!hasPreview) {
 		return;
@@ -1029,6 +1153,7 @@ void BifurxSpectrumWidget::updateAxisCache() {
 
 void BifurxSpectrumWidget::step() {
 	Widget::step();
+	syncCurveDebugCaptureState();
 	if (!module) {
 		return;
 	}
@@ -1468,6 +1593,22 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	PeakMarker peaks[2];
 	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
 	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
+	if (module && module->curveDebugLogging) {
+		curveDebugLogDecimator++;
+		// Throttle debug output to keep logs readable during modulation tests.
+		if (curveDebugLogDecimator >= 30) {
+			curveDebugLogDecimator = 0;
+			logCurveDebugSample(
+				previewState,
+				peaks[0].x, peaks[0].yMarker,
+				peaks[1].x, peaks[1].yMarker
+			);
+		}
+	}
+	else {
+		curveDebugLogDecimator = 0;
+	}
+
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
 	const int rightIndex = 1 - leftIndex;
@@ -1671,6 +1812,7 @@ struct BifurxWidget final : ModuleWidget {
 
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
+		menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 	}
 };
 
