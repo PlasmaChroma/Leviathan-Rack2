@@ -481,7 +481,11 @@ struct BifurxSpectrumWidget final : Widget {
 		float peakBX,
 		float peakBYCurve,
 		float peakBYMarker,
-		float uiFrameMs
+		float uiFrameMs,
+		uint32_t previewSeq,
+		bool previewUpdated,
+		uint32_t analysisSeq,
+		bool analysisUpdated
 	);
 	void updateAxisCache();
 	void updateCurveCache();
@@ -1104,6 +1108,7 @@ void BifurxSpectrumWidget::startCurveDebugCapture() {
 		<< "seq,t_sec,mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,"
 		   "reso_norm,balance_target,balance_filtered,"
 		   "span_param,span_cv,span_atten,span_norm,span_oct,"
+		   "preview_seq,preview_updated,analysis_seq,analysis_updated,"
 		   "peak_a_x,peak_a_y_curve,peak_a_y_marker,"
 		   "peak_b_x,peak_b_y_curve,peak_b_y_marker,ui_frame_ms\n";
 	curveDebugRecorder.startTimeSec = system::getTime();
@@ -1138,7 +1143,11 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 	float peakBX,
 	float peakBYCurve,
 	float peakBYMarker,
-	float uiFrameMs
+	float uiFrameMs,
+	uint32_t previewSeq,
+	bool previewUpdated,
+	uint32_t analysisSeq,
+	bool analysisUpdated
 ) {
 	if (!module || !curveDebugRecorder.active || !curveDebugRecorder.file.good()) {
 		return;
@@ -1161,6 +1170,10 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 		<< state.spanAtten << ","
 		<< state.spanNorm << ","
 		<< state.spanOct << ","
+		<< previewSeq << ","
+		<< (previewUpdated ? 1 : 0) << ","
+		<< analysisSeq << ","
+		<< (analysisUpdated ? 1 : 0) << ","
 		<< peakAX << ","
 		<< peakAYCurve << ","
 		<< peakAYMarker << ","
@@ -1203,6 +1216,8 @@ void BifurxSpectrumWidget::step() {
 	}
 
 	bool dirty = false;
+	bool previewUpdatedThisStep = false;
+	bool analysisUpdatedThisStep = false;
 	const bool fftScaleDynamicNow = module->fftScaleDynamic;
 	if (fftScaleDynamicNow != lastFftScaleDynamic) {
 		lastFftScaleDynamic = fftScaleDynamicNow;
@@ -1220,6 +1235,7 @@ void BifurxSpectrumWidget::step() {
 		hasPreview = true;
 		updateAxisCache();
 		lastPreviewSeq = previewSeq;
+		previewUpdatedThisStep = true;
 		updateCurveCache();
 		dirty = true;
 	}
@@ -1230,6 +1246,7 @@ void BifurxSpectrumWidget::step() {
 		updateOverlayCache(module->analysisFrames[index]);
 		hasOverlay = true;
 		lastAnalysisSeq = analysisSeq;
+		analysisUpdatedThisStep = true;
 		dirty = true;
 	}
 
@@ -1279,6 +1296,80 @@ void BifurxSpectrumWidget::step() {
 		}
 
 		dirty = dirty || overlayAnimating;
+	}
+
+	if (module->curveDebugLogging && hasPreview) {
+		const double nowSec = system::getTime();
+		const double minIntervalSec = 1.0 / 60.0;
+		if (lastCurveDebugLogTimeSec < 0.0 || (nowSec - lastCurveDebugLogTimeSec) >= minIntervalSec) {
+			lastCurveDebugLogTimeSec = nowSec;
+
+			float uiFrameMs = NAN;
+			if (APP && APP->window) {
+				const double frameSec = APP->window->getLastFrameDuration();
+				if (std::isfinite(frameSec) && frameSec > 0.0) {
+					uiFrameMs = float(frameSec * 1000.0);
+				}
+			}
+
+			float peakAX = NAN;
+			float peakAYCurve = NAN;
+			float peakAYMarker = NAN;
+			float peakBX = NAN;
+			float peakBYCurve = NAN;
+			float peakBYMarker = NAN;
+
+			const float w = box.size.x;
+			const float h = box.size.y;
+			if (w > 0.f && h > 0.f) {
+				const float padX = 0.f;
+				const float padY = std::max(4.f, h * 0.035f);
+				const float plotX = padX;
+				const float usableW = std::max(1.f, w - plotX - padX);
+				const float minHz = 10.f;
+				const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
+				const float labelBandHeight = std::max(5.2f, h * 0.072f);
+				const float labelBandTop = h - labelBandHeight;
+				const float spectrumTopY = padY * 0.35f;
+				const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+				auto responseYForDb = [&](float db) {
+					return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
+				};
+				auto evalPeak = [&](float targetHz, float* outX, float* outYCurve, float* outYMarker) {
+					const float clampedHz = clamp(targetHz, minHz, maxHz);
+					const float targetX01 = logPosition(clampedHz, minHz, maxHz);
+					const float markerRadius = 2.3f;
+					const float curveIndex = targetX01 * float(kCurvePointCount - 1);
+					const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
+					const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
+					const float t = curveIndex - float(i0);
+					const float curveDbAtHz = mixf(curveDb[i0], curveDb[i1], t);
+					const float yCurve = responseYForDb(curveDbAtHz);
+					const float yMarker = clamp(
+						yCurve,
+						spectrumTopY + markerRadius + 0.4f,
+						spectrumBottomY - markerRadius - 0.4f
+					);
+					*outX = plotX + usableW * targetX01;
+					*outYCurve = yCurve;
+					*outYMarker = yMarker;
+				};
+				evalPeak(previewState.freqA, &peakAX, &peakAYCurve, &peakAYMarker);
+				evalPeak(previewState.freqB, &peakBX, &peakBYCurve, &peakBYMarker);
+			}
+
+			logCurveDebugSample(
+				previewState,
+				peakAX, peakAYCurve, peakAYMarker,
+				peakBX, peakBYCurve, peakBYMarker,
+				uiFrameMs,
+				previewSeq, previewUpdatedThisStep,
+				analysisSeq, analysisUpdatedThisStep
+			);
+		}
+	}
+	else if (lastCurveDebugLogTimeSec >= 0.0) {
+		lastCurveDebugLogTimeSec = -1.0;
 	}
 
 	if (dirty && framebuffer) {
@@ -1637,29 +1728,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	PeakMarker peaks[2];
 	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
 	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
-	if (module && module->curveDebugLogging) {
-		const double nowSec = system::getTime();
-		const double minIntervalSec = 1.0 / 60.0;
-		if (lastCurveDebugLogTimeSec < 0.0 || (nowSec - lastCurveDebugLogTimeSec) >= minIntervalSec) {
-			lastCurveDebugLogTimeSec = nowSec;
-			float uiFrameMs = NAN;
-			if (APP && APP->window) {
-				const double frameSec = APP->window->getLastFrameDuration();
-				if (std::isfinite(frameSec) && frameSec > 0.0) {
-					uiFrameMs = float(frameSec * 1000.0);
-				}
-			}
-			logCurveDebugSample(
-				previewState,
-				peaks[0].x, peaks[0].yCurve, peaks[0].yMarker,
-				peaks[1].x, peaks[1].yCurve, peaks[1].yMarker,
-				uiFrameMs
-			);
-		}
-	}
-	else if (lastCurveDebugLogTimeSec >= 0.0) {
-		lastCurveDebugLogTimeSec = -1.0;
-	}
 
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
