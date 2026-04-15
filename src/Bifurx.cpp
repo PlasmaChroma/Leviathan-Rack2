@@ -16,7 +16,11 @@ namespace {
 constexpr float kDefaultPanelWidthMm = 71.12f;
 constexpr float kDefaultPanelHeightMm = 128.5f;
 constexpr float kPi = 3.14159265358979323846f;
-constexpr int kCurvePointCount = 257;
+constexpr float kLog2e = 1.4426950408889634f;
+constexpr float kFreqMinHz = 4.f;
+constexpr float kFreqMaxHz = 28000.f;
+constexpr float kFreqLog2Span = 12.7731392f; // log2(28000 / 4)
+constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
@@ -48,6 +52,14 @@ float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
 }
 
+float fastExp2(float x) {
+	return rack::dsp::exp2_taylor5(clamp(x, -24.f, 24.f));
+}
+
+float fastExp(float x) {
+	return fastExp2(x * kLog2e);
+}
+
 float shapedSpan(float value) {
 	return std::pow(clamp01(value), 1.65f);
 }
@@ -65,6 +77,13 @@ float mixf(float a, float b, float t) {
 	return a + (b - a) * t;
 }
 
+float onePoleAlpha(float dt, float tauSeconds) {
+	if (tauSeconds <= 0.f) {
+		return 1.f;
+	}
+	return 1.f - fastExp(-std::max(dt, 0.f) / tauSeconds);
+}
+
 float logPosition(float hz, float minHz, float maxHz) {
 	const float safeHz = clamp(hz, minHz, maxHz);
 	return std::log(safeHz / minHz) / std::log(maxHz / minHz);
@@ -74,10 +93,6 @@ float logFrequencyAt(float x01, float minHz, float maxHz) {
 	return minHz * std::pow(maxHz / minHz, clamp01(x01));
 }
 
-float expoMap(float norm, float minValue, float maxValue) {
-	return minValue * std::pow(maxValue / minValue, clamp01(norm));
-}
-
 float resoToDamping(float resoNorm) {
 	const float r = clamp01(resoNorm);
 	return 2.f - 1.98f * std::pow(r, 1.35f);
@@ -85,7 +100,7 @@ float resoToDamping(float resoNorm) {
 
 float signedWeight(float balance, bool upperPeak) {
 	const float sign = upperPeak ? 1.f : -1.f;
-	return std::exp(0.7f * sign * clamp(balance, -1.f, 1.f));
+	return fastExp(0.7f * sign * clamp(balance, -1.f, 1.f));
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
@@ -105,18 +120,32 @@ struct SvfOutputs {
 	float notch = 0.f;
 };
 
+struct SvfCoeffs {
+	float g = 0.f;
+	float k = 0.f;
+	float a1 = 1.f;
+};
+
+SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
+	const float g = std::tan(kPi * limitedCutoff / sr);
+	const float k = clamp(damping, 0.02f, 2.2f);
+	const float a1 = 1.f / (1.f + g * (g + k));
+	SvfCoeffs coeffs;
+	coeffs.g = g;
+	coeffs.k = k;
+	coeffs.a1 = a1;
+	return coeffs;
+}
+
 struct TptSvf {
 	float ic1eq = 0.f;
 	float ic2eq = 0.f;
 
-	SvfOutputs process(float input, float sampleRate, float cutoff, float damping) {
-		const float sr = std::max(sampleRate, 1.f);
-		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
-		const float g = std::tan(kPi * limitedCutoff / sr);
-		const float k = clamp(damping, 0.02f, 2.2f);
-		const float a1 = 1.f / (1.f + g * (g + k));
-		const float v1 = a1 * (ic1eq + g * (input - ic2eq));
-		const float v2 = ic2eq + g * v1;
+	SvfOutputs processWithCoeffs(float input, const SvfCoeffs& coeffs) {
+		const float v1 = coeffs.a1 * (ic1eq + coeffs.g * (input - ic2eq));
+		const float v2 = ic2eq + coeffs.g * v1;
 
 		ic1eq = 2.f * v1 - ic1eq;
 		ic2eq = 2.f * v2 - ic2eq;
@@ -124,9 +153,13 @@ struct TptSvf {
 		SvfOutputs out;
 		out.bp = v1;
 		out.lp = v2;
-		out.hp = input - k * v1 - v2;
+		out.hp = input - coeffs.k * v1 - v2;
 		out.notch = out.lp + out.hp;
 		return out;
+	}
+
+	SvfOutputs process(float input, float sampleRate, float cutoff, float damping) {
+		return processWithCoeffs(input, makeSvfCoeffs(sampleRate, cutoff, damping));
 	}
 };
 
@@ -312,9 +345,12 @@ struct BifurxSpectrumWidget final : Widget {
 	float overlayTargetOutputDbfs[kCurvePointCount];
 	float curveX[kCurvePointCount];
 	float curveY[kCurvePointCount];
+	float curveHz[kCurvePointCount];
+	float curveBinPos[kCurvePointCount];
 	float bottomY = 0.f;
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+	float cachedAxisSampleRate = 0.f;
 	BifurxPreviewState previewState;
 	bool hasPreview = false;
 	bool hasOverlay = false;
@@ -325,6 +361,7 @@ struct BifurxSpectrumWidget final : Widget {
 
 	BifurxSpectrumWidget();
 	void step() override;
+	void updateAxisCache();
 	void updateCurveCache();
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
 
@@ -424,11 +461,30 @@ struct Bifurx final : Module {
 	TptSvf coreA;
 	TptSvf coreB;
 	dsp::ClockDivider previewPublishDivider;
+	dsp::ClockDivider controlUpdateDivider;
 	BifurxPreviewState lastPreviewState;
 	bool hasLastPreviewState = false;
 	BifurxPreviewState previewStates[2];
 	std::atomic<int> previewPublishedIndex{0};
 	std::atomic<uint32_t> previewPublishSeq{0};
+	float previewFreqAFiltered = 440.f;
+	float previewFreqBFiltered = 440.f;
+	float previewQAFiltered = 1.f;
+	float previewQBFiltered = 1.f;
+	float previewBalanceFiltered = 0.f;
+	bool previewFilterInitialized = false;
+	float previewFilterAlpha = 0.f;
+	float previewFilterAlphaSampleRate = 0.f;
+	bool controlFastCacheValid = false;
+	float cachedDampingA = 0.7f;
+	float cachedDampingB = 0.7f;
+	float cachedWA = 1.f;
+	float cachedWB = 1.f;
+	float cachedFreqA0 = 440.f;
+	float cachedFreqB0 = 440.f;
+	float cachedBalance = 0.f;
+	SvfCoeffs cachedCoeffsA;
+	SvfCoeffs cachedCoeffsB;
 	float analysisInputHistory[kFftSize] = {};
 	float analysisOutputHistory[kFftSize] = {};
 	int analysisWritePos = 0;
@@ -469,6 +525,7 @@ struct Bifurx final : Module {
 		paramQuantities[MODE_PARAM]->snapEnabled = true;
 		paramQuantities[TITO_PARAM]->snapEnabled = true;
 		previewPublishDivider.setDivision(128);
+		controlUpdateDivider.setDivision(16);
 	}
 
 	void publishPreviewState(const BifurxPreviewState& state) {
@@ -507,7 +564,7 @@ struct Bifurx final : Module {
 		}
 	}
 
-		void process(const ProcessArgs& args) override {
+	void process(const ProcessArgs& args) override {
 			if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) {
 				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
 				params[MODE_PARAM].setValue(float((currentMode + 9) % 10));
@@ -520,108 +577,163 @@ struct Bifurx final : Module {
 			const float in = inputs[IN_INPUT].getVoltage();
 			const float level = params[LEVEL_PARAM].getValue();
 			const float drive = levelDriveGain(level);
-		const float voct = inputs[VOCT_INPUT].getVoltage();
-		const float fmAmt = params[FM_AMT_PARAM].getValue();
-		const float fm = clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) * fmAmt;
-		const float resoCv = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f;
-		const float balanceCv = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f;
-		const float spanCv = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
-
 		const int mode = int(std::round(params[MODE_PARAM].getValue()));
 		const int tito = int(std::round(params[TITO_PARAM].getValue()));
-		const float spanNorm = clamp(
-			params[SPAN_PARAM].getValue() + 0.5f * params[SPAN_CV_ATTEN_PARAM].getValue() * spanCv,
-			0.f, 1.f);
-		const float spanOct = 8.f * shapedSpan(spanNorm);
-		const float balance = clamp(params[BALANCE_PARAM].getValue() + balanceCv, -1.f, 1.f);
-		const float resoNorm = clamp(params[RESO_PARAM].getValue() + resoCv, 0.f, 1.f);
-		const float centerHz = expoMap(params[FREQ_PARAM].getValue(), 4.f, 28000.f) * std::pow(2.f, voct + fm);
-		const float freqA0 = centerHz * std::pow(2.f, -0.5f * spanOct);
-		const float freqB0 = centerHz * std::pow(2.f, 0.5f * spanOct);
-		const float baseDamping = resoToDamping(resoNorm);
-		const float dampingA = clamp(baseDamping * std::exp(0.55f * balance), 0.02f, 2.2f);
-		const float dampingB = clamp(baseDamping * std::exp(-0.55f * balance), 0.02f, 2.2f);
-		const float lowW = signedWeight(balance, false);
-		const float highW = signedWeight(balance, true);
-		const float norm = 2.f / (lowW + highW);
-		const float wA = lowW * norm;
-		const float wB = highW * norm;
+		const bool fastPathEligible = (tito == 1)
+			&& !inputs[VOCT_INPUT].isConnected()
+			&& !inputs[FM_INPUT].isConnected()
+			&& !inputs[RESO_CV_INPUT].isConnected()
+			&& !inputs[BALANCE_CV_INPUT].isConnected()
+			&& !inputs[SPAN_CV_INPUT].isConnected();
+		const bool updateFastControls = !controlFastCacheValid || !fastPathEligible || controlUpdateDivider.process();
+		if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) {
+			previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f);
+			previewFilterAlphaSampleRate = args.sampleRate;
+		}
+
+		float freqA0 = cachedFreqA0;
+		float freqB0 = cachedFreqB0;
+		float dampingA = cachedDampingA;
+		float dampingB = cachedDampingB;
+		float wA = cachedWA;
+		float wB = cachedWB;
+		float balance = cachedBalance;
+		const float resoNorm = clamp(
+			params[RESO_PARAM].getValue() + clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f,
+			0.f, 1.f
+		);
+
+		if (updateFastControls) {
+			const float voct = inputs[VOCT_INPUT].getVoltage();
+			const float fmAmt = params[FM_AMT_PARAM].getValue();
+			const float fm = clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) * fmAmt;
+			const float resoCv = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f;
+			const float balanceCv = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f;
+			const float spanCv = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
+			const float spanNorm = clamp(
+				params[SPAN_PARAM].getValue() + 0.5f * params[SPAN_CV_ATTEN_PARAM].getValue() * spanCv,
+				0.f, 1.f);
+			const float spanOct = 8.f * shapedSpan(spanNorm);
+			balance = clamp(params[BALANCE_PARAM].getValue() + balanceCv, -1.f, 1.f);
+			const float resoNorm = clamp(params[RESO_PARAM].getValue() + resoCv, 0.f, 1.f);
+			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * clamp01(params[FREQ_PARAM].getValue()))
+				* fastExp2(voct + fm);
+			freqA0 = centerHz * fastExp2(-0.5f * spanOct);
+			freqB0 = centerHz * fastExp2(0.5f * spanOct);
+			const float baseDamping = resoToDamping(resoNorm);
+			dampingA = clamp(baseDamping * fastExp(0.55f * balance), 0.02f, 2.2f);
+			dampingB = clamp(baseDamping * fastExp(-0.55f * balance), 0.02f, 2.2f);
+			const float lowW = signedWeight(balance, false);
+			const float highW = signedWeight(balance, true);
+			const float norm = 2.f / (lowW + highW);
+			wA = lowW * norm;
+			wB = highW * norm;
+
+			cachedDampingA = dampingA;
+			cachedDampingB = dampingB;
+			cachedWA = wA;
+			cachedWB = wB;
+			cachedFreqA0 = freqA0;
+			cachedFreqB0 = freqB0;
+			cachedBalance = balance;
+			cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA);
+			cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB);
+			controlFastCacheValid = true;
+		}
+
 		const float couplingDepth = (0.02f + 0.25f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
 		const float drivenIn = 5.f * softClip(0.2f * in * drive);
 		const float excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 
 		auto modulatedCutoffs = [&](float modA, float modB) {
-			const float cutA = freqA0 * std::pow(2.f, clamp(modA, -2.5f, 2.5f));
-			const float cutB = freqB0 * std::pow(2.f, clamp(modB, -2.5f, 2.5f));
+			const float cutA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f));
+			const float cutB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
 			return std::pair<float, float>(cutA, cutB);
 		};
 
+		float cutoffA = freqA0;
+		float cutoffB = freqB0;
 		float modA = 0.f;
 		float modB = 0.f;
-		if (tito == 2) {
-			modA = couplingDepth * coreA.ic1eq / 5.f;
-			modB = couplingDepth * coreB.ic1eq / 5.f;
-		}
-		else if (tito == 0) {
-			modA = couplingDepth * coreB.ic1eq / 5.f;
-			modB = couplingDepth * coreA.ic1eq / 5.f;
-		}
+		if (!fastPathEligible) {
+			if (tito == 2) {
+				modA = couplingDepth * coreA.ic1eq / 5.f;
+				modB = couplingDepth * coreB.ic1eq / 5.f;
+			}
+			else if (tito == 0) {
+				modA = couplingDepth * coreB.ic1eq / 5.f;
+				modB = couplingDepth * coreA.ic1eq / 5.f;
+			}
 
-		const std::pair<float, float> cutoffs = modulatedCutoffs(modA, modB);
-		const float cutoffA = cutoffs.first;
-		const float cutoffB = cutoffs.second;
+			const std::pair<float, float> cutoffs = modulatedCutoffs(modA, modB);
+			cutoffA = cutoffs.first;
+			cutoffB = cutoffs.second;
+		}
 		float modeOut = 0.f;
+
+		auto processA = [&](float sample) -> SvfOutputs {
+			if (fastPathEligible) {
+				return coreA.processWithCoeffs(sample, cachedCoeffsA);
+			}
+			return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
+		};
+		auto processB = [&](float sample) -> SvfOutputs {
+			if (fastPathEligible) {
+				return coreB.processWithCoeffs(sample, cachedCoeffsB);
+			}
+			return coreB.process(sample, args.sampleRate, cutoffB, dampingB);
+		};
 
 		switch (mode) {
 			case 0: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(a.lp, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(a.lp);
 				modeOut = b.lp;
 			} break;
 			case 1: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 0.95f * wA * a.lp + 1.05f * wB * b.bp - 0.12f * (a.bp + b.bp);
 			} break;
 			case 2: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 1.05f * wB * b.lp - 0.55f * wA * a.bp;
 			} break;
 			case 3: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(a.notch, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(a.notch);
 				modeOut = b.notch;
 			} break;
 			case 4: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 0.95f * wA * a.lp + 0.95f * wB * b.hp;
 			} break;
 			case 5: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 1.15f * (wA * a.bp + wB * b.bp);
 			} break;
 			case 6: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(a.hp, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(a.hp);
 				modeOut = b.lp;
 			} break;
 			case 7: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 1.05f * wA * a.hp - 0.55f * wB * b.bp;
 			} break;
 			case 8: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(excitation, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(excitation);
 				modeOut = 1.12f * wA * a.bp + 0.92f * wB * b.hp - 0.10f * (a.hp + b.bp);
 			} break;
 			case 9:
 			default: {
-				const SvfOutputs a = coreA.process(excitation, args.sampleRate, cutoffA, dampingA);
-				const SvfOutputs b = coreB.process(a.hp, args.sampleRate, cutoffB, dampingB);
+				const SvfOutputs a = processA(excitation);
+				const SvfOutputs b = processB(a.hp);
 				modeOut = b.hp;
 			} break;
 		}
@@ -630,14 +742,38 @@ struct Bifurx final : Module {
 		outputs[OUT_OUTPUT].setChannels(1);
 		outputs[OUT_OUTPUT].setVoltage(out);
 
+		const float previewTargetFreqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate);
+		const float previewTargetFreqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate);
+		const float previewTargetQA = 1.f / std::max(dampingA, 0.05f);
+		const float previewTargetQB = 1.f / std::max(dampingB, 0.05f);
+		const float previewTargetBalance = balance;
+		if (!previewFilterInitialized) {
+			previewFreqAFiltered = previewTargetFreqA;
+			previewFreqBFiltered = previewTargetFreqB;
+			previewQAFiltered = previewTargetQA;
+			previewQBFiltered = previewTargetQB;
+			previewBalanceFiltered = previewTargetBalance;
+			previewFilterInitialized = true;
+		}
+		else {
+			// Keep the preview stable by tracking nominal control state, not
+			// instantaneous audio-rate modulation/coupling in the DSP core.
+				const float a = previewFilterAlpha;
+				previewFreqAFiltered += a * (previewTargetFreqA - previewFreqAFiltered);
+				previewFreqBFiltered += a * (previewTargetFreqB - previewFreqBFiltered);
+				previewQAFiltered += a * (previewTargetQA - previewQAFiltered);
+			previewQBFiltered += a * (previewTargetQB - previewQBFiltered);
+			previewBalanceFiltered += a * (previewTargetBalance - previewBalanceFiltered);
+		}
+
 		BifurxPreviewState previewState;
 		previewState.sampleRate = args.sampleRate;
-		previewState.freqA = cutoffA;
-		previewState.freqB = cutoffB;
-		previewState.qA = 1.f / std::max(dampingA, 0.05f);
-		previewState.qB = 1.f / std::max(dampingB, 0.05f);
+		previewState.freqA = previewFreqAFiltered;
+		previewState.freqB = previewFreqBFiltered;
+		previewState.qA = previewQAFiltered;
+		previewState.qB = previewQBFiltered;
 		previewState.mode = mode;
-		previewState.balance = balance;
+		previewState.balance = previewBalanceFiltered;
 		if (!hasLastPreviewState || (previewPublishDivider.process() && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
 		}
@@ -678,6 +814,27 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 	}
 }
 
+void BifurxSpectrumWidget::updateAxisCache() {
+	if (!hasPreview) {
+		return;
+	}
+
+	const float sampleRate = std::max(previewState.sampleRate, 1.f);
+	if (cachedAxisSampleRate > 0.f && std::fabs(cachedAxisSampleRate - sampleRate) <= 0.5f) {
+		return;
+	}
+
+	const float minHz = 10.f;
+	const float maxHz = std::min(20000.f, 0.46f * sampleRate);
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const float x01 = float(i) / float(kCurvePointCount - 1);
+		const float hz = logFrequencyAt(x01, minHz, maxHz);
+		curveHz[i] = hz;
+		curveBinPos[i] = clamp(hz * float(kFftSize) / sampleRate, 0.f, float(kFftSize / 2));
+	}
+	cachedAxisSampleRate = sampleRate;
+}
+
 void BifurxSpectrumWidget::step() {
 	Widget::step();
 	if (!module) {
@@ -691,6 +848,7 @@ void BifurxSpectrumWidget::step() {
 		const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
 		previewState = module->previewStates[index];
 		hasPreview = true;
+		updateAxisCache();
 		lastPreviewSeq = previewSeq;
 		updateCurveCache();
 		dirty = true;
@@ -760,13 +918,10 @@ void BifurxSpectrumWidget::updateCurveCache() {
 	}
 
 	const BifurxPreviewModel model = makePreviewModel(previewState);
-	const float minHz = 10.f;
-	const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
+	updateAxisCache();
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float x01 = float(i) / float(kCurvePointCount - 1);
-		const float hz = logFrequencyAt(x01, minHz, maxHz);
-		const float mag = std::abs(previewModelResponse(model, hz));
+		const float mag = std::abs(previewModelResponse(model, curveHz[i]));
 		curveTargetDb[i] = 20.f * std::log10(std::max(mag, 1e-5f));
 	}
 
@@ -783,9 +938,7 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		return;
 	}
 
-	const float sampleRate = std::max(previewState.sampleRate, 1.f);
-	const float minHz = 10.f;
-	const float maxHz = std::min(20000.f, 0.46f * sampleRate);
+	updateAxisCache();
 	const float amplitudeScale = 4.f / float(kFftSize);
 
 	for (int i = 0; i < kFftSize; ++i) {
@@ -808,9 +961,7 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	float sampledDeltaDb[kCurvePointCount];
 	float sampledOutputDbfs[kCurvePointCount];
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float x01 = float(i) / float(kCurvePointCount - 1);
-		const float hz = logFrequencyAt(x01, minHz, maxHz);
-		const float binPosition = clamp(hz * float(kFftSize) / sampleRate, 0.f, float(kFftSize / 2));
+		const float binPosition = curveBinPos[i];
 		const int binA = int(std::floor(binPosition));
 		const int binB = std::min(binA + 1, kFftSize / 2);
 		const float frac = binPosition - float(binA);
