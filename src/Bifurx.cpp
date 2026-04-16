@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -25,7 +26,7 @@ constexpr float kFreqLog2Span = 12.7731392f; // log2(28000 / 4)
 constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
-constexpr int kFftHopSize = kFftSize / 4;
+constexpr int kFftHopSize = kFftSize / 2;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
 constexpr int kPreviewAdaptiveCooldownSamples = 64;
@@ -448,6 +449,40 @@ struct BifurxSpectrumWidget final : Widget {
 		double startTimeSec = 0.0;
 		uint64_t sequence = 0;
 	};
+	struct PerfDebugRecorder {
+		bool active = false;
+		std::ofstream file;
+		std::string path;
+		double startTimeSec = 0.0;
+		uint64_t sequence = 0;
+		double lastLogTimeSec = -1.0;
+		uint64_t lastAudioSampledCount = 0;
+		uint64_t lastAudioProcessNs = 0;
+		uint64_t lastAudioControlsNs = 0;
+		uint64_t lastAudioCoreNs = 0;
+		uint64_t lastAudioPreviewNs = 0;
+		uint64_t lastAudioAnalysisNs = 0;
+		uint64_t lastUiStepCount = 0;
+		uint64_t lastUiStepNs = 0;
+		uint64_t lastUiDrawCount = 0;
+		uint64_t lastUiDrawNs = 0;
+		uint64_t lastUiCurveUpdateCount = 0;
+		uint64_t lastUiCurveUpdateNs = 0;
+		uint64_t lastUiOverlayUpdateCount = 0;
+		uint64_t lastUiOverlayUpdateNs = 0;
+		uint64_t lastUiDrawSetupCount = 0;
+		uint64_t lastUiDrawSetupNs = 0;
+		uint64_t lastUiDrawBackgroundCount = 0;
+		uint64_t lastUiDrawBackgroundNs = 0;
+		uint64_t lastUiDrawExpectedCount = 0;
+		uint64_t lastUiDrawExpectedNs = 0;
+		uint64_t lastUiDrawOverlayCount = 0;
+		uint64_t lastUiDrawOverlayNs = 0;
+		uint64_t lastUiDrawCurveCount = 0;
+		uint64_t lastUiDrawCurveNs = 0;
+		uint64_t lastUiDrawMarkersCount = 0;
+		uint64_t lastUiDrawMarkersNs = 0;
+	};
 
 	Bifurx* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
@@ -481,13 +516,39 @@ struct BifurxSpectrumWidget final : Widget {
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
 	CurveDebugRecorder curveDebugRecorder;
+	PerfDebugRecorder perfDebugRecorder;
+	uint64_t uiStepCount = 0;
+	uint64_t uiStepNs = 0;
+	uint64_t uiStepMaxNs = 0;
+	uint64_t uiDrawCount = 0;
+	uint64_t uiDrawNs = 0;
+	uint64_t uiDrawMaxNs = 0;
+	uint64_t uiCurveUpdateCount = 0;
+	uint64_t uiCurveUpdateNs = 0;
+	uint64_t uiOverlayUpdateCount = 0;
+	uint64_t uiOverlayUpdateNs = 0;
+	uint64_t uiDrawSetupCount = 0;
+	uint64_t uiDrawSetupNs = 0;
+	uint64_t uiDrawBackgroundCount = 0;
+	uint64_t uiDrawBackgroundNs = 0;
+	uint64_t uiDrawExpectedCount = 0;
+	uint64_t uiDrawExpectedNs = 0;
+	uint64_t uiDrawOverlayCount = 0;
+	uint64_t uiDrawOverlayNs = 0;
+	uint64_t uiDrawCurveCount = 0;
+	uint64_t uiDrawCurveNs = 0;
+	uint64_t uiDrawMarkersCount = 0;
+	uint64_t uiDrawMarkersNs = 0;
 
 	BifurxSpectrumWidget();
 	~BifurxSpectrumWidget() override;
 	void step() override;
 	void syncCurveDebugCaptureState();
+	void syncPerfDebugCaptureState();
 	void startCurveDebugCapture();
 	void stopCurveDebugCapture();
+	void startPerfDebugCapture();
+	void stopPerfDebugCapture();
 	void logCurveDebugSample(
 		const BifurxPreviewState& state,
 		float peakAX,
@@ -502,6 +563,7 @@ struct BifurxSpectrumWidget final : Widget {
 		uint32_t analysisSeq,
 		bool analysisUpdated
 	);
+	void logPerfDebugSample();
 	void updateAxisCache();
 	void updateCurveCache();
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
@@ -606,6 +668,7 @@ struct Bifurx final : Module {
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
+	dsp::ClockDivider perfMeasureDivider;
 	BifurxPreviewState lastPreviewState;
 	bool hasLastPreviewState = false;
 	BifurxPreviewState previewStates[2];
@@ -648,6 +711,14 @@ struct Bifurx final : Module {
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
 	bool curveDebugLogging = false;
+	bool perfDebugLogging = false;
+	std::atomic<uint64_t> perfAudioSampledCount{0};
+	std::atomic<uint64_t> perfAudioProcessNs{0};
+	std::atomic<uint64_t> perfAudioControlsNs{0};
+	std::atomic<uint64_t> perfAudioCoreNs{0};
+	std::atomic<uint64_t> perfAudioPreviewNs{0};
+	std::atomic<uint64_t> perfAudioAnalysisNs{0};
+	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
 
 	Bifurx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -681,12 +752,14 @@ struct Bifurx final : Module {
 		previewPublishDivider.setDivision(kPreviewPublishFastDivision);
 		previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision);
 		controlUpdateDivider.setDivision(16);
+		perfMeasureDivider.setDivision(64);
 	}
 
 	json_t* dataToJson() override {
 		json_t* root = Module::dataToJson();
 		json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 		json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
+		json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 		return root;
 	}
 
@@ -700,6 +773,20 @@ struct Bifurx final : Module {
 		if (curveDebugLoggingJ) {
 			curveDebugLogging = json_is_true(curveDebugLoggingJ);
 		}
+		json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging");
+		if (perfDebugLoggingJ) {
+			perfDebugLogging = json_is_true(perfDebugLoggingJ);
+		}
+	}
+
+	void resetPerfStats() {
+		perfAudioSampledCount.store(0, std::memory_order_release);
+		perfAudioProcessNs.store(0, std::memory_order_release);
+		perfAudioControlsNs.store(0, std::memory_order_release);
+		perfAudioCoreNs.store(0, std::memory_order_release);
+		perfAudioPreviewNs.store(0, std::memory_order_release);
+		perfAudioAnalysisNs.store(0, std::memory_order_release);
+		perfAudioProcessMaxNs.store(0, std::memory_order_release);
 	}
 
 	void publishPreviewState(const BifurxPreviewState& state) {
@@ -760,6 +847,13 @@ struct Bifurx final : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+			using PerfClock = std::chrono::steady_clock;
+			const bool measurePerf = perfDebugLogging && perfMeasureDivider.process();
+			const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+			PerfClock::time_point perfCoreStart;
+			PerfClock::time_point perfPreviewStart;
+			PerfClock::time_point perfAnalysisStart;
+
 			sanitizeCoreState(coreA);
 			sanitizeCoreState(coreB);
 
@@ -865,6 +959,9 @@ struct Bifurx final : Module {
 			const std::pair<float, float> cutoffs = modulatedCutoffs(modA, modB);
 			cutoffA = cutoffs.first;
 			cutoffB = cutoffs.second;
+		}
+		if (measurePerf) {
+			perfCoreStart = PerfClock::now();
 		}
 		float modeOut = 0.f;
 
@@ -999,6 +1096,9 @@ struct Bifurx final : Module {
 		const float out = sanitizeFinite(5.5f * softClip(safeModeOut / 5.5f));
 		outputs[OUT_OUTPUT].setChannels(1);
 		outputs[OUT_OUTPUT].setVoltage(out);
+		if (measurePerf) {
+			perfPreviewStart = PerfClock::now();
+		}
 
 		const float previewTargetFreqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate);
 		const float previewTargetFreqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate);
@@ -1106,6 +1206,9 @@ struct Bifurx final : Module {
 		if (!hasLastPreviewState || (previewPublishTick && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
 		}
+		if (measurePerf) {
+			perfAnalysisStart = PerfClock::now();
+		}
 
 		pushAnalysisSample(drivenIn, out);
 
@@ -1114,6 +1217,24 @@ struct Bifurx final : Module {
 
 			lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f));
 			lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
+			if (measurePerf) {
+				const PerfClock::time_point perfEnd = PerfClock::now();
+				const uint64_t controlsNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfCoreStart - perfStart).count();
+				const uint64_t coreNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfPreviewStart - perfCoreStart).count();
+				const uint64_t previewNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfAnalysisStart - perfPreviewStart).count();
+				const uint64_t analysisNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfEnd - perfAnalysisStart).count();
+				const uint64_t processNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfEnd - perfStart).count();
+				perfAudioSampledCount.fetch_add(1, std::memory_order_relaxed);
+				perfAudioProcessNs.fetch_add(processNs, std::memory_order_relaxed);
+				perfAudioControlsNs.fetch_add(controlsNs, std::memory_order_relaxed);
+				perfAudioCoreNs.fetch_add(coreNs, std::memory_order_relaxed);
+				perfAudioPreviewNs.fetch_add(previewNs, std::memory_order_relaxed);
+				perfAudioAnalysisNs.fetch_add(analysisNs, std::memory_order_relaxed);
+				uint64_t prevMax = perfAudioProcessMaxNs.load(std::memory_order_relaxed);
+				while (processNs > prevMax &&
+					!perfAudioProcessMaxNs.compare_exchange_weak(prevMax, processNs, std::memory_order_relaxed)) {
+				}
+			}
 		}
 	};
 
@@ -1148,6 +1269,7 @@ BifurxSpectrumWidget::BifurxSpectrumWidget()
 
 BifurxSpectrumWidget::~BifurxSpectrumWidget() {
 	stopCurveDebugCapture();
+	stopPerfDebugCapture();
 }
 
 void BifurxSpectrumWidget::syncCurveDebugCaptureState() {
@@ -1160,6 +1282,18 @@ void BifurxSpectrumWidget::syncCurveDebugCaptureState() {
 		return;
 	}
 	startCurveDebugCapture();
+}
+
+void BifurxSpectrumWidget::syncPerfDebugCaptureState() {
+	if (!module) {
+		stopPerfDebugCapture();
+		return;
+	}
+	if (!module->perfDebugLogging) {
+		stopPerfDebugCapture();
+		return;
+	}
+	startPerfDebugCapture();
 }
 
 void BifurxSpectrumWidget::startCurveDebugCapture() {
@@ -1214,6 +1348,77 @@ void BifurxSpectrumWidget::stopCurveDebugCapture() {
 	lastCurveDebugLogTimeSec = -1.0;
 }
 
+void BifurxSpectrumWidget::startPerfDebugCapture() {
+	if (!module || perfDebugRecorder.active) {
+		return;
+	}
+
+	perfDebugRecorder = PerfDebugRecorder{};
+	std::string traceDir = system::join(bifurxUserRootPath(), "perf_debug");
+	system::createDirectories(traceDir);
+	const long long stampMs = (long long) std::llround(system::getUnixTime() * 1000.0);
+	const std::string filename = "perf_debug_" + std::to_string(stampMs) + ".csv";
+	perfDebugRecorder.path = system::join(traceDir, filename);
+	perfDebugRecorder.file.open(perfDebugRecorder.path.c_str(), std::ios::out | std::ios::trunc);
+	if (!perfDebugRecorder.file.good()) {
+		WARN("Bifurx: failed to open perf debug file: %s", perfDebugRecorder.path.c_str());
+		perfDebugRecorder.path.clear();
+		return;
+	}
+
+	module->resetPerfStats();
+	uiStepCount = 0;
+	uiStepNs = 0;
+	uiStepMaxNs = 0;
+	uiDrawCount = 0;
+	uiDrawNs = 0;
+	uiDrawMaxNs = 0;
+	uiCurveUpdateCount = 0;
+	uiCurveUpdateNs = 0;
+	uiOverlayUpdateCount = 0;
+	uiOverlayUpdateNs = 0;
+	uiDrawSetupCount = 0;
+	uiDrawSetupNs = 0;
+	uiDrawBackgroundCount = 0;
+	uiDrawBackgroundNs = 0;
+	uiDrawExpectedCount = 0;
+	uiDrawExpectedNs = 0;
+	uiDrawOverlayCount = 0;
+	uiDrawOverlayNs = 0;
+	uiDrawCurveCount = 0;
+	uiDrawCurveNs = 0;
+	uiDrawMarkersCount = 0;
+	uiDrawMarkersNs = 0;
+	perfDebugRecorder.file.setf(std::ios::fixed);
+	perfDebugRecorder.file << std::setprecision(3);
+	perfDebugRecorder.file << "# Bifurx performance debug trace v1\n";
+	perfDebugRecorder.file << "# Sampled audio timings plus UI timings aggregated per interval\n";
+	perfDebugRecorder.file
+		<< "seq,t_sec,"
+		   "audio_sampled_calls,audio_avg_us,audio_max_us,audio_controls_avg_us,audio_core_avg_us,audio_preview_avg_us,audio_analysis_avg_us,"
+		   "ui_step_calls,ui_step_avg_us,ui_step_max_us,"
+		   "ui_draw_calls,ui_draw_avg_us,ui_draw_max_us,"
+		   "ui_curve_updates,ui_curve_avg_us,"
+		   "ui_overlay_updates,ui_overlay_avg_us,"
+		   "ui_draw_setup_avg_us,ui_draw_background_avg_us,ui_draw_expected_avg_us,ui_draw_overlay_avg_us,ui_draw_curve_avg_us,ui_draw_markers_avg_us\n";
+	perfDebugRecorder.startTimeSec = system::getTime();
+	perfDebugRecorder.active = true;
+	perfDebugRecorder.lastLogTimeSec = -1.0;
+	INFO("Bifurx: perf debug capture started: %s", perfDebugRecorder.path.c_str());
+}
+
+void BifurxSpectrumWidget::stopPerfDebugCapture() {
+	if (!perfDebugRecorder.active) {
+		return;
+	}
+	if (perfDebugRecorder.file.good()) {
+		perfDebugRecorder.file.flush();
+		perfDebugRecorder.file.close();
+	}
+	INFO("Bifurx: perf debug capture saved: %s", perfDebugRecorder.path.c_str());
+	perfDebugRecorder = PerfDebugRecorder{};
+}
+
 void BifurxSpectrumWidget::logCurveDebugSample(
 	const BifurxPreviewState& state,
 	float peakAX,
@@ -1266,6 +1471,111 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 	}
 }
 
+void BifurxSpectrumWidget::logPerfDebugSample() {
+	if (!module || !perfDebugRecorder.active || !perfDebugRecorder.file.good()) {
+		return;
+	}
+
+	const double tSec = std::max(0.0, system::getTime() - perfDebugRecorder.startTimeSec);
+	const uint64_t audioSampledCount = module->perfAudioSampledCount.load(std::memory_order_acquire);
+	const uint64_t audioProcessNs = module->perfAudioProcessNs.load(std::memory_order_acquire);
+	const uint64_t audioControlsNs = module->perfAudioControlsNs.load(std::memory_order_acquire);
+	const uint64_t audioCoreNs = module->perfAudioCoreNs.load(std::memory_order_acquire);
+	const uint64_t audioPreviewNs = module->perfAudioPreviewNs.load(std::memory_order_acquire);
+	const uint64_t audioAnalysisNs = module->perfAudioAnalysisNs.load(std::memory_order_acquire);
+	const uint64_t audioProcessMaxNs = module->perfAudioProcessMaxNs.load(std::memory_order_acquire);
+
+	const uint64_t audioSampledDelta = audioSampledCount - perfDebugRecorder.lastAudioSampledCount;
+	const uint64_t audioProcessDeltaNs = audioProcessNs - perfDebugRecorder.lastAudioProcessNs;
+	const uint64_t audioControlsDeltaNs = audioControlsNs - perfDebugRecorder.lastAudioControlsNs;
+	const uint64_t audioCoreDeltaNs = audioCoreNs - perfDebugRecorder.lastAudioCoreNs;
+	const uint64_t audioPreviewDeltaNs = audioPreviewNs - perfDebugRecorder.lastAudioPreviewNs;
+	const uint64_t audioAnalysisDeltaNs = audioAnalysisNs - perfDebugRecorder.lastAudioAnalysisNs;
+
+	const uint64_t uiStepDeltaCount = uiStepCount - perfDebugRecorder.lastUiStepCount;
+	const uint64_t uiStepDeltaNs = uiStepNs - perfDebugRecorder.lastUiStepNs;
+	const uint64_t uiDrawDeltaCount = uiDrawCount - perfDebugRecorder.lastUiDrawCount;
+	const uint64_t uiDrawDeltaNs = uiDrawNs - perfDebugRecorder.lastUiDrawNs;
+	const uint64_t uiCurveUpdateDeltaCount = uiCurveUpdateCount - perfDebugRecorder.lastUiCurveUpdateCount;
+	const uint64_t uiCurveUpdateDeltaNs = uiCurveUpdateNs - perfDebugRecorder.lastUiCurveUpdateNs;
+	const uint64_t uiOverlayUpdateDeltaCount = uiOverlayUpdateCount - perfDebugRecorder.lastUiOverlayUpdateCount;
+	const uint64_t uiOverlayUpdateDeltaNs = uiOverlayUpdateNs - perfDebugRecorder.lastUiOverlayUpdateNs;
+	const uint64_t uiDrawSetupDeltaCount = uiDrawSetupCount - perfDebugRecorder.lastUiDrawSetupCount;
+	const uint64_t uiDrawSetupDeltaNs = uiDrawSetupNs - perfDebugRecorder.lastUiDrawSetupNs;
+	const uint64_t uiDrawBackgroundDeltaCount = uiDrawBackgroundCount - perfDebugRecorder.lastUiDrawBackgroundCount;
+	const uint64_t uiDrawBackgroundDeltaNs = uiDrawBackgroundNs - perfDebugRecorder.lastUiDrawBackgroundNs;
+	const uint64_t uiDrawExpectedDeltaCount = uiDrawExpectedCount - perfDebugRecorder.lastUiDrawExpectedCount;
+	const uint64_t uiDrawExpectedDeltaNs = uiDrawExpectedNs - perfDebugRecorder.lastUiDrawExpectedNs;
+	const uint64_t uiDrawOverlayDeltaCount = uiDrawOverlayCount - perfDebugRecorder.lastUiDrawOverlayCount;
+	const uint64_t uiDrawOverlayDeltaNs = uiDrawOverlayNs - perfDebugRecorder.lastUiDrawOverlayNs;
+	const uint64_t uiDrawCurveDeltaCount = uiDrawCurveCount - perfDebugRecorder.lastUiDrawCurveCount;
+	const uint64_t uiDrawCurveDeltaNs = uiDrawCurveNs - perfDebugRecorder.lastUiDrawCurveNs;
+	const uint64_t uiDrawMarkersDeltaCount = uiDrawMarkersCount - perfDebugRecorder.lastUiDrawMarkersCount;
+	const uint64_t uiDrawMarkersDeltaNs = uiDrawMarkersNs - perfDebugRecorder.lastUiDrawMarkersNs;
+
+	auto avgUs = [](uint64_t totalNs, uint64_t count) {
+		return count > 0 ? (double(totalNs) / double(count)) / 1000.0 : 0.0;
+	};
+
+	perfDebugRecorder.file
+		<< perfDebugRecorder.sequence++ << ","
+		<< tSec << ","
+		<< audioSampledDelta << ","
+		<< avgUs(audioProcessDeltaNs, audioSampledDelta) << ","
+		<< (double(audioProcessMaxNs) / 1000.0) << ","
+		<< avgUs(audioControlsDeltaNs, audioSampledDelta) << ","
+		<< avgUs(audioCoreDeltaNs, audioSampledDelta) << ","
+		<< avgUs(audioPreviewDeltaNs, audioSampledDelta) << ","
+		<< avgUs(audioAnalysisDeltaNs, audioSampledDelta) << ","
+		<< uiStepDeltaCount << ","
+		<< avgUs(uiStepDeltaNs, uiStepDeltaCount) << ","
+		<< (double(uiStepMaxNs) / 1000.0) << ","
+		<< uiDrawDeltaCount << ","
+		<< avgUs(uiDrawDeltaNs, uiDrawDeltaCount) << ","
+		<< (double(uiDrawMaxNs) / 1000.0) << ","
+		<< uiCurveUpdateDeltaCount << ","
+		<< avgUs(uiCurveUpdateDeltaNs, uiCurveUpdateDeltaCount) << ","
+		<< uiOverlayUpdateDeltaCount << ","
+		<< avgUs(uiOverlayUpdateDeltaNs, uiOverlayUpdateDeltaCount) << ","
+		<< avgUs(uiDrawSetupDeltaNs, uiDrawSetupDeltaCount) << ","
+		<< avgUs(uiDrawBackgroundDeltaNs, uiDrawBackgroundDeltaCount) << ","
+		<< avgUs(uiDrawExpectedDeltaNs, uiDrawExpectedDeltaCount) << ","
+		<< avgUs(uiDrawOverlayDeltaNs, uiDrawOverlayDeltaCount) << ","
+		<< avgUs(uiDrawCurveDeltaNs, uiDrawCurveDeltaCount) << ","
+		<< avgUs(uiDrawMarkersDeltaNs, uiDrawMarkersDeltaCount) << "\n";
+
+	perfDebugRecorder.lastAudioSampledCount = audioSampledCount;
+	perfDebugRecorder.lastAudioProcessNs = audioProcessNs;
+	perfDebugRecorder.lastAudioControlsNs = audioControlsNs;
+	perfDebugRecorder.lastAudioCoreNs = audioCoreNs;
+	perfDebugRecorder.lastAudioPreviewNs = audioPreviewNs;
+	perfDebugRecorder.lastAudioAnalysisNs = audioAnalysisNs;
+	perfDebugRecorder.lastUiStepCount = uiStepCount;
+	perfDebugRecorder.lastUiStepNs = uiStepNs;
+	perfDebugRecorder.lastUiDrawCount = uiDrawCount;
+	perfDebugRecorder.lastUiDrawNs = uiDrawNs;
+	perfDebugRecorder.lastUiCurveUpdateCount = uiCurveUpdateCount;
+	perfDebugRecorder.lastUiCurveUpdateNs = uiCurveUpdateNs;
+	perfDebugRecorder.lastUiOverlayUpdateCount = uiOverlayUpdateCount;
+	perfDebugRecorder.lastUiOverlayUpdateNs = uiOverlayUpdateNs;
+	perfDebugRecorder.lastUiDrawSetupCount = uiDrawSetupCount;
+	perfDebugRecorder.lastUiDrawSetupNs = uiDrawSetupNs;
+	perfDebugRecorder.lastUiDrawBackgroundCount = uiDrawBackgroundCount;
+	perfDebugRecorder.lastUiDrawBackgroundNs = uiDrawBackgroundNs;
+	perfDebugRecorder.lastUiDrawExpectedCount = uiDrawExpectedCount;
+	perfDebugRecorder.lastUiDrawExpectedNs = uiDrawExpectedNs;
+	perfDebugRecorder.lastUiDrawOverlayCount = uiDrawOverlayCount;
+	perfDebugRecorder.lastUiDrawOverlayNs = uiDrawOverlayNs;
+	perfDebugRecorder.lastUiDrawCurveCount = uiDrawCurveCount;
+	perfDebugRecorder.lastUiDrawCurveNs = uiDrawCurveNs;
+	perfDebugRecorder.lastUiDrawMarkersCount = uiDrawMarkersCount;
+	perfDebugRecorder.lastUiDrawMarkersNs = uiDrawMarkersNs;
+
+	if ((perfDebugRecorder.sequence % 20u) == 0u) {
+		perfDebugRecorder.file.flush();
+	}
+}
+
 void BifurxSpectrumWidget::updateAxisCache() {
 	if (!hasPreview) {
 		return;
@@ -1288,8 +1598,12 @@ void BifurxSpectrumWidget::updateAxisCache() {
 }
 
 void BifurxSpectrumWidget::step() {
+	using PerfClock = std::chrono::steady_clock;
+	const bool perfLoggingActive = module && module->perfDebugLogging;
+	const PerfClock::time_point perfStepStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
 	Widget::step();
 	syncCurveDebugCaptureState();
+	syncPerfDebugCaptureState();
 	if (!module) {
 		return;
 	}
@@ -1315,14 +1629,26 @@ void BifurxSpectrumWidget::step() {
 		updateAxisCache();
 		lastPreviewSeq = previewSeq;
 		previewUpdatedThisStep = true;
+		const PerfClock::time_point perfCurveStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
 		updateCurveCache();
+		if (perfLoggingActive) {
+			const uint64_t curveUpdateNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfCurveStart).count();
+			uiCurveUpdateCount++;
+			uiCurveUpdateNs += curveUpdateNs;
+		}
 		dirty = true;
 	}
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != lastAnalysisSeq) {
 		const int index = module->analysisPublishedIndex.load(std::memory_order_acquire);
+		const PerfClock::time_point perfOverlayStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
 		updateOverlayCache(module->analysisFrames[index]);
+		if (perfLoggingActive) {
+			const uint64_t overlayUpdateNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfOverlayStart).count();
+			uiOverlayUpdateCount++;
+			uiOverlayUpdateNs += overlayUpdateNs;
+		}
 		hasOverlay = true;
 		lastAnalysisSeq = analysisSeq;
 		analysisUpdatedThisStep = true;
@@ -1463,8 +1789,23 @@ void BifurxSpectrumWidget::step() {
 		lastCurveDebugLogTimeSec = -1.0;
 	}
 
+	if (perfDebugRecorder.active) {
+		const double nowSec = system::getTime();
+		const double minIntervalSec = 0.5;
+		if (perfDebugRecorder.lastLogTimeSec < 0.0 || (nowSec - perfDebugRecorder.lastLogTimeSec) >= minIntervalSec) {
+			perfDebugRecorder.lastLogTimeSec = nowSec;
+			logPerfDebugSample();
+		}
+	}
+
 	if (dirty && framebuffer) {
 		framebuffer->setDirty();
+	}
+	if (perfLoggingActive) {
+		const uint64_t stepNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfStepStart).count();
+		uiStepCount++;
+		uiStepNs += stepNs;
+		uiStepMaxNs = std::max(uiStepMaxNs, stepNs);
 	}
 }
 
@@ -1518,7 +1859,7 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	float sampledOutputDbfs[kCurvePointCount];
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float binPosition = curveBinPos[i];
-		const int binA = int(std::floor(binPosition));
+		const int binA = std::max(2, int(std::floor(binPosition)));
 		const int binB = std::min(binA + 1, kFftSize / 2);
 		const float frac = binPosition - float(binA);
 		sampledDeltaDb[i] = mixf(binDeltaDb[binA], binDeltaDb[binB], frac);
@@ -1575,6 +1916,21 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	if (!(w > 0.f && h > 0.f)) {
 		return;
 	}
+
+	using PerfClock = std::chrono::steady_clock;
+	const bool perfLoggingActive = module && module->perfDebugLogging;
+	const PerfClock::time_point perfDrawStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
+	PerfClock::time_point perfSectionStart = perfDrawStart;
+	auto recordDrawSection = [&](uint64_t& count, uint64_t& totalNs) {
+		if (!perfLoggingActive) {
+			return;
+		}
+		const PerfClock::time_point now = PerfClock::now();
+		const uint64_t ns = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(now - perfSectionStart).count();
+		count++;
+		totalNs += ns;
+		perfSectionStart = now;
+	};
 
 	const float padX = 0.f;
 	const float padY = std::max(4.f, h * 0.035f);
@@ -1665,6 +2021,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 	addCurveRefinementAround(previewState.freqA);
 	addCurveRefinementAround(previewState.freqB);
+	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
 	nvgSave(args.vg);
 	const float clipInset = 0.8f;
@@ -1763,12 +2120,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
 	nvgStrokeWidth(args.vg, 1.2f);
 	nvgStroke(args.vg);
+	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255);
 	const NVGcolor expectedCyan = nvgRGB(28, 204, 217);
 	const NVGcolor expectedWhite = nvgRGB(206, 210, 216);
+	const float expectedLineWidth = 1.6f;
 	nvgShapeAntiAlias(args.vg, 1);
-	for (int i = 0; i < kCurvePointCount; ++i) {
+	for (int i = 0; i < kCurvePointCount; i += 2) {
 		const float curveDbValue = curveDb[i];
 		const float posAmount = clamp01(curveDbValue / 18.f);
 		const float negAmount = clamp01(-curveDbValue / 18.f);
@@ -1787,9 +2146,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		nvgMoveTo(args.vg, curveX[i], spectrumBottomY);
 		nvgLineTo(args.vg, curveX[i], curveY[i]);
 		nvgStrokeColor(args.vg, tint);
-		nvgStrokeWidth(args.vg, 1.05f);
+		nvgStrokeWidth(args.vg, expectedLineWidth);
 		nvgStroke(args.vg);
 	}
+	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 	if (hasOverlay) {
 		const NVGcolor purple = expectedPurple;
@@ -1843,23 +2203,11 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			nvgFillColor(args.vg, fill);
 			nvgFill(args.vg);
 		}
+		recordDrawSection(uiDrawOverlayCount, uiDrawOverlayNs);
 	}
-
-	nvgBeginPath(args.vg);
-	for (int i = 0; i < dedupedCurveDrawPointCount; ++i) {
-		const CurveDrawPoint& point = dedupedCurveDrawPoints[i];
-		if (i == 0) {
-			nvgMoveTo(args.vg, point.x, point.y);
-		}
-		else {
-			nvgLineTo(args.vg, point.x, point.y);
-		}
+	else if (perfLoggingActive) {
+		perfSectionStart = PerfClock::now();
 	}
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 34));
-	nvgLineJoin(args.vg, NVG_ROUND);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStrokeWidth(args.vg, 3.2f);
-	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
 	for (int i = 0; i < dedupedCurveDrawPointCount; ++i) {
@@ -1876,6 +2224,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStrokeWidth(args.vg, 1.35f);
 	nvgStroke(args.vg);
+	recordDrawSection(uiDrawCurveCount, uiDrawCurveNs);
 
 	nvgRestore(args.vg);
 
@@ -1990,6 +2339,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	nvgResetScissor(args.vg);
 	nvgRestore(args.vg);
+	recordDrawSection(uiDrawMarkersCount, uiDrawMarkersNs);
+	if (perfLoggingActive) {
+		const uint64_t drawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
+		uiDrawCount++;
+		uiDrawNs += drawNs;
+		uiDrawMaxNs = std::max(uiDrawMaxNs, drawNs);
+	}
 }
 
 } // namespace
@@ -2119,6 +2475,7 @@ struct BifurxWidget final : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 		menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
+		menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
 	}
 };
 
