@@ -3311,17 +3311,15 @@ struct TemporalDeckWidget : ModuleWidget {
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (linkedToScope || metricValid) {
-        bool hqEnabled = deckModule->isHighQualityScopePreviewEnabled();
         std::string perfLabel;
         if (metricValid) {
           perfLabel = string::f(
-            "%s %.0fus s%d",
-            hqEnabled ? "HQ" : "NQ",
+            "Scope %.0fus s%d",
             std::max(0.f, deckModule->getUiScopePreviewCostUs()),
             std::max(0, deckModule->getUiScopePreviewStride())
           );
         } else {
-          perfLabel = hqEnabled ? "HQ --" : "NQ --";
+          perfLabel = "Scope --";
         }
 
         float textX = box.size.x - mm2px(0.55f);

@@ -132,8 +132,6 @@ struct TemporalDeck final : Module {
   bool isUiFreezeLatched() const;
   bool isSampleModeEnabled() const;
   bool hasLoadedSample() const;
-  bool isSampleAutoPlayOnLoadEnabled() const;
-  void setSampleAutoPlayOnLoadEnabled(bool enabled);
   void setSampleModeEnabled(bool enabled);
   bool isSampleTransportPlaying() const;
   void setSampleTransportPlaying(bool enabled);
@@ -172,8 +170,6 @@ struct TemporalDeck final : Module {
 
   bool isHighQualityScratchInterpolationEnabled() const;
   void setHighQualityScratchInterpolationEnabled(bool enabled);
-  bool isHighQualityScopePreviewEnabled() const;
-  void setHighQualityScopePreviewEnabled(bool enabled);
   int getScratchInterpolationMode() const;
   void setScratchInterpolationMode(int mode);
   void setSlipLatched(bool enabled);

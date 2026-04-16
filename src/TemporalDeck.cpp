@@ -171,7 +171,7 @@ static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, doub
 
 static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool sampleMode, bool sampleLoopEnabled,
                                      float sampleRate, float lagSamples, float accessibleLagSamples,
-                                     double liveNewestAbsolutePosOverride, bool highQualityScopePreview, ScopeWindowParams *out) {
+                                     double liveNewestAbsolutePosOverride, ScopeWindowParams *out) {
   if (!out) {
     return false;
   }
@@ -195,12 +195,6 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   out->binSpanSamples = float(double(out->binSpanLagFp) / double(kScopeLagFpOne));
   int totalWindowSamplesInt = std::max(1, int(std::ceil(totalWindowSamples)));
   int effectiveEvalBudget = kScopeEvaluationBudgetPerPublish;
-  if (!sampleMode && totalWindowSamplesInt > kScopeEvaluationBudgetPerPublish && !highQualityScopePreview) {
-    // Live decimation does a second lattice phase (see evaluateScopeBinAtIndex),
-    // so reserve half budget for that additional pass in normal mode.
-    // HQ scope preview opts for denser sampling at higher CPU cost.
-    effectiveEvalBudget = std::max(1, kScopeEvaluationBudgetPerPublish / 2);
-  }
   out->scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(effectiveEvalBudget))));
 
   float forwardWindowSamples = halfWindowSamples;
@@ -672,9 +666,9 @@ struct TemporalDeck::Impl {
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
-  bool highQualityScopePreviewEnabled = true;
   std::string customPlatterArtPath;
   bool pendingInitialPlatterArtSelection = true;
+  bool pendingLegacySampleFreezeOnPreparedInstall = false;
 };
 
 using ProcessSignalInputs = temporaldeck_frameinput::SignalInputs;
@@ -854,9 +848,8 @@ void TemporalDeck::onSampleRateChange() {
 json_t *TemporalDeck::dataToJson() {
   json_t *root = json_object();
   bool sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
-  bool sampleAutoPlayOnLoad = true;
   std::string samplePath;
-  impl->sampleLifecycle.sampleJsonSnapshot(&sampleAutoPlayOnLoad, &samplePath);
+  impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
   json_object_set_new(root, "freezeLatched", json_boolean(impl->transportControl.freezeLatched));
   json_object_set_new(root, "reverseLatched", json_boolean(impl->transportControl.reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
@@ -868,8 +861,6 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
   json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
-  json_object_set_new(root, "highQualityScopePreviewEnabled", json_boolean(impl->highQualityScopePreviewEnabled));
-  json_object_set_new(root, "sampleAutoPlayOnLoad", json_boolean(sampleAutoPlayOnLoad));
   json_object_set_new(root, "platterArtMode", json_integer(impl->platterArtMode));
   json_object_set_new(root, "platterBrightnessMode", json_integer(impl->platterBrightnessMode));
   if (!impl->customPlatterArtPath.empty()) {
@@ -897,6 +888,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
+  json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
   json_t *platterArtModeJ = json_object_get(root, "platterArtMode");
   json_t *platterBrightnessModeJ = json_object_get(root, "platterBrightnessMode");
   json_t *customPlatterArtPathJ = json_object_get(root, "customPlatterArtPath");
@@ -937,9 +929,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (sampleLoopEnabledJ) {
     impl->sampleLoopEnabled.store(json_boolean_value(sampleLoopEnabledJ), std::memory_order_relaxed);
   }
-  // HQ scope preview is now the fixed/default path.
-  impl->highQualityScopePreviewEnabled = true;
-  impl->sampleLifecycle.setSampleAutoPlayOnLoad(true);
   if (platterArtModeJ) {
     impl->platterArtMode =
       clamp((int)json_integer_value(platterArtModeJ), PLATTER_ART_BUILTIN_SVG, PLATTER_ART_MODE_COUNT - 1);
@@ -966,6 +955,8 @@ void TemporalDeck::dataFromJson(json_t *root) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
   }
   if (samplePathJ && json_is_string(samplePathJ)) {
+    impl->pendingLegacySampleFreezeOnPreparedInstall =
+      sampleAutoPlayOnLoadJ && !json_is_true(sampleAutoPlayOnLoadJ);
     std::string error;
     loadSampleFromPath(json_string_value(samplePathJ), &error);
   }
@@ -992,8 +983,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
     impl->engine.externalGatePosMode = impl->externalGatePosMode;
     impl->engine.installPreparedSample(std::move(prepared.left), std::move(prepared.right), prepared.frames,
-                                       prepared.autoPlayOnLoad, prepared.truncated, prepared.monoStorage);
+                                       prepared.truncated, prepared.monoStorage);
     impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+    if (impl->pendingLegacySampleFreezeOnPreparedInstall) {
+      impl->transportControl.freezeLatched = true;
+      impl->transportControl.freezeLatchedByButton = false;
+      impl->engine.sampleTransportPlaying = false;
+      impl->uiSampleTransportPlaying.store(false, std::memory_order_relaxed);
+      impl->pendingLegacySampleFreezeOnPreparedInstall = false;
+    }
     if (paramQuantities[BUFFER_PARAM]) {
       paramQuantities[BUFFER_PARAM]->displayMultiplier = float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
     }
@@ -1016,8 +1014,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
 
   if (impl->pendingLiveToSampleConvert.exchange(false, std::memory_order_relaxed)) {
-    bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
-    if (impl->engine.convertLiveWindowToSample(params[BUFFER_PARAM].getValue(), autoPlayOnLoad)) {
+    if (impl->engine.convertLiveWindowToSample(params[BUFFER_PARAM].getValue())) {
       impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
       if (paramQuantities[BUFFER_PARAM]) {
         paramQuantities[BUFFER_PARAM]->displayMultiplier =
@@ -1174,8 +1171,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         auto scopePreviewMeasureStart = std::chrono::steady_clock::now();
         bool haveScopeParams = computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
-          scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, impl->highQualityScopePreviewEnabled,
-          &scopeParams);
+          scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
         if (haveScopeParams) {
           ScopeChannelMode leftMode = wantStereoScope ? SCOPE_CHANNEL_LEFT : SCOPE_CHANNEL_MID;
           uint32_t leftCount =
@@ -1340,15 +1336,6 @@ bool TemporalDeck::hasLoadedSample() const {
   return impl->uiSampleLoaded.load(std::memory_order_relaxed);
 }
 
-bool TemporalDeck::isSampleAutoPlayOnLoadEnabled() const {
-  return impl->sampleLifecycle.sampleAutoPlayOnLoad();
-}
-
-void TemporalDeck::setSampleAutoPlayOnLoadEnabled(bool enabled) {
-  impl->sampleLifecycle.setSampleAutoPlayOnLoad(enabled);
-  impl->sampleLifecycle.setPendingSampleStateApply();
-}
-
 void TemporalDeck::setSampleModeEnabled(bool enabled) {
   impl->sampleModeEnabled.store(enabled, std::memory_order_relaxed);
   impl->sampleLifecycle.setPendingSampleStateApply();
@@ -1401,13 +1388,13 @@ void TemporalDeck::clearLoadedSample() {
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
   (void)errorOut;
-  bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
   bool wasFreezeLatched = impl->transportControl.freezeLatched;
   bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
-  impl->transportControl.freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
+  impl->transportControl.freezeLatched = wasFreezeLatched;
   impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
   impl->transportControl.reverseLatched = false;
   impl->transportControl.slipLatched = false;
+  impl->pendingLegacySampleFreezeOnPreparedInstall = false;
 
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
   request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::LOAD_PATH;
@@ -1419,13 +1406,13 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
 }
 
 void TemporalDeck::convertLiveToSample() {
-  bool autoPlayOnLoad = impl->sampleLifecycle.sampleAutoPlayOnLoad();
   bool wasFreezeLatched = impl->transportControl.freezeLatched;
   bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
-  impl->transportControl.freezeLatched = wasFreezeLatched || !autoPlayOnLoad;
+  impl->transportControl.freezeLatched = wasFreezeLatched;
   impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
   impl->transportControl.reverseLatched = false;
   impl->transportControl.slipLatched = false;
+  impl->pendingLegacySampleFreezeOnPreparedInstall = false;
 
   impl->sampleLifecycle.clearDecodedAndPreparedState();
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
@@ -1566,17 +1553,6 @@ bool TemporalDeck::isHighQualityScratchInterpolationEnabled() const {
 
 void TemporalDeck::setHighQualityScratchInterpolationEnabled(bool enabled) {
   impl->scratchInterpolationMode = enabled ? SCRATCH_INTERP_LAGRANGE6 : SCRATCH_INTERP_CUBIC;
-}
-
-bool TemporalDeck::isHighQualityScopePreviewEnabled() const {
-  return impl->highQualityScopePreviewEnabled;
-}
-
-void TemporalDeck::setHighQualityScopePreviewEnabled(bool enabled) {
-  impl->highQualityScopePreviewEnabled = enabled;
-  // Scope extraction behavior changed; avoid shifting stale bins from prior mode.
-  impl->expanderScopeCacheMono.valid = false;
-  impl->expanderScopeCacheRight.valid = false;
 }
 
 int TemporalDeck::getScratchInterpolationMode() const {

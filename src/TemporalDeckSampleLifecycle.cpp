@@ -97,16 +97,6 @@ bool TemporalDeckSampleLifecycle::consumePendingSampleStateApply() {
   return pendingSampleStateApply_.exchange(false, std::memory_order_relaxed);
 }
 
-bool TemporalDeckSampleLifecycle::sampleAutoPlayOnLoad() const {
-  std::lock_guard<std::mutex> lock(sampleStateMutex_);
-  return sampleAutoPlayOnLoad_;
-}
-
-void TemporalDeckSampleLifecycle::setSampleAutoPlayOnLoad(bool enabled) {
-  std::lock_guard<std::mutex> lock(sampleStateMutex_);
-  sampleAutoPlayOnLoad_ = enabled;
-}
-
 std::string TemporalDeckSampleLifecycle::samplePath() const {
   std::lock_guard<std::mutex> lock(sampleStateMutex_);
   return samplePath_;
@@ -117,11 +107,8 @@ std::string TemporalDeckSampleLifecycle::sampleDisplayName() const {
   return sampleDisplayName_;
 }
 
-void TemporalDeckSampleLifecycle::sampleJsonSnapshot(bool *autoPlayOut, std::string *pathOut) const {
+void TemporalDeckSampleLifecycle::sampleJsonSnapshot(std::string *pathOut) const {
   std::lock_guard<std::mutex> lock(sampleStateMutex_);
-  if (autoPlayOut) {
-    *autoPlayOut = sampleAutoPlayOnLoad_;
-  }
   if (pathOut) {
     *pathOut = samplePath_;
   }
@@ -149,7 +136,6 @@ void TemporalDeckSampleLifecycle::workerLoop() {
     }
 
     DecodedSampleFile decoded;
-    bool autoPlayOnLoad = true;
     bool validDecoded = false;
 
     if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
@@ -174,14 +160,12 @@ void TemporalDeckSampleLifecycle::workerLoop() {
         samplePath_ = request.path;
         sampleDisplayName_ = system::getFilename(request.path);
         decodedSample_ = decoded;
-        autoPlayOnLoad = sampleAutoPlayOnLoad_;
         decodedSampleAvailable_.store(decodedSample_.frames > 0 && !decodedSample_.left.empty(), std::memory_order_relaxed);
       }
       validDecoded = decoded.frames > 0 && !decoded.left.empty();
     } else if (request.type == AsyncSampleBuildRequest::REBUILD_FROM_DECODED) {
       std::lock_guard<std::mutex> lock(sampleStateMutex_);
       decoded = decodedSample_;
-      autoPlayOnLoad = sampleAutoPlayOnLoad_;
       validDecoded = decoded.frames > 0 && !decoded.left.empty();
     }
 
@@ -197,7 +181,7 @@ void TemporalDeckSampleLifecycle::workerLoop() {
 
     PreparedSampleData prepared;
     try {
-      if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, autoPlayOnLoad, &prepared)) {
+      if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, &prepared)) {
         if (requestSerial == sampleBuildRequestSerial_.load(std::memory_order_relaxed)) {
           std::lock_guard<std::mutex> lock(preparedSampleMutex_);
           preparedSample_ = std::move(prepared);

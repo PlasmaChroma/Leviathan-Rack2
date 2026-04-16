@@ -14,7 +14,6 @@ struct PreparedSampleData {
   int bufferMode = TemporalDeckEngine::BUFFER_DURATION_10S;
   float sampleRate = 44100.f;
   bool truncated = false;
-  bool autoPlayOnLoad = true;
   bool monoStorage = false;
   bool valid = false;
 };
@@ -22,6 +21,6 @@ struct PreparedSampleData {
 int chooseSampleBufferMode(const DecodedSampleFile &sample);
 
 bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
-                         bool autoPlayOnLoad, PreparedSampleData *outPrepared);
+                         PreparedSampleData *outPrepared);
 
 } // namespace temporaldeck

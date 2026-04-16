@@ -55,7 +55,7 @@ int chooseSampleBufferMode(const DecodedSampleFile &sample) {
 }
 
 bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
-                         bool autoPlayOnLoad, PreparedSampleData *outPrepared) {
+                         PreparedSampleData *outPrepared) {
   if (!outPrepared) {
     return false;
   }
@@ -68,7 +68,6 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
   prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
                               TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
   prepared.sampleRate = targetSampleRate;
-  prepared.autoPlayOnLoad = autoPlayOnLoad;
   prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
 
   int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, targetSampleRate);

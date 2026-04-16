@@ -1663,11 +1663,11 @@ struct TemporalDeckEngine {
     rebuildPreviewFromCurrentSample();
   }
 
-  void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool autoplay,
-                             bool truncated, bool monoStorage) {
+  void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool truncated,
+                             bool monoStorage) {
     sampleLoaded = frames > 0 && !left.empty();
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
-    sampleTransportPlaying = autoplay && sampleLoaded;
+    sampleTransportPlaying = sampleLoaded;
     sampleTruncated = truncated;
     samplePlayhead = 0.0;
     readHead = 0.0;
@@ -1698,7 +1698,7 @@ struct TemporalDeckEngine {
     bumpBufferGeneration();
   }
 
-  bool convertLiveWindowToSample(float bufferKnob, bool autoplay) {
+  bool convertLiveWindowToSample(float bufferKnob) {
     bool sampleModeActive = sampleModeEnabled && sampleLoaded && sampleFrames > 0;
     if (sampleModeActive || buffer.filled <= 0 || buffer.size <= 0) {
       return false;
@@ -1727,7 +1727,7 @@ struct TemporalDeckEngine {
       }
     }
 
-    installPreparedSample(std::move(left), std::move(right), capturedFrames, autoplay, false, buffer.monoStorage);
+    installPreparedSample(std::move(left), std::move(right), capturedFrames, false, buffer.monoStorage);
     sampleModeEnabled = sampleLoaded;
     return sampleLoaded;
   }
