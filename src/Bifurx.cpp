@@ -39,6 +39,8 @@ constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
+constexpr int kBifurxCircuitModeCount = 4;
+const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "DFM", "MS2", "PRD"};
 constexpr int kBifurxModeParamIndex = 0;
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Low + Low",
@@ -143,6 +145,10 @@ float resoToDamping(float resoNorm) {
 	return 2.f - 1.98f * std::pow(r, 1.35f);
 }
 
+int clampCircuitMode(int mode) {
+	return clamp(mode, 0, kBifurxCircuitModeCount - 1);
+}
+
 float signedWeight(float balance, bool upperPeak) {
 	const float sign = upperPeak ? 1.f : -1.f;
 	return fastExp(0.7f * sign * clamp(balance, -1.f, 1.f));
@@ -234,6 +240,109 @@ void sanitizeCoreState(TptSvf& core) {
 	if (!std::isfinite(core.ic1eq) || !std::isfinite(core.ic2eq)) {
 		core.ic1eq = 0.f;
 		core.ic2eq = 0.f;
+	}
+}
+
+struct DfmCore {
+	float s1 = 0.f;
+	float s2 = 0.f;
+
+	SvfOutputs process(float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
+		const float sr = std::max(sampleRate, 1.f);
+		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
+		const float g = std::tan(kPi * limitedCutoff / sr);
+		const float q = 1.f / std::max(damping, 0.05f);
+		const float fb = clamp(0.10f + 0.38f * q + 0.18f * resoNorm, 0.f, 1.45f);
+		const float driveScaled = 0.21f * clamp(drive, 0.f, 10.f);
+		const float x = std::tanh(driveScaled * input - fb * s2);
+		s1 += g * (x - s1);
+		s2 += g * (s1 - s2);
+		SvfOutputs out;
+		out.lp = 5.f * s2;
+		out.bp = 5.f * (s1 - s2);
+		out.hp = 5.f * (x - s1);
+		out.notch = out.lp + out.hp;
+		return out;
+	}
+};
+
+void sanitizeCoreState(DfmCore& core) {
+	if (!std::isfinite(core.s1) || !std::isfinite(core.s2)) {
+		core.s1 = 0.f;
+		core.s2 = 0.f;
+	}
+}
+
+struct Ms2Core {
+	float z1 = 0.f;
+	float z2 = 0.f;
+	float z3 = 0.f;
+	float z4 = 0.f;
+
+	SvfOutputs process(float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
+		const float sr = std::max(sampleRate, 1.f);
+		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
+		const float g = std::tan(kPi * limitedCutoff / sr);
+		const float q = 1.f / std::max(damping, 0.05f);
+		const float resonance = clamp(0.16f + 0.22f * q + 0.22f * resoNorm, 0.f, 1.10f);
+		const float driveScaled = 0.22f * clamp(drive, 0.f, 10.f);
+		const float x = std::tanh(driveScaled * input - resonance * z4);
+		z1 += g * (std::tanh(x) - z1);
+		z2 += g * (std::tanh(z1) - z2);
+		z3 += g * (std::tanh(z2) - z3);
+		z4 += g * (std::tanh(z3) - z4);
+		SvfOutputs out;
+		out.lp = 5.f * z4;
+		out.bp = 5.f * (z2 - z3);
+		out.hp = 5.f * (x - z4);
+		out.notch = out.lp + out.hp;
+		return out;
+	}
+};
+
+void sanitizeCoreState(Ms2Core& core) {
+	if (!std::isfinite(core.z1) || !std::isfinite(core.z2) || !std::isfinite(core.z3) || !std::isfinite(core.z4)) {
+		core.z1 = 0.f;
+		core.z2 = 0.f;
+		core.z3 = 0.f;
+		core.z4 = 0.f;
+	}
+}
+
+struct PrdCore {
+	float z1 = 0.f;
+	float z2 = 0.f;
+	float z3 = 0.f;
+	float z4 = 0.f;
+
+	SvfOutputs process(float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
+		const float sr = std::max(sampleRate, 1.f);
+		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
+		const float g = std::tan(kPi * limitedCutoff / sr);
+		const float q = 1.f / std::max(damping, 0.05f);
+		const float resonance = clamp(0.12f + 0.26f * q + 0.34f * resoNorm, 0.f, 1.30f);
+		const float driveScaled = 0.25f * clamp(drive, 0.f, 10.f);
+		const float u = driveScaled * input - resonance * z4;
+		const float x = std::tanh(u) + 0.20f * std::tanh(2.f * u);
+		z1 += g * (std::tanh(x - 0.08f * z1) - z1);
+		z2 += g * (std::tanh(z1) - z2);
+		z3 += g * (std::tanh(z2) - z3);
+		z4 += g * (std::tanh(z3 + 0.10f * z2) - z4);
+		SvfOutputs out;
+		out.lp = 5.f * z4;
+		out.bp = 5.f * (z1 - z3);
+		out.hp = 5.f * (x - 0.6f * z1 - z4);
+		out.notch = out.lp + out.hp;
+		return out;
+	}
+};
+
+void sanitizeCoreState(PrdCore& core) {
+	if (!std::isfinite(core.z1) || !std::isfinite(core.z2) || !std::isfinite(core.z3) || !std::isfinite(core.z4)) {
+		core.z1 = 0.f;
+		core.z2 = 0.f;
+		core.z3 = 0.f;
+		core.z4 = 0.f;
 	}
 }
 
@@ -350,6 +459,7 @@ struct BifurxPreviewState {
 	float freqParamNorm = 0.5f;
 	float voctCv = 0.f;
 	int mode = 0;
+	int circuitMode = 0;
 };
 
 struct BifurxPreviewModel {
@@ -365,6 +475,7 @@ struct BifurxPreviewModel {
 	float wA = 1.f;
 	float wB = 1.f;
 	int mode = 0;
+	int circuitMode = 0;
 };
 
 struct BifurxAnalysisFrame {
@@ -374,6 +485,9 @@ struct BifurxAnalysisFrame {
 
 bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& b) {
 	if (a.mode != b.mode) {
+		return true;
+	}
+	if (a.circuitMode != b.circuitMode) {
 		return true;
 	}
 	if (std::fabs(a.sampleRate - b.sampleRate) > 0.5f) {
@@ -399,16 +513,39 @@ bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& 
 
 BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	BifurxPreviewModel model;
-	model.lowA = makeDisplayBiquad(state.sampleRate, state.freqA, state.qA, 0);
-	model.bandA = makeDisplayBiquad(state.sampleRate, state.freqA, state.qA, 1);
-	model.highA = makeDisplayBiquad(state.sampleRate, state.freqA, state.qA, 2);
-	model.notchA = makeDisplayBiquad(state.sampleRate, state.freqA, state.qA, 3);
-	model.lowB = makeDisplayBiquad(state.sampleRate, state.freqB, state.qB, 0);
-	model.bandB = makeDisplayBiquad(state.sampleRate, state.freqB, state.qB, 1);
-	model.highB = makeDisplayBiquad(state.sampleRate, state.freqB, state.qB, 2);
-	model.notchB = makeDisplayBiquad(state.sampleRate, state.freqB, state.qB, 3);
+	float qScale = 1.f;
+	float cutoffScale = 1.f;
+	switch (clampCircuitMode(state.circuitMode)) {
+		case 1: // DFM
+			qScale = 1.20f + 0.75f * state.resoNorm;
+			cutoffScale = 0.97f;
+			break;
+		case 2: // MS2
+			qScale = 0.80f + 0.45f * state.resoNorm;
+			cutoffScale = 0.90f;
+			break;
+		case 3: // PRD
+			qScale = 1.30f + 1.05f * state.resoNorm;
+			cutoffScale = 1.03f;
+			break;
+		default:
+			break;
+	}
+	const float freqA = clamp(state.freqA * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
+	const float freqB = clamp(state.freqB * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
+	const float qA = clamp(state.qA * qScale, 0.2f, 18.f);
+	const float qB = clamp(state.qB * qScale, 0.2f, 18.f);
+	model.lowA = makeDisplayBiquad(state.sampleRate, freqA, qA, 0);
+	model.bandA = makeDisplayBiquad(state.sampleRate, freqA, qA, 1);
+	model.highA = makeDisplayBiquad(state.sampleRate, freqA, qA, 2);
+	model.notchA = makeDisplayBiquad(state.sampleRate, freqA, qA, 3);
+	model.lowB = makeDisplayBiquad(state.sampleRate, freqB, qB, 0);
+	model.bandB = makeDisplayBiquad(state.sampleRate, freqB, qB, 1);
+	model.highB = makeDisplayBiquad(state.sampleRate, freqB, qB, 2);
+	model.notchB = makeDisplayBiquad(state.sampleRate, freqB, qB, 3);
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
+	model.circuitMode = clampCircuitMode(state.circuitMode);
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -670,6 +807,14 @@ struct Bifurx final : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
+	DfmCore dfmA;
+	DfmCore dfmB;
+	Ms2Core ms2A;
+	Ms2Core ms2B;
+	PrdCore prdA;
+	PrdCore prdB;
+	int filterCircuitMode = 0; // 0: SVF, 1: DFM, 2: MS2, 3: PRD
+	int activeCircuitMode = 0;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -760,11 +905,39 @@ struct Bifurx final : Module {
 		perfMeasureDivider.setDivision(64);
 	}
 
+	void resetCircuitStates() {
+		coreA.ic1eq = 0.f;
+		coreA.ic2eq = 0.f;
+		coreB.ic1eq = 0.f;
+		coreB.ic2eq = 0.f;
+		dfmA.s1 = 0.f;
+		dfmA.s2 = 0.f;
+		dfmB.s1 = 0.f;
+		dfmB.s2 = 0.f;
+		ms2A.z1 = 0.f;
+		ms2A.z2 = 0.f;
+		ms2A.z3 = 0.f;
+		ms2A.z4 = 0.f;
+		ms2B.z1 = 0.f;
+		ms2B.z2 = 0.f;
+		ms2B.z3 = 0.f;
+		ms2B.z4 = 0.f;
+		prdA.z1 = 0.f;
+		prdA.z2 = 0.f;
+		prdA.z3 = 0.f;
+		prdA.z4 = 0.f;
+		prdB.z1 = 0.f;
+		prdB.z2 = 0.f;
+		prdB.z3 = 0.f;
+		prdB.z4 = 0.f;
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = Module::dataToJson();
 		json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 		json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 		json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
+		json_object_set_new(root, "filterCircuitMode", json_integer(clampCircuitMode(filterCircuitMode)));
 		return root;
 	}
 
@@ -782,6 +955,11 @@ struct Bifurx final : Module {
 		if (perfDebugLoggingJ) {
 			perfDebugLogging = json_is_true(perfDebugLoggingJ);
 		}
+		json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode");
+		if (filterCircuitModeJ) {
+			filterCircuitMode = clampCircuitMode(int(json_integer_value(filterCircuitModeJ)));
+		}
+		activeCircuitMode = filterCircuitMode;
 	}
 
 	void resetPerfStats() {
@@ -859,8 +1037,20 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfPreviewStart;
 			PerfClock::time_point perfAnalysisStart;
 
+			const int circuitMode = clampCircuitMode(filterCircuitMode);
+			if (circuitMode != activeCircuitMode) {
+				resetCircuitStates();
+				activeCircuitMode = circuitMode;
+				controlFastCacheValid = false;
+			}
 			sanitizeCoreState(coreA);
 			sanitizeCoreState(coreB);
+			sanitizeCoreState(dfmA);
+			sanitizeCoreState(dfmB);
+			sanitizeCoreState(ms2A);
+			sanitizeCoreState(ms2B);
+			sanitizeCoreState(prdA);
+			sanitizeCoreState(prdB);
 
 			if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) {
 				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
@@ -890,7 +1080,8 @@ struct Bifurx final : Module {
 		const float spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
 		const float spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		const float spanOct = 8.f * shapedSpan(spanNorm);
-		const bool fastPathEligible = (tito == 1)
+		const bool fastPathEligible = (circuitMode == 0)
+			&& (tito == 1)
 			&& !inputs[VOCT_INPUT].isConnected()
 			&& !inputs[FM_INPUT].isConnected()
 			&& !inputs[RESO_CV_INPUT].isConnected()
@@ -947,19 +1138,35 @@ struct Bifurx final : Module {
 			return std::pair<float, float>(cutA, cutB);
 		};
 
-		float cutoffA = freqA0;
-		float cutoffB = freqB0;
-		float modA = 0.f;
-		float modB = 0.f;
-		if (!fastPathEligible) {
-			if (tito == 2) {
-				modA = couplingDepth * coreA.ic1eq / 5.f;
-				modB = couplingDepth * coreB.ic1eq / 5.f;
-			}
-			else if (tito == 0) {
-				modA = couplingDepth * coreB.ic1eq / 5.f;
-				modB = couplingDepth * coreA.ic1eq / 5.f;
-			}
+			float cutoffA = freqA0;
+			float cutoffB = freqB0;
+			float modA = 0.f;
+			float modB = 0.f;
+			auto circuitModStateA = [&]() {
+				switch (circuitMode) {
+					case 1: return dfmA.s1;
+					case 2: return ms2A.z2;
+					case 3: return prdA.z2;
+					default: return coreA.ic1eq;
+				}
+			};
+			auto circuitModStateB = [&]() {
+				switch (circuitMode) {
+					case 1: return dfmB.s1;
+					case 2: return ms2B.z2;
+					case 3: return prdB.z2;
+					default: return coreB.ic1eq;
+				}
+			};
+			if (!fastPathEligible) {
+				if (tito == 2) {
+					modA = couplingDepth * circuitModStateA() / 5.f;
+					modB = couplingDepth * circuitModStateB() / 5.f;
+				}
+				else if (tito == 0) {
+					modA = couplingDepth * circuitModStateB() / 5.f;
+					modB = couplingDepth * circuitModStateA() / 5.f;
+				}
 
 			const std::pair<float, float> cutoffs = modulatedCutoffs(modA, modB);
 			cutoffA = cutoffs.first;
@@ -968,20 +1175,40 @@ struct Bifurx final : Module {
 		if (measurePerf) {
 			perfCoreStart = PerfClock::now();
 		}
-		float modeOut = 0.f;
+			float modeOut = 0.f;
 
-		auto processA = [&](float sample) -> SvfOutputs {
-			if (fastPathEligible) {
-				return coreA.processWithCoeffs(sample, cachedCoeffsA);
-			}
-			return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
-		};
-		auto processB = [&](float sample) -> SvfOutputs {
-			if (fastPathEligible) {
-				return coreB.processWithCoeffs(sample, cachedCoeffsB);
-			}
-			return coreB.process(sample, args.sampleRate, cutoffB, dampingB);
-		};
+			auto processA = [&](float sample) -> SvfOutputs {
+				switch (circuitMode) {
+					case 1:
+						return dfmA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+					case 2:
+						return ms2A.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+					case 3:
+						return prdA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+					default:
+						break;
+				}
+				if (fastPathEligible) {
+					return coreA.processWithCoeffs(sample, cachedCoeffsA);
+				}
+				return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
+			};
+			auto processB = [&](float sample) -> SvfOutputs {
+				switch (circuitMode) {
+					case 1:
+						return dfmB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+					case 2:
+						return ms2B.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+					case 3:
+						return prdB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+					default:
+						break;
+				}
+				if (fastPathEligible) {
+					return coreB.processWithCoeffs(sample, cachedCoeffsB);
+				}
+				return coreB.process(sample, args.sampleRate, cutoffB, dampingB);
+			};
 
 		switch (mode) {
 			case 0: {
@@ -1167,8 +1394,9 @@ struct Bifurx final : Module {
 		previewState.freqB = previewFreqBFiltered;
 		previewState.qA = previewQAFiltered;
 		previewState.qB = previewQBFiltered;
-		previewState.mode = mode;
-		previewState.balance = previewBalanceFiltered;
+			previewState.mode = mode;
+			previewState.circuitMode = circuitMode;
+			previewState.balance = previewBalanceFiltered;
 		previewState.balanceTarget = balanceNorm;
 		previewState.resoNorm = resoNorm;
 		previewState.spanParamNorm = spanParamNorm;
@@ -2490,11 +2718,20 @@ struct BifurxWidget final : ModuleWidget {
 			return;
 		}
 
-		menu->addChild(new MenuSeparator());
-		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
-		menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
-		menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
-	}
-};
+			menu->addChild(new MenuSeparator());
+			menu->addChild(createSubmenuItem("Filter Circuit", "", [=](Menu* submenu) {
+				for (int i = 0; i < kBifurxCircuitModeCount; ++i) {
+					submenu->addChild(createCheckMenuItem(
+						kBifurxCircuitLabels[i], "",
+						[=]() { return bifurx->filterCircuitMode == i; },
+						[=]() { bifurx->filterCircuitMode = i; }
+					));
+				}
+			}));
+			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
+			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
+			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
+		}
+	};
 
 Model* modelBifurx = createModel<Bifurx, BifurxWidget>("Bifurx");
