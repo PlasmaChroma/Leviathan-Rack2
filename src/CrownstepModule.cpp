@@ -773,7 +773,7 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 	boardValueIndex += float(rootSemitoneLinear());
 	boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
 	if (pitchBipolarEnabled) {
-		float center = (0.5f * float(boardCellCount() - 1)) / crownstep::pitchDividerForMode(pitchDividerMode);
+		float center = crownstep::pitchBipolarCenterOffset(pitchDividerMode, boardCellCount());
 		boardValueIndex -= center;
 	}
 	return boardValueIndex;
@@ -781,15 +781,15 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 
 float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing) {
 	if (quantizationEnabled) {
-		return crownstep::mapPitchFromIndex(
+		return clamp(crownstep::mapPitchFromIndex(
 			boardValueIndex,
 			isKing,
 			currentScaleIndex(),
 			0,
 			transposeVolts()
-		);
+		), -10.f, 10.f);
 	}
-	return crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts());
+	return clamp(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
 }
 
 float Crownstep::applyMelodicBiasToBoardValueIndex(float previousBoardValueIndex, float currentBoardValueIndex, const Move& move) const {

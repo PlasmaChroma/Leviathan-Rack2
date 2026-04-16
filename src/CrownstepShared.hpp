@@ -168,7 +168,7 @@ struct Crownstep : Module {
 	bool boardValueLayoutInverted = false;
 	int pitchDividerMode = 0;
 	bool showCellPitchOverlay = false;
-	int boardTextureMode = BOARD_TEXTURE_WOOD;
+	int boardTextureMode = BOARD_TEXTURE_MARBLE;
 	int gameMode = GAME_MODE_CHECKERS;
 	int highlightMode = HIGHLIGHT_GREEN;
 	int playerMode = PLAYER_INIT;

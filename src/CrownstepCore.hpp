@@ -72,11 +72,11 @@ static constexpr std::array<const char*, 8> BOARD_VALUE_LAYOUT_NAMES = {
 	{"Center-Out", "Linear (Horizontal)", "Linear (Vertical)", "Linear (Diagonal)",
 		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)", "Random"}
 };
-static constexpr std::array<const char*, 4> PITCH_DIVIDER_NAMES = {
-	{"Full", "Half", "Third", "Quarter"}
+static constexpr std::array<const char*, 7> PITCH_DIVIDER_NAMES = {
+	{"Full", "Half", "Third", "Quarter", "1.5x", "2x", "3x"}
 };
-static constexpr std::array<float, 4> PITCH_DIVIDER_VALUES = {
-	{1.f, 2.f, 3.f, 4.f}
+static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
+	{1.f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.f, 3.f}
 };
 
 struct Move {
@@ -1459,11 +1459,11 @@ inline float pitchDividerForMode(int dividerMode) {
 }
 
 inline float applyPitchDividerToBoardValue(float boardValueIndex, int dividerMode) {
-	return boardValueIndex / pitchDividerForMode(dividerMode);
+	return boardValueIndex * pitchDividerForMode(dividerMode);
 }
 
-inline float pitchBipolarCenterOffset(int dividerMode) {
-	return (0.5f * float(BOARD_SIZE - 1)) / pitchDividerForMode(dividerMode);
+inline float pitchBipolarCenterOffset(int dividerMode, int boardCellCount) {
+	return (0.5f * float(std::max(0, boardCellCount - 1))) * pitchDividerForMode(dividerMode);
 }
 
 inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int rootSemitone, float transposeVolts) {

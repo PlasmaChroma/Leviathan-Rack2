@@ -88,6 +88,172 @@ std::shared_ptr<Image> crownstepMarbleBoardTileImage() {
 	return APP->window->loadImage(asset::plugin(pluginInstance, "res/Board/marble_4.jpg"));
 }
 
+const crownstep::BoardState& crownstepPreviewBoardState() {
+	static const crownstep::BoardState board = crownstep::makeInitialBoard();
+	return board;
+}
+
+void drawCheckersPiecePreview(NVGcontext* vg, float centerX, float centerY, float cellWidth, float cellHeight, int piece, float alpha) {
+	if (!vg || piece == 0) {
+		return;
+	}
+	alpha = clamp(alpha, 0.f, 1.f);
+	float radius = std::min(cellWidth, cellHeight) * 0.36f;
+	int fillAlpha = int(255.f * alpha);
+	int strokeAlpha = int(240.f * alpha);
+	bool positivePiece = (crownstep::pieceSide(piece) == HUMAN_SIDE);
+
+	NVGcolor coreInner = positivePiece ? nvgRGBA(237, 112, 94, fillAlpha) : nvgRGBA(78, 78, 86, fillAlpha);
+	NVGcolor coreOuter = positivePiece ? nvgRGBA(152, 46, 38, fillAlpha) : nvgRGBA(12, 12, 16, fillAlpha);
+	NVGcolor rimBright = positivePiece ? nvgRGBA(255, 228, 208, strokeAlpha) : nvgRGBA(210, 210, 216, strokeAlpha);
+	NVGcolor rimDark = positivePiece ? nvgRGBA(82, 22, 16, int(210.f * alpha)) : nvgRGBA(6, 6, 9, int(215.f * alpha));
+
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, radius);
+	NVGpaint corePaint = nvgRadialGradient(
+		vg,
+		centerX - radius * 0.18f,
+		centerY - radius * 0.2f,
+		radius * 0.14f,
+		radius * 1.06f,
+		coreInner,
+		coreOuter
+	);
+	nvgFillPaint(vg, corePaint);
+	nvgFill(vg);
+
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, radius);
+	nvgStrokeColor(vg, rimBright);
+	nvgStrokeWidth(vg, 1.55f);
+	nvgStroke(vg);
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, radius * 0.83f);
+	nvgStrokeColor(vg, rimDark);
+	nvgStrokeWidth(vg, 1.05f);
+	nvgStroke(vg);
+
+	float rimOuterR = radius * 1.01f;
+	float rimInnerR = radius * 0.80f;
+	NVGcolor rimBandColor = positivePiece ? nvgRGBA(112, 38, 30, int(128.f * alpha)) : nvgRGBA(26, 26, 32, int(146.f * alpha));
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, rimOuterR);
+	nvgCircle(vg, centerX, centerY, rimInnerR);
+	nvgPathWinding(vg, NVG_HOLE);
+	nvgFillColor(vg, rimBandColor);
+	nvgFill(vg);
+
+	const int ridgeCount = 32;
+	float step = 2.f * float(M_PI) / float(ridgeCount);
+	float ridgeSpan = step * 0.56f;
+	float ridgeInnerR = radius * 0.86f;
+	float ridgeOuterR = radius * 1.00f;
+	for (int ridge = 0; ridge < ridgeCount; ++ridge) {
+		float aMid = float(ridge) * step;
+		float a0 = aMid - ridgeSpan * 0.5f;
+		float a1 = aMid + ridgeSpan * 0.5f;
+		float c0 = std::cos(a0);
+		float s0 = std::sin(a0);
+		float c1 = std::cos(a1);
+		float s1 = std::sin(a1);
+		float x0i = centerX + c0 * ridgeInnerR;
+		float y0i = centerY + s0 * ridgeInnerR;
+		float x1i = centerX + c1 * ridgeInnerR;
+		float y1i = centerY + s1 * ridgeInnerR;
+		float x1o = centerX + c1 * ridgeOuterR;
+		float y1o = centerY + s1 * ridgeOuterR;
+		float x0o = centerX + c0 * ridgeOuterR;
+		float y0o = centerY + s0 * ridgeOuterR;
+
+		NVGcolor ridgeFillA = positivePiece ? nvgRGBA(248, 176, 154, int(112.f * alpha)) : nvgRGBA(172, 172, 184, int(94.f * alpha));
+		NVGcolor ridgeFillB = positivePiece ? nvgRGBA(198, 104, 86, int(104.f * alpha)) : nvgRGBA(112, 112, 122, int(86.f * alpha));
+		NVGcolor ridgeStroke = positivePiece ? nvgRGBA(86, 24, 18, int(110.f * alpha)) : nvgRGBA(8, 8, 12, int(116.f * alpha));
+
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, x0i, y0i);
+		nvgLineTo(vg, x1i, y1i);
+		nvgLineTo(vg, x1o, y1o);
+		nvgLineTo(vg, x0o, y0o);
+		nvgClosePath(vg);
+		nvgFillColor(vg, (ridge & 1) ? ridgeFillA : ridgeFillB);
+		nvgFill(vg);
+		nvgStrokeColor(vg, ridgeStroke);
+		nvgStrokeWidth(vg, 0.34f);
+		nvgStroke(vg);
+	}
+
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, rimOuterR);
+	nvgStrokeColor(vg, positivePiece ? nvgRGBA(255, 212, 196, int(60.f * alpha)) : nvgRGBA(196, 196, 206, int(46.f * alpha)));
+	nvgStrokeWidth(vg, 0.70f);
+	nvgStroke(vg);
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX, centerY, rimInnerR);
+	nvgStrokeColor(vg, positivePiece ? nvgRGBA(70, 18, 14, int(82.f * alpha)) : nvgRGBA(6, 6, 10, int(96.f * alpha)));
+	nvgStrokeWidth(vg, 0.64f);
+	nvgStroke(vg);
+
+	nvgBeginPath(vg);
+	nvgCircle(vg, centerX - radius * 0.20f, centerY - radius * 0.24f, radius * 0.34f);
+	nvgFillColor(vg, nvgRGBA(255, 255, 255, int(36.f * alpha)));
+	nvgFill(vg);
+
+	if (crownstep::pieceIsKing(piece)) {
+		NVGcolor crownEdge = nvgRGBA(172, 126, 40, int(132.f * alpha));
+		NVGcolor crownFillTop = nvgRGBA(255, 238, 172, int(246.f * alpha));
+		NVGcolor crownFillBottom = nvgRGBA(236, 184, 70, int(244.f * alpha));
+		float crownYOffset = radius * 0.07f;
+		float leftX = centerX - radius * 0.56f;
+		float rightX = centerX + radius * 0.56f;
+		float bandTopY = centerY + radius * 0.05f + crownYOffset;
+		float bandBottomY = centerY + radius * 0.24f + crownYOffset;
+		float sideTipY = centerY - radius * 0.36f + crownYOffset;
+		float centerTipY = centerY - radius * 0.55f + crownYOffset;
+		float valleyY = centerY - radius * 0.08f + crownYOffset;
+		float leftTipX = centerX - radius * 0.50f;
+		float rightTipX = centerX + radius * 0.50f;
+		float leftValleyX = centerX - radius * 0.18f;
+		float rightValleyX = centerX + radius * 0.18f;
+
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, leftX, bandTopY);
+		nvgLineTo(vg, leftTipX, sideTipY);
+		nvgLineTo(vg, leftValleyX, valleyY);
+		nvgLineTo(vg, centerX, centerTipY);
+		nvgLineTo(vg, rightValleyX, valleyY);
+		nvgLineTo(vg, rightTipX, sideTipY);
+		nvgLineTo(vg, rightX, bandTopY);
+		nvgClosePath(vg);
+		NVGpaint crownBodyPaint = nvgLinearGradient(vg, centerX, centerY - radius * 0.58f, centerX, bandBottomY, crownFillTop, crownFillBottom);
+		nvgFillPaint(vg, crownBodyPaint);
+		nvgFill(vg);
+		nvgStrokeColor(vg, crownEdge);
+		nvgStrokeWidth(vg, 0.62f);
+		nvgStroke(vg);
+
+		nvgBeginPath(vg);
+		nvgRoundedRect(vg, leftX - radius * 0.03f, bandTopY, (rightX - leftX) + radius * 0.06f, bandBottomY - bandTopY, radius * 0.06f);
+		nvgFillColor(vg, nvgRGBA(230, 174, 58, int(244.f * alpha)));
+		nvgFill(vg);
+		nvgStrokeColor(vg, crownEdge);
+		nvgStrokeWidth(vg, 0.58f);
+		nvgStroke(vg);
+
+		for (int i = 0; i < 3; ++i) {
+			float tipX = (i == 0) ? leftTipX : ((i == 1) ? centerX : rightTipX);
+			float tipY = (i == 1) ? centerTipY : sideTipY;
+			float beadR = radius * 0.07f;
+			nvgBeginPath(vg);
+			nvgCircle(vg, tipX, tipY, beadR);
+			nvgFillColor(vg, nvgRGBA(255, 223, 120, int(246.f * alpha)));
+			nvgFill(vg);
+			nvgStrokeColor(vg, crownEdge);
+			nvgStrokeWidth(vg, 0.55f);
+			nvgStroke(vg);
+		}
+	}
+}
+
 constexpr const char* CHESS_ATLAS_PIECE_IDS[CHESS_ATLAS_ROWS][CHESS_ATLAS_COLS] = {
 	{
 		"piece-black-king",
@@ -849,12 +1015,20 @@ struct CrownstepBoardWidget final : Widget {
 
 		float cellWidth = box.size.x / 8.f;
 		float cellHeight = box.size.y / 8.f;
+		const int effectiveGameMode = module ? module->gameMode : Crownstep::GAME_MODE_CHECKERS;
+		const int effectiveBoardTextureMode = module ? module->boardTextureMode : Crownstep::BOARD_TEXTURE_MARBLE;
+		const crownstep::BoardState& previewBoard = crownstepPreviewBoardState();
 		const bool rotateBoardForHumanPerspective =
 			module
 			&& module->humanSide() == AI_SIDE
-			&& (module->gameMode == Crownstep::GAME_MODE_CHECKERS || module->isChessMode());
+			&& (effectiveGameMode == Crownstep::GAME_MODE_CHECKERS || module->isChessMode());
 		auto viewRowColFromBoardIndex = [&](int index, int* row, int* col) {
-			if (!module || !module->boardIndexToCoord(index, row, col)) {
+			if (module) {
+				if (!module->boardIndexToCoord(index, row, col)) {
+					return false;
+				}
+			}
+			else if (!crownstep::indexToCoord(index, row, col)) {
 				return false;
 			}
 			if (rotateBoardForHumanPerspective) {
@@ -868,9 +1042,9 @@ struct CrownstepBoardWidget final : Widget {
 			return true;
 		};
 		bool othelloBoard = module && module->isOthelloMode();
-		const bool woodTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
-		const bool marbleTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
-		const bool redBlackTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
+		const bool woodTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
+		const bool marbleTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
+		const bool redBlackTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
 		const std::shared_ptr<Image>& woodBoardTileImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardTileImage() : std::shared_ptr<Image>();
 		const std::shared_ptr<Image>& marbleBoardTileImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardTileImage() : std::shared_ptr<Image>();
 		const bool hasWoodBoardTileImage = woodBoardTileImage && woodBoardTileImage->handle >= 0;
@@ -900,7 +1074,7 @@ struct CrownstepBoardWidget final : Widget {
 		for (int row = 0; row < 8; ++row) {
 			for (int col = 0; col < 8; ++col) {
 				bool dark = ((row + col) & 1) == 1;
-				bool fabricTexture = module && module->boardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC;
+				bool fabricTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_FABRIC;
 				float x = col * cellWidth;
 				float y = row * cellHeight;
 				float seed = float((row * 29 + col * 17) % 97) * 0.17f;
@@ -1088,6 +1262,25 @@ struct CrownstepBoardWidget final : Widget {
 			nvgStrokeColor(args.vg, nvgRGBA(4, 24, 14, 228));
 			nvgStrokeWidth(args.vg, 1.6f);
 			nvgStroke(args.vg);
+		}
+
+		if (!module) {
+			for (int i = 0; i < crownstep::BOARD_SIZE; ++i) {
+				int piece = previewBoard[size_t(i)];
+				if (piece == 0) {
+					continue;
+				}
+				int row = 0;
+				int col = 0;
+				if (!viewRowColFromBoardIndex(i, &row, &col)) {
+					continue;
+				}
+				float centerX = (col + 0.5f) * cellWidth;
+				float centerY = (row + 0.5f) * cellHeight;
+				drawCheckersPiecePreview(args.vg, centerX, centerY, cellWidth, cellHeight, piece, 1.f);
+			}
+			nvgRestore(args.vg);
+			return;
 		}
 
 					if (module) {
@@ -2286,6 +2479,24 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return presetIndexForCapValue(capValueFromModule());
 	}
 
+	RibbonState previewState() const {
+		RibbonState s;
+		s.historySize = 16;
+		s.activeStart = 0;
+		s.activeLength = 16;
+		s.playbackIndex = 6;
+		s.capValue = 16;
+		s.fullMode = false;
+		s.eventFlash = 0.f;
+		s.stepWeight = {
+			0.22f, 0.18f, 0.34f, 0.24f,
+			0.42f, 0.20f, 0.30f, 0.26f,
+			0.48f, 0.22f, 0.36f, 0.24f,
+			0.54f, 0.28f, 0.40f, 0.32f
+		};
+		return s;
+	}
+
 	int presetIndexForLocalX(float x) const {
 		float innerW = std::max(1.f, box.size.x - 4.f);
 		float norm = clamp((x - 2.f) / innerW, 0.f, 1.f);
@@ -2358,11 +2569,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	RibbonState pullState() const {
-		RibbonState s;
 		if (!module) {
-			return s;
+			return previewState();
 		}
 
+		RibbonState s;
 		s.activeLength = std::max(0, module->activeLength());
 		s.activeStart = std::max(0, module->activeStartIndex());
 		s.capValue = capValueFromModule();
@@ -2535,10 +2746,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		if (!module) {
-			return;
-		}
-
 		RibbonState s = pullState();
 		int currentStep = (s.activeLength > 0 && s.playbackIndex >= 0) ? (s.playbackIndex + 1) : 0;
 		int totalSteps = s.activeLength;
@@ -3544,20 +3751,36 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 		}));
 		menu->addChild(createSubmenuItem("Divider", "", [=](Menu* dividerMenu) {
-			for (int i = 0; i < int(crownstep::PITCH_DIVIDER_NAMES.size()); ++i) {
+			for (int mode = 0; mode < 4; ++mode) {
 				dividerMenu->addChild(createCheckMenuItem(
-					crownstep::PITCH_DIVIDER_NAMES[size_t(i)],
+					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
 					"",
 					[=]() {
-						return module && module->pitchDividerMode == i;
+						return module && module->pitchDividerMode == mode;
 					},
-						[=]() {
-							if (module) {
-								module->pitchDividerMode = i;
-								module->refreshHeldPitchForCurrentStep();
-							}
+					[=]() {
+						if (module) {
+							module->pitchDividerMode = mode;
+							module->refreshHeldPitchForCurrentStep();
 						}
-					));
+					}
+				));
+			}
+			dividerMenu->addChild(new MenuSeparator());
+			for (int mode = 4; mode < int(crownstep::PITCH_DIVIDER_NAMES.size()); ++mode) {
+				dividerMenu->addChild(createCheckMenuItem(
+					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
+					"",
+					[=]() {
+						return module && module->pitchDividerMode == mode;
+					},
+					[=]() {
+						if (module) {
+							module->pitchDividerMode = mode;
+							module->refreshHeldPitchForCurrentStep();
+						}
+					}
+				));
 			}
 		}));
 	}
