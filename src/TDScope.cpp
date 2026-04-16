@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <limits>
 #include <vector>
@@ -58,7 +59,10 @@ struct TDScope final : Module {
   std::atomic<bool> uiLinkActive {false};
   std::atomic<bool> uiPreviewValid {false};
   std::atomic<uint64_t> uiLastPublishSeq {0};
+  std::atomic<uint64_t> uiSnapshotReadMissCount {0};
   float uiPublishTimerSec = 0.f;
+  float invalidMessageTimerSec = 1e9f;
+  float invalidPreviewTimerSec = 1e9f;
   uint64_t lastPublishSeq = 0;
   int staleFrames = 0;
   bool previewValid = false;
@@ -71,6 +75,8 @@ struct TDScope final : Module {
 
   static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
+  static constexpr float kLinkDropGraceSec = 1.f / 45.f;
+  static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
 
   TDScope() {
     config(0, 0, 0, LIGHTS_LEN);
@@ -149,7 +155,7 @@ struct TDScope final : Module {
 
   void process(const ProcessArgs &args) override {
     bool validMessage = false;
-    previewValid = false;
+    bool previewValidNow = false;
     const temporaldeck_expander::HostToDisplay *latestMsg = nullptr;
     if (leftExpander.module && leftExpander.consumerMessage) {
       const auto *msg = reinterpret_cast<const temporaldeck_expander::HostToDisplay *>(leftExpander.consumerMessage);
@@ -157,7 +163,7 @@ struct TDScope final : Module {
           msg->size == sizeof(temporaldeck_expander::HostToDisplay)) {
         validMessage = true;
         latestMsg = msg;
-        previewValid = (msg->flags & temporaldeck_expander::FLAG_PREVIEW_VALID) != 0u;
+        previewValidNow = (msg->flags & temporaldeck_expander::FLAG_PREVIEW_VALID) != 0u;
         if (msg->publishSeq != lastPublishSeq) {
           lastPublishSeq = msg->publishSeq;
           staleFrames = 0;
@@ -166,10 +172,25 @@ struct TDScope final : Module {
         }
       }
     }
+    previewValid = previewValidNow;
 
-    bool linkActive = validMessage && staleFrames < 2048;
+    if (validMessage) {
+      invalidMessageTimerSec = 0.f;
+    } else {
+      invalidMessageTimerSec = std::min(invalidMessageTimerSec + args.sampleTime, 1e9f);
+    }
+
+    if (validMessage && previewValidNow) {
+      invalidPreviewTimerSec = 0.f;
+    } else {
+      invalidPreviewTimerSec = std::min(invalidPreviewTimerSec + args.sampleTime, 1e9f);
+    }
+
+    bool hasTemporalDeckNeighbor = isTemporalDeckModule(leftExpander.module);
+    bool linkActive = hasTemporalDeckNeighbor && staleFrames < 2048 && invalidMessageTimerSec <= kLinkDropGraceSec;
+    bool previewVisible = invalidPreviewTimerSec <= kPreviewDropGraceSec;
     uiLinkActive.store(linkActive, std::memory_order_relaxed);
-    uiPreviewValid.store(linkActive && previewValid, std::memory_order_relaxed);
+    uiPreviewValid.store(linkActive && previewVisible, std::memory_order_relaxed);
 
     // Publish requested scope payload format back to TemporalDeck.
     if (isTemporalDeckModule(leftExpander.module) && leftExpander.module->rightExpander.producerMessage) {
@@ -205,7 +226,7 @@ struct TDScope final : Module {
       publishSnapshotToUi(*latestMsg);
     }
 
-    bool ready = linkActive && previewValid;
+    bool ready = linkActive && previewVisible;
     lights[LINK_LIGHT].setBrightness(linkActive && !ready ? 1.f : 0.f);
     lights[PREVIEW_LIGHT].setBrightness(ready ? 1.f : 0.f);
   }
@@ -239,6 +260,9 @@ struct TDScopeDisplayWidget final : Widget {
   std::vector<uint8_t> rowValidRight;
   std::vector<uint8_t> rowHoldFrames;
   std::vector<uint8_t> rowHoldFramesRight;
+  temporaldeck_expander::HostToDisplay lastGoodMsg;
+  bool hasLastGoodMsg = false;
+  double lastGoodMsgTimeSec = -1.0;
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
@@ -255,6 +279,7 @@ struct TDScopeDisplayWidget final : Widget {
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
+    constexpr double kUiSnapshotGraceSec = 0.05;
 
     auto drawStatusMessage = [&](const char* line1, const char* line2) {
       if (!APP || !APP->window || !APP->window->uiFont) {
@@ -286,9 +311,24 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     temporaldeck_expander::HostToDisplay msg;
-    if (!module->readSnapshotForUi(&msg) || !linkActive || !previewValid) {
-      drawStatusMessage(linkActive ? "Waiting for" : "Attach to", "Temporal Deck");
-      return;
+    const bool snapshotOk = module->readSnapshotForUi(&msg);
+    const double nowSec = system::getTime();
+    if (snapshotOk) {
+      lastGoodMsg = msg;
+      hasLastGoodMsg = true;
+      lastGoodMsgTimeSec = nowSec;
+    } else if (linkActive && previewValid && module) {
+      module->uiSnapshotReadMissCount.fetch_add(1u, std::memory_order_relaxed);
+    }
+
+    if (!snapshotOk || !linkActive || !previewValid) {
+      bool canReuseLastGood =
+        hasLastGoodMsg && lastGoodMsgTimeSec >= 0.0 && (nowSec - lastGoodMsgTimeSec) <= kUiSnapshotGraceSec;
+      if (!canReuseLastGood) {
+        drawStatusMessage(linkActive ? "Waiting for" : "Attach to", "Temporal Deck");
+        return;
+      }
+      msg = lastGoodMsg;
     }
 
     uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
@@ -1190,6 +1230,25 @@ struct TDScopeWidget : ModuleWidget {
       }
     } else {
       ModuleWidget::draw(args);
+    }
+
+    TDScope *scopeModule = static_cast<TDScope *>(module);
+    if (scopeModule && APP && APP->window && APP->window->uiFont) {
+      char label[40];
+      uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
+      std::snprintf(label, sizeof(label), "MISS %llu", (unsigned long long) missCount);
+
+      const float x = box.size.x - mm2px(1.1f);
+      const float y = mm2px(7.4f);
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 9.f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(6, 9, 13, 210));
+      nvgText(args.vg, x, y + 0.7f, label, nullptr);
+      nvgFillColor(args.vg, nvgRGBA(221, 233, 241, 230));
+      nvgText(args.vg, x, y, label, nullptr);
+      nvgRestore(args.vg);
     }
   }
 

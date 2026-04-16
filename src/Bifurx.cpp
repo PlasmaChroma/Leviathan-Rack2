@@ -2235,7 +2235,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			nvgLineTo(args.vg, point.x, point.y);
 		}
 	}
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 244));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 248, 208, 244));
 	nvgLineJoin(args.vg, NVG_ROUND);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStrokeWidth(args.vg, 1.35f);
@@ -2330,7 +2330,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, peaks[i].x, peaks[i].yMarker + markerRadius + 0.45f);
 		nvgLineTo(args.vg, peaks[i].x, guideYBottom);
-		nvgStrokeColor(args.vg, nvgRGBA(246, 250, 255, 170));
+		nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170));
 		nvgStrokeWidth(args.vg, 1.1f);
 		nvgStroke(args.vg);
 
