@@ -617,9 +617,9 @@ struct BifurxModeReadoutWidget final : Widget {
 
 		char label[24];
 		std::snprintf(label, sizeof(label), "Mode: %s", kBifurxModeLabels[mode]);
-		nvgFontSize(args.vg, std::max(8.f, box.size.y * 0.62f));
+		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(214, 222, 232, 238));
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, label, nullptr);
 	}
