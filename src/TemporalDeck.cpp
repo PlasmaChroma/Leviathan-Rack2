@@ -92,6 +92,13 @@ static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
 static constexpr int kScopeLagFpShift = 10;
 static constexpr int64_t kScopeLagFpOne = int64_t(1) << kScopeLagFpShift;
 
+static bool isTDScopeModule(const engine::Module *neighbor) {
+  if (!neighbor || !neighbor->model) {
+    return false;
+  }
+  return (neighbor->model == modelTDScope) || (neighbor->model->slug == "TDScope");
+}
+
 struct ScopeWindowParams {
   bool sampleMode = false;
   bool sampleLoopEnabled = false;
@@ -1112,7 +1119,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead, std::memory_order_relaxed);
   impl->uiSampleDurationSeconds.store(frame.sampleDuration, std::memory_order_relaxed);
   impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
-  bool expanderConnected = rightExpander.module && rightExpander.module->leftExpander.producerMessage;
+  bool expanderConnected =
+    isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
   if (expanderConnected) {
     uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
     if (rightExpander.consumerMessage) {

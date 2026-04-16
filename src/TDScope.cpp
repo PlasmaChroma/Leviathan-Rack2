@@ -157,7 +157,7 @@ struct TDScope final : Module {
     bool validMessage = false;
     bool previewValidNow = false;
     const temporaldeck_expander::HostToDisplay *latestMsg = nullptr;
-    if (leftExpander.module && leftExpander.consumerMessage) {
+    if (isTemporalDeckModule(leftExpander.module) && leftExpander.consumerMessage) {
       const auto *msg = reinterpret_cast<const temporaldeck_expander::HostToDisplay *>(leftExpander.consumerMessage);
       if (msg->magic == temporaldeck_expander::MAGIC && msg->version == temporaldeck_expander::VERSION &&
           msg->size == sizeof(temporaldeck_expander::HostToDisplay)) {
@@ -1233,19 +1233,19 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    if (scopeModule && APP && APP->window && APP->window->uiFont) {
+    if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
       char label[40];
       uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
       std::snprintf(label, sizeof(label), "MISS %llu", (unsigned long long) missCount);
 
-      const float x = box.size.x - mm2px(1.1f);
-      const float y = mm2px(7.4f);
+      const float x = box.size.x - mm2px(0.7f);
+      const float y = mm2px(5.9f);
       nvgSave(args.vg);
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-      nvgFontSize(args.vg, 9.f);
+      nvgFontSize(args.vg, 6.4f);
       nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
       nvgFillColor(args.vg, nvgRGBA(6, 9, 13, 210));
-      nvgText(args.vg, x, y + 0.7f, label, nullptr);
+      nvgText(args.vg, x, y + 0.45f, label, nullptr);
       nvgFillColor(args.vg, nvgRGBA(221, 233, 241, 230));
       nvgText(args.vg, x, y, label, nullptr);
       nvgRestore(args.vg);

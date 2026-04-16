@@ -45,14 +45,13 @@ TestResult testBuildPreparedSampleMonoFoldDown() {
   decoded.right = {0.5f, -0.5f, 0.5f, -0.5f};
 
   PreparedSampleData prepared;
-  bool ok = temporaldeck::buildPreparedSample(decoded, 48000.f, TemporalDeckEngine::BUFFER_DURATION_10MIN_MONO, false,
-                                              &prepared);
+  bool ok = temporaldeck::buildPreparedSample(decoded, 48000.f, TemporalDeckEngine::BUFFER_DURATION_10MIN_MONO, &prepared);
 
   bool foldMatches = prepared.left.size() == 4 && nearlyEqual(prepared.left[0], 3.75f) &&
                      nearlyEqual(prepared.left[1], -1.25f) && nearlyEqual(prepared.left[2], -1.25f) &&
                      nearlyEqual(prepared.left[3], 0.f);
   bool pass = ok && prepared.valid && prepared.monoStorage && prepared.right.empty() && prepared.frames == 4 &&
-              !prepared.autoPlayOnLoad && foldMatches;
+              foldMatches;
   return {"Mono fold-down + scaling", pass,
           "frames=" + std::to_string(prepared.frames) + " first=" +
             (prepared.left.empty() ? std::string("n/a") : std::to_string(prepared.left[0]))};
@@ -66,7 +65,7 @@ TestResult testBuildPreparedSampleTruncatesToBufferLimit() {
   decoded.left.assign(decoded.frames, 0.1f);
 
   PreparedSampleData prepared;
-  bool ok = temporaldeck::buildPreparedSample(decoded, 10.f, TemporalDeckEngine::BUFFER_DURATION_10S, true, &prepared);
+  bool ok = temporaldeck::buildPreparedSample(decoded, 10.f, TemporalDeckEngine::BUFFER_DURATION_10S, &prepared);
 
   int expectedMax = int(temporaldeck_modes::usableBufferSecondsForMode(TemporalDeckEngine::BUFFER_DURATION_10S) * 10.f);
   bool pass = ok && prepared.valid && prepared.truncated && prepared.frames == expectedMax &&
@@ -85,7 +84,7 @@ TestResult testInvalidInputClearsPreparedOutput() {
   PreparedSampleData prepared;
   prepared.valid = true;
   prepared.frames = 123;
-  bool ok = temporaldeck::buildPreparedSample(decoded, 48000.f, TemporalDeckEngine::BUFFER_DURATION_10S, true, &prepared);
+  bool ok = temporaldeck::buildPreparedSample(decoded, 48000.f, TemporalDeckEngine::BUFFER_DURATION_10S, &prepared);
 
   bool pass = !ok && !prepared.valid && prepared.frames == 0 && prepared.left.empty() && prepared.right.empty();
   return {"Invalid input returns false + resets output", pass,

@@ -25,19 +25,17 @@ Residual risk:
 
 ## TemporalDeck
 
-### High
+No material issues found in this pass.
 
-- Unsafe expander protocol access with arbitrary right-side neighbors. `TemporalDeck` treats any module on the right that exposes `leftExpander.producerMessage` as a valid scope expander, then reads `rightExpander.consumerMessage` as `DisplayToHost` and writes `HostToDisplay` into the neighbor's message buffer without first confirming the neighbor is actually `TDScope` or otherwise protocol-compatible. That is an out-of-contract cast/write and can corrupt memory or misread foreign expander payloads when a different expander module is docked on the right. Relevant code: `src/TemporalDeck.cpp:1118-1125`, `src/TemporalDeck.cpp:1144-1249`.
+Residual risk:
+- `TemporalDeck` is well covered by tests in this repo, but expander behavior still benefits from manual validation against real neighboring modules in Rack.
 
 ## TDScope
 
-### High
+No material issues found in this pass.
 
-- Unsafe expander protocol read before neighbor validation. `TDScope::process()` dereferences `leftExpander.consumerMessage` as `HostToDisplay` before it checks whether the module on the left is actually `TemporalDeck`. If some unrelated expander-capable module sits to the left, this is still an unchecked reinterpret-cast read of a foreign message layout. Relevant code: `src/TDScope.cpp:160-163`, with the actual neighbor-type check only happening later at `src/TDScope.cpp:189`.
-
-### Low
-
-- Internal diagnostic text is always rendered on the shipped panel. The widget unconditionally draws `MISS <count>` in normal operation, which looks like leftover instrumentation rather than end-user UI. Relevant code: `src/TDScope.cpp:1235-1251`.
+Residual risk:
+- Most `TDScope` behavior is still UI/manual-validation territory rather than dedicated automated coverage.
 
 ## Crownstep
 
