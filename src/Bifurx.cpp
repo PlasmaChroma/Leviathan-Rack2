@@ -62,11 +62,11 @@ constexpr float kDisplayTopDbfsCeiling = 0.f;
 constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
 constexpr float kDisplayPeakHeadroomDb = 0.6f;
 constexpr float kCurveVisualSlewDbPerSec = 170.f;
-constexpr float kPeakMarkerFillRadius = 2.3f;
-constexpr float kPeakMarkerOutlineExtraRadius = 0.5f;
-constexpr float kPeakMarkerOutlineStrokeWidth = 1.f;
+constexpr float kPeakMarkerFillRadius = 2.2f;
+constexpr float kPeakMarkerOutlineExtraRadius = 0.4f;
+constexpr float kPeakMarkerOutlineStrokeWidth = 0.8f;
 constexpr float kPeakMarkerEdgePadding = 0.4f;
-constexpr float kPeakMarkerBottomLanePadding = 0.12f;
+constexpr float kPeakMarkerBottomLanePadding = 0.f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -1956,6 +1956,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	auto responseYForDb = [&](float db) {
 		return responseYForDbDisplay(db, responseMinDb, responseMaxDb, spectrumBottomY, spectrumTopY);
 	};
+	const bool anchorMarkerToBottomLane = (previewState.mode == 3);
+	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
+	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 	const BifurxPreviewModel model = makePreviewModel(previewState);
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
@@ -2021,7 +2024,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			point.x01 = sampleX01;
 			point.x = plotX + usableW * sampleX01;
 			point.y = responseYForDb(sampleDb);
-			point.priority = 1;
+			if (anchorMarkerToBottomLane && i == 1) {
+				// In NN mode, present notch centers as pinned cut points at the marker lane.
+				point.y = markerBottomLaneY;
+				point.priority = 2;
+			}
+			else {
+				point.priority = 1;
+			}
 			insertCurveDrawPoint(point);
 		}
 	};
@@ -2242,12 +2252,11 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		bool visible = false;
 		char label[16] = {};
 	};
-	const bool anchorMarkerToBottomLane = (previewState.mode == 3);
 	auto buildMarkerAtFrequency = [&](float targetHz) {
 		PeakMarker marker;
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
-		const float markerRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
+		const float markerRadius = markerOuterRadius;
 		const float curveIndex = targetX01 * float(kCurvePointCount - 1);
 		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
 		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
@@ -2261,7 +2270,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
 		const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
 		const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
-		const float bottomLaneY = spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding;
+		const float bottomLaneY = markerBottomLaneY;
 		marker.yMarker = anchorMarkerToBottomLane ? bottomLaneY : clamp(marker.yCurve, markerMinY, markerMaxY);
 		marker.hz = clampedHz;
 		marker.visible = true;
