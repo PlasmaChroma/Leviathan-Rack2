@@ -74,6 +74,7 @@ int chessSearchForSide(
 		int eval = chessEvaluateForSide(board, state, maximizingSide);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
+	crownstep::chessSortMovesForSearch(board, &moves);
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
 		ChessState nextState;
@@ -93,6 +94,7 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 	if (moves.empty()) {
 		return Move();
 	}
+	crownstep::chessSortMovesForSearch(board, &moves);
 	int depth = crownstep::chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();

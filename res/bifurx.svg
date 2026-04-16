@@ -674,6 +674,12 @@
      cy="7980.0312"
      rx="114.98675"
      ry="120.83137" /><ellipse
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:13.0826"
+     id="FILTER_CIRCUIT_PARAM"
+     cx="680"
+     cy="10370"
+     rx="124.78679"
+     ry="130.6122" /><ellipse
      style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021"
      id="IN_INPUT"
      cx="679.99866"

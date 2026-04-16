@@ -1035,6 +1035,82 @@ inline int chessEvaluatePosition(const BoardState& board) {
 	return chessEvaluatePosition(board, inferred);
 }
 
+inline int chessOrderPieceValueForType(int pieceType) {
+	switch (pieceType) {
+		case CHESS_PAWN: return 100;
+		case CHESS_KNIGHT: return 320;
+		case CHESS_BISHOP: return 330;
+		case CHESS_ROOK: return 500;
+		case CHESS_QUEEN: return 900;
+		case CHESS_KING: return 20000;
+		default: return 0;
+	}
+}
+
+inline int chessMoveOrderingScore(const BoardState& board, const Move& move) {
+	int movingPiece = 0;
+	if (move.originIndex >= 0 && move.originIndex < CHESS_BOARD_SIZE) {
+		movingPiece = board[size_t(move.originIndex)];
+	}
+	int movingType = chessPieceType(movingPiece);
+	int score = 0;
+
+	// MVV/LVA-style capture prioritization keeps alpha-beta cutoffs effective.
+	if (move.isCapture) {
+		int capturedValue = 0;
+		for (int captureIndex : move.captured) {
+			if (captureIndex >= 0 && captureIndex < CHESS_BOARD_SIZE) {
+				capturedValue += chessOrderPieceValueForType(chessPieceType(board[size_t(captureIndex)]));
+			}
+		}
+		if (capturedValue == 0 && move.destinationIndex >= 0 && move.destinationIndex < CHESS_BOARD_SIZE) {
+			capturedValue = chessOrderPieceValueForType(chessPieceType(board[size_t(move.destinationIndex)]));
+		}
+		int movingValue = chessOrderPieceValueForType(movingType);
+		score += 6000 + capturedValue * 12 - movingValue;
+	}
+
+	if (movingType == CHESS_PAWN) {
+		int destinationRow = 0;
+		if (chessIndexToCoord(move.destinationIndex, &destinationRow, nullptr)) {
+			bool promote = (pieceSide(movingPiece) == HUMAN_SIDE) ? (destinationRow == 0) : (destinationRow == 7);
+			if (promote) {
+				score += 5000;
+			}
+		}
+	}
+
+	if (move.isKing) {
+		int originRow = 0;
+		int originCol = 0;
+		int destinationCol = 0;
+		if (chessIndexToCoord(move.originIndex, &originRow, &originCol) &&
+			chessIndexToCoord(move.destinationIndex, nullptr, &destinationCol) &&
+			std::abs(destinationCol - originCol) == 2) {
+			score += 700;
+		}
+	}
+
+	return score;
+}
+
+inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* moves) {
+	if (!moves || moves->size() < 2) {
+		return;
+	}
+	std::stable_sort(moves->begin(), moves->end(), [&](const Move& a, const Move& b) {
+		int scoreA = chessMoveOrderingScore(board, a);
+		int scoreB = chessMoveOrderingScore(board, b);
+		if (scoreA != scoreB) {
+			return scoreA > scoreB;
+		}
+		if (a.originIndex != b.originIndex) {
+			return a.originIndex < b.originIndex;
+		}
+		return a.destinationIndex < b.destinationIndex;
+	});
+}
+
 inline int chessSearchDepthForDifficulty(int difficulty) {
 	switch (std::max(0, std::min(difficulty, 2))) {
 		case 0: return 1;
@@ -1049,6 +1125,7 @@ inline int chessSearchScore(const BoardState& board, const ChessState& state, in
 		int score = chessEvaluatePosition(board, state);
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
+	chessSortMovesForSearch(board, &moves);
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
 		ChessState nextState;
@@ -1073,6 +1150,7 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty, const Che
 	if (moves.empty()) {
 		return Move();
 	}
+	chessSortMovesForSearch(board, &moves);
 	int depth = chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
