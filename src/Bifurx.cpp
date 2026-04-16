@@ -782,6 +782,7 @@ struct Bifurx final : Module {
 		TITO_PARAM,
 		MODE_LEFT_PARAM,
 		MODE_RIGHT_PARAM,
+		FILTER_CIRCUIT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -856,6 +857,7 @@ struct Bifurx final : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
+	dsp::SchmittTrigger filterCircuitTrigger;
 	BifurxAnalysisFrame analysisFrames[2];
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
@@ -887,6 +889,7 @@ struct Bifurx final : Module {
 			configSwitch(TITO_PARAM, 0.f, 2.f, 1.f, "TITO", {"XM", "Clean", "SM"});
 			configButton(MODE_LEFT_PARAM, "Mode previous");
 			configButton(MODE_RIGHT_PARAM, "Mode next");
+			configButton(FILTER_CIRCUIT_PARAM, "Filter circuit next");
 
 		configInput(IN_INPUT, "Signal In");
 		configInput(VOCT_INPUT, "V/Oct");
@@ -1059,6 +1062,9 @@ struct Bifurx final : Module {
 			if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) {
 				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
 				params[MODE_PARAM].setValue(float((currentMode + 1) % 10));
+			}
+			if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
+				filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
 			}
 
 			const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
@@ -2652,6 +2658,7 @@ struct BifurxWidget final : ModuleWidget {
 		Vec spanCvAttenPosMm(45.82f, 45.0f);
 
 		Vec inPosMm(7.6f, 112.2f);
+		Vec filterCircuitPosMm(7.6f, 102.3f);
 		Vec voctPosMm(17.15f, 112.2f);
 		Vec fmPosMm(26.7f, 112.2f);
 		Vec resoCvPosMm(36.25f, 112.2f);
@@ -2673,6 +2680,7 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("SPAN_CV_ATTEN_PARAM", &spanCvAttenPosMm);
 
 		applyPointOverride("IN_INPUT", &inPosMm);
+		applyPointOverride("FILTER_CIRCUIT_PARAM", &filterCircuitPosMm);
 		applyPointOverride("VOCT_INPUT", &voctPosMm);
 		applyPointOverride("FM_INPUT", &fmPosMm);
 		applyPointOverride("RESO_CV_INPUT", &resoCvPosMm);
@@ -2696,6 +2704,7 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(createParamCentered<VCVSlider>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM));
 		addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
 
+		addParam(createParamCentered<TL1105>(mm2px(filterCircuitPosMm), module, Bifurx::FILTER_CIRCUIT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inPosMm), module, Bifurx::IN_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPosMm), module, Bifurx::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPosMm), module, Bifurx::FM_INPUT));
