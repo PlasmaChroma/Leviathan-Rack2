@@ -12,6 +12,8 @@
 
 namespace {
 
+static constexpr float kScopeDisplayVerticalSupersample = 2.f;
+
 static PanelBorder *findPanelBorder(Widget *widget) {
   if (!widget) {
     return nullptr;
@@ -485,8 +487,9 @@ struct TDScopeDisplayWidget final : Widget {
       readHeadDrawY = 0.5f * (drawTop + drawBottom);
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = std::max(1, int(std::ceil(drawHeight)));
+    const int rowCount = std::max(1, int(std::ceil(drawHeight * kScopeDisplayVerticalSupersample)));
     size_t rowCountU = size_t(rowCount);
+    const float rowStep = drawHeight / float(rowCount);
     if (rowX0.size() != rowCountU) {
       rowX0.assign(rowCountU, lane0CenterX);
       rowX1.assign(rowCountU, lane0CenterX);
@@ -688,10 +691,10 @@ struct TDScopeDisplayWidget final : Widget {
         float prevX1 = (*x1Out)[idx];
         float prevVisual = (*visualOut)[idx];
         uint8_t prevHold = (*holdOut)[idx];
-        float y = drawTop + float(iy) + 0.5f;
+        float y = drawTop + (float(iy) + 0.5f) * rowStep;
         rowY[idx] = y;
-        float t0 = clamp((y - drawTop - 0.5f) / yDen, 0.f, 1.f);
-        float t1 = clamp((y - drawTop + 0.5f) / yDen, 0.f, 1.f);
+        float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
+        float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
         float rowMinNorm = 0.f;
         float rowMaxNorm = 0.f;
         if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
@@ -749,9 +752,9 @@ struct TDScopeDisplayWidget final : Widget {
           float prevVisual = (*visualOut)[idx];
           uint8_t prevHold = (*holdOut)[idx];
 
-          float y = drawTop + float(iy) + 0.5f;
+          float y = drawTop + (float(iy) + 0.5f) * rowStep;
           rowY[idx] = y;
-          float tMid = clamp((y - drawTop) / yDen, 0.f, 1.f);
+          float tMid = clamp((float(iy) + 0.5f) / float(rowCount), 0.f, 1.f);
           float lagMid = windowTopLag + (windowBottomLag - windowTopLag) * tMid;
           int64_t bucketIndex = int64_t(std::floor(lagMid / liveBucketSpanSamples));
           int slot = bucketSlotForIndex(bucketIndex);
