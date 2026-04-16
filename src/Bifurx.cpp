@@ -62,6 +62,11 @@ constexpr float kDisplayTopDbfsCeiling = 0.f;
 constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
 constexpr float kDisplayPeakHeadroomDb = 0.6f;
 constexpr float kCurveVisualSlewDbPerSec = 170.f;
+constexpr float kPeakMarkerFillRadius = 2.3f;
+constexpr float kPeakMarkerOutlineExtraRadius = 0.5f;
+constexpr float kPeakMarkerOutlineStrokeWidth = 1.f;
+constexpr float kPeakMarkerEdgePadding = 0.4f;
+constexpr float kPeakMarkerBottomLanePadding = 0.12f;
 
 float clamp01(float v) {
 	return clamp(v, 0.f, 1.f);
@@ -1732,8 +1737,6 @@ void BifurxSpectrumWidget::step() {
 			float peakBX = NAN;
 			float peakBYCurve = NAN;
 			float peakBYMarker = NAN;
-			const BifurxPreviewModel model = makePreviewModel(previewState);
-
 			const float w = box.size.x;
 			const float h = box.size.y;
 			if (w > 0.f && h > 0.f) {
@@ -1750,24 +1753,27 @@ void BifurxSpectrumWidget::step() {
 				auto responseYForDb = [&](float db) {
 					return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
 				};
+				const bool anchorMarkerToBottomLane = (previewState.mode == 3);
 				auto evalPeak = [&](float targetHz, float* outX, float* outYCurve, float* outYMarker) {
 					const float clampedHz = clamp(targetHz, minHz, maxHz);
 					const float targetX01 = logPosition(clampedHz, minHz, maxHz);
-					const float markerRadius = 2.3f;
+					const float markerRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 					const float curveIndex = targetX01 * float(kCurvePointCount - 1);
 					const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
 					const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
 					const float t = curveIndex - float(i0);
 					const float curveDbAtHz = mixf(curveDb[i0], curveDb[i1], t);
 					const float yCurve = responseYForDb(curveDbAtHz);
-					const float markerDbAtHz = clamp(previewModelResponseDb(model, clampedHz), kResponseMinDb, kResponseMaxDb);
-					const float analyticY = responseYForDb(markerDbAtHz);
-					const float yMarker = clamp(
-						analyticY,
-						spectrumTopY + markerRadius + 0.4f,
-						spectrumBottomY - markerRadius - 0.4f
+					const float markerX = plotX + usableW * targetX01;
+					const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
+					const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
+					const float bottomLaneY = spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding;
+					const float yMarker = anchorMarkerToBottomLane ? bottomLaneY : clamp(yCurve, markerMinY, markerMaxY);
+					*outX = clamp(
+						markerX,
+						plotX + markerRadius + kPeakMarkerEdgePadding,
+						plotX + usableW - markerRadius - kPeakMarkerEdgePadding
 					);
-					*outX = plotX + usableW * targetX01;
 					*outYCurve = yCurve;
 					*outYMarker = yMarker;
 				};
@@ -2236,26 +2242,29 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		bool visible = false;
 		char label[16] = {};
 	};
+	const bool anchorMarkerToBottomLane = (previewState.mode == 3);
 	auto buildMarkerAtFrequency = [&](float targetHz) {
 		PeakMarker marker;
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
-		const float markerRadius = 2.3f;
+		const float markerRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 		const float curveIndex = targetX01 * float(kCurvePointCount - 1);
 		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
 		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
 		const float t = curveIndex - float(i0);
-		marker.x = plotX + usableW * targetX01;
-		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
-		const float markerDb = clamp(previewModelResponseDb(model, clampedHz), responseMinDb, responseMaxDb);
-		const float markerAnalyticY = responseYForDb(markerDb);
-		marker.yMarker = clamp(
-			markerAnalyticY,
-			spectrumTopY + markerRadius + 0.4f,
-			spectrumBottomY - markerRadius - 0.4f
+		const float markerX = plotX + usableW * targetX01;
+		marker.x = clamp(
+			markerX,
+			plotX + markerRadius + kPeakMarkerEdgePadding,
+			plotX + usableW - markerRadius - kPeakMarkerEdgePadding
 		);
+		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
+		const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
+		const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
+		const float bottomLaneY = spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding;
+		marker.yMarker = anchorMarkerToBottomLane ? bottomLaneY : clamp(marker.yCurve, markerMinY, markerMaxY);
 		marker.hz = clampedHz;
-		marker.visible = markerAnalyticY <= (spectrumBottomY - 0.35f);
+		marker.visible = true;
 		formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label));
 		return marker;
 	};
@@ -2308,7 +2317,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		if (!peaks[i].visible) {
 			continue;
 		}
-		const float markerRadius = 2.3f;
+		const float markerRadius = kPeakMarkerFillRadius;
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, peaks[i].x, peaks[i].yMarker + markerRadius + 0.45f);
 		nvgLineTo(args.vg, peaks[i].x, guideYBottom);
@@ -2321,9 +2330,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
 		nvgFill(args.vg);
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, markerRadius + 0.95f);
+		nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, markerRadius + kPeakMarkerOutlineExtraRadius);
 		nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
-		nvgStrokeWidth(args.vg, 1.f);
+		nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
 		nvgStroke(args.vg);
 	}
 
