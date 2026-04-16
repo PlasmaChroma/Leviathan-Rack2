@@ -87,12 +87,12 @@ std::string bifurxUserRootPath() {
 }
 
 float shapedSpan(float value) {
-	return std::pow(clamp01(value), 1.65f);
+	return std::pow(clamp01(value), 1.45f);
 }
 
 float levelDriveGain(float knob) {
 	const float x = clamp01(knob);
-	return 0.05f + 0.9f * x + 5.f * x * x * x;
+	return 0.06f + 0.95f * x + 3.6f * x * x * x;
 }
 
 float softClip(float x) {
@@ -142,7 +142,7 @@ float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, f
 
 float resoToDamping(float resoNorm) {
 	const float r = clamp01(resoNorm);
-	return 2.f - 1.98f * std::pow(r, 1.35f);
+	return 2.f - 1.97f * std::pow(r, 1.18f);
 }
 
 int clampCircuitMode(int mode) {
@@ -151,7 +151,7 @@ int clampCircuitMode(int mode) {
 
 float signedWeight(float balance, bool upperPeak) {
 	const float sign = upperPeak ? 1.f : -1.f;
-	return fastExp(0.7f * sign * clamp(balance, -1.f, 1.f));
+	return fastExp(0.82f * sign * clamp(balance, -1.f, 1.f));
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
@@ -252,15 +252,16 @@ struct DfmCore {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float fb = clamp(0.10f + 0.38f * q + 0.18f * resoNorm, 0.f, 1.45f);
-		const float driveScaled = 0.21f * clamp(drive, 0.f, 10.f);
-		const float x = std::tanh(driveScaled * input - fb * s2);
+		const float fb = clamp(0.14f + 0.42f * q + 0.24f * resoNorm, 0.f, 1.60f);
+		const float driveScaled = 0.24f * clamp(drive, 0.f, 10.f);
+		const float u = driveScaled * input - fb * s2;
+		const float x = std::tanh(u) + 0.08f * std::tanh(2.f * (driveScaled * input - 0.6f * fb * s2));
 		s1 += g * (x - s1);
 		s2 += g * (s1 - s2);
 		SvfOutputs out;
-		out.lp = 5.f * s2;
-		out.bp = 5.f * (s1 - s2);
-		out.hp = 5.f * (x - s1);
+		out.lp = 4.8f * s2;
+		out.bp = 5.0f * (s1 - s2);
+		out.hp = 4.8f * (x - s1);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -284,17 +285,17 @@ struct Ms2Core {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float resonance = clamp(0.16f + 0.22f * q + 0.22f * resoNorm, 0.f, 1.10f);
-		const float driveScaled = 0.22f * clamp(drive, 0.f, 10.f);
-		const float x = std::tanh(driveScaled * input - resonance * z4);
+		const float resonance = clamp(0.14f + 0.18f * q + 0.16f * resoNorm, 0.f, 0.98f);
+		const float driveScaled = 0.20f * clamp(drive, 0.f, 10.f);
+		const float x = std::tanh(0.92f * (driveScaled * input - resonance * z4));
 		z1 += g * (std::tanh(x) - z1);
 		z2 += g * (std::tanh(z1) - z2);
 		z3 += g * (std::tanh(z2) - z3);
 		z4 += g * (std::tanh(z3) - z4);
 		SvfOutputs out;
-		out.lp = 5.f * z4;
-		out.bp = 5.f * (z2 - z3);
-		out.hp = 5.f * (x - z4);
+		out.lp = 4.8f * z4;
+		out.bp = 4.6f * (z2 - z3);
+		out.hp = 4.8f * (x - z4);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -320,18 +321,18 @@ struct PrdCore {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float resonance = clamp(0.12f + 0.26f * q + 0.34f * resoNorm, 0.f, 1.30f);
-		const float driveScaled = 0.25f * clamp(drive, 0.f, 10.f);
+		const float resonance = clamp(0.14f + 0.30f * q + 0.36f * resoNorm, 0.f, 1.38f);
+		const float driveScaled = 0.27f * clamp(drive, 0.f, 10.f);
 		const float u = driveScaled * input - resonance * z4;
-		const float x = std::tanh(u) + 0.20f * std::tanh(2.f * u);
-		z1 += g * (std::tanh(x - 0.08f * z1) - z1);
+		const float x = std::tanh(u) + 0.24f * std::tanh(2.2f * u);
+		z1 += g * (std::tanh(x - 0.05f * z1) - z1);
 		z2 += g * (std::tanh(z1) - z2);
 		z3 += g * (std::tanh(z2) - z3);
-		z4 += g * (std::tanh(z3 + 0.10f * z2) - z4);
+		z4 += g * (std::tanh(z3 + 0.12f * z2) - z4);
 		SvfOutputs out;
-		out.lp = 5.f * z4;
-		out.bp = 5.f * (z1 - z3);
-		out.hp = 5.f * (x - 0.6f * z1 - z4);
+		out.lp = 5.1f * z4;
+		out.bp = 5.3f * (z1 - z3);
+		out.hp = 5.1f * (x - 0.56f * z1 - z4);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -428,16 +429,16 @@ T combineModeResponse(
 	float wB
 ) {
 	switch (mode) {
-		case 0: return cascadeLp;
-		case 1: return T(0.95f) * T(wA) * lpA + T(1.05f) * T(wB) * bpB - T(0.12f) * (bpA + bpB);
-		case 2: return T(1.05f) * T(wB) * lpB - T(0.55f) * T(wA) * bpA;
-		case 3: return cascadeNotch;
-		case 4: return T(0.95f) * T(wA) * lpA + T(0.95f) * T(wB) * hpB;
-		case 5: return T(1.15f) * (T(wA) * bpA + T(wB) * bpB);
-		case 6: return cascadeHpToLp;
-		case 7: return T(1.05f) * T(wA) * hpA - T(0.55f) * T(wB) * bpB;
-		case 8: return T(1.12f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.10f) * (hpA + bpB);
-		case 9: return cascadeHpToHp;
+		case 0: return T(0.98f) * cascadeLp;
+		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
+		case 2: return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
+		case 3: return T(1.03f) * cascadeNotch;
+		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
+		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
+		case 6: return T(1.04f) * cascadeHpToLp;
+		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
+		case 8: return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
+		case 9: return T(0.98f) * cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -517,16 +518,16 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	float cutoffScale = 1.f;
 	switch (clampCircuitMode(state.circuitMode)) {
 		case 1: // DFM
-			qScale = 1.20f + 0.75f * state.resoNorm;
-			cutoffScale = 0.97f;
+			qScale = 1.28f + 0.95f * state.resoNorm;
+			cutoffScale = 0.95f;
 			break;
 		case 2: // MS2
-			qScale = 0.80f + 0.45f * state.resoNorm;
-			cutoffScale = 0.90f;
+			qScale = 0.74f + 0.36f * state.resoNorm;
+			cutoffScale = 0.88f;
 			break;
 		case 3: // PRD
-			qScale = 1.30f + 1.05f * state.resoNorm;
-			cutoffScale = 1.03f;
+			qScale = 1.42f + 1.15f * state.resoNorm;
+			cutoffScale = 1.02f;
 			break;
 		default:
 			break;
@@ -1114,8 +1115,8 @@ struct Bifurx final : Module {
 			freqA0 = centerHz * fastExp2(-0.5f * spanOct);
 			freqB0 = centerHz * fastExp2(0.5f * spanOct);
 			const float baseDamping = resoToDamping(resoNorm);
-			dampingA = clamp(baseDamping * fastExp(0.55f * balance), 0.02f, 2.2f);
-			dampingB = clamp(baseDamping * fastExp(-0.55f * balance), 0.02f, 2.2f);
+			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
+			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 			const float lowW = signedWeight(balance, false);
 			const float highW = signedWeight(balance, true);
 			const float norm = 2.f / (lowW + highW);
@@ -1134,7 +1135,7 @@ struct Bifurx final : Module {
 			controlFastCacheValid = true;
 		}
 
-		const float couplingDepth = (0.02f + 0.25f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
+		const float couplingDepth = (0.018f + 0.20f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
 		const float drivenIn = 5.f * softClip(0.2f * in * drive);
 		const float excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 
