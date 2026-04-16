@@ -112,7 +112,7 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	hoveredSquare = -1;
 	json_t* difficultyJ = json_object_get(rootJ, "aiDifficulty");
 	if (difficultyJ) {
-		aiDifficulty = clamp(int(json_integer_value(difficultyJ)), 0, 2);
+		aiDifficulty = clamp(int(json_integer_value(difficultyJ)), 0, int(DIFFICULTY_NAMES.size()) - 1);
 	}
 	json_t* quantizationEnabledJ = json_object_get(rootJ, "quantizationEnabled");
 	if (quantizationEnabledJ) {
