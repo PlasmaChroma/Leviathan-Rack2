@@ -180,7 +180,7 @@ Crownstep::Crownstep() {
 		SEQ_LENGTH_PARAM, float(SEQ_LENGTH_MIN), float(SEQ_LENGTH_MAX), float(SEQ_LENGTH_MAX), "Sequence length");
 	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Bias");
 	configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
-	configParam(RUN_PARAM, 0.f, 1.f, 1.f, "Run");
+	// RUN_PARAM intentionally left unconfigured; reserved for compatibility.
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
 	configParam(DEBUG_ADD_MOVES_PARAM, 0.f, 1.f, 0.f, "Add 10 random moves");
 

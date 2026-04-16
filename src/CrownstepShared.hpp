@@ -67,6 +67,7 @@ struct Crownstep : Module {
 		SEQ_LENGTH_PARAM,
 		ROOT_PARAM,
 		SCALE_PARAM,
+		// Reserved/deprecated: keep slot for patch/index compatibility.
 		RUN_PARAM,
 		NEW_GAME_PARAM,
 		DEBUG_ADD_MOVES_PARAM,
@@ -87,6 +88,7 @@ struct Crownstep : Module {
 		OUTPUTS_LEN
 	};
 	enum LightId {
+		// Reserved/deprecated: keep slot for patch/index compatibility.
 		RUN_LIGHT,
 		HUMAN_TURN_LIGHT,
 		AI_TURN_LIGHT,

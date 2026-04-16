@@ -108,14 +108,11 @@ void Crownstep::process(const ProcessArgs& args) {
 		eocActivityPulseRemainingSeconds = 0.f;
 	}
 
-	bool running = true;
 	if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
-		if (running) {
-			// Hold EoC high until the next clock edge, then clear before
-			// advancing so non-wrap steps read low.
-			eocGateHigh = false;
-			emitStepAtClockEdge();
-		}
+		// Hold EoC high until the next clock edge, then clear before
+		// advancing so non-wrap steps read low.
+		eocGateHigh = false;
+		emitStepAtClockEdge();
 	}
 
 	int effectiveRootWrapped = rootSemitone();
@@ -170,7 +167,6 @@ void Crownstep::process(const ProcessArgs& args) {
 		aiLedOn = (turnSide == aiSide());
 	}
 
-	lights[RUN_LIGHT].setBrightness(0.f);
 	lights[HUMAN_TURN_LIGHT].setBrightness(humanLedOn ? 1.f : 0.f);
 	lights[AI_TURN_LIGHT].setBrightness(aiLedOn ? 1.f : 0.f);
 }

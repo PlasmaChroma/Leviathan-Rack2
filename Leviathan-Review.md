@@ -52,9 +52,3 @@ No material issues found in this pass.
 
 Residual risk:
 - There is no dedicated automated test coverage for `Bifurx`, so DSP-edge and UI-preview regressions are still mostly dependent on manual validation.
-
-## Cross-Module / Plugin-Wide
-
-### Low
-
-- The DragonKing debug flag path looks unreachable in the current tree/build. Runtime code only checks for `res/dragonking.txt`, but `res/` does not contain that file and the build only packages `res` as distributables. The repo does currently have a top-level `dragonking.txt`, but that path is never consulted by the code. As written, the debug-only branches guarded by `isDragonKingDebugEnabled()` appear impossible to enable from the current source layout/package recipe. Relevant code: `src/plugin.cpp:9-16`, `Makefile:16-18`.
