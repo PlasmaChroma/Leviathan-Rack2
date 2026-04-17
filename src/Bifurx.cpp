@@ -43,7 +43,7 @@ constexpr int kBifurxCircuitModeCount = 4;
 // During filter tuning we intentionally collapse all circuit processing and
 // preview voicing to the SVF baseline. The selector UI/state stays visible so
 // we can preserve patch/UI flow while tuning the base topology.
-constexpr bool kBifurxTuneSvfOnly = true;
+constexpr bool kBifurxTuneSvfOnly = false;
 const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "DFM", "MS2", "PRD"};
 constexpr int kBifurxModeParamIndex = 0;
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
@@ -170,6 +170,47 @@ float cascadeWideMorph(float spanNorm) {
 float highHighSpanCompGain(float wideMorph) {
 	const float x = clamp01((wideMorph - 0.75f) / 0.25f);
 	return 1.f + 0.685f * std::pow(x, 1.1f);
+}
+
+float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
+	const int clampedCircuitMode = clampCircuitMode(circuitMode);
+	if (clampedCircuitMode == 0) {
+		return 1.f;
+	}
+	switch (mode) {
+		case 0: {
+			// Low+Low: keep low shelf/body aligned across alternate circuit models.
+			static const float kGainByCircuit[kBifurxCircuitModeCount] = {1.f, 0.97f, 1.04f, 0.95f};
+			return kGainByCircuit[clampedCircuitMode];
+		}
+		case 1:
+		case 8: {
+			// Keep LB/BH mirrored while matching perceived level/slope across models.
+			static const float kGainByCircuit[kBifurxCircuitModeCount] = {1.f, 0.94f, 1.07f, 0.91f};
+			return kGainByCircuit[clampedCircuitMode];
+		}
+		case 2:
+		case 7: {
+			// Keep NL/HN mirrored while matching notch-depth energy across models.
+			static const float kGainByCircuit[kBifurxCircuitModeCount] = {1.f, 0.95f, 1.06f, 0.92f};
+			return kGainByCircuit[clampedCircuitMode];
+		}
+		case 9: {
+			// High+High: compensate stronger model divergence at wide span settings.
+			static const float kBaseByCircuit[kBifurxCircuitModeCount] = {1.f, 0.93f, 1.08f, 0.89f};
+			float gain = kBaseByCircuit[clampedCircuitMode];
+			const float hiSpan = clamp01((wideMorph - 0.72f) / 0.28f);
+			if (clampedCircuitMode == 1 || clampedCircuitMode == 3) {
+				gain -= 0.04f * hiSpan;
+			}
+			else if (clampedCircuitMode == 2) {
+				gain += 0.03f * hiSpan;
+			}
+			return gain;
+		}
+		default:
+			return 1.f;
+	}
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
@@ -445,22 +486,24 @@ T combineModeResponse(
 	const T& cascadeHpToHp,
 	float wA,
 	float wB,
-	float wideMorph
+	float wideMorph,
+	int circuitMode
 ) {
+	const T circuitComp = T(modeCircuitSyncCompGain(mode, circuitMode, wideMorph));
 	switch (mode) {
 		case 0:
 			// Preserve the canonical LL cascade, but add a small stage-A support
 			// term so sub/low passband energy does not collapse before the first peak.
-			return T(1.02f) * cascadeLp + T(0.045f) * lpA;
-		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
-		case 2: return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
+			return circuitComp * (T(1.02f) * cascadeLp + T(0.045f) * lpA);
+		case 1: return circuitComp * (T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB));
+		case 2: return circuitComp * (T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA);
 		case 3: return T(1.03f) * cascadeNotch;
 		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
 		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
 		case 6: return T(1.04f) * cascadeHpToLp;
-		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
-		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
-		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
+		case 7: return circuitComp * (T(1.08f) * T(wA) * hpA - T(0.61f) * T(wB) * bpB);
+		case 8: return circuitComp * (T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB));
+		case 9: return circuitComp * (T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp);
 		default: return T(1.f);
 	}
 }
@@ -605,7 +648,7 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 		lpA, bpA, hpA, ntA,
 		lpB, bpB, hpB, ntB,
 		cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
-		model.wA, model.wB, model.wideMorph
+		model.wA, model.wB, model.wideMorph, model.circuitMode
 	);
 }
 
@@ -1295,8 +1338,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					b.lp, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 1: {
 				const SvfOutputs a = processA(excitation);
@@ -1306,8 +1349,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 2: {
 				const SvfOutputs a = processA(excitation);
@@ -1317,8 +1360,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 3: {
 				const SvfOutputs a = processA(excitation);
@@ -1328,8 +1371,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, b.notch, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 4: {
 				const SvfOutputs a = processA(excitation);
@@ -1339,8 +1382,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 5: {
 				const SvfOutputs a = processA(excitation);
@@ -1350,8 +1393,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 6: {
 				const SvfOutputs a = processA(excitation);
@@ -1361,8 +1404,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, b.lp, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 7: {
 				const SvfOutputs a = processA(excitation);
@@ -1372,8 +1415,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 8: {
 				const SvfOutputs a = processA(excitation);
@@ -1383,8 +1426,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 			case 9:
 			default: {
@@ -1395,8 +1438,8 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, b.hp,
-					wA, wB, spanWideMorph
-				);
+						wA, wB, spanWideMorph, effectiveCircuitMode
+					);
 			} break;
 		}
 
