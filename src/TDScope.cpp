@@ -1159,15 +1159,6 @@ struct TDScopeDisplayWidget final : Widget {
     }
     nvgResetScissor(args.vg);
 
-    if (renderStereo && APP && APP->window && APP->window->uiFont) {
-      const float labelY = drawTop + 6.f;
-      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-      nvgFontSize(args.vg, 8.2f);
-      nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-      nvgFillColor(args.vg, nvgRGBA(235, 243, 248, 168));
-      nvgText(args.vg, lane0CenterX, labelY, "L", nullptr);
-      nvgText(args.vg, lane1CenterX, labelY, "R", nullptr);
-    }
     nvgRestore(args.vg);
   }
 };
