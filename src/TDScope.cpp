@@ -60,6 +60,8 @@ struct TDScope final : Module {
   std::atomic<bool> uiPreviewValid {false};
   std::atomic<uint64_t> uiLastPublishSeq {0};
   std::atomic<uint64_t> uiSnapshotReadMissCount {0};
+  std::atomic<float> uiDebugScopeRackZoom {1.f};
+  std::atomic<float> uiDebugScopeZoomThicknessMul {1.f};
   float uiPublishTimerSec = 0.f;
   float invalidMessageTimerSec = 1e9f;
   float invalidPreviewTimerSec = 1e9f;
@@ -488,6 +490,15 @@ struct TDScopeDisplayWidget final : Widget {
       autoLivePeakHoldFrames = 0;
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
+    float rackZoom = 1.f;
+    if (APP && APP->scene && APP->scene->rackScroll) {
+      rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
+    }
+    // Compensate stroke thickness by rack zoom so scope readability remains
+    // steadier when modules are zoomed in/out.
+    float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.52f, 1.42f);
+    module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
+    module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
     float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
     float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
     bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
@@ -1074,7 +1085,7 @@ struct TDScopeDisplayWidget final : Widget {
         }
 
         float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-        float mainW = 0.78f + 0.62f * visual;
+        float mainW = (0.78f + 0.62f * visual) * zoomThicknessMul;
         NVGcolor mainC = gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
 
         nvgBeginPath(args.vg);
@@ -1091,7 +1102,7 @@ struct TDScopeDisplayWidget final : Widget {
           nvgMoveTo(args.vg, x0[idx], rowY[idx]);
           nvgLineTo(args.vg, x1[idx], rowY[idx]);
           nvgStrokeColor(args.vg, boostC);
-          nvgStrokeWidth(args.vg, mainW + 0.34f);
+          nvgStrokeWidth(args.vg, mainW + 0.34f * zoomThicknessMul);
           nvgStroke(args.vg);
         }
 
@@ -1099,7 +1110,7 @@ struct TDScopeDisplayWidget final : Widget {
           float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
           NVGcolor connectC =
             gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual)));
-          float connectW = 0.58f + 0.40f * connectVisual;
+          float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, prevX0, prevY);
           nvgLineTo(args.vg, x0[idx], rowY[idx]);
@@ -1131,7 +1142,6 @@ struct TDScopeDisplayWidget final : Widget {
       nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
     }
-
     float lineX0 = 2.f;
     float lineX1 = box.size.x - 2.f;
     if (lineX1 > lineX0) {
@@ -1234,20 +1244,27 @@ struct TDScopeWidget : ModuleWidget {
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-      char label[40];
+      char missLabel[40];
+      char widthLabel[40];
       uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
-      std::snprintf(label, sizeof(label), "MISS %llu", (unsigned long long) missCount);
+      float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
+      float zoomThicknessMul = scopeModule->uiDebugScopeZoomThicknessMul.load(std::memory_order_relaxed);
+      std::snprintf(missLabel, sizeof(missLabel), "MISS %llu", (unsigned long long) missCount);
+      std::snprintf(widthLabel, sizeof(widthLabel), "THKz %.2fx z%.2f", zoomThicknessMul, rackZoom);
 
       const float x = box.size.x - mm2px(0.7f);
-      const float y = mm2px(5.9f);
+      const float missY = mm2px(5.9f);
+      const float widthY = missY + 6.2f;
       nvgSave(args.vg);
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
       nvgFontSize(args.vg, 6.4f);
       nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
       nvgFillColor(args.vg, nvgRGBA(6, 9, 13, 210));
-      nvgText(args.vg, x, y + 0.45f, label, nullptr);
+      nvgText(args.vg, x, missY + 0.45f, missLabel, nullptr);
+      nvgText(args.vg, x, widthY + 0.45f, widthLabel, nullptr);
       nvgFillColor(args.vg, nvgRGBA(221, 233, 241, 230));
-      nvgText(args.vg, x, y, label, nullptr);
+      nvgText(args.vg, x, missY, missLabel, nullptr);
+      nvgText(args.vg, x, widthY, widthLabel, nullptr);
       nvgRestore(args.vg);
     }
   }
