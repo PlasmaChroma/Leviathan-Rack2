@@ -604,7 +604,7 @@
    aria-label="Out" />
       </g><g
    id="components"
-   style="display:inline"><ellipse
+   style="display:none"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_PARAM"
      cx="1340"

@@ -40,6 +40,10 @@ constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxCircuitModeCount = 4;
+// During filter tuning we intentionally collapse all circuit processing and
+// preview voicing to the SVF baseline. The selector UI/state stays visible so
+// we can preserve patch/UI flow while tuning the base topology.
+constexpr bool kBifurxTuneSvfOnly = true;
 const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "DFM", "MS2", "PRD"};
 constexpr int kBifurxModeParamIndex = 0;
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
@@ -530,21 +534,23 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	BifurxPreviewModel model;
 	float qScale = 1.f;
 	float cutoffScale = 1.f;
-	switch (clampCircuitMode(state.circuitMode)) {
-		case 1: // DFM
-			qScale = 1.28f + 0.95f * state.resoNorm;
-			cutoffScale = 0.95f;
-			break;
-		case 2: // MS2
-			qScale = 0.74f + 0.36f * state.resoNorm;
-			cutoffScale = 0.88f;
-			break;
-		case 3: // PRD
-			qScale = 1.42f + 1.15f * state.resoNorm;
-			cutoffScale = 1.02f;
-			break;
-		default:
-			break;
+	if (!kBifurxTuneSvfOnly) {
+		switch (clampCircuitMode(state.circuitMode)) {
+			case 1: // DFM
+				qScale = 1.28f + 0.95f * state.resoNorm;
+				cutoffScale = 0.95f;
+				break;
+			case 2: // MS2
+				qScale = 0.74f + 0.36f * state.resoNorm;
+				cutoffScale = 0.88f;
+				break;
+			case 3: // PRD
+				qScale = 1.42f + 1.15f * state.resoNorm;
+				cutoffScale = 1.02f;
+				break;
+			default:
+				break;
+		}
 	}
 	const float freqA = clamp(state.freqA * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
 	const float freqB = clamp(state.freqB * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
@@ -562,7 +568,7 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
-	model.circuitMode = clampCircuitMode(state.circuitMode);
+	model.circuitMode = kBifurxTuneSvfOnly ? 0 : clampCircuitMode(state.circuitMode);
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -1058,10 +1064,11 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfPreviewStart;
 			PerfClock::time_point perfAnalysisStart;
 
-			const int circuitMode = clampCircuitMode(filterCircuitMode);
-			if (circuitMode != activeCircuitMode) {
+			const int selectedCircuitMode = clampCircuitMode(filterCircuitMode);
+			const int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : selectedCircuitMode;
+			if (effectiveCircuitMode != activeCircuitMode) {
 				resetCircuitStates();
-				activeCircuitMode = circuitMode;
+				activeCircuitMode = effectiveCircuitMode;
 				controlFastCacheValid = false;
 			}
 			sanitizeCoreState(coreA);
@@ -1105,7 +1112,7 @@ struct Bifurx final : Module {
 		const float spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		const float spanOct = 8.f * shapedSpan(spanNorm);
 		const float spanWideMorph = cascadeWideMorph(spanNorm);
-		const bool fastPathEligible = (circuitMode == 0)
+		const bool fastPathEligible = (effectiveCircuitMode == 0)
 			&& (tito == 1)
 			&& !inputs[VOCT_INPUT].isConnected()
 			&& !inputs[FM_INPUT].isConnected()
@@ -1168,7 +1175,7 @@ struct Bifurx final : Module {
 			float modA = 0.f;
 			float modB = 0.f;
 			auto circuitModStateA = [&]() {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1: return dfmA.s1;
 					case 2: return ms2A.z2;
 					case 3: return prdA.z2;
@@ -1176,7 +1183,7 @@ struct Bifurx final : Module {
 				}
 			};
 			auto circuitModStateB = [&]() {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1: return dfmB.s1;
 					case 2: return ms2B.z2;
 					case 3: return prdB.z2;
@@ -1203,7 +1210,7 @@ struct Bifurx final : Module {
 			float modeOut = 0.f;
 
 			auto processA = [&](float sample) -> SvfOutputs {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1:
 						return dfmA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
 					case 2:
@@ -1219,7 +1226,7 @@ struct Bifurx final : Module {
 				return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
 			};
 			auto processB = [&](float sample) -> SvfOutputs {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1:
 						return dfmB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
 					case 2:
@@ -1420,7 +1427,7 @@ struct Bifurx final : Module {
 		previewState.qA = previewQAFiltered;
 		previewState.qB = previewQBFiltered;
 			previewState.mode = mode;
-			previewState.circuitMode = circuitMode;
+			previewState.circuitMode = effectiveCircuitMode;
 			previewState.balance = previewBalanceFiltered;
 		previewState.balanceTarget = balanceNorm;
 		previewState.resoNorm = resoNorm;
@@ -2700,7 +2707,6 @@ struct BifurxWidget final : ModuleWidget {
 
 		Vec inPosMm(7.6f, 112.2f);
 		Vec filterCircuitPosMm(7.6f, 102.3f);
-		math::Rect circuitReadoutRectMm(Vec(2.8f, 105.9f), Vec(9.6f, 3.2f));
 		Vec voctPosMm(17.15f, 112.2f);
 		Vec fmPosMm(26.7f, 112.2f);
 		Vec resoCvPosMm(36.25f, 112.2f);
@@ -2733,10 +2739,14 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
 		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
 
+		const Vec circuitReadoutSizeMm(9.6f, 3.2f);
+		const Vec circuitReadoutPosMm =
+			filterCircuitPosMm.plus(Vec(-0.5f * circuitReadoutSizeMm.x, 3.6f));
+
 		BifurxCircuitReadoutWidget* circuitReadout = new BifurxCircuitReadoutWidget();
 		circuitReadout->module = module;
-		circuitReadout->box.pos = mm2px(circuitReadoutRectMm.pos);
-		circuitReadout->box.size = mm2px(circuitReadoutRectMm.size);
+		circuitReadout->box.pos = mm2px(circuitReadoutPosMm);
+		circuitReadout->box.size = mm2px(circuitReadoutSizeMm);
 		addChild(circuitReadout);
 
 			Vec modeLeftPosMm = modePosMm.plus(Vec(-2.5f, 0.f));
