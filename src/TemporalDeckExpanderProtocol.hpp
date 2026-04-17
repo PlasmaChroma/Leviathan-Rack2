@@ -100,6 +100,33 @@ inline bool isDisplayRequestValid(const DisplayToHost &msg) {
   return msg.magic == DISPLAY_MAGIC && msg.version == DISPLAY_VERSION && msg.size == sizeof(DisplayToHost);
 }
 
+inline uint32_t encodeLagDragRequest(bool active, float lagSamples) {
+  constexpr uint32_t kActiveBit = 0x80000000u;
+  constexpr float kLagQuantize = 16.f;
+  int32_t lagQ = int32_t(std::lrint(std::max(0.f, lagSamples) * kLagQuantize));
+  if (lagQ < 0) {
+    lagQ = 0;
+  }
+  if (lagQ > 0x7fffffff) {
+    lagQ = 0x7fffffff;
+  }
+  uint32_t packed = uint32_t(lagQ) & 0x7fffffffu;
+  if (active) {
+    packed |= kActiveBit;
+  }
+  return packed;
+}
+
+inline bool decodeLagDragRequest(uint32_t reserved, float *lagSamplesOut) {
+  constexpr uint32_t kActiveBit = 0x80000000u;
+  constexpr float kLagQuantize = 16.f;
+  if (lagSamplesOut) {
+    uint32_t lagQ = reserved & 0x7fffffffu;
+    *lagSamplesOut = float(lagQ) / kLagQuantize;
+  }
+  return (reserved & kActiveBit) != 0u;
+}
+
 inline int16_t quantizePreviewSample(float monoVolts) {
   float clamped = std::max(-kPreviewQuantizeVolts, std::min(monoVolts, kPreviewQuantizeVolts));
   float scaled = (clamped / kPreviewQuantizeVolts) * 32767.f;
@@ -255,7 +282,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   }
 }
 
-inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat) {
+inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat,
+                                   bool lagDragActive = false, float lagDragSamples = 0.f) {
   if (!out) {
     return;
   }
@@ -264,7 +292,7 @@ inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint
   out->size = uint16_t(sizeof(DisplayToHost));
   out->requestSeq = requestSeq;
   out->requestedScopeFormat = (requestedScopeFormat == SCOPE_FORMAT_STEREO) ? SCOPE_FORMAT_STEREO : SCOPE_FORMAT_MONO;
-  out->reserved = 0u;
+  out->reserved = encodeLagDragRequest(lagDragActive, lagDragSamples);
 }
 
 } // namespace temporaldeck_expander

@@ -669,6 +669,7 @@ struct TemporalDeck::Impl {
   double expanderScopeNewestAbsolutePosHold = 0.0;
   std::array<temporaldeck_expander::DisplayToHost, 2> expanderRequestMessages;
   uint32_t expanderRequestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
+  bool expanderLagDragWasActive = false;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -1077,6 +1078,35 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
     impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
+  bool expanderConnected =
+    isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
+  uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
+  bool lagDragRequestActive = false;
+  float lagDragRequestSamples = 0.f;
+  if (isTDScopeModule(rightExpander.module) && rightExpander.consumerMessage) {
+    const auto *request =
+      reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
+    if (request && temporaldeck_expander::isDisplayRequestValid(*request)) {
+      requestedScopeFormat = (request->requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO)
+                               ? temporaldeck_expander::SCOPE_FORMAT_STEREO
+                               : temporaldeck_expander::SCOPE_FORMAT_MONO;
+      lagDragRequestActive = temporaldeck_expander::decodeLagDragRequest(request->reserved, &lagDragRequestSamples);
+      if (!std::isfinite(lagDragRequestSamples) || lagDragRequestSamples < 0.f) {
+        lagDragRequestSamples = 0.f;
+      }
+    }
+  }
+  if (lagDragRequestActive) {
+    float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
+    float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
+    impl->platterInput.setScratch(true, lagTarget, 0.f);
+    impl->platterInput.setMotionFreshSamples(0);
+    impl->expanderLagDragWasActive = true;
+  } else if (impl->expanderLagDragWasActive) {
+    impl->platterInput.setScratch(false, 0.f, 0.f);
+    impl->platterInput.setMotionFreshSamples(0);
+    impl->expanderLagDragWasActive = false;
+  }
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
   temporaldeck_frameinput::FrameInputControls controls;
@@ -1122,19 +1152,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->uiSamplePlayheadSeconds.store(frame.samplePlayhead, std::memory_order_relaxed);
   impl->uiSampleDurationSeconds.store(frame.sampleDuration, std::memory_order_relaxed);
   impl->uiSampleProgress.store(frame.sampleProgress, std::memory_order_relaxed);
-  bool expanderConnected =
-    isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
   if (expanderConnected) {
-    uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
-    if (rightExpander.consumerMessage) {
-      const auto *request =
-        reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
-      if (request && temporaldeck_expander::isDisplayRequestValid(*request)) {
-        requestedScopeFormat = (request->requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO)
-                                 ? temporaldeck_expander::SCOPE_FORMAT_STEREO
-                                 : temporaldeck_expander::SCOPE_FORMAT_MONO;
-      }
-    }
     impl->expanderRequestedScopeFormat = requestedScopeFormat;
     bool wantStereoScope = requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO;
 
@@ -1265,6 +1283,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   } else {
     impl->expanderPublishTimerSec = 0.f;
     impl->expanderPreviewValid = false;
+    impl->expanderLagDragWasActive = false;
     impl->expanderScopeCacheMono.valid = false;
     impl->expanderScopeCacheRight.valid = false;
     impl->expanderScopeLagHoldActive = false;

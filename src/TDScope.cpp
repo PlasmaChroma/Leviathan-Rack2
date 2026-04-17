@@ -74,10 +74,15 @@ struct TDScope final : Module {
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
+  bool lastLagDragActive = false;
+  float lastLagDragSamples = 0.f;
+  std::atomic<bool> uiLagDragActive {false};
+  std::atomic<float> uiLagDragSamples {0.f};
 
   // Match faster host updates to improve perceived sync against speakers.
   static constexpr float kUiPublishIntervalSec = 1.f / 120.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
+  static constexpr float kRequestPublishIntervalDragSec = 1.f / 120.f;
   static constexpr float kLinkDropGraceSec = 1.f / 45.f;
   static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
 
@@ -156,6 +161,11 @@ struct TDScope final : Module {
     return false;
   }
 
+  void setLagDragRequest(bool active, float lagSamples) {
+    uiLagDragActive.store(active, std::memory_order_relaxed);
+    uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
+  }
+
   void process(const ProcessArgs &args) override {
     bool validMessage = false;
     bool previewValidNow = false;
@@ -200,12 +210,20 @@ struct TDScope final : Module {
       uint32_t requestedScopeFormat = (scopeChannelMode == SCOPE_CHANNEL_STEREO)
                                         ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
+      bool lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
+      float lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
+      if (!std::isfinite(lagDragSamples) || lagDragSamples < 0.f) {
+        lagDragSamples = 0.f;
+      }
+      float requestIntervalSec = lagDragActive ? kRequestPublishIntervalDragSec : kRequestPublishIntervalSec;
       requestPublishTimerSec += args.sampleTime;
       bool formatChanged = requestedScopeFormat != lastRequestedScopeFormat;
-      bool timerElapsed = requestPublishTimerSec >= kRequestPublishIntervalSec;
-      if (formatChanged || timerElapsed) {
+      bool lagStateChanged = lagDragActive != lastLagDragActive;
+      bool lagValueChanged = lagDragActive && std::fabs(lagDragSamples - lastLagDragSamples) >= (1.f / 16.f);
+      bool timerElapsed = requestPublishTimerSec >= requestIntervalSec;
+      if (formatChanged || lagStateChanged || lagValueChanged || timerElapsed) {
         if (timerElapsed) {
-          requestPublishTimerSec = std::fmod(requestPublishTimerSec, kRequestPublishIntervalSec);
+          requestPublishTimerSec = std::fmod(requestPublishTimerSec, requestIntervalSec);
         } else {
           requestPublishTimerSec = 0.f;
         }
@@ -213,14 +231,20 @@ struct TDScope final : Module {
           reinterpret_cast<temporaldeck_expander::DisplayToHost *>(leftExpander.module->rightExpander.producerMessage);
         if (request) {
           requestSeq++;
-          temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat);
+          temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
+                                                        lagDragSamples);
           leftExpander.module->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
+          lastLagDragActive = lagDragActive;
+          lastLagDragSamples = lagDragSamples;
         }
       }
     } else {
       requestPublishTimerSec = 0.f;
       lastRequestedScopeFormat = uint32_t(-1);
+      lastLagDragActive = false;
+      lastLagDragSamples = 0.f;
+      uiLagDragActive.store(false, std::memory_order_relaxed);
     }
 
     uiPublishTimerSec += args.sampleTime;
@@ -278,6 +302,157 @@ struct TDScopeDisplayWidget final : Widget {
   int liveBucketCount = 0;
   float liveBucketSpanSamples = 0.f;
   uint64_t liveBucketLastPublishSeq = 0;
+  bool lagDragArmed = false;
+  bool lagDragging = false;
+  Vec lagDragButtonPos;
+  Vec lagDragCursorPos;
+  float lagDragLocalLagSamples = 0.f;
+  double lagDragLastMoveSec = 0.0;
+
+  bool isWithinDisplay(Vec pos) const {
+    return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
+  }
+
+  struct ScopeWindowMap {
+    float drawTop = 0.f;
+    float drawBottom = 1.f;
+    float windowTopLag = 0.f;
+    float windowBottomLag = 0.f;
+    float accessibleLag = 0.f;
+    bool valid = false;
+  };
+
+  ScopeWindowMap buildScopeWindowMap(const temporaldeck_expander::HostToDisplay &msg) const {
+    ScopeWindowMap map;
+    float sampleRate = std::max(msg.sampleRate, 1.f);
+    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * sampleRate);
+    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    float forwardWindowSamples = halfWindowSamples;
+    float backwardWindowSamples = halfWindowSamples;
+    if (!sampleMode) {
+      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
+      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
+    }
+    map.windowTopLag = msg.lagSamples + backwardWindowSamples;
+    map.windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    map.accessibleLag = std::max(0.f, msg.accessibleLagSamples);
+    float yInset = 0.75f;
+    map.drawTop = yInset;
+    map.drawBottom = std::max(map.drawTop + 1.f, box.size.y - yInset);
+    map.valid = map.drawBottom > map.drawTop;
+    return map;
+  }
+
+  float lagSamplesPerPixel(const ScopeWindowMap &map) const {
+    if (!map.valid) {
+      return 0.f;
+    }
+    return std::fabs(map.windowTopLag - map.windowBottomLag) / std::max(map.drawBottom - map.drawTop, 1.f);
+  }
+
+  float lagForCursorY(const ScopeWindowMap &map, float y) const {
+    if (!map.valid) {
+      return 0.f;
+    }
+    float t = clamp((y - map.drawTop) / std::max(map.drawBottom - map.drawTop, 1.f), 0.f, 1.f);
+    float lag = map.windowBottomLag + t * (map.windowTopLag - map.windowBottomLag);
+    return clamp(lag, 0.f, map.accessibleLag);
+  }
+
+  float adaptiveLagTarget(const ScopeWindowMap &map, float absoluteLag, float deltaY, double dtSec) const {
+    float samplesPerPx = lagSamplesPerPixel(map);
+    float deltaLag = deltaY * samplesPerPx;
+    float lagFromDelta = clamp(lagDragLocalLagSamples + deltaLag, 0.f, map.accessibleLag);
+    float speedPxPerSec = float(std::fabs(deltaY) / std::max(dtSec, 1e-4));
+    float speedNorm = clamp(speedPxPerSec / 850.f, 0.f, 1.f);
+    float blendToAbsolute = crossfade(0.30f, 0.92f, speedNorm);
+    if (dtSec > 0.022) {
+      blendToAbsolute = std::max(blendToAbsolute, 0.72f);
+    }
+    return clamp(lagFromDelta + (absoluteLag - lagFromDelta) * blendToAbsolute, 0.f, map.accessibleLag);
+  }
+
+  void endLagDrag() {
+    lagDragging = false;
+    lagDragArmed = false;
+    if (module) {
+      module->setLagDragRequest(false, 0.f);
+    }
+  }
+
+  void onButton(const event::Button &e) override {
+    if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
+      if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
+        lagDragButtonPos = e.pos;
+        lagDragArmed = true;
+        e.consume(this);
+        return;
+      }
+      if (e.action == GLFW_RELEASE && (lagDragging || lagDragArmed)) {
+        endLagDrag();
+        e.consume(this);
+        return;
+      }
+    }
+    Widget::onButton(e);
+  }
+
+  void onDragStart(const event::DragStart &e) override {
+    if (e.button != GLFW_MOUSE_BUTTON_LEFT || !lagDragArmed || !module) {
+      Widget::onDragStart(e);
+      return;
+    }
+    if (!isWithinDisplay(lagDragButtonPos)) {
+      lagDragArmed = false;
+      Widget::onDragStart(e);
+      return;
+    }
+    if (!hasLastGoodMsg) {
+      lagDragArmed = false;
+      Widget::onDragStart(e);
+      return;
+    }
+    lagDragging = true;
+    lagDragArmed = false;
+    lagDragCursorPos = lagDragButtonPos;
+    lagDragLastMoveSec = system::getTime();
+    lagDragLocalLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, std::max(lastGoodMsg.accessibleLagSamples, 0.f));
+    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
+    if (map.valid) {
+      lagDragLocalLagSamples = lagForCursorY(map, lagDragCursorPos.y);
+    }
+    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    e.consume(this);
+  }
+
+  void onDragMove(const event::DragMove &e) override {
+    if (!lagDragging || e.button != GLFW_MOUSE_BUTTON_LEFT || !module || !hasLastGoodMsg) {
+      Widget::onDragMove(e);
+      return;
+    }
+    lagDragCursorPos = lagDragCursorPos.plus(e.mouseDelta);
+    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
+    if (!map.valid) {
+      return;
+    }
+    double nowSec = system::getTime();
+    double dtSec = std::max(1e-4, std::min(0.08, nowSec - lagDragLastMoveSec));
+    lagDragLastMoveSec = nowSec;
+    float absoluteLag = lagForCursorY(map, lagDragCursorPos.y);
+    lagDragLocalLagSamples = adaptiveLagTarget(map, absoluteLag, e.mouseDelta.y, dtSec);
+    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    e.consume(this);
+  }
+
+  void onDragEnd(const event::DragEnd &e) override {
+    if (lagDragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+      endLagDrag();
+      e.consume(this);
+      return;
+    }
+    Widget::onDragEnd(e);
+  }
 
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
