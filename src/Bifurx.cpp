@@ -2703,25 +2703,27 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 	auto buildMarkerAtFrequency = [&](float targetHz) {
 		PeakMarker marker;
-		const float clampedHz = clamp(targetHz, minHz, maxHz);
-		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
+		const float safeHz = std::max(targetHz, 1e-6f);
+		const float targetX01 = std::log(safeHz / minHz) / std::log(maxHz / minHz);
 		const float markerRadius = markerOuterRadius;
+		const float markerX = plotX + usableW * targetX01;
+		const float markerXMin = plotX + markerRadius + kPeakMarkerEdgePadding;
+		const float markerXMax = plotX + usableW - markerRadius - kPeakMarkerEdgePadding;
+		if (markerX < markerXMin || markerX > markerXMax) {
+			marker.visible = false;
+			return marker;
+		}
+		marker.x = markerX;
 		const float curveIndex = targetX01 * float(kCurvePointCount - 1);
 		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
 		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
 		const float t = curveIndex - float(i0);
-		const float markerX = plotX + usableW * targetX01;
-		marker.x = clamp(
-			markerX,
-			plotX + markerRadius + kPeakMarkerEdgePadding,
-			plotX + usableW - markerRadius - kPeakMarkerEdgePadding
-		);
 		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
 		const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
 		const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
 		const float bottomLaneY = markerBottomLaneY;
 		marker.yMarker = anchorMarkerToBottomLane ? bottomLaneY : clamp(marker.yCurve, markerMinY, markerMaxY);
-		marker.hz = clampedHz;
+		marker.hz = safeHz;
 		marker.visible = true;
 		formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label));
 		return marker;
@@ -2732,39 +2734,48 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	peaks[1] = buildMarkerAtFrequency(model.markerFreqB);
 
 	float labelX[2] = {peaks[0].x, peaks[1].x};
-	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
-	const int rightIndex = 1 - leftIndex;
 	const float labelMargin = std::max(18.f, w * 0.08f);
 	const float minLabelSeparation = std::max(30.f, w * 0.18f);
 	const float minX = plotX + labelMargin;
 	const float maxX = plotX + usableW - labelMargin;
-	float leftX = clamp(labelX[leftIndex], minX, maxX);
-	float rightX = clamp(labelX[rightIndex], minX, maxX);
+	if (peaks[0].visible && peaks[1].visible) {
+		const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
+		const int rightIndex = 1 - leftIndex;
+		float leftX = clamp(labelX[leftIndex], minX, maxX);
+		float rightX = clamp(labelX[rightIndex], minX, maxX);
 
-	const float availableSpan = std::max(0.f, maxX - minX);
-	const float targetSeparation = std::min(minLabelSeparation, availableSpan);
-	float needed = targetSeparation - (rightX - leftX);
-	if (needed > 0.f) {
-		float moveLeft = std::min(0.5f * needed, leftX - minX);
-		float moveRight = std::min(0.5f * needed, maxX - rightX);
-		leftX -= moveLeft;
-		rightX += moveRight;
-		needed -= (moveLeft + moveRight);
-
+		const float availableSpan = std::max(0.f, maxX - minX);
+		const float targetSeparation = std::min(minLabelSeparation, availableSpan);
+		float needed = targetSeparation - (rightX - leftX);
 		if (needed > 0.f) {
-			float extraLeft = std::min(needed, leftX - minX);
-			leftX -= extraLeft;
-			needed -= extraLeft;
+			float moveLeft = std::min(0.5f * needed, leftX - minX);
+			float moveRight = std::min(0.5f * needed, maxX - rightX);
+			leftX -= moveLeft;
+			rightX += moveRight;
+			needed -= (moveLeft + moveRight);
+
+			if (needed > 0.f) {
+				float extraLeft = std::min(needed, leftX - minX);
+				leftX -= extraLeft;
+				needed -= extraLeft;
+			}
+			if (needed > 0.f) {
+				float extraRight = std::min(needed, maxX - rightX);
+				rightX += extraRight;
+				needed -= extraRight;
+			}
 		}
-		if (needed > 0.f) {
-			float extraRight = std::min(needed, maxX - rightX);
-			rightX += extraRight;
-			needed -= extraRight;
+
+		labelX[leftIndex] = leftX;
+		labelX[rightIndex] = rightX;
+	}
+	else {
+		for (int i = 0; i < 2; ++i) {
+			if (peaks[i].visible) {
+				labelX[i] = clamp(labelX[i], minX, maxX);
+			}
 		}
 	}
-
-	labelX[leftIndex] = leftX;
-	labelX[rightIndex] = rightX;
 
 	const float freqLabelFontSize = std::max(7.f, h * 0.055f);
 	const float labelTextY = labelBandTop + 0.5f * labelBandHeight;
@@ -2798,6 +2809,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 	for (int i = 0; i < 2; ++i) {
+		if (!peaks[i].visible) {
+			continue;
+		}
 		nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
 		nvgText(args.vg, labelX[i], labelTextY + 0.75f, peaks[i].label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
