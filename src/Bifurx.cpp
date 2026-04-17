@@ -53,15 +53,17 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Notch + Notch",
 	"Low + High",
 	"Band + Band",
-	"High + High",
+	"High + Low",
 	"High + Notch",
 	"Band + High",
-	"High + Low"
+	"High + High"
 };
 constexpr float kResponseMinDb = -48.f;
 constexpr float kResponseMaxDb = 48.f;
 constexpr float kOverlayDbfsFloor = -96.f;
 constexpr float kOverlayDbfsCeiling = 6.f;
+constexpr float kOverlaySubsonicCutHz = 10.f;
+constexpr float kOverlaySubsonicFadeHz = 30.f;
 constexpr float kDisplayDbfsSpan = 30.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
@@ -439,7 +441,10 @@ T combineModeResponse(
 	float wideMorph
 ) {
 	switch (mode) {
-		case 0: return T(0.98f) * cascadeLp;
+		case 0:
+			// Preserve the canonical LL cascade, but add a small stage-A support
+			// term so sub/low passband energy does not collapse before the first peak.
+			return T(1.02f) * cascadeLp + T(0.045f) * lpA;
 		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
 		case 2: return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
 		case 3: return T(1.03f) * cascadeNotch;
@@ -448,12 +453,9 @@ T combineModeResponse(
 		case 6: return T(1.04f) * cascadeHpToLp;
 		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
-		case 9: {
-			const T fourPole = T(0.98f) * cascadeHpToHp;
-			// Mirror of mode 0: hpB here is also cascaded in the audio path.
-			const T twoPole = T(1.04f) * hpA;
-			return fourPole + (twoPole - fourPole) * T(clamp01(wideMorph));
-		}
+		case 9:
+			// Symmetric counterpart to mode 0 in the highpass domain.
+			return T(1.02f) * cascadeHpToHp + T(0.045f) * hpA;
 		default: return T(1.f);
 	}
 }
@@ -2137,8 +2139,12 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	float binDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
-		const float inputAmp = amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
-		const float outputAmp = amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
+		const float binHz = (float(bin) * previewState.sampleRate) / float(kFftSize);
+		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
+		const float weightedInputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
+		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
+		const float inputAmp = weightedInputAmp;
+		const float outputAmp = weightedOutputAmp;
 		binDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (inputAmp + 1e-6f)), -24.f, 24.f);
 		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}

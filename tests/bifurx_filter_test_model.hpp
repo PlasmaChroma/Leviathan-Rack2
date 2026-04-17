@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstddef>
 
 namespace bifurx_test_model {
 
@@ -121,7 +122,7 @@ inline T combineModeResponse(
   (void)wideMorph;
   switch (mode) {
     case 0:
-      return T(0.98f) * cascadeLp;
+      return T(1.02f) * cascadeLp + T(0.045f) * lpA;
     case 1:
       return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
     case 2:
@@ -243,6 +244,104 @@ inline std::complex<float> response(const PreviewModel& model, float hz) {
 inline float responseDb(const PreviewModel& model, float hz) {
   const float mag = std::abs(response(model, hz));
   return 20.f * std::log10(std::max(mag, 1e-5f));
+}
+
+inline float levelDriveGain(float knob) {
+  const float x = clamp01(knob);
+  return 0.06f + 0.95f * x + 3.6f * x * x * x;
+}
+
+inline float softClip(float x) {
+  return std::tanh(x);
+}
+
+struct SvfCoeffs {
+  float g = 0.f;
+  float k = 0.f;
+  float a1 = 1.f;
+};
+
+inline SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
+  const float sr = std::max(sampleRate, 1.f);
+  const float limitedCutoff = clampf(cutoff, kFreqMinHz, 0.46f * sr);
+  const float g = std::tan(kPi * limitedCutoff / sr);
+  const float k = clampf(damping, 0.02f, 2.2f);
+  const float a1 = 1.f / (1.f + g * (g + k));
+  SvfCoeffs c;
+  c.g = g;
+  c.k = k;
+  c.a1 = a1;
+  return c;
+}
+
+struct SvfState {
+  float ic1eq = 0.f;
+  float ic2eq = 0.f;
+};
+
+struct SvfOutputs {
+  float lp = 0.f;
+  float bp = 0.f;
+  float hp = 0.f;
+};
+
+inline SvfOutputs processSvf(SvfState& s, float input, const SvfCoeffs& c) {
+  const float v1 = c.a1 * (s.ic1eq + c.g * (input - s.ic2eq));
+  const float v2 = s.ic2eq + c.g * v1;
+
+  s.ic1eq = 2.f * v1 - s.ic1eq;
+  s.ic2eq = 2.f * v2 - s.ic2eq;
+
+  SvfOutputs out;
+  out.bp = v1;
+  out.lp = v2;
+  out.hp = input - c.k * v1 - v2;
+  return out;
+}
+
+inline float simulateLlRuntimeGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float drive = levelDriveGain(levelKnob);
+  float inSq = 0.f;
+  float outSq = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = 5.f * softClip(0.2f * in * drive);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.lp, cB);
+    const float modeOut = 1.02f * oB.lp + 0.045f * oA.lp;
+    const float out = 5.5f * softClip(modeOut / 5.5f);
+
+    if (n >= settleSamples) {
+      inSq += in * in;
+      outSq += out * out;
+      nAccum++;
+    }
+  }
+
+  const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
+  const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
+  return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
 }
 
 } // namespace bifurx_test_model
