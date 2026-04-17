@@ -837,7 +837,11 @@ struct TDScopeDisplayWidget final : Widget {
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           fillFraction = clamp(fillFraction, 0.f, 1.f);
-          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillFraction, 0.f, 1.f);
+          // At wider/farther views, per-row coverage can drop and make the
+          // scope look artificially dim. Keep some coverage influence for
+          // fidelity, but apply a floor so visibility remains stable.
+          float fillInfluence = 0.55f + 0.45f * fillFraction;
+          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillInfluence, 0.f, 1.f);
           (*visualOut)[idx] = visualIntensity;
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
@@ -1060,6 +1064,13 @@ struct TDScopeDisplayWidget final : Widget {
 
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
+    float rackZoom = 1.f;
+    if (APP && APP->scene && APP->scene->rackScroll) {
+      rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-3f);
+    }
+    // Compensate stroke visibility as the user zooms the rack out.
+    // Use 3.0x Rack zoom as the baseline, and increase thickness below that.
+    float zoomStrokeScale = clamp(std::pow(3.f / rackZoom, 0.52f), 1.f, 2.25f);
 
     auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
                         const std::vector<uint8_t> &valid, float laneCenterXForConnectors) {
@@ -1078,10 +1089,12 @@ struct TDScopeDisplayWidget final : Widget {
         }
 
         float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+        float visualForStroke = std::max(visual, 0.22f);
         // Keep the scope trace crisp and less "chunky" by using a thinner
         // stroke envelope while preserving intensity-based width variation.
-        float mainW = 0.36f + 0.28f * visual;
-        NVGcolor mainC = gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
+        float mainW = (0.30f + 0.22f * visualForStroke) * zoomStrokeScale;
+        NVGcolor mainC =
+          gradientColorForIntensity(visual, uint8_t(std::lround(136.f + 106.f * visualForStroke)));
 
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, x0[idx], rowY[idx]);
@@ -1097,15 +1110,16 @@ struct TDScopeDisplayWidget final : Widget {
           nvgMoveTo(args.vg, x0[idx], rowY[idx]);
           nvgLineTo(args.vg, x1[idx], rowY[idx]);
           nvgStrokeColor(args.vg, boostC);
-          nvgStrokeWidth(args.vg, mainW + 0.13f);
+          nvgStrokeWidth(args.vg, mainW + 0.10f * zoomStrokeScale);
           nvgStroke(args.vg);
         }
 
         if (prevValid) {
           float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+          float connectVisualForStroke = std::max(connectVisual, 0.18f);
           NVGcolor connectC =
-            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual)));
-          float connectW = 0.26f + 0.18f * connectVisual;
+            gradientColorForIntensity(connectVisual, uint8_t(std::lround(104.f + 88.f * connectVisualForStroke)));
+          float connectW = (0.22f + 0.14f * connectVisualForStroke) * zoomStrokeScale;
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, prevX0, prevY);
           nvgLineTo(args.vg, x0[idx], rowY[idx]);
