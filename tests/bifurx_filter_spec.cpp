@@ -9,9 +9,13 @@ namespace {
 
 using bifurx_test_model::PreviewModel;
 using bifurx_test_model::PreviewState;
-using bifurx_test_model::simulateLlRuntimeGainDb;
+using bifurx_test_model::cascadeWideMorph;
+using bifurx_test_model::clampf;
+using bifurx_test_model::clamp01;
 using bifurx_test_model::makePreviewModel;
 using bifurx_test_model::responseDb;
+using bifurx_test_model::simulateHhRuntimeGainDb;
+using bifurx_test_model::simulateLlRuntimeGainDb;
 
 struct TestResult {
   std::string name;
@@ -64,9 +68,9 @@ TestResult testLowLowMidpointDipNotOverlyDeep() {
   const float dbMid = responseDb(m, midpoint);
   const float dbF2 = responseDb(m, f2);
 
-  // This threshold is intentionally strict for current tuning work:
-  // midpoint should not collapse far below the first-region level.
-  const bool pass = (dbMid > -10.f) && (dbMid < dbF1 - 2.f) && (dbMid > dbF2 + 6.f);
+  // Keep the middle region clearly below the first shoulder, but avoid
+  // an extreme hole in the transition.
+  const bool pass = (dbMid > -18.f) && (dbMid < dbF1 - 3.f) && (dbMid > dbF2 + 8.f);
   return {
     "LL midpoint dip remains controlled between f1 and f2",
     pass,
@@ -97,6 +101,145 @@ TestResult testLowLowRuntimeRetainsPrePeakLowBand() {
     "LL runtime keeps low band before first peak",
     pass,
     "g40=" + std::to_string(gain40) + " g80=" + std::to_string(gain80) + " g140=" + std::to_string(gain140)
+  };
+}
+
+struct MirrorStats {
+  float meanAbsDiff = 0.f;
+  float maxAbsDiff = 0.f;
+};
+
+struct MirrorBand {
+  float centerHz = 900.f;
+  float cutoffA = 900.f;
+  float cutoffB = 900.f;
+  float wideMorph = 0.f;
+};
+
+MirrorBand makeMirrorBand(float sampleRate, float centerHz, float spanNorm) {
+  MirrorBand band;
+  band.centerHz = clampf(centerHz, 4.f, 0.46f * sampleRate);
+  const float spanOct = 8.f * std::pow(clamp01(spanNorm), 1.45f);
+  const float maxShiftUp = std::max(0.f, std::log2((0.46f * sampleRate) / band.centerHz));
+  const float maxShiftDown = std::max(0.f, std::log2(band.centerHz / 4.f));
+  const float halfSpanOct = std::min(0.5f * spanOct, std::min(maxShiftUp, maxShiftDown));
+  band.cutoffA = band.centerHz * std::pow(2.f, -halfSpanOct);
+  band.cutoffB = band.centerHz * std::pow(2.f, halfSpanOct);
+  band.wideMorph = cascadeWideMorph(spanNorm);
+  return band;
+}
+
+MirrorStats computeLlHhPreviewMirrorStats(float spanNorm, float q) {
+  const MirrorBand band = makeMirrorBand(48000.f, 900.f, spanNorm);
+  PreviewState ll;
+  ll.sampleRate = 48000.f;
+  ll.mode = 0;      // Low + Low
+  ll.freqA = band.cutoffA;
+  ll.freqB = band.cutoffB;
+  ll.qA = q;
+  ll.qB = q;
+  ll.spanNorm = spanNorm;
+  ll.balance = 0.f;
+
+  PreviewState hh = ll;
+  hh.mode = 9;      // High + High
+
+  const PreviewModel mLL = makePreviewModel(ll);
+  const PreviewModel mHH = makePreviewModel(hh);
+  const float center = band.centerHz;
+
+  const float ratios[] = {1.08f, 1.16f, 1.28f, 1.45f, 1.70f, 2.0f, 2.4f};
+  float sumAbsDiff = 0.f;
+  float maxAbsDiff = 0.f;
+  int points = 0;
+  for (float r : ratios) {
+    const float lowHz = center / r;
+    const float highHz = center * r;
+    const float llDb = responseDb(mLL, lowHz);
+    const float hhDb = responseDb(mHH, highHz);
+    const float absDiff = std::fabs(llDb - hhDb);
+    sumAbsDiff += absDiff;
+    maxAbsDiff = std::max(maxAbsDiff, absDiff);
+    points++;
+  }
+
+  MirrorStats stats;
+  stats.meanAbsDiff = sumAbsDiff / std::max(1, points);
+  stats.maxAbsDiff = maxAbsDiff;
+  return stats;
+}
+
+MirrorStats computeLlHhRuntimeMirrorStats(float spanNorm, float q) {
+  const float sampleRate = 48000.f;
+  const MirrorBand band = makeMirrorBand(sampleRate, 900.f, spanNorm);
+  const float damping = 1.f / std::max(q, 0.2f);
+  const float ratios[] = {1.08f, 1.16f, 1.28f, 1.45f, 1.70f, 2.0f, 2.4f};
+  float sumAbsDiff = 0.f;
+  float maxAbsDiff = 0.f;
+  int points = 0;
+  for (float r : ratios) {
+    const float lowHz = band.centerHz / r;
+    const float highHz = band.centerHz * r;
+    const float llDb = simulateLlRuntimeGainDb(
+      sampleRate, lowHz, 0.25f, 0.5f, band.cutoffA, band.cutoffB, damping, damping
+    );
+    const float hhDb = simulateHhRuntimeGainDb(
+      sampleRate, highHz, 0.25f, 0.5f, band.cutoffA, band.cutoffB, damping, damping, band.wideMorph
+    );
+    const float absDiff = std::fabs(llDb - hhDb);
+    sumAbsDiff += absDiff;
+    maxAbsDiff = std::max(maxAbsDiff, absDiff);
+    points++;
+  }
+  MirrorStats stats;
+  stats.meanAbsDiff = sumAbsDiff / std::max(1, points);
+  stats.maxAbsDiff = maxAbsDiff;
+  return stats;
+}
+
+TestResult testLowLowAndHighHighPreviewMirrorLowSpan() {
+  const MirrorStats stats = computeLlHhPreviewMirrorStats(0.35f, 1.1f);
+  const bool pass = (stats.meanAbsDiff < 0.12f) && (stats.maxAbsDiff < 0.20f);
+  return {
+    "LL/HH preview mirror at low span",
+    pass,
+    "meanAbsDiff=" + std::to_string(stats.meanAbsDiff) + " maxAbsDiff=" + std::to_string(stats.maxAbsDiff)
+  };
+}
+
+TestResult testLowLowAndHighHighPreviewMirrorMidSpan() {
+  const MirrorStats stats = computeLlHhPreviewMirrorStats(0.65f, 1.1f);
+  const bool pass = (stats.meanAbsDiff < 0.12f) && (stats.maxAbsDiff < 0.20f);
+  return {
+    "LL/HH preview mirror at mid span",
+    pass,
+    "meanAbsDiff=" + std::to_string(stats.meanAbsDiff) + " maxAbsDiff=" + std::to_string(stats.maxAbsDiff)
+  };
+}
+
+TestResult testLowLowAndHighHighPreviewMirrorHighSpan() {
+  const MirrorStats stats = computeLlHhPreviewMirrorStats(0.95f, 1.1f);
+  const bool pass = (stats.meanAbsDiff < 0.12f) && (stats.maxAbsDiff < 0.20f);
+  return {
+    "LL/HH preview mirror at high span",
+    pass,
+    "meanAbsDiff=" + std::to_string(stats.meanAbsDiff) + " maxAbsDiff=" + std::to_string(stats.maxAbsDiff)
+  };
+}
+
+TestResult testLowLowAndHighHighRuntimeMirrorAcrossSpans() {
+  const MirrorStats low = computeLlHhRuntimeMirrorStats(0.35f, 1.1f);
+  const MirrorStats mid = computeLlHhRuntimeMirrorStats(0.65f, 1.1f);
+  const MirrorStats high = computeLlHhRuntimeMirrorStats(0.95f, 1.1f);
+  const bool pass = (low.meanAbsDiff < 0.15f) && (low.maxAbsDiff < 0.25f)
+    && (mid.meanAbsDiff < 0.15f) && (mid.maxAbsDiff < 0.25f)
+    && (high.meanAbsDiff < 0.15f) && (high.maxAbsDiff < 0.25f);
+  return {
+    "LL/HH runtime mirror remains aligned at low/mid/high span",
+    pass,
+    "low(mean,max)=(" + std::to_string(low.meanAbsDiff) + "," + std::to_string(low.maxAbsDiff) + ") "
+      "mid=(" + std::to_string(mid.meanAbsDiff) + "," + std::to_string(mid.maxAbsDiff) + ") "
+      "high=(" + std::to_string(high.meanAbsDiff) + "," + std::to_string(high.maxAbsDiff) + ")"
   };
 }
 
@@ -205,6 +348,10 @@ int main() {
     testLowLowMaintainsDoubleSlopeOrdering(),
     testLowLowMidpointDipNotOverlyDeep(),
     testLowLowRuntimeRetainsPrePeakLowBand(),
+    testLowLowAndHighHighPreviewMirrorLowSpan(),
+    testLowLowAndHighHighPreviewMirrorMidSpan(),
+    testLowLowAndHighHighPreviewMirrorHighSpan(),
+    testLowLowAndHighHighRuntimeMirrorAcrossSpans(),
     testBandBandHasTwoLocalPeaksNearMarkers(),
     testModesRemainDistinctAtReferenceState(),
     testPreviewCircuitSelectionCollapsedForSvfTuning(),

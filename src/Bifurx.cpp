@@ -165,6 +165,11 @@ float cascadeWideMorph(float spanNorm) {
 	return std::pow(x, 0.58f);
 }
 
+float highHighSpanCompGain(float wideMorph) {
+	const float x = clamp01((wideMorph - 0.75f) / 0.25f);
+	return 1.f + 0.685f * std::pow(x, 1.1f);
+}
+
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	const float clampedT = clamp01(t);
 	NVGcolor out;
@@ -453,9 +458,7 @@ T combineModeResponse(
 		case 6: return T(1.04f) * cascadeHpToLp;
 		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
-		case 9:
-			// Symmetric counterpart to mode 0 in the highpass domain.
-			return T(1.02f) * cascadeHpToHp + T(0.045f) * hpA;
+		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -1139,8 +1142,17 @@ struct Bifurx final : Module {
 		if (updateFastControls) {
 			balance = balanceNorm;
 			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
-			freqA0 = centerHz * fastExp2(-0.5f * spanOct);
-			freqB0 = centerHz * fastExp2(0.5f * spanOct);
+			// Keep span symmetric around center by limiting octave shift before
+			// cutoff clamping in the core. Without this, one side can slam into
+			// cutoff limits at high span and visually break LL/HH mirroring.
+			const float sr = std::max(args.sampleRate, 1.f);
+			const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr);
+			const float maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz));
+			const float maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz));
+			const float maxSymShift = std::min(maxShiftUp, maxShiftDown);
+			const float halfSpanOct = std::min(0.5f * spanOct, maxSymShift);
+			freqA0 = safeCenterHz * fastExp2(-halfSpanOct);
+			freqB0 = safeCenterHz * fastExp2(halfSpanOct);
 			const float baseDamping = resoToDamping(resoNorm);
 			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
 			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);

@@ -37,6 +37,11 @@ inline float cascadeWideMorph(float spanNorm) {
   return std::pow(x, 0.58f);
 }
 
+inline float highHighSpanCompGain(float wideMorph) {
+  const float x = clamp01((wideMorph - 0.75f) / 0.25f);
+  return 1.f + 0.685f * std::pow(x, 1.1f);
+}
+
 struct DisplayBiquad {
   float b0 = 0.f;
   float b1 = 0.f;
@@ -140,7 +145,7 @@ inline T combineModeResponse(
     case 8:
       return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
     case 9:
-      return T(0.98f) * cascadeHpToHp;
+      return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
     default:
       return T(1.f);
   }
@@ -330,6 +335,53 @@ inline float simulateLlRuntimeGainDb(
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.lp, cB);
     const float modeOut = 1.02f * oB.lp + 0.045f * oA.lp;
+    const float out = 5.5f * softClip(modeOut / 5.5f);
+
+    if (n >= settleSamples) {
+      inSq += in * in;
+      outSq += out * out;
+      nAccum++;
+    }
+  }
+
+  const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
+  const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
+  return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+inline float simulateHhRuntimeGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB,
+  float wideMorph
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float drive = levelDriveGain(levelKnob);
+  const float hhGain = 1.06f * highHighSpanCompGain(wideMorph);
+  float inSq = 0.f;
+  float outSq = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = 5.f * softClip(0.2f * in * drive);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.hp, cB);
+    const float modeOut = hhGain * oB.hp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 
     if (n >= settleSamples) {
