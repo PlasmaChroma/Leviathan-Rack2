@@ -75,7 +75,8 @@ struct TDScope final : Module {
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
 
-  static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
+  // Match faster host updates to improve perceived sync against speakers.
+  static constexpr float kUiPublishIntervalSec = 1.f / 120.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
   static constexpr float kLinkDropGraceSec = 1.f / 45.f;
   static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
@@ -281,7 +282,8 @@ struct TDScopeDisplayWidget final : Widget {
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
-    constexpr double kUiSnapshotGraceSec = 0.05;
+    // Keep stale-frame reuse short so we prefer freshest scope state.
+    constexpr double kUiSnapshotGraceSec = 0.02;
 
     auto drawStatusMessage = [&](const char* line1, const char* line2) {
       if (!APP || !APP->window || !APP->window->uiFont) {
@@ -339,17 +341,19 @@ struct TDScopeDisplayWidget final : Widget {
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
     bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+    const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
+    const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
-      const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+      const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
       if (!temporaldeck_expander::isScopeBinValid(bin)) {
         continue;
       }
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.min))));
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.max))));
       if (renderStereo) {
-        const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+        const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
         if (temporaldeck_expander::isScopeBinValid(binR)) {
           peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.min))));
           peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.max))));
@@ -382,7 +386,7 @@ struct TDScopeDisplayWidget final : Widget {
         std::vector<float> peaks;
         peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
         for (uint32_t i = 0; i < scopeBinCount; ++i) {
-          const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+          const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
           if (!temporaldeck_expander::isScopeBinValid(bin)) {
             // fall through to right channel in stereo mode
           } else {
@@ -391,7 +395,7 @@ struct TDScopeDisplayWidget final : Widget {
             peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
           }
           if (renderStereo) {
-            const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+            const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
             if (temporaldeck_expander::isScopeBinValid(binR)) {
               int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
               float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
@@ -496,7 +500,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     // Compensate stroke thickness by rack zoom so scope readability remains
     // steadier when modules are zoomed in/out.
-    float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.52f, 1.42f);
+    float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.70f, 1.42f);
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
     float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
@@ -673,9 +677,9 @@ struct TDScopeDisplayWidget final : Widget {
     };
 
     if (liveMode && msg.publishSeq != liveBucketLastPublishSeq) {
-      ingestLiveLane(msg.scope, &liveBucketsLeft);
+      ingestLiveLane(leftScopeBins, &liveBucketsLeft);
       if (renderStereo) {
-        ingestLiveLane(msg.scopeRight, &liveBucketsRight);
+        ingestLiveLane(rightScopeBins, &liveBucketsRight);
       }
       liveBucketLastPublishSeq = msg.publishSeq;
     }
@@ -844,7 +848,11 @@ struct TDScopeDisplayWidget final : Widget {
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           fillFraction = clamp(fillFraction, 0.f, 1.f);
-          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillFraction, 0.f, 1.f);
+          // At wider/farther views, per-row coverage can drop and make the
+          // scope look artificially dim. Keep some coverage influence for
+          // fidelity, but apply a floor so visibility remains stable.
+          float fillInfluence = 0.55f + 0.45f * fillFraction;
+          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillInfluence, 0.f, 1.f);
           (*visualOut)[idx] = visualIntensity;
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
@@ -870,10 +878,10 @@ struct TDScopeDisplayWidget final : Widget {
         }
       } else {
         rebuildLaneFromScopeBins(
-          msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
+          leftScopeBins, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
         if (renderStereo) {
           rebuildLaneFromScopeBins(
-            msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
+            rightScopeBins, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
             &rowHoldFramesRight);
         } else {
           std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
@@ -1162,6 +1170,7 @@ struct TDScopeDisplayWidget final : Widget {
       drawReadHeadLine(readHeadDrawY, 255, 1.15f);
     }
     nvgResetScissor(args.vg);
+
     nvgRestore(args.vg);
   }
 };

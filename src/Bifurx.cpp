@@ -40,6 +40,10 @@ constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxCircuitModeCount = 4;
+// During filter tuning we intentionally collapse all circuit processing and
+// preview voicing to the SVF baseline. The selector UI/state stays visible so
+// we can preserve patch/UI flow while tuning the base topology.
+constexpr bool kBifurxTuneSvfOnly = true;
 const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "DFM", "MS2", "PRD"};
 constexpr int kBifurxModeParamIndex = 0;
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
@@ -49,15 +53,19 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Notch + Notch",
 	"Low + High",
 	"Band + Band",
-	"High + High",
+	"High + Low",
 	"High + Notch",
 	"Band + High",
-	"High + Low"
+	"High + High"
 };
 constexpr float kResponseMinDb = -48.f;
 constexpr float kResponseMaxDb = 48.f;
 constexpr float kOverlayDbfsFloor = -96.f;
 constexpr float kOverlayDbfsCeiling = 6.f;
+constexpr float kOverlaySubsonicCutHz = 10.f;
+constexpr float kOverlaySubsonicFadeHz = 30.f;
+constexpr float kVoctSmoothingTauSeconds = 0.0025f;
+constexpr float kVoctDeadbandVolts = 0.001f;
 constexpr float kDisplayDbfsSpan = 30.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
@@ -87,12 +95,12 @@ std::string bifurxUserRootPath() {
 }
 
 float shapedSpan(float value) {
-	return std::pow(clamp01(value), 1.65f);
+	return std::pow(clamp01(value), 1.45f);
 }
 
 float levelDriveGain(float knob) {
 	const float x = clamp01(knob);
-	return 0.05f + 0.9f * x + 5.f * x * x * x;
+	return 0.06f + 0.95f * x + 3.6f * x * x * x;
 }
 
 float softClip(float x) {
@@ -142,7 +150,7 @@ float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, f
 
 float resoToDamping(float resoNorm) {
 	const float r = clamp01(resoNorm);
-	return 2.f - 1.98f * std::pow(r, 1.35f);
+	return 2.f - 1.97f * std::pow(r, 1.18f);
 }
 
 int clampCircuitMode(int mode) {
@@ -151,7 +159,17 @@ int clampCircuitMode(int mode) {
 
 float signedWeight(float balance, bool upperPeak) {
 	const float sign = upperPeak ? 1.f : -1.f;
-	return fastExp(0.7f * sign * clamp(balance, -1.f, 1.f));
+	return fastExp(0.82f * sign * clamp(balance, -1.f, 1.f));
+}
+
+float cascadeWideMorph(float spanNorm) {
+	const float x = clamp01((clamp01(spanNorm) - 0.03f) / 0.97f);
+	return std::pow(x, 0.58f);
+}
+
+float highHighSpanCompGain(float wideMorph) {
+	const float x = clamp01((wideMorph - 0.75f) / 0.25f);
+	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
@@ -252,15 +270,16 @@ struct DfmCore {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float fb = clamp(0.10f + 0.38f * q + 0.18f * resoNorm, 0.f, 1.45f);
-		const float driveScaled = 0.21f * clamp(drive, 0.f, 10.f);
-		const float x = std::tanh(driveScaled * input - fb * s2);
+		const float fb = clamp(0.14f + 0.42f * q + 0.24f * resoNorm, 0.f, 1.60f);
+		const float driveScaled = 0.24f * clamp(drive, 0.f, 10.f);
+		const float u = driveScaled * input - fb * s2;
+		const float x = std::tanh(u) + 0.08f * std::tanh(2.f * (driveScaled * input - 0.6f * fb * s2));
 		s1 += g * (x - s1);
 		s2 += g * (s1 - s2);
 		SvfOutputs out;
-		out.lp = 5.f * s2;
-		out.bp = 5.f * (s1 - s2);
-		out.hp = 5.f * (x - s1);
+		out.lp = 4.8f * s2;
+		out.bp = 5.0f * (s1 - s2);
+		out.hp = 4.8f * (x - s1);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -284,17 +303,17 @@ struct Ms2Core {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float resonance = clamp(0.16f + 0.22f * q + 0.22f * resoNorm, 0.f, 1.10f);
-		const float driveScaled = 0.22f * clamp(drive, 0.f, 10.f);
-		const float x = std::tanh(driveScaled * input - resonance * z4);
+		const float resonance = clamp(0.14f + 0.18f * q + 0.16f * resoNorm, 0.f, 0.98f);
+		const float driveScaled = 0.20f * clamp(drive, 0.f, 10.f);
+		const float x = std::tanh(0.92f * (driveScaled * input - resonance * z4));
 		z1 += g * (std::tanh(x) - z1);
 		z2 += g * (std::tanh(z1) - z2);
 		z3 += g * (std::tanh(z2) - z3);
 		z4 += g * (std::tanh(z3) - z4);
 		SvfOutputs out;
-		out.lp = 5.f * z4;
-		out.bp = 5.f * (z2 - z3);
-		out.hp = 5.f * (x - z4);
+		out.lp = 4.8f * z4;
+		out.bp = 4.6f * (z2 - z3);
+		out.hp = 4.8f * (x - z4);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -320,18 +339,18 @@ struct PrdCore {
 		const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
-		const float resonance = clamp(0.12f + 0.26f * q + 0.34f * resoNorm, 0.f, 1.30f);
-		const float driveScaled = 0.25f * clamp(drive, 0.f, 10.f);
+		const float resonance = clamp(0.14f + 0.30f * q + 0.36f * resoNorm, 0.f, 1.38f);
+		const float driveScaled = 0.27f * clamp(drive, 0.f, 10.f);
 		const float u = driveScaled * input - resonance * z4;
-		const float x = std::tanh(u) + 0.20f * std::tanh(2.f * u);
-		z1 += g * (std::tanh(x - 0.08f * z1) - z1);
+		const float x = std::tanh(u) + 0.24f * std::tanh(2.2f * u);
+		z1 += g * (std::tanh(x - 0.05f * z1) - z1);
 		z2 += g * (std::tanh(z1) - z2);
 		z3 += g * (std::tanh(z2) - z3);
-		z4 += g * (std::tanh(z3 + 0.10f * z2) - z4);
+		z4 += g * (std::tanh(z3 + 0.12f * z2) - z4);
 		SvfOutputs out;
-		out.lp = 5.f * z4;
-		out.bp = 5.f * (z1 - z3);
-		out.hp = 5.f * (x - 0.6f * z1 - z4);
+		out.lp = 5.1f * z4;
+		out.bp = 5.3f * (z1 - z3);
+		out.hp = 5.1f * (x - 0.56f * z1 - z4);
 		out.notch = out.lp + out.hp;
 		return out;
 	}
@@ -425,19 +444,23 @@ T combineModeResponse(
 	const T& cascadeHpToLp,
 	const T& cascadeHpToHp,
 	float wA,
-	float wB
+	float wB,
+	float wideMorph
 ) {
 	switch (mode) {
-		case 0: return cascadeLp;
-		case 1: return T(0.95f) * T(wA) * lpA + T(1.05f) * T(wB) * bpB - T(0.12f) * (bpA + bpB);
-		case 2: return T(1.05f) * T(wB) * lpB - T(0.55f) * T(wA) * bpA;
-		case 3: return cascadeNotch;
-		case 4: return T(0.95f) * T(wA) * lpA + T(0.95f) * T(wB) * hpB;
-		case 5: return T(1.15f) * (T(wA) * bpA + T(wB) * bpB);
-		case 6: return cascadeHpToLp;
-		case 7: return T(1.05f) * T(wA) * hpA - T(0.55f) * T(wB) * bpB;
-		case 8: return T(1.12f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.10f) * (hpA + bpB);
-		case 9: return cascadeHpToHp;
+		case 0:
+			// Preserve the canonical LL cascade, but add a small stage-A support
+			// term so sub/low passband energy does not collapse before the first peak.
+			return T(1.02f) * cascadeLp + T(0.045f) * lpA;
+		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
+		case 2: return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
+		case 3: return T(1.03f) * cascadeNotch;
+		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
+		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
+		case 6: return T(1.04f) * cascadeHpToLp;
+		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
+		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
+		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -471,9 +494,12 @@ struct BifurxPreviewModel {
 	DisplayBiquad bandB;
 	DisplayBiquad highB;
 	DisplayBiquad notchB;
+	float markerFreqA = 440.f;
+	float markerFreqB = 440.f;
 	float sampleRate = 44100.f;
 	float wA = 1.f;
 	float wB = 1.f;
+	float wideMorph = 0.f;
 	int mode = 0;
 	int circuitMode = 0;
 };
@@ -515,21 +541,23 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	BifurxPreviewModel model;
 	float qScale = 1.f;
 	float cutoffScale = 1.f;
-	switch (clampCircuitMode(state.circuitMode)) {
-		case 1: // DFM
-			qScale = 1.20f + 0.75f * state.resoNorm;
-			cutoffScale = 0.97f;
-			break;
-		case 2: // MS2
-			qScale = 0.80f + 0.45f * state.resoNorm;
-			cutoffScale = 0.90f;
-			break;
-		case 3: // PRD
-			qScale = 1.30f + 1.05f * state.resoNorm;
-			cutoffScale = 1.03f;
-			break;
-		default:
-			break;
+	if (!kBifurxTuneSvfOnly) {
+		switch (clampCircuitMode(state.circuitMode)) {
+			case 1: // DFM
+				qScale = 1.28f + 0.95f * state.resoNorm;
+				cutoffScale = 0.95f;
+				break;
+			case 2: // MS2
+				qScale = 0.74f + 0.36f * state.resoNorm;
+				cutoffScale = 0.88f;
+				break;
+			case 3: // PRD
+				qScale = 1.42f + 1.15f * state.resoNorm;
+				cutoffScale = 1.02f;
+				break;
+			default:
+				break;
+		}
 	}
 	const float freqA = clamp(state.freqA * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
 	const float freqB = clamp(state.freqB * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
@@ -543,15 +571,18 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.bandB = makeDisplayBiquad(state.sampleRate, freqB, qB, 1);
 	model.highB = makeDisplayBiquad(state.sampleRate, freqB, qB, 2);
 	model.notchB = makeDisplayBiquad(state.sampleRate, freqB, qB, 3);
+	model.markerFreqA = freqA;
+	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
-	model.circuitMode = clampCircuitMode(state.circuitMode);
+	model.circuitMode = kBifurxTuneSvfOnly ? 0 : clampCircuitMode(state.circuitMode);
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
 	const float norm = 2.f / (lowW + highW);
 	model.wA = lowW * norm;
 	model.wB = highW * norm;
+	model.wideMorph = cascadeWideMorph(state.spanNorm);
 	return model;
 }
 
@@ -574,7 +605,7 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 		lpA, bpA, hpA, ntA,
 		lpB, bpB, hpB, ntB,
 		cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
-		model.wA, model.wB
+		model.wA, model.wB, model.wideMorph
 	);
 }
 
@@ -834,6 +865,10 @@ struct Bifurx final : Module {
 	float previewFilterAlpha = 0.f;
 	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
+	float voctCvFiltered = 0.f;
+	bool voctCvFilterInitialized = false;
+	float voctCvFilterAlpha = 0.f;
+	float voctCvFilterSampleRate = 0.f;
 	float previewPrevTargetFreqA = 440.f;
 	float previewPrevTargetFreqB = 440.f;
 	bool previewTargetMotionInitialized = false;
@@ -933,6 +968,8 @@ struct Bifurx final : Module {
 		prdB.z2 = 0.f;
 		prdB.z3 = 0.f;
 		prdB.z4 = 0.f;
+		voctCvFiltered = 0.f;
+		voctCvFilterInitialized = false;
 	}
 
 	json_t* dataToJson() override {
@@ -1040,10 +1077,11 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfPreviewStart;
 			PerfClock::time_point perfAnalysisStart;
 
-			const int circuitMode = clampCircuitMode(filterCircuitMode);
-			if (circuitMode != activeCircuitMode) {
+			const int selectedCircuitMode = clampCircuitMode(filterCircuitMode);
+			const int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : selectedCircuitMode;
+			if (effectiveCircuitMode != activeCircuitMode) {
 				resetCircuitStates();
-				activeCircuitMode = circuitMode;
+				activeCircuitMode = effectiveCircuitMode;
 				controlFastCacheValid = false;
 			}
 			sanitizeCoreState(coreA);
@@ -1067,13 +1105,35 @@ struct Bifurx final : Module {
 				filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
 			}
 
-			const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
-			const float level = params[LEVEL_PARAM].getValue();
-			const float drive = levelDriveGain(level);
+		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
+		const float level = params[LEVEL_PARAM].getValue();
+		const float drive = levelDriveGain(level);
 		const int mode = int(std::round(params[MODE_PARAM].getValue()));
 		const int tito = int(std::round(params[TITO_PARAM].getValue()));
 		const float freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
-		const float voctCv = inputs[VOCT_INPUT].isConnected() ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		const bool voctConnected = inputs[VOCT_INPUT].isConnected();
+		const float voctCvRaw = voctConnected ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		if (std::fabs(voctCvFilterSampleRate - args.sampleRate) > 0.5f) {
+			voctCvFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kVoctSmoothingTauSeconds);
+			voctCvFilterSampleRate = args.sampleRate;
+		}
+		float voctCv = 0.f;
+		if (voctConnected) {
+			if (!voctCvFilterInitialized) {
+				voctCvFiltered = voctCvRaw;
+				voctCvFilterInitialized = true;
+			}
+			else {
+				voctCvFiltered += voctCvFilterAlpha * (voctCvRaw - voctCvFiltered);
+			}
+			// Prevent tiny DC/noise wobble from a connected 0V source from
+			// audibly ratcheting cutoff while turning the frequency knob.
+			voctCv = (std::fabs(voctCvFiltered) < kVoctDeadbandVolts) ? 0.f : voctCvFiltered;
+		}
+		else {
+			voctCvFiltered = 0.f;
+			voctCvFilterInitialized = false;
+		}
 		const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f);
 		const float fmCv = inputs[FM_INPUT].isConnected() ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
 		const float fm = fmCv * fmAmt;
@@ -1086,7 +1146,8 @@ struct Bifurx final : Module {
 		const float spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
 		const float spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		const float spanOct = 8.f * shapedSpan(spanNorm);
-		const bool fastPathEligible = (circuitMode == 0)
+		const float spanWideMorph = cascadeWideMorph(spanNorm);
+		const bool fastPathEligible = (effectiveCircuitMode == 0)
 			&& (tito == 1)
 			&& !inputs[VOCT_INPUT].isConnected()
 			&& !inputs[FM_INPUT].isConnected()
@@ -1111,11 +1172,20 @@ struct Bifurx final : Module {
 		if (updateFastControls) {
 			balance = balanceNorm;
 			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
-			freqA0 = centerHz * fastExp2(-0.5f * spanOct);
-			freqB0 = centerHz * fastExp2(0.5f * spanOct);
+			// Keep span symmetric around center by limiting octave shift before
+			// cutoff clamping in the core. Without this, one side can slam into
+			// cutoff limits at high span and visually break LL/HH mirroring.
+			const float sr = std::max(args.sampleRate, 1.f);
+			const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr);
+			const float maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz));
+			const float maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz));
+			const float maxSymShift = std::min(maxShiftUp, maxShiftDown);
+			const float halfSpanOct = std::min(0.5f * spanOct, maxSymShift);
+			freqA0 = safeCenterHz * fastExp2(-halfSpanOct);
+			freqB0 = safeCenterHz * fastExp2(halfSpanOct);
 			const float baseDamping = resoToDamping(resoNorm);
-			dampingA = clamp(baseDamping * fastExp(0.55f * balance), 0.02f, 2.2f);
-			dampingB = clamp(baseDamping * fastExp(-0.55f * balance), 0.02f, 2.2f);
+			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
+			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 			const float lowW = signedWeight(balance, false);
 			const float highW = signedWeight(balance, true);
 			const float norm = 2.f / (lowW + highW);
@@ -1134,7 +1204,7 @@ struct Bifurx final : Module {
 			controlFastCacheValid = true;
 		}
 
-		const float couplingDepth = (0.02f + 0.25f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
+		const float couplingDepth = (0.018f + 0.20f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
 		const float drivenIn = 5.f * softClip(0.2f * in * drive);
 		const float excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 
@@ -1149,7 +1219,7 @@ struct Bifurx final : Module {
 			float modA = 0.f;
 			float modB = 0.f;
 			auto circuitModStateA = [&]() {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1: return dfmA.s1;
 					case 2: return ms2A.z2;
 					case 3: return prdA.z2;
@@ -1157,7 +1227,7 @@ struct Bifurx final : Module {
 				}
 			};
 			auto circuitModStateB = [&]() {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1: return dfmB.s1;
 					case 2: return ms2B.z2;
 					case 3: return prdB.z2;
@@ -1184,7 +1254,7 @@ struct Bifurx final : Module {
 			float modeOut = 0.f;
 
 			auto processA = [&](float sample) -> SvfOutputs {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1:
 						return dfmA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
 					case 2:
@@ -1200,7 +1270,7 @@ struct Bifurx final : Module {
 				return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
 			};
 			auto processB = [&](float sample) -> SvfOutputs {
-				switch (circuitMode) {
+				switch (effectiveCircuitMode) {
 					case 1:
 						return dfmB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
 					case 2:
@@ -1225,7 +1295,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					b.lp, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 1: {
@@ -1236,7 +1306,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 2: {
@@ -1247,7 +1317,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 3: {
@@ -1258,7 +1328,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, b.notch, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 4: {
@@ -1269,7 +1339,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 5: {
@@ -1280,7 +1350,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 6: {
@@ -1291,7 +1361,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, b.lp, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 7: {
@@ -1302,7 +1372,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 8: {
@@ -1313,7 +1383,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 9:
@@ -1325,7 +1395,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, b.hp,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 		}
@@ -1401,7 +1471,7 @@ struct Bifurx final : Module {
 		previewState.qA = previewQAFiltered;
 		previewState.qB = previewQBFiltered;
 			previewState.mode = mode;
-			previewState.circuitMode = circuitMode;
+			previewState.circuitMode = effectiveCircuitMode;
 			previewState.balance = previewBalanceFiltered;
 		previewState.balanceTarget = balanceNorm;
 		previewState.resoNorm = resoNorm;
@@ -1478,6 +1548,27 @@ struct Bifurx final : Module {
 	};
 
 namespace {
+
+struct BifurxCircuitReadoutWidget final : Widget {
+	Bifurx* module = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+
+		int mode = 0;
+		if (module) {
+			mode = clampCircuitMode(module->filterCircuitMode);
+		}
+
+		nvgFontSize(args.vg, std::max(8.5f, box.size.y * 0.82f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(232, 238, 245, 250));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, kBifurxCircuitLabels[mode], nullptr);
+	}
+};
 
 float orderedSpectrumMagnitude(const float* fftData, int bin) {
 	if (bin <= 0) {
@@ -1974,6 +2065,7 @@ void BifurxSpectrumWidget::step() {
 			const float w = box.size.x;
 			const float h = box.size.y;
 			if (w > 0.f && h > 0.f) {
+				const BifurxPreviewModel model = makePreviewModel(previewState);
 				const float padX = 0.f;
 				const float padY = std::max(4.f, h * 0.035f);
 				const float plotX = padX;
@@ -2011,8 +2103,8 @@ void BifurxSpectrumWidget::step() {
 					*outYCurve = yCurve;
 					*outYMarker = yMarker;
 				};
-				evalPeak(previewState.freqA, &peakAX, &peakAYCurve, &peakAYMarker);
-				evalPeak(previewState.freqB, &peakBX, &peakBYCurve, &peakBYMarker);
+				evalPeak(model.markerFreqA, &peakAX, &peakAYCurve, &peakAYMarker);
+				evalPeak(model.markerFreqB, &peakBX, &peakBYCurve, &peakBYMarker);
 			}
 
 			logCurveDebugSample(
@@ -2089,8 +2181,12 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 	float binDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
-		const float inputAmp = amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
-		const float outputAmp = amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
+		const float binHz = (float(bin) * previewState.sampleRate) / float(kFftSize);
+		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
+		const float weightedInputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
+		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
+		const float inputAmp = weightedInputAmp;
+		const float outputAmp = weightedOutputAmp;
 		binDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (inputAmp + 1e-6f)), -24.f, 24.f);
 		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
@@ -2269,8 +2365,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			insertCurveDrawPoint(point);
 		}
 	};
-	addCurveRefinementAround(previewState.freqA);
-	addCurveRefinementAround(previewState.freqB);
+	addCurveRefinementAround(model.markerFreqA);
+	addCurveRefinementAround(model.markerFreqB);
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
 	nvgSave(args.vg);
@@ -2513,8 +2609,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 
 	PeakMarker peaks[2];
-	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
-	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
+	peaks[0] = buildMarkerAtFrequency(model.markerFreqA);
+	peaks[1] = buildMarkerAtFrequency(model.markerFreqB);
 
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
@@ -2690,6 +2786,16 @@ struct BifurxWidget final : ModuleWidget {
 
 		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
 		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
+
+		const Vec circuitReadoutSizeMm(9.6f, 3.2f);
+		const Vec circuitReadoutPosMm =
+			filterCircuitPosMm.plus(Vec(-0.5f * circuitReadoutSizeMm.x, 3.6f));
+
+		BifurxCircuitReadoutWidget* circuitReadout = new BifurxCircuitReadoutWidget();
+		circuitReadout->module = module;
+		circuitReadout->box.pos = mm2px(circuitReadoutPosMm);
+		circuitReadout->box.size = mm2px(circuitReadoutSizeMm);
+		addChild(circuitReadout);
 
 			Vec modeLeftPosMm = modePosMm.plus(Vec(-2.5f, 0.f));
 			Vec modeRightPosMm = modePosMm.plus(Vec(2.5f, 0.f));

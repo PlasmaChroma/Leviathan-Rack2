@@ -84,7 +84,8 @@ using temporaldeck::PreparedSampleData;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 
-static constexpr float kExpanderPublishRateHz = 60.f;
+// Push scope payload faster so TD.Scope tracks live output motion more tightly.
+static constexpr float kExpanderPublishRateHz = 120.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
@@ -126,9 +127,11 @@ struct ScopeWindowCache {
 };
 
 enum ScopeChannelMode {
-  SCOPE_CHANNEL_MID = 0,
-  SCOPE_CHANNEL_LEFT,
-  SCOPE_CHANNEL_RIGHT
+  // Must stay aligned with TemporalDeckEngine::readLiveScopeEnvelopeRange():
+  // 0 = left, 1 = right, 2 = mid.
+  SCOPE_CHANNEL_LEFT = 0,
+  SCOPE_CHANNEL_RIGHT = 1,
+  SCOPE_CHANNEL_MID = 2
 };
 
 static float reduceScopeChannelValue(float left, float right, ScopeChannelMode channelMode) {

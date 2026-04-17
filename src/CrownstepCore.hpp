@@ -62,7 +62,12 @@ static const std::array<Scale, 13> SCALES = {{
 
 static constexpr std::array<int, 5> SEQ_CAPS = {{0, 8, 16, 32, 64}};
 static constexpr std::array<const char*, 5> SEQ_CAP_NAMES = {{"Full", "8", "16", "32", "64"}};
-static constexpr std::array<const char*, 3> DIFFICULTY_NAMES = {{"Easy", "Normal", "Hard"}};
+static constexpr std::array<const char*, 4> DIFFICULTY_NAMES = {{
+	"Too young to die",
+	"Not too rough",
+	"Hurt me plenty",
+	"Ultra violence"
+}};
 static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
 };
@@ -73,7 +78,7 @@ static constexpr std::array<const char*, 8> BOARD_VALUE_LAYOUT_NAMES = {
 		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)", "Random"}
 };
 static constexpr std::array<const char*, 7> PITCH_DIVIDER_NAMES = {
-	{"Full", "Half", "Third", "Quarter", "1.5x", "2x", "3x"}
+	{"Full", "1/2", "1/3", "1/4", "1.5x", "2x", "3x"}
 };
 static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
 	{1.f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.f, 3.f}
@@ -430,9 +435,10 @@ inline int searchScore(const BoardState& sourceBoard, int sideToMove, int depth,
 }
 
 inline int searchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 2))) {
+	switch (std::max(0, std::min(difficulty, 3))) {
 		case 0: return 1;
 		case 2: return 3;
+		case 3: return 4;
 		default: return 2;
 	}
 }
@@ -1112,9 +1118,10 @@ inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* 
 }
 
 inline int chessSearchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 2))) {
+	switch (std::max(0, std::min(difficulty, 3))) {
 		case 0: return 1;
 		case 2: return 3;
+		case 3: return 4;
 		default: return 2;
 	}
 }
@@ -1356,9 +1363,10 @@ inline int othelloEvaluatePosition(const BoardState& board) {
 }
 
 inline int othelloSearchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 2))) {
+	switch (std::max(0, std::min(difficulty, 3))) {
 		case 0: return 1;
 		case 2: return 3;
+		case 3: return 4;
 		default: return 2;
 	}
 }
