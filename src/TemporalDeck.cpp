@@ -84,7 +84,8 @@ using temporaldeck::PreparedSampleData;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 
-static constexpr float kExpanderPublishRateHz = 60.f;
+// Push scope payload faster so TD.Scope tracks live output motion more tightly.
+static constexpr float kExpanderPublishRateHz = 120.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;

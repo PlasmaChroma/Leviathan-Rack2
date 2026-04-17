@@ -73,7 +73,8 @@ struct TDScope final : Module {
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
 
-  static constexpr float kUiPublishIntervalSec = 1.f / 60.f;
+  // Match faster host updates to improve perceived sync against speakers.
+  static constexpr float kUiPublishIntervalSec = 1.f / 120.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
   static constexpr float kLinkDropGraceSec = 1.f / 45.f;
   static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
@@ -279,7 +280,8 @@ struct TDScopeDisplayWidget final : Widget {
   void draw(const DrawArgs &args) override {
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
-    constexpr double kUiSnapshotGraceSec = 0.05;
+    // Keep stale-frame reuse short so we prefer freshest scope state.
+    constexpr double kUiSnapshotGraceSec = 0.02;
 
     auto drawStatusMessage = [&](const char* line1, const char* line2) {
       if (!APP || !APP->window || !APP->window->uiFont) {
@@ -1078,7 +1080,7 @@ struct TDScopeDisplayWidget final : Widget {
         float visual = clamp(visualIntensity[idx], 0.f, 1.f);
         // Keep the scope trace crisp and less "chunky" by using a thinner
         // stroke envelope while preserving intensity-based width variation.
-        float mainW = 0.52f + 0.42f * visual;
+        float mainW = 0.44f + 0.34f * visual;
         NVGcolor mainC = gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
 
         nvgBeginPath(args.vg);
@@ -1095,7 +1097,7 @@ struct TDScopeDisplayWidget final : Widget {
           nvgMoveTo(args.vg, x0[idx], rowY[idx]);
           nvgLineTo(args.vg, x1[idx], rowY[idx]);
           nvgStrokeColor(args.vg, boostC);
-          nvgStrokeWidth(args.vg, mainW + 0.22f);
+          nvgStrokeWidth(args.vg, mainW + 0.17f);
           nvgStroke(args.vg);
         }
 
@@ -1103,7 +1105,7 @@ struct TDScopeDisplayWidget final : Widget {
           float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
           NVGcolor connectC =
             gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual)));
-          float connectW = 0.38f + 0.30f * connectVisual;
+          float connectW = 0.32f + 0.22f * connectVisual;
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, prevX0, prevY);
           nvgLineTo(args.vg, x0[idx], rowY[idx]);
