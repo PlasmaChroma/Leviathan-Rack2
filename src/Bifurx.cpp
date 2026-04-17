@@ -172,6 +172,32 @@ float highHighSpanCompGain(float wideMorph) {
 	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
+float circuitCutoffScale(int circuitMode) {
+	switch (clampCircuitMode(circuitMode)) {
+		case 1: // DFM
+			return 0.95f;
+		case 2: // MS2
+			return 0.88f;
+		case 3: // PRD
+			return 1.02f;
+		default:
+			return 1.f;
+	}
+}
+
+float circuitQScale(float resoNorm, int circuitMode) {
+	switch (clampCircuitMode(circuitMode)) {
+		case 1: // DFM
+			return 1.28f + 0.95f * resoNorm;
+		case 2: // MS2
+			return 0.74f + 0.36f * resoNorm;
+		case 3: // PRD
+			return 1.42f + 1.15f * resoNorm;
+		default:
+			return 1.f;
+	}
+}
+
 float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
 	const int clampedCircuitMode = clampCircuitMode(circuitMode);
 	if (clampedCircuitMode == 0) {
@@ -582,30 +608,12 @@ bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& 
 
 BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	BifurxPreviewModel model;
-	float qScale = 1.f;
-	float cutoffScale = 1.f;
-	if (!kBifurxTuneSvfOnly) {
-		switch (clampCircuitMode(state.circuitMode)) {
-			case 1: // DFM
-				qScale = 1.28f + 0.95f * state.resoNorm;
-				cutoffScale = 0.95f;
-				break;
-			case 2: // MS2
-				qScale = 0.74f + 0.36f * state.resoNorm;
-				cutoffScale = 0.88f;
-				break;
-			case 3: // PRD
-				qScale = 1.42f + 1.15f * state.resoNorm;
-				cutoffScale = 1.02f;
-				break;
-			default:
-				break;
-		}
-	}
-	const float freqA = clamp(state.freqA * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
-	const float freqB = clamp(state.freqB * cutoffScale, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
-	const float qA = clamp(state.qA * qScale, 0.2f, 18.f);
-	const float qB = clamp(state.qB * qScale, 0.2f, 18.f);
+	// previewState already carries circuit-adjusted target frequencies/Q from
+	// the audio path, so do not apply circuit scaling a second time here.
+	const float freqA = clamp(state.freqA, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
+	const float freqB = clamp(state.freqB, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
+	const float qA = clamp(state.qA, 0.2f, 18.f);
+	const float qB = clamp(state.qB, 0.2f, 18.f);
 	model.lowA = makeDisplayBiquad(state.sampleRate, freqA, qA, 0);
 	model.bandA = makeDisplayBiquad(state.sampleRate, freqA, qA, 1);
 	model.highA = makeDisplayBiquad(state.sampleRate, freqA, qA, 2);
@@ -890,6 +898,15 @@ struct Bifurx final : Module {
 	PrdCore prdB;
 	int filterCircuitMode = 0; // 0: SVF, 1: DFM, 2: MS2, 3: PRD
 	int activeCircuitMode = 0;
+	float circuitCutoffAlignA[kBifurxCircuitModeCount] = {1.f, 1.f, 1.f, 1.f};
+	float circuitCutoffAlignB[kBifurxCircuitModeCount] = {1.f, 1.f, 1.f, 1.f};
+	bool pendingCircuitSwitch = false;
+	int pendingCircuitMode = 0;
+	float pendingAlignA = 1.f;
+	float pendingAlignB = 1.f;
+	int pendingSolveSteps = 0;
+	static constexpr int kPendingSolveMinSteps = 6;
+	static constexpr int kPendingSolveMaxSteps = 64;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -1120,13 +1137,12 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfPreviewStart;
 			PerfClock::time_point perfAnalysisStart;
 
-			const int selectedCircuitMode = clampCircuitMode(filterCircuitMode);
-			const int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : selectedCircuitMode;
-			if (effectiveCircuitMode != activeCircuitMode) {
-				resetCircuitStates();
-				activeCircuitMode = effectiveCircuitMode;
-				controlFastCacheValid = false;
-			}
+				if (kBifurxTuneSvfOnly) {
+					pendingCircuitSwitch = false;
+					pendingSolveSteps = 0;
+					activeCircuitMode = 0;
+				}
+				int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : activeCircuitMode;
 			sanitizeCoreState(coreA);
 			sanitizeCoreState(coreB);
 			sanitizeCoreState(dfmA);
@@ -1144,9 +1160,25 @@ struct Bifurx final : Module {
 				const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9);
 				params[MODE_PARAM].setValue(float((currentMode + 1) % 10));
 			}
-			if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
-				filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
-			}
+				if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
+					filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
+				}
+				if (!kBifurxTuneSvfOnly) {
+					const int requestedCircuitMode = clampCircuitMode(filterCircuitMode);
+					if (requestedCircuitMode != activeCircuitMode) {
+						if (!pendingCircuitSwitch || pendingCircuitMode != requestedCircuitMode) {
+							pendingCircuitSwitch = true;
+							pendingCircuitMode = requestedCircuitMode;
+							pendingAlignA = circuitCutoffAlignA[pendingCircuitMode];
+							pendingAlignB = circuitCutoffAlignB[pendingCircuitMode];
+							pendingSolveSteps = 0;
+						}
+					}
+					else {
+						pendingCircuitSwitch = false;
+						pendingSolveSteps = 0;
+					}
+				}
 
 		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
 		const float level = params[LEVEL_PARAM].getValue();
@@ -1212,23 +1244,67 @@ struct Bifurx final : Module {
 		float wB = cachedWB;
 		float balance = cachedBalance;
 
-		if (updateFastControls) {
-			balance = balanceNorm;
-			const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
-			// Keep span symmetric around center by limiting octave shift before
-			// cutoff clamping in the core. Without this, one side can slam into
-			// cutoff limits at high span and visually break LL/HH mirroring.
-			const float sr = std::max(args.sampleRate, 1.f);
-			const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr);
-			const float maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz));
-			const float maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz));
-			const float maxSymShift = std::min(maxShiftUp, maxShiftDown);
-			const float halfSpanOct = std::min(0.5f * spanOct, maxSymShift);
-			freqA0 = safeCenterHz * fastExp2(-halfSpanOct);
-			freqB0 = safeCenterHz * fastExp2(halfSpanOct);
-			const float baseDamping = resoToDamping(resoNorm);
-			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
-			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
+				if (updateFastControls) {
+					balance = balanceNorm;
+					const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
+					const float sr = std::max(args.sampleRate, 1.f);
+					auto computeAlignedFreqs = [&](int circuitMode, float alignA, float alignB, float *freqAOut, float *freqBOut) {
+						const float cutoffScale = circuitCutoffScale(circuitMode);
+						// Keep span symmetric around center by limiting octave shift before
+						// cutoff clamping in the core.
+						const float safeCenterHz = clamp(centerHz * cutoffScale, kFreqMinHz, 0.46f * sr);
+						const float maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz));
+						const float maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz));
+						const float maxSymShift = std::min(maxShiftUp, maxShiftDown);
+						const float halfSpanOct = std::min(0.5f * spanOct, maxSymShift);
+						float baseA = safeCenterHz * fastExp2(-halfSpanOct);
+						float baseB = safeCenterHz * fastExp2(halfSpanOct);
+						if (freqAOut) {
+							*freqAOut = clamp(baseA * std::max(alignA, 1e-4f), kFreqMinHz, 0.46f * sr);
+						}
+						if (freqBOut) {
+							*freqBOut = clamp(baseB * std::max(alignB, 1e-4f), kFreqMinHz, 0.46f * sr);
+						}
+					};
+					if (pendingCircuitSwitch && !kBifurxTuneSvfOnly) {
+						const float targetA = clamp(cachedFreqA0, kFreqMinHz, 0.46f * sr);
+						const float targetB = clamp(cachedFreqB0, kFreqMinHz, 0.46f * sr);
+						float pendingBaseA = 0.f;
+						float pendingBaseB = 0.f;
+						computeAlignedFreqs(pendingCircuitMode, 1.f, 1.f, &pendingBaseA, &pendingBaseB);
+						float desiredAlignA = clamp(targetA / std::max(pendingBaseA, 1e-4f), 0.70f, 1.40f);
+						float desiredAlignB = clamp(targetB / std::max(pendingBaseB, 1e-4f), 0.70f, 1.40f);
+						const float solveAlpha = 0.24f;
+						pendingAlignA += solveAlpha * (desiredAlignA - pendingAlignA);
+						pendingAlignB += solveAlpha * (desiredAlignB - pendingAlignB);
+						pendingSolveSteps++;
+						const float errA = std::fabs(std::log2(std::max(pendingAlignA, 1e-4f) / std::max(desiredAlignA, 1e-4f)));
+						const float errB = std::fabs(std::log2(std::max(pendingAlignB, 1e-4f) / std::max(desiredAlignB, 1e-4f)));
+						const float solveErr = std::max(errA, errB);
+						const bool converged = (pendingSolveSteps >= kPendingSolveMinSteps) && (solveErr <= 5e-4f);
+						const bool timeout = pendingSolveSteps >= kPendingSolveMaxSteps;
+						if (converged || timeout) {
+							circuitCutoffAlignA[pendingCircuitMode] = pendingAlignA;
+							circuitCutoffAlignB[pendingCircuitMode] = pendingAlignB;
+							activeCircuitMode = pendingCircuitMode;
+							effectiveCircuitMode = activeCircuitMode;
+							pendingCircuitSwitch = false;
+							pendingSolveSteps = 0;
+							resetCircuitStates();
+							controlFastCacheValid = false;
+						}
+					}
+					const float qScale = circuitQScale(resoNorm, effectiveCircuitMode);
+					computeAlignedFreqs(
+						effectiveCircuitMode,
+						circuitCutoffAlignA[effectiveCircuitMode],
+						circuitCutoffAlignB[effectiveCircuitMode],
+						&freqA0,
+						&freqB0
+					);
+					const float baseDamping = resoToDamping(resoNorm) / std::max(qScale, 1e-4f);
+					dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
+					dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 			const float lowW = signedWeight(balance, false);
 			const float highW = signedWeight(balance, true);
 			const float norm = 2.f / (lowW + highW);
