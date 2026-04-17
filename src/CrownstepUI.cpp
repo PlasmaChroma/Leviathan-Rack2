@@ -3750,8 +3750,22 @@ struct CrownstepWidget final : ModuleWidget {
 				));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Divider", "", [=](Menu* dividerMenu) {
-			for (int mode = 0; mode < 4; ++mode) {
+		menu->addChild(createSubmenuItem("Scalar", "", [=](Menu* dividerMenu) {
+			dividerMenu->addChild(createCheckMenuItem(
+				crownstep::PITCH_DIVIDER_NAMES[size_t(0)],
+				"",
+				[=]() {
+					return module && module->pitchDividerMode == 0;
+				},
+				[=]() {
+					if (module) {
+						module->pitchDividerMode = 0;
+						module->refreshHeldPitchForCurrentStep();
+					}
+				}
+			));
+			dividerMenu->addChild(new MenuSeparator());
+			for (int mode = 1; mode < 4; ++mode) {
 				dividerMenu->addChild(createCheckMenuItem(
 					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
 					"",

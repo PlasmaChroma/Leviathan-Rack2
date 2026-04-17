@@ -78,7 +78,7 @@ static constexpr std::array<const char*, 8> BOARD_VALUE_LAYOUT_NAMES = {
 		"Serpentine (Horizontal)", "Serpentine (Vertical)", "Serpentine (Diagonal)", "Random"}
 };
 static constexpr std::array<const char*, 7> PITCH_DIVIDER_NAMES = {
-	{"Full", "Half", "Third", "Quarter", "1.5x", "2x", "3x"}
+	{"Full", "1/2", "1/3", "1/4", "1.5x", "2x", "3x"}
 };
 static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
 	{1.f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.f, 3.f}
