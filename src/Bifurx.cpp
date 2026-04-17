@@ -898,8 +898,8 @@ struct Bifurx final : Module {
 	PrdCore prdB;
 	int filterCircuitMode = 0; // 0: SVF, 1: DFM, 2: MS2, 3: PRD
 	int activeCircuitMode = 0;
-	float circuitCutoffAlignA[kBifurxCircuitModeCount] = {1.f, 1.f, 1.f, 1.f};
-	float circuitCutoffAlignB[kBifurxCircuitModeCount] = {1.f, 1.f, 1.f, 1.f};
+	float activeCircuitAlignA = 1.f;
+	float activeCircuitAlignB = 1.f;
 	bool pendingCircuitSwitch = false;
 	int pendingCircuitMode = 0;
 	float pendingAlignA = 1.f;
@@ -1137,11 +1137,13 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfPreviewStart;
 			PerfClock::time_point perfAnalysisStart;
 
-				if (kBifurxTuneSvfOnly) {
-					pendingCircuitSwitch = false;
-					pendingSolveSteps = 0;
-					activeCircuitMode = 0;
-				}
+					if (kBifurxTuneSvfOnly) {
+						pendingCircuitSwitch = false;
+						pendingSolveSteps = 0;
+						activeCircuitMode = 0;
+						activeCircuitAlignA = 1.f;
+						activeCircuitAlignB = 1.f;
+					}
 				int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : activeCircuitMode;
 			sanitizeCoreState(coreA);
 			sanitizeCoreState(coreB);
@@ -1163,22 +1165,28 @@ struct Bifurx final : Module {
 				if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
 					filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
 				}
-				if (!kBifurxTuneSvfOnly) {
-					const int requestedCircuitMode = clampCircuitMode(filterCircuitMode);
-					if (requestedCircuitMode != activeCircuitMode) {
-						if (!pendingCircuitSwitch || pendingCircuitMode != requestedCircuitMode) {
-							pendingCircuitSwitch = true;
-							pendingCircuitMode = requestedCircuitMode;
-							pendingAlignA = circuitCutoffAlignA[pendingCircuitMode];
-							pendingAlignB = circuitCutoffAlignB[pendingCircuitMode];
+					if (!kBifurxTuneSvfOnly) {
+						const int requestedCircuitMode = clampCircuitMode(filterCircuitMode);
+						if (requestedCircuitMode != activeCircuitMode) {
+							if (!pendingCircuitSwitch || pendingCircuitMode != requestedCircuitMode) {
+								pendingCircuitSwitch = true;
+								pendingCircuitMode = requestedCircuitMode;
+								// Stateless solve: always seed from neutral so switching is
+								// deterministic and not history-dependent.
+								pendingAlignA = 1.f;
+								pendingAlignB = 1.f;
+								pendingSolveSteps = 0;
+							}
+						}
+						else {
+							pendingCircuitSwitch = false;
 							pendingSolveSteps = 0;
+							if (activeCircuitMode == 0) {
+								activeCircuitAlignA = 1.f;
+								activeCircuitAlignB = 1.f;
+							}
 						}
 					}
-					else {
-						pendingCircuitSwitch = false;
-						pendingSolveSteps = 0;
-					}
-				}
 
 		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
 		const float level = params[LEVEL_PARAM].getValue();
@@ -1244,10 +1252,10 @@ struct Bifurx final : Module {
 		float wB = cachedWB;
 		float balance = cachedBalance;
 
-				if (updateFastControls) {
-					balance = balanceNorm;
-					const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
-					const float sr = std::max(args.sampleRate, 1.f);
+			if (updateFastControls) {
+				balance = balanceNorm;
+				const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
+				const float sr = std::max(args.sampleRate, 1.f);
 					auto computeAlignedFreqs = [&](int circuitMode, float alignA, float alignB, float *freqAOut, float *freqBOut) {
 						const float cutoffScale = circuitCutoffScale(circuitMode);
 						// Keep span symmetric around center by limiting octave shift before
@@ -1267,8 +1275,21 @@ struct Bifurx final : Module {
 						}
 					};
 					if (pendingCircuitSwitch && !kBifurxTuneSvfOnly) {
-						const float targetA = clamp(cachedFreqA0, kFreqMinHz, 0.46f * sr);
-						const float targetB = clamp(cachedFreqB0, kFreqMinHz, 0.46f * sr);
+						float targetA = 0.f;
+						float targetB = 0.f;
+						// Canonical target is always SVF mapping at current controls.
+						computeAlignedFreqs(0, 1.f, 1.f, &targetA, &targetB);
+						if (pendingCircuitMode == 0) {
+							activeCircuitMode = 0;
+							activeCircuitAlignA = 1.f;
+							activeCircuitAlignB = 1.f;
+							effectiveCircuitMode = activeCircuitMode;
+							pendingCircuitSwitch = false;
+							pendingSolveSteps = 0;
+							resetCircuitStates();
+							controlFastCacheValid = false;
+						}
+						else {
 						float pendingBaseA = 0.f;
 						float pendingBaseB = 0.f;
 						computeAlignedFreqs(pendingCircuitMode, 1.f, 1.f, &pendingBaseA, &pendingBaseB);
@@ -1284,21 +1305,25 @@ struct Bifurx final : Module {
 						const bool converged = (pendingSolveSteps >= kPendingSolveMinSteps) && (solveErr <= 5e-4f);
 						const bool timeout = pendingSolveSteps >= kPendingSolveMaxSteps;
 						if (converged || timeout) {
-							circuitCutoffAlignA[pendingCircuitMode] = pendingAlignA;
-							circuitCutoffAlignB[pendingCircuitMode] = pendingAlignB;
 							activeCircuitMode = pendingCircuitMode;
+							activeCircuitAlignA = pendingAlignA;
+							activeCircuitAlignB = pendingAlignB;
 							effectiveCircuitMode = activeCircuitMode;
 							pendingCircuitSwitch = false;
 							pendingSolveSteps = 0;
 							resetCircuitStates();
 							controlFastCacheValid = false;
 						}
+						}
 					}
-					const float qScale = circuitQScale(resoNorm, effectiveCircuitMode);
+					const int safeEffectiveMode = clampCircuitMode(effectiveCircuitMode);
+					const float qScale = circuitQScale(resoNorm, safeEffectiveMode);
+					const float applyAlignA = (safeEffectiveMode == 0) ? 1.f : activeCircuitAlignA;
+					const float applyAlignB = (safeEffectiveMode == 0) ? 1.f : activeCircuitAlignB;
 					computeAlignedFreqs(
-						effectiveCircuitMode,
-						circuitCutoffAlignA[effectiveCircuitMode],
-						circuitCutoffAlignB[effectiveCircuitMode],
+						safeEffectiveMode,
+						applyAlignA,
+						applyAlignB,
 						&freqA0,
 						&freqB0
 					);
@@ -2895,9 +2920,6 @@ struct BifurxWidget final : ModuleWidget {
 		Vec spanCvPosMm(55.35f, 112.2f);
 		Vec outPosMm(64.9f, 112.2f);
 
-		Vec fmLightPosMm(25.3f, 27.3f);
-		Vec spanLightPosMm(45.82f, 27.3f);
-
 		applyPointOverride("MODE_PARAM", &modePosMm);
 		applyPointOverride("LEVEL_PARAM", &levelPosMm);
 		applyPointOverride("RESO_PARAM", &resoPosMm);
@@ -2917,9 +2939,6 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("SPAN_CV_INPUT", &spanCvPosMm);
 		applyPointOverride("OUT_OUTPUT", &outPosMm);
 
-		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
-		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
-
 		const Vec circuitReadoutSizeMm(9.6f, 3.2f);
 		const Vec circuitReadoutPosMm =
 			filterCircuitPosMm.plus(Vec(-0.5f * circuitReadoutSizeMm.x, 3.6f));
@@ -2936,12 +2955,12 @@ struct BifurxWidget final : ModuleWidget {
 			addParam(createParamCentered<BifurxModeRightButton>(mm2px(modeRightPosMm), module, Bifurx::MODE_RIGHT_PARAM));
 			addParam(createParamCentered<RoundBlackKnob>(mm2px(levelPosMm), module, Bifurx::LEVEL_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPosMm), module, Bifurx::FREQ_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(resoPosMm), module, Bifurx::RESO_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(balancePosMm), module, Bifurx::BALANCE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(spanPosMm), module, Bifurx::SPAN_PARAM));
-		addParam(createParamCentered<VCVSlider>(mm2px(fmAmtPosMm), module, Bifurx::FM_AMT_PARAM));
-		addParam(createParamCentered<VCVSlider>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM));
-		addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
+			addParam(createParamCentered<RoundBlackKnob>(mm2px(resoPosMm), module, Bifurx::RESO_PARAM));
+			addParam(createParamCentered<RoundBlackKnob>(mm2px(balancePosMm), module, Bifurx::BALANCE_PARAM));
+			addParam(createParamCentered<RoundBlackKnob>(mm2px(spanPosMm), module, Bifurx::SPAN_PARAM));
+			addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(fmAmtPosMm), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
+			addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT));
+			addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
 
 		addParam(createParamCentered<TL1105>(mm2px(filterCircuitPosMm), module, Bifurx::FILTER_CIRCUIT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inPosMm), module, Bifurx::IN_INPUT));
@@ -2950,13 +2969,9 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(resoCvPosMm), module, Bifurx::RESO_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(balanceCvPosMm), module, Bifurx::BALANCE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(spanCvPosMm), module, Bifurx::SPAN_CV_INPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
+			addOutput(createOutputCentered<BananutBlack>(mm2px(outPosMm), module, Bifurx::OUT_OUTPUT));
 
-			addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_POS_LIGHT));
-			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(fmLightPosMm), module, Bifurx::FM_AMT_NEG_LIGHT));
-			addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_POS_LIGHT));
-			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(spanLightPosMm), module, Bifurx::SPAN_CV_ATTEN_NEG_LIGHT));
-		}
+			}
 
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu);
