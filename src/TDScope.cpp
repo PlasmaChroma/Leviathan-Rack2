@@ -337,17 +337,19 @@ struct TDScopeDisplayWidget final : Widget {
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
     bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+    const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
+    const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
-      const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+      const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
       if (!temporaldeck_expander::isScopeBinValid(bin)) {
         continue;
       }
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.min))));
       peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.max))));
       if (renderStereo) {
-        const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+        const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
         if (temporaldeck_expander::isScopeBinValid(binR)) {
           peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.min))));
           peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.max))));
@@ -380,7 +382,7 @@ struct TDScopeDisplayWidget final : Widget {
         std::vector<float> peaks;
         peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
         for (uint32_t i = 0; i < scopeBinCount; ++i) {
-          const temporaldeck_expander::ScopeBin &bin = msg.scope[i];
+          const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
           if (!temporaldeck_expander::isScopeBinValid(bin)) {
             // fall through to right channel in stereo mode
           } else {
@@ -389,7 +391,7 @@ struct TDScopeDisplayWidget final : Widget {
             peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
           }
           if (renderStereo) {
-            const temporaldeck_expander::ScopeBin &binR = msg.scopeRight[i];
+            const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
             if (temporaldeck_expander::isScopeBinValid(binR)) {
               int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
               float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
@@ -662,9 +664,9 @@ struct TDScopeDisplayWidget final : Widget {
     };
 
     if (liveMode && msg.publishSeq != liveBucketLastPublishSeq) {
-      ingestLiveLane(msg.scope, &liveBucketsLeft);
+      ingestLiveLane(leftScopeBins, &liveBucketsLeft);
       if (renderStereo) {
-        ingestLiveLane(msg.scopeRight, &liveBucketsRight);
+        ingestLiveLane(rightScopeBins, &liveBucketsRight);
       }
       liveBucketLastPublishSeq = msg.publishSeq;
     }
@@ -859,10 +861,10 @@ struct TDScopeDisplayWidget final : Widget {
         }
       } else {
         rebuildLaneFromScopeBins(
-          msg.scope, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
+          leftScopeBins, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
         if (renderStereo) {
           rebuildLaneFromScopeBins(
-            msg.scopeRight, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
+            rightScopeBins, lane1CenterX, laneAmpHalfWidth, &rowX0Right, &rowX1Right, &rowVisualIntensityRight, &rowValidRight,
             &rowHoldFramesRight);
         } else {
           std::fill(rowValidRight.begin(), rowValidRight.end(), 0u);
@@ -1152,6 +1154,16 @@ struct TDScopeDisplayWidget final : Widget {
       drawReadHeadLine(readHeadDrawY, 255, 1.15f);
     }
     nvgResetScissor(args.vg);
+
+    if (renderStereo && APP && APP->window && APP->window->uiFont) {
+      const float labelY = drawTop + 6.f;
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 8.2f);
+      nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(235, 243, 248, 168));
+      nvgText(args.vg, lane0CenterX, labelY, "L", nullptr);
+      nvgText(args.vg, lane1CenterX, labelY, "R", nullptr);
+    }
     nvgRestore(args.vg);
   }
 };

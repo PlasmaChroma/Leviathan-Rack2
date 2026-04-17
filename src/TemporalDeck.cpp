@@ -126,9 +126,11 @@ struct ScopeWindowCache {
 };
 
 enum ScopeChannelMode {
-  SCOPE_CHANNEL_MID = 0,
-  SCOPE_CHANNEL_LEFT,
-  SCOPE_CHANNEL_RIGHT
+  // Must stay aligned with TemporalDeckEngine::readLiveScopeEnvelopeRange():
+  // 0 = left, 1 = right, 2 = mid.
+  SCOPE_CHANNEL_LEFT = 0,
+  SCOPE_CHANNEL_RIGHT = 1,
+  SCOPE_CHANNEL_MID = 2
 };
 
 static float reduceScopeChannelValue(float left, float right, ScopeChannelMode channelMode) {

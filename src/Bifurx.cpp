@@ -64,6 +64,8 @@ constexpr float kOverlayDbfsFloor = -96.f;
 constexpr float kOverlayDbfsCeiling = 6.f;
 constexpr float kOverlaySubsonicCutHz = 10.f;
 constexpr float kOverlaySubsonicFadeHz = 30.f;
+constexpr float kVoctSmoothingTauSeconds = 0.0025f;
+constexpr float kVoctDeadbandVolts = 0.001f;
 constexpr float kDisplayDbfsSpan = 30.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
@@ -863,6 +865,10 @@ struct Bifurx final : Module {
 	float previewFilterAlpha = 0.f;
 	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
+	float voctCvFiltered = 0.f;
+	bool voctCvFilterInitialized = false;
+	float voctCvFilterAlpha = 0.f;
+	float voctCvFilterSampleRate = 0.f;
 	float previewPrevTargetFreqA = 440.f;
 	float previewPrevTargetFreqB = 440.f;
 	bool previewTargetMotionInitialized = false;
@@ -962,6 +968,8 @@ struct Bifurx final : Module {
 		prdB.z2 = 0.f;
 		prdB.z3 = 0.f;
 		prdB.z4 = 0.f;
+		voctCvFiltered = 0.f;
+		voctCvFilterInitialized = false;
 	}
 
 	json_t* dataToJson() override {
@@ -1097,13 +1105,35 @@ struct Bifurx final : Module {
 				filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
 			}
 
-			const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
-			const float level = params[LEVEL_PARAM].getValue();
-			const float drive = levelDriveGain(level);
+		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
+		const float level = params[LEVEL_PARAM].getValue();
+		const float drive = levelDriveGain(level);
 		const int mode = int(std::round(params[MODE_PARAM].getValue()));
 		const int tito = int(std::round(params[TITO_PARAM].getValue()));
 		const float freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
-		const float voctCv = inputs[VOCT_INPUT].isConnected() ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		const bool voctConnected = inputs[VOCT_INPUT].isConnected();
+		const float voctCvRaw = voctConnected ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+		if (std::fabs(voctCvFilterSampleRate - args.sampleRate) > 0.5f) {
+			voctCvFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kVoctSmoothingTauSeconds);
+			voctCvFilterSampleRate = args.sampleRate;
+		}
+		float voctCv = 0.f;
+		if (voctConnected) {
+			if (!voctCvFilterInitialized) {
+				voctCvFiltered = voctCvRaw;
+				voctCvFilterInitialized = true;
+			}
+			else {
+				voctCvFiltered += voctCvFilterAlpha * (voctCvRaw - voctCvFiltered);
+			}
+			// Prevent tiny DC/noise wobble from a connected 0V source from
+			// audibly ratcheting cutoff while turning the frequency knob.
+			voctCv = (std::fabs(voctCvFiltered) < kVoctDeadbandVolts) ? 0.f : voctCvFiltered;
+		}
+		else {
+			voctCvFiltered = 0.f;
+			voctCvFilterInitialized = false;
+		}
 		const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f);
 		const float fmCv = inputs[FM_INPUT].isConnected() ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
 		const float fm = fmCv * fmAmt;
