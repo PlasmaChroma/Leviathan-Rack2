@@ -154,6 +154,11 @@ float signedWeight(float balance, bool upperPeak) {
 	return fastExp(0.82f * sign * clamp(balance, -1.f, 1.f));
 }
 
+float cascadeWideMorph(float spanNorm) {
+	const float x = clamp01((clamp01(spanNorm) - 0.03f) / 0.97f);
+	return std::pow(x, 0.58f);
+}
+
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	const float clampedT = clamp01(t);
 	NVGcolor out;
@@ -426,7 +431,8 @@ T combineModeResponse(
 	const T& cascadeHpToLp,
 	const T& cascadeHpToHp,
 	float wA,
-	float wB
+	float wB,
+	float wideMorph
 ) {
 	switch (mode) {
 		case 0: return T(0.98f) * cascadeLp;
@@ -438,7 +444,12 @@ T combineModeResponse(
 		case 6: return T(1.04f) * cascadeHpToLp;
 		case 7: return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
-		case 9: return T(0.98f) * cascadeHpToHp;
+		case 9: {
+			const T fourPole = T(0.98f) * cascadeHpToHp;
+			// Mirror of mode 0: hpB here is also cascaded in the audio path.
+			const T twoPole = T(1.04f) * hpA;
+			return fourPole + (twoPole - fourPole) * T(clamp01(wideMorph));
+		}
 		default: return T(1.f);
 	}
 }
@@ -472,9 +483,12 @@ struct BifurxPreviewModel {
 	DisplayBiquad bandB;
 	DisplayBiquad highB;
 	DisplayBiquad notchB;
+	float markerFreqA = 440.f;
+	float markerFreqB = 440.f;
 	float sampleRate = 44100.f;
 	float wA = 1.f;
 	float wB = 1.f;
+	float wideMorph = 0.f;
 	int mode = 0;
 	int circuitMode = 0;
 };
@@ -544,6 +558,8 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.bandB = makeDisplayBiquad(state.sampleRate, freqB, qB, 1);
 	model.highB = makeDisplayBiquad(state.sampleRate, freqB, qB, 2);
 	model.notchB = makeDisplayBiquad(state.sampleRate, freqB, qB, 3);
+	model.markerFreqA = freqA;
+	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
 	model.circuitMode = clampCircuitMode(state.circuitMode);
@@ -553,6 +569,7 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	const float norm = 2.f / (lowW + highW);
 	model.wA = lowW * norm;
 	model.wB = highW * norm;
+	model.wideMorph = cascadeWideMorph(state.spanNorm);
 	return model;
 }
 
@@ -575,7 +592,7 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 		lpA, bpA, hpA, ntA,
 		lpB, bpB, hpB, ntB,
 		cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
-		model.wA, model.wB
+		model.wA, model.wB, model.wideMorph
 	);
 }
 
@@ -1087,6 +1104,7 @@ struct Bifurx final : Module {
 		const float spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f;
 		const float spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		const float spanOct = 8.f * shapedSpan(spanNorm);
+		const float spanWideMorph = cascadeWideMorph(spanNorm);
 		const bool fastPathEligible = (circuitMode == 0)
 			&& (tito == 1)
 			&& !inputs[VOCT_INPUT].isConnected()
@@ -1226,7 +1244,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					b.lp, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 1: {
@@ -1237,7 +1255,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 2: {
@@ -1248,7 +1266,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 3: {
@@ -1259,7 +1277,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, b.notch, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 4: {
@@ -1270,7 +1288,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 5: {
@@ -1281,7 +1299,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 6: {
@@ -1292,7 +1310,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, b.lp, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 7: {
@@ -1303,7 +1321,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 8: {
@@ -1314,7 +1332,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, 0.f,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 			case 9:
@@ -1326,7 +1344,7 @@ struct Bifurx final : Module {
 					a.lp, a.bp, a.hp, a.notch,
 					b.lp, b.bp, b.hp, b.notch,
 					0.f, 0.f, 0.f, b.hp,
-					wA, wB
+					wA, wB, spanWideMorph
 				);
 			} break;
 		}
@@ -1479,6 +1497,27 @@ struct Bifurx final : Module {
 	};
 
 namespace {
+
+struct BifurxCircuitReadoutWidget final : Widget {
+	Bifurx* module = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+
+		int mode = 0;
+		if (module) {
+			mode = clampCircuitMode(module->filterCircuitMode);
+		}
+
+		nvgFontSize(args.vg, std::max(8.5f, box.size.y * 0.82f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(232, 238, 245, 250));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, kBifurxCircuitLabels[mode], nullptr);
+	}
+};
 
 float orderedSpectrumMagnitude(const float* fftData, int bin) {
 	if (bin <= 0) {
@@ -1975,6 +2014,7 @@ void BifurxSpectrumWidget::step() {
 			const float w = box.size.x;
 			const float h = box.size.y;
 			if (w > 0.f && h > 0.f) {
+				const BifurxPreviewModel model = makePreviewModel(previewState);
 				const float padX = 0.f;
 				const float padY = std::max(4.f, h * 0.035f);
 				const float plotX = padX;
@@ -2012,8 +2052,8 @@ void BifurxSpectrumWidget::step() {
 					*outYCurve = yCurve;
 					*outYMarker = yMarker;
 				};
-				evalPeak(previewState.freqA, &peakAX, &peakAYCurve, &peakAYMarker);
-				evalPeak(previewState.freqB, &peakBX, &peakBYCurve, &peakBYMarker);
+				evalPeak(model.markerFreqA, &peakAX, &peakAYCurve, &peakAYMarker);
+				evalPeak(model.markerFreqB, &peakBX, &peakBYCurve, &peakBYMarker);
 			}
 
 			logCurveDebugSample(
@@ -2270,8 +2310,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			insertCurveDrawPoint(point);
 		}
 	};
-	addCurveRefinementAround(previewState.freqA);
-	addCurveRefinementAround(previewState.freqB);
+	addCurveRefinementAround(model.markerFreqA);
+	addCurveRefinementAround(model.markerFreqB);
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
 	nvgSave(args.vg);
@@ -2514,8 +2554,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 
 	PeakMarker peaks[2];
-	peaks[0] = buildMarkerAtFrequency(previewState.freqA);
-	peaks[1] = buildMarkerAtFrequency(previewState.freqB);
+	peaks[0] = buildMarkerAtFrequency(model.markerFreqA);
+	peaks[1] = buildMarkerAtFrequency(model.markerFreqB);
 
 	float labelX[2] = {peaks[0].x, peaks[1].x};
 	const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1;
@@ -2660,6 +2700,7 @@ struct BifurxWidget final : ModuleWidget {
 
 		Vec inPosMm(7.6f, 112.2f);
 		Vec filterCircuitPosMm(7.6f, 102.3f);
+		math::Rect circuitReadoutRectMm(Vec(2.8f, 105.9f), Vec(9.6f, 3.2f));
 		Vec voctPosMm(17.15f, 112.2f);
 		Vec fmPosMm(26.7f, 112.2f);
 		Vec resoCvPosMm(36.25f, 112.2f);
@@ -2691,6 +2732,12 @@ struct BifurxWidget final : ModuleWidget {
 
 		applyPointOverride("FM_AMT_LIGHT", &fmLightPosMm);
 		applyPointOverride("SPAN_CV_ATTEN_LIGHT", &spanLightPosMm);
+
+		BifurxCircuitReadoutWidget* circuitReadout = new BifurxCircuitReadoutWidget();
+		circuitReadout->module = module;
+		circuitReadout->box.pos = mm2px(circuitReadoutRectMm.pos);
+		circuitReadout->box.size = mm2px(circuitReadoutRectMm.size);
+		addChild(circuitReadout);
 
 			Vec modeLeftPosMm = modePosMm.plus(Vec(-2.5f, 0.f));
 			Vec modeRightPosMm = modePosMm.plus(Vec(2.5f, 0.f));
