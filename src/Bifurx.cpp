@@ -885,6 +885,10 @@ struct Bifurx final : Module {
 		FM_AMT_NEG_LIGHT,
 		SPAN_CV_ATTEN_POS_LIGHT,
 		SPAN_CV_ATTEN_NEG_LIGHT,
+		FILTER_CIRCUIT_TL_LIGHT,
+		FILTER_CIRCUIT_TR_LIGHT,
+		FILTER_CIRCUIT_BR_LIGHT,
+		FILTER_CIRCUIT_BL_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -1670,6 +1674,12 @@ struct Bifurx final : Module {
 
 			lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f));
 			lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
+
+			const int circuitModeLight = clampCircuitMode(filterCircuitMode);
+			lights[FILTER_CIRCUIT_TL_LIGHT].setBrightness(circuitModeLight == 0 ? 1.f : 0.f); // SVF
+			lights[FILTER_CIRCUIT_TR_LIGHT].setBrightness(circuitModeLight == 1 ? 1.f : 0.f); // DFM
+			lights[FILTER_CIRCUIT_BR_LIGHT].setBrightness(circuitModeLight == 2 ? 1.f : 0.f); // MS2
+			lights[FILTER_CIRCUIT_BL_LIGHT].setBrightness(circuitModeLight == 3 ? 1.f : 0.f); // PRD
 			if (measurePerf) {
 				const PerfClock::time_point perfEnd = PerfClock::now();
 				const uint64_t controlsNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfCoreStart - perfStart).count();
@@ -2963,6 +2973,15 @@ struct BifurxWidget final : ModuleWidget {
 			addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
 
 		addParam(createParamCentered<TL1105>(mm2px(filterCircuitPosMm), module, Bifurx::FILTER_CIRCUIT_PARAM));
+		const float circuitLedOffsetMm = 2.7f;
+		addChild(createLightCentered<SmallLight<YellowLight>>(
+			mm2px(filterCircuitPosMm.plus(Vec(-circuitLedOffsetMm, -circuitLedOffsetMm))), module, Bifurx::FILTER_CIRCUIT_TL_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(
+			mm2px(filterCircuitPosMm.plus(Vec(circuitLedOffsetMm, -circuitLedOffsetMm))), module, Bifurx::FILTER_CIRCUIT_TR_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(
+			mm2px(filterCircuitPosMm.plus(Vec(circuitLedOffsetMm, circuitLedOffsetMm))), module, Bifurx::FILTER_CIRCUIT_BR_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(
+			mm2px(filterCircuitPosMm.plus(Vec(-circuitLedOffsetMm, circuitLedOffsetMm))), module, Bifurx::FILTER_CIRCUIT_BL_LIGHT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inPosMm), module, Bifurx::IN_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPosMm), module, Bifurx::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPosMm), module, Bifurx::FM_INPUT));
