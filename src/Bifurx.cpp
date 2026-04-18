@@ -41,9 +41,8 @@ constexpr int kGuideCount = 4;
 const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxCircuitModeCount = 4;
-// During filter tuning we intentionally collapse all circuit processing and
-// preview voicing to the SVF baseline. The selector UI/state stays visible so
-// we can preserve patch/UI flow while tuning the base topology.
+// Circuit selection stays active while we normalize each core's exported
+// semantic response into the shared mode algebra.
 constexpr bool kBifurxTuneSvfOnly = false;
 const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "DFM", "MS2", "PRD"};
 constexpr int kBifurxModeParamIndex = 0;
@@ -201,6 +200,50 @@ float circuitQScale(float resoNorm, int circuitMode) {
 		default:
 			return 1.f;
 	}
+}
+
+float semanticExportScale(int circuitMode) {
+	switch (clampCircuitMode(circuitMode)) {
+		case 1: // DFM
+			return 0.82f;
+		case 2: // MS2
+			return 0.90f;
+		case 3: // PRD
+			return 0.86f;
+		default:
+			return 0.f;
+	}
+}
+
+template <typename T>
+T normalizeSemanticComponent(const T& value, float exportScale) {
+	if (!(exportScale > 0.f)) {
+		return value;
+	}
+	const float magnitude = std::abs(value);
+	if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
+		return value;
+	}
+	const float compressed = exportScale * std::tanh(magnitude / exportScale);
+	if (!(compressed > 0.f) || !std::isfinite(compressed)) {
+		return value;
+	}
+	return value * T(compressed / magnitude);
+}
+
+SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode) {
+	const float exportScale = semanticExportScale(circuitMode);
+	SvfOutputs out;
+	out.lp = normalizeSemanticComponent(raw.lp, exportScale);
+	out.bp = normalizeSemanticComponent(raw.bp, exportScale);
+	out.hp = normalizeSemanticComponent(raw.hp, exportScale);
+	out.notch = out.lp + out.hp;
+	return out;
+}
+
+template <typename T>
+T normalizeSemanticResponse(const T& value, int circuitMode) {
+	return normalizeSemanticComponent(value, semanticExportScale(circuitMode));
 }
 
 float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
@@ -646,7 +689,7 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
-	model.circuitMode = kBifurxTuneSvfOnly ? 0 : clampCircuitMode(state.circuitMode);
+	model.circuitMode = clampCircuitMode(state.circuitMode);
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -659,14 +702,14 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 
 std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
 	const float omega = 2.f * kPi * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-	const std::complex<float> lpA = model.lowA.response(omega);
-	const std::complex<float> bpA = model.bandA.response(omega);
-	const std::complex<float> hpA = model.highA.response(omega);
-	const std::complex<float> ntA = model.notchA.response(omega);
-	const std::complex<float> lpB = model.lowB.response(omega);
-	const std::complex<float> bpB = model.bandB.response(omega);
-	const std::complex<float> hpB = model.highB.response(omega);
-	const std::complex<float> ntB = model.notchB.response(omega);
+	const std::complex<float> lpA = normalizeSemanticResponse(model.lowA.response(omega), model.circuitMode);
+	const std::complex<float> bpA = normalizeSemanticResponse(model.bandA.response(omega), model.circuitMode);
+	const std::complex<float> hpA = normalizeSemanticResponse(model.highA.response(omega), model.circuitMode);
+	const std::complex<float> ntA = normalizeSemanticResponse(model.notchA.response(omega), model.circuitMode);
+	const std::complex<float> lpB = normalizeSemanticResponse(model.lowB.response(omega), model.circuitMode);
+	const std::complex<float> bpB = normalizeSemanticResponse(model.bandB.response(omega), model.circuitMode);
+	const std::complex<float> hpB = normalizeSemanticResponse(model.highB.response(omega), model.circuitMode);
+	const std::complex<float> ntB = normalizeSemanticResponse(model.notchB.response(omega), model.circuitMode);
 	const std::complex<float> cascadeLp = lpB * lpA;
 	const std::complex<float> cascadeNotch = ntB * ntA;
 	const std::complex<float> cascadeHpToLp = lpB * hpA;
@@ -1365,36 +1408,54 @@ struct Bifurx final : Module {
 			float llStageBLpSample = 0.f;
 
 			auto processA = [&](float sample) -> SvfOutputs {
+				SvfOutputs raw;
 				switch (effectiveCircuitMode) {
 					case 1:
-						return dfmA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						raw = dfmA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						break;
 					case 2:
-						return ms2A.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						raw = ms2A.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						break;
 					case 3:
-						return prdA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						raw = prdA.process(sample, args.sampleRate, cutoffA, dampingA, drive, resoNorm);
+						break;
 					default:
 						break;
 				}
-				if (fastPathEligible) {
-					return coreA.processWithCoeffs(sample, cachedCoeffsA);
+				if (effectiveCircuitMode == 0) {
+					if (fastPathEligible) {
+						raw = coreA.processWithCoeffs(sample, cachedCoeffsA);
+					}
+					else {
+						raw = coreA.process(sample, args.sampleRate, cutoffA, dampingA);
+					}
 				}
-				return coreA.process(sample, args.sampleRate, cutoffA, dampingA);
+				return normalizeSemanticOutputs(raw, effectiveCircuitMode);
 			};
 			auto processB = [&](float sample) -> SvfOutputs {
+				SvfOutputs raw;
 				switch (effectiveCircuitMode) {
 					case 1:
-						return dfmB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						raw = dfmB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						break;
 					case 2:
-						return ms2B.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						raw = ms2B.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						break;
 					case 3:
-						return prdB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						raw = prdB.process(sample, args.sampleRate, cutoffB, dampingB, drive, resoNorm);
+						break;
 					default:
 						break;
 				}
-				if (fastPathEligible) {
-					return coreB.processWithCoeffs(sample, cachedCoeffsB);
+				if (effectiveCircuitMode == 0) {
+					if (fastPathEligible) {
+						raw = coreB.processWithCoeffs(sample, cachedCoeffsB);
+					}
+					else {
+						raw = coreB.process(sample, args.sampleRate, cutoffB, dampingB);
+					}
 				}
-				return coreB.process(sample, args.sampleRate, cutoffB, dampingB);
+				return normalizeSemanticOutputs(raw, effectiveCircuitMode);
 			};
 
 		switch (mode) {

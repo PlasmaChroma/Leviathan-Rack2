@@ -104,6 +104,40 @@ TestResult testLowLowRuntimeRetainsPrePeakLowBand() {
   };
 }
 
+TestResult testLowLowRuntimeSemanticExportsTrackSvfBaseline() {
+  const float sampleRate = 48000.f;
+  const float cutoffA = 140.f;
+  const float cutoffB = 950.f;
+  const float dampingA = 1.f / 1.1f;
+  const float dampingB = 1.f / 1.1f;
+
+  const float svf = simulateLlRuntimeGainDb(
+    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 0
+  );
+  const float dfm = simulateLlRuntimeGainDb(
+    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 1
+  );
+  const float ms2 = simulateLlRuntimeGainDb(
+    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 2
+  );
+  const float prd = simulateLlRuntimeGainDb(
+    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 3
+  );
+
+  const float maxDelta = std::max(
+    std::max(std::fabs(dfm - svf), std::fabs(ms2 - svf)),
+    std::fabs(prd - svf)
+  );
+  const bool pass = maxDelta < 5.0f;
+  return {
+    "LL semantic exports keep alternate circuits near SVF baseline",
+    pass,
+    "svf=" + std::to_string(svf) + " dfm=" + std::to_string(dfm) +
+      " ms2=" + std::to_string(ms2) + " prd=" + std::to_string(prd) +
+      " maxDelta=" + std::to_string(maxDelta)
+  };
+}
+
 struct MirrorStats {
   float meanAbsDiff = 0.f;
   float maxAbsDiff = 0.f;
@@ -537,7 +571,7 @@ TestResult testModesRemainDistinctAtReferenceState() {
   };
 }
 
-TestResult testPreviewCircuitSelectionCollapsedForSvfTuning() {
+TestResult testPreviewCircuitSelectionRespectsCircuitMode() {
   PreviewState svf;
   PreviewState dfm;
   svf.sampleRate = 48000.f;
@@ -558,9 +592,9 @@ TestResult testPreviewCircuitSelectionCollapsedForSvfTuning() {
     sumAbs += std::fabs(responseDb(a, f) - responseDb(b, f));
   }
 
-  const bool same = sumAbs < 1e-3f && a.circuitMode == 0 && b.circuitMode == 0;
+  const bool same = sumAbs > 0.25f && a.circuitMode == 0 && b.circuitMode == 1;
   return {
-    "Preview circuit voicing is pinned to SVF while tuning",
+    "Preview circuit selection respects circuit mode",
     same,
     "sumAbs=" + std::to_string(sumAbs) + " circuitA=" + std::to_string(a.circuitMode) +
       " circuitB=" + std::to_string(b.circuitMode)
@@ -582,13 +616,14 @@ int main() {
     testLowLowMaintainsDoubleSlopeOrdering(),
     testLowLowMidpointDipNotOverlyDeep(),
     testLowLowRuntimeRetainsPrePeakLowBand(),
+    testLowLowRuntimeSemanticExportsTrackSvfBaseline(),
     testLowLowAndHighHighPreviewMirrorLowSpan(),
     testLowLowAndHighHighPreviewMirrorMidSpan(),
     testLowLowAndHighHighPreviewMirrorHighSpan(),
     testLowLowAndHighHighRuntimeMirrorAcrossSpans(),
     testBandBandHasTwoLocalPeaksNearMarkers(),
     testModesRemainDistinctAtReferenceState(),
-    testPreviewCircuitSelectionCollapsedForSvfTuning(),
+    testPreviewCircuitSelectionRespectsCircuitMode(),
   };
 
   int fails = 0;

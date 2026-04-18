@@ -145,20 +145,14 @@
   - normalize the circuit core outputs to a common contract, or
   - introduce per-circuit mode extraction/mixing
 
-## Current planning recommendation
+## Current implementation status
 
-- The recommended next design step is:
-  - keep the shared `combineModeResponse()` abstraction for now
-  - move the abstraction boundary downward so each circuit core is responsible for exporting a normalized semantic response bundle
-- In practice, that means:
-  - `SVF` already behaves like a semantic baseline
-  - `DFM`, `MS2`, and `PRD` should each get an adapter/export layer that maps internal states to a shared contract for `lp` / `bp` / `hp` / `notch`
-  - the shared combiner should consume that normalized contract, not the raw hand-shaped proxies directly
-- This is preferable to immediately switching to fully per-circuit mode extraction because:
-  - it preserves the existing shared mode algebra if that algebra is still valid
-  - it isolates the mismatch to the place where the telemetry says it lives
-  - it is a smaller architectural move than rewriting every mode as circuit-specific logic
-- Only escalate to fully per-circuit mode extraction if the adapter/export-layer approach fails to produce coherent cross-circuit behavior without new per-mode hacks.
+- The semantic export normalization pass is now implemented.
+- The shared `combineModeResponse()` abstraction is still in place.
+- `DFM`, `MS2`, and `PRD` now go through a normalized semantic export layer before the shared combiner sees `lp` / `bp` / `hp` / `notch`.
+- The implementation uses a small per-circuit soft-saturation adapter rather than a new combiner-side compensation layer.
+- This preserves the shared mode algebra while moving the contract boundary to the circuit export side, which is the architecture supported by the telemetry so far.
+- The test model mirrors the same normalized-export behavior so the fast spec exercises the same contract as runtime and preview.
 
 ## What not to do next
 
@@ -169,13 +163,29 @@
 ## Present status
 
 - Measurement-first investigation has succeeded.
-- The raw `LL` telemetry is no longer hypothetical; it clearly separates `SVF` from `DFM`, `MS2`, and `PRD`.
-- `make test-fast` remains green with the current raw-`LL` baseline and updated fast-test model.
-- The repo is now at an architectural decision point, not a coefficient-tuning point.
-- `GPT-5.4` has now weighed in on the abstraction boundary:
+- The raw `LL` telemetry is no longer hypothetical; it clearly separated `SVF` from `DFM`, `MS2`, and `PRD`.
+- The normalized-export implementation is now in place in both runtime and the fast-test model.
+- `make test-fast` passes with the semantic export layer enabled.
+- The repo is still at an architectural decision point for any follow-up work, but the next move is no longer “do we have a mismatch?”; that has been answered.
+- `GPT-5.4` weighed in on the abstraction boundary:
   - prefer normalized per-circuit semantic exports first
   - keep shared mode combination unless that approach fails
-- The next implementation work should follow that plan before considering more drastic per-circuit mode logic.
+- If follow-up work is needed, it should start from this normalized-export baseline instead of returning to raw proxy tuning.
+
+## Handoff readiness
+
+- The repo is ready for a constrained follow-on handoff.
+- The correct handoff scope is:
+  - validate the normalized-export baseline against additional runtime captures if desired
+  - keep the shared `combineModeResponse()` path in place while evaluating that baseline
+- The handoff is not:
+  - freeform tuning
+  - shared-combiner retuning
+  - direct introduction of per-circuit mode extraction without first exhausting the normalized-export baseline
+- Stop and escalate if:
+  - the export contract cannot be kept coherent without per-mode hacks
+  - normalization starts requiring circuit-specific glue inside `combineModeResponse()`
+  - the work starts collapsing into ad hoc compensation rather than a clean semantic contract
 
 ## Instructions for GPT-5.3
 
