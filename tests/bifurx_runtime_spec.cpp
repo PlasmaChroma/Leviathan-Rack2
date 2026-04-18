@@ -12,6 +12,8 @@ Plugin* pluginInstance = nullptr;
 
 namespace {
 
+constexpr float kRuntimePi = 3.14159265358979323846f;
+
 struct TestResult {
   std::string name;
   bool pass = false;
@@ -81,7 +83,7 @@ float measureRuntimeGainDb(
   int nAccum = 0;
   for (int n = 0; n < totalSamples; ++n) {
     const float t = float(n) / args.sampleRate;
-    const float in = inputAmplitude * std::sin(2.f * float(M_PI) * inputHz * t);
+    const float in = inputAmplitude * std::sin(2.f * kRuntimePi * inputHz * t);
     module.inputs[Bifurx::IN_INPUT].setVoltage(in);
     module.process(args);
     const float out = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();

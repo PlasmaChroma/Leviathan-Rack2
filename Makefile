@@ -38,6 +38,64 @@ TEST_BINS := \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec
 
+RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
+RACK_TEST_OPT_FLAGS := -O1
+CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
+RACK_RUNTIME_DIR := $(abspath $(RACK_DIR))
+# Candidate runtime locations for Rack-linked test binaries.
+# `RACK_DIR` is primary, while `/tmp/Rack2` is used by some local Rack setups.
+RACK_RUNTIME_DIRS := $(RACK_RUNTIME_DIR) /tmp/Rack2
+
+define run_test_bin
+	@if [ -x "$(1)" ]; then "$(1)"; \
+	elif [ -x "$(1).exe" ]; then \
+		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
+			echo "[SKIP] $(1).exe is a Windows test binary; cannot execute in this Linux shell."; \
+		else \
+			"$(1).exe"; \
+		fi; \
+	elif [ -f "$(1).exe" ]; then \
+		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
+			echo "[SKIP] $(1).exe is a Windows test binary; cannot execute in this Linux shell."; \
+		else \
+			echo "[FAIL] Test binary exists but is not executable: $(1).exe"; exit 1; \
+		fi; \
+	else echo "[FAIL] Missing test binary: $(1)"; exit 1; fi
+endef
+
+define run_rack_test_bin
+	@rack_path="$$PATH"; \
+	rack_ld_path="$$LD_LIBRARY_PATH"; \
+	for d in $(RACK_RUNTIME_DIRS); do \
+		if [ -d "$$d" ]; then \
+			rack_path="$$d:$$rack_path"; \
+			rack_ld_path="$$d:$$rack_ld_path"; \
+		fi; \
+	done; \
+	run_with_rack_env() { \
+		PATH="$$rack_path" LD_LIBRARY_PATH="$$rack_ld_path" "$$1"; \
+		rc=$$?; \
+		if [ "$$rc" -eq 127 ]; then \
+			echo "[FAIL] Rack-linked test could not start (exit 127). Runtime dirs checked: $(RACK_RUNTIME_DIRS)"; \
+		fi; \
+		return "$$rc"; \
+	}; \
+	if [ -x "$(1)" ]; then run_with_rack_env "$(1)"; \
+	elif [ -x "$(1).exe" ]; then \
+		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
+			echo "[SKIP] $(1).exe is a Windows Rack-linked test binary; cannot execute in this Linux shell."; \
+		else \
+			run_with_rack_env "$(1).exe"; \
+		fi; \
+	elif [ -f "$(1).exe" ]; then \
+		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
+			echo "[SKIP] $(1).exe is a Windows Rack-linked test binary; cannot execute in this Linux shell."; \
+		else \
+			echo "[FAIL] Rack-linked test binary exists but is not executable: $(1).exe"; exit 1; \
+		fi; \
+	else echo "[FAIL] Missing Rack-linked test binary: $(1)"; exit 1; fi
+endef
+
 CROWNSTEP_MODULE_SOURCES := \
 	src/Crownstep.cpp \
 	src/CrownstepModule.cpp \
@@ -48,20 +106,20 @@ CROWNSTEP_MODULE_SOURCES := \
 test-build: $(TEST_BINS)
 
 test: test-build
-	@build/tests/temporaldeck_platter_spec_harness
-	@build/tests/temporaldeck_arc_lights_spec
-	@build/tests/temporaldeck_engine_spec
-	@build/tests/temporaldeck_expander_preview_spec
-	@build/tests/temporaldeck_menu_utils_spec
-	@build/tests/temporaldeck_frame_input_spec
-	@build/tests/temporaldeck_platter_input_spec
-	@build/tests/temporaldeck_sample_prep_spec
-	@build/tests/temporaldeck_virtual_integration_spec
-	@build/tests/crownstep_spec
-	@build/tests/bifurx_filter_spec
-	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/bifurx_runtime_spec
-	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/panel_svg_utils_spec
-	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/crownstep_persistence_spec
+	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
+	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
+	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
+	$(call run_test_bin,build/tests/temporaldeck_expander_preview_spec)
+	$(call run_test_bin,build/tests/temporaldeck_menu_utils_spec)
+	$(call run_test_bin,build/tests/temporaldeck_frame_input_spec)
+	$(call run_test_bin,build/tests/temporaldeck_platter_input_spec)
+	$(call run_test_bin,build/tests/temporaldeck_sample_prep_spec)
+	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
+	$(call run_test_bin,build/tests/crownstep_spec)
+	$(call run_test_bin,build/tests/bifurx_filter_spec)
+	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
+	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
+	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
 	@$(MAKE) --no-print-directory test-odr
 
 test-odr: plugin.so
@@ -126,10 +184,12 @@ build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/PanelSvgUtils.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/PanelSvgUtils.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/PanelSvgUtils.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
-build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+# Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
+# them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests build/tests/bifurx_runtime_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
-build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

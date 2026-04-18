@@ -163,7 +163,7 @@ TestResult testLiveToSampleConversionBumpsGenerationAndPreservesStaticSamplePrev
     engine.process(in);
   }
 
-  bool converted = engine.convertLiveWindowToSample(1.f, true);
+  bool converted = engine.convertLiveWindowToSample(1.f);
   uint64_t genAfter = engine.bufferGeneration;
   bool generationBumped = genAfter > genBefore;
   bool previewPopulated = engine.preview.filledBins > 0;

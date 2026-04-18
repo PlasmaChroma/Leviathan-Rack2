@@ -396,7 +396,7 @@ TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
     engine.buffer.write(float(i), float(100 + i));
   }
 
-  bool converted = engine.convertLiveWindowToSample(0.00045f, true);
+  bool converted = engine.convertLiveWindowToSample(0.00045f);
   bool sizeOk = engine.sampleFrames == 5;
   bool endpointsOk = sizeOk && std::fabs(engine.buffer.left[0] - 5.f) <= 1e-6f &&
                      std::fabs(engine.buffer.left[engine.sampleFrames - 1] - 9.f) <= 1e-6f;

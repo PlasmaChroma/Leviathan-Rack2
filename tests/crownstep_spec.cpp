@@ -131,7 +131,7 @@ TestResult testPitchDividerModesScaleBoardValuesAndCenterOffset() {
   const std::array<float, 4> expectedCenter = {{15.5f, 7.75f, 5.1666665f, 3.875f}};
   for (int mode = 0; mode < 4; ++mode) {
     float divided = crownstep::applyPitchDividerToBoardValue(sourceValue, mode);
-    float center = crownstep::pitchBipolarCenterOffset(mode);
+    float center = crownstep::pitchBipolarCenterOffset(mode, crownstep::BOARD_SIZE);
     if (std::fabs(divided - expectedDivided[size_t(mode)]) > 1e-6f ||
         std::fabs(center - expectedCenter[size_t(mode)]) > 1e-6f) {
       pass = false;
