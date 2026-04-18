@@ -42,11 +42,13 @@ inline float highHighSpanCompGain(float wideMorph) {
   return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
-inline float semanticExportScale(int circuitMode) {
-  switch (std::max(0, std::min(3, circuitMode))) {
-    case 1: return 0.82f;
-    case 2: return 0.90f;
-    case 3: return 0.86f;
+inline float semanticExportScale(int circuitMode, int stageIndex) {
+  const int clampedCircuitMode = std::max(0, std::min(3, circuitMode));
+  const int clampedStageIndex = std::max(0, std::min(1, stageIndex));
+  switch (clampedCircuitMode) {
+    case 1: return clampedStageIndex == 0 ? 0.82f : 0.70f;
+    case 2: return clampedStageIndex == 0 ? 0.70f : 0.48f;
+    case 3: return clampedStageIndex == 0 ? 0.76f : 0.54f;
     default: return 0.f;
   }
 }
@@ -73,8 +75,8 @@ struct SvfOutputs {
   float hp = 0.f;
 };
 
-inline SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode) {
-  const float exportScale = semanticExportScale(circuitMode);
+inline SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
+  const float exportScale = semanticExportScale(circuitMode, stageIndex);
   SvfOutputs out;
   out.lp = normalizeSemanticComponent(raw.lp, exportScale);
   out.bp = normalizeSemanticComponent(raw.bp, exportScale);
@@ -258,14 +260,14 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
 
 inline std::complex<float> response(const PreviewModel& model, float hz) {
   const float omega = 2.f * kPi * clampf(hz, kFreqMinHz, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-  const std::complex<float> lpA = normalizeSemanticComponent(model.lowA.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> bpA = normalizeSemanticComponent(model.bandA.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> hpA = normalizeSemanticComponent(model.highA.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> ntA = normalizeSemanticComponent(model.notchA.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> lpB = normalizeSemanticComponent(model.lowB.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> bpB = normalizeSemanticComponent(model.bandB.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> hpB = normalizeSemanticComponent(model.highB.response(omega), semanticExportScale(model.circuitMode));
-  const std::complex<float> ntB = normalizeSemanticComponent(model.notchB.response(omega), semanticExportScale(model.circuitMode));
+  const std::complex<float> lpA = normalizeSemanticComponent(model.lowA.response(omega), semanticExportScale(model.circuitMode, 0));
+  const std::complex<float> bpA = normalizeSemanticComponent(model.bandA.response(omega), semanticExportScale(model.circuitMode, 0));
+  const std::complex<float> hpA = normalizeSemanticComponent(model.highA.response(omega), semanticExportScale(model.circuitMode, 0));
+  const std::complex<float> ntA = normalizeSemanticComponent(model.notchA.response(omega), semanticExportScale(model.circuitMode, 0));
+  const std::complex<float> lpB = normalizeSemanticComponent(model.lowB.response(omega), semanticExportScale(model.circuitMode, 1));
+  const std::complex<float> bpB = normalizeSemanticComponent(model.bandB.response(omega), semanticExportScale(model.circuitMode, 1));
+  const std::complex<float> hpB = normalizeSemanticComponent(model.highB.response(omega), semanticExportScale(model.circuitMode, 1));
+  const std::complex<float> ntB = normalizeSemanticComponent(model.notchB.response(omega), semanticExportScale(model.circuitMode, 1));
   const std::complex<float> cascadeLp = lpB * lpA;
   const std::complex<float> cascadeNotch = ntB * ntA;
   const std::complex<float> cascadeHpToLp = lpB * hpA;
@@ -361,8 +363,8 @@ inline float simulateLlRuntimeGainDb(
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
     const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.lp, cB), circuitMode);
+    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
+    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.lp, cB), circuitMode, 1);
     const float modeOut = oB.lp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 
@@ -409,8 +411,8 @@ inline float simulateHhRuntimeGainDb(
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
     const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.hp, cB), circuitMode);
+    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
+    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.hp, cB), circuitMode, 1);
     const float modeOut = hhGain * oB.hp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 

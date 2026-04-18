@@ -79,14 +79,14 @@
 ## Current plan
 
 - Immediate implementation target:
-  - refine the export adapter shape for `MS2` first, then `PRD`
+  - validate the stage-aware export adapter shape for `MS2` first, then `PRD`
 - Keep fixed:
   - `combineModeResponse()`
   - shared mode coefficients
   - solver-free baseline
   - no support taps or combiner glue
 - Validation target:
-  - re-run the Rack `LL` capture after each adapter revision
+  - re-run the Rack `LL` capture after the adapter revision
   - judge success by whether `ll_stage_b_over_a_db` and `ll_output_over_input_db` move materially toward the `SVF` envelope
 - Stop and escalate if:
   - adapter refinement starts requiring per-mode hacks
@@ -132,12 +132,15 @@
    - `MS2`
    - `PRD`
 6. Run `scripts/bifurx_curve_debug_summary.sh <csv...>` on the resulting CSV files.
-7. Compare:
+7. Read both summaries:
+   - circuit-level rollup
+   - circuit-plus-mode breakdown
+8. Compare:
    - `ll_stage_a_lp_rms`
    - `ll_stage_b_lp_rms`
    - `ll_stage_b_over_a_db`
    - `ll_output_over_input_db`
-8. Treat the pass as successful if the non-`SVF` circuits now sit in the same rough envelope as `SVF` instead of showing a large structural gap.
+9. Treat the pass as successful if the non-`SVF` circuits now sit in the same rough envelope as `SVF` instead of showing a large structural gap.
 
 ## Measured LL telemetry results
 
@@ -183,8 +186,8 @@
 - The semantic export normalization pass is now implemented.
 - The shared `combineModeResponse()` abstraction is still in place.
 - `DFM`, `MS2`, and `PRD` now go through a normalized semantic export layer before the shared combiner sees `lp` / `bp` / `hp` / `notch`.
-- The implementation uses a small per-circuit soft-saturation adapter rather than a new combiner-side compensation layer.
-- This preserves the shared mode algebra while moving the contract boundary to the circuit export side, but the latest capture shows that the adapter is only partially converged.
+- The implementation now uses a stage-aware per-circuit soft-saturation adapter rather than a new combiner-side compensation layer.
+- This preserves the shared mode algebra while moving the contract boundary to the circuit export side.
 - The test model mirrors the same normalized-export behavior so the fast spec exercises the same contract as runtime and preview.
 
 ## What not to do next
@@ -199,18 +202,18 @@
 - The raw `LL` telemetry is no longer hypothetical; it clearly separated `SVF` from `DFM`, `MS2`, and `PRD`.
 - The normalized-export implementation is now in place in both runtime and the fast-test model.
 - `make test-fast` passes with the semantic export layer enabled.
-- The latest normalized-baseline capture moved the numbers, but it did not fully converge the non-`SVF` circuits onto `SVF`.
-- The repo is now at a refinement point rather than a discovery point.
+- The source build for `src/Bifurx.cpp` now compiles in this WSL shell.
+- The repo is at a validation point for the stage-aware adapter revision.
 - `GPT-5.4` weighed in on the abstraction boundary:
   - prefer normalized per-circuit semantic exports first
   - keep shared mode combination unless that approach fails
-- If follow-up work is needed, it should start from this partially normalized baseline instead of returning to raw proxy tuning.
+- If follow-up work is needed, it should start from this stage-aware baseline instead of returning to raw proxy tuning.
 
 ## Handoff readiness
 
 - The repo is ready for a constrained follow-on handoff.
 - The correct handoff scope is:
-  - refine the export adapter shape for the remaining `MS2` / `PRD` gap
+  - validate the stage-aware adapter against Rack telemetry
   - keep the shared `combineModeResponse()` path in place while evaluating that baseline
 - The handoff is not:
   - freeform tuning

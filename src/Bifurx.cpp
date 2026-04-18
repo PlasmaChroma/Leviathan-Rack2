@@ -176,6 +176,13 @@ float highHighSpanCompGain(float wideMorph) {
 	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
+struct SvfOutputs {
+	float lp = 0.f;
+	float bp = 0.f;
+	float hp = 0.f;
+	float notch = 0.f;
+};
+
 float circuitCutoffScale(int circuitMode) {
 	switch (clampCircuitMode(circuitMode)) {
 		case 1: // DFM
@@ -202,14 +209,16 @@ float circuitQScale(float resoNorm, int circuitMode) {
 	}
 }
 
-float semanticExportScale(int circuitMode) {
-	switch (clampCircuitMode(circuitMode)) {
+float semanticExportScale(int circuitMode, int stageIndex) {
+	const int clampedCircuitMode = clampCircuitMode(circuitMode);
+	const int clampedStageIndex = clamp(stageIndex, 0, 1);
+	switch (clampedCircuitMode) {
 		case 1: // DFM
-			return 0.82f;
+			return clampedStageIndex == 0 ? 0.82f : 0.70f;
 		case 2: // MS2
-			return 0.90f;
+			return clampedStageIndex == 0 ? 0.70f : 0.48f;
 		case 3: // PRD
-			return 0.86f;
+			return clampedStageIndex == 0 ? 0.76f : 0.54f;
 		default:
 			return 0.f;
 	}
@@ -231,8 +240,8 @@ T normalizeSemanticComponent(const T& value, float exportScale) {
 	return value * T(compressed / magnitude);
 }
 
-SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode) {
-	const float exportScale = semanticExportScale(circuitMode);
+SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
+	const float exportScale = semanticExportScale(circuitMode, stageIndex);
 	SvfOutputs out;
 	out.lp = normalizeSemanticComponent(raw.lp, exportScale);
 	out.bp = normalizeSemanticComponent(raw.bp, exportScale);
@@ -242,8 +251,8 @@ SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode) {
 }
 
 template <typename T>
-T normalizeSemanticResponse(const T& value, int circuitMode) {
-	return normalizeSemanticComponent(value, semanticExportScale(circuitMode));
+T normalizeSemanticResponse(const T& value, int circuitMode, int stageIndex) {
+	return normalizeSemanticComponent(value, semanticExportScale(circuitMode, stageIndex));
 }
 
 float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
@@ -318,13 +327,6 @@ void formatFrequencyLabel(float hz, char* out, size_t outSize) {
 	}
 	std::snprintf(out, outSize, "%.2fHz", safeHz);
 }
-
-struct SvfOutputs {
-	float lp = 0.f;
-	float bp = 0.f;
-	float hp = 0.f;
-	float notch = 0.f;
-};
 
 struct SvfCoeffs {
 	float g = 0.f;
@@ -702,14 +704,14 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 
 std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
 	const float omega = 2.f * kPi * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-	const std::complex<float> lpA = normalizeSemanticResponse(model.lowA.response(omega), model.circuitMode);
-	const std::complex<float> bpA = normalizeSemanticResponse(model.bandA.response(omega), model.circuitMode);
-	const std::complex<float> hpA = normalizeSemanticResponse(model.highA.response(omega), model.circuitMode);
-	const std::complex<float> ntA = normalizeSemanticResponse(model.notchA.response(omega), model.circuitMode);
-	const std::complex<float> lpB = normalizeSemanticResponse(model.lowB.response(omega), model.circuitMode);
-	const std::complex<float> bpB = normalizeSemanticResponse(model.bandB.response(omega), model.circuitMode);
-	const std::complex<float> hpB = normalizeSemanticResponse(model.highB.response(omega), model.circuitMode);
-	const std::complex<float> ntB = normalizeSemanticResponse(model.notchB.response(omega), model.circuitMode);
+	const std::complex<float> lpA = normalizeSemanticResponse(model.lowA.response(omega), model.circuitMode, 0);
+	const std::complex<float> bpA = normalizeSemanticResponse(model.bandA.response(omega), model.circuitMode, 0);
+	const std::complex<float> hpA = normalizeSemanticResponse(model.highA.response(omega), model.circuitMode, 0);
+	const std::complex<float> ntA = normalizeSemanticResponse(model.notchA.response(omega), model.circuitMode, 0);
+	const std::complex<float> lpB = normalizeSemanticResponse(model.lowB.response(omega), model.circuitMode, 1);
+	const std::complex<float> bpB = normalizeSemanticResponse(model.bandB.response(omega), model.circuitMode, 1);
+	const std::complex<float> hpB = normalizeSemanticResponse(model.highB.response(omega), model.circuitMode, 1);
+	const std::complex<float> ntB = normalizeSemanticResponse(model.notchB.response(omega), model.circuitMode, 1);
 	const std::complex<float> cascadeLp = lpB * lpA;
 	const std::complex<float> cascadeNotch = ntB * ntA;
 	const std::complex<float> cascadeHpToLp = lpB * hpA;
@@ -1430,7 +1432,7 @@ struct Bifurx final : Module {
 						raw = coreA.process(sample, args.sampleRate, cutoffA, dampingA);
 					}
 				}
-				return normalizeSemanticOutputs(raw, effectiveCircuitMode);
+				return normalizeSemanticOutputs(raw, effectiveCircuitMode, 0);
 			};
 			auto processB = [&](float sample) -> SvfOutputs {
 				SvfOutputs raw;
@@ -1455,7 +1457,7 @@ struct Bifurx final : Module {
 						raw = coreB.process(sample, args.sampleRate, cutoffB, dampingB);
 					}
 				}
-				return normalizeSemanticOutputs(raw, effectiveCircuitMode);
+				return normalizeSemanticOutputs(raw, effectiveCircuitMode, 1);
 			};
 
 		switch (mode) {
