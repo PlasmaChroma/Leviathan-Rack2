@@ -338,7 +338,9 @@ struct DfmCore {
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
 		const float fb = clamp(0.14f + 0.42f * q + 0.24f * resoNorm, 0.f, 1.60f);
-		const float driveScaled = 0.24f * clamp(drive, 0.f, 10.f);
+		// `input` is already level-shaped upstream; keep a strong unity floor so
+		// alternate circuit models do not collapse low-frequency energy.
+		const float driveScaled = 0.88f + 0.16f * clamp(drive, 0.f, 10.f);
 		const float u = driveScaled * input - fb * s2;
 		const float x = std::tanh(u) + 0.08f * std::tanh(2.f * (driveScaled * input - 0.6f * fb * s2));
 		s1 += g * (x - s1);
@@ -371,7 +373,9 @@ struct Ms2Core {
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
 		const float resonance = clamp(0.14f + 0.18f * q + 0.16f * resoNorm, 0.f, 0.98f);
-		const float driveScaled = 0.20f * clamp(drive, 0.f, 10.f);
+		// `input` is already level-shaped upstream; keep a strong unity floor so
+		// alternate circuit models do not collapse low-frequency energy.
+		const float driveScaled = 0.86f + 0.15f * clamp(drive, 0.f, 10.f);
 		const float x = std::tanh(0.92f * (driveScaled * input - resonance * z4));
 		z1 += g * (std::tanh(x) - z1);
 		z2 += g * (std::tanh(z1) - z2);
@@ -407,7 +411,9 @@ struct PrdCore {
 		const float g = std::tan(kPi * limitedCutoff / sr);
 		const float q = 1.f / std::max(damping, 0.05f);
 		const float resonance = clamp(0.14f + 0.30f * q + 0.36f * resoNorm, 0.f, 1.38f);
-		const float driveScaled = 0.27f * clamp(drive, 0.f, 10.f);
+		// `input` is already level-shaped upstream; keep a strong unity floor so
+		// alternate circuit models do not collapse low-frequency energy.
+		const float driveScaled = 0.90f + 0.18f * clamp(drive, 0.f, 10.f);
 		const float u = driveScaled * input - resonance * z4;
 		const float x = std::tanh(u) + 0.24f * std::tanh(2.2f * u);
 		z1 += g * (std::tanh(x - 0.05f * z1) - z1);
@@ -2313,13 +2319,34 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 
 	float binDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
+	float binInputAmp[kFftBinCount];
+	float binOutputAmp[kFftBinCount];
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float binHz = (float(bin) * previewState.sampleRate) / float(kFftSize);
 		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedInputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftInputFreq, bin);
 		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
-		const float inputAmp = weightedInputAmp;
-		const float outputAmp = weightedOutputAmp;
+		binInputAmp[bin] = weightedInputAmp;
+		binOutputAmp[bin] = weightedOutputAmp;
+	}
+
+	// Use short band-energy windows (not single bins) so nonlinear circuit
+	// coloration still reads as local lift/cut instead of jittery per-bin flips.
+	constexpr int kOverlayBandRadius = 2;
+	constexpr float kOverlayBandKernel[2 * kOverlayBandRadius + 1] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
+	for (int bin = 0; bin < kFftBinCount; ++bin) {
+		float inputEnergy = 0.f;
+		float outputEnergy = 0.f;
+		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; ++k) {
+			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
+			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
+			const float inAmp = binInputAmp[sampleBin];
+			const float outAmp = binOutputAmp[sampleBin];
+			inputEnergy += w * inAmp * inAmp;
+			outputEnergy += w * outAmp * outAmp;
+		}
+		const float inputAmp = std::sqrt(std::max(0.f, inputEnergy));
+		const float outputAmp = std::sqrt(std::max(0.f, outputEnergy));
 		binDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (inputAmp + 1e-6f)), -24.f, 24.f);
 		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
@@ -2482,7 +2509,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		for (int i = 0; i < 3; ++i) {
 			const float sampleX01 = refineX01[i];
 			const float sampleHz = (i == 1) ? clampedHz : logFrequencyAt(sampleX01, minHz, maxHz);
-			const float sampleDb = clamp(previewModelResponseDb(model, sampleHz), responseMinDb, responseMaxDb);
+			const float curveIndex = logPosition(sampleHz, minHz, maxHz) * float(kCurvePointCount - 1);
+			const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
+			const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
+			const float t = curveIndex - float(i0);
+			// Keep refinement points tied to the same smoothed curve cache as
+			// the vertical bars and peak markers so cutoff moves stay coherent.
+			const float sampleDb = mixf(curveDb[i0], curveDb[i1], t);
 			CurveDrawPoint point;
 			point.x01 = sampleX01;
 			point.x = plotX + usableW * sampleX01;
