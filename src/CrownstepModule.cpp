@@ -247,7 +247,10 @@ void Crownstep::runAiWorkerLoop() {
 
 		AiWorkerResult result;
 		result.id = request.id;
+		const auto thinkStart = std::chrono::steady_clock::now();
 		result.move = chooseAiMoveForSnapshot(request);
+		const auto thinkEnd = std::chrono::steady_clock::now();
+		result.thinkMs = int(std::chrono::duration_cast<std::chrono::milliseconds>(thinkEnd - thinkStart).count());
 
 		{
 			std::lock_guard<std::mutex> lock(aiWorkerMutex);
@@ -297,7 +300,7 @@ void Crownstep::clearAiWorkerQueueState() {
 	aiWorkerInFlightRequestId = 0;
 }
 
-bool Crownstep::consumeReadyAiResult(Move* outMove) {
+bool Crownstep::consumeReadyAiResult(Move* outMove, int* outThinkMs) {
 	if (!outMove) {
 		return false;
 	}
@@ -306,6 +309,9 @@ bool Crownstep::consumeReadyAiResult(Move* outMove) {
 		return false;
 	}
 	*outMove = aiWorkerResult.move;
+	if (outThinkMs) {
+		*outThinkMs = std::max(0, aiWorkerResult.thinkMs);
+	}
 	uint64_t resultId = aiWorkerResult.id;
 	aiWorkerHasResult = false;
 	if (aiWorkerInFlightRequestId != 0 && resultId == aiWorkerInFlightRequestId) {
@@ -864,6 +870,7 @@ void Crownstep::startNewGame() {
 	selectedSquare = -1;
 	hoveredSquare = -1;
 	lastMove = Move();
+	lastAiThinkMs = 0;
 	// Init: player is initial side. Follow: AI is initial side.
 	turnSide = gameRules ? gameRules->humanSide() : HUMAN_SIDE;
 	winnerSide = 0;
@@ -1158,10 +1165,12 @@ void Crownstep::serviceAiTurnFromUiThread() {
 	dispatchAiRequestIfIdle();
 
 	Move readyMove;
-	bool hasReadyMove = consumeReadyAiResult(&readyMove);
+	int readyThinkMs = 0;
+	bool hasReadyMove = consumeReadyAiResult(&readyMove, &readyThinkMs);
 	if (hasReadyMove && !gameOver && turnSide == aiSide()) {
 		if (readyMove.originIndex >= 0 && readyMove.destinationIndex >= 0) {
 			commitMove(readyMove, aiSide());
+			lastAiThinkMs = std::max(0, readyThinkMs);
 		}
 		else if (isOthelloMode()) {
 			advanceForcedPassesIfNeeded();

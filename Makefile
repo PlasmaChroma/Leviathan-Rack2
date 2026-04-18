@@ -22,7 +22,7 @@ DISTRIBUTABLES += $(wildcard presets)
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
 
-TEST_BINS := \
+TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
 	build/tests/temporaldeck_engine_spec \
@@ -33,18 +33,37 @@ TEST_BINS := \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
-	build/tests/bifurx_filter_spec \
+	build/tests/bifurx_filter_spec
+
+TEST_BINS_RACK := \
 	build/tests/bifurx_runtime_spec \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec
+
+TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 RACK_RUNTIME_DIR := $(abspath $(RACK_DIR))
+# Optional extra runtime directory for libRack.dll (e.g. /c/Program Files/VCV/Rack2Pro).
+# Keep this as a single directory path; pass it at invocation time if needed:
+#   make test RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"
+RACK_APP_RUNTIME_DIR ?=
 # Candidate runtime locations for Rack-linked test binaries.
 # `RACK_DIR` is primary, while `/tmp/Rack2` is used by some local Rack setups.
-RACK_RUNTIME_DIRS := $(RACK_RUNTIME_DIR) /tmp/Rack2
+# Include Rack dependency folders so MSYS2 can resolve transitive DLL/SO deps.
+RACK_RUNTIME_DIRS := \
+	$(RACK_RUNTIME_DIR) \
+	$(RACK_RUNTIME_DIR)/dep/lib \
+	$(RACK_RUNTIME_DIR)/dep/bin \
+	/tmp/Rack2 \
+	/tmp/Rack2/dep/lib \
+	/tmp/Rack2/dep/bin \
+	/mingw64/bin \
+	/ucrt64/bin \
+	/clang64/bin \
+	/mingw32/bin
 
 define run_test_bin
 	@if [ -x "$(1)" ]; then "$(1)"; \
@@ -66,6 +85,10 @@ endef
 define run_rack_test_bin
 	@rack_path="$$PATH"; \
 	rack_ld_path="$$LD_LIBRARY_PATH"; \
+	if [ -n "$(RACK_APP_RUNTIME_DIR)" ] && [ -d "$(RACK_APP_RUNTIME_DIR)" ]; then \
+		rack_path="$(RACK_APP_RUNTIME_DIR):$$rack_path"; \
+		rack_ld_path="$(RACK_APP_RUNTIME_DIR):$$rack_ld_path"; \
+	fi; \
 	for d in $(RACK_RUNTIME_DIRS); do \
 		if [ -d "$$d" ]; then \
 			rack_path="$$d:$$rack_path"; \
@@ -77,6 +100,18 @@ define run_rack_test_bin
 		rc=$$?; \
 		if [ "$$rc" -eq 127 ]; then \
 			echo "[FAIL] Rack-linked test could not start (exit 127). Runtime dirs checked: $(RACK_RUNTIME_DIRS)"; \
+			if command -v ldd >/dev/null 2>&1; then \
+				echo "[INFO] ldd unresolved dependencies for $$1:"; \
+				ldd "$$1" 2>/dev/null | grep -i "not found" || echo "[INFO] ldd found no unresolved dependencies (or could not inspect this binary)."; \
+			fi; \
+			if command -v cygcheck >/dev/null 2>&1; then \
+				echo "[INFO] cygcheck unresolved dependencies for $$1:"; \
+				cygcheck "$$1" 2>/dev/null | grep -i "not found" || echo "[INFO] cygcheck found no unresolved dependencies (or could not inspect this binary)."; \
+			fi; \
+			if command -v ntldd >/dev/null 2>&1; then \
+				echo "[INFO] ntldd unresolved dependencies for $$1:"; \
+				ntldd -R "$$1" 2>/dev/null | grep -i "not found" || echo "[INFO] ntldd found no unresolved dependencies (or could not inspect this binary)."; \
+			fi; \
 		fi; \
 		return "$$rc"; \
 	}; \
@@ -102,10 +137,12 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/CrownstepPlayback.cpp \
 	src/CrownstepSerialization.cpp
 
-.PHONY: test test-build test-odr
+.PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr
 test-build: $(TEST_BINS)
+test-build-fast: $(TEST_BINS_NON_RACK)
+test-build-rack: $(TEST_BINS_RACK)
 
-test: test-build
+test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
 	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
@@ -117,9 +154,13 @@ test: test-build
 	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
 	$(call run_test_bin,build/tests/crownstep_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
+
+test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
+
+test: test-fast test-rack
 	@$(MAKE) --no-print-directory test-odr
 
 test-odr: plugin.so

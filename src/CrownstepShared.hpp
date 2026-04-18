@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <condition_variable>
+#include <chrono>
 
 using crownstep::AI_SIDE;
 using crownstep::BoardState;
@@ -161,6 +162,7 @@ struct Crownstep : Module {
 	int winnerSide = 0;
 	int lastMoveSide = 0;
 	int aiDifficulty = 1;
+	int lastAiThinkMs = 0;
 	bool quantizationEnabled = true;
 	bool pitchBipolarEnabled = false;
 	bool melodicBiasEnabled = false;
@@ -206,6 +208,7 @@ struct Crownstep : Module {
 	struct AiWorkerResult {
 		uint64_t id = 0;
 		Move move;
+		int thinkMs = 0;
 	};
 	std::thread aiWorkerThread;
 	std::mutex aiWorkerMutex;
@@ -233,7 +236,7 @@ struct Crownstep : Module {
 	void stopAiWorker();
 	void cancelAiTurnWork();
 	void clearAiWorkerQueueState();
-	bool consumeReadyAiResult(Move* outMove);
+	bool consumeReadyAiResult(Move* outMove, int* outThinkMs = nullptr);
 	bool dispatchAiRequestIfIdle();
 
 	void setGameMode(int mode, bool startFreshGame);

@@ -3300,6 +3300,30 @@ struct CrownstepDifficultyItem final : MenuItem {
 	}
 };
 
+struct CrownstepAiThinkMsWidget final : TransparentWidget {
+	Crownstep* module = nullptr;
+
+	explicit CrownstepAiThinkMsWidget(Crownstep* crownstepModule) {
+		module = crownstepModule;
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !args.vg) {
+			return;
+		}
+
+		char text[64];
+		std::snprintf(text, sizeof(text), "AI: %dms", std::max(0, module->lastAiThinkMs));
+
+		nvgFontSize(args.vg, 10.0f);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGBA(16, 16, 16, 168));
+		nvgText(args.vg, 0.45f, box.size.y * 0.52f + 0.45f, text, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(245, 221, 88, 236));
+		nvgText(args.vg, 0.f, box.size.y * 0.52f, text, nullptr);
+	}
+};
+
 struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
@@ -3368,6 +3392,7 @@ struct CrownstepWidget final : ModuleWidget {
 
 			Vec newGamePos(43.f, 114.0f);
 		Vec debugAddMovesPos(5.08f, 5.08f);
+		Vec aiThinkMsPos(debugAddMovesPos.x + 4.2f, debugAddMovesPos.y);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
@@ -3447,12 +3472,17 @@ struct CrownstepWidget final : ModuleWidget {
 		applyPointOverride("EOC_OUTPUT", &eocPos);
 		applyPointOverride("HUMAN_TURN_LIGHT", &humanLightPos);
 		applyPointOverride("AI_TURN_LIGHT", &aiLightPos);
+		applyPointOverride("AI_THINK_MS", &aiThinkMsPos);
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
 			addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
 			if (isDragonKingDebugEnabled()) {
 				addParam(createParamCentered<LEDButton>(mm2px(debugAddMovesPos), module, Crownstep::DEBUG_ADD_MOVES_PARAM));
+				CrownstepAiThinkMsWidget* aiThinkMsWidget = new CrownstepAiThinkMsWidget(module);
+				aiThinkMsWidget->box.pos = mm2px(Vec(aiThinkMsPos.x + 2.7f, aiThinkMsPos.y - 1.2f));
+				aiThinkMsWidget->box.size = mm2px(Vec(17.0f, 4.0f));
+				addChild(aiThinkMsWidget);
 			}
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
