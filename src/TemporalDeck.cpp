@@ -1088,6 +1088,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool haveLagDragRequest = false;
   bool lagDragRequestActive = false;
   float lagDragRequestSamples = 0.f;
+  float lagDragRequestVelocity = 0.f;
   uint64_t lagDragRequestSeq = 0u;
   if (isTDScopeModule(rightExpander.module) && rightExpander.consumerMessage) {
     const auto *request =
@@ -1099,6 +1100,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
                                ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                : temporaldeck_expander::SCOPE_FORMAT_MONO;
       lagDragRequestActive = temporaldeck_expander::decodeLagDragRequest(request->reserved, &lagDragRequestSamples);
+      if (request->version >= 2u) {
+        lagDragRequestVelocity = request->lagDragVelocity;
+      }
       if (!std::isfinite(lagDragRequestSamples) || lagDragRequestSamples < 0.f) {
         lagDragRequestSamples = 0.f;
       }
@@ -1114,7 +1118,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
       if (lagDragRequestActive) {
         float lagDelta = std::fabs(lagTarget - impl->expanderLagDragLastLagSamples);
         bool dragJustStarted = !impl->expanderLagDragWasActive;
-        bool meaningfulLagMove = lagDelta > 0.02f;
+        // If we have a transmitted velocity, trust it even for small moves to preserve scratch "flavor".
+        bool meaningfulLagMove = lagDelta > 0.02f || std::fabs(lagDragRequestVelocity) > 1e-3f;
         if (dragJustStarted || meaningfulLagMove) {
           if (dragJustStarted) {
             // Scope touch-down should latch a stationary hold without creating
@@ -1125,16 +1130,27 @@ void TemporalDeck::process(const ProcessArgs &args) {
             float velocitySamples = 0.f;
             int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
             float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
-            velocitySamples = (lagTarget - impl->expanderLagDragLastLagSamples) / dtSec;
+            if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
+              // Use high-quality filtered velocity from expander UI if available.
+              velocitySamples = lagDragRequestVelocity;
+            } else {
+              velocitySamples = (lagTarget - impl->expanderLagDragLastLagSamples) / dtSec;
+            }
             impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-            int motionFreshSamples = clamp(int(std::round(args.sampleRate * 0.05f)), 1, int(std::round(args.sampleRate * 0.09f)));
+            // Allow dynamic hold duration based on the actual update rate of the expander UI.
+            int motionFreshSamples = int(std::round(args.sampleRate * dtSec * 1.5f));
+            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
+            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
             impl->platterInput.setMotionFreshSamples(motionFreshSamples);
           }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;
         } else {
           // Keep touch latched without emitting a fresh gesture each heartbeat.
-          impl->platterInput.setTouchHold(true, impl->expanderLagDragLastLagSamples);
+          // Maintain the previous velocity and motion-fresh samples to avoid
+          // scratch flavor pulsing between sparse expander updates.
+          impl->platterInput.setScratch(true, lagTarget, lagDragRequestVelocity);
           impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
         }
         impl->expanderLagDragWasActive = true;
@@ -1310,13 +1326,14 @@ void TemporalDeck::process(const ProcessArgs &args) {
         impl->expanderPublishSeq++;
         float sampleAbsolutePeakVolts =
           (frame.sampleMode && frame.sampleLoaded) ? impl->engine.sampleAbsolutePeakVolts : impl->engine.getLiveAbsolutePeakVolts();
+        float combinedSensitivity = scratchSensitivity() * kMouseScratchTravelScale;
         temporaldeck_expander::populateHostMessage(
           msg, impl->expanderPublishSeq, impl->engine.bufferGeneration, flags, impl->cachedSampleRate, scopeLagForPreview,
           float(frame.accessibleLag), frame.platterAngle, float(frame.samplePlayhead), float(frame.sampleDuration),
-          float(frame.sampleProgress), sampleAbsolutePeakVolts, uint32_t(std::max(0, impl->engine.buffer.size)),
+          float(frame.sampleProgress), sampleAbsolutePeakVolts, combinedSensitivity,
+          uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
-          scopeBinSpanSamples, scopeBinCount, scopeBins.data(), wantStereoScope ? scopeBinsRight.data() : nullptr);
-        rightExpander.module->leftExpander.messageFlipRequested = true;
+          scopeBinSpanSamples, scopeBinCount, scopeBins.data(), wantStereoScope ? scopeBinsRight.data() : nullptr);        rightExpander.module->leftExpander.messageFlipRequested = true;
         impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
         impl->expanderPreviewValid = scopeReady;
       } else {

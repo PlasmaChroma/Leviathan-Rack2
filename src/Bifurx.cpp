@@ -34,6 +34,7 @@ constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
 constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
 constexpr float kPreviewAdaptiveQThreshold = 0.05f;
 constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
+constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kGuideCount = 4;
@@ -88,6 +89,10 @@ float fastExp2(float x) {
 
 float fastExp(float x) {
 	return fastExp2(x * kLog2e);
+}
+
+float amplitudeRatioDb(float numerator, float denominator) {
+	return 20.f * std::log10((std::fabs(numerator) + 1e-6f) / (std::fabs(denominator) + 1e-6f));
 }
 
 std::string bifurxUserRootPath() {
@@ -524,9 +529,7 @@ T combineModeResponse(
 	const T circuitComp = T(modeCircuitSyncCompGain(mode, circuitMode, wideMorph));
 	switch (mode) {
 		case 0:
-			// Preserve the canonical LL cascade, but add a small stage-A support
-			// term so sub/low passband energy does not collapse before the first peak.
-			return circuitComp * (T(1.02f) * cascadeLp + T(0.045f) * lpA);
+			return circuitComp * cascadeLp;
 		case 1: return circuitComp * (T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB));
 		case 2: return circuitComp * (T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA);
 		case 3: return T(1.03f) * cascadeNotch;
@@ -558,6 +561,17 @@ struct BifurxPreviewState {
 	float voctCv = 0.f;
 	int mode = 0;
 	int circuitMode = 0;
+};
+
+struct BifurxLlTelemetryState {
+	bool active = false;
+	int circuitMode = 0;
+	float excitationRms = 0.f;
+	float stageALpRms = 0.f;
+	float stageBLpRms = 0.f;
+	float outputRms = 0.f;
+	float stageBLpOverALpDb = 0.f;
+	float outputOverInputDb = 0.f;
 };
 
 struct BifurxPreviewModel {
@@ -739,11 +753,14 @@ struct BifurxSpectrumWidget final : Widget {
 	double lastCurveDebugLogTimeSec = -1.0;
 	float cachedAxisSampleRate = 0.f;
 	BifurxPreviewState previewState;
+	BifurxLlTelemetryState llTelemetryState;
 	bool hasPreview = false;
+	bool hasLlTelemetry = false;
 	bool hasOverlay = false;
 	bool hasCurveTarget = false;
 	bool hasOverlayTarget = false;
 	uint32_t lastPreviewSeq = 0;
+	uint32_t lastLlTelemetrySeq = 0;
 	uint32_t lastAnalysisSeq = 0;
 	CurveDebugRecorder curveDebugRecorder;
 	PerfDebugRecorder perfDebugRecorder;
@@ -781,6 +798,7 @@ struct BifurxSpectrumWidget final : Widget {
 	void stopPerfDebugCapture();
 	void logCurveDebugSample(
 		const BifurxPreviewState& state,
+		const BifurxLlTelemetryState& llTelemetry,
 		float peakAX,
 		float peakAYCurve,
 		float peakAYMarker,
@@ -908,15 +926,6 @@ struct Bifurx final : Module {
 	PrdCore prdB;
 	int filterCircuitMode = 0; // 0: SVF, 1: DFM, 2: MS2, 3: PRD
 	int activeCircuitMode = 0;
-	float activeCircuitAlignA = 1.f;
-	float activeCircuitAlignB = 1.f;
-	bool pendingCircuitSwitch = false;
-	int pendingCircuitMode = 0;
-	float pendingAlignA = 1.f;
-	float pendingAlignB = 1.f;
-	int pendingSolveSteps = 0;
-	static constexpr int kPendingSolveMinSteps = 6;
-	static constexpr int kPendingSolveMaxSteps = 64;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -926,6 +935,9 @@ struct Bifurx final : Module {
 	BifurxPreviewState previewStates[2];
 	std::atomic<int> previewPublishedIndex{0};
 	std::atomic<uint32_t> previewPublishSeq{0};
+	BifurxLlTelemetryState llTelemetryStates[2];
+	std::atomic<int> llTelemetryPublishedIndex{0};
+	std::atomic<uint32_t> llTelemetryPublishSeq{0};
 	float previewFreqAFiltered = 440.f;
 	float previewFreqBFiltered = 440.f;
 	float previewQAFiltered = 1.f;
@@ -956,6 +968,10 @@ struct Bifurx final : Module {
 	SvfCoeffs cachedCoeffsB;
 	float analysisInputHistory[kFftSize] = {};
 	float analysisOutputHistory[kFftSize] = {};
+	float llTelemetryExcitationSq = 0.f;
+	float llTelemetryStageALpSq = 0.f;
+	float llTelemetryStageBLpSq = 0.f;
+	float llTelemetryOutputSq = 0.f;
 	int analysisWritePos = 0;
 	int analysisFilled = 0;
 	int analysisHopCounter = 0;
@@ -1038,6 +1054,10 @@ struct Bifurx final : Module {
 		prdB.z2 = 0.f;
 		prdB.z3 = 0.f;
 		prdB.z4 = 0.f;
+		llTelemetryExcitationSq = 0.f;
+		llTelemetryStageALpSq = 0.f;
+		llTelemetryStageBLpSq = 0.f;
+		llTelemetryOutputSq = 0.f;
 		voctCvFiltered = 0.f;
 		voctCvFilterInitialized = false;
 	}
@@ -1089,6 +1109,13 @@ struct Bifurx final : Module {
 		previewPublishSeq.fetch_add(1, std::memory_order_release);
 		lastPreviewState = state;
 		hasLastPreviewState = true;
+	}
+
+	void publishLlTelemetryState(const BifurxLlTelemetryState& state) {
+		const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed);
+		llTelemetryStates[writeIndex] = state;
+		llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release);
+		llTelemetryPublishSeq.fetch_add(1, std::memory_order_release);
 	}
 
 	void publishAnalysisFrame() {
@@ -1148,11 +1175,7 @@ struct Bifurx final : Module {
 			PerfClock::time_point perfAnalysisStart;
 
 					if (kBifurxTuneSvfOnly) {
-						pendingCircuitSwitch = false;
-						pendingSolveSteps = 0;
 						activeCircuitMode = 0;
-						activeCircuitAlignA = 1.f;
-						activeCircuitAlignB = 1.f;
 					}
 				int effectiveCircuitMode = kBifurxTuneSvfOnly ? 0 : activeCircuitMode;
 			sanitizeCoreState(coreA);
@@ -1175,28 +1198,9 @@ struct Bifurx final : Module {
 				if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
 					filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
 				}
-					if (!kBifurxTuneSvfOnly) {
-						const int requestedCircuitMode = clampCircuitMode(filterCircuitMode);
-						if (requestedCircuitMode != activeCircuitMode) {
-							if (!pendingCircuitSwitch || pendingCircuitMode != requestedCircuitMode) {
-								pendingCircuitSwitch = true;
-								pendingCircuitMode = requestedCircuitMode;
-								// Stateless solve: always seed from neutral so switching is
-								// deterministic and not history-dependent.
-								pendingAlignA = 1.f;
-								pendingAlignB = 1.f;
-								pendingSolveSteps = 0;
-							}
-						}
-						else {
-							pendingCircuitSwitch = false;
-							pendingSolveSteps = 0;
-							if (activeCircuitMode == 0) {
-								activeCircuitAlignA = 1.f;
-								activeCircuitAlignB = 1.f;
-							}
-						}
-					}
+				if (!kBifurxTuneSvfOnly) {
+					activeCircuitMode = clampCircuitMode(filterCircuitMode);
+				}
 
 		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
 		const float level = params[LEVEL_PARAM].getValue();
@@ -1266,7 +1270,7 @@ struct Bifurx final : Module {
 				balance = balanceNorm;
 				const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm);
 				const float sr = std::max(args.sampleRate, 1.f);
-					auto computeAlignedFreqs = [&](int circuitMode, float alignA, float alignB, float *freqAOut, float *freqBOut) {
+					auto computeCircuitFreqs = [&](int circuitMode, float *freqAOut, float *freqBOut) {
 						const float cutoffScale = circuitCutoffScale(circuitMode);
 						// Keep span symmetric around center by limiting octave shift before
 						// cutoff clamping in the core.
@@ -1278,65 +1282,15 @@ struct Bifurx final : Module {
 						float baseA = safeCenterHz * fastExp2(-halfSpanOct);
 						float baseB = safeCenterHz * fastExp2(halfSpanOct);
 						if (freqAOut) {
-							*freqAOut = clamp(baseA * std::max(alignA, 1e-4f), kFreqMinHz, 0.46f * sr);
+							*freqAOut = clamp(baseA, kFreqMinHz, 0.46f * sr);
 						}
 						if (freqBOut) {
-							*freqBOut = clamp(baseB * std::max(alignB, 1e-4f), kFreqMinHz, 0.46f * sr);
+							*freqBOut = clamp(baseB, kFreqMinHz, 0.46f * sr);
 						}
 					};
-					if (pendingCircuitSwitch && !kBifurxTuneSvfOnly) {
-						float targetA = 0.f;
-						float targetB = 0.f;
-						// Canonical target is always SVF mapping at current controls.
-						computeAlignedFreqs(0, 1.f, 1.f, &targetA, &targetB);
-						if (pendingCircuitMode == 0) {
-							activeCircuitMode = 0;
-							activeCircuitAlignA = 1.f;
-							activeCircuitAlignB = 1.f;
-							effectiveCircuitMode = activeCircuitMode;
-							pendingCircuitSwitch = false;
-							pendingSolveSteps = 0;
-							resetCircuitStates();
-							controlFastCacheValid = false;
-						}
-						else {
-						float pendingBaseA = 0.f;
-						float pendingBaseB = 0.f;
-						computeAlignedFreqs(pendingCircuitMode, 1.f, 1.f, &pendingBaseA, &pendingBaseB);
-						float desiredAlignA = clamp(targetA / std::max(pendingBaseA, 1e-4f), 0.70f, 1.40f);
-						float desiredAlignB = clamp(targetB / std::max(pendingBaseB, 1e-4f), 0.70f, 1.40f);
-						const float solveAlpha = 0.24f;
-						pendingAlignA += solveAlpha * (desiredAlignA - pendingAlignA);
-						pendingAlignB += solveAlpha * (desiredAlignB - pendingAlignB);
-						pendingSolveSteps++;
-						const float errA = std::fabs(std::log2(std::max(pendingAlignA, 1e-4f) / std::max(desiredAlignA, 1e-4f)));
-						const float errB = std::fabs(std::log2(std::max(pendingAlignB, 1e-4f) / std::max(desiredAlignB, 1e-4f)));
-						const float solveErr = std::max(errA, errB);
-						const bool converged = (pendingSolveSteps >= kPendingSolveMinSteps) && (solveErr <= 5e-4f);
-						const bool timeout = pendingSolveSteps >= kPendingSolveMaxSteps;
-						if (converged || timeout) {
-							activeCircuitMode = pendingCircuitMode;
-							activeCircuitAlignA = pendingAlignA;
-							activeCircuitAlignB = pendingAlignB;
-							effectiveCircuitMode = activeCircuitMode;
-							pendingCircuitSwitch = false;
-							pendingSolveSteps = 0;
-							resetCircuitStates();
-							controlFastCacheValid = false;
-						}
-						}
-					}
 					const int safeEffectiveMode = clampCircuitMode(effectiveCircuitMode);
 					const float qScale = circuitQScale(resoNorm, safeEffectiveMode);
-					const float applyAlignA = (safeEffectiveMode == 0) ? 1.f : activeCircuitAlignA;
-					const float applyAlignB = (safeEffectiveMode == 0) ? 1.f : activeCircuitAlignB;
-					computeAlignedFreqs(
-						safeEffectiveMode,
-						applyAlignA,
-						applyAlignB,
-						&freqA0,
-						&freqB0
-					);
+					computeCircuitFreqs(safeEffectiveMode, &freqA0, &freqB0);
 					const float baseDamping = resoToDamping(resoNorm) / std::max(qScale, 1e-4f);
 					dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
 					dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
@@ -1406,6 +1360,9 @@ struct Bifurx final : Module {
 			perfCoreStart = PerfClock::now();
 		}
 			float modeOut = 0.f;
+			float llExcitationSample = 0.f;
+			float llStageALpSample = 0.f;
+			float llStageBLpSample = 0.f;
 
 			auto processA = [&](float sample) -> SvfOutputs {
 				switch (effectiveCircuitMode) {
@@ -1444,6 +1401,9 @@ struct Bifurx final : Module {
 			case 0: {
 				const SvfOutputs a = processA(excitation);
 				const SvfOutputs b = processB(a.lp);
+				llExcitationSample = excitation;
+				llStageALpSample = a.lp;
+				llStageBLpSample = b.lp;
 				modeOut = combineModeResponse<float>(
 					mode,
 					a.lp, a.bp, a.hp, a.notch,
@@ -1558,6 +1518,19 @@ struct Bifurx final : Module {
 		const float out = sanitizeFinite(5.5f * softClip(safeModeOut / 5.5f));
 		outputs[OUT_OUTPUT].setChannels(1);
 		outputs[OUT_OUTPUT].setVoltage(out);
+		const float llTelemetryAlpha = onePoleAlpha(args.sampleTime, kLlTelemetryTauSeconds);
+		if (mode == 0) {
+			llTelemetryExcitationSq += llTelemetryAlpha * (llExcitationSample * llExcitationSample - llTelemetryExcitationSq);
+			llTelemetryStageALpSq += llTelemetryAlpha * (llStageALpSample * llStageALpSample - llTelemetryStageALpSq);
+			llTelemetryStageBLpSq += llTelemetryAlpha * (llStageBLpSample * llStageBLpSample - llTelemetryStageBLpSq);
+			llTelemetryOutputSq += llTelemetryAlpha * (out * out - llTelemetryOutputSq);
+		}
+		else {
+			llTelemetryExcitationSq += llTelemetryAlpha * (0.f - llTelemetryExcitationSq);
+			llTelemetryStageALpSq += llTelemetryAlpha * (0.f - llTelemetryStageALpSq);
+			llTelemetryStageBLpSq += llTelemetryAlpha * (0.f - llTelemetryStageBLpSq);
+			llTelemetryOutputSq += llTelemetryAlpha * (0.f - llTelemetryOutputSq);
+		}
 		if (measurePerf) {
 			perfPreviewStart = PerfClock::now();
 		}
@@ -1668,6 +1641,20 @@ struct Bifurx final : Module {
 		const bool previewPublishTick = periodicPreviewTick || adaptivePreviewTick;
 		if (!hasLastPreviewState || (previewPublishTick && previewStatesDiffer(previewState, lastPreviewState))) {
 			publishPreviewState(previewState);
+		}
+		if (previewPublishTick) {
+			BifurxLlTelemetryState llTelemetryState;
+			llTelemetryState.active = (mode == 0);
+			llTelemetryState.circuitMode = effectiveCircuitMode;
+			llTelemetryState.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f));
+			llTelemetryState.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f));
+			llTelemetryState.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f));
+			llTelemetryState.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f));
+			llTelemetryState.stageBLpOverALpDb =
+				amplitudeRatioDb(llTelemetryState.stageBLpRms, llTelemetryState.stageALpRms);
+			llTelemetryState.outputOverInputDb =
+				amplitudeRatioDb(llTelemetryState.outputRms, llTelemetryState.excitationRms);
+			publishLlTelemetryState(llTelemetryState);
 		}
 		if (measurePerf) {
 			perfAnalysisStart = PerfClock::now();
@@ -1784,12 +1771,14 @@ void BifurxSpectrumWidget::startCurveDebugCapture() {
 
 	curveDebugRecorder.file.setf(std::ios::fixed);
 	curveDebugRecorder.file << std::setprecision(6);
-	curveDebugRecorder.file << "# Bifurx curve debug trace v2\n";
+	curveDebugRecorder.file << "# Bifurx curve debug trace v3\n";
 	curveDebugRecorder.file << "# Start when curve debug logging is enabled, stop when it is disabled\n";
 	curveDebugRecorder.file
-		<< "seq,t_sec,mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,"
+		<< "seq,t_sec,mode,circuit_mode,freq_param,voct_cv,freq_a_hz,freq_b_hz,"
 		   "reso_norm,balance_target,balance_filtered,"
 		   "span_param,span_cv,span_atten,span_norm,span_oct,"
+		   "ll_active,ll_input_rms,ll_stage_a_lp_rms,ll_stage_b_lp_rms,ll_output_rms,"
+		   "ll_stage_b_over_a_db,ll_output_over_input_db,"
 		   "preview_seq,preview_updated,analysis_seq,analysis_updated,"
 		   "peak_a_x,peak_a_y_curve,peak_a_y_marker,"
 		   "peak_b_x,peak_b_y_curve,peak_b_y_marker,ui_frame_ms\n";
@@ -1890,6 +1879,7 @@ void BifurxSpectrumWidget::stopPerfDebugCapture() {
 
 void BifurxSpectrumWidget::logCurveDebugSample(
 	const BifurxPreviewState& state,
+	const BifurxLlTelemetryState& llTelemetry,
 	float peakAX,
 	float peakAYCurve,
 	float peakAYMarker,
@@ -1911,6 +1901,7 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 		<< curveDebugRecorder.sequence++ << ","
 		<< tSec << ","
 		<< state.mode << ","
+		<< state.circuitMode << ","
 		<< state.freqParamNorm << ","
 		<< state.voctCv << ","
 		<< state.freqA << ","
@@ -1923,6 +1914,13 @@ void BifurxSpectrumWidget::logCurveDebugSample(
 		<< state.spanAtten << ","
 		<< state.spanNorm << ","
 		<< state.spanOct << ","
+		<< (llTelemetry.active ? 1 : 0) << ","
+		<< llTelemetry.excitationRms << ","
+		<< llTelemetry.stageALpRms << ","
+		<< llTelemetry.stageBLpRms << ","
+		<< llTelemetry.outputRms << ","
+		<< llTelemetry.stageBLpOverALpDb << ","
+		<< llTelemetry.outputOverInputDb << ","
 		<< previewSeq << ","
 		<< (previewUpdated ? 1 : 0) << ","
 		<< analysisSeq << ","
@@ -2108,6 +2106,14 @@ void BifurxSpectrumWidget::step() {
 		dirty = true;
 	}
 
+	const uint32_t llTelemetrySeq = module->llTelemetryPublishSeq.load(std::memory_order_acquire);
+	if (llTelemetrySeq != lastLlTelemetrySeq) {
+		const int index = module->llTelemetryPublishedIndex.load(std::memory_order_acquire);
+		llTelemetryState = module->llTelemetryStates[index];
+		hasLlTelemetry = true;
+		lastLlTelemetrySeq = llTelemetrySeq;
+	}
+
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != lastAnalysisSeq) {
 		const int index = module->analysisPublishedIndex.load(std::memory_order_acquire);
@@ -2248,6 +2254,7 @@ void BifurxSpectrumWidget::step() {
 
 			logCurveDebugSample(
 				previewState,
+				hasLlTelemetry ? llTelemetryState : BifurxLlTelemetryState{},
 				peakAX, peakAYCurve, peakAYMarker,
 				peakBX, peakBYCurve, peakBYMarker,
 				uiFrameMs,

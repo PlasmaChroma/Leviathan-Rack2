@@ -77,8 +77,10 @@ struct TDScope final : Module {
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
   bool lastLagDragActive = false;
   float lastLagDragSamples = 0.f;
+  float lastLagDragVelocity = 0.f;
   std::atomic<bool> uiLagDragActive {false};
   std::atomic<float> uiLagDragSamples {0.f};
+  std::atomic<float> uiLagDragVelocity {0.f};
 
   // Match faster host updates to improve perceived sync against speakers.
   static constexpr float kUiPublishIntervalSec = 1.f / 120.f;
@@ -162,9 +164,10 @@ struct TDScope final : Module {
     return false;
   }
 
-  void setLagDragRequest(bool active, float lagSamples) {
+  void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f) {
     uiLagDragActive.store(active, std::memory_order_relaxed);
     uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
+    uiLagDragVelocity.store(velocity, std::memory_order_relaxed);
   }
 
   void process(const ProcessArgs &args) override {
@@ -213,14 +216,19 @@ struct TDScope final : Module {
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
       bool lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
       float lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
+      float lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
       if (!std::isfinite(lagDragSamples) || lagDragSamples < 0.f) {
         lagDragSamples = 0.f;
+      }
+      if (!std::isfinite(lagDragVelocity)) {
+        lagDragVelocity = 0.f;
       }
       float requestIntervalSec = lagDragActive ? kRequestPublishIntervalDragSec : kRequestPublishIntervalSec;
       requestPublishTimerSec += args.sampleTime;
       bool formatChanged = requestedScopeFormat != lastRequestedScopeFormat;
       bool lagStateChanged = lagDragActive != lastLagDragActive;
-      bool lagValueChanged = lagDragActive && std::fabs(lagDragSamples - lastLagDragSamples) >= (1.f / 16.f);
+      bool lagValueChanged = lagDragActive && (std::fabs(lagDragSamples - lastLagDragSamples) >= (1.f / 16.f) ||
+                                               std::fabs(lagDragVelocity - lastLagDragVelocity) >= 0.1f);
       bool timerElapsed = requestPublishTimerSec >= requestIntervalSec;
       if (formatChanged || lagStateChanged || lagValueChanged || timerElapsed) {
         if (timerElapsed) {
@@ -233,11 +241,12 @@ struct TDScope final : Module {
         if (request) {
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
-                                                        lagDragSamples);
+                                                        lagDragSamples, lagDragVelocity);
           leftExpander.module->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
           lastLagDragActive = lagDragActive;
           lastLagDragSamples = lagDragSamples;
+          lastLagDragVelocity = lagDragVelocity;
         }
       }
     } else {
@@ -371,8 +380,9 @@ struct TDScopeDisplayWidget final : Widget {
     // scratching than timeline scrubbing.
     float virtualRadiusPx = 52.f;
     float deltaAngle = deltaY / virtualRadiusPx;
+    float sensitivity = hasLastGoodMsg ? lastGoodMsg.scratchSensitivity : 1.f;
     float lagDelta =
-      platter_interaction::lagDeltaFromAngle(deltaAngle, std::max(lastGoodMsg.sampleRate, 1.f), 1.f, 1.f);
+      platter_interaction::lagDeltaFromAngle(deltaAngle, std::max(lastGoodMsg.sampleRate, 1.f), sensitivity, 1.f);
     return lagDelta;
   }
 
@@ -392,7 +402,7 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragFilteredVelocity = 0.f;
     // Touch-down should hold current playback position; movement is relative.
     lagDragLocalLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
     return true;
   }
 
@@ -438,12 +448,21 @@ struct TDScopeDisplayWidget final : Widget {
       Widget::onDragMove(e);
       return;
     }
+    double nowSec = system::getTime();
+    double dtSec = std::max(1e-4, std::min(0.08, nowSec - lagDragLastMoveSec));
+    lagDragLastMoveSec = nowSec;
+
     // Full-window time mapping is intentionally high resolution; suppress
     // tiny hand jitter so stationary holds stay truly pinned.
     constexpr float kLagDragJitterDeadzonePx = 0.45f;
     lagDragResidualY += e.mouseDelta.y;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples);
+      float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
+      lagDragFilteredVelocity += (0.f - lagDragFilteredVelocity) * settleAlpha;
+      if (std::fabs(lagDragFilteredVelocity) < 1.f) {
+        lagDragFilteredVelocity = 0.f;
+      }
+      module->setLagDragRequest(true, lagDragLocalLagSamples, lagDragFilteredVelocity);
       e.consume(this);
       return;
     }
@@ -454,17 +473,27 @@ struct TDScopeDisplayWidget final : Widget {
     if (!map.valid) {
       return;
     }
-    double nowSec = system::getTime();
-    double dtSec = std::max(1e-4, std::min(0.08, nowSec - lagDragLastMoveSec));
-    lagDragLastMoveSec = nowSec;
 
     float lagDelta = lagDeltaFromVerticalGesture(map, appliedDeltaY);
-    lagDragLocalLagSamples = clamp(lagDragLocalLagSamples + lagDelta, 0.f, map.accessibleLag);
+    float liveLag = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
+    // Use direction-aware rebasing to prevent "mushy" feel when DSP lags.
+    // TDScope drag sign: +lagDelta means toward NOW (forward).
+    // rebaseLagTarget takes movement TOWARD now, so we pass +lagDelta.
+    bool freezeLikeDrag = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (!freezeLikeDrag) {
+      lagDragLocalLagSamples = platter_interaction::rebaseLagTarget(lagDragLocalLagSamples, liveLag, lagDelta);
+    }
 
-    float measuredVelocity = lagDelta / float(dtSec);
-    float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
-    lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
-    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    int substeps = 4;
+    float lagDeltaStep = lagDelta / float(substeps);
+    double stepDtSec = dtSec / double(substeps);
+    for (int i = 0; i < substeps; ++i) {
+      lagDragLocalLagSamples = clamp(lagDragLocalLagSamples - lagDeltaStep, 0.f, map.accessibleLag);
+      float measuredVelocity = lagDeltaStep / float(stepDtSec);
+      float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(stepDtSec));
+      lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
+    }
+    module->setLagDragRequest(true, lagDragLocalLagSamples, lagDragFilteredVelocity);
     e.consume(this);
   }
 

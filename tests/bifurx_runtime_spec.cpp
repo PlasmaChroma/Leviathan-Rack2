@@ -281,6 +281,7 @@ TestResult testRuntimeLlDropoutRegressionSweepAcrossCircuits() {
 
   float lowAvg[4] = {};
   float lowMin[4] = {};
+  float lowMinHz[4] = {};
   float upperAvg[4] = {};
   bool pass = true;
   std::string detail;
@@ -292,7 +293,10 @@ TestResult testRuntimeLlDropoutRegressionSweepAcrossCircuits() {
     for (float hz : lowBandHz) {
       const float g = measureRuntimeGainDb(circuit, 0, hz, amp, freqNorm, spanNorm, reso, balance);
       lowSum += g;
-      lowFloor = std::min(lowFloor, g);
+      if (g < lowFloor) {
+        lowFloor = g;
+        lowMinHz[circuit] = hz;
+      }
       lowCount++;
       if (!std::isfinite(g)) {
         pass = false;
@@ -334,6 +338,8 @@ TestResult testRuntimeLlDropoutRegressionSweepAcrossCircuits() {
       std::to_string(lowAvg[2]) + "," + std::to_string(lowAvg[3]) + ") "
     "lowMin=(" + std::to_string(lowMin[0]) + "," + std::to_string(lowMin[1]) + "," +
       std::to_string(lowMin[2]) + "," + std::to_string(lowMin[3]) + ") "
+    "lowMinHz=(" + std::to_string(lowMinHz[0]) + "," + std::to_string(lowMinHz[1]) + "," +
+      std::to_string(lowMinHz[2]) + "," + std::to_string(lowMinHz[3]) + ") "
     "upperAvg=(" + std::to_string(upperAvg[0]) + "," + std::to_string(upperAvg[1]) + "," +
       std::to_string(upperAvg[2]) + "," + std::to_string(upperAvg[3]) + ")";
 

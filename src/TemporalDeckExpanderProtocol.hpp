@@ -10,9 +10,9 @@
 namespace temporaldeck_expander {
 
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
-constexpr uint16_t VERSION = 4u;
+constexpr uint16_t VERSION = 5u;
 constexpr uint32_t DISPLAY_MAGIC = 0x54445844u; // "TDXD"
-constexpr uint16_t DISPLAY_VERSION = 1u;
+constexpr uint16_t DISPLAY_VERSION = 2u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
 constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
@@ -70,6 +70,9 @@ struct HostToDisplay {
   float sampleProgress = 0.f;
   float sampleAbsolutePeakVolts = 0.f;
 
+  float scratchSensitivity = 1.0f;
+  uint32_t reserved1 = 0;
+
   uint32_t bufferCapacityFrames = 0;
   uint32_t bufferFilledFrames = 0;
 
@@ -92,12 +95,13 @@ struct DisplayToHost {
   uint64_t requestSeq = 0;
   uint32_t requestedScopeFormat = SCOPE_FORMAT_MONO;
   uint32_t reserved = 0;
+  float lagDragVelocity = 0.f;
 };
 
 static_assert(std::is_standard_layout<DisplayToHost>::value, "DisplayToHost must stay POD-like");
 
 inline bool isDisplayRequestValid(const DisplayToHost &msg) {
-  return msg.magic == DISPLAY_MAGIC && msg.version == DISPLAY_VERSION && msg.size == sizeof(DisplayToHost);
+  return msg.magic == DISPLAY_MAGIC && msg.version >= 1u && msg.size >= 24u && msg.size <= 256u;
 }
 
 inline uint32_t encodeLagDragRequest(bool active, float lagSamples) {
@@ -242,7 +246,7 @@ struct PreviewAccumulator {
 inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_t bufferGeneration, uint32_t flags,
                                 float sampleRate, float lagSamples, float accessibleLagSamples, float platterAngle,
                                 float samplePlayheadSec, float sampleDurationSec, float sampleProgress,
-                                float sampleAbsolutePeakVolts,
+                                float sampleAbsolutePeakVolts, float scratchSensitivity,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
                                 float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
                                 uint32_t scopeBinCount, const ScopeBin *scopeBins, const ScopeBin *scopeRightBins = nullptr) {
@@ -263,6 +267,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   out->sampleDurationSec = sampleDurationSec;
   out->sampleProgress = sampleProgress;
   out->sampleAbsolutePeakVolts = sampleAbsolutePeakVolts;
+  out->scratchSensitivity = scratchSensitivity;
+  out->reserved1 = 0;
   out->bufferCapacityFrames = bufferCapacityFrames;
   out->bufferFilledFrames = bufferFilledFrames;
   out->scopeHalfWindowMs = scopeHalfWindowMs;
@@ -283,7 +289,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
 }
 
 inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat,
-                                   bool lagDragActive = false, float lagDragSamples = 0.f) {
+                                   bool lagDragActive = false, float lagDragSamples = 0.f, float lagDragVelocity = 0.f) {
   if (!out) {
     return;
   }
@@ -293,6 +299,7 @@ inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint
   out->requestSeq = requestSeq;
   out->requestedScopeFormat = (requestedScopeFormat == SCOPE_FORMAT_STEREO) ? SCOPE_FORMAT_STEREO : SCOPE_FORMAT_MONO;
   out->reserved = encodeLagDragRequest(lagDragActive, lagDragSamples);
+  out->lagDragVelocity = lagDragVelocity;
 }
 
 } // namespace temporaldeck_expander

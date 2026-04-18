@@ -127,7 +127,7 @@ inline T combineModeResponse(
   (void)wideMorph;
   switch (mode) {
     case 0:
-      return T(1.02f) * cascadeLp + T(0.045f) * lpA;
+      return cascadeLp;
     case 1:
       return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
     case 2:
@@ -334,7 +334,7 @@ inline float simulateLlRuntimeGainDb(
     const float drivenIn = 5.f * softClip(0.2f * in * drive);
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.lp, cB);
-    const float modeOut = 1.02f * oB.lp + 0.045f * oA.lp;
+    const float modeOut = oB.lp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 
     if (n >= settleSamples) {

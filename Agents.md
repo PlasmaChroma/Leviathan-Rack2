@@ -18,6 +18,10 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
   - Full plugin builds are expected to work.
   - You should run and verify full plugin linking as part of validation.
 
+## Testing Note
+
+- In either environment the simple test-fast set is expected to pass, although test-rack is a work in progress and will not be able to run.  Stick to test-fast for now if tests are required.
+
 ## Practical Expectation
 
 - In WSL context: prefer validating behavior with focused tests (e.g. `build/tests/crownstep_spec`) and source-level checks.

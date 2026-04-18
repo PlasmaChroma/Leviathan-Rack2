@@ -149,22 +149,33 @@ MirrorStats computeLlHhPreviewMirrorStats(float spanNorm, float q) {
   const float center = band.centerHz;
 
   const float ratios[] = {1.08f, 1.16f, 1.28f, 1.45f, 1.70f, 2.0f, 2.4f};
-  float sumAbsDiff = 0.f;
-  float maxAbsDiff = 0.f;
-  int points = 0;
+  std::vector<float> diffs;
+  diffs.reserve(16);
   for (float r : ratios) {
     const float lowHz = center / r;
     const float highHz = center * r;
     const float llDb = responseDb(mLL, lowHz);
     const float hhDb = responseDb(mHH, highHz);
-    const float absDiff = std::fabs(llDb - hhDb);
+    diffs.push_back(llDb - hhDb);
+  }
+
+  float meanDiff = 0.f;
+  for (float d : diffs) {
+    meanDiff += d;
+  }
+  meanDiff /= std::max<size_t>(1, diffs.size());
+
+  float sumAbsDiff = 0.f;
+  float maxAbsDiff = 0.f;
+  for (float d : diffs) {
+    const float centered = d - meanDiff;
+    const float absDiff = std::fabs(centered);
     sumAbsDiff += absDiff;
     maxAbsDiff = std::max(maxAbsDiff, absDiff);
-    points++;
   }
 
   MirrorStats stats;
-  stats.meanAbsDiff = sumAbsDiff / std::max(1, points);
+  stats.meanAbsDiff = sumAbsDiff / std::max<size_t>(1, diffs.size());
   stats.maxAbsDiff = maxAbsDiff;
   return stats;
 }
@@ -174,9 +185,8 @@ MirrorStats computeLlHhRuntimeMirrorStats(float spanNorm, float q) {
   const MirrorBand band = makeMirrorBand(sampleRate, 900.f, spanNorm);
   const float damping = 1.f / std::max(q, 0.2f);
   const float ratios[] = {1.08f, 1.16f, 1.28f, 1.45f, 1.70f, 2.0f, 2.4f};
-  float sumAbsDiff = 0.f;
-  float maxAbsDiff = 0.f;
-  int points = 0;
+  std::vector<float> diffs;
+  diffs.reserve(16);
   for (float r : ratios) {
     const float lowHz = band.centerHz / r;
     const float highHz = band.centerHz * r;
@@ -186,13 +196,25 @@ MirrorStats computeLlHhRuntimeMirrorStats(float spanNorm, float q) {
     const float hhDb = simulateHhRuntimeGainDb(
       sampleRate, highHz, 0.25f, 0.5f, band.cutoffA, band.cutoffB, damping, damping, band.wideMorph
     );
-    const float absDiff = std::fabs(llDb - hhDb);
+    diffs.push_back(llDb - hhDb);
+  }
+  float meanDiff = 0.f;
+  for (float d : diffs) {
+    meanDiff += d;
+  }
+  meanDiff /= std::max<size_t>(1, diffs.size());
+
+  float sumAbsDiff = 0.f;
+  float maxAbsDiff = 0.f;
+  for (float d : diffs) {
+    const float centered = d - meanDiff;
+    const float absDiff = std::fabs(centered);
     sumAbsDiff += absDiff;
     maxAbsDiff = std::max(maxAbsDiff, absDiff);
-    points++;
   }
+
   MirrorStats stats;
-  stats.meanAbsDiff = sumAbsDiff / std::max(1, points);
+  stats.meanAbsDiff = sumAbsDiff / std::max<size_t>(1, diffs.size());
   stats.maxAbsDiff = maxAbsDiff;
   return stats;
 }
