@@ -76,6 +76,22 @@
 4. Decide from the measurements whether the semantic export layer is sufficient or needs a different per-circuit adapter shape.
 5. Do not add new shared combiner compensation before those measurements are in hand.
 
+## Current plan
+
+- Immediate implementation target:
+  - refine the export adapter shape for `MS2` first, then `PRD`
+- Keep fixed:
+  - `combineModeResponse()`
+  - shared mode coefficients
+  - solver-free baseline
+  - no support taps or combiner glue
+- Validation target:
+  - re-run the Rack `LL` capture after each adapter revision
+  - judge success by whether `ll_stage_b_over_a_db` and `ll_output_over_input_db` move materially toward the `SVF` envelope
+- Stop and escalate if:
+  - adapter refinement starts requiring per-mode hacks
+  - the cleanest next move becomes per-circuit extraction rather than semantic export normalization
+
 ## Current best judgment
 
 - The best path is still to root-cause the core/output contract first.
@@ -168,7 +184,7 @@
 - The shared `combineModeResponse()` abstraction is still in place.
 - `DFM`, `MS2`, and `PRD` now go through a normalized semantic export layer before the shared combiner sees `lp` / `bp` / `hp` / `notch`.
 - The implementation uses a small per-circuit soft-saturation adapter rather than a new combiner-side compensation layer.
-- This preserves the shared mode algebra while moving the contract boundary to the circuit export side, which is the architecture supported by the telemetry so far.
+- This preserves the shared mode algebra while moving the contract boundary to the circuit export side, but the latest capture shows that the adapter is only partially converged.
 - The test model mirrors the same normalized-export behavior so the fast spec exercises the same contract as runtime and preview.
 
 ## What not to do next
@@ -183,17 +199,18 @@
 - The raw `LL` telemetry is no longer hypothetical; it clearly separated `SVF` from `DFM`, `MS2`, and `PRD`.
 - The normalized-export implementation is now in place in both runtime and the fast-test model.
 - `make test-fast` passes with the semantic export layer enabled.
-- The repo is still at an architectural decision point for any follow-up work, but the next move is no longer “do we have a mismatch?”; that has been answered.
+- The latest normalized-baseline capture moved the numbers, but it did not fully converge the non-`SVF` circuits onto `SVF`.
+- The repo is now at a refinement point rather than a discovery point.
 - `GPT-5.4` weighed in on the abstraction boundary:
   - prefer normalized per-circuit semantic exports first
   - keep shared mode combination unless that approach fails
-- If follow-up work is needed, it should start from this normalized-export baseline instead of returning to raw proxy tuning.
+- If follow-up work is needed, it should start from this partially normalized baseline instead of returning to raw proxy tuning.
 
 ## Handoff readiness
 
 - The repo is ready for a constrained follow-on handoff.
 - The correct handoff scope is:
-  - validate the normalized-export baseline against additional runtime captures if desired
+  - refine the export adapter shape for the remaining `MS2` / `PRD` gap
   - keep the shared `combineModeResponse()` path in place while evaluating that baseline
 - The handoff is not:
   - freeform tuning
