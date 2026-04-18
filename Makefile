@@ -34,6 +34,7 @@ TEST_BINS := \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
 	build/tests/bifurx_filter_spec \
+	build/tests/bifurx_runtime_spec \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec
 
@@ -58,6 +59,7 @@ test: test-build
 	@build/tests/temporaldeck_virtual_integration_spec
 	@build/tests/crownstep_spec
 	@build/tests/bifurx_filter_spec
+	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/bifurx_runtime_spec
 	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/panel_svg_utils_spec
 	@LD_LIBRARY_PATH=$(RACK_DIR):$$LD_LIBRARY_PATH build/tests/crownstep_persistence_spec
 	@$(MAKE) --no-print-directory test-odr
@@ -122,6 +124,9 @@ build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/PanelSvgUtils.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/PanelSvgUtils.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
 build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

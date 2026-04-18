@@ -243,6 +243,210 @@ TestResult testLowLowAndHighHighRuntimeMirrorAcrossSpans() {
   };
 }
 
+float computeCenterHzFromKnobAndVoct(float freqParamNorm, float voctCv, float fmSum) {
+  constexpr float kFreqMinHz = 4.f;
+  constexpr float kFreqLog2Span = 12.7731392f;  // log2(28000 / 4)
+  const float clampedKnob = clamp01(freqParamNorm);
+  const float octaveShift = kFreqLog2Span * clampedKnob + voctCv + fmSum;
+  return kFreqMinHz * std::pow(2.f, octaveShift);
+}
+
+TestResult testSvfFrequencyKnobMappingIsMonotonic() {
+  const float voct = 0.f;
+  const float fm = 0.f;
+  const float h0 = computeCenterHzFromKnobAndVoct(0.10f, voct, fm);
+  const float h1 = computeCenterHzFromKnobAndVoct(0.30f, voct, fm);
+  const float h2 = computeCenterHzFromKnobAndVoct(0.50f, voct, fm);
+  const float h3 = computeCenterHzFromKnobAndVoct(0.70f, voct, fm);
+  const float h4 = computeCenterHzFromKnobAndVoct(0.90f, voct, fm);
+  const bool pass = (h0 < h1) && (h1 < h2) && (h2 < h3) && (h3 < h4);
+  return {
+    "SVF center frequency mapping is monotonic over FREQ knob",
+    pass,
+    "hz=" + std::to_string(h0) + "," + std::to_string(h1) + "," + std::to_string(h2) +
+      "," + std::to_string(h3) + "," + std::to_string(h4)
+  };
+}
+
+TestResult testSvfVoctTrackingIsMonotonicPerVolt() {
+  const float freqNorm = 0.58f;
+  const float hm1 = computeCenterHzFromKnobAndVoct(freqNorm, -1.f, 0.f);
+  const float h0 = computeCenterHzFromKnobAndVoct(freqNorm, 0.f, 0.f);
+  const float h1 = computeCenterHzFromKnobAndVoct(freqNorm, 1.f, 0.f);
+  const float upRatio = h1 / std::max(h0, 1e-6f);
+  const float downRatio = h0 / std::max(hm1, 1e-6f);
+  const bool monotonic = (hm1 < h0) && (h0 < h1);
+  const bool nearOctave = std::fabs(upRatio - 2.f) < 0.05f && std::fabs(downRatio - 2.f) < 0.05f;
+  return {
+    "SVF V/OCT mapping is monotonic and near 2x per volt",
+    monotonic && nearOctave,
+    "hm1=" + std::to_string(hm1) + " h0=" + std::to_string(h0) + " h1=" + std::to_string(h1) +
+      " upRatio=" + std::to_string(upRatio) + " downRatio=" + std::to_string(downRatio)
+  };
+}
+
+TestResult testSvfBandBandResonanceLiftIncreasesWithQ() {
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.mode = 5;      // Band + Band
+  s.freqA = 320.f;
+  s.freqB = 1400.f;
+  s.balance = 0.f;
+  s.spanNorm = 0.52f;
+
+  auto localSharpnessDb = [&](float q) {
+    s.qA = q;
+    s.qB = q;
+    const PreviewModel m = makePreviewModel(s);
+    const float center = responseDb(m, s.freqA);
+    const float shoulderLo = responseDb(m, s.freqA * 0.84f);
+    const float shoulderHi = responseDb(m, s.freqA * 1.20f);
+    return center - 0.5f * (shoulderLo + shoulderHi);
+  };
+
+  const float lowQSharpness = localSharpnessDb(0.8f);
+  const float midQSharpness = localSharpnessDb(1.4f);
+  const float highQSharpness = localSharpnessDb(2.2f);
+
+  const bool pass = (lowQSharpness < midQSharpness) && (midQSharpness < highQSharpness)
+    && ((highQSharpness - lowQSharpness) > 1.5f);
+  return {
+    "SVF resonance sharpness around marker increases with Q",
+    pass,
+    "lowQ=" + std::to_string(lowQSharpness) + " midQ=" + std::to_string(midQSharpness) +
+      " highQ=" + std::to_string(highQSharpness)
+  };
+}
+
+TestResult testSvfLowLowRuntimeDoesNotCollapseNearLowPeak() {
+  // Regression guard for the reported 40Hz tone with first LL peak near 53.9Hz.
+  const float sampleRate = 48000.f;
+  const float gain40 = simulateLlRuntimeGainDb(
+    sampleRate, 40.f, 0.25f, 0.5f, 53.9f, 114.f, 1.f / 1.2f, 1.f / 1.2f
+  );
+  const float gain54 = simulateLlRuntimeGainDb(
+    sampleRate, 53.9f, 0.25f, 0.5f, 53.9f, 114.f, 1.f / 1.2f, 1.f / 1.2f
+  );
+  // 40Hz can be below the first shoulder, but should not vanish.
+  const bool pass = (gain40 > -10.f) && (gain54 > gain40 - 4.f);
+  return {
+    "SVF LL runtime keeps low tone energy near first low peak",
+    pass,
+    "g40=" + std::to_string(gain40) + " g53.9=" + std::to_string(gain54)
+  };
+}
+
+TestResult testSvfLowLowPreviewRuntimeTrendAgreement() {
+  const float sampleRate = 48000.f;
+  PreviewState s;
+  s.sampleRate = sampleRate;
+  s.mode = 0;      // Low + Low
+  s.freqA = 140.f;
+  s.freqB = 950.f;
+  s.qA = 1.1f;
+  s.qB = 1.1f;
+  s.balance = 0.f;
+  s.spanNorm = 0.45f;
+  const PreviewModel m = makePreviewModel(s);
+
+  const float runtime40 = simulateLlRuntimeGainDb(sampleRate, 40.f, 0.10f, 0.18f, s.freqA, s.freqB, 1.f / s.qA, 1.f / s.qB);
+  const float runtime300 = simulateLlRuntimeGainDb(sampleRate, 300.f, 0.10f, 0.18f, s.freqA, s.freqB, 1.f / s.qA, 1.f / s.qB);
+  const float runtime1800 = simulateLlRuntimeGainDb(sampleRate, 1800.f, 0.10f, 0.18f, s.freqA, s.freqB, 1.f / s.qA, 1.f / s.qB);
+
+  const float preview40 = responseDb(m, 40.f);
+  const float preview300 = responseDb(m, 300.f);
+  const float preview1800 = responseDb(m, 1800.f);
+
+  const bool previewOrdered = (preview40 > preview300) && (preview300 > preview1800);
+  const bool runtimeOrdered = (runtime40 > runtime300) && (runtime300 > runtime1800);
+  return {
+    "SVF LL preview and runtime share low>mid>high trend",
+    previewOrdered && runtimeOrdered,
+    "preview(40,300,1800)=(" + std::to_string(preview40) + "," + std::to_string(preview300) + "," + std::to_string(preview1800) + ") "
+      "runtime=(" + std::to_string(runtime40) + "," + std::to_string(runtime300) + "," + std::to_string(runtime1800) + ")"
+  };
+}
+
+TestResult testSpanIncreasesMarkerSeparationAtFixedCenter() {
+  const float sampleRate = 48000.f;
+  const float centerHz = 900.f;
+  const MirrorBand narrow = makeMirrorBand(sampleRate, centerHz, 0.20f);
+  const MirrorBand medium = makeMirrorBand(sampleRate, centerHz, 0.55f);
+  const MirrorBand wide = makeMirrorBand(sampleRate, centerHz, 0.90f);
+
+  const float sepNarrow = narrow.cutoffB / std::max(narrow.cutoffA, 1e-6f);
+  const float sepMedium = medium.cutoffB / std::max(medium.cutoffA, 1e-6f);
+  const float sepWide = wide.cutoffB / std::max(wide.cutoffA, 1e-6f);
+  const bool pass = (sepNarrow < sepMedium) && (sepMedium < sepWide);
+  return {
+    "SPAN increases A/B marker separation at fixed center",
+    pass,
+    "sep(n,m,w)=(" + std::to_string(sepNarrow) + "," + std::to_string(sepMedium) + "," + std::to_string(sepWide) + ")"
+  };
+}
+
+TestResult testSpanWidensBandBandDualPeakSpacing() {
+  const float sampleRate = 48000.f;
+  PreviewState s;
+  s.sampleRate = sampleRate;
+  s.mode = 5;      // Band + Band
+  s.qA = 4.5f;
+  s.qB = 4.5f;
+  s.balance = 0.f;
+
+  const MirrorBand narrowBand = makeMirrorBand(sampleRate, 900.f, 0.20f);
+  s.freqA = narrowBand.cutoffA;
+  s.freqB = narrowBand.cutoffB;
+  s.spanNorm = 0.20f;
+  const PreviewModel narrow = makePreviewModel(s);
+
+  const MirrorBand wideBand = makeMirrorBand(sampleRate, 900.f, 0.90f);
+  s.freqA = wideBand.cutoffA;
+  s.freqB = wideBand.cutoffB;
+  s.spanNorm = 0.90f;
+  const PreviewModel wide = makePreviewModel(s);
+
+  const float narrowBridge = responseDb(narrow, 900.f);
+  const float wideBridge = responseDb(wide, 900.f);
+  // With wider span, the center bridge between the two BP peaks should drop.
+  const bool pass = wideBridge < (narrowBridge - 2.f);
+  return {
+    "SPAN widening deepens BB center bridge between peaks",
+    pass,
+    "bridgeDb(narrow,wide)=(" + std::to_string(narrowBridge) + "," + std::to_string(wideBridge) + ")"
+  };
+}
+
+TestResult testBalanceShiftsBandBandEnergyTowardSelectedSide() {
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.mode = 5;      // Band + Band
+  s.freqA = 340.f;
+  s.freqB = 1500.f;
+  s.qA = 4.0f;
+  s.qB = 4.0f;
+  s.spanNorm = 0.50f;
+
+  s.balance = -0.85f;
+  const PreviewModel leftTilt = makePreviewModel(s);
+  const float leftLow = responseDb(leftTilt, s.freqA);
+  const float leftHigh = responseDb(leftTilt, s.freqB);
+
+  s.balance = 0.85f;
+  const PreviewModel rightTilt = makePreviewModel(s);
+  const float rightLow = responseDb(rightTilt, s.freqA);
+  const float rightHigh = responseDb(rightTilt, s.freqB);
+
+  const bool lowFavoredWhenNegative = leftLow > (leftHigh + 1.f);
+  const bool highFavoredWhenPositive = rightHigh > (rightLow + 1.f);
+  return {
+    "BALANCE steers BB emphasis toward low/high side",
+    lowFavoredWhenNegative && highFavoredWhenPositive,
+    "negBal(low,high)=(" + std::to_string(leftLow) + "," + std::to_string(leftHigh) + ") "
+      "posBal(low,high)=(" + std::to_string(rightLow) + "," + std::to_string(rightHigh) + ")"
+  };
+}
+
 TestResult testBandBandHasTwoLocalPeaksNearMarkers() {
   PreviewState s;
   s.sampleRate = 48000.f;
@@ -345,6 +549,14 @@ TestResult testPreviewCircuitSelectionCollapsedForSvfTuning() {
 
 int main() {
   const std::vector<TestResult> tests = {
+    testSvfFrequencyKnobMappingIsMonotonic(),
+    testSvfVoctTrackingIsMonotonicPerVolt(),
+    testSvfBandBandResonanceLiftIncreasesWithQ(),
+    testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),
+    testSvfLowLowPreviewRuntimeTrendAgreement(),
+    testSpanIncreasesMarkerSeparationAtFixedCenter(),
+    testSpanWidensBandBandDualPeakSpacing(),
+    testBalanceShiftsBandBandEnergyTowardSelectedSide(),
     testLowLowMaintainsDoubleSlopeOrdering(),
     testLowLowMidpointDipNotOverlyDeep(),
     testLowLowRuntimeRetainsPrePeakLowBand(),
