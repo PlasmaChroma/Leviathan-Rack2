@@ -840,7 +840,7 @@ struct BifurxModeReadoutWidget final : Widget {
 		}
 
 		char label[24];
-		std::snprintf(label, sizeof(label), "Mode: %s", kBifurxModeLabels[mode]);
+		std::snprintf(label, sizeof(label), "Mode (%d): %s", mode + 1, kBifurxModeLabels[mode]);
 		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
@@ -1702,27 +1702,6 @@ struct Bifurx final : Module {
 	};
 
 namespace {
-
-struct BifurxCircuitReadoutWidget final : Widget {
-	Bifurx* module = nullptr;
-
-	void draw(const DrawArgs& args) override {
-		if (!APP || !APP->window || !APP->window->uiFont) {
-			return;
-		}
-
-		int mode = 0;
-		if (module) {
-			mode = clampCircuitMode(module->filterCircuitMode);
-		}
-
-		nvgFontSize(args.vg, std::max(8.5f, box.size.y * 0.82f));
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(232, 238, 245, 250));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, kBifurxCircuitLabels[mode], nullptr);
-	}
-};
 
 float orderedSpectrumMagnitude(const float* fftData, int bin) {
 	if (bin <= 0) {
@@ -2605,15 +2584,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 	nvgText(args.vg, topLabelRightX, 1.f, topLabel, nullptr);
 
-	char curveMinLabel[12];
-	char curveMaxLabel[12];
-	compactSignedLabel(responseMinDb, curveMinLabel, sizeof(curveMinLabel));
-	compactSignedLabel(responseMaxDb, curveMaxLabel, sizeof(curveMaxLabel));
-	char curveRangeLabel[40];
-	std::snprintf(curveRangeLabel, sizeof(curveRangeLabel), "Curve %s/%s dB", curveMinLabel, curveMaxLabel);
-	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-	nvgText(args.vg, w - 1.5f, 1.f, curveRangeLabel, nullptr);
-
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
 	nvgLineTo(args.vg, plotX + usableW, responseYForDb(0.f));
@@ -2949,16 +2919,6 @@ struct BifurxWidget final : ModuleWidget {
 		applyPointOverride("SPAN_CV_INPUT", &spanCvPosMm);
 		applyPointOverride("OUT_OUTPUT", &outPosMm);
 
-		const Vec circuitReadoutSizeMm(9.6f, 3.2f);
-		const Vec circuitReadoutPosMm =
-			filterCircuitPosMm.plus(Vec(-0.5f * circuitReadoutSizeMm.x, 3.6f));
-
-		BifurxCircuitReadoutWidget* circuitReadout = new BifurxCircuitReadoutWidget();
-		circuitReadout->module = module;
-		circuitReadout->box.pos = mm2px(circuitReadoutPosMm);
-		circuitReadout->box.size = mm2px(circuitReadoutSizeMm);
-		addChild(circuitReadout);
-
 			Vec modeLeftPosMm = modePosMm.plus(Vec(-2.5f, 0.f));
 			Vec modeRightPosMm = modePosMm.plus(Vec(2.5f, 0.f));
 			addParam(createParamCentered<BifurxModeLeftButton>(mm2px(modeLeftPosMm), module, Bifurx::MODE_LEFT_PARAM));
@@ -2970,7 +2930,7 @@ struct BifurxWidget final : ModuleWidget {
 			addParam(createParamCentered<RoundBlackKnob>(mm2px(spanPosMm), module, Bifurx::SPAN_PARAM));
 			addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(fmAmtPosMm), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
 			addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(spanCvAttenPosMm), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT));
-			addParam(createParamCentered<CKSSThree>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
+			addParam(createParamCentered<CKSSThreeHorizontal>(mm2px(titoPosMm), module, Bifurx::TITO_PARAM));
 
 		addParam(createParamCentered<TL1105>(mm2px(filterCircuitPosMm), module, Bifurx::FILTER_CIRCUIT_PARAM));
 		const float circuitLedOffsetMm = 2.7f;
