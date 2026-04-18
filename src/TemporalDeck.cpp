@@ -670,6 +670,10 @@ struct TemporalDeck::Impl {
   std::array<temporaldeck_expander::DisplayToHost, 2> expanderRequestMessages;
   uint32_t expanderRequestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   bool expanderLagDragWasActive = false;
+  bool expanderLagDragRequestSeen = false;
+  uint64_t expanderLagDragLastRequestSeq = 0u;
+  float expanderLagDragLastLagSamples = 0.f;
+  int expanderLagDragFramesSinceUpdate = 0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
@@ -1081,12 +1085,16 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool expanderConnected =
     isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
+  bool haveLagDragRequest = false;
   bool lagDragRequestActive = false;
   float lagDragRequestSamples = 0.f;
+  uint64_t lagDragRequestSeq = 0u;
   if (isTDScopeModule(rightExpander.module) && rightExpander.consumerMessage) {
     const auto *request =
       reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
     if (request && temporaldeck_expander::isDisplayRequestValid(*request)) {
+      haveLagDragRequest = true;
+      lagDragRequestSeq = request->requestSeq;
       requestedScopeFormat = (request->requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO)
                                ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                : temporaldeck_expander::SCOPE_FORMAT_MONO;
@@ -1096,16 +1104,53 @@ void TemporalDeck::process(const ProcessArgs &args) {
       }
     }
   }
-  if (lagDragRequestActive) {
-    float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
-    float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
-    impl->platterInput.setScratch(true, lagTarget, 0.f);
-    impl->platterInput.setMotionFreshSamples(0);
-    impl->expanderLagDragWasActive = true;
-  } else if (impl->expanderLagDragWasActive) {
-    impl->platterInput.setScratch(false, 0.f, 0.f);
-    impl->platterInput.setMotionFreshSamples(0);
-    impl->expanderLagDragWasActive = false;
+  if (haveLagDragRequest) {
+    bool isNewLagRequest = !impl->expanderLagDragRequestSeen || lagDragRequestSeq != impl->expanderLagDragLastRequestSeq;
+    if (isNewLagRequest) {
+      impl->expanderLagDragRequestSeen = true;
+      impl->expanderLagDragLastRequestSeq = lagDragRequestSeq;
+      float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
+      float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
+      if (lagDragRequestActive) {
+        float lagDelta = std::fabs(lagTarget - impl->expanderLagDragLastLagSamples);
+        bool dragJustStarted = !impl->expanderLagDragWasActive;
+        bool meaningfulLagMove = lagDelta > 0.02f;
+        if (dragJustStarted || meaningfulLagMove) {
+          if (dragJustStarted) {
+            // Scope touch-down should latch a stationary hold without creating
+            // a fresh gesture that invokes write-head compensation motion.
+            impl->platterInput.setTouchHold(true, lagTarget);
+            impl->platterInput.setMotionFreshSamples(0);
+          } else {
+            float velocitySamples = 0.f;
+            int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
+            float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
+            velocitySamples = (lagTarget - impl->expanderLagDragLastLagSamples) / dtSec;
+            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+            int motionFreshSamples = clamp(int(std::round(args.sampleRate * 0.05f)), 1, int(std::round(args.sampleRate * 0.09f)));
+            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+          }
+          impl->expanderLagDragLastLagSamples = lagTarget;
+          impl->expanderLagDragFramesSinceUpdate = 0;
+        } else {
+          // Keep touch latched without emitting a fresh gesture each heartbeat.
+          impl->platterInput.setTouchHold(true, impl->expanderLagDragLastLagSamples);
+          impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
+        }
+        impl->expanderLagDragWasActive = true;
+      } else {
+        if (impl->expanderLagDragWasActive) {
+          impl->platterInput.setScratch(false, impl->expanderLagDragLastLagSamples, 0.f);
+          impl->platterInput.setMotionFreshSamples(0);
+        }
+        impl->expanderLagDragWasActive = false;
+        impl->expanderLagDragFramesSinceUpdate = 0;
+      }
+    } else if (impl->expanderLagDragWasActive) {
+      impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
+    }
+  } else {
+    impl->expanderLagDragRequestSeen = false;
   }
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
@@ -1284,6 +1329,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->expanderPublishTimerSec = 0.f;
     impl->expanderPreviewValid = false;
     impl->expanderLagDragWasActive = false;
+    impl->expanderLagDragRequestSeen = false;
+    impl->expanderLagDragLastRequestSeq = 0u;
+    impl->expanderLagDragLastLagSamples = 0.f;
+    impl->expanderLagDragFramesSinceUpdate = 0;
     impl->expanderScopeCacheMono.valid = false;
     impl->expanderScopeCacheRight.valid = false;
     impl->expanderScopeLagHoldActive = false;

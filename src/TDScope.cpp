@@ -1,4 +1,5 @@
 #include "TemporalDeckExpanderProtocol.hpp"
+#include "TemporalDeckTest.hpp"
 #include "PanelSvgUtils.hpp"
 #include "plugin.hpp"
 
@@ -307,7 +308,9 @@ struct TDScopeDisplayWidget final : Widget {
   Vec lagDragButtonPos;
   Vec lagDragCursorPos;
   float lagDragLocalLagSamples = 0.f;
+  float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
+  float lagDragFilteredVelocity = 0.f;
 
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
@@ -344,13 +347,6 @@ struct TDScopeDisplayWidget final : Widget {
     return map;
   }
 
-  float lagSamplesPerPixel(const ScopeWindowMap &map) const {
-    if (!map.valid) {
-      return 0.f;
-    }
-    return std::fabs(map.windowTopLag - map.windowBottomLag) / std::max(map.drawBottom - map.drawTop, 1.f);
-  }
-
   float lagForCursorY(const ScopeWindowMap &map, float y) const {
     if (!map.valid) {
       return 0.f;
@@ -360,22 +356,51 @@ struct TDScopeDisplayWidget final : Widget {
     return clamp(lag, 0.f, map.accessibleLag);
   }
 
-  float adaptiveLagTarget(const ScopeWindowMap &map, float absoluteLag, float deltaY, double dtSec) const {
-    float samplesPerPx = lagSamplesPerPixel(map);
-    float deltaLag = deltaY * samplesPerPx;
-    float lagFromDelta = clamp(lagDragLocalLagSamples + deltaLag, 0.f, map.accessibleLag);
-    float speedPxPerSec = float(std::fabs(deltaY) / std::max(dtSec, 1e-4));
-    float speedNorm = clamp(speedPxPerSec / 850.f, 0.f, 1.f);
-    float blendToAbsolute = crossfade(0.30f, 0.92f, speedNorm);
-    if (dtSec > 0.022) {
-      blendToAbsolute = std::max(blendToAbsolute, 0.72f);
+  float lagSamplesPerPixel(const ScopeWindowMap &map) const {
+    if (!map.valid) {
+      return 0.f;
     }
-    return clamp(lagFromDelta + (absoluteLag - lagFromDelta) * blendToAbsolute, 0.f, map.accessibleLag);
+    return std::fabs(map.windowTopLag - map.windowBottomLag) / std::max(map.drawBottom - map.drawTop, 1.f);
+  }
+
+  float lagDeltaFromVerticalGesture(const ScopeWindowMap &map, float deltaY) const {
+    if (!map.valid) {
+      return 0.f;
+    }
+    // Use a platter-like virtual radius so drag motion feels closer to hand
+    // scratching than timeline scrubbing.
+    float virtualRadiusPx = 52.f;
+    float deltaAngle = deltaY / virtualRadiusPx;
+    float lagDelta =
+      platter_interaction::lagDeltaFromAngle(deltaAngle, std::max(lastGoodMsg.sampleRate, 1.f), 1.f, 1.f);
+    return lagDelta;
+  }
+
+  bool beginLagDragAt(Vec pos) {
+    if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
+      return false;
+    }
+    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
+    if (!map.valid) {
+      return false;
+    }
+    lagDragging = true;
+    lagDragArmed = false;
+    lagDragCursorPos = pos;
+    lagDragResidualY = 0.f;
+    lagDragLastMoveSec = system::getTime();
+    lagDragFilteredVelocity = 0.f;
+    // Touch-down should hold current playback position; movement is relative.
+    lagDragLocalLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
+    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    return true;
   }
 
   void endLagDrag() {
     lagDragging = false;
     lagDragArmed = false;
+    lagDragResidualY = 0.f;
+    lagDragFilteredVelocity = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
     }
@@ -386,6 +411,7 @@ struct TDScopeDisplayWidget final : Widget {
       if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
         lagDragButtonPos = e.pos;
         lagDragArmed = true;
+        (void)beginLagDragAt(e.pos);
         e.consume(this);
         return;
       }
@@ -403,26 +429,7 @@ struct TDScopeDisplayWidget final : Widget {
       Widget::onDragStart(e);
       return;
     }
-    if (!isWithinDisplay(lagDragButtonPos)) {
-      lagDragArmed = false;
-      Widget::onDragStart(e);
-      return;
-    }
-    if (!hasLastGoodMsg) {
-      lagDragArmed = false;
-      Widget::onDragStart(e);
-      return;
-    }
-    lagDragging = true;
-    lagDragArmed = false;
-    lagDragCursorPos = lagDragButtonPos;
-    lagDragLastMoveSec = system::getTime();
-    lagDragLocalLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, std::max(lastGoodMsg.accessibleLagSamples, 0.f));
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (map.valid) {
-      lagDragLocalLagSamples = lagForCursorY(map, lagDragCursorPos.y);
-    }
-    module->setLagDragRequest(true, lagDragLocalLagSamples);
+    (void)beginLagDragAt(lagDragButtonPos);
     e.consume(this);
   }
 
@@ -431,7 +438,18 @@ struct TDScopeDisplayWidget final : Widget {
       Widget::onDragMove(e);
       return;
     }
-    lagDragCursorPos = lagDragCursorPos.plus(e.mouseDelta);
+    // Full-window time mapping is intentionally high resolution; suppress
+    // tiny hand jitter so stationary holds stay truly pinned.
+    constexpr float kLagDragJitterDeadzonePx = 0.45f;
+    lagDragResidualY += e.mouseDelta.y;
+    if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
+      module->setLagDragRequest(true, lagDragLocalLagSamples);
+      e.consume(this);
+      return;
+    }
+    float appliedDeltaY = lagDragResidualY;
+    lagDragCursorPos.y += appliedDeltaY;
+    lagDragResidualY = 0.f;
     ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
     if (!map.valid) {
       return;
@@ -439,8 +457,13 @@ struct TDScopeDisplayWidget final : Widget {
     double nowSec = system::getTime();
     double dtSec = std::max(1e-4, std::min(0.08, nowSec - lagDragLastMoveSec));
     lagDragLastMoveSec = nowSec;
-    float absoluteLag = lagForCursorY(map, lagDragCursorPos.y);
-    lagDragLocalLagSamples = adaptiveLagTarget(map, absoluteLag, e.mouseDelta.y, dtSec);
+
+    float lagDelta = lagDeltaFromVerticalGesture(map, appliedDeltaY);
+    lagDragLocalLagSamples = clamp(lagDragLocalLagSamples + lagDelta, 0.f, map.accessibleLag);
+
+    float measuredVelocity = lagDelta / float(dtSec);
+    float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(dtSec));
+    lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
     module->setLagDragRequest(true, lagDragLocalLagSamples);
     e.consume(this);
   }

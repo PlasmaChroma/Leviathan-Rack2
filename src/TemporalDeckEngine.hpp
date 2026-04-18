@@ -1995,6 +1995,7 @@ struct TemporalDeckEngine {
     float rateCv = 0.f;
     bool rateCvConnected = false;
     bool platterTouched = false;
+    bool platterTouchHoldDirect = false;
     bool wheelScratchHeld = false;
     bool platterMotionActive = false;
     uint32_t platterGestureRevision = 0;
@@ -2023,6 +2024,7 @@ struct TemporalDeckEngine {
     const float rateCv = input.rateCv;
     const bool rateCvConnected = input.rateCvConnected;
     const bool platterTouched = input.platterTouched;
+    const bool platterTouchHoldDirect = input.platterTouchHoldDirect;
     const bool wheelScratchHeld = input.wheelScratchHeld;
     const bool platterMotionActive = input.platterMotionActive;
     const uint32_t platterGestureRevision = input.platterGestureRevision;
@@ -2402,7 +2404,15 @@ struct TemporalDeckEngine {
 
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
         if (stationaryManualHold) {
-          scratchLagTargetSamples = scratchLagSamples;
+          if (sampleModeActive && manualTouchScratch && platterTouchHoldDirect) {
+            double targetLag = clampLag(platterLagTarget, limit);
+            scratchLagSamples = targetLag;
+            scratchLagTargetSamples = targetLag;
+            readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
+                                            : buffer.wrapPosition(newestPos - targetLag);
+          } else {
+            scratchLagTargetSamples = scratchLagSamples;
+          }
           scratchHandVelocity = 0.f;
           scratchMotionVelocity = 0.f;
         } else {
