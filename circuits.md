@@ -66,24 +66,22 @@
 
 ## Recommended next pass
 
-1. Use the current raw-`LL` state as the measurement baseline.
+1. Use the normalized-export implementation as the current baseline.
 2. Capture `LL` telemetry for `SVF`, `DFM`, `MS2`, and `PRD` at matching settings.
 3. Compare:
    - stage-A lowpass output
    - stage-B lowpass output
    - relative loss through the `A.lp -> B -> B.lp` path
    - final output gain in the failing low-frequency window
-4. Decide from the measurements whether to:
-   - normalize the nonlinear core outputs to a common contract, or
-   - give each circuit its own mode extraction/mixing rules.
+4. Decide from the measurements whether the semantic export layer is sufficient or needs a different per-circuit adapter shape.
 5. Do not add new shared combiner compensation before those measurements are in hand.
 
 ## Current best judgment
 
-- The best path is to root-cause the core/output contract first.
-- Between the candidate approaches, the first thing to do is measurement, not more tuning.
+- The best path is still to root-cause the core/output contract first.
+- Between the candidate approaches, the next thing to do is measurement on the normalized-export baseline, not more tuning.
 - After that:
-  - if the nonlinear cores can be normalized cleanly, that is probably the simplest long-term design
+  - if the normalized exports hold across circuits, that is probably the simplest long-term design
   - if they cannot, then the shared combiner is the wrong abstraction and per-circuit mode extraction is the more honest solution
 
 ## Session state
@@ -99,12 +97,31 @@
 
 ## Immediate next step from this state
 
-- Do not gather more `LL` telemetry unless a specific ambiguity remains.
-- Treat the cross-circuit lowpass contract mismatch as established by measurement.
-- The next step is to choose the fix boundary:
-  - normalize the nonlinear core outputs to a common contract, or
-  - move mode extraction/mixing to per-circuit logic
-- If more captures are needed for a specific follow-up question, use `Log Curve Debug` and `scripts/bifurx_curve_debug_summary.sh <csv...>`, but do not treat measurement collection itself as the main task anymore.
+- Gather one more normalized-baseline `LL` capture set in Rack if you want final runtime confirmation.
+- Compare the new numbers against the earlier raw-baseline telemetry:
+  - stage-B over stage-A should be materially closer to `SVF`
+  - final output over input should also compress toward the `SVF` envelope
+- If the normalized baseline still leaves large gaps, adjust the adapter shape or escalate to a different export contract.
+- Use `Log Curve Debug` and `scripts/bifurx_curve_debug_summary.sh <csv...>` for that check; at this point, measurement is for validating the implemented contract, not for re-proving the original mismatch.
+
+## Rack run checklist
+
+1. Enable `Log Curve Debug`.
+2. Set mode to `LL` (`Low + Low`).
+3. Keep input steady and use the same fixed knob positions across all circuits.
+4. Run one circuit at a time for 8-10 seconds.
+5. Capture separate runs for:
+   - `SVF`
+   - `DFM`
+   - `MS2`
+   - `PRD`
+6. Run `scripts/bifurx_curve_debug_summary.sh <csv...>` on the resulting CSV files.
+7. Compare:
+   - `ll_stage_a_lp_rms`
+   - `ll_stage_b_lp_rms`
+   - `ll_stage_b_over_a_db`
+   - `ll_output_over_input_db`
+8. Treat the pass as successful if the non-`SVF` circuits now sit in the same rough envelope as `SVF` instead of showing a large structural gap.
 
 ## Measured LL telemetry results
 
