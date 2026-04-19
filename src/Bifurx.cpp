@@ -1141,6 +1141,16 @@ struct Bifurx final : Module {
 		voctCvFilterInitialized = false;
 	}
 
+	void setFilterCircuitMode(int newMode) {
+		const int clampedMode = clampCircuitMode(newMode);
+		const bool changed = (filterCircuitMode != clampedMode) || (activeCircuitMode != clampedMode);
+		filterCircuitMode = clampedMode;
+		activeCircuitMode = clampedMode;
+		if (changed) {
+			resetCircuitStates();
+		}
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = Module::dataToJson();
 		json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
@@ -1166,9 +1176,11 @@ struct Bifurx final : Module {
 		}
 		json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode");
 		if (filterCircuitModeJ) {
-			filterCircuitMode = clampCircuitMode(int(json_integer_value(filterCircuitModeJ)));
+			setFilterCircuitMode(int(json_integer_value(filterCircuitModeJ)));
 		}
-		activeCircuitMode = filterCircuitMode;
+		else {
+			setFilterCircuitMode(filterCircuitMode);
+		}
 	}
 
 	void resetPerfStats() {
@@ -1275,10 +1287,7 @@ struct Bifurx final : Module {
 				params[MODE_PARAM].setValue(float((currentMode + 1) % 10));
 			}
 				if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) {
-					filterCircuitMode = (clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount;
-				}
-				if (!kBifurxTuneSvfOnly) {
-					activeCircuitMode = clampCircuitMode(filterCircuitMode);
+					setFilterCircuitMode((clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount);
 				}
 
 		const float in = sanitizeFinite(inputs[IN_INPUT].getVoltage());
@@ -3103,7 +3112,7 @@ struct BifurxWidget final : ModuleWidget {
 					submenu->addChild(createCheckMenuItem(
 						kBifurxCircuitLabels[i], "",
 						[=]() { return bifurx->filterCircuitMode == i; },
-						[=]() { bifurx->filterCircuitMode = i; }
+						[=]() { bifurx->setFilterCircuitMode(i); }
 					));
 				}
 			}));
