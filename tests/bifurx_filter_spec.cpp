@@ -13,7 +13,9 @@ using bifurx_test_model::cascadeWideMorph;
 using bifurx_test_model::clampf;
 using bifurx_test_model::clamp01;
 using bifurx_test_model::makePreviewModel;
+using bifurx_test_model::makeLlRuntimeSweep;
 using bifurx_test_model::responseDb;
+using bifurx_test_model::LlRuntimeSweepPoint;
 using bifurx_test_model::simulateHhRuntimeGainDb;
 using bifurx_test_model::simulateLlRuntimeGainDb;
 
@@ -22,6 +24,10 @@ struct TestResult {
   bool pass = false;
   std::string detail;
 };
+
+std::vector<float> llSweepFrequenciesHz() {
+  return {30.f, 40.f, 55.f, 75.f, 100.f, 140.f, 200.f, 300.f, 450.f, 650.f, 900.f, 1300.f, 1800.f};
+}
 
 TestResult testLowLowMaintainsDoubleSlopeOrdering() {
   PreviewState s;
@@ -135,6 +141,92 @@ TestResult testLowLowRuntimeSemanticExportsTrackSvfBaseline() {
     "svf=" + std::to_string(svf) + " dfm=" + std::to_string(dfm) +
       " ms2=" + std::to_string(ms2) + " prd=" + std::to_string(prd) +
       " maxDelta=" + std::to_string(maxDelta)
+  };
+}
+
+TestResult testLowLowSweepDatasetHasStableShape() {
+  const float sampleRate = 48000.f;
+  const float cutoffA = 140.f;
+  const float cutoffB = 950.f;
+  const float dampingA = 1.f / 1.1f;
+  const float dampingB = 1.f / 1.1f;
+  const std::vector<float> freqs = llSweepFrequenciesHz();
+  bool pass = true;
+
+  for (int circuit = 0; circuit <= 3; ++circuit) {
+    const std::vector<LlRuntimeSweepPoint> sweep = makeLlRuntimeSweep(
+      sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, circuit
+    );
+    if (sweep.size() != freqs.size()) {
+      pass = false;
+      break;
+    }
+    for (size_t i = 0; i < sweep.size(); ++i) {
+      const LlRuntimeSweepPoint& p = sweep[i];
+      if (!(p.freqHz > 0.f) || (i > 0 && !(p.freqHz > sweep[i - 1].freqHz))) {
+        pass = false;
+        break;
+      }
+      if (!std::isfinite(p.telemetry.inputRms) || !std::isfinite(p.telemetry.stageALpRms)
+          || !std::isfinite(p.telemetry.stageBLpRms) || !std::isfinite(p.telemetry.outputRms)
+          || !std::isfinite(p.telemetry.stageBOverADb) || !std::isfinite(p.telemetry.outputOverInputDb)) {
+        pass = false;
+        break;
+      }
+    }
+    if (!pass) {
+      break;
+    }
+  }
+
+  return {
+    "LL sweep dataset is finite, ordered, and complete for all circuits",
+    pass,
+    "freq_count=" + std::to_string(freqs.size())
+  };
+}
+
+TestResult testLowLowSweepContractEnvelopeAgainstSvf() {
+  const float sampleRate = 48000.f;
+  const float cutoffA = 140.f;
+  const float cutoffB = 950.f;
+  const float dampingA = 1.f / 1.1f;
+  const float dampingB = 1.f / 1.1f;
+  const std::vector<float> freqs = llSweepFrequenciesHz();
+  const std::vector<LlRuntimeSweepPoint> svf = makeLlRuntimeSweep(
+    sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 0
+  );
+
+  bool pass = true;
+  float worstOutputDeltaDb = 0.f;
+  float worstStageDeltaDb = 0.f;
+
+  for (int circuit = 1; circuit <= 3; ++circuit) {
+    const std::vector<LlRuntimeSweepPoint> alt = makeLlRuntimeSweep(
+      sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, circuit
+    );
+    for (size_t i = 0; i < alt.size(); ++i) {
+      const float outputDelta = alt[i].telemetry.outputOverInputDb - svf[i].telemetry.outputOverInputDb;
+      const float stageDelta = alt[i].telemetry.stageBOverADb - svf[i].telemetry.stageBOverADb;
+      worstOutputDeltaDb = std::max(worstOutputDeltaDb, std::fabs(outputDelta));
+      worstStageDeltaDb = std::max(worstStageDeltaDb, std::fabs(stageDelta));
+
+      // Contract guardrails: broad enough for nonlinear behavior, narrow enough
+      // to flag collapse/blow-up regressions.
+      if (outputDelta < -12.f || outputDelta > 8.f) {
+        pass = false;
+      }
+      if (stageDelta < -6.f || stageDelta > 6.f) {
+        pass = false;
+      }
+    }
+  }
+
+  return {
+    "LL sweep contract remains within broad SVF-relative envelopes",
+    pass,
+    "worstOutputDeltaDb=" + std::to_string(worstOutputDeltaDb) +
+      " worstStageDeltaDb=" + std::to_string(worstStageDeltaDb)
   };
 }
 
@@ -617,6 +709,8 @@ int main() {
     testLowLowMidpointDipNotOverlyDeep(),
     testLowLowRuntimeRetainsPrePeakLowBand(),
     testLowLowRuntimeSemanticExportsTrackSvfBaseline(),
+    testLowLowSweepDatasetHasStableShape(),
+    testLowLowSweepContractEnvelopeAgainstSvf(),
     testLowLowAndHighHighPreviewMirrorLowSpan(),
     testLowLowAndHighHighPreviewMirrorMidSpan(),
     testLowLowAndHighHighPreviewMirrorHighSpan(),

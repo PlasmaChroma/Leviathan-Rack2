@@ -209,18 +209,55 @@ float circuitQScale(float resoNorm, int circuitMode) {
 	}
 }
 
-float semanticExportScale(int circuitMode, int stageIndex) {
+struct SemanticExportProfile {
+	float lpScale = 0.f;
+	float bpScale = 0.f;
+	float hpScale = 0.f;
+};
+
+SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
 	const int clampedCircuitMode = clampCircuitMode(circuitMode);
 	const int clampedStageIndex = clamp(stageIndex, 0, 1);
+	SemanticExportProfile profile;
 	switch (clampedCircuitMode) {
 		case 1: // DFM
-			return clampedStageIndex == 0 ? 0.82f : 0.70f;
+			if (clampedStageIndex == 0) {
+				profile.lpScale = 4.5f;
+				profile.bpScale = 1.05f;
+				profile.hpScale = 1.05f;
+			}
+			else {
+				profile.lpScale = 2.4f;
+				profile.bpScale = 0.90f;
+				profile.hpScale = 0.90f;
+			}
+			return profile;
 		case 2: // MS2
-			return clampedStageIndex == 0 ? 0.70f : 0.48f;
+			if (clampedStageIndex == 0) {
+				profile.lpScale = 2.0f;
+				profile.bpScale = 0.92f;
+				profile.hpScale = 0.92f;
+			}
+			else {
+				profile.lpScale = 1.1f;
+				profile.bpScale = 0.72f;
+				profile.hpScale = 0.72f;
+			}
+			return profile;
 		case 3: // PRD
-			return clampedStageIndex == 0 ? 0.76f : 0.54f;
+			if (clampedStageIndex == 0) {
+				profile.lpScale = 2.5f;
+				profile.bpScale = 0.98f;
+				profile.hpScale = 0.98f;
+			}
+			else {
+				profile.lpScale = 1.6f;
+				profile.bpScale = 0.78f;
+				profile.hpScale = 0.78f;
+			}
+			return profile;
 		default:
-			return 0.f;
+			return profile;
 	}
 }
 
@@ -241,18 +278,13 @@ T normalizeSemanticComponent(const T& value, float exportScale) {
 }
 
 SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
-	const float exportScale = semanticExportScale(circuitMode, stageIndex);
+	const SemanticExportProfile profile = semanticExportProfile(circuitMode, stageIndex);
 	SvfOutputs out;
-	out.lp = normalizeSemanticComponent(raw.lp, exportScale);
-	out.bp = normalizeSemanticComponent(raw.bp, exportScale);
-	out.hp = normalizeSemanticComponent(raw.hp, exportScale);
+	out.lp = normalizeSemanticComponent(raw.lp, profile.lpScale);
+	out.bp = normalizeSemanticComponent(raw.bp, profile.bpScale);
+	out.hp = normalizeSemanticComponent(raw.hp, profile.hpScale);
 	out.notch = out.lp + out.hp;
 	return out;
-}
-
-template <typename T>
-T normalizeSemanticResponse(const T& value, int circuitMode, int stageIndex) {
-	return normalizeSemanticComponent(value, semanticExportScale(circuitMode, stageIndex));
 }
 
 float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
@@ -704,14 +736,16 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 
 std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
 	const float omega = 2.f * kPi * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-	const std::complex<float> lpA = normalizeSemanticResponse(model.lowA.response(omega), model.circuitMode, 0);
-	const std::complex<float> bpA = normalizeSemanticResponse(model.bandA.response(omega), model.circuitMode, 0);
-	const std::complex<float> hpA = normalizeSemanticResponse(model.highA.response(omega), model.circuitMode, 0);
-	const std::complex<float> ntA = normalizeSemanticResponse(model.notchA.response(omega), model.circuitMode, 0);
-	const std::complex<float> lpB = normalizeSemanticResponse(model.lowB.response(omega), model.circuitMode, 1);
-	const std::complex<float> bpB = normalizeSemanticResponse(model.bandB.response(omega), model.circuitMode, 1);
-	const std::complex<float> hpB = normalizeSemanticResponse(model.highB.response(omega), model.circuitMode, 1);
-	const std::complex<float> ntB = normalizeSemanticResponse(model.notchB.response(omega), model.circuitMode, 1);
+	const SemanticExportProfile profileA = semanticExportProfile(model.circuitMode, 0);
+	const SemanticExportProfile profileB = semanticExportProfile(model.circuitMode, 1);
+	const std::complex<float> lpA = normalizeSemanticComponent(model.lowA.response(omega), profileA.lpScale);
+	const std::complex<float> bpA = normalizeSemanticComponent(model.bandA.response(omega), profileA.bpScale);
+	const std::complex<float> hpA = normalizeSemanticComponent(model.highA.response(omega), profileA.hpScale);
+	const std::complex<float> ntA = lpA + hpA;
+	const std::complex<float> lpB = normalizeSemanticComponent(model.lowB.response(omega), profileB.lpScale);
+	const std::complex<float> bpB = normalizeSemanticComponent(model.bandB.response(omega), profileB.bpScale);
+	const std::complex<float> hpB = normalizeSemanticComponent(model.highB.response(omega), profileB.hpScale);
+	const std::complex<float> ntB = lpB + hpB;
 	const std::complex<float> cascadeLp = lpB * lpA;
 	const std::complex<float> cascadeNotch = ntB * ntA;
 	const std::complex<float> cascadeHpToLp = lpB * hpA;
