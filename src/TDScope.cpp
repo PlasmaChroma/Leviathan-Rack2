@@ -750,7 +750,7 @@ struct TDScopeDisplayWidget final : Widget {
       readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
     }
     float readHeadY = drawTop + readHeadT * yDen + 0.5f;
-    if (lowSignalWindow) {
+    if (lowSignalWindow && sampleMode) {
       readHeadY = drawTop + 0.5f * yDen + 0.5f;
     }
     // Keep the full multi-line read-head band visible near window edges,

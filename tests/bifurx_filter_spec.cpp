@@ -1,5 +1,6 @@
 #include "bifurx_filter_test_model.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -693,6 +694,380 @@ TestResult testPreviewCircuitSelectionRespectsCircuitMode() {
   };
 }
 
+std::vector<float> qualifierSweepFrequenciesHz() {
+  return {
+    30.f, 40.f, 55.f, 75.f, 100.f, 135.f, 180.f, 240.f, 320.f, 430.f,
+    580.f, 780.f, 1050.f, 1420.f, 1910.f, 2580.f, 3480.f, 4700.f, 6350.f, 8600.f
+  };
+}
+
+float percentileValue(const std::vector<float>& values, float p) {
+  if (values.empty()) {
+    return 0.f;
+  }
+  std::vector<float> sorted = values;
+  std::sort(sorted.begin(), sorted.end());
+  const float clampedP = clampf(p, 0.f, 1.f);
+  const size_t idx = std::min(sorted.size() - 1, size_t(std::floor(clampedP * float(sorted.size() - 1))));
+  return sorted[idx];
+}
+
+struct SvfQualifierMetrics {
+  float meanSignedDeltaDb = 0.f;
+  float meanAbsDeltaDb = 0.f;
+  float p95AbsDeltaDb = 0.f;
+  float maxAbsDeltaDb = 0.f;
+  float meanCenteredAbsDeltaDb = 0.f;
+  float p95CenteredAbsDeltaDb = 0.f;
+  float meanSlopeAbsDeltaDb = 0.f;
+  float maxSlopeAbsDeltaDb = 0.f;
+  float lowBandBiasDb = 0.f;
+  float midBandBiasDb = 0.f;
+  float highBandBiasDb = 0.f;
+  float worstFreqHz = 0.f;
+  float worstDeltaDb = 0.f;
+};
+
+struct SvfQualifierPairResult {
+  int mode = -1;
+  int circuit = -1;
+  float score = 0.f;
+  SvfQualifierMetrics metrics;
+};
+
+struct LlQualifierScenario {
+  float freqA = 0.f;
+  float freqB = 0.f;
+  float qA = 1.f;
+  float qB = 1.f;
+  float spanNorm = 0.f;
+  float balance = 0.f;
+};
+
+std::vector<LlQualifierScenario> llQualifierScenarios() {
+  return {
+    {80.f, 420.f, 1.10f, 1.10f, 0.35f, 0.f},
+    {140.f, 950.f, 1.10f, 1.10f, 0.45f, 0.f},
+    {220.f, 1400.f, 1.25f, 1.25f, 0.55f, 0.f},
+    {320.f, 2200.f, 1.40f, 1.40f, 0.70f, 0.f},
+    {500.f, 4200.f, 1.60f, 1.60f, 0.85f, 0.f},
+  };
+}
+
+SvfQualifierMetrics qualifyModeAgainstSvf(int mode, int circuitMode) {
+  const std::vector<float> freqs = qualifierSweepFrequenciesHz();
+
+  PreviewState base;
+  base.sampleRate = 48000.f;
+  base.freqA = 220.f;
+  base.freqB = 1400.f;
+  base.qA = 1.25f;
+  base.qB = 1.25f;
+  base.spanNorm = 0.55f;
+  base.balance = 0.f;
+
+  PreviewState svfState = base;
+  svfState.mode = mode;
+  svfState.circuitMode = 0;
+  const PreviewModel svfModel = makePreviewModel(svfState);
+
+  PreviewState altState = svfState;
+  altState.circuitMode = circuitMode;
+  const PreviewModel altModel = makePreviewModel(altState);
+
+  std::vector<float> deltasDb;
+  std::vector<float> absDeltasDb;
+  std::vector<float> centeredAbsDeltasDb;
+  std::vector<float> slopeAbsDeltasDb;
+  deltasDb.reserve(freqs.size());
+  absDeltasDb.reserve(freqs.size());
+  centeredAbsDeltasDb.reserve(freqs.size());
+  slopeAbsDeltasDb.reserve(freqs.size());
+
+  float lowBiasSum = 0.f;
+  float midBiasSum = 0.f;
+  float highBiasSum = 0.f;
+  int lowBiasCount = 0;
+  int midBiasCount = 0;
+  int highBiasCount = 0;
+
+  SvfQualifierMetrics metrics;
+  for (float hz : freqs) {
+    const float svfDb = responseDb(svfModel, hz);
+    const float altDb = responseDb(altModel, hz);
+    const float deltaDb = altDb - svfDb;
+    const float absDeltaDb = std::fabs(deltaDb);
+    deltasDb.push_back(deltaDb);
+    absDeltasDb.push_back(absDeltaDb);
+    metrics.meanSignedDeltaDb += deltaDb;
+    metrics.meanAbsDeltaDb += absDeltaDb;
+    if (absDeltaDb > metrics.maxAbsDeltaDb) {
+      metrics.maxAbsDeltaDb = absDeltaDb;
+      metrics.worstFreqHz = hz;
+      metrics.worstDeltaDb = deltaDb;
+    }
+
+    if (hz <= 180.f) {
+      lowBiasSum += deltaDb;
+      lowBiasCount++;
+    } else if (hz <= 1400.f) {
+      midBiasSum += deltaDb;
+      midBiasCount++;
+    } else {
+      highBiasSum += deltaDb;
+      highBiasCount++;
+    }
+  }
+
+  metrics.meanSignedDeltaDb /= std::max<size_t>(1, deltasDb.size());
+  metrics.meanAbsDeltaDb /= std::max<size_t>(1, absDeltasDb.size());
+  metrics.p95AbsDeltaDb = percentileValue(absDeltasDb, 0.95f);
+
+  for (float deltaDb : deltasDb) {
+    centeredAbsDeltasDb.push_back(std::fabs(deltaDb - metrics.meanSignedDeltaDb));
+  }
+  metrics.meanCenteredAbsDeltaDb = 0.f;
+  for (float v : centeredAbsDeltasDb) {
+    metrics.meanCenteredAbsDeltaDb += v;
+  }
+  metrics.meanCenteredAbsDeltaDb /= std::max<size_t>(1, centeredAbsDeltasDb.size());
+  metrics.p95CenteredAbsDeltaDb = percentileValue(centeredAbsDeltasDb, 0.95f);
+
+  for (size_t i = 1; i < freqs.size(); ++i) {
+    const float svfSlope = responseDb(svfModel, freqs[i]) - responseDb(svfModel, freqs[i - 1]);
+    const float altSlope = responseDb(altModel, freqs[i]) - responseDb(altModel, freqs[i - 1]);
+    const float slopeAbsDeltaDb = std::fabs(altSlope - svfSlope);
+    slopeAbsDeltasDb.push_back(slopeAbsDeltaDb);
+    metrics.meanSlopeAbsDeltaDb += slopeAbsDeltaDb;
+    metrics.maxSlopeAbsDeltaDb = std::max(metrics.maxSlopeAbsDeltaDb, slopeAbsDeltaDb);
+  }
+  metrics.meanSlopeAbsDeltaDb /= std::max<size_t>(1, slopeAbsDeltasDb.size());
+
+  metrics.lowBandBiasDb = lowBiasSum / std::max(1, lowBiasCount);
+  metrics.midBandBiasDb = midBiasSum / std::max(1, midBiasCount);
+  metrics.highBandBiasDb = highBiasSum / std::max(1, highBiasCount);
+  return metrics;
+}
+
+SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios(int circuitMode) {
+  const std::vector<float> freqs = qualifierSweepFrequenciesHz();
+  const std::vector<LlQualifierScenario> scenarios = llQualifierScenarios();
+
+  std::vector<float> deltasDb;
+  std::vector<float> absDeltasDb;
+  std::vector<float> centeredAbsDeltasDb;
+  std::vector<float> slopeAbsDeltasDb;
+
+  float lowBiasSum = 0.f;
+  float midBiasSum = 0.f;
+  float highBiasSum = 0.f;
+  int lowBiasCount = 0;
+  int midBiasCount = 0;
+  int highBiasCount = 0;
+
+  SvfQualifierMetrics metrics;
+  for (size_t si = 0; si < scenarios.size(); ++si) {
+    const LlQualifierScenario& scenario = scenarios[si];
+
+    PreviewState svfState;
+    svfState.sampleRate = 48000.f;
+    svfState.mode = 0;
+    svfState.circuitMode = 0;
+    svfState.freqA = scenario.freqA;
+    svfState.freqB = scenario.freqB;
+    svfState.qA = scenario.qA;
+    svfState.qB = scenario.qB;
+    svfState.spanNorm = scenario.spanNorm;
+    svfState.balance = scenario.balance;
+    const PreviewModel svfModel = makePreviewModel(svfState);
+
+    PreviewState altState = svfState;
+    altState.circuitMode = circuitMode;
+    const PreviewModel altModel = makePreviewModel(altState);
+
+    for (float hz : freqs) {
+      const float svfDb = responseDb(svfModel, hz);
+      const float altDb = responseDb(altModel, hz);
+      const float deltaDb = altDb - svfDb;
+      const float absDeltaDb = std::fabs(deltaDb);
+      deltasDb.push_back(deltaDb);
+      absDeltasDb.push_back(absDeltaDb);
+      metrics.meanSignedDeltaDb += deltaDb;
+      metrics.meanAbsDeltaDb += absDeltaDb;
+      if (absDeltaDb > metrics.maxAbsDeltaDb) {
+        metrics.maxAbsDeltaDb = absDeltaDb;
+        metrics.worstFreqHz = hz;
+        metrics.worstDeltaDb = deltaDb;
+      }
+
+      if (hz <= 180.f) {
+        lowBiasSum += deltaDb;
+        lowBiasCount++;
+      } else if (hz <= 1400.f) {
+        midBiasSum += deltaDb;
+        midBiasCount++;
+      } else {
+        highBiasSum += deltaDb;
+        highBiasCount++;
+      }
+    }
+
+    for (size_t i = 1; i < freqs.size(); ++i) {
+      const float svfSlope = responseDb(svfModel, freqs[i]) - responseDb(svfModel, freqs[i - 1]);
+      const float altSlope = responseDb(altModel, freqs[i]) - responseDb(altModel, freqs[i - 1]);
+      const float slopeAbsDeltaDb = std::fabs(altSlope - svfSlope);
+      slopeAbsDeltasDb.push_back(slopeAbsDeltaDb);
+      metrics.meanSlopeAbsDeltaDb += slopeAbsDeltaDb;
+      metrics.maxSlopeAbsDeltaDb = std::max(metrics.maxSlopeAbsDeltaDb, slopeAbsDeltaDb);
+    }
+  }
+
+  metrics.meanSignedDeltaDb /= std::max<size_t>(1, deltasDb.size());
+  metrics.meanAbsDeltaDb /= std::max<size_t>(1, absDeltasDb.size());
+  metrics.p95AbsDeltaDb = percentileValue(absDeltasDb, 0.95f);
+
+  for (float deltaDb : deltasDb) {
+    centeredAbsDeltasDb.push_back(std::fabs(deltaDb - metrics.meanSignedDeltaDb));
+  }
+  for (float v : centeredAbsDeltasDb) {
+    metrics.meanCenteredAbsDeltaDb += v;
+  }
+  metrics.meanCenteredAbsDeltaDb /= std::max<size_t>(1, centeredAbsDeltasDb.size());
+  metrics.p95CenteredAbsDeltaDb = percentileValue(centeredAbsDeltasDb, 0.95f);
+  metrics.meanSlopeAbsDeltaDb /= std::max<size_t>(1, slopeAbsDeltasDb.size());
+
+  metrics.lowBandBiasDb = lowBiasSum / std::max(1, lowBiasCount);
+  metrics.midBandBiasDb = midBiasSum / std::max(1, midBiasCount);
+  metrics.highBandBiasDb = highBiasSum / std::max(1, highBiasCount);
+  return metrics;
+}
+
+TestResult testLowLowMeetsDedicatedSvfTuningQualifier() {
+  bool pass = true;
+  std::string detail;
+  for (int circuit = 1; circuit <= 3; ++circuit) {
+    const SvfQualifierMetrics metrics = qualifyLowLowAgainstSvfAcrossScenarios(circuit);
+    const bool circuitPass =
+      metrics.p95AbsDeltaDb <= 1.5f &&
+      metrics.maxAbsDeltaDb <= 2.0f &&
+      metrics.meanSlopeAbsDeltaDb <= 0.45f &&
+      metrics.maxSlopeAbsDeltaDb <= 1.2f;
+    pass = pass && circuitPass;
+
+    if (!detail.empty()) {
+      detail += " ";
+    }
+    detail +=
+      "[c" + std::to_string(circuit) +
+      (circuitPass ? " PASS" : " FAIL") +
+      " p95Abs=" + std::to_string(metrics.p95AbsDeltaDb) +
+      " maxAbs=" + std::to_string(metrics.maxAbsDeltaDb) +
+      " meanSlope=" + std::to_string(metrics.meanSlopeAbsDeltaDb) +
+      " maxSlope=" + std::to_string(metrics.maxSlopeAbsDeltaDb) + "]";
+  }
+
+  return {
+    "LL dedicated SVF tuning qualifier holds across representative states",
+    pass,
+    detail
+  };
+}
+
+TestResult testAllModesMeetSvfTuningQualifier() {
+  bool pass = true;
+  int violations = 0;
+  float worstScore = -1.f;
+  int worstMode = -1;
+  int worstCircuit = -1;
+  SvfQualifierMetrics worstMetrics;
+  std::vector<SvfQualifierPairResult> offenders;
+  std::vector<SvfQualifierPairResult> llPairs;
+
+  for (int mode = 0; mode <= 9; ++mode) {
+    for (int circuit = 1; circuit <= 3; ++circuit) {
+      const SvfQualifierMetrics metrics = qualifyModeAgainstSvf(mode, circuit);
+      float score = metrics.p95CenteredAbsDeltaDb + 0.75f * metrics.meanSlopeAbsDeltaDb + 0.15f * metrics.p95AbsDeltaDb;
+      if (mode == 0) {
+        llPairs.push_back({mode, circuit, score, metrics});
+      }
+      const bool pairPass =
+        metrics.maxAbsDeltaDb <= 12.f &&
+        metrics.p95AbsDeltaDb <= 8.f &&
+        metrics.p95CenteredAbsDeltaDb <= 3.f &&
+        metrics.meanSlopeAbsDeltaDb <= 1.5f &&
+        metrics.maxSlopeAbsDeltaDb <= 4.f;
+      if (!pairPass) {
+        pass = false;
+        violations++;
+        offenders.push_back({mode, circuit, score, metrics});
+      }
+
+      if (score > worstScore) {
+        worstScore = score;
+        worstMode = mode;
+        worstCircuit = circuit;
+        worstMetrics = metrics;
+      }
+    }
+  }
+
+  std::sort(
+    offenders.begin(), offenders.end(),
+    [](const SvfQualifierPairResult& a, const SvfQualifierPairResult& b) { return a.score > b.score; }
+  );
+  std::sort(
+    llPairs.begin(), llPairs.end(),
+    [](const SvfQualifierPairResult& a, const SvfQualifierPairResult& b) { return a.circuit < b.circuit; }
+  );
+
+  std::string offenderSummary;
+  const size_t offenderLimit = offenders.size();
+  for (size_t i = 0; i < offenderLimit; ++i) {
+    const SvfQualifierPairResult& offender = offenders[i];
+    if (!offenderSummary.empty()) {
+      offenderSummary += " ";
+    }
+    offenderSummary +=
+      "[m" + std::to_string(offender.mode) +
+      " c" + std::to_string(offender.circuit) +
+      " score=" + std::to_string(offender.score) +
+      " p95c=" + std::to_string(offender.metrics.p95CenteredAbsDeltaDb) +
+      " slope=" + std::to_string(offender.metrics.meanSlopeAbsDeltaDb) + "]";
+  }
+
+  std::string llSummary;
+  for (size_t i = 0; i < llPairs.size(); ++i) {
+    const SvfQualifierPairResult& ll = llPairs[i];
+    if (!llSummary.empty()) {
+      llSummary += " ";
+    }
+    llSummary +=
+      "[c" + std::to_string(ll.circuit) +
+      " score=" + std::to_string(ll.score) +
+      " p95c=" + std::to_string(ll.metrics.p95CenteredAbsDeltaDb) +
+      " slope=" + std::to_string(ll.metrics.meanSlopeAbsDeltaDb) +
+      " p95Abs=" + std::to_string(ll.metrics.p95AbsDeltaDb) +
+      " maxAbs=" + std::to_string(ll.metrics.maxAbsDeltaDb) + "]";
+  }
+
+  return {
+    "All mode/circuit preview curves meet SVF tuning qualifier",
+    pass,
+    "violations=" + std::to_string(violations) +
+      " worstScore=" + std::to_string(worstScore) +
+      " mode=" + std::to_string(worstMode) +
+      " circuit=" + std::to_string(worstCircuit) +
+      " p95Centered=" + std::to_string(worstMetrics.p95CenteredAbsDeltaDb) +
+      " meanSlope=" + std::to_string(worstMetrics.meanSlopeAbsDeltaDb) +
+      " p95Abs=" + std::to_string(worstMetrics.p95AbsDeltaDb) +
+      " maxAbs=" + std::to_string(worstMetrics.maxAbsDeltaDb) +
+      " worstFreqHz=" + std::to_string(worstMetrics.worstFreqHz) +
+      " worstDeltaDb=" + std::to_string(worstMetrics.worstDeltaDb) +
+      " LL=" + llSummary +
+      " offenders=" + offenderSummary
+  };
+}
+
 } // namespace
 
 int main() {
@@ -711,6 +1086,7 @@ int main() {
     testLowLowRuntimeSemanticExportsTrackSvfBaseline(),
     testLowLowSweepDatasetHasStableShape(),
     testLowLowSweepContractEnvelopeAgainstSvf(),
+    testLowLowMeetsDedicatedSvfTuningQualifier(),
     testLowLowAndHighHighPreviewMirrorLowSpan(),
     testLowLowAndHighHighPreviewMirrorMidSpan(),
     testLowLowAndHighHighPreviewMirrorHighSpan(),
@@ -718,6 +1094,7 @@ int main() {
     testBandBandHasTwoLocalPeaksNearMarkers(),
     testModesRemainDistinctAtReferenceState(),
     testPreviewCircuitSelectionRespectsCircuitMode(),
+    testAllModesMeetSvfTuningQualifier(),
   };
 
   int fails = 0;
