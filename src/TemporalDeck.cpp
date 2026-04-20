@@ -1121,6 +1121,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
     // Expander scope requests are treated as intent signals: lag target is
     // authoritative and optional velocity is advisory. Final scratch behavior
     // remains centralized in the host/engine path below.
+    // WARNING: Sign contract for expander scope drag messages:
+    // - `lagTarget` increases away from NOW (older audio).
+    // - `lagDragRequestVelocity` uses scratch gesture convention:
+    //     positive => toward NOW (decreasing lag)
+    //     negative => away from NOW (increasing lag)
+    // Any receive-side derivation or blending must preserve this convention.
     bool isNewLagRequest = !impl->expanderLagDragRequestSeen || lagDragRequestSeq != impl->expanderLagDragLastRequestSeq;
     if (isNewLagRequest) {
       impl->expanderLagDragRequestSeen = true;
@@ -1143,12 +1149,22 @@ void TemporalDeck::process(const ProcessArgs &args) {
             float velocitySamples = 0.f;
             int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
             float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
+            // WARNING: Keep derived velocity in the same convention as
+            // incoming scope velocity before blending.
+            // positive velocity => toward NOW (decreasing lag).
+            float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
             if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
-              // Prefer transmitted scope velocity when present, otherwise derive
-              // it from lag-target deltas.
-              velocitySamples = lagDragRequestVelocity;
+              // Scope velocity is advisory; blend with host-derived target
+              // velocity so intent remains responsive without over-driving.
+              // Near small lag deltas, bias strongly toward derived velocity
+              // to improve target landing accuracy in scope-time coordinates.
+              constexpr float kScopeVelocityBlendMax = 0.22f;
+              float blendByDelta = clamp((lagDelta - 0.5f) / 8.f, 0.f, 1.f);
+              float kScopeVelocityBlend = kScopeVelocityBlendMax * blendByDelta;
+              velocitySamples =
+                lagDragRequestVelocity * kScopeVelocityBlend + derivedVelocity * (1.f - kScopeVelocityBlend);
             } else {
-              velocitySamples = (lagTarget - impl->expanderLagDragLastLagSamples) / dtSec;
+              velocitySamples = derivedVelocity;
             }
             impl->platterInput.setScratch(true, lagTarget, velocitySamples);
             // Allow dynamic hold duration based on the actual update rate of the expander UI.

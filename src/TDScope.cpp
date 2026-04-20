@@ -165,6 +165,12 @@ struct TDScope final : Module {
   }
 
   void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f) {
+    // WARNING: Expander lag-drag sign contract.
+    // `lagSamples` increases when moving toward older audio (away from NOW).
+    // `velocity` must use scratch gesture convention:
+    //   positive velocity => motion toward NOW (decreasing lag)
+    //   negative velocity => motion away from NOW (increasing lag)
+    // Breaking this convention can silently invert drag direction downstream.
     uiLagDragActive.store(active, std::memory_order_relaxed);
     uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
     uiLagDragVelocity.store(velocity, std::memory_order_relaxed);
@@ -323,7 +329,6 @@ struct TDScopeDisplayWidget final : Widget {
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
-  float lagDragFilteredVelocity = 0.f;
 
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
@@ -386,7 +391,6 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragCursorPos = pos;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
-    lagDragFilteredVelocity = 0.f;
     lagDragSignedLagPerPixel =
       (map.windowTopLag - map.windowBottomLag) / map.drawYDen;
     lagDragDrawTop = map.drawTop;
@@ -409,7 +413,6 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragSignedLagPerPixel = 0.f;
     lagDragDrawTop = 0.f;
     lagDragWindowBottomLag = 0.f;
-    lagDragFilteredVelocity = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
     }
@@ -456,12 +459,7 @@ struct TDScopeDisplayWidget final : Widget {
     constexpr float kLagDragJitterDeadzonePx = 0.20f;
     lagDragResidualY += e.mouseDelta.y;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
-      lagDragFilteredVelocity += (0.f - lagDragFilteredVelocity) * settleAlpha;
-      if (std::fabs(lagDragFilteredVelocity) < 1.f) {
-        lagDragFilteredVelocity = 0.f;
-      }
-      module->setLagDragRequest(true, lagDragLocalLagSamples, lagDragFilteredVelocity);
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
       e.consume(this);
       return;
     }
@@ -473,6 +471,10 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
+    // WARNING: Scope drag direction contract.
+    // Positive Y drag (downward) must produce larger lag (older audio).
+    // This requires positive `lagDragSignedLagPerPixel` and is the source of
+    // truth for scope-side directionality.
     float cursorLag = lagDragWindowBottomLag + (lagDragCursorPos.y - lagDragDrawTop) * lagDragSignedLagPerPixel;
     float desiredPlaybackLag = cursorLag + lagDragCursorToPlaybackOffsetSamples;
     float previousLag = lagDragLocalLagSamples;
@@ -487,13 +489,11 @@ struct TDScopeDisplayWidget final : Widget {
     } else {
       lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, map.accessibleLag);
     }
-
-    // Keep velocity estimate lightweight; host remains the authority for
-    // scratch response behavior.
-    float measuredVelocity = (previousLag - lagDragLocalLagSamples) / float(dtSec);
-    float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 24.f * float(dtSec));
-    lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, lagDragFilteredVelocity);
+    // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
+    // positive velocity means toward NOW (lag decreasing), hence
+    // (previousLag - currentLag) / dt.
+    float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
+    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
     e.consume(this);
   }
 
