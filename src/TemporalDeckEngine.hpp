@@ -2405,10 +2405,9 @@ struct TemporalDeckEngine {
 
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
         if (manualTouchScratch && platterTouchHoldDirect) {
-          // Scope-style direct positioning should follow the requested lag
-          // target exactly instead of going through the hybrid platter motion
-          // model, which is tuned for inertial hand gestures and can overshoot
-          // scope-time targets.
+          // Direct-position requests are only for stationary hold behavior.
+          // Active scope movement should arrive through the normal scratch
+          // gesture path instead.
           double targetLag = clampLag(platterLagTarget, limit);
           scratchLagSamples = targetLag;
           scratchLagTargetSamples = targetLag;

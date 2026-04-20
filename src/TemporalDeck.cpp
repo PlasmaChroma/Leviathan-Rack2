@@ -1166,10 +1166,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
             } else {
               velocitySamples = derivedVelocity;
             }
-            // Scope drag is a direct positioning intent, not platter-style
-            // hybrid motion. Route it through a direct scratch target path so
-            // landing follows scope-time targets without extra overshoot.
-            impl->platterInput.setDirectScratch(true, lagTarget, velocitySamples);
+            // Scope emits equivalent platter-gesture intent. TemporalDeck
+            // realizes that intent through the same scratch gesture path used
+            // by actual platter dragging.
+            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+            int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
+            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
+            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
+            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
           }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;
