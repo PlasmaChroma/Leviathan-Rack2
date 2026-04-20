@@ -378,13 +378,29 @@ struct TDScopeDisplayWidget final : Widget {
     if (!map.valid) {
       return 0.f;
     }
-    float currentY = clamp(lagDragCursorPos.y, map.drawTop, map.drawBottom);
-    float nextY = clamp(currentY + deltaY, map.drawTop, map.drawBottom);
-    float lagBefore = lagForCursorY(map, currentY);
-    float lagAfter = lagForCursorY(map, nextY);
-    float unityLagDelta = lagAfter - lagBefore;
+    float signedLagPerPixel = (map.windowBottomLag - map.windowTopLag) /
+                              std::max(map.drawBottom - map.drawTop, 1.f);
+    float unityLagDelta = deltaY * signedLagPerPixel;
     float sensitivity = hasLastGoodMsg ? std::max(lastGoodMsg.scratchSensitivity, 0.f) : 1.f;
     return unityLagDelta * sensitivity;
+  }
+
+  float applyLagDeltaToLocalTarget(float currentLag, float lagDelta, float accessibleLag) const {
+    if (accessibleLag <= 0.f) {
+      return 0.f;
+    }
+    bool sampleLoopMode = hasLastGoodMsg &&
+                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
+                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
+                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
+    if (sampleLoopMode) {
+      double wrappedLag = std::fmod(double(currentLag - lagDelta), double(accessibleLag) + 1.0);
+      if (wrappedLag < 0.0) {
+        wrappedLag += double(accessibleLag) + 1.0;
+      }
+      return float(wrappedLag);
+    }
+    return clamp(currentLag - lagDelta, 0.f, accessibleLag);
   }
 
   bool beginLagDragAt(Vec pos) {
@@ -489,7 +505,7 @@ struct TDScopeDisplayWidget final : Widget {
     float lagDeltaStep = lagDelta / float(substeps);
     double stepDtSec = dtSec / double(substeps);
     for (int i = 0; i < substeps; ++i) {
-      lagDragLocalLagSamples = clamp(lagDragLocalLagSamples - lagDeltaStep, 0.f, map.accessibleLag);
+      lagDragLocalLagSamples = applyLagDeltaToLocalTarget(lagDragLocalLagSamples, lagDeltaStep, map.accessibleLag);
       float measuredVelocity = lagDeltaStep / float(stepDtSec);
       float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(stepDtSec));
       lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
