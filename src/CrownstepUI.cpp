@@ -14,8 +14,10 @@ constexpr bool CHESS_ATLAS_ENABLED = true;
 constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
 constexpr float CHESS_ATLAS_RASTER_SCALE = 3.f;
 constexpr unsigned char CHESS_MASK_SOLID_ALPHA_THRESHOLD = 24u;
-constexpr float CHESS_ATLAS_ALPHA_GAMMA = 0.92f;
-constexpr int CHESS_ATLAS_IMAGE_FLAGS = NVG_IMAGE_GENERATE_MIPMAPS;
+// Keep alpha neutral to avoid edge over-brightening halos on thin contours.
+constexpr float CHESS_ATLAS_ALPHA_GAMMA = 1.f;
+// Disable mipmaps for packed chess atlas to reduce edge bleed/fringe at glyph borders.
+constexpr int CHESS_ATLAS_IMAGE_FLAGS = 0;
 constexpr int CHESS_ATLAS_MASK_FLAGS = 0;
 constexpr bool CHESS_ATLAS_SCALE_PER_COLOR = false;
 
