@@ -37,7 +37,7 @@ static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
 static constexpr float TRANSPOSE_CV_ZERO_DEADBAND_VOLTS = 1e-3f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
-static constexpr std::array<const char*, 4> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric", "Red/Black"}};
+static constexpr std::array<const char*, 5> BOARD_TEXTURE_NAMES = {{"Wood", "Marble", "Fabric", "Red/Black", "White/Black"}};
 static constexpr std::array<const char*, 3> GAME_MODE_NAMES = {{"Checkers", "Chess", "Reversi"}};
 static constexpr std::array<const char*, 4> HIGHLIGHT_MODE_NAMES = {{"Purple", "Cyan", "Green", "Off"}};
 static constexpr std::array<const char*, 2> PLAYER_MODE_NAMES = {{"Cause", "Effect"}};
@@ -100,6 +100,7 @@ struct Crownstep : Module {
 		BOARD_TEXTURE_MARBLE,
 		BOARD_TEXTURE_FABRIC,
 		BOARD_TEXTURE_RED_BLACK,
+		BOARD_TEXTURE_WHITE_BLACK,
 		BOARD_TEXTURE_COUNT
 	};
 	enum GameMode {

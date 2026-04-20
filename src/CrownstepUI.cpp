@@ -1047,6 +1047,7 @@ struct CrownstepBoardWidget final : Widget {
 		const bool woodTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 		const bool redBlackTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
+		const bool whiteBlackTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WHITE_BLACK;
 		const std::shared_ptr<Image>& woodBoardTileImage = (!othelloBoard && woodTexture) ? crownstepWoodBoardTileImage() : std::shared_ptr<Image>();
 		const std::shared_ptr<Image>& marbleBoardTileImage = (!othelloBoard && marbleTexture) ? crownstepMarbleBoardTileImage() : std::shared_ptr<Image>();
 		const bool hasWoodBoardTileImage = woodBoardTileImage && woodBoardTileImage->handle >= 0;
@@ -1139,6 +1140,24 @@ struct CrownstepBoardWidget final : Widget {
 					NVGcolor bottomColor = dark ? nvgRGB(14, 14, 18) : nvgRGB(88, 12, 18);
 					NVGcolor sheenA = dark ? nvgRGBA(255, 255, 255, 14) : nvgRGBA(255, 212, 214, 18);
 					NVGcolor sheenB = dark ? nvgRGBA(0, 0, 0, 22) : nvgRGBA(38, 4, 6, 18);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint basePaint = nvgLinearGradient(args.vg, x, y, x, y + cellHeight, topColor, bottomColor);
+					nvgFillPaint(args.vg, basePaint);
+					nvgFill(args.vg);
+
+					nvgBeginPath(args.vg);
+					nvgRect(args.vg, x, y, cellWidth, cellHeight);
+					NVGpaint sheenPaint = nvgLinearGradient(args.vg, x, y, x + cellWidth, y + cellHeight, sheenA, sheenB);
+					nvgFillPaint(args.vg, sheenPaint);
+					nvgFill(args.vg);
+				}
+				else if (whiteBlackTexture) {
+					NVGcolor topColor = dark ? nvgRGB(36, 36, 40) : nvgRGB(248, 248, 252);
+					NVGcolor bottomColor = dark ? nvgRGB(12, 12, 16) : nvgRGB(226, 228, 234);
+					NVGcolor sheenA = dark ? nvgRGBA(255, 255, 255, 12) : nvgRGBA(255, 255, 255, 20);
+					NVGcolor sheenB = dark ? nvgRGBA(0, 0, 0, 20) : nvgRGBA(70, 74, 84, 12);
 
 					nvgBeginPath(args.vg);
 					nvgRect(args.vg, x, y, cellWidth, cellHeight);
