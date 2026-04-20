@@ -1166,13 +1166,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
             } else {
               velocitySamples = derivedVelocity;
             }
-            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-            // Allow dynamic hold duration based on the actual update rate of the expander UI.
-            int motionFreshSamples = int(std::round(args.sampleRate * dtSec * 1.5f));
-            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
-            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
-            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
-            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+            // Scope drag is a direct positioning intent, not platter-style
+            // hybrid motion. Route it through a direct scratch target path so
+            // landing follows scope-time targets without extra overshoot.
+            impl->platterInput.setDirectScratch(true, lagTarget, velocitySamples);
           }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;

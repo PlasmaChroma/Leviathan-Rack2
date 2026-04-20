@@ -2404,16 +2404,22 @@ struct TemporalDeckEngine {
         }
 
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
-        if (stationaryManualHold) {
-          if (sampleModeActive && manualTouchScratch && platterTouchHoldDirect) {
-            double targetLag = clampLag(platterLagTarget, limit);
-            scratchLagSamples = targetLag;
-            scratchLagTargetSamples = targetLag;
-            readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
-                                            : buffer.wrapPosition(newestPos - targetLag);
-          } else {
-            scratchLagTargetSamples = scratchLagSamples;
-          }
+        if (manualTouchScratch && platterTouchHoldDirect) {
+          // Scope-style direct positioning should follow the requested lag
+          // target exactly instead of going through the hybrid platter motion
+          // model, which is tuned for inertial hand gestures and can overshoot
+          // scope-time targets.
+          double targetLag = clampLag(platterLagTarget, limit);
+          scratchLagSamples = targetLag;
+          scratchLagTargetSamples = targetLag;
+          scratchHandVelocity = 0.f;
+          scratchMotionVelocity = 0.f;
+          scratch3LagVelocity = 0.f;
+          readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
+                                          : buffer.wrapPosition(newestPos - targetLag);
+          lastPlatterGestureRevision = platterGestureRevision;
+        } else if (stationaryManualHold) {
+          scratchLagTargetSamples = scratchLagSamples;
           scratchHandVelocity = 0.f;
           scratchMotionVelocity = 0.f;
         } else {

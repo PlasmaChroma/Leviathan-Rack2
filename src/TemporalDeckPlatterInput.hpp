@@ -20,6 +20,7 @@ struct PlatterInputSnapshot {
 class PlatterInputState {
 public:
   void setScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0);
+  void setDirectScratch(bool touched, float lagSamples, float velocitySamples);
   void setTouchHold(bool touched, float lagSamples);
   void setMotionFreshSamples(int motionFreshSamples);
   void addWheelDelta(float delta, int holdSamples);

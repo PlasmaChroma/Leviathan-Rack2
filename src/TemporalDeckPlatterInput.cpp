@@ -17,6 +17,19 @@ void PlatterInputState::setScratch(bool touched, float lagSamples, float velocit
   }
 }
 
+void PlatterInputState::setDirectScratch(bool touched, float lagSamples, float velocitySamples) {
+  platterTouched.store(touched, std::memory_order_relaxed);
+  platterTouchHoldDirect.store(touched, std::memory_order_relaxed);
+  platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
+  platterLagTarget.store(lagSamples, std::memory_order_relaxed);
+  platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
+  platterScratchHoldSamples.store(0, std::memory_order_relaxed);
+  platterMotionFreshSamples.store(0, std::memory_order_relaxed);
+  if (touched) {
+    platterWheelDelta.store(0.f, std::memory_order_relaxed);
+  }
+}
+
 void PlatterInputState::setTouchHold(bool touched, float lagSamples) {
   platterTouched.store(touched, std::memory_order_relaxed);
   platterTouchHoldDirect.store(touched, std::memory_order_relaxed);
