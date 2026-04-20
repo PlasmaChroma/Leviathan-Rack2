@@ -1127,8 +1127,12 @@ inline int chessSearchDepthForDifficulty(int difficulty) {
 }
 
 inline int chessSearchScore(const BoardState& board, const ChessState& state, int sideToMove, int depth, int alpha, int beta) {
+	if (depth <= 0) {
+		int score = chessEvaluatePosition(board, state);
+		return (sideToMove == AI_SIDE) ? score : -score;
+	}
 	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove, state);
-	if (depth <= 0 || moves.empty()) {
+	if (moves.empty()) {
 		int score = chessEvaluatePosition(board, state);
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}

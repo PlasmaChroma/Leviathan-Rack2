@@ -69,8 +69,12 @@ int chessSearchForSide(
 	int alpha,
 	int beta
 ) {
+	if (depth <= 0) {
+		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
 	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, sideToMove, state);
-	if (depth <= 0 || moves.empty()) {
+	if (moves.empty()) {
 		int eval = chessEvaluateForSide(board, state, maximizingSide);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
