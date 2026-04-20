@@ -361,7 +361,8 @@ struct TDScopeDisplayWidget final : Widget {
       return 0.f;
     }
     float t = clamp((y - map.drawTop) / std::max(map.drawBottom - map.drawTop, 1.f), 0.f, 1.f);
-    // Inverted Y direction: moving down maps toward lower lag (forward/NOW).
+    // The scope advances upward over time, so lower screen Y is newer audio
+    // and moving downward should map toward older audio (higher lag).
     float lag = map.windowTopLag + t * (map.windowBottomLag - map.windowTopLag);
     return clamp(lag, 0.f, map.accessibleLag);
   }
@@ -377,15 +378,13 @@ struct TDScopeDisplayWidget final : Widget {
     if (!map.valid) {
       return 0.f;
     }
-    // Use a platter-like virtual radius so drag motion feels closer to hand
-    // scratching than timeline scrubbing.
-    float virtualRadiusPx = 52.f;
-    // Inverted Y direction: downward drag should map to forward/NOW motion.
-    float deltaAngle = -deltaY / virtualRadiusPx;
-    float sensitivity = (hasLastGoodMsg ? lastGoodMsg.scratchSensitivity : 1.f) * 0.5f;
-    float lagDelta =
-      platter_interaction::lagDeltaFromAngle(deltaAngle, std::max(lastGoodMsg.sampleRate, 1.f), sensitivity, 1.f);
-    return lagDelta;
+    float currentY = clamp(lagDragCursorPos.y, map.drawTop, map.drawBottom);
+    float nextY = clamp(currentY + deltaY, map.drawTop, map.drawBottom);
+    float lagBefore = lagForCursorY(map, currentY);
+    float lagAfter = lagForCursorY(map, nextY);
+    float unityLagDelta = lagAfter - lagBefore;
+    float sensitivity = hasLastGoodMsg ? std::max(lastGoodMsg.scratchSensitivity, 0.f) : 1.f;
+    return unityLagDelta * sensitivity;
   }
 
   bool beginLagDragAt(Vec pos) {
