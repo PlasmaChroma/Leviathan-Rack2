@@ -316,6 +316,9 @@ struct TDScopeDisplayWidget final : Widget {
   bool lagDragging = false;
   Vec lagDragButtonPos;
   Vec lagDragCursorPos;
+  float lagDragAnchorY = 0.f;
+  float lagDragAnchorLagSamples = 0.f;
+  float lagDragSignedLagPerPixel = 0.f;
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
@@ -378,9 +381,7 @@ struct TDScopeDisplayWidget final : Widget {
     if (!map.valid) {
       return 0.f;
     }
-    float signedLagPerPixel = (map.windowBottomLag - map.windowTopLag) /
-                              std::max(map.drawBottom - map.drawTop, 1.f);
-    float unityLagDelta = deltaY * signedLagPerPixel;
+    float unityLagDelta = deltaY * lagDragSignedLagPerPixel;
     float sensitivity = hasLastGoodMsg ? std::max(lastGoodMsg.scratchSensitivity, 0.f) : 1.f;
     return unityLagDelta * sensitivity;
   }
@@ -414,11 +415,15 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragging = true;
     lagDragArmed = false;
     lagDragCursorPos = pos;
+    lagDragAnchorY = pos.y;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
     lagDragFilteredVelocity = 0.f;
+    lagDragSignedLagPerPixel =
+      (map.windowBottomLag - map.windowTopLag) / std::max(map.drawBottom - map.drawTop, 1.f);
     // Touch-down should hold current playback position; movement is relative.
-    lagDragLocalLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
+    lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
+    lagDragLocalLagSamples = lagDragAnchorLagSamples;
     module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
     return true;
   }
@@ -427,6 +432,7 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragging = false;
     lagDragArmed = false;
     lagDragResidualY = 0.f;
+    lagDragSignedLagPerPixel = 0.f;
     lagDragFilteredVelocity = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
@@ -492,20 +498,14 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     float lagDelta = lagDeltaFromVerticalGesture(map, appliedDeltaY);
-    float liveLag = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    // Use direction-aware rebasing to prevent "mushy" feel when DSP lags.
-    // TDScope drag sign: +lagDelta means toward NOW (forward).
-    // rebaseLagTarget takes movement TOWARD now, so we pass +lagDelta.
-    bool freezeLikeDrag = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!freezeLikeDrag) {
-      lagDragLocalLagSamples = platter_interaction::rebaseLagTarget(lagDragLocalLagSamples, liveLag, lagDelta);
-    }
+    float totalDeltaY = lagDragCursorPos.y - lagDragAnchorY;
+    float anchorLagDelta = lagDeltaFromVerticalGesture(map, totalDeltaY);
+    lagDragLocalLagSamples = applyLagDeltaToLocalTarget(lagDragAnchorLagSamples, anchorLagDelta, map.accessibleLag);
 
     int substeps = 4;
     float lagDeltaStep = lagDelta / float(substeps);
     double stepDtSec = dtSec / double(substeps);
     for (int i = 0; i < substeps; ++i) {
-      lagDragLocalLagSamples = applyLagDeltaToLocalTarget(lagDragLocalLagSamples, lagDeltaStep, map.accessibleLag);
       float measuredVelocity = lagDeltaStep / float(stepDtSec);
       float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(stepDtSec));
       lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
