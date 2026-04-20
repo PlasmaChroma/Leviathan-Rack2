@@ -168,6 +168,8 @@ struct TemporalDeck final : Module {
   bool isPlatterTraceLoggingEnabled() const;
   void setPlatterTraceLoggingEnabled(bool enabled);
 
+  bool isHighQualityRateInterpolationEnabled() const;
+  void setHighQualityRateInterpolationEnabled(bool enabled);
   bool isHighQualityScratchInterpolationEnabled() const;
   void setHighQualityScratchInterpolationEnabled(bool enabled);
   int getScratchInterpolationMode() const;

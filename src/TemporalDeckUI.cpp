@@ -3543,6 +3543,10 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
+      menu->addChild(createCheckMenuItem(
+        "HQ rate interpolation", "",
+        [=]() { return module->isHighQualityRateInterpolationEnabled(); },
+        [=]() { module->setHighQualityRateInterpolationEnabled(!module->isHighQualityRateInterpolationEnabled()); }));
       menu->addChild(createSubmenuItem("Gate+Pos mode", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(

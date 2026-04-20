@@ -485,6 +485,7 @@ struct TemporalDeckEngine {
   bool freezeState = false;
   bool reverseState = false;
   bool slipState = false;
+  bool highQualityRateInterpolation = false;
   int scratchInterpolationMode = SCRATCH_INTERP_LAGRANGE6;
   int externalGatePosMode = EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = SLIP_RETURN_NORMAL;
@@ -2581,8 +2582,12 @@ struct TemporalDeckEngine {
     }
     std::pair<float, float> wet;
     if (sampleModeActive) {
-      // Match live-mode behavior: normal transport playback uses cubic.
-      int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : SCRATCH_INTERP_CUBIC;
+      int sampleInterp = SCRATCH_INTERP_CUBIC;
+      if (scratchReadPath) {
+        sampleInterp = effectiveScratchInterpolation;
+      } else if (highQualityRateInterpolation) {
+        sampleInterp = SCRATCH_INTERP_LAGRANGE6;
+      }
       wet = readSampleBounded(readHead, sampleInterp, sampleWindowEndPos);
     } else if (slipBlendActive) {
       std::pair<float, float> catchWet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);

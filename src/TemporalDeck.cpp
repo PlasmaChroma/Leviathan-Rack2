@@ -675,6 +675,7 @@ struct TemporalDeck::Impl {
   float expanderLagDragLastLagSamples = 0.f;
   int expanderLagDragFramesSinceUpdate = 0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
+  bool highQualityRateInterpolation = false;
   bool platterTraceLoggingEnabled = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
@@ -839,6 +840,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
     impl->engine.reset(impl->cachedSampleRate);
     impl->engine.sampleModeEnabled = sampleModeEnabled;
     impl->engine.sampleLoopEnabled = sampleLoopEnabled;
+    impl->engine.highQualityRateInterpolation = impl->highQualityRateInterpolation;
     impl->engine.externalGatePosMode = impl->externalGatePosMode;
   } catch (const std::bad_alloc &) {
     WARN("TemporalDeck: buffer allocation failed, forcing 10s live fallback");
@@ -850,6 +852,7 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
     impl->engine.reset(impl->cachedSampleRate);
     impl->engine.sampleModeEnabled = false;
     impl->engine.sampleLoopEnabled = sampleLoopEnabled;
+    impl->engine.highQualityRateInterpolation = impl->highQualityRateInterpolation;
     impl->engine.externalGatePosMode = impl->externalGatePosMode;
   }
   applyUiState(mode);
@@ -869,6 +872,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "reverseLatched", json_boolean(impl->transportControl.reverseLatched));
   json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
+  json_object_set_new(root, "highQualityRateInterpolation", json_boolean(impl->highQualityRateInterpolation));
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
@@ -896,6 +900,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *reverseJ = json_object_get(root, "reverseLatched");
   json_t *slipJ = json_object_get(root, "slipLatched");
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
+  json_t *highQualityRateInterpJ = json_object_get(root, "highQualityRateInterpolation");
   json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
@@ -921,6 +926,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (scratchInterpModeJ) {
     impl->scratchInterpolationMode =
       clamp((int)json_integer_value(scratchInterpModeJ), SCRATCH_INTERP_CUBIC, SCRATCH_INTERP_COUNT - 1);
+  }
+  if (highQualityRateInterpJ) {
+    impl->highQualityRateInterpolation = json_boolean_value(highQualityRateInterpJ);
   }
   if (platterTraceLoggingJ) {
     impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
@@ -1067,6 +1075,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   temporaldeck_transport::applyFreezeGateEdge(impl->transportControl, freezeGateHigh);
 
   impl->engine.scratchInterpolationMode = impl->scratchInterpolationMode;
+  impl->engine.highQualityRateInterpolation = impl->highQualityRateInterpolation;
   impl->engine.slipReturnMode = impl->transportControl.slipReturnMode;
   impl->engine.externalGatePosMode = impl->externalGatePosMode;
   impl->engine.cartridgeCharacter = impl->cartridgeCharacter;
@@ -1641,6 +1650,15 @@ bool TemporalDeck::isPlatterTraceLoggingEnabled() const {
 
 void TemporalDeck::setPlatterTraceLoggingEnabled(bool enabled) {
   impl->platterTraceLoggingEnabled = enabled;
+}
+
+bool TemporalDeck::isHighQualityRateInterpolationEnabled() const {
+  return impl->highQualityRateInterpolation;
+}
+
+void TemporalDeck::setHighQualityRateInterpolationEnabled(bool enabled) {
+  impl->highQualityRateInterpolation = enabled;
+  impl->engine.highQualityRateInterpolation = enabled;
 }
 
 bool TemporalDeck::isHighQualityScratchInterpolationEnabled() const {
