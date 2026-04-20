@@ -677,6 +677,13 @@ struct TemporalDeck::Impl {
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool highQualityRateInterpolation = false;
   bool platterTraceLoggingEnabled = false;
+  bool scopeDragTraceLoggingEnabled = false;
+  bool scopeDragTraceWasActive = false;
+  bool scopeDragTraceHavePrev = false;
+  float scopeDragTracePrevTargetLag = 0.f;
+  float scopeDragTracePrevFrameLag = 0.f;
+  int scopeDragTraceStallFrames = 0;
+  float scopeDragTraceLogTimerSec = 0.f;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
@@ -874,6 +881,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "highQualityRateInterpolation", json_boolean(impl->highQualityRateInterpolation));
   json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
+  json_object_set_new(root, "scopeDragTraceLoggingEnabled", json_boolean(impl->scopeDragTraceLoggingEnabled));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
@@ -902,6 +910,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *highQualityRateInterpJ = json_object_get(root, "highQualityRateInterpolation");
   json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
+  json_t *scopeDragTraceLoggingJ = json_object_get(root, "scopeDragTraceLoggingEnabled");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
@@ -932,6 +941,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (platterTraceLoggingJ) {
     impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
+  }
+  if (scopeDragTraceLoggingJ) {
+    impl->scopeDragTraceLoggingEnabled = json_boolean_value(scopeDragTraceLoggingJ);
   }
   if (externalGatePosModeJ) {
     impl->externalGatePosMode =
@@ -1099,6 +1111,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
   float lagDragRequestSamples = 0.f;
   float lagDragRequestVelocity = 0.f;
   uint64_t lagDragRequestSeq = 0u;
+  bool scopeTraceNewRequest = false;
+  bool scopeTraceDragJustStarted = false;
+  float scopeTraceLagTarget = 0.f;
+  float scopeTraceVelocityApplied = 0.f;
   if (isTDScopeModule(rightExpander.module) && rightExpander.consumerMessage) {
     const auto *request =
       reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
@@ -1133,13 +1149,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
       impl->expanderLagDragLastRequestSeq = lagDragRequestSeq;
       float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
       float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
+      scopeTraceNewRequest = true;
+      scopeTraceLagTarget = lagTarget;
       if (lagDragRequestActive) {
         bool dragJustStarted = !impl->expanderLagDragWasActive;
+        scopeTraceDragJustStarted = dragJustStarted;
         if (dragJustStarted) {
           // Scope touch-down should latch a stationary hold without creating
           // a fresh gesture that invokes write-head compensation motion.
           impl->platterInput.setTouchHold(true, lagTarget);
           impl->platterInput.setMotionFreshSamples(0);
+          scopeTraceVelocityApplied = 0.f;
         } else {
           float velocitySamples = 0.f;
           int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
@@ -1160,6 +1180,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // sender-side timing spikes producing unrealistic multi-turn motion.
           float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
           velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+          scopeTraceVelocityApplied = velocitySamples;
           // Scope emits equivalent platter-gesture intent. TemporalDeck
           // realizes that intent through the same scratch gesture path used
           // by actual platter dragging.
@@ -1214,6 +1235,48 @@ void TemporalDeck::process(const ProcessArgs &args) {
     temporaldeck_frameinput::buildFrameInput(frameSignals, controls, platterInput);
 
   auto frame = impl->engine.process(frameInput);
+
+  if (impl->scopeDragTraceLoggingEnabled) {
+    bool scopeActive = haveLagDragRequest && lagDragRequestActive;
+    if (!scopeActive) {
+      if (impl->scopeDragTraceWasActive) {
+        WARN("TemporalDeck ScopeDragTrace END lag=%.2f", float(frame.lag));
+      }
+      impl->scopeDragTraceWasActive = false;
+      impl->scopeDragTraceHavePrev = false;
+      impl->scopeDragTraceStallFrames = 0;
+      impl->scopeDragTraceLogTimerSec = 0.f;
+    } else {
+      float targetLag = scopeTraceNewRequest ? scopeTraceLagTarget : impl->expanderLagDragLastLagSamples;
+      float prevTargetLag = impl->scopeDragTraceHavePrev ? impl->scopeDragTracePrevTargetLag : targetLag;
+      float prevFrameLag = impl->scopeDragTraceHavePrev ? impl->scopeDragTracePrevFrameLag : float(frame.lag);
+      float targetDelta = targetLag - prevTargetLag;
+      float frameLagDelta = float(frame.lag) - prevFrameLag;
+      bool wantsAwayFromNow = targetDelta > 0.35f || lagDragRequestVelocity < -8.f;
+      bool movingAwayFromNow = frameLagDelta > 0.20f;
+      if (wantsAwayFromNow && !movingAwayFromNow && !scopeTraceDragJustStarted) {
+        impl->scopeDragTraceStallFrames = std::min(impl->scopeDragTraceStallFrames + 1, 1 << 20);
+      } else if (!wantsAwayFromNow || movingAwayFromNow) {
+        impl->scopeDragTraceStallFrames = std::max(impl->scopeDragTraceStallFrames - 1, 0);
+      }
+      impl->scopeDragTraceLogTimerSec += args.sampleTime;
+      bool shouldLog = scopeTraceNewRequest || !impl->scopeDragTraceWasActive || impl->scopeDragTraceStallFrames >= 3 ||
+                       impl->scopeDragTraceLogTimerSec >= (1.f / 45.f);
+      if (shouldLog) {
+        impl->scopeDragTraceLogTimerSec = 0.f;
+        bool freezeTrace = frameInput.freezeButton || frameInput.freezeGate;
+        WARN("TemporalDeck ScopeDragTrace seq=%llu target=%.2f targetΔ=%.2f reqVel=%.2f appliedVel=%.2f lag=%.2f lagΔ=%.2f freeze=%d "
+             "sample=%d started=%d stall=%d",
+             (unsigned long long)lagDragRequestSeq, targetLag, targetDelta, lagDragRequestVelocity, scopeTraceVelocityApplied,
+             float(frame.lag), frameLagDelta, freezeTrace ? 1 : 0, frame.sampleMode ? 1 : 0,
+             scopeTraceDragJustStarted ? 1 : 0, impl->scopeDragTraceStallFrames);
+      }
+      impl->scopeDragTraceWasActive = true;
+      impl->scopeDragTraceHavePrev = true;
+      impl->scopeDragTracePrevTargetLag = targetLag;
+      impl->scopeDragTracePrevFrameLag = float(frame.lag);
+    }
+  }
 
   temporaldeck_transport::applyAutoFreezeRequest(impl->transportControl, frame.autoFreezeRequested, freezeGateHigh);
 
@@ -1660,6 +1723,14 @@ bool TemporalDeck::isPlatterTraceLoggingEnabled() const {
 
 void TemporalDeck::setPlatterTraceLoggingEnabled(bool enabled) {
   impl->platterTraceLoggingEnabled = enabled;
+}
+
+bool TemporalDeck::isScopeDragTraceLoggingEnabled() const {
+  return impl->scopeDragTraceLoggingEnabled;
+}
+
+void TemporalDeck::setScopeDragTraceLoggingEnabled(bool enabled) {
+  impl->scopeDragTraceLoggingEnabled = enabled;
 }
 
 bool TemporalDeck::isHighQualityRateInterpolationEnabled() const {

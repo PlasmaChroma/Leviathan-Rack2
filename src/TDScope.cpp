@@ -467,16 +467,26 @@ struct TDScopeDisplayWidget final : Widget {
     // Project cursor motion into a drag-start-anchored platter-equivalent lag
     // space so travel does not inflate as the live scope window recenters.
     float desiredPlaybackLag = lagDragAnchorLagSamples + (lagDragCursorPos.y - lagDragAnchorCursorY) * lagDragSamplesPerPixel;
-    if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
-        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
-        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u && map.accessibleLag > 0.f) {
+    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
+    bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
+    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
       double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
       if (wrappedLag < 0.0) {
         wrappedLag += double(map.accessibleLag) + 1.0;
       }
       lagDragLocalLagSamples = float(wrappedLag);
     } else {
-      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, map.accessibleLag);
+      // Live (non-sample) streaming advances the write head between UI updates.
+      // Add dynamic headroom so scope-side clamping doesn't create a false
+      // downward barrier while dragging away from NOW.
+      float effectiveAccessibleLag = map.accessibleLag;
+      if (!sampleMode && !freezeActive && lastGoodMsgTimeSec >= 0.0) {
+        double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
+        effectiveAccessibleLag += std::max(lastGoodMsg.sampleRate, 1.f) * float(msgAgeSec);
+      }
+      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
     }
     // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
     // positive velocity means toward NOW (lag decreasing), hence

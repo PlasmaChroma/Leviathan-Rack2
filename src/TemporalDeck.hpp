@@ -167,6 +167,8 @@ struct TemporalDeck final : Module {
 
   bool isPlatterTraceLoggingEnabled() const;
   void setPlatterTraceLoggingEnabled(bool enabled);
+  bool isScopeDragTraceLoggingEnabled() const;
+  void setScopeDragTraceLoggingEnabled(bool enabled);
 
   bool isHighQualityRateInterpolationEnabled() const;
   void setHighQualityRateInterpolationEnabled(bool enabled);

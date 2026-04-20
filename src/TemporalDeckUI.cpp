@@ -3595,6 +3595,11 @@ struct TemporalDeckWidget : ModuleWidget {
                                            [=]() {
                                              module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
                                            }));
+        menu->addChild(createCheckMenuItem("Log scope drag events", "",
+                                           [=]() { return module->isScopeDragTraceLoggingEnabled(); },
+                                           [=]() {
+                                             module->setScopeDragTraceLoggingEnabled(!module->isScopeDragTraceLoggingEnabled());
+                                           }));
       }
       if (isDragonKingDebugEnabled()) {
         menu->addChild(createMenuItem("Export signed inventory.json...", "", [=]() {

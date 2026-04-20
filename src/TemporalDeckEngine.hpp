@@ -2447,7 +2447,12 @@ struct TemporalDeckEngine {
             gestureDirection = (targetReadVelocity > 0.f) ? 1.f : -1.f;
           }
           bool reverseGestureIntent = gestureDirection < 0.f;
-          if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
+          if (manualTouchScratch && manualMotionActive && platterGestureVelocity < 0.f) {
+            // In live touch drag, even slow negative gesture velocity means the
+            // user is pulling away from NOW. Preserve reverse intent so write
+            // compensation does not create a false downward "barrier".
+            reverseGestureIntent = true;
+          } else if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
             // Preserve reverse intent across sparse gesture updates. Using raw
             // platter velocity avoids sign flips caused by write compensation.
             reverseGestureIntent = true;
