@@ -377,24 +377,6 @@ struct TDScopeDisplayWidget final : Widget {
     return map.windowBottomLag + t * (map.windowTopLag - map.windowBottomLag);
   }
 
-  float applyOffWidgetLagDelta(float currentLag, float deltaY, float accessibleLag) const {
-    if (accessibleLag <= 0.f) {
-      return 0.f;
-    }
-    float lagDelta = deltaY * lagDragSignedLagPerPixel;
-    if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
-        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
-        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u) {
-      double wrappedLag = std::fmod(double(currentLag + lagDelta), double(accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(accessibleLag) + 1.0;
-      }
-      return float(wrappedLag);
-    }
-    return clamp(currentLag + lagDelta, 0.f, accessibleLag);
-  }
-
-
   bool beginLagDragAt(Vec pos) {
     if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
       return false;
@@ -493,22 +475,20 @@ struct TDScopeDisplayWidget final : Widget {
     // This requires positive `lagDragSignedLagPerPixel` and is the source of
     // truth for scope-side directionality.
     float previousLag = lagDragLocalLagSamples;
-    if (!isWithinDisplay(lagDragCursorPos)) {
-      lagDragLocalLagSamples = applyOffWidgetLagDelta(lagDragLocalLagSamples, appliedDeltaY, map.accessibleLag);
-    } else {
-      float cursorLag = lagDragWindowBottomLag + (lagDragCursorPos.y - lagDragDrawTop) * lagDragSignedLagPerPixel;
-      float desiredPlaybackLag = cursorLag + lagDragCursorToPlaybackOffsetSamples;
-      if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
-          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
-          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u && map.accessibleLag > 0.f) {
-        double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
-        if (wrappedLag < 0.0) {
-          wrappedLag += double(map.accessibleLag) + 1.0;
-        }
-        lagDragLocalLagSamples = float(wrappedLag);
-      } else {
-        lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, map.accessibleLag);
+    // Project the cursor onto the same lag mapping even outside the widget
+    // bounds, so off-widget drags preserve the exact in-widget scaling law.
+    float cursorLag = lagDragWindowBottomLag + (lagDragCursorPos.y - lagDragDrawTop) * lagDragSignedLagPerPixel;
+    float desiredPlaybackLag = cursorLag + lagDragCursorToPlaybackOffsetSamples;
+    if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
+        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
+        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u && map.accessibleLag > 0.f) {
+      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
+      if (wrappedLag < 0.0) {
+        wrappedLag += double(map.accessibleLag) + 1.0;
       }
+      lagDragLocalLagSamples = float(wrappedLag);
+    } else {
+      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, map.accessibleLag);
     }
     // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
     // positive velocity means toward NOW (lag decreasing), hence
