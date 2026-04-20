@@ -382,7 +382,7 @@ struct TDScopeDisplayWidget final : Widget {
     float virtualRadiusPx = 52.f;
     // Inverted Y direction: downward drag should map to forward/NOW motion.
     float deltaAngle = -deltaY / virtualRadiusPx;
-    float sensitivity = hasLastGoodMsg ? lastGoodMsg.scratchSensitivity : 1.f;
+    float sensitivity = (hasLastGoodMsg ? lastGoodMsg.scratchSensitivity : 1.f) * 0.5f;
     float lagDelta =
       platter_interaction::lagDeltaFromAngle(deltaAngle, std::max(lastGoodMsg.sampleRate, 1.f), sensitivity, 1.f);
     return lagDelta;
