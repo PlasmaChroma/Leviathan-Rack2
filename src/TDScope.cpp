@@ -276,6 +276,13 @@ struct TDScope final : Module {
 };
 
 struct TDScopeDisplayWidget final : Widget {
+  // Scope is an input proxy for platter drag. Define drag travel directly in
+  // platter turns so full-height swipes have stable, deck-equivalent meaning.
+  // Scale factor applied to nominal 1-turn-per-full-height scope drag.
+  // 1.0 = one nominal platter turn across full scope height.
+  static constexpr float kScopeDragNominalTurnScale = 0.30f;
+  static constexpr float kNominalPlatterRpm = 33.3333f;
+
   struct LiveScopeBucket {
     float minNorm = 0.f;
     float maxNorm = 0.f;
@@ -318,14 +325,11 @@ struct TDScopeDisplayWidget final : Widget {
   int liveBucketCount = 0;
   float liveBucketSpanSamples = 0.f;
   uint64_t liveBucketLastPublishSeq = 0;
-  bool lagDragArmed = false;
   bool lagDragging = false;
-  Vec lagDragButtonPos;
   Vec lagDragCursorPos;
-  float lagDragCursorToPlaybackOffsetSamples = 0.f;
-  float lagDragSignedLagPerPixel = 0.f;
-  float lagDragDrawTop = 0.f;
-  float lagDragWindowBottomLag = 0.f;
+  float lagDragAnchorCursorY = 0.f;
+  float lagDragAnchorLagSamples = 0.f;
+  float lagDragSamplesPerPixel = 0.f;
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
@@ -369,12 +373,12 @@ struct TDScopeDisplayWidget final : Widget {
     return map;
   }
 
-  float unconstrainedLagForCursorY(const ScopeWindowMap &map, float y) const {
+  float lagSamplesPerPixelForDrag(const ScopeWindowMap &map, float sampleRate) const {
     if (!map.valid) {
       return 0.f;
     }
-    float t = (y - map.drawTop) / map.drawYDen;
-    return map.windowBottomLag + t * (map.windowTopLag - map.windowBottomLag);
+    float samplesPerRevolution = std::max(sampleRate, 1.f) * (60.f / std::max(kNominalPlatterRpm, 1e-6f));
+    return (samplesPerRevolution * kScopeDragNominalTurnScale) / map.drawYDen;
   }
 
   bool beginLagDragAt(Vec pos) {
@@ -386,19 +390,13 @@ struct TDScopeDisplayWidget final : Widget {
       return false;
     }
     lagDragging = true;
-    lagDragArmed = false;
     lagDragCursorPos = pos;
+    lagDragAnchorCursorY = pos.y;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
-    lagDragSignedLagPerPixel =
-      (map.windowTopLag - map.windowBottomLag) / map.drawYDen;
-    lagDragDrawTop = map.drawTop;
-    lagDragWindowBottomLag = map.windowBottomLag;
-    // Scope acts as a positioning input layer: latch current playback lag and
-    // preserve cursor-to-playback offset for this drag.
     float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    float cursorLag = unconstrainedLagForCursorY(map, pos.y);
-    lagDragCursorToPlaybackOffsetSamples = anchorLagSamples - cursorLag;
+    lagDragAnchorLagSamples = anchorLagSamples;
+    lagDragSamplesPerPixel = lagSamplesPerPixelForDrag(map, lastGoodMsg.sampleRate);
     lagDragLocalLagSamples = anchorLagSamples;
     module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
     return true;
@@ -406,12 +404,8 @@ struct TDScopeDisplayWidget final : Widget {
 
   void endLagDrag() {
     lagDragging = false;
-    lagDragArmed = false;
     lagDragResidualY = 0.f;
-    lagDragCursorToPlaybackOffsetSamples = 0.f;
-    lagDragSignedLagPerPixel = 0.f;
-    lagDragDrawTop = 0.f;
-    lagDragWindowBottomLag = 0.f;
+    lagDragSamplesPerPixel = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
     }
@@ -420,13 +414,11 @@ struct TDScopeDisplayWidget final : Widget {
   void onButton(const event::Button &e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        lagDragButtonPos = e.pos;
-        lagDragArmed = true;
         (void)beginLagDragAt(e.pos);
         e.consume(this);
         return;
       }
-      if (e.action == GLFW_RELEASE && (lagDragging || lagDragArmed)) {
+      if (e.action == GLFW_RELEASE && lagDragging) {
         endLagDrag();
         e.consume(this);
         return;
@@ -436,12 +428,7 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   void onDragStart(const event::DragStart &e) override {
-    if (e.button != GLFW_MOUSE_BUTTON_LEFT || !lagDragArmed || !module) {
-      Widget::onDragStart(e);
-      return;
-    }
-    (void)beginLagDragAt(lagDragButtonPos);
-    e.consume(this);
+    Widget::onDragStart(e);
   }
 
   void onDragMove(const event::DragMove &e) override {
@@ -450,12 +437,18 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     double nowSec = system::getTime();
-    double dtSec = std::max(1e-4, std::min(0.08, nowSec - lagDragLastMoveSec));
+    // Match platter gesture timing bounds to avoid tiny-dt velocity spikes
+    // that can over-drive scratch motion.
+    constexpr double kMinGestureDtSec = 1.0 / 240.0;
+    constexpr double kMaxGestureDtSec = 1.0 / 20.0;
+    double dtSec = std::max(kMinGestureDtSec, std::min(kMaxGestureDtSec, nowSec - lagDragLastMoveSec));
     lagDragLastMoveSec = nowSec;
 
     // Full-window time mapping is intentionally high resolution; suppress
     // tiny hand jitter so stationary holds stay truly pinned.
-    constexpr float kLagDragJitterDeadzonePx = 0.20f;
+    // Keep this close to platter drag sensitivity so rapid short reversals
+    // feel immediate instead of waiting on accumulated cursor motion.
+    constexpr float kLagDragJitterDeadzonePx = 0.05f;
     lagDragResidualY += e.mouseDelta.y;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
@@ -470,15 +463,10 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
-    // WARNING: Scope drag direction contract.
-    // Positive Y drag (downward) must produce larger lag (older audio).
-    // This requires positive `lagDragSignedLagPerPixel` and is the source of
-    // truth for scope-side directionality.
     float previousLag = lagDragLocalLagSamples;
-    // Project the cursor onto the same lag mapping even outside the widget
-    // bounds, so off-widget drags preserve the exact in-widget scaling law.
-    float cursorLag = lagDragWindowBottomLag + (lagDragCursorPos.y - lagDragDrawTop) * lagDragSignedLagPerPixel;
-    float desiredPlaybackLag = cursorLag + lagDragCursorToPlaybackOffsetSamples;
+    // Project cursor motion into a drag-start-anchored platter-equivalent lag
+    // space so travel does not inflate as the live scope window recenters.
+    float desiredPlaybackLag = lagDragAnchorLagSamples + (lagDragCursorPos.y - lagDragAnchorCursorY) * lagDragSamplesPerPixel;
     if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
         (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
         (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u && map.accessibleLag > 0.f) {
@@ -494,6 +482,9 @@ struct TDScopeDisplayWidget final : Widget {
     // positive velocity means toward NOW (lag decreasing), hence
     // (previousLag - currentLag) / dt.
     float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
+    float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
+    float maxAbsGestureVelocity = sampleRate * 3.0f;
+    velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
     module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
     e.consume(this);
   }

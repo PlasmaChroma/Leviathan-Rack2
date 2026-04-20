@@ -1134,57 +1134,44 @@ void TemporalDeck::process(const ProcessArgs &args) {
       float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
       float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
       if (lagDragRequestActive) {
-        float lagDelta = std::fabs(lagTarget - impl->expanderLagDragLastLagSamples);
         bool dragJustStarted = !impl->expanderLagDragWasActive;
-        // Velocity from scope is a support signal. We still accept tiny
-        // movements if velocity is present so gesture continuity is preserved.
-        bool meaningfulLagMove = lagDelta > 0.02f || std::fabs(lagDragRequestVelocity) > 1e-3f;
-        if (dragJustStarted || meaningfulLagMove) {
-          if (dragJustStarted) {
-            // Scope touch-down should latch a stationary hold without creating
-            // a fresh gesture that invokes write-head compensation motion.
-            impl->platterInput.setTouchHold(true, lagTarget);
-            impl->platterInput.setMotionFreshSamples(0);
+        if (dragJustStarted) {
+          // Scope touch-down should latch a stationary hold without creating
+          // a fresh gesture that invokes write-head compensation motion.
+          impl->platterInput.setTouchHold(true, lagTarget);
+          impl->platterInput.setMotionFreshSamples(0);
+        } else {
+          float velocitySamples = 0.f;
+          int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
+          float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
+          // WARNING: Keep derived velocity in the same convention as
+          // incoming scope velocity before blending.
+          // positive velocity => toward NOW (decreasing lag).
+          float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
+          if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
+            // Scope drag should feel equivalent to direct platter motion:
+            // trust scope-provided gesture velocity when available so
+            // reversals are immediate instead of inertia-smoothed by host.
+            velocitySamples = lagDragRequestVelocity;
           } else {
-            float velocitySamples = 0.f;
-            int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
-            float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
-            // WARNING: Keep derived velocity in the same convention as
-            // incoming scope velocity before blending.
-            // positive velocity => toward NOW (decreasing lag).
-            float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
-            if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
-              // Scope velocity is advisory; blend with host-derived target
-              // velocity so intent remains responsive without over-driving.
-              // Near small lag deltas, bias strongly toward derived velocity
-              // to improve target landing accuracy in scope-time coordinates.
-              constexpr float kScopeVelocityBlendMax = 0.22f;
-              float blendByDelta = clamp((lagDelta - 0.5f) / 8.f, 0.f, 1.f);
-              float kScopeVelocityBlend = kScopeVelocityBlendMax * blendByDelta;
-              velocitySamples =
-                lagDragRequestVelocity * kScopeVelocityBlend + derivedVelocity * (1.f - kScopeVelocityBlend);
-            } else {
-              velocitySamples = derivedVelocity;
-            }
-            // Scope emits equivalent platter-gesture intent. TemporalDeck
-            // realizes that intent through the same scratch gesture path used
-            // by actual platter dragging.
-            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-            int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
-            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
-            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
-            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
-            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+            velocitySamples = derivedVelocity;
           }
+          // Safety clamp: Scope is an external input path, so guard against
+          // sender-side timing spikes producing unrealistic multi-turn motion.
+          float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
+          velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+          // Scope emits equivalent platter-gesture intent. TemporalDeck
+          // realizes that intent through the same scratch gesture path used
+          // by actual platter dragging.
+          impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+          int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
+          int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+          int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
+          motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
+          impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+        }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;
-        } else {
-          // Keep touch latched without emitting a fresh gesture each heartbeat.
-          // Maintain the previous velocity and motion-fresh samples to avoid
-          // scratch flavor pulsing between sparse expander updates.
-          impl->platterInput.setScratch(true, lagTarget, lagDragRequestVelocity);
-          impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
-        }
         impl->expanderLagDragWasActive = true;
       } else {
         if (impl->expanderLagDragWasActive) {
