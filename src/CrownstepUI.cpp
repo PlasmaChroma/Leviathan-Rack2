@@ -911,8 +911,10 @@ bool drawChessAtlasPieceRingContour(
 	float shellMargin = 25.5f * pxToScreen;
 	float bandMargin = 16.4f * pxToScreen;
 	float pulse01 = clamp(pulse, 0.f, 1.f);
-	float shellPulseMargin = shellMargin + pxToScreen * (1.3f + 5.3f * pulse01);
-	float bandPulseMargin = bandMargin + pxToScreen * (0.9f + 3.9f * pulse01);
+	// Keep pulse expansion conservative; large expansion can leak neighboring
+	// atlas content near cell edges and show as corner glow artifacts.
+	float shellPulseMargin = shellMargin + pxToScreen * (0.35f + 1.45f * pulse01);
+	float bandPulseMargin = bandMargin + pxToScreen * (0.25f + 1.05f * pulse01);
 	float shellAlpha = 0.24f + 0.28f * pulse01;
 	float bandAlpha = 0.78f + 0.18f * pulse01;
 
