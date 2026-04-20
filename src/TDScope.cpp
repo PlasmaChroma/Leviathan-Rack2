@@ -316,9 +316,10 @@ struct TDScopeDisplayWidget final : Widget {
   bool lagDragging = false;
   Vec lagDragButtonPos;
   Vec lagDragCursorPos;
-  float lagDragAnchorY = 0.f;
-  float lagDragAnchorLagSamples = 0.f;
+  float lagDragCursorToPlaybackOffsetSamples = 0.f;
   float lagDragSignedLagPerPixel = 0.f;
+  float lagDragDrawTop = 0.f;
+  float lagDragWindowBottomLag = 0.f;
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
@@ -331,6 +332,7 @@ struct TDScopeDisplayWidget final : Widget {
   struct ScopeWindowMap {
     float drawTop = 0.f;
     float drawBottom = 1.f;
+    float drawYDen = 1.f;
     float windowTopLag = 0.f;
     float windowBottomLag = 0.f;
     float accessibleLag = 0.f;
@@ -355,54 +357,21 @@ struct TDScopeDisplayWidget final : Widget {
     float yInset = 0.75f;
     map.drawTop = yInset;
     map.drawBottom = std::max(map.drawTop + 1.f, box.size.y - yInset);
+    // Drag mapping is continuous cursor motion, so use continuous draw height
+    // rather than row-center spacing.
+    map.drawYDen = std::max(map.drawBottom - map.drawTop, 1.f);
     map.valid = map.drawBottom > map.drawTop;
     return map;
   }
 
-  float lagForCursorY(const ScopeWindowMap &map, float y) const {
+  float unconstrainedLagForCursorY(const ScopeWindowMap &map, float y) const {
     if (!map.valid) {
       return 0.f;
     }
-    float t = clamp((y - map.drawTop) / std::max(map.drawBottom - map.drawTop, 1.f), 0.f, 1.f);
-    // The scope advances upward over time, so lower screen Y is newer audio
-    // and moving downward should map toward older audio (higher lag).
-    float lag = map.windowTopLag + t * (map.windowBottomLag - map.windowTopLag);
-    return clamp(lag, 0.f, map.accessibleLag);
+    float t = (y - map.drawTop) / map.drawYDen;
+    return map.windowBottomLag + t * (map.windowTopLag - map.windowBottomLag);
   }
 
-  float lagSamplesPerPixel(const ScopeWindowMap &map) const {
-    if (!map.valid) {
-      return 0.f;
-    }
-    return std::fabs(map.windowTopLag - map.windowBottomLag) / std::max(map.drawBottom - map.drawTop, 1.f);
-  }
-
-  float lagDeltaFromVerticalGesture(const ScopeWindowMap &map, float deltaY) const {
-    if (!map.valid) {
-      return 0.f;
-    }
-    float unityLagDelta = deltaY * lagDragSignedLagPerPixel;
-    float sensitivity = hasLastGoodMsg ? std::max(lastGoodMsg.scratchSensitivity, 0.f) : 1.f;
-    return unityLagDelta * sensitivity;
-  }
-
-  float applyLagDeltaToLocalTarget(float currentLag, float lagDelta, float accessibleLag) const {
-    if (accessibleLag <= 0.f) {
-      return 0.f;
-    }
-    bool sampleLoopMode = hasLastGoodMsg &&
-                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
-                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
-                          (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
-    if (sampleLoopMode) {
-      double wrappedLag = std::fmod(double(currentLag - lagDelta), double(accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(accessibleLag) + 1.0;
-      }
-      return float(wrappedLag);
-    }
-    return clamp(currentLag - lagDelta, 0.f, accessibleLag);
-  }
 
   bool beginLagDragAt(Vec pos) {
     if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
@@ -415,15 +384,19 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragging = true;
     lagDragArmed = false;
     lagDragCursorPos = pos;
-    lagDragAnchorY = pos.y;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
     lagDragFilteredVelocity = 0.f;
     lagDragSignedLagPerPixel =
-      (map.windowBottomLag - map.windowTopLag) / std::max(map.drawBottom - map.drawTop, 1.f);
-    // Touch-down should hold current playback position; movement is relative.
-    lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    lagDragLocalLagSamples = lagDragAnchorLagSamples;
+      (map.windowTopLag - map.windowBottomLag) / map.drawYDen;
+    lagDragDrawTop = map.drawTop;
+    lagDragWindowBottomLag = map.windowBottomLag;
+    // Scope acts as a positioning input layer: latch current playback lag and
+    // preserve cursor-to-playback offset for this drag.
+    float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
+    float cursorLag = unconstrainedLagForCursorY(map, pos.y);
+    lagDragCursorToPlaybackOffsetSamples = anchorLagSamples - cursorLag;
+    lagDragLocalLagSamples = anchorLagSamples;
     module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
     return true;
   }
@@ -432,7 +405,10 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragging = false;
     lagDragArmed = false;
     lagDragResidualY = 0.f;
+    lagDragCursorToPlaybackOffsetSamples = 0.f;
     lagDragSignedLagPerPixel = 0.f;
+    lagDragDrawTop = 0.f;
+    lagDragWindowBottomLag = 0.f;
     lagDragFilteredVelocity = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
@@ -477,7 +453,7 @@ struct TDScopeDisplayWidget final : Widget {
 
     // Full-window time mapping is intentionally high resolution; suppress
     // tiny hand jitter so stationary holds stay truly pinned.
-    constexpr float kLagDragJitterDeadzonePx = 0.45f;
+    constexpr float kLagDragJitterDeadzonePx = 0.20f;
     lagDragResidualY += e.mouseDelta.y;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       float settleAlpha = 1.f - std::exp(-2.f * float(M_PI) * 45.f * float(dtSec));
@@ -497,19 +473,26 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
 
-    float lagDelta = lagDeltaFromVerticalGesture(map, appliedDeltaY);
-    float totalDeltaY = lagDragCursorPos.y - lagDragAnchorY;
-    float anchorLagDelta = lagDeltaFromVerticalGesture(map, totalDeltaY);
-    lagDragLocalLagSamples = applyLagDeltaToLocalTarget(lagDragAnchorLagSamples, anchorLagDelta, map.accessibleLag);
-
-    int substeps = 4;
-    float lagDeltaStep = lagDelta / float(substeps);
-    double stepDtSec = dtSec / double(substeps);
-    for (int i = 0; i < substeps; ++i) {
-      float measuredVelocity = lagDeltaStep / float(stepDtSec);
-      float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 30.f * float(stepDtSec));
-      lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
+    float cursorLag = lagDragWindowBottomLag + (lagDragCursorPos.y - lagDragDrawTop) * lagDragSignedLagPerPixel;
+    float desiredPlaybackLag = cursorLag + lagDragCursorToPlaybackOffsetSamples;
+    float previousLag = lagDragLocalLagSamples;
+    if ((lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u &&
+        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u &&
+        (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u && map.accessibleLag > 0.f) {
+      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
+      if (wrappedLag < 0.0) {
+        wrappedLag += double(map.accessibleLag) + 1.0;
+      }
+      lagDragLocalLagSamples = float(wrappedLag);
+    } else {
+      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, map.accessibleLag);
     }
+
+    // Keep velocity estimate lightweight; host remains the authority for
+    // scratch response behavior.
+    float measuredVelocity = (previousLag - lagDragLocalLagSamples) / float(dtSec);
+    float velocityAlpha = 1.f - std::exp(-2.f * float(M_PI) * 24.f * float(dtSec));
+    lagDragFilteredVelocity += (measuredVelocity - lagDragFilteredVelocity) * velocityAlpha;
     module->setLagDragRequest(true, lagDragLocalLagSamples, lagDragFilteredVelocity);
     e.consume(this);
   }

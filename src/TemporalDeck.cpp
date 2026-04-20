@@ -1118,6 +1118,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
     }
   }
   if (haveLagDragRequest) {
+    // Expander scope requests are treated as intent signals: lag target is
+    // authoritative and optional velocity is advisory. Final scratch behavior
+    // remains centralized in the host/engine path below.
     bool isNewLagRequest = !impl->expanderLagDragRequestSeen || lagDragRequestSeq != impl->expanderLagDragLastRequestSeq;
     if (isNewLagRequest) {
       impl->expanderLagDragRequestSeen = true;
@@ -1127,7 +1130,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
       if (lagDragRequestActive) {
         float lagDelta = std::fabs(lagTarget - impl->expanderLagDragLastLagSamples);
         bool dragJustStarted = !impl->expanderLagDragWasActive;
-        // If we have a transmitted velocity, trust it even for small moves to preserve scratch "flavor".
+        // Velocity from scope is a support signal. We still accept tiny
+        // movements if velocity is present so gesture continuity is preserved.
         bool meaningfulLagMove = lagDelta > 0.02f || std::fabs(lagDragRequestVelocity) > 1e-3f;
         if (dragJustStarted || meaningfulLagMove) {
           if (dragJustStarted) {
@@ -1140,7 +1144,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
             int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
             float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
             if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
-              // Use high-quality filtered velocity from expander UI if available.
+              // Prefer transmitted scope velocity when present, otherwise derive
+              // it from lag-target deltas.
               velocitySamples = lagDragRequestVelocity;
             } else {
               velocitySamples = (lagTarget - impl->expanderLagDragLastLagSamples) / dtSec;
