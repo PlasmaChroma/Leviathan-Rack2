@@ -647,6 +647,7 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
+  std::atomic<float> uiDrawCostUs{0.f};
   std::atomic<float> uiScopePreviewCostUs{0.f};
   std::atomic<int> uiScopePreviewStride{0};
   std::atomic<bool> uiScopePreviewMetricValid{false};
@@ -1551,6 +1552,17 @@ float TemporalDeck::getUiSampleRate() const {
 
 float TemporalDeck::getUiScopePreviewCostUs() const {
   return impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
+}
+
+float TemporalDeck::getUiDrawCostUs() const {
+  return impl->uiDrawCostUs.load(std::memory_order_relaxed);
+}
+
+void TemporalDeck::setUiDrawCostUs(float costUs) {
+  costUs = std::max(0.f, costUs);
+  float prevUs = impl->uiDrawCostUs.load(std::memory_order_relaxed);
+  float smoothedUs = (prevUs > 0.f) ? (prevUs + (costUs - prevUs) * 0.18f) : costUs;
+  impl->uiDrawCostUs.store(smoothedUs, std::memory_order_relaxed);
 }
 
 int TemporalDeck::getUiScopePreviewStride() const {

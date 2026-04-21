@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -3284,6 +3285,17 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void draw(const DrawArgs &args) override {
+    auto drawStart = std::chrono::steady_clock::now();
+    auto publishUiDrawMetric = [&](TemporalDeck *deckModule) {
+      if (!deckModule) {
+        return;
+      }
+      auto drawEnd = std::chrono::steady_clock::now();
+      float drawUs =
+        std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
+      deckModule->setUiDrawCostUs(drawUs);
+    };
+
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (linkedToScope) {
@@ -3307,11 +3319,14 @@ struct TemporalDeckWidget : ModuleWidget {
     } else {
       ModuleWidget::draw(args);
     }
+    publishUiDrawMetric(deckModule);
 
     if (deckModule) {
+      bool deckUiMetricVisible = isDragonKingDebugEnabled();
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
-      if (linkedToScope || metricValid) {
+      if (deckUiMetricVisible || linkedToScope || metricValid) {
         std::string perfLabel;
+        std::string uiLabel = string::f("UI %.2fms", std::max(0.f, deckModule->getUiDrawCostUs()) * 0.001f);
         if (metricValid) {
           perfLabel = string::f(
             "Scope %.0fus s%d",
@@ -3326,10 +3341,18 @@ struct TemporalDeckWidget : ModuleWidget {
         // Keep perf debug readout clear of sample-mode time/fraction labels.
         bool sampleReadoutActive = deckModule->isSampleModeEnabled() && deckModule->hasLoadedSample();
         float textY = sampleReadoutActive ? mm2px(31.0f) : mm2px(21.0f);
+        float uiTextY = textY - 6.2f;
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
         nvgFontSize(args.vg, 6.7f);
-        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, metricValid ? 164 : 128));
+        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 164));
+        if (deckUiMetricVisible) {
+          nvgText(args.vg, textX + 0.65f, uiTextY + 0.65f, uiLabel.c_str(), nullptr);
+        }
         nvgText(args.vg, textX + 0.65f, textY + 0.65f, perfLabel.c_str(), nullptr);
+        nvgFillColor(args.vg, nvgRGBA(232, 242, 250, 212));
+        if (deckUiMetricVisible) {
+          nvgText(args.vg, textX, uiTextY, uiLabel.c_str(), nullptr);
+        }
         nvgFillColor(args.vg, metricValid ? nvgRGBA(232, 242, 250, 212) : nvgRGBA(168, 184, 198, 180));
         nvgText(args.vg, textX, textY, perfLabel.c_str(), nullptr);
       }

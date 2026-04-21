@@ -1,11 +1,13 @@
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "plugin.hpp"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -15,6 +17,7 @@
 namespace {
 
 static constexpr float kScopeDisplayVerticalSupersampleMax = 2.f;
+static std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 
 static float computeScopeDisplayVerticalSupersample(float rackZoom) {
   rackZoom = std::max(rackZoom, 1e-4f);
@@ -75,6 +78,11 @@ struct TDScope final : Module {
   std::atomic<uint64_t> uiSnapshotReadMissCount {0};
   std::atomic<float> uiDebugScopeRackZoom {1.f};
   std::atomic<float> uiDebugScopeZoomThicknessMul {1.f};
+  std::atomic<float> uiDebugScopeUiDrawUs {0.f};
+  std::atomic<float> uiDebugScopeUiDrawUsEma {0.f};
+  std::atomic<float> uiDebugScopeDensityPct {100.f};
+  std::atomic<int> uiDebugScopeDensityRows {0};
+  uint32_t debugInstanceId = 0u;
   float uiPublishTimerSec = 0.f;
   float invalidMessageTimerSec = 1e9f;
   float invalidPreviewTimerSec = 1e9f;
@@ -104,6 +112,7 @@ struct TDScope final : Module {
 
   TDScope() {
     config(0, 0, 0, LIGHTS_LEN);
+    debugInstanceId = gTDScopeDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
     leftExpander.producerMessage = &leftMessages[0];
     leftExpander.consumerMessage = &leftMessages[1];
     uiSnapshots[0] = temporaldeck_expander::HostToDisplay();
@@ -563,6 +572,22 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   void draw(const DrawArgs &args) override {
+    auto drawStart = std::chrono::steady_clock::now();
+    auto publishUiDebugMetrics = [&](float densityPct, int densityRows) {
+      if (!module) {
+        return;
+      }
+      auto drawEnd = std::chrono::steady_clock::now();
+      float drawUs =
+        std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
+      float prevEma = module->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
+      float emaUs = (prevEma > 0.f) ? (prevEma + (drawUs - prevEma) * 0.18f) : drawUs;
+      module->uiDebugScopeUiDrawUs.store(drawUs, std::memory_order_relaxed);
+      module->uiDebugScopeUiDrawUsEma.store(emaUs, std::memory_order_relaxed);
+      module->uiDebugScopeDensityPct.store(clamp(densityPct, 0.f, 100.f), std::memory_order_relaxed);
+      module->uiDebugScopeDensityRows.store(std::max(densityRows, 0), std::memory_order_relaxed);
+    };
+
     bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
     // Keep stale-frame reuse short so we prefer freshest scope state.
@@ -594,6 +619,7 @@ struct TDScopeDisplayWidget final : Widget {
 
     if (!module) {
       drawStatusMessage("Attach to", "Temporal Deck");
+      publishUiDebugMetrics(0.f, 0);
       return;
     }
 
@@ -613,6 +639,7 @@ struct TDScopeDisplayWidget final : Widget {
         hasLastGoodMsg && lastGoodMsgTimeSec >= 0.0 && (nowSec - lastGoodMsgTimeSec) <= kUiSnapshotGraceSec;
       if (!canReuseLastGood) {
         drawStatusMessage(linkActive ? "Waiting for" : "Attach to", "Temporal Deck");
+        publishUiDebugMetrics(0.f, 0);
         return;
       }
       msg = lastGoodMsg;
@@ -620,6 +647,7 @@ struct TDScopeDisplayWidget final : Widget {
 
     uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
     if (scopeBinCount == 0u) {
+      publishUiDebugMetrics(0.f, 0);
       return;
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
@@ -827,6 +855,8 @@ struct TDScopeDisplayWidget final : Widget {
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     float displaySupersample = computeScopeDisplayVerticalSupersample(rackZoom);
     const int rowCount = std::max(1, int(std::ceil(drawHeight * displaySupersample)));
+    const int fullDensityRowCount = std::max(1, int(std::ceil(drawHeight * kScopeDisplayVerticalSupersampleMax)));
+    const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
     size_t rowCountU = size_t(rowCount);
     const float rowStep = drawHeight / float(rowCount);
     if (rowX0.size() != rowCountU) {
@@ -1554,6 +1584,7 @@ struct TDScopeDisplayWidget final : Widget {
     nvgResetScissor(args.vg);
 
     nvgRestore(args.vg);
+    publishUiDebugMetrics(densityPct, rowCount);
   }
 };
 
@@ -1634,29 +1665,35 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-      char missLabel[40];
-      char widthLabel[40];
+    if (scopeModule && isDragonKingDebugEnabled()) {
       uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
+      float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
+      float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
+      int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
       float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
       float zoomThicknessMul = scopeModule->uiDebugScopeZoomThicknessMul.load(std::memory_order_relaxed);
-      std::snprintf(missLabel, sizeof(missLabel), "MISS %llu", (unsigned long long) missCount);
-      std::snprintf(widthLabel, sizeof(widthLabel), "THKz %.2fx z%.2f", zoomThicknessMul, rackZoom);
-
-      const float x = box.size.x - mm2px(0.7f);
-      const float missY = mm2px(5.9f);
-      const float widthY = missY + 6.2f;
-      nvgSave(args.vg);
-      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-      nvgFontSize(args.vg, 6.4f);
-      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-      nvgFillColor(args.vg, nvgRGBA(6, 9, 13, 210));
-      nvgText(args.vg, x, missY + 0.45f, missLabel, nullptr);
-      nvgText(args.vg, x, widthY + 0.45f, widthLabel, nullptr);
-      nvgFillColor(args.vg, nvgRGBA(221, 233, 241, 230));
-      nvgText(args.vg, x, missY, missLabel, nullptr);
-      nvgText(args.vg, x, widthY, widthLabel, nullptr);
-      nvgRestore(args.vg);
+      debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
+                                             uiDrawUsEma * 0.001f,
+                                             densityRows,
+                                             densityPct,
+                                             rackZoom,
+                                             zoomThicknessMul,
+                                             missCount);
+      if (APP && APP->window && APP->window->uiFont) {
+        char debugIdLabel[32];
+        std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", scopeModule->debugInstanceId);
+        const float x = box.size.x - mm2px(0.9f);
+        const float y = mm2px(2.5f);
+        nvgSave(args.vg);
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 6.8f);
+        nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+        nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+        nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+        nvgText(args.vg, x, y, debugIdLabel, nullptr);
+        nvgRestore(args.vg);
+      }
     }
   }
 
