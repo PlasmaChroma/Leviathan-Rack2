@@ -7,6 +7,16 @@
 
 namespace temporaldeck {
 
+constexpr float kSampleFileVoltageScale = 5.f;
+
+inline float sampleFileToBufferVoltage(float x) {
+  return x * kSampleFileVoltageScale;
+}
+
+inline float bufferVoltageToSampleFile(float x) {
+  return x / kSampleFileVoltageScale;
+}
+
 struct PreparedSampleData {
   std::vector<float> left;
   std::vector<float> right;

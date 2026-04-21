@@ -492,7 +492,8 @@ static int16_t floatToPcm16(float x) {
 }
 
 static bool writeStereoOrMonoWav16(const std::string &path, const std::vector<float> &left, const std::vector<float> &right,
-                                   int frames, int channels, float sampleRate, std::string *errorOut) {
+                                   int frames, int channels, float sampleRate, float inputScale,
+                                   std::string *errorOut) {
   if (path.empty()) {
     if (errorOut) {
       *errorOut = "Missing save path";
@@ -555,10 +556,10 @@ static bool writeStereoOrMonoWav16(const std::string &path, const std::vector<fl
   writeLe32(out, dataBytes);
 
   for (int i = 0; i < frames; ++i) {
-    int16_t l = floatToPcm16(left[size_t(i)]);
+    int16_t l = floatToPcm16(left[size_t(i)] * inputScale);
     writeLe16(out, uint16_t(l));
     if (channels == 2) {
-      int16_t r = floatToPcm16(right[size_t(i)]);
+      int16_t r = floatToPcm16(right[size_t(i)] * inputScale);
       writeLe16(out, uint16_t(r));
     }
   }
@@ -1691,7 +1692,7 @@ bool TemporalDeck::saveLoadedSampleToPath(const std::string &path, std::string *
   int frames = impl->engine.sampleFrames;
   int channels = impl->engine.buffer.monoStorage ? 1 : 2;
   if (!writeStereoOrMonoWav16(path, impl->engine.buffer.left, impl->engine.buffer.right, frames, channels,
-                              impl->engine.sampleRate, errorOut)) {
+                              impl->engine.sampleRate, temporaldeck::bufferVoltageToSampleFile(1.f), errorOut)) {
     return false;
   }
   // Promote live-converted sample to file-backed state for patch restore.

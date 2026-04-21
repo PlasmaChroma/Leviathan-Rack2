@@ -91,6 +91,16 @@ TestResult testInvalidInputClearsPreparedOutput() {
           "ok=" + std::to_string(int(ok)) + " frames=" + std::to_string(prepared.frames)};
 }
 
+TestResult testFileBufferScalingIsInvertible() {
+  float fileSample = 0.42f;
+  float bufferSample = temporaldeck::sampleFileToBufferVoltage(fileSample);
+  float roundTrip = temporaldeck::bufferVoltageToSampleFile(bufferSample);
+
+  bool pass = nearlyEqual(bufferSample, 2.1f) && nearlyEqual(roundTrip, fileSample);
+  return {"File/buffer scaling round-trip", pass,
+          "buffer=" + std::to_string(bufferSample) + " roundTrip=" + std::to_string(roundTrip)};
+}
+
 } // namespace
 
 int main() {
@@ -99,6 +109,7 @@ int main() {
   tests.push_back(testBuildPreparedSampleMonoFoldDown());
   tests.push_back(testBuildPreparedSampleTruncatesToBufferLimit());
   tests.push_back(testInvalidInputClearsPreparedOutput());
+  tests.push_back(testFileBufferScalingIsInvertible());
 
   int failed = 0;
   std::cout << "TemporalDeck Sample Prep Spec\n";

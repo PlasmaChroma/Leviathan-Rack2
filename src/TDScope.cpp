@@ -55,8 +55,9 @@ struct TDScope final : Module {
   };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
-  temporaldeck_expander::HostToDisplay uiSnapshot;
-  std::atomic<uint32_t> uiSnapshotSeq {0};
+  std::array<temporaldeck_expander::HostToDisplay, 2> uiSnapshots;
+  std::atomic<uint32_t> uiSnapshotFrontIndex {0};
+  std::atomic<uint64_t> uiSnapshotPublishGen {0};
   std::atomic<bool> uiLinkActive {false};
   std::atomic<bool> uiPreviewValid {false};
   std::atomic<uint64_t> uiLastPublishSeq {0};
@@ -72,6 +73,7 @@ struct TDScope final : Module {
   int scopeDisplayRangeMode = SCOPE_RANGE_5V;
   int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
+  bool scopeTransientHaloEnabled = true;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
@@ -93,7 +95,8 @@ struct TDScope final : Module {
     config(0, 0, 0, LIGHTS_LEN);
     leftExpander.producerMessage = &leftMessages[0];
     leftExpander.consumerMessage = &leftMessages[1];
-    uiSnapshot = temporaldeck_expander::HostToDisplay();
+    uiSnapshots[0] = temporaldeck_expander::HostToDisplay();
+    uiSnapshots[1] = temporaldeck_expander::HostToDisplay();
   }
 
   float scopeDisplayFullScaleVolts() const {
@@ -115,6 +118,7 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
+    json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
     return root;
   }
 
@@ -134,13 +138,18 @@ struct TDScope final : Module {
     if (schemeJ) {
       scopeColorScheme = clamp(int(json_integer_value(schemeJ)), COLOR_SCHEME_TEMPORAL_DECK, COLOR_SCHEME_COUNT - 1);
     }
+    json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
+    if (haloJ) {
+      scopeTransientHaloEnabled = json_boolean_value(haloJ);
+    }
   }
 
   void publishSnapshotToUi(const temporaldeck_expander::HostToDisplay &msg) {
-    uint32_t seq = uiSnapshotSeq.load(std::memory_order_relaxed);
-    uiSnapshotSeq.store(seq + 1u, std::memory_order_release); // writer active (odd)
-    uiSnapshot = msg;
-    uiSnapshotSeq.store(seq + 2u, std::memory_order_release); // writer done (even)
+    uint32_t frontIndex = uiSnapshotFrontIndex.load(std::memory_order_relaxed) & 1u;
+    uint32_t backIndex = frontIndex ^ 1u;
+    uiSnapshots[backIndex] = msg;
+    uiSnapshotFrontIndex.store(backIndex, std::memory_order_release);
+    uiSnapshotPublishGen.fetch_add(1u, std::memory_order_release);
     uiLastPublishSeq.store(msg.publishSeq, std::memory_order_release);
   }
 
@@ -149,13 +158,12 @@ struct TDScope final : Module {
       return false;
     }
     for (int i = 0; i < 3; ++i) {
-      uint32_t seq0 = uiSnapshotSeq.load(std::memory_order_acquire);
-      if ((seq0 & 1u) != 0u) {
-        continue;
-      }
-      *out = uiSnapshot;
-      uint32_t seq1 = uiSnapshotSeq.load(std::memory_order_acquire);
-      if (seq0 == seq1 && (seq1 & 1u) == 0u) {
+      uint64_t gen0 = uiSnapshotPublishGen.load(std::memory_order_acquire);
+      uint32_t frontIndex0 = uiSnapshotFrontIndex.load(std::memory_order_acquire) & 1u;
+      *out = uiSnapshots[frontIndex0];
+      uint32_t frontIndex1 = uiSnapshotFrontIndex.load(std::memory_order_acquire) & 1u;
+      uint64_t gen1 = uiSnapshotPublishGen.load(std::memory_order_acquire);
+      if (frontIndex0 == frontIndex1 && gen0 == gen1) {
         return out->magic == temporaldeck_expander::MAGIC &&
                out->version == temporaldeck_expander::VERSION &&
                out->size == sizeof(temporaldeck_expander::HostToDisplay);
@@ -1203,7 +1211,7 @@ struct TDScopeDisplayWidget final : Widget {
           // Use transient energy as a brightness lift over the base palette,
           // not a hue remap. Strong attacks should look luminous instead of
           // simply shifting deeper into the hot end of the gradient.
-          float brightnessLift = clamp((0.26f + 0.74f * baseDrive) * transientBoost, 0.f, 1.f);
+          float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * std::pow(transientBoost, 0.84f), 0.f, 1.f);
           float alpha = (brightnessLift > prevDrive) ? kTransientRiseAlpha : kTransientFallAlpha;
           (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
         }
@@ -1425,12 +1433,12 @@ struct TDScopeDisplayWidget final : Widget {
         float haloT = clamp((transientLift - 0.025f) / 0.975f, 0.f, 1.f);
         NVGcolor mainC = brightenColor(
           gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual))),
-          transientLift * 0.72f);
+          transientLift * 0.90f);
 
-        if (haloT > 1e-4f) {
+        if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
           float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
           float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
-          uint8_t haloAlpha = uint8_t(std::lround((52.f + 148.f * std::max(visual, 0.22f)) * haloT));
+          uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
           nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
@@ -1462,7 +1470,7 @@ struct TDScopeDisplayWidget final : Widget {
           float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
           NVGcolor connectC = brightenColor(
             gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
-            connectTransientLift * 0.56f);
+            connectTransientLift * 0.72f);
           float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, prevX0, prevY);
@@ -1687,6 +1695,9 @@ struct TDScopeWidget : ModuleWidget {
         "Emerald", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_EMERALD; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_EMERALD; }));
     }));
+    menu->addChild(createCheckMenuItem(
+      "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
+      [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
   }
 };
 
