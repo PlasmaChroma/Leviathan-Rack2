@@ -336,4 +336,21 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
   transport().submit("TDScope", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitTemporalDeckUiMetrics(uint32_t instanceId,
+                                 float uiMs,
+                                 float scopePreviewUs,
+                                 int scopeStride,
+                                 bool scopeMetricValid) {
+  char dataBuf[256];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
+                std::max(0.f, uiMs),
+                std::max(0.f, scopePreviewUs),
+                std::max(0, scopeStride),
+                scopeMetricValid ? 1 : 0);
+  double ts = system::getTime();
+  transport().submit("TemporalDeck", instanceId, "ui", "metric", dataBuf, ts);
+}
+
 } // namespace debug_terminal

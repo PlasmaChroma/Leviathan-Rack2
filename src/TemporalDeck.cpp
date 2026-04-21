@@ -84,6 +84,7 @@ using temporaldeck_modes::usableBufferSecondsForMode;
 using temporaldeck::PreparedSampleData;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
+static std::atomic<uint32_t> gTemporalDeckDebugInstanceCounter {1u};
 
 // Push scope payload faster so TD.Scope tracks live output motion more tightly.
 static constexpr float kExpanderPublishRateHz = 120.f;
@@ -647,6 +648,7 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
+  uint32_t debugInstanceId = 0u;
   std::atomic<float> uiDrawCostUs{0.f};
   std::atomic<float> uiScopePreviewCostUs{0.f};
   std::atomic<int> uiScopePreviewStride{0};
@@ -771,6 +773,7 @@ void publishArcLights(TemporalDeck *module, int sampleFrames, float maxLagSample
 } // namespace temporaldeck_ui
 
 TemporalDeck::TemporalDeck() : impl(new Impl()) {
+  impl->debugInstanceId = gTemporalDeckDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   rightExpander.producerMessage = &impl->expanderRequestMessages[0];
   rightExpander.consumerMessage = &impl->expanderRequestMessages[1];
@@ -1556,6 +1559,10 @@ float TemporalDeck::getUiScopePreviewCostUs() const {
 
 float TemporalDeck::getUiDrawCostUs() const {
   return impl->uiDrawCostUs.load(std::memory_order_relaxed);
+}
+
+uint32_t TemporalDeck::getDebugInstanceId() const {
+  return impl->debugInstanceId;
 }
 
 void TemporalDeck::setUiDrawCostUs(float costUs) {

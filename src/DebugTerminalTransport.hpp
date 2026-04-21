@@ -12,4 +12,10 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             float thickness,
                             uint64_t misses);
 
+void submitTemporalDeckUiMetrics(uint32_t instanceId,
+                                 float uiMs,
+                                 float scopePreviewUs,
+                                 int scopeStride,
+                                 bool scopeMetricValid);
+
 } // namespace debug_terminal

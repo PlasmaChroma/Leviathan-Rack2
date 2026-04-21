@@ -125,6 +125,7 @@ struct TemporalDeck final : Module {
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
   float getUiSampleRate() const;
+  uint32_t getDebugInstanceId() const;
   float getUiDrawCostUs() const;
   void setUiDrawCostUs(float costUs);
   float getUiScopePreviewCostUs() const;

@@ -1,4 +1,5 @@
 #include "TemporalDeck.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
 
@@ -3322,39 +3323,26 @@ struct TemporalDeckWidget : ModuleWidget {
     publishUiDrawMetric(deckModule);
 
     if (deckModule) {
-      bool deckUiMetricVisible = isDragonKingDebugEnabled();
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
-      if (deckUiMetricVisible || linkedToScope || metricValid) {
-        std::string perfLabel;
-        std::string uiLabel = string::f("UI %.2fms", std::max(0.f, deckModule->getUiDrawCostUs()) * 0.001f);
-        if (metricValid) {
-          perfLabel = string::f(
-            "Scope %.0fus s%d",
-            std::max(0.f, deckModule->getUiScopePreviewCostUs()),
-            std::max(0, deckModule->getUiScopePreviewStride())
-          );
-        } else {
-          perfLabel = "Scope --";
-        }
-
-        float textX = box.size.x - mm2px(0.55f);
-        // Keep perf debug readout clear of sample-mode time/fraction labels.
-        bool sampleReadoutActive = deckModule->isSampleModeEnabled() && deckModule->hasLoadedSample();
-        float textY = sampleReadoutActive ? mm2px(31.0f) : mm2px(21.0f);
-        float uiTextY = textY - 6.2f;
+      if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+        debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
+                                                    deckModule->getUiDrawCostUs() * 0.001f,
+                                                    deckModule->getUiScopePreviewCostUs(),
+                                                    deckModule->getUiScopePreviewStride(),
+                                                    metricValid);
+        char debugIdLabel[32];
+        std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", deckModule->getDebugInstanceId());
+        const float x = box.size.x - mm2px(0.9f);
+        const float y = mm2px(2.5f);
+        nvgSave(args.vg);
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 6.8f);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgFontSize(args.vg, 6.7f);
-        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 164));
-        if (deckUiMetricVisible) {
-          nvgText(args.vg, textX + 0.65f, uiTextY + 0.65f, uiLabel.c_str(), nullptr);
-        }
-        nvgText(args.vg, textX + 0.65f, textY + 0.65f, perfLabel.c_str(), nullptr);
-        nvgFillColor(args.vg, nvgRGBA(232, 242, 250, 212));
-        if (deckUiMetricVisible) {
-          nvgText(args.vg, textX, uiTextY, uiLabel.c_str(), nullptr);
-        }
-        nvgFillColor(args.vg, metricValid ? nvgRGBA(232, 242, 250, 212) : nvgRGBA(168, 184, 198, 180));
-        nvgText(args.vg, textX, textY, perfLabel.c_str(), nullptr);
+        nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+        nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+        nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+        nvgText(args.vg, x, y, debugIdLabel, nullptr);
+        nvgRestore(args.vg);
       }
     }
   }
