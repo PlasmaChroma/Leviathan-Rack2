@@ -514,6 +514,8 @@ struct TemporalDeckEngine {
   double filteredManualLagTargetSamples = 0.0;
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
+  bool platterTouchHoldLatched = false;
+  double platterTouchHoldReadHead = 0.0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   int bufferDurationMode = BUFFER_DURATION_10S;
   int lastSlipReturnMode = SLIP_RETURN_NORMAL;
@@ -759,6 +761,8 @@ struct TemporalDeckEngine {
     filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
     lastPlatterGestureRevision = 0;
+    platterTouchHoldLatched = false;
+    platterTouchHoldReadHead = 0.0;
     cartridgeLeft.reset();
     cartridgeRight.reset();
     lofiWowPhaseA = 0.f;
@@ -2403,19 +2407,30 @@ struct TemporalDeckEngine {
           lastPlatterGestureRevision = platterGestureRevision;
         }
 
+        bool directTouchHoldActive = manualTouchScratch && platterTouchHoldDirect;
+        if (!directTouchHoldActive) {
+          platterTouchHoldLatched = false;
+        }
+
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
-        if (manualTouchScratch && platterTouchHoldDirect) {
+        if (directTouchHoldActive) {
           // Direct-position requests are only for stationary hold behavior.
           // Active scope movement should arrive through the normal scratch
           // gesture path instead.
           double targetLag = clampLag(platterLagTarget, limit);
-          scratchLagSamples = targetLag;
-          scratchLagTargetSamples = targetLag;
+          if (!platterTouchHoldLatched || hasFreshPlatterGesture) {
+            platterTouchHoldReadHead =
+              isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
+                                   : buffer.wrapPosition(newestPos - targetLag);
+            platterTouchHoldLatched = true;
+          }
+          readHead = platterTouchHoldReadHead;
+          double heldLag = clampLag(currentLagFromNewest(newestPos), limit);
+          scratchLagSamples = heldLag;
+          scratchLagTargetSamples = heldLag;
           scratchHandVelocity = 0.f;
           scratchMotionVelocity = 0.f;
           scratch3LagVelocity = 0.f;
-          readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
-                                          : buffer.wrapPosition(newestPos - targetLag);
           lastPlatterGestureRevision = platterGestureRevision;
         } else if (stationaryManualHold) {
           scratchLagTargetSamples = scratchLagSamples;

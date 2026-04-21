@@ -1220,28 +1220,43 @@ void TemporalDeck::process(const ProcessArgs &args) {
           } else {
             velocitySamples = derivedVelocity;
           }
-          // Safety clamp: Scope is an external input path, so guard against
-          // sender-side timing spikes producing unrealistic multi-turn motion.
-          float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
-          velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
-          scopeTraceVelocityApplied = velocitySamples;
-          // CONTAINMENT NOTE
-          // This receive path is where expander-supplied scope drag becomes a
-          // "real" platter gesture for the engine. That means Scope and host
-          // currently share behavior responsibility, even though the intended
-          // architecture is for Scope to be mostly I/O. Keep that in mind when
-          // refactoring: if this translation is simplified without also moving
-          // the live-drag workarounds out of TDScope, regressions will look
-          // like stalled live drags, over-travel, or delayed reversals.
-          // Scope emits equivalent platter-gesture intent. TemporalDeck
-          // realizes that intent through the same scratch gesture path used
-          // by actual platter dragging.
-          impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-          int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
-          int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
-          int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
-          motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
-          impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+          float lagDelta = std::fabs(impl->expanderLagDragLastLagSamples - lagTarget);
+          constexpr float kLagHoldDeltaSamples = 1.f / 32.f;
+          constexpr float kLagHoldVelocitySamplesPerSec = 0.5f;
+          bool stationaryHold = lagDelta <= kLagHoldDeltaSamples &&
+                                std::fabs(lagDragRequestVelocity) <= kLagHoldVelocitySamplesPerSec &&
+                                std::fabs(derivedVelocity) <= kLagHoldVelocitySamplesPerSec;
+          if (stationaryHold) {
+            // Scope's contract during a hold is just "drag still active,
+            // target stable, velocity near zero". Keep that in direct-hold
+            // mode so the engine can pin playback position on the deck side.
+            impl->platterInput.setTouchHold(true, lagTarget);
+            impl->platterInput.setMotionFreshSamples(0);
+            scopeTraceVelocityApplied = 0.f;
+          } else {
+            // Safety clamp: Scope is an external input path, so guard against
+            // sender-side timing spikes producing unrealistic multi-turn motion.
+            float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
+            velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+            scopeTraceVelocityApplied = velocitySamples;
+            // CONTAINMENT NOTE
+            // This receive path is where expander-supplied scope drag becomes a
+            // "real" platter gesture for the engine. That means Scope and host
+            // currently share behavior responsibility, even though the intended
+            // architecture is for Scope to be mostly I/O. Keep that in mind when
+            // refactoring: if this translation is simplified without also moving
+            // the live-drag workarounds out of TDScope, regressions will look
+            // like stalled live drags, over-travel, or delayed reversals.
+            // Scope emits equivalent platter-gesture intent. TemporalDeck
+            // realizes that intent through the same scratch gesture path used
+            // by actual platter dragging.
+            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+            int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
+            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
+            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
+            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
+          }
         }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;

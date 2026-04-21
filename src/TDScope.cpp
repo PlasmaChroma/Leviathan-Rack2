@@ -363,7 +363,6 @@ struct TDScopeDisplayWidget final : Widget {
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
-
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
   }
