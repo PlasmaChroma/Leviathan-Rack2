@@ -305,6 +305,8 @@ struct TDScopeDisplayWidget final : Widget {
   std::vector<float> rowX1Right;
   std::vector<float> rowVisualIntensity;
   std::vector<float> rowVisualIntensityRight;
+  std::vector<float> rowColorDrive;
+  std::vector<float> rowColorDriveRight;
   std::vector<float> rowY;
   std::vector<uint8_t> rowValid;
   std::vector<uint8_t> rowValidRight;
@@ -814,6 +816,8 @@ struct TDScopeDisplayWidget final : Widget {
       rowX1Right.assign(rowCountU, lane1CenterX);
       rowVisualIntensity.assign(rowCountU, 0.f);
       rowVisualIntensityRight.assign(rowCountU, 0.f);
+      rowColorDrive.assign(rowCountU, 0.f);
+      rowColorDriveRight.assign(rowCountU, 0.f);
       rowY.assign(rowCountU, 0.f);
       rowValid.assign(rowCountU, 0u);
       rowValidRight.assign(rowCountU, 0u);
@@ -1160,6 +1164,57 @@ struct TDScopeDisplayWidget final : Widget {
       cachedRangeMode = module->scopeDisplayRangeMode;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
+
+      auto rebuildTransientColorDrive = [&](const std::vector<float> &x0, const std::vector<float> &x1,
+                                           const std::vector<float> &visualIntensity, const std::vector<uint8_t> &valid,
+                                           float laneHalfWidthLocal, std::vector<float> *colorDriveOut) {
+        if (!colorDriveOut || colorDriveOut->size() != rowCountU) {
+          return;
+        }
+        constexpr float kTransientRiseAlpha = 0.42f;
+        constexpr float kTransientFallAlpha = 0.14f;
+        float laneWidthDen = std::max(2.f * laneHalfWidthLocal, 1e-3f);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          float baseDrive = clamp(visualIntensity[idx], 0.f, 1.f);
+          float prevDrive = clamp((*colorDriveOut)[idx], 0.f, 1.f);
+          if (!valid[idx]) {
+            (*colorDriveOut)[idx] = prevDrive * 0.82f;
+            continue;
+          }
+          float center = 0.5f * (x0[idx] + x1[idx]);
+          float span = x1[idx] - x0[idx];
+          float transientNorm = 0.f;
+          auto accumulateTransientAgainst = [&](size_t otherIdx) {
+            float otherCenter = 0.5f * (x0[otherIdx] + x1[otherIdx]);
+            float otherSpan = x1[otherIdx] - x0[otherIdx];
+            float centerDeltaNorm = std::fabs(center - otherCenter) / laneWidthDen;
+            float spanDeltaNorm = std::fabs(span - otherSpan) / laneWidthDen;
+            transientNorm = std::max(transientNorm, std::max(centerDeltaNorm * 1.15f, spanDeltaNorm * 1.35f));
+          };
+          if (iy > 0 && valid[size_t(iy - 1)]) {
+            accumulateTransientAgainst(size_t(iy - 1));
+          }
+          if (iy + 1 < rowCount && valid[size_t(iy + 1)]) {
+            accumulateTransientAgainst(size_t(iy + 1));
+          }
+          transientNorm = clamp(transientNorm, 0.f, 1.f);
+          float transientBoost = std::pow(transientNorm, 0.56f);
+          // Use transient energy as a brightness lift over the base palette,
+          // not a hue remap. Strong attacks should look luminous instead of
+          // simply shifting deeper into the hot end of the gradient.
+          float brightnessLift = clamp((0.26f + 0.74f * baseDrive) * transientBoost, 0.f, 1.f);
+          float alpha = (brightnessLift > prevDrive) ? kTransientRiseAlpha : kTransientFallAlpha;
+          (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
+        }
+      };
+      rebuildTransientColorDrive(rowX0, rowX1, rowVisualIntensity, rowValid, laneAmpHalfWidth, &rowColorDrive);
+      if (renderStereo) {
+        rebuildTransientColorDrive(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, laneAmpHalfWidth,
+                                   &rowColorDriveRight);
+      } else {
+        std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
+      }
     }
 
     auto gradientColorForIntensity = [&](float intensity, uint8_t alpha) -> NVGcolor {
@@ -1335,11 +1390,20 @@ struct TDScopeDisplayWidget final : Widget {
       return nvgRGBA(rq, gq, bq, alpha);
     };
 
+    auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
+      lift = clamp(lift, 0.f, 1.f);
+      c.r = c.r + (1.f - c.r) * lift;
+      c.g = c.g + (1.f - c.g) * lift;
+      c.b = c.b + (1.f - c.b) * lift;
+      return c;
+    };
+
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
 
     auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
-                        const std::vector<uint8_t> &valid, float laneCenterXForConnectors) {
+                        const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid,
+                        float laneCenterXForConnectors) {
       // Continuous gradient rendering: draw each row and connector using its
       // actual visual intensity, rather than quantizing to discrete buckets.
       bool prevValid = false;
@@ -1347,6 +1411,7 @@ struct TDScopeDisplayWidget final : Widget {
       float prevX1 = laneCenterXForConnectors;
       float prevY = drawTop + 0.5f;
       float prevVisual = 0.f;
+      float prevColorDrive = 0.f;
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t idx = size_t(iy);
         if (!valid[idx]) {
@@ -1355,8 +1420,24 @@ struct TDScopeDisplayWidget final : Widget {
         }
 
         float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+        float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
         float mainW = (0.78f + 0.62f * visual) * zoomThicknessMul;
-        NVGcolor mainC = gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual)));
+        float haloT = clamp((transientLift - 0.025f) / 0.975f, 0.f, 1.f);
+        NVGcolor mainC = brightenColor(
+          gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual))),
+          transientLift * 0.72f);
+
+        if (haloT > 1e-4f) {
+          float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
+          float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
+          uint8_t haloAlpha = uint8_t(std::lround((52.f + 148.f * std::max(visual, 0.22f)) * haloT));
+          nvgBeginPath(args.vg);
+          nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
+          nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
+          nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, haloAlpha));
+          nvgStrokeWidth(args.vg, haloW);
+          nvgStroke(args.vg);
+        }
 
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, x0[idx], rowY[idx]);
@@ -1378,8 +1459,10 @@ struct TDScopeDisplayWidget final : Widget {
 
         if (prevValid) {
           float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-          NVGcolor connectC =
-            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual)));
+          float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+          NVGcolor connectC = brightenColor(
+            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
+            connectTransientLift * 0.56f);
           float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
           nvgBeginPath(args.vg);
           nvgMoveTo(args.vg, prevX0, prevY);
@@ -1395,13 +1478,14 @@ struct TDScopeDisplayWidget final : Widget {
         prevX1 = x1[idx];
         prevY = rowY[idx];
         prevVisual = visual;
+        prevColorDrive = transientLift;
         prevValid = true;
       }
     };
 
-    drawLane(rowX0, rowX1, rowVisualIntensity, rowValid, lane0CenterX);
+    drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
     if (renderStereo) {
-      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, lane1CenterX);
+      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
 
       // Draw subtle lane divider for stereo side-by-side view.
       float dividerX = laneWidth + laneGap * 0.5f;
