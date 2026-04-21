@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <mutex>
 #include <new>
@@ -92,6 +93,8 @@ static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
 static constexpr int kScopeLagFpShift = 10;
 static constexpr int64_t kScopeLagFpOne = int64_t(1) << kScopeLagFpShift;
+
+static std::string temporalDeckUserRootPathForTrace() { return system::join(asset::user(), "Leviathan/TemporalDeck"); }
 
 static bool isTDScopeModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
@@ -678,6 +681,11 @@ struct TemporalDeck::Impl {
   bool highQualityRateInterpolation = false;
   bool platterTraceLoggingEnabled = false;
   bool scopeDragTraceLoggingEnabled = false;
+  bool scopeDragTraceCaptureActive = false;
+  std::ofstream scopeDragTraceFile;
+  std::string scopeDragTracePath;
+  double scopeDragTraceStartTimeSec = 0.0;
+  uint64_t scopeDragTraceSequence = 0;
   bool scopeDragTraceWasActive = false;
   bool scopeDragTraceHavePrev = false;
   float scopeDragTracePrevTargetLag = 0.f;
@@ -880,8 +888,6 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipLatched", json_boolean(impl->transportControl.slipLatched));
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "highQualityRateInterpolation", json_boolean(impl->highQualityRateInterpolation));
-  json_object_set_new(root, "platterTraceLoggingEnabled", json_boolean(impl->platterTraceLoggingEnabled));
-  json_object_set_new(root, "scopeDragTraceLoggingEnabled", json_boolean(impl->scopeDragTraceLoggingEnabled));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
@@ -909,8 +915,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *slipJ = json_object_get(root, "slipLatched");
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *highQualityRateInterpJ = json_object_get(root, "highQualityRateInterpolation");
-  json_t *platterTraceLoggingJ = json_object_get(root, "platterTraceLoggingEnabled");
-  json_t *scopeDragTraceLoggingJ = json_object_get(root, "scopeDragTraceLoggingEnabled");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
@@ -938,12 +942,6 @@ void TemporalDeck::dataFromJson(json_t *root) {
   }
   if (highQualityRateInterpJ) {
     impl->highQualityRateInterpolation = json_boolean_value(highQualityRateInterpJ);
-  }
-  if (platterTraceLoggingJ) {
-    impl->platterTraceLoggingEnabled = json_boolean_value(platterTraceLoggingJ);
-  }
-  if (scopeDragTraceLoggingJ) {
-    impl->scopeDragTraceLoggingEnabled = json_boolean_value(scopeDragTraceLoggingJ);
   }
   if (externalGatePosModeJ) {
     impl->externalGatePosMode =
@@ -1103,6 +1101,47 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
     impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
+
+  bool scopeTraceDebugEnabled = isDragonKingDebugEnabled();
+  if (!scopeTraceDebugEnabled && impl->scopeDragTraceLoggingEnabled) {
+    impl->scopeDragTraceLoggingEnabled = false;
+  }
+  if (impl->scopeDragTraceLoggingEnabled && scopeTraceDebugEnabled && !impl->scopeDragTraceCaptureActive) {
+    std::string traceDir = system::join(temporalDeckUserRootPathForTrace(), "scope_traces");
+    system::createDirectories(traceDir);
+    long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+    std::string filename = "scope_drag_trace_" + std::to_string(stampMs) + ".csv";
+    impl->scopeDragTracePath = system::join(traceDir, filename);
+    impl->scopeDragTraceFile.open(impl->scopeDragTracePath.c_str(), std::ios::out | std::ios::trunc);
+    if (!impl->scopeDragTraceFile.good()) {
+      WARN("TemporalDeck: failed to open scope drag trace file: %s", impl->scopeDragTracePath.c_str());
+      impl->scopeDragTracePath.clear();
+      impl->scopeDragTraceLoggingEnabled = false;
+    } else {
+      impl->scopeDragTraceFile.setf(std::ios::fixed);
+      impl->scopeDragTraceFile << std::setprecision(6);
+      impl->scopeDragTraceFile << "# TemporalDeck scope drag trace v1\n";
+      impl->scopeDragTraceFile << "# Start when scope drag trace logging is enabled, stop when it is disabled\n";
+      impl->scopeDragTraceFile
+        << "seq,t_sec,event,request_seq,scope_active,new_request,just_started,stall_frames,target_lag,target_delta,"
+           "request_velocity,applied_velocity,frame_lag,frame_lag_delta,freeze,sample_mode\n";
+      impl->scopeDragTraceStartTimeSec = system::getTime();
+      impl->scopeDragTraceSequence = 0;
+      impl->scopeDragTraceCaptureActive = true;
+      INFO("TemporalDeck: scope drag trace capture started: %s", impl->scopeDragTracePath.c_str());
+    }
+  } else if ((!impl->scopeDragTraceLoggingEnabled || !scopeTraceDebugEnabled) && impl->scopeDragTraceCaptureActive) {
+    if (impl->scopeDragTraceFile.good()) {
+      impl->scopeDragTraceFile.flush();
+      impl->scopeDragTraceFile.close();
+    }
+    INFO("TemporalDeck: scope drag trace capture saved: %s", impl->scopeDragTracePath.c_str());
+    impl->scopeDragTraceCaptureActive = false;
+    impl->scopeDragTraceStartTimeSec = 0.0;
+    impl->scopeDragTraceSequence = 0;
+    impl->scopeDragTracePath.clear();
+  }
+
   bool expanderConnected =
     isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
@@ -1236,9 +1275,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   auto frame = impl->engine.process(frameInput);
 
-  if (impl->scopeDragTraceLoggingEnabled) {
+  if (impl->scopeDragTraceLoggingEnabled && scopeTraceDebugEnabled) {
     bool scopeActive = haveLagDragRequest && lagDragRequestActive;
     if (!scopeActive) {
+      if (impl->scopeDragTraceCaptureActive && impl->scopeDragTraceFile.good() && impl->scopeDragTraceWasActive) {
+        double tSec = std::max(0.0, system::getTime() - impl->scopeDragTraceStartTimeSec);
+        impl->scopeDragTraceFile << impl->scopeDragTraceSequence++ << "," << tSec << ",SCOPE_DRAG_END,"
+                                 << (unsigned long long)lagDragRequestSeq << ",0,0,0,0,0,0,0,0,"
+                                 << float(frame.lag) << ",0,0," << (frame.sampleMode ? 1 : 0) << "\n";
+      }
       if (impl->scopeDragTraceWasActive) {
         WARN("TemporalDeck ScopeDragTrace END lag=%.2f", float(frame.lag));
       }
@@ -1265,6 +1310,16 @@ void TemporalDeck::process(const ProcessArgs &args) {
       if (shouldLog) {
         impl->scopeDragTraceLogTimerSec = 0.f;
         bool freezeTrace = frameInput.freezeButton || frameInput.freezeGate;
+        if (impl->scopeDragTraceCaptureActive && impl->scopeDragTraceFile.good()) {
+          double tSec = std::max(0.0, system::getTime() - impl->scopeDragTraceStartTimeSec);
+          impl->scopeDragTraceFile << impl->scopeDragTraceSequence++ << "," << tSec << ",SCOPE_DRAG,"
+                                   << (unsigned long long)lagDragRequestSeq << "," << (scopeActive ? 1 : 0) << ","
+                                   << (scopeTraceNewRequest ? 1 : 0) << "," << (scopeTraceDragJustStarted ? 1 : 0) << ","
+                                   << impl->scopeDragTraceStallFrames << "," << targetLag << "," << targetDelta << ","
+                                   << lagDragRequestVelocity << "," << scopeTraceVelocityApplied << "," << float(frame.lag)
+                                   << "," << frameLagDelta << "," << (freezeTrace ? 1 : 0) << ","
+                                   << (frame.sampleMode ? 1 : 0) << "\n";
+        }
         WARN("TemporalDeck ScopeDragTrace seq=%llu target=%.2f targetΔ=%.2f reqVel=%.2f appliedVel=%.2f lag=%.2f lagΔ=%.2f freeze=%d "
              "sample=%d started=%d stall=%d",
              (unsigned long long)lagDragRequestSeq, targetLag, targetDelta, lagDragRequestVelocity, scopeTraceVelocityApplied,

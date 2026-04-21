@@ -458,6 +458,14 @@ struct TDScopeDisplayWidget final : Widget {
     float appliedDeltaY = lagDragResidualY;
     lagDragCursorPos.y += appliedDeltaY;
     lagDragResidualY = 0.f;
+    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (!sampleMode && !freezeActive && appliedDeltaY > 0.f) {
+      // In live mode, compensate write-head advance only while dragging away
+      // from NOW (downward). Applying this during upward drags can feel like
+      // stutter because compensation fights reversal intent.
+      lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
+    }
     ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
     if (!map.valid) {
       return;
@@ -467,10 +475,8 @@ struct TDScopeDisplayWidget final : Widget {
     // Project cursor motion into a drag-start-anchored platter-equivalent lag
     // space so travel does not inflate as the live scope window recenters.
     float desiredPlaybackLag = lagDragAnchorLagSamples + (lagDragCursorPos.y - lagDragAnchorCursorY) * lagDragSamplesPerPixel;
-    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
     if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
       double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
       if (wrappedLag < 0.0) {
