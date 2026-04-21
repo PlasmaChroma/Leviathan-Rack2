@@ -1,3 +1,4 @@
+from collections import deque
 import threading
 import time
 
@@ -22,6 +23,8 @@ class DebugState(object):
     def ingest_event(self, event):
         now = time.time()
         row_key = (event["plugin"], event["module"], event["instance"], event["stream"])
+        data = dict(event["data"])
+        ui_ms_value = data.get("ui_ms")
         row = {
             "plugin": event["plugin"],
             "module": event["module"],
@@ -30,9 +33,19 @@ class DebugState(object):
             "kind": event["kind"],
             "ts": event["ts"],
             "last_seen_sec": now,
-            "data": dict(event["data"]),
+            "data": data,
         }
         with self._lock:
+            prev_row = self._rows.get(row_key)
+            ui_ms_history = prev_row.get("ui_ms_history") if prev_row else None
+            if ui_ms_history is None:
+                ui_ms_history = deque()
+            if isinstance(ui_ms_value, (int, float)):
+                ui_ms_history.append((now, float(ui_ms_value)))
+            cutoff_sec = now - 1.0
+            while ui_ms_history and ui_ms_history[0][0] < cutoff_sec:
+                ui_ms_history.popleft()
+            row["ui_ms_history"] = ui_ms_history
             self._rows[row_key] = row
             self._events_total += 1
 
@@ -43,6 +56,14 @@ class DebugState(object):
             for row in self._rows.values():
                 snap = dict(row)
                 snap["data"] = dict(row["data"])
+                ui_ms_history = row.get("ui_ms_history")
+                if ui_ms_history:
+                    cutoff_sec = now - 1.0
+                    while ui_ms_history and ui_ms_history[0][0] < cutoff_sec:
+                        ui_ms_history.popleft()
+                    if ui_ms_history:
+                        ui_ms_values = [value for _, value in ui_ms_history]
+                        snap["data"]["ui_ms"] = "%.2f to %.2f" % (min(ui_ms_values), max(ui_ms_values))
                 # Age in the terminal should reflect how stale the latest row is
                 # from the server's point of view, not the producer's timestamp
                 # domain, which may be relative uptime instead of wall clock.

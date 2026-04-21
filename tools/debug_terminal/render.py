@@ -63,7 +63,7 @@ def _module_title(module_name, row_count):
 
 def build_module_table(module_name, rows):
     table = Table(title=_module_title(module_name, len(rows)))
-    table.add_column("Instance", no_wrap=True)
+    table.add_column("ID", no_wrap=True)
     table.add_column("Stream", no_wrap=True)
     for _, label in _module_columns(module_name):
         table.add_column(label, justify="right", no_wrap=True)
@@ -115,6 +115,7 @@ def build_table(snapshot, host, port):
     grouped = _group_rows_by_module(snapshot)
     for module_name in sorted(grouped.keys()):
         renderables.append(build_module_table(module_name, grouped[module_name]))
+    renderables.append("")
     return Group(*renderables)
 
 
@@ -133,7 +134,7 @@ def _truncate(text, width):
 
 def _plain_module_lines(module_name, rows):
     columns = _module_columns(module_name)
-    header = ["Instance", "Stream"] + [label for _, label in columns] + ["Age"]
+    header = ["ID", "Stream"] + [label for _, label in columns] + ["Age"]
     table_rows = []
     for row in rows:
         data = row["data"]
@@ -187,6 +188,7 @@ def build_plain_text(snapshot, host, port):
     for module_name in sorted(grouped.keys()):
         lines.extend(_plain_module_lines(module_name, grouped[module_name]))
         lines.append("")
+    lines.append("")
 
     width = shutil.get_terminal_size((120, 40)).columns
     return "\n".join(_truncate(line, width) for line in lines).rstrip() + "\n"
@@ -198,7 +200,13 @@ def run_live_renderer(state, host, port, refresh_hz, stop_event):
 
     console = Console()
     interval_sec = 1.0 / max(1.0, float(refresh_hz))
-    with Live(console=console, refresh_per_second=max(1.0, float(refresh_hz))) as live:
+    with Live(
+        console=console,
+        refresh_per_second=max(1.0, float(refresh_hz)),
+        screen=True,
+        transient=False,
+        vertical_overflow="crop",
+    ) as live:
         while not stop_event.is_set():
             live.update(build_table(state.snapshot(), host, port))
             stop_event.wait(interval_sec)

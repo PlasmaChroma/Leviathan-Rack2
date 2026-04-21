@@ -29,6 +29,8 @@ static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
+static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -3325,11 +3327,17 @@ struct TemporalDeckWidget : ModuleWidget {
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-        debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
-                                                    deckModule->getUiDrawCostUs() * 0.001f,
-                                                    deckModule->getUiScopePreviewCostUs(),
-                                                    deckModule->getUiScopePreviewStride(),
-                                                    metricValid);
+        double nowSec = system::getTime();
+        uint32_t debugId = deckModule->getDebugInstanceId();
+        double &lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
+        if (lastSubmitSec < 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
+          lastSubmitSec = nowSec;
+          debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
+                                                      deckModule->getUiDrawCostUs() * 0.001f,
+                                                      deckModule->getUiScopePreviewCostUs(),
+                                                      deckModule->getUiScopePreviewStride(),
+                                                      metricValid);
+        }
         char debugIdLabel[32];
         std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", deckModule->getDebugInstanceId());
         const float x = box.size.x - mm2px(0.9f);

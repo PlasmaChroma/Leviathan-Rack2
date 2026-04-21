@@ -17,6 +17,7 @@
 namespace {
 
 static constexpr float kScopeDisplayVerticalSupersampleMax = 2.f;
+static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 static std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 
 static float computeScopeDisplayVerticalSupersample(float rackZoom) {
@@ -83,6 +84,7 @@ struct TDScope final : Module {
   std::atomic<float> uiDebugScopeDensityPct {100.f};
   std::atomic<int> uiDebugScopeDensityRows {0};
   uint32_t debugInstanceId = 0u;
+  double uiDebugTerminalLastSubmitSec = -1.0;
   float uiPublishTimerSec = 0.f;
   float invalidMessageTimerSec = 1e9f;
   float invalidPreviewTimerSec = 1e9f;
@@ -1669,19 +1671,24 @@ struct TDScopeWidget : ModuleWidget {
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (scopeModule && isDragonKingDebugEnabled()) {
-      uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
-      float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
-      float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
-      int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
-      float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
-      float zoomThicknessMul = scopeModule->uiDebugScopeZoomThicknessMul.load(std::memory_order_relaxed);
-      debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                             uiDrawUsEma * 0.001f,
-                                             densityRows,
-                                             densityPct,
-                                             rackZoom,
-                                             zoomThicknessMul,
-                                             missCount);
+      double nowSec = system::getTime();
+      if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
+          (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
+        scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
+        uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
+        float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
+        float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
+        int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
+        float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
+        float zoomThicknessMul = scopeModule->uiDebugScopeZoomThicknessMul.load(std::memory_order_relaxed);
+        debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
+                                               uiDrawUsEma * 0.001f,
+                                               densityRows,
+                                               densityPct,
+                                               rackZoom,
+                                               zoomThicknessMul,
+                                               missCount);
+      }
       if (APP && APP->window && APP->window->uiFont) {
         char debugIdLabel[32];
         std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", scopeModule->debugInstanceId);
