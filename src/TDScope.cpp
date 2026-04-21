@@ -25,9 +25,9 @@ static float computeScopeDisplayVerticalSupersample(float rackZoom) {
   // Zoomed out: reduce total row density to save draw calls when several
   // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
   float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
-  float zoomInT = clamp((rackZoom - 1.0f) / 0.35f, 0.f, 1.f);
-  float supersample = 1.10f + (1.45f - 1.10f) * (1.f - zoomOutT);
-  supersample += (kScopeDisplayVerticalSupersampleMax - 1.45f) * zoomInT;
+  float zoomInT = clamp((rackZoom - 1.0f) / 1.0f, 0.f, 1.f);
+  float supersample = 1.10f + (1.35f - 1.10f) * (1.f - zoomOutT);
+  supersample += (kScopeDisplayVerticalSupersampleMax - 1.35f) * zoomInT;
   return clamp(supersample, 1.10f, kScopeDisplayVerticalSupersampleMax);
 }
 
@@ -1475,7 +1475,7 @@ struct TDScopeDisplayWidget final : Widget {
       constexpr uint8_t kHaloMinAlphaToDraw = 28u;
       constexpr float kHaloFullDensityThreshold = 0.72f;
       const bool denseHaloRows = rowStep <= 0.75f;
-      const bool fullHaloDensity = rackZoom >= 1.18f;
+      const bool fullHaloDensity = rackZoom >= 2.0f;
       bool prevValid = false;
       float prevX0 = laneCenterXForConnectors;
       float prevX1 = laneCenterXForConnectors;

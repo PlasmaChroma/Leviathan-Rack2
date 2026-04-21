@@ -74,10 +74,10 @@ public:
   Transport() { startWorker(); }
   ~Transport() {
     stop_.store(true, std::memory_order_relaxed);
+    closeSocket();
     if (worker_.joinable()) {
       worker_.join();
     }
-    closeSocket();
 #ifdef _WIN32
     if (wsaStarted_) {
       WSACleanup();
@@ -285,9 +285,11 @@ private:
       return;
     }
 #ifdef _WIN32
+    ::shutdown(sock_, SD_BOTH);
     ::closesocket(sock_);
     sock_ = INVALID_SOCKET;
 #else
+    ::shutdown(sock_, SHUT_RDWR);
     ::close(sock_);
     sock_ = -1;
 #endif
