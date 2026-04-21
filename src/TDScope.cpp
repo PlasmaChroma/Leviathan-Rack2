@@ -1267,8 +1267,13 @@ struct TDScopeDisplayWidget final : Widget {
       }
     }
 
-    auto gradientColorForIntensity = [&](float intensity, uint8_t alpha) -> NVGcolor {
-      intensity = clamp(intensity, 0.f, 1.f);
+    static std::array<std::array<NVGcolor, 256>, TDScope::COLOR_SCHEME_COUNT> colorLut;
+    static std::array<uint8_t, TDScope::COLOR_SCHEME_COUNT> colorLutValid {};
+    auto ensureColorLut = [&](int scheme) {
+      scheme = clamp(scheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
+      if (colorLutValid[size_t(scheme)]) {
+        return;
+      }
       float lowR = 85.f;
       float lowG = 227.f;
       float lowB = 238.f;
@@ -1280,104 +1285,96 @@ struct TDScopeDisplayWidget final : Widget {
       float highB = 218.f;
       float midPoint = 0.5f;
       float midHoldHalfWidth = 0.f;
-      switch (module->scopeColorScheme) {
+      switch (scheme) {
         case TDScope::COLOR_SCHEME_EMERALD:
-          // Emerald: low -> deep forest green, mid -> jade, high -> mint.
-          lowR = 15.f;   // #0f4f36
+          lowR = 15.f;
           lowG = 79.f;
           lowB = 54.f;
-          midR = 47.f;   // #2fa86e
+          midR = 47.f;
           midG = 168.f;
           midB = 110.f;
-          highR = 87.f;  // #57f0b6
+          highR = 87.f;
           highG = 240.f;
           highB = 182.f;
           midPoint = 0.52f;
           break;
         case TDScope::COLOR_SCHEME_WASP:
-          // Wasp: low -> amber shadow, mid -> warning orange, high -> yellow.
-          lowR = 33.f;   // #211b12
+          lowR = 33.f;
           lowG = 27.f;
           lowB = 18.f;
-          midR = 231.f;  // #e7892f
+          midR = 231.f;
           midG = 137.f;
           midB = 47.f;
-          highR = 255.f; // #ffd84a
+          highR = 255.f;
           highG = 216.f;
           highB = 74.f;
           midPoint = 0.58f;
           break;
         case TDScope::COLOR_SCHEME_PIXIE:
-          // Pixie: low -> candy pink, mid -> fairy lavender, high -> mint.
-          lowR = 255.f;  // #ff8fd1
+          lowR = 255.f;
           lowG = 143.f;
           lowB = 209.f;
-          midR = 211.f;  // #d3b4ef
+          midR = 211.f;
           midG = 180.f;
           midB = 239.f;
-          highR = 129.f; // #81ffd2
+          highR = 129.f;
           highG = 255.f;
           highB = 210.f;
           midPoint = 0.48f;
           break;
         case TDScope::COLOR_SCHEME_VIOLET_FLAME:
-          // Violet Flame: low -> indigo, mid -> flame magenta, high -> violet.
-          lowR = 42.f;   // #2a1f5f
+          lowR = 42.f;
           lowG = 31.f;
           lowB = 95.f;
-          midR = 147.f;  // #9347d9
+          midR = 147.f;
           midG = 71.f;
           midB = 217.f;
-          highR = 181.f; // #b56dff
+          highR = 181.f;
           highG = 109.f;
           highB = 255.f;
           midPoint = 0.54f;
           break;
         case TDScope::COLOR_SCHEME_ANGELIC:
-          // Angelic: low -> pearl, mid -> halo lavender, high -> sky blue.
-          lowR = 248.f;  // #f8f5ff
+          lowR = 248.f;
           lowG = 245.f;
           lowB = 255.f;
-          midR = 232.f;  // #e8dcff
+          midR = 232.f;
           midG = 220.f;
           midB = 255.f;
-          highR = 179.f; // #b3e5ff
+          highR = 179.f;
           highG = 229.f;
           highB = 255.f;
           midPoint = 0.40f;
           break;
         case TDScope::COLOR_SCHEME_HELLFIRE:
-          // Hellfire: low -> lava red, mid -> inferno orange, high -> ember.
-          lowR = 120.f;  // #78180f
+          lowR = 120.f;
           lowG = 24.f;
           lowB = 15.f;
-          midR = 255.f;  // #ff6f2b
+          midR = 255.f;
           midG = 111.f;
           midB = 43.f;
-          highR = 255.f; // #ffd166
+          highR = 255.f;
           highG = 209.f;
           highB = 102.f;
           midPoint = 0.60f;
           break;
         case TDScope::COLOR_SCHEME_PICKLE:
-          // Pickle: low -> dill green, mid -> olive brine, high -> chartreuse.
-          lowR = 62.f;   // #3e6f31
+          lowR = 62.f;
           lowG = 111.f;
           lowB = 49.f;
-          midR = 132.f;  // #84b948
+          midR = 132.f;
           midG = 185.f;
           midB = 72.f;
-          highR = 190.f; // #beea61
+          highR = 190.f;
           highG = 234.f;
           highB = 97.f;
           midPoint = 0.56f;
           break;
         case TDScope::COLOR_SCHEME_LEVIATHAN:
-          // Leviathan: low -> purple, mid -> vivid blue, high -> cyan.
           lowR = 122.f;
           lowG = 92.f;
           lowB = 255.f;
-          midR = 75.f;   // #4b8dff
+          midR = 75.f;
           midG = 141.f;
           midB = 255.f;
           highR = 28.f;
@@ -1387,57 +1384,74 @@ struct TDScopeDisplayWidget final : Widget {
           break;
         case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
         default:
-          // Temporal Deck: low cyan -> mid ember yellow -> high magenta.
           lowR = 85.f;
           lowG = 227.f;
           lowB = 238.f;
-          midR = 255.f;  // #ffbf56
+          midR = 255.f;
           midG = 191.f;
           midB = 86.f;
           highR = 233.f;
           highG = 112.f;
           highB = 218.f;
           midPoint = 0.5f;
-          // No midpoint hold: keep color flow continuous through the center.
           midHoldHalfWidth = 0.f;
           break;
       }
-      float r = 0.f;
-      float g = 0.f;
-      float b = 0.f;
-      float midStart = clamp(midPoint - midHoldHalfWidth, 0.f, 1.f);
-      float midEnd = clamp(midPoint + midHoldHalfWidth, 0.f, 1.f);
-      if (midEnd <= midStart + 1e-6f) {
-        if (intensity <= midPoint) {
-          float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+      for (int i = 0; i < 256; ++i) {
+        float intensity = float(i) / 255.f;
+        float r = 0.f;
+        float g = 0.f;
+        float b = 0.f;
+        float midStart = clamp(midPoint - midHoldHalfWidth, 0.f, 1.f);
+        float midEnd = clamp(midPoint + midHoldHalfWidth, 0.f, 1.f);
+        if (midEnd <= midStart + 1e-6f) {
+          if (intensity <= midPoint) {
+            float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+            r = lowR + (midR - lowR) * t;
+            g = lowG + (midG - lowG) * t;
+            b = lowB + (midB - lowB) * t;
+          } else {
+            float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+            r = midR + (highR - midR) * t;
+            g = midG + (highG - midG) * t;
+            b = midB + (highB - midB) * t;
+          }
+        } else if (intensity < midStart) {
+          float t = (midStart > 1e-6f) ? (intensity / midStart) : 0.f;
           r = lowR + (midR - lowR) * t;
           g = lowG + (midG - lowG) * t;
           b = lowB + (midB - lowB) * t;
+        } else if (intensity <= midEnd) {
+          r = midR;
+          g = midG;
+          b = midB;
         } else {
-          float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+          float t = (1.f - midEnd > 1e-6f) ? ((intensity - midEnd) / (1.f - midEnd)) : 1.f;
           r = midR + (highR - midR) * t;
           g = midG + (highG - midG) * t;
           b = midB + (highB - midB) * t;
         }
-      } else if (intensity < midStart) {
-        float t = (midStart > 1e-6f) ? (intensity / midStart) : 0.f;
-        r = lowR + (midR - lowR) * t;
-        g = lowG + (midG - lowG) * t;
-        b = lowB + (midB - lowB) * t;
-      } else if (intensity <= midEnd) {
-        r = midR;
-        g = midG;
-        b = midB;
-      } else {
-        float t = (1.f - midEnd > 1e-6f) ? ((intensity - midEnd) / (1.f - midEnd)) : 1.f;
-        r = midR + (highR - midR) * t;
-        g = midG + (highG - midG) * t;
-        b = midB + (highB - midB) * t;
+        uint8_t rq = uint8_t(std::lround(clamp(r, 0.f, 255.f)));
+        uint8_t gq = uint8_t(std::lround(clamp(g, 0.f, 255.f)));
+        uint8_t bq = uint8_t(std::lround(clamp(b, 0.f, 255.f)));
+        colorLut[size_t(scheme)][size_t(i)] = nvgRGBA(rq, gq, bq, 255);
       }
-      uint8_t rq = uint8_t(std::lround(clamp(r, 0.f, 255.f)));
-      uint8_t gq = uint8_t(std::lround(clamp(g, 0.f, 255.f)));
-      uint8_t bq = uint8_t(std::lround(clamp(b, 0.f, 255.f)));
-      return nvgRGBA(rq, gq, bq, alpha);
+      colorLutValid[size_t(scheme)] = 1u;
+    };
+    auto gradientColorForIntensity = [&](float intensity, uint8_t alpha) -> NVGcolor {
+      int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
+      ensureColorLut(scheme);
+      int index = clamp(int(std::lround(clamp(intensity, 0.f, 1.f) * 255.f)), 0, 255);
+      NVGcolor c = colorLut[size_t(scheme)][size_t(index)];
+      // Keep a strong top-end accent without paying for a second boost stroke pass.
+      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.82f) / 0.18f, 0.f, 1.f);
+      hotT = hotT * hotT;
+      float hotLift = 0.24f * hotT;
+      c.r = c.r + (1.f - c.r) * hotLift;
+      c.g = c.g + (1.f - c.g) * hotLift;
+      c.b = c.b + (1.f - c.b) * hotLift;
+      c.a = float(alpha) / 255.f;
+      return c;
     };
 
     auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
@@ -1511,17 +1525,6 @@ struct TDScopeDisplayWidget final : Widget {
         nvgStrokeColor(args.vg, mainC);
         nvgStrokeWidth(args.vg, mainW);
         nvgStroke(args.vg);
-
-        if (visual > 0.86f) {
-          float boostT = clamp((visual - 0.86f) / 0.14f, 0.f, 1.f);
-          NVGcolor boostC = gradientColorForIntensity(1.f, uint8_t(std::lround(52.f + 108.f * boostT)));
-          nvgBeginPath(args.vg);
-          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
-          nvgLineTo(args.vg, x1[idx], rowY[idx]);
-          nvgStrokeColor(args.vg, boostC);
-          nvgStrokeWidth(args.vg, mainW + 0.34f * zoomThicknessMul);
-          nvgStroke(args.vg);
-        }
 
         if (prevValid) {
           float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
@@ -1705,20 +1708,21 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     menu->addChild(new MenuSeparator());
-    menu->addChild(createMenuLabel("Scope Range"));
-    menu->addChild(createCheckMenuItem(
-      "Auto (window peak)", "",
-      [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO; },
-      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_AUTO; }));
-    menu->addChild(createCheckMenuItem(
-      "+/-2.5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_2V5; },
-      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_2V5; }));
-    menu->addChild(createCheckMenuItem(
-      "+/-5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_5V; },
-      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_5V; }));
-    menu->addChild(createCheckMenuItem(
-      "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
-      [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
+    menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
+      submenu->addChild(createCheckMenuItem(
+        "Auto (window peak)", "",
+        [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO; },
+        [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_AUTO; }));
+      submenu->addChild(createCheckMenuItem(
+        "+/-2.5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_2V5; },
+        [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_2V5; }));
+      submenu->addChild(createCheckMenuItem(
+        "+/-5V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_5V; },
+        [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_5V; }));
+      submenu->addChild(createCheckMenuItem(
+        "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
+        [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
+    }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Channel View"));
