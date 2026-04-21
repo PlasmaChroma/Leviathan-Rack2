@@ -1,13 +1,15 @@
-import os
+import shutil
+import sys
 import time
 
 try:
-    from rich.console import Console
+    from rich.console import Console, Group
     from rich.live import Live
     from rich.table import Table
     from rich.text import Text
 except ImportError:
     Console = None
+    Group = None
     Live = None
     Table = None
     Text = None
@@ -79,14 +81,97 @@ def build_module_table(module_name, rows):
 
 
 def build_table(snapshot, host, port):
-    outer = Table(title="Debug Terminal %s:%d" % (host, port), show_header=False, box=None, pad_edge=False)
-    outer.add_column("Tables")
+    renderables = []
+    if Text is None:
+        renderables.append("Debug Terminal %s:%d" % (host, port))
+        renderables.append(
+            "clients=%d  rows=%d  events=%d  parse_errors=%d  eps=%.1f"
+            % (
+                snapshot["client_count"],
+                len(snapshot["rows"]),
+                snapshot["events_total"],
+                snapshot["parse_errors"],
+                snapshot["events_per_sec"],
+            )
+        )
+    else:
+        title = Text()
+        title.append("Debug Terminal ", style="bold")
+        title.append("%s:%d" % (host, port), style="cyan")
+        renderables.append(title)
+
+        status = Text()
+        status.append("clients=%d" % snapshot["client_count"], style="green")
+        status.append("  ")
+        status.append("rows=%d" % len(snapshot["rows"]), style="white")
+        status.append("  ")
+        status.append("events=%d" % snapshot["events_total"], style="white")
+        status.append("  ")
+        status.append("parse_errors=%d" % snapshot["parse_errors"], style="yellow" if snapshot["parse_errors"] else "dim")
+        status.append("  ")
+        status.append("eps=%.1f" % snapshot["events_per_sec"], style="magenta")
+        renderables.append(status)
 
     grouped = _group_rows_by_module(snapshot)
     for module_name in sorted(grouped.keys()):
-        outer.add_row(build_module_table(module_name, grouped[module_name]))
+        renderables.append(build_module_table(module_name, grouped[module_name]))
+    return Group(*renderables)
 
-    outer.caption = (
+
+def _truncate(text, width):
+    text = str(text)
+    if width <= 0:
+        return ""
+    if len(text) <= width:
+        return text
+    if width == 1:
+        return text[:1]
+    if width <= 3:
+        return text[:width]
+    return text[: width - 3] + "..."
+
+
+def _plain_module_lines(module_name, rows):
+    columns = _module_columns(module_name)
+    header = ["Instance", "Stream"] + [label for _, label in columns] + ["Age"]
+    table_rows = []
+    for row in rows:
+        data = row["data"]
+        values = [row["instance"], row["stream"]]
+        for key, _ in columns:
+            values.append(_format_metric(data.get(key)))
+        values.append("%.2fs" % row["age_sec"])
+        table_rows.append(values)
+
+    widths = [len(label) for label in header]
+    for values in table_rows:
+        for i, value in enumerate(values):
+            widths[i] = max(widths[i], len(str(value)))
+
+    max_widths = [14, 10] + [10 for _ in columns] + [8]
+    widths = [min(widths[i], max_widths[i]) for i in range(len(widths))]
+
+    align_right = [False, False] + [True for _ in columns] + [True]
+
+    def format_row(values):
+      cells = []
+      for i, value in enumerate(values):
+          cell = _truncate(value, widths[i])
+          if align_right[i]:
+              cells.append(cell.rjust(widths[i]))
+          else:
+              cells.append(cell.ljust(widths[i]))
+      return "  ".join(cells).rstrip()
+
+    lines = ["%s (%d)" % (module_name, len(rows)), format_row(header)]
+    for values in table_rows:
+        lines.append(format_row(values))
+    return lines
+
+
+def build_plain_text(snapshot, host, port):
+    lines = [
+        "Debug Terminal %s:%d" % (host, port),
         "clients=%d  rows=%d  events=%d  parse_errors=%d  eps=%.1f"
         % (
             snapshot["client_count"],
@@ -94,9 +179,17 @@ def build_table(snapshot, host, port):
             snapshot["events_total"],
             snapshot["parse_errors"],
             snapshot["events_per_sec"],
-        )
-    )
-    return outer
+        ),
+        "",
+    ]
+
+    grouped = _group_rows_by_module(snapshot)
+    for module_name in sorted(grouped.keys()):
+        lines.extend(_plain_module_lines(module_name, grouped[module_name]))
+        lines.append("")
+
+    width = shutil.get_terminal_size((120, 40)).columns
+    return "\n".join(_truncate(line, width) for line in lines).rstrip() + "\n"
 
 
 def run_live_renderer(state, host, port, refresh_hz, stop_event):
@@ -113,38 +206,22 @@ def run_live_renderer(state, host, port, refresh_hz, stop_event):
 
 def run_plain_renderer(state, host, port, refresh_hz, stop_event):
     interval_sec = 1.0 / max(1.0, float(refresh_hz))
-    while not stop_event.is_set():
-        snapshot = state.snapshot()
-        os.system("clear")
-        print("Debug Terminal %s:%d" % (host, port))
-        print(
-            "clients=%d rows=%d events=%d parse_errors=%d eps=%.1f"
-            % (
-                snapshot["client_count"],
-                len(snapshot["rows"]),
-                snapshot["events_total"],
-                snapshot["parse_errors"],
-                snapshot["events_per_sec"],
-            )
-        )
-        print("")
-
-        grouped = _group_rows_by_module(snapshot)
-        for module_name in sorted(grouped.keys()):
-            rows = grouped[module_name]
-            columns = _module_columns(module_name)
-            print("%s (%d)" % (module_name, len(rows)))
-            header = ["Instance", "Stream"] + [label for _, label in columns] + ["Age"]
-            formats = ["{:<14}", "{:<8}"] + ["{:>10}" for _ in columns] + ["{:>8}"]
-            row_fmt = " ".join(formats)
-            print(row_fmt.format(*header))
-            for row in rows:
-                data = row["data"]
-                values = [row["instance"][:14], row["stream"][:8]]
-                for key, _ in columns:
-                    values.append(_format_metric(data.get(key)))
-                values.append("%.2fs" % row["age_sec"])
-                print(row_fmt.format(*values))
-            print("")
-
-        stop_event.wait(interval_sec)
+    use_ansi = sys.stdout.isatty()
+    if use_ansi:
+        sys.stdout.write("\x1b[?25l\x1b[2J")
+        sys.stdout.flush()
+    try:
+        while not stop_event.is_set():
+            frame = build_plain_text(state.snapshot(), host, port)
+            if use_ansi:
+                sys.stdout.write("\x1b[H\x1b[J")
+                sys.stdout.write(frame)
+                sys.stdout.flush()
+            else:
+                sys.stdout.write(frame)
+                sys.stdout.flush()
+            stop_event.wait(interval_sec)
+    finally:
+        if use_ansi:
+            sys.stdout.write("\x1b[?25h")
+            sys.stdout.flush()

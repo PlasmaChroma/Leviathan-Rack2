@@ -45,6 +45,11 @@ TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
+
+ifneq (,$(findstring mingw,$(CXX_MACHINE)))
+LDFLAGS += -lws2_32
+endif
+
 RACK_RUNTIME_DIR := $(abspath $(RACK_DIR))
 # Optional extra runtime directory for libRack.dll (e.g. /c/Program Files/VCV/Rack2Pro).
 # Keep this as a single directory path; pass it at invocation time if needed:
