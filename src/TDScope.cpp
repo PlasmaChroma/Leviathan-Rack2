@@ -359,7 +359,9 @@ struct TDScopeDisplayWidget final : Widget {
   Vec lagDragCursorPos;
   float lagDragAnchorCursorY = 0.f;
   float lagDragAnchorLagSamples = 0.f;
-  float lagDragSamplesPerPixel = 0.f;
+  float lagDragReferenceHeight = 1.f;
+  float lagDragTravelSamples = 0.f;
+  float lagDragNormalizedOffset = 0.f;
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
@@ -402,21 +404,11 @@ struct TDScopeDisplayWidget final : Widget {
     return map;
   }
 
-  float lagSamplesPerPixelForDrag(const ScopeWindowMap &map, float sampleRate) const {
-    if (!map.valid) {
-      return 0.f;
+  float currentRackZoom() const {
+    if (APP && APP->scene && APP->scene->rackScroll) {
+      return std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
     }
-    // CONTAINMENT NOTE
-    // TD.Scope is supposed to behave like an I/O layer for drag intent, not
-    // the canonical home of scratch semantics. In practice this mapping is a
-    // calibrated compromise: it starts from nominal platter-turn distance, then
-    // is scaled so the end-to-end result feels deck-equivalent after the host
-    // and engine apply their own scratch dynamics. Do not read this as a pure
-    // geometric law. If this area is revisited, the long-term target is:
-    // Scope emits stable drag intent only, TemporalDeck owns all platter/live
-    // compensation semantics.
-    float samplesPerRevolution = std::max(sampleRate, 1.f) * (60.f / std::max(kNominalPlatterRpm, 1e-6f));
-    return (samplesPerRevolution * kScopeDragNominalTurnScale) / map.drawYDen;
+    return 1.f;
   }
 
   bool beginLagDragAt(Vec pos) {
@@ -434,7 +426,9 @@ struct TDScopeDisplayWidget final : Widget {
     lagDragLastMoveSec = system::getTime();
     float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
     lagDragAnchorLagSamples = anchorLagSamples;
-    lagDragSamplesPerPixel = lagSamplesPerPixelForDrag(map, lastGoodMsg.sampleRate);
+    lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
+    lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
+    lagDragNormalizedOffset = 0.f;
     lagDragLocalLagSamples = anchorLagSamples;
     module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
     return true;
@@ -443,7 +437,9 @@ struct TDScopeDisplayWidget final : Widget {
   void endLagDrag() {
     lagDragging = false;
     lagDragResidualY = 0.f;
-    lagDragSamplesPerPixel = 0.f;
+    lagDragReferenceHeight = 1.f;
+    lagDragTravelSamples = 0.f;
+    lagDragNormalizedOffset = 0.f;
     if (module) {
       module->setLagDragRequest(false, 0.f);
     }
@@ -487,14 +483,18 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep this close to platter drag sensitivity so rapid short reversals
     // feel immediate instead of waiting on accumulated cursor motion.
     constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    lagDragResidualY += e.mouseDelta.y;
+    // DragMoveEvent mouseDelta is reported in screen pixels, but the anchor
+    // cursor position and widget box size live in rack-local coordinates
+    // under ZoomWidget. Normalize delta back into local scope space so drag
+    // travel stays consistent across rack zoom levels.
+    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
+    lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
       e.consume(this);
       return;
     }
     float appliedDeltaY = lagDragResidualY;
-    lagDragCursorPos.y += appliedDeltaY;
     lagDragResidualY = 0.f;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
@@ -516,15 +516,16 @@ struct TDScopeDisplayWidget final : Widget {
       // stutter because compensation fights reversal intent.
       lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
     }
+    lagDragNormalizedOffset += appliedDeltaY / std::max(lagDragReferenceHeight, 1.f);
     ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
     if (!map.valid) {
       return;
     }
 
     float previousLag = lagDragLocalLagSamples;
-    // Project cursor motion into a drag-start-anchored platter-equivalent lag
-    // space so travel does not inflate as the live scope window recenters.
-    float desiredPlaybackLag = lagDragAnchorLagSamples + (lagDragCursorPos.y - lagDragAnchorCursorY) * lagDragSamplesPerPixel;
+    // Keep scope drag in normalized local travel space so behavior is tied to
+    // the visible scope window rather than raw rendered pixel density.
+    float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
