@@ -1430,7 +1430,10 @@ struct TDScopeDisplayWidget final : Widget {
         float visual = clamp(visualIntensity[idx], 0.f, 1.f);
         float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
         float mainW = (0.78f + 0.62f * visual) * zoomThicknessMul;
-        float haloT = clamp((transientLift - 0.025f) / 0.975f, 0.f, 1.f);
+        // Bias toward faster fade-out for lower-transient content while
+        // preserving strong halo response for high-transient peaks.
+        float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
+        float haloT = haloLinear * haloLinear;
         NVGcolor mainC = brightenColor(
           gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual))),
           transientLift * 0.90f);
