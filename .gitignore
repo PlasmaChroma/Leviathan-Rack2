@@ -13,3 +13,7 @@
 
 # Local runtime debug flag
 /res/dragonking.txt
+
+# Python cache artifacts
+__pycache__/
+*.pyc
