@@ -14,7 +14,18 @@
 
 namespace {
 
-static constexpr float kScopeDisplayVerticalSupersample = 2.f;
+static constexpr float kScopeDisplayVerticalSupersampleMax = 2.f;
+
+static float computeScopeDisplayVerticalSupersample(float rackZoom) {
+  rackZoom = std::max(rackZoom, 1e-4f);
+  // Zoomed out: reduce total row density to save draw calls when several
+  // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
+  float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
+  float zoomInT = clamp((rackZoom - 1.0f) / 0.35f, 0.f, 1.f);
+  float supersample = 1.10f + (1.45f - 1.10f) * (1.f - zoomOutT);
+  supersample += (kScopeDisplayVerticalSupersampleMax - 1.45f) * zoomInT;
+  return clamp(supersample, 1.10f, kScopeDisplayVerticalSupersampleMax);
+}
 
 static PanelBorder *findPanelBorder(Widget *widget) {
   if (!widget) {
@@ -814,7 +825,8 @@ struct TDScopeDisplayWidget final : Widget {
       readHeadDrawY = 0.5f * (drawTop + drawBottom);
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = std::max(1, int(std::ceil(drawHeight * kScopeDisplayVerticalSupersample)));
+    float displaySupersample = computeScopeDisplayVerticalSupersample(rackZoom);
+    const int rowCount = std::max(1, int(std::ceil(drawHeight * displaySupersample)));
     size_t rowCountU = size_t(rowCount);
     const float rowStep = drawHeight / float(rowCount);
     if (rowX0.size() != rowCountU) {
@@ -1414,6 +1426,10 @@ struct TDScopeDisplayWidget final : Widget {
                         float laneCenterXForConnectors) {
       // Continuous gradient rendering: draw each row and connector using its
       // actual visual intensity, rather than quantizing to discrete buckets.
+      constexpr uint8_t kHaloMinAlphaToDraw = 28u;
+      constexpr float kHaloFullDensityThreshold = 0.72f;
+      const bool denseHaloRows = rowStep <= 0.75f;
+      const bool fullHaloDensity = rackZoom >= 1.18f;
       bool prevValid = false;
       float prevX0 = laneCenterXForConnectors;
       float prevX1 = laneCenterXForConnectors;
@@ -1439,15 +1455,24 @@ struct TDScopeDisplayWidget final : Widget {
           transientLift * 0.90f);
 
         if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
-          float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-          float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
           uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-          nvgBeginPath(args.vg);
-          nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
-          nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
-          nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, haloAlpha));
-          nvgStrokeWidth(args.vg, haloW);
-          nvgStroke(args.vg);
+          bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
+          // The main trace already renders every supersampled row. For the
+          // diffuse halo, decimating lower-energy rows in dense layouts keeps
+          // the look while materially cutting UI-thread stroke count.
+          if (drawHaloRow && !fullHaloDensity && denseHaloRows && haloT < kHaloFullDensityThreshold && (iy & 1)) {
+            drawHaloRow = false;
+          }
+          if (drawHaloRow) {
+            float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
+            float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
+            nvgBeginPath(args.vg);
+            nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
+            nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
+            nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, haloAlpha));
+            nvgStrokeWidth(args.vg, haloW);
+            nvgStroke(args.vg);
+          }
         }
 
         nvgBeginPath(args.vg);
