@@ -507,3 +507,52 @@ This appendix tracks concrete work completed in code (not just proposed).
   - fixed-point window anchoring and scope protocol behavior,
   - current anti-jitter approach,
   - staged optimization roadmap for host caching and UI rendering.
+## TD.Scope drag containment note
+
+Current state:
+
+- `TD.Scope` drag is close to final behavior, but the implementation is a
+  compromise rather than a clean architectural endpoint.
+- The original intent was for `TD.Scope` to be mostly an I/O layer that emits
+  drag intent, while `TemporalDeck` remains the authoritative home of scratch
+  semantics.
+- In practice, some live-mode behavior had to be patched on the Scope side as
+  well, because the live write head keeps advancing between UI snapshots and
+  expander request updates.
+
+Why it looks "wrong":
+
+- `src/TDScope.cpp` now contains live-mode drag compensation and UI-side clamp
+  headroom logic.
+- `src/TemporalDeck.cpp` translates scope expander requests into platter-like
+  gesture input for the engine.
+- `src/TemporalDeckEngine.hpp` contains an additional reverse-intent safeguard
+  so slow live drags away from NOW are not overridden by write-head baseline
+  compensation.
+
+This means the current behavior is split across Scope, host, and engine.
+That split is intentional for containment, not because it is the ideal design.
+
+Symptoms that led to these workarounds:
+
+- Scope drag initially over-traveled compared to platter drag.
+- Live downward drags could hit a false "barrier" unless write-head motion was
+  accounted for.
+- Fixing that naively caused upward drag stutter, so the live anchor
+  compensation became direction-specific.
+
+What future ancestors should assume:
+
+- Do not treat the current Scope drag math as a clean physical law.
+- Do not assume the Scope-side live compensation is generally desirable; it is
+  there to preserve current behavior.
+- If refactoring, the proper end goal is still:
+  `TD.Scope` emits stable drag intent only, and `TemporalDeck`/engine own live
+  platter equivalence and write-head compensation.
+
+What to re-test if this is touched:
+
+- Slow live downward drag for the old "barrier" symptom.
+- Upward drag for reversal stutter.
+- Full-height scope sweep travel against platter-equivalent turn distance.
+- Rapid direction reversals for latency / inertia feel.

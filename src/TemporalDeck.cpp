@@ -1220,6 +1220,14 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
           velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
           scopeTraceVelocityApplied = velocitySamples;
+          // CONTAINMENT NOTE
+          // This receive path is where expander-supplied scope drag becomes a
+          // "real" platter gesture for the engine. That means Scope and host
+          // currently share behavior responsibility, even though the intended
+          // architecture is for Scope to be mostly I/O. Keep that in mind when
+          // refactoring: if this translation is simplified without also moving
+          // the live-drag workarounds out of TDScope, regressions will look
+          // like stalled live drags, over-travel, or delayed reversals.
           // Scope emits equivalent platter-gesture intent. TemporalDeck
           // realizes that intent through the same scratch gesture path used
           // by actual platter dragging.

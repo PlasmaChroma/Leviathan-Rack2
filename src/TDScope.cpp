@@ -377,6 +377,15 @@ struct TDScopeDisplayWidget final : Widget {
     if (!map.valid) {
       return 0.f;
     }
+    // CONTAINMENT NOTE
+    // TD.Scope is supposed to behave like an I/O layer for drag intent, not
+    // the canonical home of scratch semantics. In practice this mapping is a
+    // calibrated compromise: it starts from nominal platter-turn distance, then
+    // is scaled so the end-to-end result feels deck-equivalent after the host
+    // and engine apply their own scratch dynamics. Do not read this as a pure
+    // geometric law. If this area is revisited, the long-term target is:
+    // Scope emits stable drag intent only, TemporalDeck owns all platter/live
+    // compensation semantics.
     float samplesPerRevolution = std::max(sampleRate, 1.f) * (60.f / std::max(kNominalPlatterRpm, 1e-6f));
     return (samplesPerRevolution * kScopeDragNominalTurnScale) / map.drawYDen;
   }
@@ -461,6 +470,18 @@ struct TDScopeDisplayWidget final : Widget {
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
     if (!sampleMode && !freezeActive && appliedDeltaY > 0.f) {
+      // CONTAINMENT NOTE
+      // This is not architecturally "clean". Scope is compensating for live
+      // write-head advance here because, without it, slow downward drags in
+      // live mode can fall behind the moving lag reference and feel like they
+      // hit a false barrier. The matching trace that exposed this looked like:
+      // target lag going stale while frame lag kept advancing.
+      //
+      // This compensation is intentionally one-sided. Applying it during
+      // upward drags created visible/audible stutter because it fought reversal
+      // intent. If future work removes or moves this logic, re-test both:
+      // 1. slow downward live drags for the "barrier" symptom
+      // 2. upward drags for reversal stutter
       // In live mode, compensate write-head advance only while dragging away
       // from NOW (downward). Applying this during upward drags can feel like
       // stutter because compensation fights reversal intent.
@@ -484,6 +505,12 @@ struct TDScopeDisplayWidget final : Widget {
       }
       lagDragLocalLagSamples = float(wrappedLag);
     } else {
+      // CONTAINMENT NOTE
+      // This extra headroom is another live-mode workaround. Fresh host
+      // snapshots arrive at UI cadence, not audio cadence, so a strict clamp to
+      // the last advertised accessible lag can create a false local ceiling
+      // during live drag. The host still remains authoritative; this just keeps
+      // the UI-side request from getting artificially pinned too early.
       // Live (non-sample) streaming advances the write head between UI updates.
       // Add dynamic headroom so scope-side clamping doesn't create a false
       // downward barrier while dragging away from NOW.

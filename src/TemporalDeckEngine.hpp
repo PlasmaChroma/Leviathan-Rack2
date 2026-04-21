@@ -2448,6 +2448,14 @@ struct TemporalDeckEngine {
           }
           bool reverseGestureIntent = gestureDirection < 0.f;
           if (manualTouchScratch && manualMotionActive && platterGestureVelocity < 0.f) {
+            // CONTAINMENT NOTE
+            // This branch exists because slow live drags away from NOW were
+            // getting classified too weakly to overcome write-head baseline
+            // compensation, which manifested as a downward "barrier" in
+            // TD.Scope-driven drag. The cleaner architecture would be for the
+            // expander/host contract to encode this intent unambiguously before
+            // it gets here; for now the engine preserves reverse intent for any
+            // negative touch velocity during active manual motion.
             // In live touch drag, even slow negative gesture velocity means the
             // user is pulling away from NOW. Preserve reverse intent so write
             // compensation does not create a false downward "barrier".
