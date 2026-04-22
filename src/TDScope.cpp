@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <vector>
 
@@ -67,11 +68,7 @@ struct TDScope final : Module {
   enum DebugRenderMode {
     DEBUG_RENDER_STANDARD = 0,
     DEBUG_RENDER_TAIL_RASTER,
-    DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT,
-    DEBUG_RENDER_GEOMETRY_HISTORY,
-    DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT,
-    DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY,
-    DEBUG_RENDER_OPENGL_GEOMETRY,
+    DEBUG_RENDER_OPENGL,
     DEBUG_RENDER_COUNT
   };
   enum ColorScheme {
@@ -119,10 +116,6 @@ struct TDScope final : Module {
   bool debugRenderStereoRightLaneEnabled = true;
   bool debugFramebufferCacheEnabled = true;
   int debugRenderMode = DEBUG_RENDER_STANDARD;
-  bool debugTailRasterCacheEnabled = false;
-  bool debugTailRasterGpuShiftEnabled = false;
-  bool debugGeometryHistoryCacheEnabled = false;
-  bool debugGlGeometryEnabled = false;
   int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
@@ -177,24 +170,15 @@ struct TDScope final : Module {
   }
 
   bool useTailRasterRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_TAIL_RASTER || debugRenderMode == DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT ||
-           debugRenderMode == DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT;
-  }
-
-  bool useTailRasterGpuShiftRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT ||
-           debugRenderMode == DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT;
+    return debugRenderMode == DEBUG_RENDER_TAIL_RASTER;
   }
 
   bool useGeometryHistoryRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_GEOMETRY_HISTORY ||
-           debugRenderMode == DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT ||
-           debugRenderMode == DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY;
+    return debugRenderMode == DEBUG_RENDER_OPENGL;
   }
 
   bool useOpenGlGeometryRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_OPENGL_GEOMETRY ||
-           debugRenderMode == DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY;
+    return debugRenderMode == DEBUG_RENDER_OPENGL;
   }
 
   json_t *dataToJson() override {
@@ -209,10 +193,6 @@ struct TDScope final : Module {
     json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
     json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode));
-    json_object_set_new(root, "debugTailRasterCacheEnabled", json_boolean(useTailRasterRenderMode()));
-    json_object_set_new(root, "debugTailRasterGpuShiftEnabled", json_boolean(useTailRasterGpuShiftRenderMode()));
-    json_object_set_new(root, "debugGeometryHistoryCacheEnabled", json_boolean(useGeometryHistoryRenderMode()));
-    json_object_set_new(root, "debugGlGeometryEnabled", json_boolean(useOpenGlGeometryRenderMode()));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
     return root;
   }
@@ -260,7 +240,19 @@ struct TDScope final : Module {
     bool loadedRenderMode = false;
     json_t *renderModeJ = json_object_get(root, "debugRenderMode");
     if (renderModeJ) {
-      debugRenderMode = clamp(int(json_integer_value(renderModeJ)), DEBUG_RENDER_STANDARD, DEBUG_RENDER_COUNT - 1);
+      int rawRenderMode = int(json_integer_value(renderModeJ));
+      switch (rawRenderMode) {
+        case 0: debugRenderMode = DEBUG_RENDER_STANDARD; break;
+        case 1: debugRenderMode = DEBUG_RENDER_TAIL_RASTER; break;
+        case 2: debugRenderMode = DEBUG_RENDER_OPENGL; break;
+        case 3: debugRenderMode = DEBUG_RENDER_STANDARD; break;
+        case 4: debugRenderMode = DEBUG_RENDER_TAIL_RASTER; break;
+        case 5: debugRenderMode = DEBUG_RENDER_OPENGL; break;
+        case 6: debugRenderMode = DEBUG_RENDER_OPENGL; break;
+        default:
+          debugRenderMode = clamp(rawRenderMode, DEBUG_RENDER_STANDARD, DEBUG_RENDER_COUNT - 1);
+          break;
+      }
       loadedRenderMode = true;
     }
     if (!loadedRenderMode) {
@@ -285,23 +277,19 @@ struct TDScope final : Module {
         legacyGlGeometry = json_boolean_value(glGeometryJ);
       }
       if (legacyGlGeometry && legacyGeometryHistory) {
-        debugRenderMode = DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY;
+        debugRenderMode = DEBUG_RENDER_OPENGL;
       } else if (legacyGlGeometry) {
-        debugRenderMode = DEBUG_RENDER_OPENGL_GEOMETRY;
+        debugRenderMode = DEBUG_RENDER_OPENGL;
       } else if (legacyGeometryHistory) {
-        debugRenderMode = DEBUG_RENDER_GEOMETRY_HISTORY;
+        debugRenderMode = DEBUG_RENDER_STANDARD;
       } else if (legacyTailRasterGpuShift) {
-        debugRenderMode = DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT;
+        debugRenderMode = DEBUG_RENDER_TAIL_RASTER;
       } else if (legacyTailRaster) {
         debugRenderMode = DEBUG_RENDER_TAIL_RASTER;
       } else {
         debugRenderMode = DEBUG_RENDER_STANDARD;
       }
     }
-    debugTailRasterCacheEnabled = useTailRasterRenderMode();
-    debugTailRasterGpuShiftEnabled = useTailRasterGpuShiftRenderMode();
-    debugGeometryHistoryCacheEnabled = useGeometryHistoryRenderMode();
-    debugGlGeometryEnabled = useOpenGlGeometryRenderMode();
     json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
     if (publishRateJ) {
       debugUiPublishRateMode =
@@ -516,6 +504,7 @@ struct TDScopeDisplayWidget final : Widget {
   float historyReferenceWindowBottomLag = 0.f;
   float historyNewestPosSamples = 0.f;
   float historyShiftResidualRows = 0.f;
+  int historyHeadRow = 0;
   std::vector<LiveScopeBucket> liveBucketsLeft;
   std::vector<LiveScopeBucket> liveBucketsRight;
   bool liveBucketsInitialized = false;
@@ -548,11 +537,8 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastStereoRightLaneEnabled = false;
   int redrawLastRenderMode = -1;
   int tailRasterImage = -1;
-  int tailRasterScratchImage = -1;
   int tailRasterW = 0;
   int tailRasterH = 0;
-  GLuint tailRasterFbo = 0;
-  GLuint tailRasterScratchFbo = 0;
   std::vector<uint8_t> tailRasterPixels;
   bool tailRasterValid = false;
   bool tailRasterStereo = false;
@@ -569,16 +555,7 @@ struct TDScopeDisplayWidget final : Widget {
         if (tailRasterImage >= 0) {
           nvgDeleteImage(vg, tailRasterImage);
         }
-        if (tailRasterScratchImage >= 0) {
-          nvgDeleteImage(vg, tailRasterScratchImage);
-        }
       }
-    }
-    if (tailRasterFbo != 0) {
-      glDeleteFramebuffers(1, &tailRasterFbo);
-    }
-    if (tailRasterScratchFbo != 0) {
-      glDeleteFramebuffers(1, &tailRasterScratchFbo);
     }
   }
 
@@ -1604,6 +1581,7 @@ struct TDScopeDisplayWidget final : Widget {
         historyMarginRows = historyMargin;
         historyRowCount = rowCount;
         historyStereoLayout = renderStereo;
+        historyHeadRow = 0;
         historyX0.assign(size_t(historyCapacityRows), lane0CenterX);
         historyX1.assign(size_t(historyCapacityRows), lane0CenterX);
         historyX0Right.assign(size_t(historyCapacityRows), lane1CenterX);
@@ -1628,8 +1606,16 @@ struct TDScopeDisplayWidget final : Widget {
         if (y1 < y0) {
           return;
         }
+        auto historySlotForLogicalRow = [&](int logicalRow) {
+          int slot = historyHeadRow + logicalRow;
+          slot %= historyCapacityRows;
+          if (slot < 0) {
+            slot += historyCapacityRows;
+          }
+          return slot;
+        };
         for (int iy = y0; iy <= y1; ++iy) {
-          size_t idx = size_t(iy);
+          size_t idx = size_t(historySlotForLogicalRow(iy));
           historyX0[idx] = lane0CenterX;
           historyX1[idx] = lane0CenterX;
           historyVisualIntensity[idx] = 0.f;
@@ -1647,32 +1633,15 @@ struct TDScopeDisplayWidget final : Widget {
         if (shiftRows == 0) {
           return;
         }
-        size_t count = size_t(historyCapacityRows - std::abs(shiftRows));
+        historyHeadRow += shiftRows;
+        historyHeadRow %= historyCapacityRows;
+        if (historyHeadRow < 0) {
+          historyHeadRow += historyCapacityRows;
+        }
         if (shiftRows > 0) {
-          std::memmove(historyX0.data(), historyX0.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyX1.data(), historyX1.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyVisualIntensity.data(), historyVisualIntensity.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyValid.data(), historyValid.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyHoldFrames.data(), historyHoldFrames.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyX0Right.data(), historyX0Right.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyX1Right.data(), historyX1Right.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyVisualIntensityRight.data(), historyVisualIntensityRight.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyValidRight.data(), historyValidRight.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyHoldFramesRight.data(), historyHoldFramesRight.data() + shiftRows, count * sizeof(uint8_t));
           clearHistoryRows(historyCapacityRows - shiftRows, historyCapacityRows - 1);
         } else {
-          int downRows = -shiftRows;
-          std::memmove(historyX0.data() + downRows, historyX0.data(), count * sizeof(float));
-          std::memmove(historyX1.data() + downRows, historyX1.data(), count * sizeof(float));
-          std::memmove(historyVisualIntensity.data() + downRows, historyVisualIntensity.data(), count * sizeof(float));
-          std::memmove(historyValid.data() + downRows, historyValid.data(), count * sizeof(uint8_t));
-          std::memmove(historyHoldFrames.data() + downRows, historyHoldFrames.data(), count * sizeof(uint8_t));
-          std::memmove(historyX0Right.data() + downRows, historyX0Right.data(), count * sizeof(float));
-          std::memmove(historyX1Right.data() + downRows, historyX1Right.data(), count * sizeof(float));
-          std::memmove(historyVisualIntensityRight.data() + downRows, historyVisualIntensityRight.data(), count * sizeof(float));
-          std::memmove(historyValidRight.data() + downRows, historyValidRight.data(), count * sizeof(uint8_t));
-          std::memmove(historyHoldFramesRight.data() + downRows, historyHoldFramesRight.data(), count * sizeof(uint8_t));
-          clearHistoryRows(0, downRows - 1);
+          clearHistoryRows(0, -shiftRows - 1);
         }
       };
 
@@ -1691,7 +1660,12 @@ struct TDScopeDisplayWidget final : Widget {
           return;
         }
         for (int iy = startRow; iy <= endRow; ++iy) {
-          size_t idx = size_t(iy);
+          int slot = historyHeadRow + iy;
+          slot %= historyCapacityRows;
+          if (slot < 0) {
+            slot += historyCapacityRows;
+          }
+          size_t idx = size_t(slot);
           bool prevValid = (*validOut)[idx] != 0u;
           float prevX0 = (*x0Out)[idx];
           float prevX1 = (*x1Out)[idx];
@@ -1789,7 +1763,12 @@ struct TDScopeDisplayWidget final : Widget {
 
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t vidx = size_t(iy);
-        size_t hidx = size_t(historyMarginRows + iy);
+        int hslot = historyHeadRow + historyMarginRows + iy;
+        hslot %= historyCapacityRows;
+        if (hslot < 0) {
+          hslot += historyCapacityRows;
+        }
+        size_t hidx = size_t(hslot);
         rowY[vidx] = drawTop + (float(iy) + 0.5f) * rowStep;
         rowX0[vidx] = historyX0[hidx];
         rowX1[vidx] = historyX1[hidx];
@@ -2061,99 +2040,6 @@ struct TDScopeDisplayWidget final : Widget {
       return c;
     };
 
-    auto tailRasterTextureHandle = [&](NVGcontext *vg) -> GLuint {
-      if (!vg || tailRasterImage < 0) {
-        return 0;
-      }
-#if defined(NANOVG_GL3)
-      return nvglImageHandleGL3(vg, tailRasterImage);
-#elif defined(NANOVG_GL2)
-      return nvglImageHandleGL2(vg, tailRasterImage);
-#elif defined(NANOVG_GLES3)
-      return nvglImageHandleGLES3(vg, tailRasterImage);
-#elif defined(NANOVG_GLES2)
-      return nvglImageHandleGLES2(vg, tailRasterImage);
-#else
-      (void) vg;
-      return 0;
-#endif
-    };
-
-    auto tailRasterScratchTextureHandle = [&](NVGcontext *vg) -> GLuint {
-      if (!vg || tailRasterScratchImage < 0) {
-        return 0;
-      }
-#if defined(NANOVG_GL3)
-      return nvglImageHandleGL3(vg, tailRasterScratchImage);
-#elif defined(NANOVG_GL2)
-      return nvglImageHandleGL2(vg, tailRasterScratchImage);
-#elif defined(NANOVG_GLES3)
-      return nvglImageHandleGLES3(vg, tailRasterScratchImage);
-#elif defined(NANOVG_GLES2)
-      return nvglImageHandleGLES2(vg, tailRasterScratchImage);
-#else
-      (void) vg;
-      return 0;
-#endif
-    };
-
-    auto uploadTailRasterRows = [&](int y0, int y1, bool fullUpload) {
-      if (tailRasterImage < 0 || tailRasterPixels.empty() || tailRasterW <= 0 || tailRasterH <= 0) {
-        return;
-      }
-      if (fullUpload) {
-        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
-        return;
-      }
-      y0 = clamp(y0, 0, tailRasterH - 1);
-      y1 = clamp(y1, 0, tailRasterH - 1);
-      if (y1 < y0) {
-        return;
-      }
-
-      GLuint tex = tailRasterTextureHandle(args.vg);
-      if (tex == 0) {
-        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
-        return;
-      }
-
-      GLint prevTex = 0;
-      glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
-      glBindTexture(GL_TEXTURE_2D, tex);
-      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-      int uploadRows = y1 - y0 + 1;
-      const uint8_t *src = tailRasterPixels.data() + size_t(y0) * size_t(tailRasterW) * 4u;
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y0, tailRasterW, uploadRows, GL_RGBA, GL_UNSIGNED_BYTE, src);
-      glBindTexture(GL_TEXTURE_2D, GLuint(prevTex));
-    };
-
-    auto recreateTailRasterFramebuffers = [&]() {
-      if (tailRasterFbo != 0) {
-        glDeleteFramebuffers(1, &tailRasterFbo);
-        tailRasterFbo = 0;
-      }
-      if (tailRasterScratchFbo != 0) {
-        glDeleteFramebuffers(1, &tailRasterScratchFbo);
-        tailRasterScratchFbo = 0;
-      }
-
-      GLuint mainTex = tailRasterTextureHandle(args.vg);
-      GLuint scratchTex = tailRasterScratchTextureHandle(args.vg);
-      if (mainTex == 0 || scratchTex == 0) {
-        return;
-      }
-
-      glGenFramebuffers(1, &tailRasterFbo);
-      glBindFramebuffer(GL_FRAMEBUFFER, tailRasterFbo);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainTex, 0);
-
-      glGenFramebuffers(1, &tailRasterScratchFbo);
-      glBindFramebuffer(GL_FRAMEBUFFER, tailRasterScratchFbo);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, scratchTex, 0);
-
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    };
-
     auto ensureTailRasterImage = [&]() {
       int targetW = std::max(1, int(std::ceil(box.size.x)));
       int targetH = std::max(1, int(std::ceil(box.size.y)));
@@ -2165,63 +2051,15 @@ struct TDScopeDisplayWidget final : Widget {
         nvgDeleteImage(args.vg, tailRasterImage);
         tailRasterImage = -1;
       }
-      if (tailRasterScratchImage >= 0) {
-        nvgDeleteImage(args.vg, tailRasterScratchImage);
-        tailRasterScratchImage = -1;
-      }
       tailRasterW = targetW;
       tailRasterH = targetH;
       tailRasterPixels.assign(size_t(tailRasterW * tailRasterH * 4), 0u);
       tailRasterImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
-      tailRasterScratchImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
       tailRasterValid = false;
       tailRasterShiftResidualPx = 0.f;
       if (tailRasterImage >= 0) {
         nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
       }
-      if (tailRasterScratchImage >= 0) {
-        nvgUpdateImage(args.vg, tailRasterScratchImage, tailRasterPixels.data());
-      }
-      recreateTailRasterFramebuffers();
-    };
-
-    auto shiftTailRasterTexture = [&](int shiftPx) -> bool {
-      if (shiftPx == 0 || tailRasterFbo == 0 || tailRasterScratchFbo == 0) {
-        return shiftPx == 0;
-      }
-      if (shiftPx <= -tailRasterH || shiftPx >= tailRasterH) {
-        return false;
-      }
-
-      GLint prevReadFbo = 0;
-      GLint prevDrawFbo = 0;
-      glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
-      glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDrawFbo);
-
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tailRasterScratchFbo);
-      glViewport(0, 0, tailRasterW, tailRasterH);
-      glDisable(GL_SCISSOR_TEST);
-      glClearColor(0.f, 0.f, 0.f, 0.f);
-      glClear(GL_COLOR_BUFFER_BIT);
-
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, tailRasterFbo);
-      if (shiftPx > 0) {
-        glBlitFramebuffer(0, shiftPx, tailRasterW, tailRasterH,
-                          0, 0, tailRasterW, tailRasterH - shiftPx,
-                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
-      } else {
-        int downPx = -shiftPx;
-        glBlitFramebuffer(0, 0, tailRasterW, tailRasterH - downPx,
-                          0, downPx, tailRasterW, tailRasterH,
-                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
-      }
-
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
-
-      std::swap(tailRasterImage, tailRasterScratchImage);
-      std::swap(tailRasterFbo, tailRasterScratchFbo);
-      return true;
     };
 
     auto clearTailRasterRows = [&](int y0, int y1) {
@@ -2531,7 +2369,6 @@ struct TDScopeDisplayWidget final : Widget {
     } else {
       ensureTailRasterImage();
       if (tailRasterImage >= 0 && tailRasterW > 0 && tailRasterH > 0) {
-        bool useGpuShift = module->useTailRasterGpuShiftRenderMode();
         bool sameStereo = tailRasterStereo == renderStereo;
         float prevSpan = std::max(std::fabs(tailRasterWindowTopLag - tailRasterWindowBottomLag), 1e-6f);
         float currSpan = std::max(std::fabs(windowTopLag - windowBottomLag), 1e-6f);
@@ -2541,9 +2378,6 @@ struct TDScopeDisplayWidget final : Widget {
 
         int iyMin = 0;
         int iyMax = rowCount - 1;
-        int uploadY0 = 0;
-        int uploadY1 = tailRasterH - 1;
-        bool fullTextureUpload = true;
         if (canIncremental) {
           float shiftLagSamples =
             (tailRasterWindowTopLag - windowTopLag) + (msg.scopeNewestPosSamples - tailRasterNewestPosSamples);
@@ -2553,61 +2387,23 @@ struct TDScopeDisplayWidget final : Widget {
           if (shiftPx > -tailRasterH && shiftPx < tailRasterH) {
             size_t stride = size_t(tailRasterW) * 4u;
             if (shiftPx > 0) {
-              if (useGpuShift) {
-                if (!shiftTailRasterTexture(shiftPx)) {
-                  canIncremental = false;
-                  tailRasterShiftResidualPx = 0.f;
-                } else {
-                  size_t copyRows = size_t(tailRasterH - shiftPx);
-                  std::memmove(tailRasterPixels.data(),
-                               tailRasterPixels.data() + size_t(shiftPx) * stride,
-                               copyRows * stride);
-                  clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
-                  iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
-                                0, rowCount - 1);
-                  iyMax = rowCount - 1;
-                  uploadY0 = clamp(tailRasterH - shiftPx - 12, 0, tailRasterH - 1);
-                  uploadY1 = tailRasterH - 1;
-                  fullTextureUpload = false;
-                }
-              } else {
-                size_t copyRows = size_t(tailRasterH - shiftPx);
-                std::memmove(tailRasterPixels.data(),
-                             tailRasterPixels.data() + size_t(shiftPx) * stride,
-                             copyRows * stride);
-                clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
-                iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
-                              0, rowCount - 1);
-                iyMax = rowCount - 1;
-              }
+              size_t copyRows = size_t(tailRasterH - shiftPx);
+              std::memmove(tailRasterPixels.data(),
+                           tailRasterPixels.data() + size_t(shiftPx) * stride,
+                           copyRows * stride);
+              clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
+              iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
+                            0, rowCount - 1);
+              iyMax = rowCount - 1;
             } else if (shiftPx < 0) {
-              if (useGpuShift) {
-                if (!shiftTailRasterTexture(shiftPx)) {
-                  canIncremental = false;
-                  tailRasterShiftResidualPx = 0.f;
-                } else {
-                  int downPx = -shiftPx;
-                  size_t copyRows = size_t(tailRasterH - downPx);
-                  std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
-                               tailRasterPixels.data(),
-                               copyRows * stride);
-                  clearTailRasterRows(0, downPx - 1);
-                  iyMin = 0;
-                  iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
-                  uploadY0 = 0;
-                  uploadY1 = clamp(downPx + 12, 0, tailRasterH - 1);
-                  fullTextureUpload = false;
-                }
-              } else {
-                int downPx = -shiftPx;
-                size_t copyRows = size_t(tailRasterH - downPx);
-                std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
-                             tailRasterPixels.data(),
-                             copyRows * stride);
-                clearTailRasterRows(0, downPx - 1);
-                iyMin = 0;
-                iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
-              }
+              int downPx = -shiftPx;
+              size_t copyRows = size_t(tailRasterH - downPx);
+              std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
+                           tailRasterPixels.data(),
+                           copyRows * stride);
+              clearTailRasterRows(0, downPx - 1);
+              iyMin = 0;
+              iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
             } else {
               // Sub-pixel motion accumulated but did not cross a full pixel yet.
               // Refresh only a narrow edge band instead of falling back to a
@@ -2620,9 +2416,6 @@ struct TDScopeDisplayWidget final : Widget {
                 iyMin = 0;
                 iyMax = std::min(rowCount - 1, kEdgeBandRows - 1);
               }
-              uploadY0 = clamp(int(std::floor(rowY[size_t(iyMin)] - 10.f)), 0, tailRasterH - 1);
-              uploadY1 = clamp(int(std::ceil(rowY[size_t(iyMax)] + 10.f)), 0, tailRasterH - 1);
-              fullTextureUpload = false;
             }
           } else {
             canIncremental = false;
@@ -2642,7 +2435,7 @@ struct TDScopeDisplayWidget final : Widget {
             rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX, iyMin, iyMax);
         }
 
-        uploadTailRasterRows(uploadY0, uploadY1, fullTextureUpload);
+        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
         nvgBeginPath(args.vg);
         nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
         NVGpaint rasterPaint =
@@ -2702,6 +2495,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     bool hasData = false;
     int64_t key = std::numeric_limits<int64_t>::min();
     uint64_t updateSeq = 0;
+  };
+  struct GlLineVertex {
+    GLfloat x;
+    GLfloat y;
+    GLubyte r;
+    GLubyte g;
+    GLubyte b;
+    GLubyte a;
   };
 
   TDScope *module = nullptr;
@@ -2772,6 +2573,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   float historyReferenceWindowBottomLag = 0.f;
   float historyNewestPosSamples = 0.f;
   float historyShiftResidualRows = 0.f;
+  int historyHeadRow = 0;
+  std::array<std::vector<GlLineVertex>, 8> haloBatchVerts;
+  std::array<std::vector<GlLineVertex>, 10> mainBatchVerts;
+  std::array<std::vector<GlLineVertex>, 8> connectorBatchVerts;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -3046,6 +2851,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       rowValidRight.assign(rowCountU, 0u);
       rowHoldFrames.assign(rowCountU, 0u);
       rowHoldFramesRight.assign(rowCountU, 0u);
+      for (auto &verts : haloBatchVerts) {
+        verts.clear();
+        verts.reserve(size_t(rowCount / 2 + 8) * 2u);
+      }
+      for (auto &verts : mainBatchVerts) {
+        verts.clear();
+        verts.reserve(size_t(rowCount / 2 + 8) * 2u);
+      }
+      for (auto &verts : connectorBatchVerts) {
+        verts.clear();
+        verts.reserve(size_t(rowCount / 2 + 8) * 4u);
+      }
       cachedGeometryValid = false;
     }
 
@@ -3315,32 +3132,89 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       };
 
-    auto rebuildTransientColorDrive = [&](const std::vector<float> &x0, const std::vector<float> &x1,
-                                         const std::vector<float> &visualIntensity, const std::vector<uint8_t> &valid,
+    using RowFloatAccessor = std::function<float(size_t)>;
+    using RowValidAccessor = std::function<bool(size_t)>;
+    auto rebuildTransientColorDrive = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
+                                         const RowFloatAccessor &getVisualIntensity, const RowValidAccessor &isValid,
                                          float laneHalfWidthLocal, std::vector<float> *colorDriveOut) {
+      if (!colorDriveOut || colorDriveOut->size() != rowCountU) {
+        return;
+      }
       float laneWidthDen = std::max(2.f * laneHalfWidthLocal, 1e-3f);
-      for (int iy = 0; iy < rowCount; ++iy) {
+      auto updateRange = [&](int startRow, int endRow) {
+        startRow = clamp(startRow, 0, rowCount - 1);
+        endRow = clamp(endRow, 0, rowCount - 1);
+        if (endRow < startRow) {
+          return;
+        }
+        for (int iy = startRow; iy <= endRow; ++iy) {
+          size_t idx = size_t(iy);
+          float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          float prevDrive = clamp((*colorDriveOut)[idx], 0.f, 1.f);
+          if (!isValid(idx)) {
+            (*colorDriveOut)[idx] = prevDrive * 0.82f;
+            continue;
+          }
+          float center = 0.5f * (getX0(idx) + getX1(idx));
+          float span = getX1(idx) - getX0(idx);
+          float transientNorm = 0.f;
+          auto accumulateTransientAgainst = [&](size_t otherIdx) {
+            float otherCenter = 0.5f * (getX0(otherIdx) + getX1(otherIdx));
+            float otherSpan = getX1(otherIdx) - getX0(otherIdx);
+            transientNorm = std::max(transientNorm,
+                                     std::max(std::fabs(center - otherCenter) / laneWidthDen * 1.15f,
+                                              std::fabs(span - otherSpan) / laneWidthDen * 1.35f));
+          };
+          if (iy > 0 && isValid(size_t(iy - 1))) {
+            accumulateTransientAgainst(size_t(iy - 1));
+          }
+          if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
+            accumulateTransientAgainst(size_t(iy + 1));
+          }
+          float brightnessLift =
+            clamp((0.38f + 0.92f * baseDrive) * std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f * 0.84f), 0.f, 1.f);
+          float alpha = (brightnessLift > prevDrive) ? 0.42f : 0.14f;
+          (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
+        }
+      };
+      updateRange(0, rowCount - 1);
+    };
+
+    auto rebuildTransientColorDriveRange = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
+                                               const RowFloatAccessor &getVisualIntensity,
+                                               const RowValidAccessor &isValid, float laneHalfWidthLocal,
+                                               std::vector<float> *colorDriveOut, int startRow, int endRow) {
+      if (!colorDriveOut || colorDriveOut->size() != rowCountU) {
+        return;
+      }
+      float laneWidthDen = std::max(2.f * laneHalfWidthLocal, 1e-3f);
+      startRow = clamp(startRow, 0, rowCount - 1);
+      endRow = clamp(endRow, 0, rowCount - 1);
+      if (endRow < startRow) {
+        return;
+      }
+      for (int iy = startRow; iy <= endRow; ++iy) {
         size_t idx = size_t(iy);
-        float baseDrive = clamp(visualIntensity[idx], 0.f, 1.f);
+        float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
         float prevDrive = clamp((*colorDriveOut)[idx], 0.f, 1.f);
-        if (!valid[idx]) {
+        if (!isValid(idx)) {
           (*colorDriveOut)[idx] = prevDrive * 0.82f;
           continue;
         }
-        float center = 0.5f * (x0[idx] + x1[idx]);
-        float span = x1[idx] - x0[idx];
+        float center = 0.5f * (getX0(idx) + getX1(idx));
+        float span = getX1(idx) - getX0(idx);
         float transientNorm = 0.f;
         auto accumulateTransientAgainst = [&](size_t otherIdx) {
-          float otherCenter = 0.5f * (x0[otherIdx] + x1[otherIdx]);
-          float otherSpan = x1[otherIdx] - x0[otherIdx];
+          float otherCenter = 0.5f * (getX0(otherIdx) + getX1(otherIdx));
+          float otherSpan = getX1(otherIdx) - getX0(otherIdx);
           transientNorm = std::max(transientNorm,
                                    std::max(std::fabs(center - otherCenter) / laneWidthDen * 1.15f,
                                             std::fabs(span - otherSpan) / laneWidthDen * 1.35f));
         };
-        if (iy > 0 && valid[size_t(iy - 1)]) {
+        if (iy > 0 && isValid(size_t(iy - 1))) {
           accumulateTransientAgainst(size_t(iy - 1));
         }
-        if (iy + 1 < rowCount && valid[size_t(iy + 1)]) {
+        if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
           accumulateTransientAgainst(size_t(iy + 1));
         }
         float brightnessLift =
@@ -3349,9 +3223,30 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
       }
     };
+    auto shiftVisibleColorDrive = [&](std::vector<float> *colorDriveOut, int shiftRows) {
+      if (!colorDriveOut || colorDriveOut->size() != rowCountU || shiftRows == 0 || std::abs(shiftRows) >= rowCount) {
+        if (colorDriveOut && colorDriveOut->size() == rowCountU && std::abs(shiftRows) >= rowCount) {
+          std::fill(colorDriveOut->begin(), colorDriveOut->end(), 0.f);
+        }
+        return;
+      }
+      size_t count = size_t(rowCount - std::abs(shiftRows));
+      if (shiftRows > 0) {
+        std::memmove(colorDriveOut->data(), colorDriveOut->data() + shiftRows, count * sizeof(float));
+        std::fill(colorDriveOut->begin() + (rowCount - shiftRows), colorDriveOut->end(), 0.f);
+      } else {
+        int downRows = -shiftRows;
+        std::memmove(colorDriveOut->data() + downRows, colorDriveOut->data(), count * sizeof(float));
+        std::fill(colorDriveOut->begin(), colorDriveOut->begin() + downRows, 0.f);
+      }
+    };
+
+    for (int iy = 0; iy < rowCount; ++iy) {
+      rowY[size_t(iy)] = drawTop + (float(iy) + 0.5f) * rowStep;
+    }
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
-    bool useGeometryHistoryCache = module->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY;
+    bool useGeometryHistoryCache = module->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL;
     bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || cachedRowCount != rowCount ||
                          stereoLayoutChanged;
     if (useGeometryHistoryCache) {
@@ -3362,6 +3257,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         historyMarginRows = historyMargin;
         historyRowCount = rowCount;
         historyStereoLayout = renderStereo;
+        historyHeadRow = 0;
         historyX0.assign(size_t(historyCapacityRows), lane0CenterX);
         historyX1.assign(size_t(historyCapacityRows), lane0CenterX);
         historyX0Right.assign(size_t(historyCapacityRows), lane1CenterX);
@@ -3386,8 +3282,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (y1 < y0) {
           return;
         }
+        auto historySlotForLogicalRow = [&](int logicalRow) {
+          int slot = historyHeadRow + logicalRow;
+          slot %= historyCapacityRows;
+          if (slot < 0) {
+            slot += historyCapacityRows;
+          }
+          return slot;
+        };
         for (int iy = y0; iy <= y1; ++iy) {
-          size_t idx = size_t(iy);
+          size_t idx = size_t(historySlotForLogicalRow(iy));
           historyX0[idx] = lane0CenterX;
           historyX1[idx] = lane0CenterX;
           historyVisualIntensity[idx] = 0.f;
@@ -3405,32 +3309,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (shiftRows == 0) {
           return;
         }
-        size_t count = size_t(historyCapacityRows - std::abs(shiftRows));
+        historyHeadRow += shiftRows;
+        historyHeadRow %= historyCapacityRows;
+        if (historyHeadRow < 0) {
+          historyHeadRow += historyCapacityRows;
+        }
         if (shiftRows > 0) {
-          std::memmove(historyX0.data(), historyX0.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyX1.data(), historyX1.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyVisualIntensity.data(), historyVisualIntensity.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyValid.data(), historyValid.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyHoldFrames.data(), historyHoldFrames.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyX0Right.data(), historyX0Right.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyX1Right.data(), historyX1Right.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyVisualIntensityRight.data(), historyVisualIntensityRight.data() + shiftRows, count * sizeof(float));
-          std::memmove(historyValidRight.data(), historyValidRight.data() + shiftRows, count * sizeof(uint8_t));
-          std::memmove(historyHoldFramesRight.data(), historyHoldFramesRight.data() + shiftRows, count * sizeof(uint8_t));
           clearHistoryRows(historyCapacityRows - shiftRows, historyCapacityRows - 1);
         } else {
-          int downRows = -shiftRows;
-          std::memmove(historyX0.data() + downRows, historyX0.data(), count * sizeof(float));
-          std::memmove(historyX1.data() + downRows, historyX1.data(), count * sizeof(float));
-          std::memmove(historyVisualIntensity.data() + downRows, historyVisualIntensity.data(), count * sizeof(float));
-          std::memmove(historyValid.data() + downRows, historyValid.data(), count * sizeof(uint8_t));
-          std::memmove(historyHoldFrames.data() + downRows, historyHoldFrames.data(), count * sizeof(uint8_t));
-          std::memmove(historyX0Right.data() + downRows, historyX0Right.data(), count * sizeof(float));
-          std::memmove(historyX1Right.data() + downRows, historyX1Right.data(), count * sizeof(float));
-          std::memmove(historyVisualIntensityRight.data() + downRows, historyVisualIntensityRight.data(), count * sizeof(float));
-          std::memmove(historyValidRight.data() + downRows, historyValidRight.data(), count * sizeof(uint8_t));
-          std::memmove(historyHoldFramesRight.data() + downRows, historyHoldFramesRight.data(), count * sizeof(uint8_t));
-          clearHistoryRows(0, downRows - 1);
+          clearHistoryRows(0, -shiftRows - 1);
         }
       };
 
@@ -3449,7 +3336,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           return;
         }
         for (int iy = startRow; iy <= endRow; ++iy) {
-          size_t idx = size_t(iy);
+          int slot = historyHeadRow + iy;
+          slot %= historyCapacityRows;
+          if (slot < 0) {
+            slot += historyCapacityRows;
+          }
+          size_t idx = size_t(slot);
           bool prevValid = (*validOut)[idx] != 0u;
           float prevX0 = (*x0Out)[idx];
           float prevX1 = (*x1Out)[idx];
@@ -3525,6 +3417,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       bool fullHistoryRebuild = !historyCompatible || rangeModeChanged || stereoLayoutChanged;
       int rebuildStart = historyMarginRows;
       int rebuildEnd = historyMarginRows + rowCount - 1;
+      int visibleShiftRows = 0;
       if (!fullHistoryRebuild && msg.publishSeq != cachedPublishSeq) {
         float shiftLagSamples =
           (historyReferenceWindowTopLag - windowTopLag) + (msg.scopeNewestPosSamples - historyNewestPosSamples);
@@ -3536,6 +3429,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fullHistoryRebuild = true;
           historyShiftResidualRows = 0.f;
         } else if (shiftRows != 0) {
+          visibleShiftRows = shiftRows;
           shiftHistoryRows(shiftRows);
           if (shiftRows > 0) {
             rebuildStart = std::max(historyMarginRows, historyMarginRows + rowCount - shiftRows - 1);
@@ -3574,26 +3468,48 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           &historyValidRight, &historyHoldFramesRight, rebuildStart, rebuildEnd);
       }
 
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t vidx = size_t(iy);
-        size_t hidx = size_t(historyMarginRows + iy);
-        rowY[vidx] = drawTop + (float(iy) + 0.5f) * rowStep;
-        rowX0[vidx] = historyX0[hidx];
-        rowX1[vidx] = historyX1[hidx];
-        rowVisualIntensity[vidx] = historyVisualIntensity[hidx];
-        rowValid[vidx] = historyValid[hidx];
-        rowHoldFrames[vidx] = historyHoldFrames[hidx];
-        rowX0Right[vidx] = historyX0Right[hidx];
-        rowX1Right[vidx] = historyX1Right[hidx];
-        rowVisualIntensityRight[vidx] = historyVisualIntensityRight[hidx];
-        rowValidRight[vidx] = historyValidRight[hidx];
-        rowHoldFramesRight[vidx] = historyHoldFramesRight[hidx];
-      }
+      auto historyVisibleSlot = [&](size_t visibleIdx) {
+        int slot = historyHeadRow + historyMarginRows + int(visibleIdx);
+        slot %= historyCapacityRows;
+        if (slot < 0) {
+          slot += historyCapacityRows;
+        }
+        return size_t(slot);
+      };
+      auto historyGetX0 = [&](size_t visibleIdx) { return historyX0[historyVisibleSlot(visibleIdx)]; };
+      auto historyGetX1 = [&](size_t visibleIdx) { return historyX1[historyVisibleSlot(visibleIdx)]; };
+      auto historyGetVisual = [&](size_t visibleIdx) { return historyVisualIntensity[historyVisibleSlot(visibleIdx)]; };
+      auto historyIsValid = [&](size_t visibleIdx) { return historyValid[historyVisibleSlot(visibleIdx)] != 0u; };
+      auto historyGetX0Right = [&](size_t visibleIdx) { return historyX0Right[historyVisibleSlot(visibleIdx)]; };
+      auto historyGetX1Right = [&](size_t visibleIdx) { return historyX1Right[historyVisibleSlot(visibleIdx)]; };
+      auto historyGetVisualRight = [&](size_t visibleIdx) {
+        return historyVisualIntensityRight[historyVisibleSlot(visibleIdx)];
+      };
+      auto historyIsValidRight = [&](size_t visibleIdx) { return historyValidRight[historyVisibleSlot(visibleIdx)] != 0u; };
 
-      rebuildTransientColorDrive(rowX0, rowX1, rowVisualIntensity, rowValid, laneAmpHalfWidth, &rowColorDrive);
+      if (fullHistoryRebuild) {
+        std::fill(rowColorDrive.begin(), rowColorDrive.end(), 0.f);
+        if (renderStereo) {
+          std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
+        }
+      } else if (visibleShiftRows != 0) {
+        shiftVisibleColorDrive(&rowColorDrive, visibleShiftRows);
+        if (renderStereo) {
+          shiftVisibleColorDrive(&rowColorDriveRight, visibleShiftRows);
+        }
+      }
+      int visibleRebuildStart = fullHistoryRebuild ? 0 : (rebuildStart - historyMarginRows);
+      int visibleRebuildEnd = fullHistoryRebuild ? (rowCount - 1) : (rebuildEnd - historyMarginRows);
+      visibleRebuildStart = clamp(visibleRebuildStart - 1, 0, rowCount - 1);
+      visibleRebuildEnd = clamp(visibleRebuildEnd + 1, 0, rowCount - 1);
+      rebuildTransientColorDriveRange(
+        historyGetX0, historyGetX1, historyGetVisual, historyIsValid, laneAmpHalfWidth, &rowColorDrive, visibleRebuildStart,
+        visibleRebuildEnd);
       if (renderStereo) {
-        rebuildTransientColorDrive(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, laneAmpHalfWidth,
-                                   &rowColorDriveRight);
+        rebuildTransientColorDriveRange(
+          historyGetX0Right, historyGetX1Right, historyGetVisualRight, historyIsValidRight, laneAmpHalfWidth,
+          &rowColorDriveRight,
+          visibleRebuildStart, visibleRebuildEnd);
       } else {
         std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
       }
@@ -3634,10 +3550,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
 
-      rebuildTransientColorDrive(rowX0, rowX1, rowVisualIntensity, rowValid, laneAmpHalfWidth, &rowColorDrive);
+      rebuildTransientColorDrive(
+        [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
+        [&](size_t idx) { return rowVisualIntensity[idx]; }, [&](size_t idx) { return rowValid[idx] != 0u; },
+        laneAmpHalfWidth, &rowColorDrive);
       if (renderStereo) {
-        rebuildTransientColorDrive(rowX0Right, rowX1Right, rowVisualIntensityRight, rowValidRight, laneAmpHalfWidth,
-                                   &rowColorDriveRight);
+        rebuildTransientColorDrive(
+          [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
+          [&](size_t idx) { return rowVisualIntensityRight[idx]; },
+          [&](size_t idx) { return rowValidRight[idx] != 0u; }, laneAmpHalfWidth, &rowColorDriveRight);
       } else {
         std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
       }
@@ -3711,122 +3632,162 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       c.b = c.b + (1.f - c.b) * lift;
       return c;
     };
-    auto glColor = [](NVGcolor c) {
-      glColor4f(c.r, c.g, c.b, c.a);
+    auto encodeColorByte = [](float v) -> GLubyte {
+      return GLubyte(std::lround(clamp(v, 0.f, 1.f) * 255.f));
     };
-    auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
-                        const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid,
-                        float laneCenterXForConnectors) {
+    constexpr int kGlHaloStrokeBins = 8;
+    constexpr int kGlMainStrokeBins = 10;
+    constexpr int kGlConnectorStrokeBins = 8;
+    constexpr float kGlMainAlphaGain = 1.18f;
+    constexpr float kGlMainLiftGain = 1.16f;
+    constexpr float kGlConnectorAlphaGain = 1.14f;
+    constexpr float kGlConnectorLiftGain = 1.12f;
+    constexpr float kGlHaloAlphaGain = 1.34f;
+    constexpr float kGlHaloWidthGain = 1.10f;
+    constexpr float kGlMainWidthGain = 1.10f;
+    constexpr float kGlConnectorWidthGain = 1.08f;
+    auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
+                        const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
+                        const RowValidAccessor &isValid, float laneCenterXForConnectors) {
       constexpr uint8_t kHaloMinAlphaToDraw = 28u;
-      constexpr float kHaloFullDensityThreshold = 0.72f;
-      const bool denseHaloRows = rowStep <= 0.75f;
-      const bool fullHaloDensity = rackZoom >= 2.0f;
-      if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
-        for (int widthBin = 0; widthBin < 5; ++widthBin) {
-          glLineWidth((1.6f + float(widthBin) * 1.8f) * zoomThicknessMul);
-          glBegin(GL_LINES);
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              continue;
-            }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
-            float haloT = haloLinear * haloLinear;
-            uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-            bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
-            if (drawHaloRow && !fullHaloDensity && denseHaloRows && haloT < kHaloFullDensityThreshold && (iy & 1)) {
-              drawHaloRow = false;
-            }
-            if (!drawHaloRow) {
-              continue;
-            }
-            int rowBin = clamp(int(std::floor(haloT * 5.f)), 0, 4);
-            if (rowBin != widthBin) {
-              continue;
-            }
-            float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-            glColor(nvgRGBA(255, 255, 255, haloAlpha));
-            glVertex2f(x0[idx] - haloExtend, rowY[idx]);
-            glVertex2f(x1[idx] + haloExtend, rowY[idx]);
-          }
-          glEnd();
+      auto quantizeStrokeBin = [&](float t, int binCount) -> int {
+        t = clamp(t, 0.f, 1.f);
+        return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
+      };
+      auto strokeBinCenter = [&](int bin, int binCount) -> float {
+        return (float(bin) + 0.5f) / float(binCount);
+      };
+      auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width) {
+        if (verts.empty()) {
+          return;
         }
+        glLineWidth(width);
+        glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), &verts[0].x);
+        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GlLineVertex), &verts[0].r);
+        glDrawArrays(GL_LINES, 0, GLsizei(verts.size()));
+      };
+      if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
+        for (auto &verts : haloBatchVerts) {
+          verts.clear();
+        }
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!isValid(idx)) {
+            continue;
+          }
+          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
+          float haloT = haloLinear * haloLinear;
+          uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
+          if (haloAlpha < kHaloMinAlphaToDraw) {
+            continue;
+          }
+          int rowBin = quantizeStrokeBin(haloT, kGlHaloStrokeBins);
+          float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
+          uint8_t boostedHaloAlpha = uint8_t(std::lround(clamp(float(haloAlpha) * kGlHaloAlphaGain, 0.f, 255.f)));
+          haloBatchVerts[size_t(rowBin)].push_back({getX0(idx) - haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
+          haloBatchVerts[size_t(rowBin)].push_back({getX1(idx) + haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
+        }
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        for (int widthBin = 0; widthBin < kGlHaloStrokeBins; ++widthBin) {
+          float haloCenter = strokeBinCenter(widthBin, kGlHaloStrokeBins);
+          float visualCenter = haloCenter;
+          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
+          float haloW = (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain;
+          drawBatch(haloBatchVerts[size_t(widthBin)], haloW);
+        }
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       }
       if (module->debugRenderMainTraceEnabled) {
-        for (int widthBin = 0; widthBin < 6; ++widthBin) {
-          glLineWidth((0.85f + float(widthBin) * 0.28f) * zoomThicknessMul);
-          glBegin(GL_LINES);
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              continue;
-            }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
-            int rowBin = clamp(int(std::floor(tone * 6.f)), 0, 5);
-            if (rowBin != widthBin) {
-              continue;
-            }
-            glColor(brightenColor(gradientColorForIntensity(tone, uint8_t(std::lround(122.f + 120.f * tone))),
-                                  transientLift * 0.90f));
-            glVertex2f(x0[idx], rowY[idx]);
-            glVertex2f(x1[idx], rowY[idx]);
+        for (auto &verts : mainBatchVerts) {
+          verts.clear();
+        }
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!isValid(idx)) {
+            continue;
           }
-          glEnd();
+          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
+          NVGcolor c = brightenColor(
+            gradientColorForIntensity(
+              tone, uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain, 0.f, 255.f)))),
+            clamp(transientLift * 0.90f * kGlMainLiftGain, 0.f, 1.f));
+          GLubyte r = encodeColorByte(c.r);
+          GLubyte g = encodeColorByte(c.g);
+          GLubyte b = encodeColorByte(c.b);
+          GLubyte a = encodeColorByte(c.a);
+          mainBatchVerts[size_t(rowBin)].push_back({getX0(idx), rowY[idx], r, g, b, a});
+          mainBatchVerts[size_t(rowBin)].push_back({getX1(idx), rowY[idx], r, g, b, a});
+        }
+        for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
+          float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
+          float mainW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain;
+          drawBatch(mainBatchVerts[size_t(widthBin)], mainW);
         }
       }
       if (module->debugRenderConnectorsEnabled) {
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
-        for (int widthBin = 0; widthBin < 5; ++widthBin) {
-          glLineWidth((0.58f + float(widthBin) * 0.18f) * zoomThicknessMul);
-          glBegin(GL_LINES);
-          bool prevValid = false;
-          float prevX0 = laneCenterXForConnectors;
-          float prevX1 = laneCenterXForConnectors;
-          float prevY = drawTop + 0.5f;
-          float prevVisual = 0.f;
-          float prevColorDrive = 0.f;
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              prevValid = false;
+        for (auto &verts : connectorBatchVerts) {
+          verts.clear();
+        }
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        float prevY = drawTop + 0.5f;
+        float prevVisual = 0.f;
+        float prevColorDrive = 0.f;
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!isValid(idx)) {
+            prevValid = false;
+            continue;
+          }
+          float x0 = getX0(idx);
+          float x1 = getX1(idx);
+          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          if (prevValid) {
+            if (std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx) {
+              prevX0 = x0;
+              prevX1 = x1;
+              prevY = rowY[idx];
+              prevVisual = visual;
+              prevColorDrive = transientLift;
               continue;
             }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            if (prevValid) {
-              if (std::fabs(x0[idx] - prevX0) < connectorMinDeltaPx && std::fabs(x1[idx] - prevX1) < connectorMinDeltaPx) {
-                prevX0 = x0[idx];
-                prevX1 = x1[idx];
-                prevY = rowY[idx];
-                prevVisual = visual;
-                prevColorDrive = transientLift;
-                continue;
-              }
-              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
-              float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
-              int rowBin = clamp(int(std::floor(tone * 5.f)), 0, 4);
-              if (rowBin == widthBin) {
-                glColor(brightenColor(gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
-                                      connectTransientLift * 0.72f));
-                glVertex2f(prevX0, prevY);
-                glVertex2f(x0[idx], rowY[idx]);
-                glVertex2f(prevX1, prevY);
-                glVertex2f(x1[idx], rowY[idx]);
-              }
-            }
-            prevX0 = x0[idx];
-            prevX1 = x1[idx];
-            prevY = rowY[idx];
-            prevVisual = visual;
-            prevColorDrive = transientLift;
-            prevValid = true;
+            float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+            float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+            float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+            int rowBin = quantizeStrokeBin(tone, kGlConnectorStrokeBins);
+            NVGcolor c = brightenColor(
+              gradientColorForIntensity(
+                connectVisual,
+                uint8_t(std::lround(clamp((88.f + 92.f * connectVisual) * kGlConnectorAlphaGain, 0.f, 255.f)))),
+              clamp(connectTransientLift * 0.72f * kGlConnectorLiftGain, 0.f, 1.f));
+            GLubyte r = encodeColorByte(c.r);
+            GLubyte g = encodeColorByte(c.g);
+            GLubyte b = encodeColorByte(c.b);
+            GLubyte a = encodeColorByte(c.a);
+            connectorBatchVerts[size_t(rowBin)].push_back({prevX0, prevY, r, g, b, a});
+            connectorBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, a});
+            connectorBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, a});
+            connectorBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, a});
           }
-          glEnd();
+          prevX0 = x0;
+          prevX1 = x1;
+          prevY = rowY[idx];
+          prevVisual = visual;
+          prevColorDrive = transientLift;
+          prevValid = true;
+        }
+        for (int widthBin = 0; widthBin < kGlConnectorStrokeBins; ++widthBin) {
+          float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
+          float connectW = (0.58f + 0.40f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain;
+          drawBatch(connectorBatchVerts[size_t(widthBin)], connectW);
         }
       }
     };
@@ -3842,11 +3803,45 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
 
-    drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
-    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
-      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
+    auto historyVisibleSlot = [&](size_t visibleIdx) {
+      int slot = historyHeadRow + historyMarginRows + int(visibleIdx);
+      slot %= std::max(historyCapacityRows, 1);
+      if (slot < 0) {
+        slot += std::max(historyCapacityRows, 1);
+      }
+      return size_t(slot);
+    };
+    const bool drawFromHistory = useGeometryHistoryCache && historyValidState && historyCapacityRows > 0;
+    if (drawFromHistory) {
+      drawLane(
+        [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
+        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX);
+      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+        drawLane(
+          [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
+          [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
+          [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; }, rowColorDriveRight,
+          [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX);
+      }
+    } else {
+      drawLane(
+        [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
+        [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
+        [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX);
+      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+        drawLane(
+          [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
+          [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,
+          [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX);
+      }
     }
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_VERTEX_ARRAY);
     glDisable(GL_LINE_SMOOTH);
 
     publishUiDebugMetrics(densityPct, rowCount);
@@ -4079,25 +4074,9 @@ struct TDScopeWidget : ModuleWidget {
           "Tail raster", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER; },
           [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
         submenu->addChild(createCheckMenuItem(
-          "Tail raster + GPU shift", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER_GPU_SHIFT; }));
-        submenu->addChild(createCheckMenuItem(
-          "Geometry history", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_GEOMETRY_HISTORY; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_GEOMETRY_HISTORY; }));
-        submenu->addChild(createCheckMenuItem(
-          "Geometry history + tail raster + GPU shift", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_GEOMETRY_HISTORY_TAIL_RASTER_GPU_SHIFT; }));
-        submenu->addChild(createCheckMenuItem(
-          "OpenGL geometry + history", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL_GEOMETRY_HISTORY; }));
-        submenu->addChild(createCheckMenuItem(
-          "OpenGL geometry", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_GEOMETRY; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL_GEOMETRY; }));
+          "OpenGL", "",
+          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL; },
+          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL; }));
         submenu->addChild(new MenuSeparator());
         submenu->addChild(createCheckMenuItem(
           "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
