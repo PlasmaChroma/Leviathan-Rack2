@@ -25,6 +25,8 @@ static std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 
 static float computeScopeDisplayVerticalSupersample(float rackZoom) {
   rackZoom = std::max(rackZoom, 1e-4f);
+  (void) rackZoom;
+  return kScopeDisplayVerticalSupersampleMax;
   // Zoomed out: reduce total row density to save draw calls when several
   // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
   float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
@@ -3646,6 +3648,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr float kGlHaloWidthGain = 1.10f;
     constexpr float kGlMainWidthGain = 1.10f;
     constexpr float kGlConnectorWidthGain = 1.08f;
+    constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
+    constexpr float kGlConnectorBodyFillAlpha = 0.20f;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors) {
@@ -3657,6 +3661,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       auto strokeBinCenter = [&](int bin, int binCount) -> float {
         return (float(bin) + 0.5f) / float(binCount);
       };
+      float glZoomInT = clamp((rackZoom - 1.f) / 2.4f, 0.f, 1.f);
+      float glZoomInEase = std::pow(glZoomInT, 0.72f);
+      float glDeepZoomT = clamp((rackZoom - 2.f) / 1.4f, 0.f, 1.f);
+      float glDeepZoomEase = std::pow(glDeepZoomT, 0.82f);
+      float glZoomInWidthComp = 1.f + 0.16f * glZoomInEase + 0.05f * glDeepZoomEase;
+      float glZoomInHaloWidthComp = 1.f + 0.22f * glZoomInEase + 0.06f * glDeepZoomEase;
+      float glZoomInAlphaComp = 1.f + 0.46f * glZoomInEase + 0.62f * glDeepZoomEase;
+      float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
+      float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
+      float glDeepZoomEnergyFill = glDeepZoomEase;
       auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width) {
         if (verts.empty()) {
           return;
@@ -3685,7 +3699,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
           int rowBin = quantizeStrokeBin(haloT, kGlHaloStrokeBins);
           float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-          uint8_t boostedHaloAlpha = uint8_t(std::lround(clamp(float(haloAlpha) * kGlHaloAlphaGain, 0.f, 255.f)));
+          uint8_t boostedHaloAlpha = uint8_t(std::lround(
+            clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
           haloBatchVerts[size_t(rowBin)].push_back({getX0(idx) - haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
           haloBatchVerts[size_t(rowBin)].push_back({getX1(idx) + haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
         }
@@ -3694,7 +3709,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float haloCenter = strokeBinCenter(widthBin, kGlHaloStrokeBins);
           float visualCenter = haloCenter;
           float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
-          float haloW = (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain;
+          float haloW =
+            (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
           drawBatch(haloBatchVerts[size_t(widthBin)], haloW);
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3714,8 +3730,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
           NVGcolor c = brightenColor(
             gradientColorForIntensity(
-              tone, uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain, 0.f, 255.f)))),
-            clamp(transientLift * 0.90f * kGlMainLiftGain, 0.f, 1.f));
+              tone,
+              uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
           GLubyte r = encodeColorByte(c.r);
           GLubyte g = encodeColorByte(c.g);
           GLubyte b = encodeColorByte(c.b);
@@ -3725,14 +3742,41 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
         for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
           float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
-          float mainW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain;
+          float mainW =
+            (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain * glZoomInWidthComp;
           drawBatch(mainBatchVerts[size_t(widthBin)], mainW);
+        }
+        if (glDeepZoomEnergyFill > 1e-4f) {
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+          for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
+            std::vector<GlLineVertex> &verts = mainBatchVerts[size_t(widthBin)];
+            if (verts.empty()) {
+              continue;
+            }
+            float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
+            float fillW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * (1.01f + 0.04f * glDeepZoomEnergyFill);
+            GLubyte fillAlpha =
+              GLubyte(std::lround(clamp(255.f * kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, 0.f, 255.f)));
+            if (fillAlpha == 0u) {
+              continue;
+            }
+            std::vector<GlLineVertex> fillVerts = verts;
+            for (GlLineVertex &v : fillVerts) {
+              v.a = fillAlpha;
+            }
+            drawBatch(fillVerts, fillW);
+          }
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
       }
       if (module->debugRenderConnectorsEnabled) {
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
         for (auto &verts : connectorBatchVerts) {
           verts.clear();
+        }
+        std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
+        for (auto &verts : connectorBodyBatchVerts) {
+          verts.reserve(size_t(rowCount / 2 + 8) * 2u);
         }
         bool prevValid = false;
         float prevX0 = laneCenterXForConnectors;
@@ -3766,8 +3810,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             NVGcolor c = brightenColor(
               gradientColorForIntensity(
                 connectVisual,
-                uint8_t(std::lround(clamp((88.f + 92.f * connectVisual) * kGlConnectorAlphaGain, 0.f, 255.f)))),
-              clamp(connectTransientLift * 0.72f * kGlConnectorLiftGain, 0.f, 1.f));
+                uint8_t(std::lround(clamp(
+                  (88.f + 92.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+              clamp(connectTransientLift * 0.72f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
@@ -3776,6 +3821,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             connectorBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, a});
             connectorBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, a});
             connectorBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, a});
+            float prevCenter = 0.5f * (prevX0 + prevX1);
+            float center = 0.5f * (x0 + x1);
+            float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
+            if (centerSpan > connectorMinDeltaPx * 1.5f) {
+              GLubyte bodyAlpha = GLubyte(std::lround(clamp(
+                float(a) * kGlConnectorBodyFillAlpha * (0.65f + 0.35f * glDeepZoomEnergyFill), 0.f, 255.f)));
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevCenter, prevY, r, g, b, bodyAlpha});
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({center, rowY[idx], r, g, b, bodyAlpha});
+            }
           }
           prevX0 = x0;
           prevX1 = x1;
@@ -3786,8 +3840,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
         for (int widthBin = 0; widthBin < kGlConnectorStrokeBins; ++widthBin) {
           float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
-          float connectW = (0.58f + 0.40f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain;
+          float connectW =
+            (0.58f + 0.40f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * glZoomInWidthComp;
           drawBatch(connectorBatchVerts[size_t(widthBin)], connectW);
+          if (!connectorBodyBatchVerts[size_t(widthBin)].empty()) {
+            float bodyW = connectW * (0.95f + 0.08f * glDeepZoomEnergyFill);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+          }
         }
       }
     };
