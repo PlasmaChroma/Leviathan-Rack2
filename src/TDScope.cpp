@@ -56,6 +56,12 @@ struct TDScope final : Module {
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
   enum ScopeChannelMode { SCOPE_CHANNEL_MONO = 0, SCOPE_CHANNEL_STEREO, SCOPE_CHANNEL_COUNT };
+  enum DebugUiPublishRateMode {
+    DEBUG_UI_PUBLISH_120HZ = 0,
+    DEBUG_UI_PUBLISH_60HZ,
+    DEBUG_UI_PUBLISH_30HZ,
+    DEBUG_UI_PUBLISH_COUNT
+  };
   enum ColorScheme {
     COLOR_SCHEME_TEMPORAL_DECK = 0,
     COLOR_SCHEME_LEVIATHAN,
@@ -95,6 +101,11 @@ struct TDScope final : Module {
   int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
   bool scopeTransientHaloEnabled = true;
+  bool debugRenderMainTraceEnabled = true;
+  bool debugRenderHaloEnabled = true;
+  bool debugRenderConnectorsEnabled = true;
+  bool debugRenderStereoRightLaneEnabled = true;
+  int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
@@ -132,6 +143,18 @@ struct TDScope final : Module {
       case SCOPE_RANGE_5V:
       default:
         return 5.f;
+    }
+  }
+
+  float debugUiPublishIntervalSec() const {
+    switch (debugUiPublishRateMode) {
+      case DEBUG_UI_PUBLISH_30HZ:
+        return 1.f / 30.f;
+      case DEBUG_UI_PUBLISH_60HZ:
+        return 1.f / 60.f;
+      case DEBUG_UI_PUBLISH_120HZ:
+      default:
+        return kUiPublishIntervalSec;
     }
   }
 
@@ -293,9 +316,11 @@ struct TDScope final : Module {
       uiLagDragActive.store(false, std::memory_order_relaxed);
     }
 
+    float uiPublishIntervalSec =
+      uiLagDragActive.load(std::memory_order_relaxed) ? kUiPublishIntervalSec : debugUiPublishIntervalSec();
     uiPublishTimerSec += args.sampleTime;
-    if (linkActive && latestMsg && uiPublishTimerSec >= kUiPublishIntervalSec) {
-      uiPublishTimerSec = std::fmod(uiPublishTimerSec, kUiPublishIntervalSec);
+    if (linkActive && latestMsg && uiPublishTimerSec >= uiPublishIntervalSec) {
+      uiPublishTimerSec = std::fmod(uiPublishTimerSec, uiPublishIntervalSec);
       publishSnapshotToUi(*latestMsg);
     }
 
@@ -1470,22 +1495,29 @@ struct TDScopeDisplayWidget final : Widget {
     auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
                         const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid,
                         float laneCenterXForConnectors) {
-      // Continuous gradient rendering: draw each row and connector using its
-      // actual visual intensity, rather than quantizing to discrete buckets.
+      // Batch trace rendering into ordered intensity bins so NanoVG receives
+      // far fewer stroke submissions while preserving a low->high gradient
+      // progression across the scope.
       constexpr uint8_t kHaloMinAlphaToDraw = 28u;
       constexpr float kHaloFullDensityThreshold = 0.72f;
+      constexpr int kMainStrokeBins = 10;
+      constexpr int kConnectorStrokeBins = 8;
       const bool denseHaloRows = rowStep <= 0.75f;
       const bool fullHaloDensity = rackZoom >= 2.0f;
-      bool prevValid = false;
-      float prevX0 = laneCenterXForConnectors;
-      float prevX1 = laneCenterXForConnectors;
-      float prevY = drawTop + 0.5f;
-      float prevVisual = 0.f;
-      float prevColorDrive = 0.f;
+
+      auto quantizeStrokeBin = [&](float t, int binCount) -> int {
+        t = clamp(t, 0.f, 1.f);
+        return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
+      };
+      auto strokeBinCenter = [&](int bin, int binCount) -> float {
+        return (float(bin) + 0.5f) / float(binCount);
+      };
+
+      // Keep halo as a separate diffuse layer so stronger transients can still
+      // bloom independently of the quantized main-trace bins.
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t idx = size_t(iy);
         if (!valid[idx]) {
-          prevValid = false;
           continue;
         }
 
@@ -1496,11 +1528,8 @@ struct TDScopeDisplayWidget final : Widget {
         // preserving strong halo response for high-transient peaks.
         float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
         float haloT = haloLinear * haloLinear;
-        NVGcolor mainC = brightenColor(
-          gradientColorForIntensity(visual, uint8_t(std::lround(122.f + 120.f * visual))),
-          transientLift * 0.90f);
 
-        if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
+        if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled && haloT > 1e-4f) {
           uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
           bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
           // The main trace already renders every supersampled row. For the
@@ -1520,42 +1549,111 @@ struct TDScopeDisplayWidget final : Widget {
             nvgStroke(args.vg);
           }
         }
+      }
 
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0[idx], rowY[idx]);
-        nvgLineTo(args.vg, x1[idx], rowY[idx]);
-        nvgStrokeColor(args.vg, mainC);
-        nvgStrokeWidth(args.vg, mainW);
-        nvgStroke(args.vg);
+      if (module->debugRenderMainTraceEnabled) {
+        for (int bin = 0; bin < kMainStrokeBins; ++bin) {
+          bool hasPath = false;
+          nvgBeginPath(args.vg);
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            if (!valid[idx]) {
+              continue;
+            }
+            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+            float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+            if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
+              continue;
+            }
+            nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+            nvgLineTo(args.vg, x1[idx], rowY[idx]);
+            hasPath = true;
+          }
+          if (!hasPath) {
+            continue;
+          }
+          float toneCenter = strokeBinCenter(bin, kMainStrokeBins);
+          float visualCenter = toneCenter;
+          float transientCenter = toneCenter;
+          NVGcolor mainC = brightenColor(
+            gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
+            transientCenter * 0.90f);
+          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
+          nvgStrokeColor(args.vg, mainC);
+          nvgStrokeWidth(args.vg, mainW);
+          nvgStroke(args.vg);
+        }
+      }
 
-        if (prevValid) {
-          float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-          float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+      if (module->debugRenderConnectorsEnabled) {
+        const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
+        for (int bin = 0; bin < kConnectorStrokeBins; ++bin) {
+          bool hasPath = false;
+          bool prevValid = false;
+          float prevX0 = laneCenterXForConnectors;
+          float prevX1 = laneCenterXForConnectors;
+          float prevY = drawTop + 0.5f;
+          float prevVisual = 0.f;
+          float prevColorDrive = 0.f;
+          nvgBeginPath(args.vg);
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            if (!valid[idx]) {
+              prevValid = false;
+              continue;
+            }
+            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+            if (prevValid) {
+              float leftDeltaPx = std::fabs(x0[idx] - prevX0);
+              float rightDeltaPx = std::fabs(x1[idx] - prevX1);
+              if (leftDeltaPx < connectorMinDeltaPx && rightDeltaPx < connectorMinDeltaPx) {
+                prevX0 = x0[idx];
+                prevX1 = x1[idx];
+                prevY = rowY[idx];
+                prevVisual = visual;
+                prevColorDrive = transientLift;
+                prevValid = true;
+                continue;
+              }
+              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+              float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+              if (quantizeStrokeBin(tone, kConnectorStrokeBins) == bin) {
+                nvgMoveTo(args.vg, prevX0, prevY);
+                nvgLineTo(args.vg, x0[idx], rowY[idx]);
+                nvgMoveTo(args.vg, prevX1, prevY);
+                nvgLineTo(args.vg, x1[idx], rowY[idx]);
+                hasPath = true;
+              }
+            }
+            prevX0 = x0[idx];
+            prevX1 = x1[idx];
+            prevY = rowY[idx];
+            prevVisual = visual;
+            prevColorDrive = transientLift;
+            prevValid = true;
+          }
+          if (!hasPath) {
+            continue;
+          }
+          float toneCenter = strokeBinCenter(bin, kConnectorStrokeBins);
+          float connectVisual = toneCenter;
+          float connectTransientLift = toneCenter;
           NVGcolor connectC = brightenColor(
             gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
             connectTransientLift * 0.72f);
           float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
-          nvgBeginPath(args.vg);
-          nvgMoveTo(args.vg, prevX0, prevY);
-          nvgLineTo(args.vg, x0[idx], rowY[idx]);
-          nvgMoveTo(args.vg, prevX1, prevY);
-          nvgLineTo(args.vg, x1[idx], rowY[idx]);
           nvgStrokeColor(args.vg, connectC);
           nvgStrokeWidth(args.vg, connectW);
           nvgStroke(args.vg);
         }
-
-        prevX0 = x0[idx];
-        prevX1 = x1[idx];
-        prevY = rowY[idx];
-        prevVisual = visual;
-        prevColorDrive = transientLift;
-        prevValid = true;
       }
     };
 
     drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
-    if (renderStereo) {
+    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
       drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
 
       // Draw subtle lane divider for stereo side-by-side view.
@@ -1774,6 +1872,35 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
       [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
+
+    if (isDragonKingDebugEnabled()) {
+      menu->addChild(new MenuSeparator());
+      menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
+        submenu->addChild(createMenuLabel("Scope Rate"));
+        submenu->addChild(createCheckMenuItem(
+          "120 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_120HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_120HZ; }));
+        submenu->addChild(createCheckMenuItem(
+          "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
+        submenu->addChild(createCheckMenuItem(
+          "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
+        submenu->addChild(new MenuSeparator());
+        submenu->addChild(createCheckMenuItem(
+          "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
+          [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
+        submenu->addChild(createCheckMenuItem(
+          "Halo", "", [=]() { return scopeModule->debugRenderHaloEnabled; },
+          [=]() { scopeModule->debugRenderHaloEnabled = !scopeModule->debugRenderHaloEnabled; }));
+        submenu->addChild(createCheckMenuItem(
+          "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
+          [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));
+        submenu->addChild(createCheckMenuItem(
+          "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled; },
+          [=]() { scopeModule->debugRenderStereoRightLaneEnabled = !scopeModule->debugRenderStereoRightLaneEnabled; }));
+      }));
+    }
   }
 };
 

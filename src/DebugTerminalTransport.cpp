@@ -313,8 +313,11 @@ private:
 };
 
 static Transport &transport() {
-  static Transport gTransport;
-  return gTransport;
+  // Debug-only transport: avoid process-shutdown stalls by intentionally
+  // keeping the singleton alive until OS teardown instead of running a static
+  // destructor that may block on socket/thread cleanup during Rack exit.
+  static Transport *gTransport = new Transport();
+  return *gTransport;
 }
 
 } // namespace
