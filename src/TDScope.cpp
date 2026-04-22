@@ -109,6 +109,7 @@ struct TDScope final : Module {
   bool debugRenderStereoRightLaneEnabled = true;
   bool debugFramebufferCacheEnabled = true;
   bool debugTailRasterCacheEnabled = false;
+  bool debugTailRasterGpuShiftEnabled = false;
   int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
@@ -174,6 +175,7 @@ struct TDScope final : Module {
     json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
     json_object_set_new(root, "debugTailRasterCacheEnabled", json_boolean(debugTailRasterCacheEnabled));
+    json_object_set_new(root, "debugTailRasterGpuShiftEnabled", json_boolean(debugTailRasterGpuShiftEnabled));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
     return root;
   }
@@ -221,6 +223,10 @@ struct TDScope final : Module {
     json_t *tailRasterCacheJ = json_object_get(root, "debugTailRasterCacheEnabled");
     if (tailRasterCacheJ) {
       debugTailRasterCacheEnabled = json_boolean_value(tailRasterCacheJ);
+    }
+    json_t *tailRasterGpuShiftJ = json_object_get(root, "debugTailRasterGpuShiftEnabled");
+    if (tailRasterGpuShiftJ) {
+      debugTailRasterGpuShiftEnabled = json_boolean_value(tailRasterGpuShiftJ);
     }
     json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
     if (publishRateJ) {
@@ -447,9 +453,13 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastConnectorsEnabled = false;
   bool redrawLastStereoRightLaneEnabled = false;
   bool redrawLastTailRasterEnabled = false;
+  bool redrawLastTailRasterGpuShiftEnabled = false;
   int tailRasterImage = -1;
+  int tailRasterScratchImage = -1;
   int tailRasterW = 0;
   int tailRasterH = 0;
+  GLuint tailRasterFbo = 0;
+  GLuint tailRasterScratchFbo = 0;
   std::vector<uint8_t> tailRasterPixels;
   bool tailRasterValid = false;
   bool tailRasterStereo = false;
@@ -458,6 +468,26 @@ struct TDScopeDisplayWidget final : Widget {
   float tailRasterNewestPosSamples = 0.f;
   float tailRasterShiftResidualPx = 0.f;
   uint64_t tailRasterPublishSeq = 0;
+
+  ~TDScopeDisplayWidget() override {
+    if (APP && APP->window) {
+      NVGcontext *vg = APP->window->vg;
+      if (vg) {
+        if (tailRasterImage >= 0) {
+          nvgDeleteImage(vg, tailRasterImage);
+        }
+        if (tailRasterScratchImage >= 0) {
+          nvgDeleteImage(vg, tailRasterScratchImage);
+        }
+      }
+    }
+    if (tailRasterFbo != 0) {
+      glDeleteFramebuffers(1, &tailRasterFbo);
+    }
+    if (tailRasterScratchFbo != 0) {
+      glDeleteFramebuffers(1, &tailRasterScratchFbo);
+    }
+  }
 
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
@@ -726,6 +756,12 @@ struct TDScopeDisplayWidget final : Widget {
       if (module->debugTailRasterCacheEnabled != redrawLastTailRasterEnabled) {
         dirty = true;
         redrawLastTailRasterEnabled = module->debugTailRasterCacheEnabled;
+        tailRasterValid = false;
+        tailRasterShiftResidualPx = 0.f;
+      }
+      if (module->debugTailRasterGpuShiftEnabled != redrawLastTailRasterGpuShiftEnabled) {
+        dirty = true;
+        redrawLastTailRasterGpuShiftEnabled = module->debugTailRasterGpuShiftEnabled;
         tailRasterValid = false;
         tailRasterShiftResidualPx = 0.f;
       }
@@ -1663,6 +1699,24 @@ struct TDScopeDisplayWidget final : Widget {
 #endif
     };
 
+    auto tailRasterScratchTextureHandle = [&](NVGcontext *vg) -> GLuint {
+      if (!vg || tailRasterScratchImage < 0) {
+        return 0;
+      }
+#if defined(NANOVG_GL3)
+      return nvglImageHandleGL3(vg, tailRasterScratchImage);
+#elif defined(NANOVG_GL2)
+      return nvglImageHandleGL2(vg, tailRasterScratchImage);
+#elif defined(NANOVG_GLES3)
+      return nvglImageHandleGLES3(vg, tailRasterScratchImage);
+#elif defined(NANOVG_GLES2)
+      return nvglImageHandleGLES2(vg, tailRasterScratchImage);
+#else
+      (void) vg;
+      return 0;
+#endif
+    };
+
     auto uploadTailRasterRows = [&](int y0, int y1, bool fullUpload) {
       if (tailRasterImage < 0 || tailRasterPixels.empty() || tailRasterW <= 0 || tailRasterH <= 0) {
         return;
@@ -1693,6 +1747,33 @@ struct TDScopeDisplayWidget final : Widget {
       glBindTexture(GL_TEXTURE_2D, GLuint(prevTex));
     };
 
+    auto recreateTailRasterFramebuffers = [&]() {
+      if (tailRasterFbo != 0) {
+        glDeleteFramebuffers(1, &tailRasterFbo);
+        tailRasterFbo = 0;
+      }
+      if (tailRasterScratchFbo != 0) {
+        glDeleteFramebuffers(1, &tailRasterScratchFbo);
+        tailRasterScratchFbo = 0;
+      }
+
+      GLuint mainTex = tailRasterTextureHandle(args.vg);
+      GLuint scratchTex = tailRasterScratchTextureHandle(args.vg);
+      if (mainTex == 0 || scratchTex == 0) {
+        return;
+      }
+
+      glGenFramebuffers(1, &tailRasterFbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, tailRasterFbo);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainTex, 0);
+
+      glGenFramebuffers(1, &tailRasterScratchFbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, tailRasterScratchFbo);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, scratchTex, 0);
+
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    };
+
     auto ensureTailRasterImage = [&]() {
       int targetW = std::max(1, int(std::ceil(box.size.x)));
       int targetH = std::max(1, int(std::ceil(box.size.y)));
@@ -1704,15 +1785,63 @@ struct TDScopeDisplayWidget final : Widget {
         nvgDeleteImage(args.vg, tailRasterImage);
         tailRasterImage = -1;
       }
+      if (tailRasterScratchImage >= 0) {
+        nvgDeleteImage(args.vg, tailRasterScratchImage);
+        tailRasterScratchImage = -1;
+      }
       tailRasterW = targetW;
       tailRasterH = targetH;
       tailRasterPixels.assign(size_t(tailRasterW * tailRasterH * 4), 0u);
       tailRasterImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
+      tailRasterScratchImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
       tailRasterValid = false;
       tailRasterShiftResidualPx = 0.f;
       if (tailRasterImage >= 0) {
         nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
       }
+      if (tailRasterScratchImage >= 0) {
+        nvgUpdateImage(args.vg, tailRasterScratchImage, tailRasterPixels.data());
+      }
+      recreateTailRasterFramebuffers();
+    };
+
+    auto shiftTailRasterTexture = [&](int shiftPx) -> bool {
+      if (shiftPx == 0 || tailRasterFbo == 0 || tailRasterScratchFbo == 0) {
+        return shiftPx == 0;
+      }
+      if (shiftPx <= -tailRasterH || shiftPx >= tailRasterH) {
+        return false;
+      }
+
+      GLint prevReadFbo = 0;
+      GLint prevDrawFbo = 0;
+      glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
+      glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDrawFbo);
+
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tailRasterScratchFbo);
+      glViewport(0, 0, tailRasterW, tailRasterH);
+      glDisable(GL_SCISSOR_TEST);
+      glClearColor(0.f, 0.f, 0.f, 0.f);
+      glClear(GL_COLOR_BUFFER_BIT);
+
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, tailRasterFbo);
+      if (shiftPx > 0) {
+        glBlitFramebuffer(0, shiftPx, tailRasterW, tailRasterH,
+                          0, 0, tailRasterW, tailRasterH - shiftPx,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      } else {
+        int downPx = -shiftPx;
+        glBlitFramebuffer(0, 0, tailRasterW, tailRasterH - downPx,
+                          0, downPx, tailRasterW, tailRasterH,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      }
+
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
+
+      std::swap(tailRasterImage, tailRasterScratchImage);
+      std::swap(tailRasterFbo, tailRasterScratchFbo);
+      return true;
     };
 
     auto clearTailRasterRows = [&](int y0, int y1) {
@@ -2022,6 +2151,7 @@ struct TDScopeDisplayWidget final : Widget {
     } else {
       ensureTailRasterImage();
       if (tailRasterImage >= 0 && tailRasterW > 0 && tailRasterH > 0) {
+        bool useGpuShift = module->debugTailRasterGpuShiftEnabled;
         bool sameStereo = tailRasterStereo == renderStereo;
         float prevSpan = std::max(std::fabs(tailRasterWindowTopLag - tailRasterWindowBottomLag), 1e-6f);
         float currSpan = std::max(std::fabs(windowTopLag - windowBottomLag), 1e-6f);
@@ -2043,23 +2173,61 @@ struct TDScopeDisplayWidget final : Widget {
           if (shiftPx > -tailRasterH && shiftPx < tailRasterH) {
             size_t stride = size_t(tailRasterW) * 4u;
             if (shiftPx > 0) {
-              size_t copyRows = size_t(tailRasterH - shiftPx);
-              std::memmove(tailRasterPixels.data(),
-                           tailRasterPixels.data() + size_t(shiftPx) * stride,
-                           copyRows * stride);
-              clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
-              iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
-                            0, rowCount - 1);
-              iyMax = rowCount - 1;
+              if (useGpuShift) {
+                if (!shiftTailRasterTexture(shiftPx)) {
+                  canIncremental = false;
+                  tailRasterShiftResidualPx = 0.f;
+                } else {
+                  size_t copyRows = size_t(tailRasterH - shiftPx);
+                  std::memmove(tailRasterPixels.data(),
+                               tailRasterPixels.data() + size_t(shiftPx) * stride,
+                               copyRows * stride);
+                  clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
+                  iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
+                                0, rowCount - 1);
+                  iyMax = rowCount - 1;
+                  uploadY0 = clamp(tailRasterH - shiftPx - 12, 0, tailRasterH - 1);
+                  uploadY1 = tailRasterH - 1;
+                  fullTextureUpload = false;
+                }
+              } else {
+                size_t copyRows = size_t(tailRasterH - shiftPx);
+                std::memmove(tailRasterPixels.data(),
+                             tailRasterPixels.data() + size_t(shiftPx) * stride,
+                             copyRows * stride);
+                clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
+                iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
+                              0, rowCount - 1);
+                iyMax = rowCount - 1;
+              }
             } else if (shiftPx < 0) {
-              int downPx = -shiftPx;
-              size_t copyRows = size_t(tailRasterH - downPx);
-              std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
-                           tailRasterPixels.data(),
-                           copyRows * stride);
-              clearTailRasterRows(0, downPx - 1);
-              iyMin = 0;
-              iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
+              if (useGpuShift) {
+                if (!shiftTailRasterTexture(shiftPx)) {
+                  canIncremental = false;
+                  tailRasterShiftResidualPx = 0.f;
+                } else {
+                  int downPx = -shiftPx;
+                  size_t copyRows = size_t(tailRasterH - downPx);
+                  std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
+                               tailRasterPixels.data(),
+                               copyRows * stride);
+                  clearTailRasterRows(0, downPx - 1);
+                  iyMin = 0;
+                  iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
+                  uploadY0 = 0;
+                  uploadY1 = clamp(downPx + 12, 0, tailRasterH - 1);
+                  fullTextureUpload = false;
+                }
+              } else {
+                int downPx = -shiftPx;
+                size_t copyRows = size_t(tailRasterH - downPx);
+                std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
+                             tailRasterPixels.data(),
+                             copyRows * stride);
+                clearTailRasterRows(0, downPx - 1);
+                iyMin = 0;
+                iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
+              }
             } else {
               // Sub-pixel motion accumulated but did not cross a full pixel yet.
               // Refresh only a narrow edge band instead of falling back to a
@@ -2352,6 +2520,9 @@ struct TDScopeWidget : ModuleWidget {
         submenu->addChild(createCheckMenuItem(
           "Tail raster cache", "", [=]() { return scopeModule->debugTailRasterCacheEnabled; },
           [=]() { scopeModule->debugTailRasterCacheEnabled = !scopeModule->debugTailRasterCacheEnabled; }));
+        submenu->addChild(createCheckMenuItem(
+          "Tail raster GPU shift", "", [=]() { return scopeModule->debugTailRasterGpuShiftEnabled; },
+          [=]() { scopeModule->debugTailRasterGpuShiftEnabled = !scopeModule->debugTailRasterGpuShiftEnabled; }));
         submenu->addChild(new MenuSeparator());
         submenu->addChild(createCheckMenuItem(
           "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
