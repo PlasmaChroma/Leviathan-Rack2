@@ -48,6 +48,7 @@ CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32
+LDFLAGS += -lopengl32
 endif
 
 RACK_RUNTIME_DIR := $(abspath $(RACK_DIR))

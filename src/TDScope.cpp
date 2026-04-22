@@ -3,6 +3,7 @@
 #include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "plugin.hpp"
+#include <nanovg_gl.h>
 
 #include <algorithm>
 #include <array>
@@ -421,6 +422,7 @@ struct TDScopeDisplayWidget final : Widget {
   float tailRasterNewestPosSamples = 0.f;
   float tailRasterShiftResidualPx = 0.f;
   uint64_t tailRasterPublishSeq = 0;
+
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
   }
@@ -1607,6 +1609,54 @@ struct TDScopeDisplayWidget final : Widget {
       return c;
     };
 
+    auto tailRasterTextureHandle = [&](NVGcontext *vg) -> GLuint {
+      if (!vg || tailRasterImage < 0) {
+        return 0;
+      }
+#if defined(NANOVG_GL3)
+      return nvglImageHandleGL3(vg, tailRasterImage);
+#elif defined(NANOVG_GL2)
+      return nvglImageHandleGL2(vg, tailRasterImage);
+#elif defined(NANOVG_GLES3)
+      return nvglImageHandleGLES3(vg, tailRasterImage);
+#elif defined(NANOVG_GLES2)
+      return nvglImageHandleGLES2(vg, tailRasterImage);
+#else
+      (void) vg;
+      return 0;
+#endif
+    };
+
+    auto uploadTailRasterRows = [&](int y0, int y1, bool fullUpload) {
+      if (tailRasterImage < 0 || tailRasterPixels.empty() || tailRasterW <= 0 || tailRasterH <= 0) {
+        return;
+      }
+      if (fullUpload) {
+        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
+        return;
+      }
+      y0 = clamp(y0, 0, tailRasterH - 1);
+      y1 = clamp(y1, 0, tailRasterH - 1);
+      if (y1 < y0) {
+        return;
+      }
+
+      GLuint tex = tailRasterTextureHandle(args.vg);
+      if (tex == 0) {
+        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
+        return;
+      }
+
+      GLint prevTex = 0;
+      glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+      glBindTexture(GL_TEXTURE_2D, tex);
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+      int uploadRows = y1 - y0 + 1;
+      const uint8_t *src = tailRasterPixels.data() + size_t(y0) * size_t(tailRasterW) * 4u;
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y0, tailRasterW, uploadRows, GL_RGBA, GL_UNSIGNED_BYTE, src);
+      glBindTexture(GL_TEXTURE_2D, GLuint(prevTex));
+    };
+
     auto ensureTailRasterImage = [&]() {
       int targetW = std::max(1, int(std::ceil(box.size.x)));
       int targetH = std::max(1, int(std::ceil(box.size.y)));
@@ -1945,6 +1995,9 @@ struct TDScopeDisplayWidget final : Widget {
 
         int iyMin = 0;
         int iyMax = rowCount - 1;
+        int uploadY0 = 0;
+        int uploadY1 = tailRasterH - 1;
+        bool fullTextureUpload = true;
         if (canIncremental) {
           float shiftLagSamples =
             (tailRasterWindowTopLag - windowTopLag) + (msg.scopeNewestPosSamples - tailRasterNewestPosSamples);
@@ -1983,6 +2036,9 @@ struct TDScopeDisplayWidget final : Widget {
                 iyMin = 0;
                 iyMax = std::min(rowCount - 1, kEdgeBandRows - 1);
               }
+              uploadY0 = clamp(int(std::floor(rowY[size_t(iyMin)] - 10.f)), 0, tailRasterH - 1);
+              uploadY1 = clamp(int(std::ceil(rowY[size_t(iyMax)] + 10.f)), 0, tailRasterH - 1);
+              fullTextureUpload = false;
             }
           } else {
             canIncremental = false;
@@ -2002,7 +2058,7 @@ struct TDScopeDisplayWidget final : Widget {
             rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX, iyMin, iyMax);
         }
 
-        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
+        uploadTailRasterRows(uploadY0, uploadY1, fullTextureUpload);
         nvgBeginPath(args.vg);
         nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
         NVGpaint rasterPaint =
