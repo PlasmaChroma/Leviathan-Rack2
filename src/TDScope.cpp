@@ -168,6 +168,13 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
     json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
+    json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
+    json_object_set_new(root, "debugRenderHaloEnabled", json_boolean(debugRenderHaloEnabled));
+    json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
+    json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
+    json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
+    json_object_set_new(root, "debugTailRasterCacheEnabled", json_boolean(debugTailRasterCacheEnabled));
+    json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
     return root;
   }
 
@@ -190,6 +197,35 @@ struct TDScope final : Module {
     json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
     if (haloJ) {
       scopeTransientHaloEnabled = json_boolean_value(haloJ);
+    }
+    json_t *mainTraceJ = json_object_get(root, "debugRenderMainTraceEnabled");
+    if (mainTraceJ) {
+      debugRenderMainTraceEnabled = json_boolean_value(mainTraceJ);
+    }
+    json_t *renderHaloJ = json_object_get(root, "debugRenderHaloEnabled");
+    if (renderHaloJ) {
+      debugRenderHaloEnabled = json_boolean_value(renderHaloJ);
+    }
+    json_t *connectorsJ = json_object_get(root, "debugRenderConnectorsEnabled");
+    if (connectorsJ) {
+      debugRenderConnectorsEnabled = json_boolean_value(connectorsJ);
+    }
+    json_t *stereoRightLaneJ = json_object_get(root, "debugRenderStereoRightLaneEnabled");
+    if (stereoRightLaneJ) {
+      debugRenderStereoRightLaneEnabled = json_boolean_value(stereoRightLaneJ);
+    }
+    json_t *framebufferCacheJ = json_object_get(root, "debugFramebufferCacheEnabled");
+    if (framebufferCacheJ) {
+      debugFramebufferCacheEnabled = json_boolean_value(framebufferCacheJ);
+    }
+    json_t *tailRasterCacheJ = json_object_get(root, "debugTailRasterCacheEnabled");
+    if (tailRasterCacheJ) {
+      debugTailRasterCacheEnabled = json_boolean_value(tailRasterCacheJ);
+    }
+    json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
+    if (publishRateJ) {
+      debugUiPublishRateMode =
+        clamp(int(json_integer_value(publishRateJ)), DEBUG_UI_PUBLISH_120HZ, DEBUG_UI_PUBLISH_COUNT - 1);
     }
   }
 
