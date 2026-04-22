@@ -79,6 +79,7 @@ struct HostToDisplay {
   float scopeHalfWindowMs = 900.f;
   float scopeStartLagSamples = 0.f;
   float scopeBinSpanSamples = 1.f;
+  float scopeNewestPosSamples = 0.f;
   uint32_t scopeBinCount = 0;
 
   ScopeBin scope[SCOPE_BIN_COUNT];
@@ -249,6 +250,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
                                 float sampleAbsolutePeakVolts, float scratchSensitivity,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
                                 float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
+                                float scopeNewestPosSamples,
                                 uint32_t scopeBinCount, const ScopeBin *scopeBins, const ScopeBin *scopeRightBins = nullptr) {
   if (!out) {
     return;
@@ -274,6 +276,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   out->scopeHalfWindowMs = scopeHalfWindowMs;
   out->scopeStartLagSamples = scopeStartLagSamples;
   out->scopeBinSpanSamples = scopeBinSpanSamples;
+  out->scopeNewestPosSamples = scopeNewestPosSamples;
   out->scopeBinCount = std::min(scopeBinCount, SCOPE_BIN_COUNT);
   ScopeBin empty = makeEmptyScopeBin();
   for (size_t i = 0; i < SCOPE_BIN_COUNT; ++i) {

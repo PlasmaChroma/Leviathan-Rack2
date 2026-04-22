@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -105,6 +106,8 @@ struct TDScope final : Module {
   bool debugRenderHaloEnabled = true;
   bool debugRenderConnectorsEnabled = true;
   bool debugRenderStereoRightLaneEnabled = true;
+  bool debugFramebufferCacheEnabled = true;
+  bool debugTailRasterCacheEnabled = false;
   int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
@@ -349,6 +352,7 @@ struct TDScopeDisplayWidget final : Widget {
   };
 
   TDScope *module = nullptr;
+  widget::FramebufferWidget *framebuffer = nullptr;
   float autoDisplayFullScaleVolts = 5.f;
   bool autoDisplayScaleInitialized = false;
   bool autoLastSampleMode = true;
@@ -392,6 +396,31 @@ struct TDScopeDisplayWidget final : Widget {
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
+  uint64_t redrawLastPublishSeq = 0;
+  bool redrawHasFreshFrame = false;
+  bool redrawLastLinkActive = false;
+  bool redrawLastPreviewValid = false;
+  float redrawLastRackZoom = 1.f;
+  int redrawLastRangeMode = -1;
+  int redrawLastChannelMode = -1;
+  int redrawLastColorScheme = -1;
+  bool redrawLastHaloEnabled = false;
+  bool redrawLastMainTraceEnabled = false;
+  bool redrawLastRenderHaloEnabled = false;
+  bool redrawLastConnectorsEnabled = false;
+  bool redrawLastStereoRightLaneEnabled = false;
+  bool redrawLastTailRasterEnabled = false;
+  int tailRasterImage = -1;
+  int tailRasterW = 0;
+  int tailRasterH = 0;
+  std::vector<uint8_t> tailRasterPixels;
+  bool tailRasterValid = false;
+  bool tailRasterStereo = false;
+  float tailRasterWindowTopLag = 0.f;
+  float tailRasterWindowBottomLag = 0.f;
+  float tailRasterNewestPosSamples = 0.f;
+  float tailRasterShiftResidualPx = 0.f;
+  uint64_t tailRasterPublishSeq = 0;
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
   }
@@ -596,6 +625,95 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     Widget::onDragEnd(e);
+  }
+
+  void step() override {
+    Widget::step();
+    if (!framebuffer) {
+      return;
+    }
+    if (!module || !module->debugFramebufferCacheEnabled) {
+      framebuffer->setDirty();
+      return;
+    }
+
+    bool dirty = false;
+    bool linkActive = module && module->uiLinkActive.load(std::memory_order_relaxed);
+    bool previewValid = module && module->uiPreviewValid.load(std::memory_order_relaxed);
+    if (linkActive != redrawLastLinkActive || previewValid != redrawLastPreviewValid) {
+      dirty = true;
+      redrawLastLinkActive = linkActive;
+      redrawLastPreviewValid = previewValid;
+    }
+
+    float rackZoom = currentRackZoom();
+    if (std::fabs(rackZoom - redrawLastRackZoom) > 0.01f) {
+      dirty = true;
+      redrawLastRackZoom = rackZoom;
+    }
+
+    if (module) {
+      if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
+        dirty = true;
+        redrawLastRangeMode = module->scopeDisplayRangeMode;
+      }
+      if (module->scopeChannelMode != redrawLastChannelMode) {
+        dirty = true;
+        redrawLastChannelMode = module->scopeChannelMode;
+      }
+      if (module->scopeColorScheme != redrawLastColorScheme) {
+        dirty = true;
+        redrawLastColorScheme = module->scopeColorScheme;
+      }
+      if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
+        dirty = true;
+        redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
+      }
+      if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
+        dirty = true;
+        redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
+      }
+      if (module->debugRenderHaloEnabled != redrawLastRenderHaloEnabled) {
+        dirty = true;
+        redrawLastRenderHaloEnabled = module->debugRenderHaloEnabled;
+      }
+      if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
+        dirty = true;
+        redrawLastConnectorsEnabled = module->debugRenderConnectorsEnabled;
+      }
+      if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
+        dirty = true;
+        redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
+      }
+      if (module->debugTailRasterCacheEnabled != redrawLastTailRasterEnabled) {
+        dirty = true;
+        redrawLastTailRasterEnabled = module->debugTailRasterCacheEnabled;
+        tailRasterValid = false;
+        tailRasterShiftResidualPx = 0.f;
+      }
+    }
+
+    temporaldeck_expander::HostToDisplay msg;
+    bool snapshotOk = module && module->readSnapshotForUi(&msg);
+    bool hasFreshFrame = snapshotOk && linkActive && previewValid;
+    if (hasFreshFrame) {
+      if (!redrawHasFreshFrame || msg.publishSeq != redrawLastPublishSeq) {
+        dirty = true;
+        redrawLastPublishSeq = msg.publishSeq;
+      }
+      redrawHasFreshFrame = true;
+    } else if (redrawHasFreshFrame) {
+      dirty = true;
+      redrawHasFreshFrame = false;
+    }
+
+    if (lagDragging) {
+      dirty = true;
+    }
+
+    if (dirty) {
+      framebuffer->setDirty();
+    }
   }
 
   void draw(const DrawArgs &args) override {
@@ -1489,6 +1607,153 @@ struct TDScopeDisplayWidget final : Widget {
       return c;
     };
 
+    auto ensureTailRasterImage = [&]() {
+      int targetW = std::max(1, int(std::ceil(box.size.x)));
+      int targetH = std::max(1, int(std::ceil(box.size.y)));
+      bool recreate = (tailRasterImage < 0) || (tailRasterW != targetW) || (tailRasterH != targetH);
+      if (!recreate) {
+        return;
+      }
+      if (tailRasterImage >= 0) {
+        nvgDeleteImage(args.vg, tailRasterImage);
+        tailRasterImage = -1;
+      }
+      tailRasterW = targetW;
+      tailRasterH = targetH;
+      tailRasterPixels.assign(size_t(tailRasterW * tailRasterH * 4), 0u);
+      tailRasterImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
+      tailRasterValid = false;
+      tailRasterShiftResidualPx = 0.f;
+      if (tailRasterImage >= 0) {
+        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
+      }
+    };
+
+    auto clearTailRasterRows = [&](int y0, int y1) {
+      if (tailRasterW <= 0 || tailRasterH <= 0 || tailRasterPixels.empty()) {
+        return;
+      }
+      y0 = clamp(y0, 0, tailRasterH - 1);
+      y1 = clamp(y1, 0, tailRasterH - 1);
+      if (y1 < y0) {
+        return;
+      }
+      size_t stride = size_t(tailRasterW) * 4u;
+      for (int y = y0; y <= y1; ++y) {
+        std::memset(tailRasterPixels.data() + size_t(y) * stride, 0, stride);
+      }
+    };
+
+    auto blendTailRasterPixel = [&](int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+      if (a == 0u || x < 0 || y < 0 || x >= tailRasterW || y >= tailRasterH) {
+        return;
+      }
+      size_t idx = (size_t(y) * size_t(tailRasterW) + size_t(x)) * 4u;
+      uint8_t sr = uint8_t((uint16_t(r) * uint16_t(a) + 127u) / 255u);
+      uint8_t sg = uint8_t((uint16_t(g) * uint16_t(a) + 127u) / 255u);
+      uint8_t sb = uint8_t((uint16_t(b) * uint16_t(a) + 127u) / 255u);
+      uint8_t sa = a;
+      uint8_t dr = tailRasterPixels[idx + 0];
+      uint8_t dg = tailRasterPixels[idx + 1];
+      uint8_t db = tailRasterPixels[idx + 2];
+      uint8_t da = tailRasterPixels[idx + 3];
+      uint16_t inv = uint16_t(255u - sa);
+      tailRasterPixels[idx + 0] = uint8_t(std::min<uint16_t>(255u, uint16_t(sr) + uint16_t((uint16_t(dr) * inv + 127u) / 255u)));
+      tailRasterPixels[idx + 1] = uint8_t(std::min<uint16_t>(255u, uint16_t(sg) + uint16_t((uint16_t(dg) * inv + 127u) / 255u)));
+      tailRasterPixels[idx + 2] = uint8_t(std::min<uint16_t>(255u, uint16_t(sb) + uint16_t((uint16_t(db) * inv + 127u) / 255u)));
+      tailRasterPixels[idx + 3] = uint8_t(std::min<uint16_t>(255u, uint16_t(sa) + uint16_t((uint16_t(da) * inv + 127u) / 255u)));
+    };
+
+    auto fillTailRasterSpan = [&](int y, int x0, int x1, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+      if (y < 0 || y >= tailRasterH || a == 0u) {
+        return;
+      }
+      if (x1 < x0) {
+        std::swap(x0, x1);
+      }
+      x0 = clamp(x0, 0, tailRasterW - 1);
+      x1 = clamp(x1, 0, tailRasterW - 1);
+      for (int x = x0; x <= x1; ++x) {
+        blendTailRasterPixel(x, y, r, g, b, a);
+      }
+    };
+
+    auto drawTailRasterLaneRows =
+      [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
+          const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid, float laneCenterXForConnectors,
+          int iyMin, int iyMax) {
+        constexpr uint8_t kHaloMinAlphaToDraw = 28u;
+        iyMin = clamp(iyMin, 0, rowCount - 1);
+        iyMax = clamp(iyMax, 0, rowCount - 1);
+        if (iyMax < iyMin) {
+          return;
+        }
+
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        int prevY = 0;
+        for (int iy = iyMin; iy <= iyMax; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
+            prevValid = false;
+            continue;
+          }
+          int yPx = clamp(int(std::lround(rowY[idx])), 0, tailRasterH - 1);
+          float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          NVGcolor c = brightenColor(
+            gradientColorForIntensity(tone, uint8_t(std::lround(122.f + 120.f * tone))),
+            transientLift * 0.90f);
+          uint8_t r = uint8_t(std::lround(clamp(c.r, 0.f, 1.f) * 255.f));
+          uint8_t g = uint8_t(std::lround(clamp(c.g, 0.f, 1.f) * 255.f));
+          uint8_t b = uint8_t(std::lround(clamp(c.b, 0.f, 1.f) * 255.f));
+          uint8_t a = uint8_t(std::lround(clamp(c.a, 0.f, 1.f) * 255.f));
+          int xMin = int(std::lround(std::min(x0[idx], x1[idx])));
+          int xMax = int(std::lround(std::max(x0[idx], x1[idx])));
+
+          if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
+            float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
+            float haloT = haloLinear * haloLinear;
+            uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
+            if (haloAlpha >= kHaloMinAlphaToDraw) {
+              int haloExtend = int(std::lround((1.35f + 5.20f * haloT) * zoomThicknessMul));
+              int haloHalfW = std::max(1, int(std::lround((0.50f + 1.20f * haloT) * zoomThicknessMul)));
+              for (int yy = yPx - haloHalfW; yy <= yPx + haloHalfW; ++yy) {
+                fillTailRasterSpan(yy, xMin - haloExtend, xMax + haloExtend, 255u, 255u, 255u, haloAlpha);
+              }
+            }
+          }
+
+          if (module->debugRenderMainTraceEnabled) {
+            int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
+            for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
+              fillTailRasterSpan(yy, xMin, xMax, r, g, b, a);
+            }
+          }
+
+          if (module->debugRenderConnectorsEnabled && prevValid) {
+            int y0i = prevY;
+            int y1i = yPx;
+            int dy = std::abs(y1i - y0i);
+            int steps = std::max(1, dy);
+            for (int s = 0; s <= steps; ++s) {
+              float t = float(s) / float(steps);
+              int ys = int(std::lround(float(y0i) + float(y1i - y0i) * t));
+              int lx = int(std::lround(prevX0 + (x0[idx] - prevX0) * t));
+              int rx = int(std::lround(prevX1 + (x1[idx] - prevX1) * t));
+              fillTailRasterSpan(ys, lx, rx, r, g, b, uint8_t(std::min(255, int(a) / 2 + 28)));
+            }
+          }
+
+          prevX0 = x0[idx];
+          prevX1 = x1[idx];
+          prevY = yPx;
+          prevValid = true;
+        }
+      };
+
     nvgSave(args.vg);
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
 
@@ -1652,11 +1917,110 @@ struct TDScopeDisplayWidget final : Widget {
       }
     };
 
-    drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
-    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
-      drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
+    bool useTailRaster = module->debugTailRasterCacheEnabled;
+    if (!useTailRaster) {
+      drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
+      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+        drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
 
-      // Draw subtle lane divider for stereo side-by-side view.
+        // Draw subtle lane divider for stereo side-by-side view.
+        float dividerX = laneWidth + laneGap * 0.5f;
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, dividerX, drawTop);
+        nvgLineTo(args.vg, dividerX, drawBottom);
+        nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
+        nvgStrokeWidth(args.vg, 1.f);
+        nvgStroke(args.vg);
+      }
+      tailRasterValid = false;
+    } else {
+      ensureTailRasterImage();
+      if (tailRasterImage >= 0 && tailRasterW > 0 && tailRasterH > 0) {
+        bool sameStereo = tailRasterStereo == renderStereo;
+        float prevSpan = std::max(std::fabs(tailRasterWindowTopLag - tailRasterWindowBottomLag), 1e-6f);
+        float currSpan = std::max(std::fabs(windowTopLag - windowBottomLag), 1e-6f);
+        bool spanCompatible = std::fabs(currSpan - prevSpan) <= std::max(1e-4f, 0.01f * currSpan);
+        bool canIncremental =
+          tailRasterValid && sameStereo && spanCompatible && !lagDragging && (msg.publishSeq != tailRasterPublishSeq);
+
+        int iyMin = 0;
+        int iyMax = rowCount - 1;
+        if (canIncremental) {
+          float shiftLagSamples =
+            (tailRasterWindowTopLag - windowTopLag) + (msg.scopeNewestPosSamples - tailRasterNewestPosSamples);
+          float exactShiftPx = tailRasterShiftResidualPx + (shiftLagSamples / currSpan) * float(tailRasterH - 1);
+          int shiftPx = int(std::trunc(exactShiftPx));
+          tailRasterShiftResidualPx = exactShiftPx - float(shiftPx);
+          if (shiftPx > -tailRasterH && shiftPx < tailRasterH) {
+            size_t stride = size_t(tailRasterW) * 4u;
+            if (shiftPx > 0) {
+              size_t copyRows = size_t(tailRasterH - shiftPx);
+              std::memmove(tailRasterPixels.data(),
+                           tailRasterPixels.data() + size_t(shiftPx) * stride,
+                           copyRows * stride);
+              clearTailRasterRows(tailRasterH - shiftPx, tailRasterH - 1);
+              iyMin = clamp(int(std::floor(((float(tailRasterH - shiftPx) - drawTop) / std::max(rowStep, 1e-6f))) - 3),
+                            0, rowCount - 1);
+              iyMax = rowCount - 1;
+            } else if (shiftPx < 0) {
+              int downPx = -shiftPx;
+              size_t copyRows = size_t(tailRasterH - downPx);
+              std::memmove(tailRasterPixels.data() + size_t(downPx) * stride,
+                           tailRasterPixels.data(),
+                           copyRows * stride);
+              clearTailRasterRows(0, downPx - 1);
+              iyMin = 0;
+              iyMax = clamp(int(std::ceil(((float(downPx) - drawTop) / std::max(rowStep, 1e-6f))) + 3), 0, rowCount - 1);
+            } else {
+              // Sub-pixel motion accumulated but did not cross a full pixel yet.
+              // Refresh only a narrow edge band instead of falling back to a
+              // full redraw, which avoids visible cadence hitching.
+              constexpr int kEdgeBandRows = 6;
+              if (exactShiftPx >= 0.f) {
+                iyMin = std::max(0, rowCount - kEdgeBandRows);
+                iyMax = rowCount - 1;
+              } else {
+                iyMin = 0;
+                iyMax = std::min(rowCount - 1, kEdgeBandRows - 1);
+              }
+            }
+          } else {
+            canIncremental = false;
+            tailRasterShiftResidualPx = 0.f;
+          }
+        }
+        if (!canIncremental) {
+          clearTailRasterRows(0, tailRasterH - 1);
+          iyMin = 0;
+          iyMax = rowCount - 1;
+          tailRasterShiftResidualPx = 0.f;
+        }
+
+        drawTailRasterLaneRows(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX, iyMin, iyMax);
+        if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+          drawTailRasterLaneRows(
+            rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX, iyMin, iyMax);
+        }
+
+        nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
+        nvgBeginPath(args.vg);
+        nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+        NVGpaint rasterPaint =
+          nvgImagePattern(args.vg, 0.f, 0.f, float(tailRasterW), float(tailRasterH), 0.f, tailRasterImage, 1.f);
+        nvgFillPaint(args.vg, rasterPaint);
+        nvgFill(args.vg);
+
+        tailRasterStereo = renderStereo;
+        tailRasterWindowTopLag = windowTopLag;
+        tailRasterWindowBottomLag = windowBottomLag;
+        tailRasterNewestPosSamples = msg.scopeNewestPosSamples;
+        tailRasterPublishSeq = msg.publishSeq;
+        tailRasterValid = true;
+      }
+    }
+    float lineX0 = 2.f;
+    float lineX1 = box.size.x - 2.f;
+    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
       float dividerX = laneWidth + laneGap * 0.5f;
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, dividerX, drawTop);
@@ -1665,8 +2029,6 @@ struct TDScopeDisplayWidget final : Widget {
       nvgStrokeWidth(args.vg, 1.f);
       nvgStroke(args.vg);
     }
-    float lineX0 = 2.f;
-    float lineX1 = box.size.x - 2.f;
     if (lineX1 > lineX0) {
       auto drawReadHeadLine = [&](float y, uint8_t alpha, float width) {
         nvgBeginPath(args.vg);
@@ -1713,17 +2075,22 @@ struct TDScopeWidget : ModuleWidget {
       panelBorder = findPanelBorder(svgPanel->fb);
     }
 
+    math::Rect scopeRectMm;
+    if (!panel_svg::loadRectFromSvgMm(panelPath, "scope", &scopeRectMm)) {
+      scopeRectMm.pos = Vec(1.1138f, 10.9404f);
+      scopeRectMm.size = Vec(38.5563f, 109.4206f);
+    }
+    widget::FramebufferWidget *displayFb = new widget::FramebufferWidget();
+    displayFb->box.pos = mm2px(scopeRectMm.pos);
+    displayFb->box.size = mm2px(scopeRectMm.size);
+    displayFb->dirtyOnSubpixelChange = false;
+
     auto *display = new TDScopeDisplayWidget;
     display->module = module;
-    math::Rect scopeRectMm;
-    if (panel_svg::loadRectFromSvgMm(panelPath, "scope", &scopeRectMm)) {
-      display->box.pos = mm2px(scopeRectMm.pos);
-      display->box.size = mm2px(scopeRectMm.size);
-    } else {
-      display->box.pos = mm2px(Vec(1.1138f, 10.9404f));
-      display->box.size = mm2px(Vec(38.5563f, 109.4206f));
-    }
-    addChild(display);
+    display->framebuffer = displayFb;
+    display->box.size = displayFb->box.size;
+    displayFb->addChild(display);
+    addChild(displayFb);
 
     addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
     addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
@@ -1886,6 +2253,13 @@ struct TDScopeWidget : ModuleWidget {
         submenu->addChild(createCheckMenuItem(
           "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
           [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
+        submenu->addChild(new MenuSeparator());
+        submenu->addChild(createCheckMenuItem(
+          "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled; },
+          [=]() { scopeModule->debugFramebufferCacheEnabled = !scopeModule->debugFramebufferCacheEnabled; }));
+        submenu->addChild(createCheckMenuItem(
+          "Tail raster cache", "", [=]() { return scopeModule->debugTailRasterCacheEnabled; },
+          [=]() { scopeModule->debugTailRasterCacheEnabled = !scopeModule->debugTailRasterCacheEnabled; }));
         submenu->addChild(new MenuSeparator());
         submenu->addChild(createCheckMenuItem(
           "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },

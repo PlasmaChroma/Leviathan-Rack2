@@ -1421,6 +1421,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBinsRight;
         float scopeStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
+        float scopeNewestPosSamples = 0.f;
         uint32_t scopeBinCount = 0u;
         ScopeWindowParams scopeParams;
         auto scopePreviewMeasureStart = std::chrono::steady_clock::now();
@@ -1442,6 +1443,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           }
           scopeStartLagSamples = scopeParams.scopeStartLagSamples;
           scopeBinSpanSamples = scopeParams.binSpanSamples;
+          scopeNewestPosSamples = float(scopeParams.newestPos);
         } else {
           impl->expanderScopeCacheMono.valid = false;
           impl->expanderScopeCacheRight.valid = false;
@@ -1498,7 +1500,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float(frame.sampleProgress), sampleAbsolutePeakVolts, combinedSensitivity,
           uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
-          scopeBinSpanSamples, scopeBinCount, scopeBins.data(), wantStereoScope ? scopeBinsRight.data() : nullptr);        rightExpander.module->leftExpander.messageFlipRequested = true;
+          scopeBinSpanSamples, scopeNewestPosSamples, scopeBinCount, scopeBins.data(),
+          wantStereoScope ? scopeBinsRight.data() : nullptr);        rightExpander.module->leftExpander.messageFlipRequested = true;
         impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
         impl->expanderPreviewValid = scopeReady;
       } else {
