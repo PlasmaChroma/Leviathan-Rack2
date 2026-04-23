@@ -106,6 +106,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint shaderVertex = 0;
   GLuint shaderFragment = 0;
   GLuint shaderVbo = 0;
+  GLint shaderUniformColorScale = -1;
+  GLint shaderUniformColorLift = -1;
+  GLint shaderUniformAlphaScale = -1;
+  GLint shaderUniformAlphaGamma = -1;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -1168,6 +1172,20 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     auto encodeColorByte = [](float v) -> GLubyte {
       return GLubyte(std::lround(clamp(v, 0.f, 1.f) * 255.f));
     };
+    struct ShaderPassParams {
+      float colorScale = 1.f;
+      float colorLift = 0.f;
+      float alphaScale = 1.f;
+      float alphaGamma = 1.f;
+    };
+    auto makeShaderPassParams = [](float colorScale, float colorLift, float alphaScale, float alphaGamma) {
+      ShaderPassParams params;
+      params.colorScale = colorScale;
+      params.colorLift = colorLift;
+      params.alphaScale = alphaScale;
+      params.alphaGamma = alphaGamma;
+      return params;
+    };
     auto initShaderPipeline = [&]() {
       if (shaderInitAttempted) {
         return shaderReady;
@@ -1175,14 +1193,25 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       shaderInitAttempted = true;
       static const char *kVertexShaderSrc =
         "#version 120\n"
+        "varying vec4 vColor;\n"
         "void main() {\n"
         "  gl_Position = ftransform();\n"
-        "  gl_FrontColor = gl_Color;\n"
+        "  vColor = gl_Color;\n"
         "}\n";
       static const char *kFragmentShaderSrc =
         "#version 120\n"
+        "varying vec4 vColor;\n"
+        "uniform float uColorScale;\n"
+        "uniform float uColorLift;\n"
+        "uniform float uAlphaScale;\n"
+        "uniform float uAlphaGamma;\n"
         "void main() {\n"
-        "  gl_FragColor = gl_Color;\n"
+        "  vec3 rgb = clamp(vColor.rgb * uColorScale, 0.0, 1.0);\n"
+        "  rgb = rgb + (vec3(1.0) - rgb) * clamp(uColorLift, 0.0, 1.0);\n"
+        "  float alpha = clamp(vColor.a, 0.0, 1.0);\n"
+        "  alpha = pow(alpha, max(uAlphaGamma, 0.05));\n"
+        "  alpha = clamp(alpha * uAlphaScale, 0.0, 1.0);\n"
+        "  gl_FragColor = vec4(rgb, alpha);\n"
         "}\n";
 
       auto compileShader = [](GLenum type, const char *src) -> GLuint {
@@ -1249,6 +1278,27 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return false;
       }
 
+      shaderUniformColorScale = glGetUniformLocation(shaderProgram, "uColorScale");
+      shaderUniformColorLift = glGetUniformLocation(shaderProgram, "uColorLift");
+      shaderUniformAlphaScale = glGetUniformLocation(shaderProgram, "uAlphaScale");
+      shaderUniformAlphaGamma = glGetUniformLocation(shaderProgram, "uAlphaGamma");
+      if (shaderUniformColorScale < 0 || shaderUniformColorLift < 0 || shaderUniformAlphaScale < 0 ||
+          shaderUniformAlphaGamma < 0) {
+        glDeleteBuffers(1, &shaderVbo);
+        glDeleteProgram(shaderProgram);
+        glDeleteShader(shaderVertex);
+        glDeleteShader(shaderFragment);
+        shaderProgram = 0;
+        shaderVertex = 0;
+        shaderFragment = 0;
+        shaderVbo = 0;
+        shaderUniformColorScale = -1;
+        shaderUniformColorLift = -1;
+        shaderUniformAlphaScale = -1;
+        shaderUniformAlphaGamma = -1;
+        return false;
+      }
+
       shaderReady = true;
       return true;
     };
@@ -1264,7 +1314,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr float kGlMainWidthGain = 1.10f;
     constexpr float kGlConnectorWidthGain = 1.08f;
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
-    constexpr float kGlConnectorBodyFillAlpha = 0.20f;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors) {
@@ -1286,13 +1335,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
       float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
-      auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width) {
+      auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width, const ShaderPassParams &shaderParams) {
         if (verts.empty()) {
           return;
         }
         glLineWidth(width);
         if (initShaderPipeline()) {
           glUseProgram(shaderProgram);
+          glUniform1f(shaderUniformColorScale, shaderParams.colorScale);
+          glUniform1f(shaderUniformColorLift, shaderParams.colorLift);
+          glUniform1f(shaderUniformAlphaScale, shaderParams.alphaScale);
+          glUniform1f(shaderUniformAlphaGamma, shaderParams.alphaGamma);
           glBindBuffer(GL_ARRAY_BUFFER, shaderVbo);
           glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(GlLineVertex)), verts.data(), GL_STREAM_DRAW);
           glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), reinterpret_cast<const GLvoid *>(offsetof(GlLineVertex, x)));
@@ -1310,6 +1363,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       };
       if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
+        const ShaderPassParams haloShaderParams = makeShaderPassParams(1.08f, 0.14f, 1.16f, 0.92f);
         for (auto &verts : haloBatchVerts) {
           verts.clear();
         }
@@ -1340,11 +1394,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
           float haloW =
             (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
-          drawBatch(haloBatchVerts[size_t(widthBin)], haloW);
+          drawBatch(haloBatchVerts[size_t(widthBin)], haloW, haloShaderParams);
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       }
       if (module->debugRenderMainTraceEnabled) {
+        const ShaderPassParams mainShaderParams = makeShaderPassParams(1.05f, 0.05f, 1.08f, 0.96f);
+        const ShaderPassParams fillShaderParams = makeShaderPassParams(1.10f, 0.10f, 1.18f, 0.88f);
         for (auto &verts : mainBatchVerts) {
           verts.clear();
         }
@@ -1373,7 +1429,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
           float mainW =
             (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain * glZoomInWidthComp;
-          drawBatch(mainBatchVerts[size_t(widthBin)], mainW);
+          drawBatch(mainBatchVerts[size_t(widthBin)], mainW, mainShaderParams);
         }
         if (glDeepZoomEnergyFill > 1e-4f) {
           glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -1393,16 +1449,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             for (GlLineVertex &v : fillVerts) {
               v.a = fillAlpha;
             }
-            drawBatch(fillVerts, fillW);
+            drawBatch(fillVerts, fillW, fillShaderParams);
           }
           glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
       }
       if (module->debugRenderConnectorsEnabled) {
+        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.14f, 0.14f, 1.28f, 0.82f);
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
-        for (auto &verts : connectorBatchVerts) {
-          verts.clear();
-        }
         std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
         for (auto &verts : connectorBodyBatchVerts) {
           verts.reserve(size_t(rowCount / 2 + 8) * 2u);
@@ -1440,22 +1494,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
               gradientColorForIntensity(
                 connectVisual,
                 uint8_t(std::lround(clamp(
-                  (88.f + 92.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-              clamp(connectTransientLift * 0.72f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+                  (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+              clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
             GLubyte a = encodeColorByte(c.a);
-            connectorBatchVerts[size_t(rowBin)].push_back({prevX0, prevY, r, g, b, a});
-            connectorBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, a});
-            connectorBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, a});
-            connectorBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, a});
             float prevCenter = 0.5f * (prevX0 + prevX1);
             float center = 0.5f * (x0 + x1);
             float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
-            if (centerSpan > connectorMinDeltaPx * 1.5f) {
+            if (centerSpan > connectorMinDeltaPx * 1.2f) {
               GLubyte bodyAlpha = GLubyte(std::lround(clamp(
-                float(a) * kGlConnectorBodyFillAlpha * (0.65f + 0.35f * glDeepZoomEnergyFill), 0.f, 255.f)));
+                float(a) * (0.90f + 0.24f * glDeepZoomEnergyFill), 0.f, 255.f)));
               connectorBodyBatchVerts[size_t(rowBin)].push_back({prevCenter, prevY, r, g, b, bodyAlpha});
               connectorBodyBatchVerts[size_t(rowBin)].push_back({center, rowY[idx], r, g, b, bodyAlpha});
             }
@@ -1468,14 +1518,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           prevValid = true;
         }
         for (int widthBin = 0; widthBin < kGlConnectorStrokeBins; ++widthBin) {
-          float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
-          float connectW =
-            (0.58f + 0.40f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * glZoomInWidthComp;
-          drawBatch(connectorBatchVerts[size_t(widthBin)], connectW);
           if (!connectorBodyBatchVerts[size_t(widthBin)].empty()) {
-            float bodyW = connectW * (0.95f + 0.08f * glDeepZoomEnergyFill);
+            float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
+            float bodyW =
+              (0.92f + 0.52f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * (1.04f + 0.10f * glZoomInWidthComp);
+            bodyW *= (1.02f + 0.10f * glDeepZoomEnergyFill);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-            drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW);
+            drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW, connectorBodyShaderParams);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
           }
         }
