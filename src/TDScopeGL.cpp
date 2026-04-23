@@ -40,6 +40,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     GLfloat by;
     GLfloat radius;
   };
+  struct GlFieldVertex {
+    GLfloat x;
+    GLfloat y;
+  };
 
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
@@ -133,6 +137,32 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint segmentShaderVertex = 0;
   GLuint segmentShaderFragment = 0;
   GLuint segmentShaderVbo = 0;
+  bool fieldShaderInitAttempted = false;
+  bool fieldShaderReady = false;
+  GLuint fieldShaderProgram = 0;
+  GLuint fieldShaderVertex = 0;
+  GLuint fieldShaderFragment = 0;
+  GLuint fieldShaderVbo = 0;
+  GLuint fieldRowTexture = 0;
+  GLuint fieldColorLutTexture = 0;
+  GLint fieldUniformRowTex = -1;
+  GLint fieldUniformColorLutTex = -1;
+  GLint fieldUniformRowCount = -1;
+  GLint fieldUniformDrawTop = -1;
+  GLint fieldUniformRowStep = -1;
+  GLint fieldUniformZoomThickness = -1;
+  GLint fieldUniformZoomInWidthComp = -1;
+  GLint fieldUniformZoomInHaloWidthComp = -1;
+  GLint fieldUniformZoomInAlphaComp = -1;
+  GLint fieldUniformZoomInLiftComp = -1;
+  GLint fieldUniformZoomInHaloAlphaComp = -1;
+  GLint fieldUniformDeepZoomEnergyFill = -1;
+  GLint fieldUniformRenderMain = -1;
+  GLint fieldUniformRenderHalo = -1;
+  GLint fieldUniformRenderContinuity = -1;
+  std::vector<GLfloat> fieldRowData;
+  int fieldRowTextureWidth = 0;
+  int fieldColorLutScheme = -1;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -1429,6 +1459,288 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       segmentShaderReady = true;
       return true;
     };
+    auto initFieldShaderPipeline = [&]() {
+      if (fieldShaderInitAttempted) {
+        return fieldShaderReady;
+      }
+      fieldShaderInitAttempted = true;
+      static const GLuint kAttrPos = 0;
+      static const char *kVertexShaderSrc =
+        "#version 120\n"
+        "attribute vec2 aPos;\n"
+        "varying vec2 vLocalPos;\n"
+        "void main() {\n"
+        "  gl_Position = gl_ModelViewProjectionMatrix * vec4(aPos, 0.0, 1.0);\n"
+        "  vLocalPos = aPos;\n"
+        "}\n";
+      static const char *kFragmentShaderSrc =
+        "#version 120\n"
+        "uniform sampler2D uRowTex;\n"
+        "uniform sampler2D uColorLutTex;\n"
+        "uniform float uRowCount;\n"
+        "uniform float uDrawTop;\n"
+        "uniform float uRowStep;\n"
+        "uniform float uZoomThickness;\n"
+        "uniform float uZoomInWidthComp;\n"
+        "uniform float uZoomInHaloWidthComp;\n"
+        "uniform float uZoomInAlphaComp;\n"
+        "uniform float uZoomInLiftComp;\n"
+        "uniform float uZoomInHaloAlphaComp;\n"
+        "uniform float uDeepZoomEnergyFill;\n"
+        "uniform float uRenderMain;\n"
+        "uniform float uRenderHalo;\n"
+        "uniform float uRenderContinuity;\n"
+        "varying vec2 vLocalPos;\n"
+        "vec4 fetchRow(float idx) {\n"
+        "  float t = (clamp(idx, 0.0, uRowCount - 1.0) + 0.5) / max(uRowCount, 1.0);\n"
+        "  return texture2D(uRowTex, vec2(t, 0.5));\n"
+        "}\n"
+        "bool rowValid(vec4 row) {\n"
+        "  return row.z >= 0.0;\n"
+        "}\n"
+        "vec4 gradientColor(float intensity, float alpha) {\n"
+        "  float t = clamp(intensity, 0.0, 1.0);\n"
+        "  vec4 c = texture2D(uColorLutTex, vec2(t, 0.5));\n"
+        "  float hotT = clamp((t - 0.82) / 0.18, 0.0, 1.0);\n"
+        "  float hotLift = 0.24 * hotT * hotT;\n"
+        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * hotLift;\n"
+        "  c.a = alpha;\n"
+        "  return c;\n"
+        "}\n"
+        "vec4 brightenColor(vec4 c, float lift) {\n"
+        "  lift = clamp(lift, 0.0, 1.0);\n"
+        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * lift;\n"
+        "  return c;\n"
+        "}\n"
+        "float segmentDistance(vec2 p, vec2 a, vec2 b) {\n"
+        "  vec2 pa = p - a;\n"
+        "  vec2 ba = b - a;\n"
+        "  float denom = max(dot(ba, ba), 1e-6);\n"
+        "  float h = clamp(dot(pa, ba) / denom, 0.0, 1.0);\n"
+        "  return length(pa - ba * h);\n"
+        "}\n"
+        "float gaussianAlpha(float dist, float radius) {\n"
+        "  float sigma = max(radius * 0.70, 0.001);\n"
+        "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
+        "}\n"
+        "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 rgb, inout float alphaMax) {\n"
+        "  if (!rowValid(row)) {\n"
+        "    return;\n"
+        "  }\n"
+        "  float y = uDrawTop + (rowIdx + 0.5) * uRowStep;\n"
+        "  float x0 = row.x;\n"
+        "  float x1 = row.y;\n"
+        "  float visual = clamp(row.z, 0.0, 1.0);\n"
+        "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
+        "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
+        "  float mainAlpha = clamp(((122.0 + 120.0 * tone) / 255.0) * 1.18 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  vec4 mainColor = brightenColor(gradientColor(tone, mainAlpha),\n"
+        "                                clamp(transientLift * 0.90 * 1.16 * uZoomInLiftComp, 0.0, 1.0));\n"
+        "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
+        "  float mainRadius = max(mainW * 0.55, 0.40);\n"
+        "  float mainCov = gaussianAlpha(segmentDistance(p, vec2(x0, y), vec2(x1, y)), mainRadius);\n"
+        "  if (uRenderMain > 0.5) {\n"
+        "    rgb += mainColor.rgb * (mainColor.a * mainCov);\n"
+        "    alphaMax = max(alphaMax, mainColor.a * mainCov);\n"
+        "    if (uDeepZoomEnergyFill > 1e-4) {\n"
+        "      float fillRadius = mainRadius * (1.08 + 0.04 * uDeepZoomEnergyFill);\n"
+        "      float fillCov = gaussianAlpha(segmentDistance(p, vec2(x0, y), vec2(x1, y)), fillRadius);\n"
+        "      float fillAlpha = clamp(0.24 * uDeepZoomEnergyFill, 0.0, 1.0) * fillCov;\n"
+        "      rgb += mainColor.rgb * fillAlpha;\n"
+        "      alphaMax = max(alphaMax, fillAlpha);\n"
+        "    }\n"
+        "  }\n"
+        "  if (uRenderHalo > 0.5) {\n"
+        "    float haloLinear = clamp((transientLift - 0.030) / 0.800, 0.0, 1.0);\n"
+        "    float haloT = haloLinear * haloLinear;\n"
+        "    float haloAlpha = ((88.0 + 196.0 * max(visual, 0.24)) / 255.0) * haloT;\n"
+        "    float boostedHaloAlpha = clamp(haloAlpha * 1.34 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
+        "    if (boostedHaloAlpha > 0.001) {\n"
+        "      float haloW = (mainW + (1.10 + 2.20 * haloT) * uZoomThickness) * 1.10 * uZoomInHaloWidthComp;\n"
+        "      float haloRadius = max(haloW * 0.58, mainRadius + 0.30);\n"
+        "      float haloCov = gaussianAlpha(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius);\n"
+        "      rgb += vec3(1.0) * (boostedHaloAlpha * haloCov);\n"
+        "      alphaMax = max(alphaMax, boostedHaloAlpha * haloCov);\n"
+        "    }\n"
+        "  }\n"
+        "}\n"
+        "void accumulateContinuity(vec2 p, vec4 rowA, float idxA, vec4 rowB, float idxB, inout vec3 rgb, inout float alphaMax) {\n"
+        "  if (!(uRenderContinuity > 0.5) || !rowValid(rowA) || !rowValid(rowB)) {\n"
+        "    return;\n"
+        "  }\n"
+        "  float x0a = rowA.x;\n"
+        "  float x1a = rowA.y;\n"
+        "  float x0b = rowB.x;\n"
+        "  float x1b = rowB.y;\n"
+        "  float delta = max(abs(x0b - x0a), abs(x1b - x1a));\n"
+        "  float connectorMinDelta = max(0.60 * uZoomThickness, 0.40);\n"
+        "  if (delta < connectorMinDelta) {\n"
+        "    return;\n"
+        "  }\n"
+        "  float prevVisual = clamp(rowA.z, 0.0, 1.0);\n"
+        "  float visual = clamp(rowB.z, 0.0, 1.0);\n"
+        "  float prevDrive = clamp(rowA.w, 0.0, 1.0);\n"
+        "  float drive = clamp(rowB.w, 0.0, 1.0);\n"
+        "  float connectVisual = clamp(0.5 * (prevVisual + visual), 0.0, 1.0);\n"
+        "  float connectTransientLift = clamp(0.5 * (prevDrive + drive), 0.0, 1.0);\n"
+        "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
+        "  vec4 c = brightenColor(gradientColor(connectVisual,\n"
+        "                         clamp(((104.0 + 108.0 * connectVisual) / 255.0) * 1.14 * uZoomInAlphaComp, 0.0, 1.0)),\n"
+        "                         clamp(connectTransientLift * 0.84 * 1.12 * uZoomInLiftComp, 0.0, 1.0));\n"
+        "  float prevCenter = 0.5 * (x0a + x1a);\n"
+        "  float center = 0.5 * (x0b + x1b);\n"
+        "  float centerSpan = 0.5 * (abs(x1a - x0a) + abs(x1b - x0b));\n"
+        "  if (centerSpan <= connectorMinDelta * 1.2) {\n"
+        "    return;\n"
+        "  }\n"
+        "  float continuityRadius = max((0.92 + 0.52 * connectTone) * uZoomThickness * 1.08 *\n"
+        "                               (1.04 + 0.10 * uZoomInWidthComp) * (1.02 + 0.10 * uDeepZoomEnergyFill) * 0.58,\n"
+        "                               0.45);\n"
+        "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
+        "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
+        "  float contCov = gaussianAlpha(segmentDistance(p, vec2(prevCenter, yA), vec2(center, yB)), continuityRadius);\n"
+        "  float contAlpha = clamp(c.a * (0.52 + 0.12 * uDeepZoomEnergyFill), 0.0, 1.0) * contCov;\n"
+        "  rgb += c.rgb * contAlpha;\n"
+        "  alphaMax = max(alphaMax, contAlpha);\n"
+        "}\n"
+        "void main() {\n"
+        "  vec2 p = vLocalPos;\n"
+        "  float rowPos = ((p.y - uDrawTop) / max(uRowStep, 1e-6)) - 0.5;\n"
+        "  float i0 = floor(rowPos);\n"
+        "  float i1 = i0 + 1.0;\n"
+        "  vec4 row0 = fetchRow(i0);\n"
+        "  vec4 row1 = fetchRow(i1);\n"
+        "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
+        "  vec3 rgb = vec3(0.0);\n"
+        "  float alphaMax = 0.0;\n"
+        "  accumulateRow(p, row0, i0, rgb, alphaMax);\n"
+        "  accumulateRow(p, row1, i1, rgb, alphaMax);\n"
+        "  accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, rgb, alphaMax);\n"
+        "  accumulateContinuity(p, row0, i0, row1, i1, rgb, alphaMax);\n"
+        "  rgb = clamp(rgb, 0.0, 1.0);\n"
+        "  alphaMax = clamp(max(alphaMax, max(rgb.r, max(rgb.g, rgb.b))), 0.0, 1.0);\n"
+        "  gl_FragColor = vec4(rgb, alphaMax);\n"
+        "}\n";
+
+      auto compileShader = [](GLenum type, const char *src) -> GLuint {
+        GLuint shader = glCreateShader(type);
+        if (!shader) {
+          return 0;
+        }
+        glShaderSource(shader, 1, &src, nullptr);
+        glCompileShader(shader);
+        GLint status = GL_FALSE;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE) {
+          glDeleteShader(shader);
+          return 0;
+        }
+        return shader;
+      };
+
+      fieldShaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+      fieldShaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+      if (!fieldShaderVertex || !fieldShaderFragment) {
+        if (fieldShaderVertex) {
+          glDeleteShader(fieldShaderVertex);
+          fieldShaderVertex = 0;
+        }
+        if (fieldShaderFragment) {
+          glDeleteShader(fieldShaderFragment);
+          fieldShaderFragment = 0;
+        }
+        return false;
+      }
+
+      fieldShaderProgram = glCreateProgram();
+      if (!fieldShaderProgram) {
+        glDeleteShader(fieldShaderVertex);
+        glDeleteShader(fieldShaderFragment);
+        fieldShaderVertex = 0;
+        fieldShaderFragment = 0;
+        return false;
+      }
+      glAttachShader(fieldShaderProgram, fieldShaderVertex);
+      glAttachShader(fieldShaderProgram, fieldShaderFragment);
+      glBindAttribLocation(fieldShaderProgram, kAttrPos, "aPos");
+      glLinkProgram(fieldShaderProgram);
+      GLint linkStatus = GL_FALSE;
+      glGetProgramiv(fieldShaderProgram, GL_LINK_STATUS, &linkStatus);
+      if (linkStatus != GL_TRUE) {
+        glDeleteProgram(fieldShaderProgram);
+        glDeleteShader(fieldShaderVertex);
+        glDeleteShader(fieldShaderFragment);
+        fieldShaderProgram = 0;
+        fieldShaderVertex = 0;
+        fieldShaderFragment = 0;
+        return false;
+      }
+
+      glGenBuffers(1, &fieldShaderVbo);
+      glGenTextures(1, &fieldRowTexture);
+      glGenTextures(1, &fieldColorLutTexture);
+      if (!fieldShaderVbo || !fieldRowTexture || !fieldColorLutTexture) {
+        if (fieldShaderVbo) {
+          glDeleteBuffers(1, &fieldShaderVbo);
+          fieldShaderVbo = 0;
+        }
+        if (fieldRowTexture) {
+          glDeleteTextures(1, &fieldRowTexture);
+          fieldRowTexture = 0;
+        }
+        if (fieldColorLutTexture) {
+          glDeleteTextures(1, &fieldColorLutTexture);
+          fieldColorLutTexture = 0;
+        }
+        glDeleteProgram(fieldShaderProgram);
+        glDeleteShader(fieldShaderVertex);
+        glDeleteShader(fieldShaderFragment);
+        fieldShaderProgram = 0;
+        fieldShaderVertex = 0;
+        fieldShaderFragment = 0;
+        return false;
+      }
+
+      fieldUniformRowTex = glGetUniformLocation(fieldShaderProgram, "uRowTex");
+      fieldUniformColorLutTex = glGetUniformLocation(fieldShaderProgram, "uColorLutTex");
+      fieldUniformRowCount = glGetUniformLocation(fieldShaderProgram, "uRowCount");
+      fieldUniformDrawTop = glGetUniformLocation(fieldShaderProgram, "uDrawTop");
+      fieldUniformRowStep = glGetUniformLocation(fieldShaderProgram, "uRowStep");
+      fieldUniformZoomThickness = glGetUniformLocation(fieldShaderProgram, "uZoomThickness");
+      fieldUniformZoomInWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInWidthComp");
+      fieldUniformZoomInHaloWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloWidthComp");
+      fieldUniformZoomInAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInAlphaComp");
+      fieldUniformZoomInLiftComp = glGetUniformLocation(fieldShaderProgram, "uZoomInLiftComp");
+      fieldUniformZoomInHaloAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloAlphaComp");
+      fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
+      fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
+      fieldUniformRenderHalo = glGetUniformLocation(fieldShaderProgram, "uRenderHalo");
+      fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
+      if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
+          fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
+          fieldUniformZoomInWidthComp < 0 ||
+          fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
+          fieldUniformZoomInLiftComp < 0 || fieldUniformZoomInHaloAlphaComp < 0 ||
+          fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
+          fieldUniformRenderContinuity < 0) {
+        return false;
+      }
+
+      glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glBindTexture(GL_TEXTURE_2D, 0);
+
+      fieldShaderReady = true;
+      return true;
+    };
     constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
@@ -1462,6 +1774,102 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
       float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
+      auto drawFieldLane = [&]() -> bool {
+        if (!initFieldShaderPipeline()) {
+          return false;
+        }
+        if (fieldRowData.size() != rowCountU * 4u) {
+          fieldRowData.assign(rowCountU * 4u, 0.f);
+        }
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          size_t base = idx * 4u;
+          if (!isValid(idx)) {
+            fieldRowData[base + 0u] = laneCenterXForConnectors;
+            fieldRowData[base + 1u] = laneCenterXForConnectors;
+            fieldRowData[base + 2u] = -1.f;
+            fieldRowData[base + 3u] = 0.f;
+            continue;
+          }
+          fieldRowData[base + 0u] = getX0(idx);
+          fieldRowData[base + 1u] = getX1(idx);
+          fieldRowData[base + 2u] = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
+        }
+
+        int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
+        ensureColorLut(scheme);
+        if (fieldRowTextureWidth != rowCount) {
+          glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA32F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, fieldRowData.data());
+          fieldRowTextureWidth = rowCount;
+        } else {
+          glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
+        }
+        if (fieldColorLutScheme != scheme) {
+          std::array<GLubyte, 256 * 4> lutBytes {};
+          for (int i = 0; i < 256; ++i) {
+            const NVGcolor &c = colorLut[size_t(scheme)][size_t(i)];
+            lutBytes[size_t(i) * 4u + 0u] = encodeColorByte(c.r);
+            lutBytes[size_t(i) * 4u + 1u] = encodeColorByte(c.g);
+            lutBytes[size_t(i) * 4u + 2u] = encodeColorByte(c.b);
+            lutBytes[size_t(i) * 4u + 3u] = 255u;
+          }
+          glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, lutBytes.data());
+          fieldColorLutScheme = scheme;
+        }
+
+        const GlFieldVertex quad[6] = {
+          {0.f, 0.f},
+          {box.size.x, 0.f},
+          {box.size.x, box.size.y},
+          {0.f, 0.f},
+          {box.size.x, box.size.y},
+          {0.f, box.size.y},
+        };
+        static const GLuint kAttrPos = 0;
+        glUseProgram(fieldShaderProgram);
+        glUniform1i(fieldUniformRowTex, 0);
+        glUniform1i(fieldUniformColorLutTex, 1);
+        glUniform1f(fieldUniformRowCount, float(rowCount));
+        glUniform1f(fieldUniformDrawTop, drawTop);
+        glUniform1f(fieldUniformRowStep, rowStep);
+        glUniform1f(fieldUniformZoomThickness, zoomThicknessMul);
+        glUniform1f(fieldUniformZoomInWidthComp, glZoomInWidthComp);
+        glUniform1f(fieldUniformZoomInHaloWidthComp, glZoomInHaloWidthComp);
+        glUniform1f(fieldUniformZoomInAlphaComp, glZoomInAlphaComp);
+        glUniform1f(fieldUniformZoomInLiftComp, glZoomInLiftComp);
+        glUniform1f(fieldUniformZoomInHaloAlphaComp, glZoomInHaloAlphaComp);
+        glUniform1f(fieldUniformDeepZoomEnergyFill, glDeepZoomEnergyFill);
+        glUniform1f(fieldUniformRenderMain, module->debugRenderMainTraceEnabled ? 1.f : 0.f);
+        glUniform1f(
+          fieldUniformRenderHalo, (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) ? 1.f : 0.f);
+        glUniform1f(fieldUniformRenderContinuity, module->debugRenderConnectorsEnabled ? 1.f : 0.f);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
+        glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STREAM_DRAW);
+        glEnableVertexAttribArray(kAttrPos);
+        glVertexAttribPointer(
+          kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisableVertexAttribArray(kAttrPos);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
+        return true;
+      };
+      if (drawFieldLane()) {
+        return;
+      }
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
         if (!verts) {
