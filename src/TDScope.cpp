@@ -775,7 +775,7 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = 666;
+    const int rowCount = 333;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
