@@ -328,17 +328,21 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             float densityPct,
                             float zoom,
                             float thickness,
-                            uint64_t misses) {
-  char dataBuf[256];
+                            uint64_t publishSeq,
+                            uint64_t drawSeq,
+                            uint64_t drawCalls) {
+  char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"misses\":%llu}",
+                "{\"ui_ms\":%.4f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
                 std::max(0.f, uiMs),
                 std::max(0, rows),
                 std::max(0.f, densityPct),
                 std::max(0.f, zoom),
                 std::max(0.f, thickness),
-                (unsigned long long) misses);
+                (unsigned long long) publishSeq,
+                (unsigned long long) drawSeq,
+                (unsigned long long) drawCalls);
   double ts = system::getTime();
   transport().submit("TDScope", instanceId, "ui", "metric", dataBuf, ts);
 }

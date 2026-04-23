@@ -10,7 +10,9 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             float densityPct,
                             float zoom,
                             float thickness,
-                            uint64_t misses);
+                            uint64_t publishSeq,
+                            uint64_t drawSeq,
+                            uint64_t drawCalls);
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  float uiMs,

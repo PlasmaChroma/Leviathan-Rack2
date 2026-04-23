@@ -22,7 +22,9 @@ MODULE_COLUMNS = {
         ("density_pct", "Density%"),
         ("zoom", "Zoom"),
         ("thickness", "Thickness"),
-        ("misses", "Misses"),
+        ("publish_seq", "Publish"),
+        ("draw_seq", "Draw"),
+        ("draw_calls", "Calls"),
     ),
     "TemporalDeck": (
         ("ui_ms", "UI ms"),

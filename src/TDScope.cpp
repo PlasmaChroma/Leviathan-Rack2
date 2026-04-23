@@ -26,7 +26,7 @@ static std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 static float computeScopeDisplayVerticalSupersample(float rackZoom) {
   rackZoom = std::max(rackZoom, 1e-4f);
   (void) rackZoom;
-  return kScopeDisplayVerticalSupersampleMax;
+  return 0.55f;
   // Zoomed out: reduce total row density to save draw calls when several
   // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
   float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
@@ -94,6 +94,8 @@ struct TDScope final : Module {
   std::atomic<bool> uiPreviewValid {false};
   std::atomic<uint64_t> uiLastPublishSeq {0};
   std::atomic<uint64_t> uiSnapshotReadMissCount {0};
+  std::atomic<uint64_t> uiDebugScopeDrawSeq {0};
+  std::atomic<uint64_t> uiDebugScopeDrawCalls {0};
   std::atomic<float> uiDebugScopeRackZoom {1.f};
   std::atomic<float> uiDebugScopeZoomThicknessMul {1.f};
   std::atomic<float> uiDebugScopeUiDrawUs {0.f};
@@ -860,6 +862,9 @@ struct TDScopeDisplayWidget final : Widget {
 
   void draw(const DrawArgs &args) override {
     auto drawStart = std::chrono::steady_clock::now();
+    if (module) {
+      module->uiDebugScopeDrawCalls.fetch_add(1u, std::memory_order_relaxed);
+    }
     auto publishUiDebugMetrics = [&](float densityPct, int densityRows) {
       if (!module) {
         return;
@@ -931,6 +936,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       msg = lastGoodMsg;
     }
+    module->uiDebugScopeDrawSeq.store(msg.publishSeq, std::memory_order_relaxed);
 
     uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
     if (scopeBinCount == 0u) {
@@ -2661,6 +2667,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
   void drawFramebuffer() override {
     auto drawStart = std::chrono::steady_clock::now();
+    if (module) {
+      module->uiDebugScopeDrawCalls.fetch_add(1u, std::memory_order_relaxed);
+    }
     auto publishUiDebugMetrics = [&](float densityPct, int densityRows) {
       if (!module) {
         return;
@@ -2710,6 +2719,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       msg = lastGoodMsg;
     }
+    module->uiDebugScopeDrawSeq.store(msg.publishSeq, std::memory_order_relaxed);
 
     uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
     if (scopeBinCount == 0u) {
@@ -4010,19 +4020,23 @@ struct TDScopeWidget : ModuleWidget {
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
-        uint64_t missCount = scopeModule->uiSnapshotReadMissCount.load(std::memory_order_relaxed);
         float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
         float zoomThicknessMul = scopeModule->uiDebugScopeZoomThicknessMul.load(std::memory_order_relaxed);
+        uint64_t publishSeq = scopeModule->uiLastPublishSeq.load(std::memory_order_relaxed);
+        uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
+        uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
                                                uiDrawUsEma * 0.001f,
                                                densityRows,
                                                densityPct,
                                                rackZoom,
                                                zoomThicknessMul,
-                                               missCount);
+                                               publishSeq,
+                                               drawSeq,
+                                               drawCalls);
       }
       if (APP && APP->window && APP->window->uiFont) {
         char debugIdLabel[32];
