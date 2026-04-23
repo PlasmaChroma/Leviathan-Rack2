@@ -1152,34 +1152,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return;
       }
       float lowR = 85.f, lowG = 227.f, lowB = 238.f;
-      float midR = 255.f, midG = 191.f, midB = 86.f;
       float highR = 233.f, highG = 112.f, highB = 218.f;
-      float midPoint = 0.5f;
       switch (scheme) {
-        case TDScope::COLOR_SCHEME_EMERALD: lowR = 15.f; lowG = 79.f; lowB = 54.f; midR = 47.f; midG = 168.f; midB = 110.f; highR = 87.f; highG = 240.f; highB = 182.f; midPoint = 0.52f; break;
-        case TDScope::COLOR_SCHEME_WASP: lowR = 33.f; lowG = 27.f; lowB = 18.f; midR = 231.f; midG = 137.f; midB = 47.f; highR = 255.f; highG = 216.f; highB = 74.f; midPoint = 0.58f; break;
-        case TDScope::COLOR_SCHEME_PIXIE: lowR = 255.f; lowG = 143.f; lowB = 209.f; midR = 211.f; midG = 180.f; midB = 239.f; highR = 129.f; highG = 255.f; highB = 210.f; midPoint = 0.48f; break;
-        case TDScope::COLOR_SCHEME_VIOLET_FLAME: lowR = 42.f; lowG = 31.f; lowB = 95.f; midR = 147.f; midG = 71.f; midB = 217.f; highR = 181.f; highG = 109.f; highB = 255.f; midPoint = 0.54f; break;
-        case TDScope::COLOR_SCHEME_ANGELIC: lowR = 248.f; lowG = 245.f; lowB = 255.f; midR = 232.f; midG = 220.f; midB = 255.f; highR = 179.f; highG = 229.f; highB = 255.f; midPoint = 0.40f; break;
-        case TDScope::COLOR_SCHEME_HELLFIRE: lowR = 120.f; lowG = 24.f; lowB = 15.f; midR = 255.f; midG = 111.f; midB = 43.f; highR = 255.f; highG = 209.f; highB = 102.f; midPoint = 0.60f; break;
-        case TDScope::COLOR_SCHEME_PICKLE: lowR = 62.f; lowG = 111.f; lowB = 49.f; midR = 132.f; midG = 185.f; midB = 72.f; highR = 190.f; highG = 234.f; highB = 97.f; midPoint = 0.56f; break;
-        case TDScope::COLOR_SCHEME_LEVIATHAN: lowR = 122.f; lowG = 92.f; lowB = 255.f; midR = 75.f; midG = 141.f; midB = 255.f; highR = 28.f; highG = 204.f; highB = 217.f; midPoint = 0.52f; break;
+        case TDScope::COLOR_SCHEME_EMERALD: lowR = 15.f; lowG = 79.f; lowB = 54.f; highR = 87.f; highG = 240.f; highB = 182.f; break;
+        case TDScope::COLOR_SCHEME_WASP: lowR = 33.f; lowG = 27.f; lowB = 18.f; highR = 255.f; highG = 216.f; highB = 74.f; break;
+        case TDScope::COLOR_SCHEME_PIXIE: lowR = 255.f; lowG = 143.f; lowB = 209.f; highR = 129.f; highG = 255.f; highB = 210.f; break;
+        case TDScope::COLOR_SCHEME_VIOLET_FLAME: lowR = 42.f; lowG = 31.f; lowB = 95.f; highR = 181.f; highG = 109.f; highB = 255.f; break;
+        case TDScope::COLOR_SCHEME_ANGELIC: lowR = 248.f; lowG = 245.f; lowB = 255.f; highR = 179.f; highG = 229.f; highB = 255.f; break;
+        case TDScope::COLOR_SCHEME_HELLFIRE: lowR = 120.f; lowG = 24.f; lowB = 15.f; highR = 255.f; highG = 209.f; highB = 102.f; break;
+        case TDScope::COLOR_SCHEME_PICKLE: lowR = 62.f; lowG = 111.f; lowB = 49.f; highR = 190.f; highG = 234.f; highB = 97.f; break;
+        case TDScope::COLOR_SCHEME_LEVIATHAN: lowR = 122.f; lowG = 92.f; lowB = 255.f; highR = 92.f; highG = 190.f; highB = 246.f; break;
         default: break;
       }
       for (int i = 0; i < 256; ++i) {
         float intensity = float(i) / 255.f;
-        float r = 0.f, g = 0.f, b = 0.f;
-        if (intensity <= midPoint) {
-          float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
-          r = lowR + (midR - lowR) * t;
-          g = lowG + (midG - lowG) * t;
-          b = lowB + (midB - lowB) * t;
-        } else {
-          float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
-          r = midR + (highR - midR) * t;
-          g = midG + (highG - midG) * t;
-          b = midB + (highB - midB) * t;
-        }
+        float r = lowR + (highR - lowR) * intensity;
+        float g = lowG + (highG - lowG) * intensity;
+        float b = lowB + (highB - lowB) * intensity;
         colorLut[size_t(scheme)][size_t(i)] = nvgRGBA(uint8_t(std::lround(clamp(r, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(g, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(b, 0.f, 255.f))), 255);
@@ -1539,9 +1528,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
-        "  float colorVisual = visual;\n"
-        "  float mainAlpha = clamp(((168.0 + 40.0 * visual) / 255.0) * 0.98 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  float colorVisual = tone;\n"
+        "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
+        "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
+        "  float mainHotLift = 0.24 * mainHotT * mainHotT;\n"
+        "  mainColor.rgb = mainColor.rgb + (vec3(1.0) - mainColor.rgb) * mainHotLift;\n"
+        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.90, 0.0, 1.0));\n"
         "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
         "  float lowVisualBoost = 1.0 + 0.32 * (1.0 - clamp(visual, 0.0, 1.0));\n"
         "  mainW *= lowVisualBoost;\n"
@@ -1592,11 +1585,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float prevDrive = clamp(rowA.w, 0.0, 1.0);\n"
         "  float drive = clamp(rowB.w, 0.0, 1.0);\n"
         "  float connectVisual = clamp(0.5 * (prevVisual + visual), 0.0, 1.0);\n"
-        "  float connectColorVisual = connectVisual;\n"
         "  float connectTransientLift = clamp(0.5 * (prevDrive + drive), 0.0, 1.0);\n"
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
+        "  float connectColorVisual = connectTone;\n"
         "  vec4 c = gradientColor(connectColorVisual,\n"
-        "                         clamp(((84.0 + 76.0 * connectVisual) / 255.0) * 0.98 * uZoomInAlphaComp, 0.0, 1.0));\n"
+        "                         clamp(((88.0 + 92.0 * connectColorVisual) / 255.0) * uZoomInAlphaComp, 0.0, 1.0));\n"
+        "  float connectHotT = clamp((connectColorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
+        "  float connectHotLift = 0.24 * connectHotT * connectHotT;\n"
+        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
+        "  c = brightenColor(c, clamp(connectTransientLift * 0.72, 0.0, 1.0));\n"
         "  float prevCenter = 0.5 * (x0a + x1a);\n"
         "  float center = 0.5 * (x0b + x1b);\n"
         "  float centerDrift = abs(center - prevCenter);\n"
