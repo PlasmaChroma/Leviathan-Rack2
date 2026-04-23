@@ -1530,9 +1530,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
+        "  float colorVisual = min(pow(visual, 1.65), 0.64);\n"
         "  float mainAlpha = clamp(((88.0 + 76.0 * visual) / 255.0) * 0.92 * uZoomInAlphaComp, 0.0, 1.0);\n"
-        "  vec4 mainColor = gradientColor(visual, mainAlpha);\n"
+        "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
+        "  float maxMainW = max(uRowStep * 0.82, 0.70);\n"
+        "  mainW = min(mainW, maxMainW);\n"
         "  float mainRadius = max(mainW * 0.55, 0.40);\n"
         "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
         "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.82);\n"
@@ -1578,9 +1581,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float prevDrive = clamp(rowA.w, 0.0, 1.0);\n"
         "  float drive = clamp(rowB.w, 0.0, 1.0);\n"
         "  float connectVisual = clamp(0.5 * (prevVisual + visual), 0.0, 1.0);\n"
+        "  float connectColorVisual = min(pow(connectVisual, 1.55), 0.60);\n"
         "  float connectTransientLift = clamp(0.5 * (prevDrive + drive), 0.0, 1.0);\n"
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
-        "  vec4 c = gradientColor(connectVisual,\n"
+        "  vec4 c = gradientColor(connectColorVisual,\n"
         "                         clamp(((84.0 + 76.0 * connectVisual) / 255.0) * 0.98 * uZoomInAlphaComp, 0.0, 1.0));\n"
         "  float prevCenter = 0.5 * (x0a + x1a);\n"
         "  float center = 0.5 * (x0b + x1b);\n"
@@ -1776,7 +1780,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glDeepZoomEase = std::pow(glDeepZoomT, 0.82f);
       float glZoomInWidthComp = 1.f + 0.16f * glZoomInEase + 0.05f * glDeepZoomEase;
       float glZoomInHaloWidthComp = 1.f + 0.22f * glZoomInEase + 0.06f * glDeepZoomEase;
-      float glZoomInAlphaComp = 1.f + 0.46f * glZoomInEase + 0.62f * glDeepZoomEase;
+      float glZoomInAlphaComp = 1.f + 0.14f * glZoomInEase + 0.18f * glDeepZoomEase;
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
       float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
