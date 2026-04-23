@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -1176,8 +1177,7 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    float displaySupersample = computeScopeDisplayVerticalSupersample(rackZoom);
-    const int rowCount = std::max(1, int(std::ceil(drawHeight * displaySupersample)));
+    const int rowCount = 666;
     const int fullDensityRowCount = std::max(1, int(std::ceil(drawHeight * kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
     size_t rowCountU = size_t(rowCount);
@@ -2786,6 +2786,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::array<std::vector<GlLineVertex>, 8> haloBatchVerts;
   std::array<std::vector<GlLineVertex>, 10> mainBatchVerts;
   std::array<std::vector<GlLineVertex>, 8> connectorBatchVerts;
+  bool shaderInitAttempted = false;
+  bool shaderReady = false;
+  GLuint shaderProgram = 0;
+  GLuint shaderVertex = 0;
+  GLuint shaderFragment = 0;
+  GLuint shaderVbo = 0;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -3043,8 +3049,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     float windowTopLag = msg.lagSamples + backwardWindowSamples;
     float windowBottomLag = msg.lagSamples - forwardWindowSamples;
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    float displaySupersample = computeScopeDisplayVerticalSupersample(rackZoom);
-    const int rowCount = std::max(1, int(std::ceil(drawHeight * displaySupersample)));
+    const int rowCount = 666;
     const int fullDensityRowCount = std::max(1, int(std::ceil(drawHeight * kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
     size_t rowCountU = size_t(rowCount);
@@ -3848,6 +3853,90 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     auto encodeColorByte = [](float v) -> GLubyte {
       return GLubyte(std::lround(clamp(v, 0.f, 1.f) * 255.f));
     };
+    auto initShaderPipeline = [&]() {
+      if (shaderInitAttempted) {
+        return shaderReady;
+      }
+      shaderInitAttempted = true;
+      static const char *kVertexShaderSrc =
+        "#version 120\n"
+        "void main() {\n"
+        "  gl_Position = ftransform();\n"
+        "  gl_FrontColor = gl_Color;\n"
+        "}\n";
+      static const char *kFragmentShaderSrc =
+        "#version 120\n"
+        "void main() {\n"
+        "  gl_FragColor = gl_Color;\n"
+        "}\n";
+
+      auto compileShader = [](GLenum type, const char *src) -> GLuint {
+        GLuint shader = glCreateShader(type);
+        if (!shader) {
+          return 0;
+        }
+        glShaderSource(shader, 1, &src, nullptr);
+        glCompileShader(shader);
+        GLint status = GL_FALSE;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE) {
+          glDeleteShader(shader);
+          return 0;
+        }
+        return shader;
+      };
+
+      shaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+      shaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+      if (!shaderVertex || !shaderFragment) {
+        if (shaderVertex) {
+          glDeleteShader(shaderVertex);
+          shaderVertex = 0;
+        }
+        if (shaderFragment) {
+          glDeleteShader(shaderFragment);
+          shaderFragment = 0;
+        }
+        return false;
+      }
+
+      shaderProgram = glCreateProgram();
+      if (!shaderProgram) {
+        glDeleteShader(shaderVertex);
+        glDeleteShader(shaderFragment);
+        shaderVertex = 0;
+        shaderFragment = 0;
+        return false;
+      }
+      glAttachShader(shaderProgram, shaderVertex);
+      glAttachShader(shaderProgram, shaderFragment);
+      glLinkProgram(shaderProgram);
+      GLint linkStatus = GL_FALSE;
+      glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+      if (linkStatus != GL_TRUE) {
+        glDeleteProgram(shaderProgram);
+        glDeleteShader(shaderVertex);
+        glDeleteShader(shaderFragment);
+        shaderProgram = 0;
+        shaderVertex = 0;
+        shaderFragment = 0;
+        return false;
+      }
+
+      glGenBuffers(1, &shaderVbo);
+      if (shaderVbo == 0) {
+        glDeleteProgram(shaderProgram);
+        glDeleteShader(shaderVertex);
+        glDeleteShader(shaderFragment);
+        shaderProgram = 0;
+        shaderVertex = 0;
+        shaderFragment = 0;
+        return false;
+      }
+
+      shaderReady = true;
+      return true;
+    };
     constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
@@ -3887,9 +3976,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           return;
         }
         glLineWidth(width);
-        glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), &verts[0].x);
-        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GlLineVertex), &verts[0].r);
+        if (initShaderPipeline()) {
+          glUseProgram(shaderProgram);
+          glBindBuffer(GL_ARRAY_BUFFER, shaderVbo);
+          glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(GlLineVertex)), verts.data(), GL_STREAM_DRAW);
+          glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), reinterpret_cast<const GLvoid *>(offsetof(GlLineVertex, x)));
+          glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GlLineVertex), reinterpret_cast<const GLvoid *>(offsetof(GlLineVertex, r)));
+        } else {
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
+          glUseProgram(0);
+          glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), &verts[0].x);
+          glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GlLineVertex), &verts[0].r);
+        }
         glDrawArrays(GL_LINES, 0, GLsizei(verts.size()));
+        if (shaderReady) {
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
+          glUseProgram(0);
+        }
       };
       if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
         for (auto &verts : haloBatchVerts) {
