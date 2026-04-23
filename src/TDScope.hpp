@@ -85,6 +85,9 @@ struct TDScope final : Module {
   int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
   bool scopeTransientHaloEnabled = true;
+  bool fieldHotCenterWhiteningEnabled = true;
+  bool fieldMainBrightenEnabled = true;
+  bool fieldDeepZoomFillEnabled = true;
   bool debugRenderMainTraceEnabled = true;
   bool debugRenderHaloEnabled = true;
   bool debugRenderConnectorsEnabled = true;
@@ -161,6 +164,9 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
     json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
+    json_object_set_new(root, "fieldHotCenterWhiteningEnabled", json_boolean(fieldHotCenterWhiteningEnabled));
+    json_object_set_new(root, "fieldMainBrightenEnabled", json_boolean(fieldMainBrightenEnabled));
+    json_object_set_new(root, "fieldDeepZoomFillEnabled", json_boolean(fieldDeepZoomFillEnabled));
     json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
     json_object_set_new(root, "debugRenderHaloEnabled", json_boolean(debugRenderHaloEnabled));
     json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
@@ -190,6 +196,18 @@ struct TDScope final : Module {
     json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
     if (haloJ) {
       scopeTransientHaloEnabled = json_boolean_value(haloJ);
+    }
+    json_t *fieldHotLiftJ = json_object_get(root, "fieldHotCenterWhiteningEnabled");
+    if (fieldHotLiftJ) {
+      fieldHotCenterWhiteningEnabled = json_boolean_value(fieldHotLiftJ);
+    }
+    json_t *fieldMainBrightenJ = json_object_get(root, "fieldMainBrightenEnabled");
+    if (fieldMainBrightenJ) {
+      fieldMainBrightenEnabled = json_boolean_value(fieldMainBrightenJ);
+    }
+    json_t *fieldDeepZoomFillJ = json_object_get(root, "fieldDeepZoomFillEnabled");
+    if (fieldDeepZoomFillJ) {
+      fieldDeepZoomFillEnabled = json_boolean_value(fieldDeepZoomFillJ);
     }
     json_t *mainTraceJ = json_object_get(root, "debugRenderMainTraceEnabled");
     if (mainTraceJ) {

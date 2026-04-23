@@ -196,6 +196,17 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
       [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
+    menu->addChild(createSubmenuItem("Field Tuning", "", [=](Menu *submenu) {
+      submenu->addChild(createCheckMenuItem(
+        "Hot center whitening", "", [=]() { return scopeModule->fieldHotCenterWhiteningEnabled; },
+        [=]() { scopeModule->fieldHotCenterWhiteningEnabled = !scopeModule->fieldHotCenterWhiteningEnabled; }));
+      submenu->addChild(createCheckMenuItem(
+        "Main brighten", "", [=]() { return scopeModule->fieldMainBrightenEnabled; },
+        [=]() { scopeModule->fieldMainBrightenEnabled = !scopeModule->fieldMainBrightenEnabled; }));
+      submenu->addChild(createCheckMenuItem(
+        "Deep zoom fill", "", [=]() { return scopeModule->fieldDeepZoomFillEnabled; },
+        [=]() { scopeModule->fieldDeepZoomFillEnabled = !scopeModule->fieldDeepZoomFillEnabled; }));
+    }));
 
     if (isDragonKingDebugEnabled()) {
       menu->addChild(new MenuSeparator());
