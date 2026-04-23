@@ -1070,12 +1070,38 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       };
       auto historyIsValidRight = [&](size_t visibleIdx) { return historyValidRight[historyVisibleSlot(visibleIdx)] != 0u; };
 
-      std::fill(rowColorDrive.begin(), rowColorDrive.end(), 0.f);
-      if (renderStereo) {
-        std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
+      if (fullHistoryRebuild) {
+        std::fill(rowColorDrive.begin(), rowColorDrive.end(), 0.f);
+        if (renderStereo) {
+          std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
+        }
+      } else if (visibleShiftRows != 0) {
+        // Preserve the already computed visible transient drive when history rows
+        // shift, then only recompute exposed/new rows.
+        shiftVisibleColorDrive(&rowColorDrive, visibleShiftRows);
+        if (renderStereo) {
+          shiftVisibleColorDrive(&rowColorDriveRight, visibleShiftRows);
+        }
       }
+
       int visibleRebuildStart = 0;
       int visibleRebuildEnd = rowCount - 1;
+      if (!fullHistoryRebuild) {
+        visibleRebuildStart = clamp(rebuildStart - historyMarginRows, 0, rowCount - 1);
+        visibleRebuildEnd = clamp(rebuildEnd - historyMarginRows, 0, rowCount - 1);
+        if (visibleShiftRows > 0) {
+          int exposedStart = std::max(0, rowCount - visibleShiftRows);
+          visibleRebuildStart = std::min(visibleRebuildStart, exposedStart);
+          visibleRebuildEnd = rowCount - 1;
+        } else if (visibleShiftRows < 0) {
+          int exposedEnd = std::min(rowCount - 1, -visibleShiftRows - 1);
+          visibleRebuildStart = 0;
+          visibleRebuildEnd = std::max(visibleRebuildEnd, exposedEnd);
+        }
+        // Include one neighbor row for local transient-delta continuity.
+        visibleRebuildStart = std::max(0, visibleRebuildStart - 1);
+        visibleRebuildEnd = std::min(rowCount - 1, visibleRebuildEnd + 1);
+      }
       rebuildTransientColorDriveRange(
         historyGetX0, historyGetX1, historyGetVisual, historyIsValid, laneAmpHalfWidth, &rowColorDrive, visibleRebuildStart,
         visibleRebuildEnd);
@@ -1529,7 +1555,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
         "  float colorVisual = tone;\n"
-        "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * 1.16 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
         "  float mainHotLift = 0.24 * mainHotT * mainHotT;\n"
@@ -1775,7 +1801,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
-    constexpr float kGlMainAlphaGain = 1.18f;
+    constexpr float kGlMainAlphaGain = 1.26f;
     constexpr float kGlMainLiftGain = 1.16f;
     constexpr float kGlConnectorAlphaGain = 1.14f;
     constexpr float kGlConnectorLiftGain = 1.12f;
