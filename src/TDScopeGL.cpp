@@ -1630,21 +1630,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float connectHotLift = 0.24 * connectHotT * connectHotT;\n"
         "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
         "  c = brightenColor(c, clamp(connectTransientLift * 0.72, 0.0, 1.0));\n"
-        "  float prevCenter = 0.5 * (x0a + x1a);\n"
-        "  float center = 0.5 * (x0b + x1b);\n"
-        "  float centerDrift = abs(center - prevCenter);\n"
-        "  float centerSpan = 0.5 * (abs(x1a - x0a) + abs(x1b - x0b));\n"
-        "  if (centerSpan <= connectorMinDelta * 1.2 || centerDrift <= connectorMinDelta * 0.70) {\n"
+        "  float drift0 = abs(x0b - x0a);\n"
+        "  float drift1 = abs(x1b - x1a);\n"
+        "  float edgeDrift = max(drift0, drift1);\n"
+        "  float spanAvg = 0.5 * (abs(x1a - x0a) + abs(x1b - x0b));\n"
+        "  if (spanAvg <= connectorMinDelta * 1.2 || edgeDrift <= connectorMinDelta * 0.70) {\n"
         "    return;\n"
         "  }\n"
-        "  float driftT = clamp((centerDrift - connectorMinDelta * 0.70) / max(connectorMinDelta * 1.80, 1e-4), 0.0, 1.0);\n"
+        "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.70) / max(connectorMinDelta * 1.80, 1e-4), 0.0, 1.0);\n"
         "  float continuityRadius = max((0.80 + 0.40 * connectTone) * uZoomThickness * 1.04 *\n"
-        "                               (1.02 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.52,\n"
+        "                               (1.02 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.62,\n"
         "                               0.45);\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
-        "  float contCov = gaussianAlpha(segmentDistance(p, vec2(prevCenter, yA), vec2(center, yB)), continuityRadius);\n"
-        "  float contAlpha = clamp(c.a * (0.28 + 0.06 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0) * contCov;\n"
+        "  float contAlphaBase = clamp(c.a * (0.20 + 0.04 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
+        "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
+        "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
+        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.46;\n"
         "  baseRgb += c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
         "}\n"
@@ -2152,17 +2154,21 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
               GLubyte g = encodeColorByte(c.g);
               GLubyte b = encodeColorByte(c.b);
               GLubyte a = encodeColorByte(c.a);
-              float prevCenter = 0.5f * (prevX0 + prevX1);
-              float center = 0.5f * (x0 + x1);
-              float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
-              if (centerSpan > connectorMinDeltaPx * 1.2f) {
+              float leftDrift = std::fabs(x0 - prevX0);
+              float rightDrift = std::fabs(x1 - prevX1);
+              float edgeDrift = std::max(leftDrift, rightDrift);
+              float spanAvg = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
+              if (spanAvg > connectorMinDeltaPx * 1.2f && edgeDrift > connectorMinDeltaPx * 0.70f) {
+                float driftT = clamp((edgeDrift - connectorMinDeltaPx * 0.70f) / std::max(connectorMinDeltaPx * 1.80f, 1e-4f), 0.f, 1.f);
                 GLubyte bodyAlpha = GLubyte(std::lround(clamp(
-                  float(a) * (0.52f + 0.12f * glDeepZoomEnergyFill), 0.f, 255.f)));
+                  float(a) * (0.36f + 0.10f * glDeepZoomEnergyFill) * driftT, 0.f, 255.f)));
                 float continuityRadius =
                   std::max((0.92f + 0.52f * connectTone) * zoomThicknessMul * kGlConnectorWidthGain *
-                             (1.04f + 0.10f * glZoomInWidthComp) * (1.02f + 0.10f * glDeepZoomEnergyFill) * 0.58f,
+                             (1.04f + 0.10f * glZoomInWidthComp) * (1.02f + 0.10f * glDeepZoomEnergyFill) * 0.68f,
                            0.45f);
-                appendSegmentQuad(&continuitySegmentVerts, prevCenter, prevY, center, y, continuityRadius, r, g, b,
+                appendSegmentQuad(&continuitySegmentVerts, prevX0, prevY, x0, y, continuityRadius, r, g, b,
+                                  bodyAlpha);
+                appendSegmentQuad(&continuitySegmentVerts, prevX1, prevY, x1, y, continuityRadius, r, g, b,
                                   bodyAlpha);
               }
             }
@@ -2320,7 +2326,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
       if (module->debugRenderConnectorsEnabled) {
-        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.86f, 1.02f);
+        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.74f, 1.10f);
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
         std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
         for (auto &verts : connectorBodyBatchVerts) {
@@ -2365,14 +2371,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
             GLubyte a = encodeColorByte(c.a);
-            float prevCenter = 0.5f * (prevX0 + prevX1);
-            float center = 0.5f * (x0 + x1);
-            float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
-            if (centerSpan > connectorMinDeltaPx * 1.2f) {
+            float leftDrift = std::fabs(x0 - prevX0);
+            float rightDrift = std::fabs(x1 - prevX1);
+            float edgeDrift = std::max(leftDrift, rightDrift);
+            float spanAvg = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
+            if (spanAvg > connectorMinDeltaPx * 1.2f && edgeDrift > connectorMinDeltaPx * 0.70f) {
+              float driftT = clamp((edgeDrift - connectorMinDeltaPx * 0.70f) / std::max(connectorMinDeltaPx * 1.80f, 1e-4f), 0.f, 1.f);
               GLubyte bodyAlpha = GLubyte(std::lround(clamp(
-                float(a) * (0.52f + 0.12f * glDeepZoomEnergyFill), 0.f, 255.f)));
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevCenter, prevY, r, g, b, bodyAlpha});
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({center, rowY[idx], r, g, b, bodyAlpha});
+                float(a) * (0.36f + 0.10f * glDeepZoomEnergyFill) * driftT, 0.f, 255.f)));
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX0, prevY, r, g, b, bodyAlpha});
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, bodyAlpha});
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, bodyAlpha});
+              connectorBodyBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, bodyAlpha});
             }
           }
           prevX0 = x0;
