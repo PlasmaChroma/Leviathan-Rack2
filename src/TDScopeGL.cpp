@@ -143,7 +143,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint fieldShaderVertex = 0;
   GLuint fieldShaderFragment = 0;
   GLuint fieldShaderVbo = 0;
-  GLuint fieldRowTexture = 0;
+  GLuint fieldRowTextureLeft = 0;
+  GLuint fieldRowTextureRight = 0;
   GLuint fieldColorLutTexture = 0;
   GLint fieldUniformRowTex = -1;
   GLint fieldUniformColorLutTex = -1;
@@ -163,6 +164,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
+  uint64_t fieldRowTexturePublishSeqLeft = 0;
+  uint64_t fieldRowTexturePublishSeqRight = 0;
+  bool fieldRowTextureValidLeft = false;
+  bool fieldRowTextureValidRight = false;
+  float fieldQuadW = -1.f;
+  float fieldQuadH = -1.f;
+  GLsizeiptr shaderVboCapacityBytes = 0;
+  GLsizeiptr segmentShaderVboCapacityBytes = 0;
+  std::vector<GlLineVertex> fillScratchVerts;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -1727,16 +1737,21 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
 
       glGenBuffers(1, &fieldShaderVbo);
-      glGenTextures(1, &fieldRowTexture);
+      glGenTextures(1, &fieldRowTextureLeft);
+      glGenTextures(1, &fieldRowTextureRight);
       glGenTextures(1, &fieldColorLutTexture);
-      if (!fieldShaderVbo || !fieldRowTexture || !fieldColorLutTexture) {
+      if (!fieldShaderVbo || !fieldRowTextureLeft || !fieldRowTextureRight || !fieldColorLutTexture) {
         if (fieldShaderVbo) {
           glDeleteBuffers(1, &fieldShaderVbo);
           fieldShaderVbo = 0;
         }
-        if (fieldRowTexture) {
-          glDeleteTextures(1, &fieldRowTexture);
-          fieldRowTexture = 0;
+        if (fieldRowTextureLeft) {
+          glDeleteTextures(1, &fieldRowTextureLeft);
+          fieldRowTextureLeft = 0;
+        }
+        if (fieldRowTextureRight) {
+          glDeleteTextures(1, &fieldRowTextureRight);
+          fieldRowTextureRight = 0;
         }
         if (fieldColorLutTexture) {
           glDeleteTextures(1, &fieldColorLutTexture);
@@ -1783,7 +1798,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return false;
       }
 
-      glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+      glBindTexture(GL_TEXTURE_2D, fieldRowTextureLeft);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glBindTexture(GL_TEXTURE_2D, fieldRowTextureRight);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1794,6 +1814,24 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glBindTexture(GL_TEXTURE_2D, 0);
+
+      const GlFieldVertex quad[6] = {
+        {0.f, 0.f},
+        {0.f, 0.f},
+        {0.f, 0.f},
+        {0.f, 0.f},
+        {0.f, 0.f},
+        {0.f, 0.f},
+      };
+      glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      fieldQuadW = -1.f;
+      fieldQuadH = -1.f;
+      fieldRowTextureValidLeft = false;
+      fieldRowTextureValidRight = false;
+      fieldRowTexturePublishSeqLeft = 0;
+      fieldRowTexturePublishSeqRight = 0;
 
       fieldShaderReady = true;
       return true;
@@ -1812,7 +1850,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
-                        const RowValidAccessor &isValid, float laneCenterXForConnectors) {
+                        const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
       constexpr uint8_t kHaloMinAlphaToDraw = 28u;
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
@@ -1835,36 +1873,71 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (!initFieldShaderPipeline()) {
           return false;
         }
+        auto ensureFieldQuad = [&]() {
+          if (fieldQuadW == box.size.x && fieldQuadH == box.size.y) {
+            return;
+          }
+          const GlFieldVertex quad[6] = {
+            {0.f, 0.f},
+            {box.size.x, 0.f},
+            {box.size.x, box.size.y},
+            {0.f, 0.f},
+            {box.size.x, box.size.y},
+            {0.f, box.size.y},
+          };
+          glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+          glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
+          fieldQuadW = box.size.x;
+          fieldQuadH = box.size.y;
+        };
+        ensureFieldQuad();
+
+        const bool useRightLaneTexture = fieldLaneSlot != 0;
+        GLuint rowTex = useRightLaneTexture ? fieldRowTextureRight : fieldRowTextureLeft;
+        uint64_t &rowTexSeq = useRightLaneTexture ? fieldRowTexturePublishSeqRight : fieldRowTexturePublishSeqLeft;
+        bool &rowTexValid = useRightLaneTexture ? fieldRowTextureValidRight : fieldRowTextureValidLeft;
+        bool rowUploadNeeded = (fieldRowTextureWidth != rowCount) || !rowTexValid || msgChanged || rowTexSeq != msg.publishSeq;
+
         if (fieldRowData.size() != rowCountU * 4u) {
           fieldRowData.assign(rowCountU * 4u, 0.f);
         }
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          size_t base = idx * 4u;
-          if (!isValid(idx)) {
-            fieldRowData[base + 0u] = laneCenterXForConnectors;
-            fieldRowData[base + 1u] = laneCenterXForConnectors;
-            fieldRowData[base + 2u] = -1.f;
-            fieldRowData[base + 3u] = 0.f;
-            continue;
+        if (rowUploadNeeded) {
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            size_t base = idx * 4u;
+            if (!isValid(idx)) {
+              fieldRowData[base + 0u] = laneCenterXForConnectors;
+              fieldRowData[base + 1u] = laneCenterXForConnectors;
+              fieldRowData[base + 2u] = -1.f;
+              fieldRowData[base + 3u] = 0.f;
+              continue;
+            }
+            fieldRowData[base + 0u] = getX0(idx);
+            fieldRowData[base + 1u] = getX1(idx);
+            fieldRowData[base + 2u] = clamp(getVisualIntensity(idx), 0.f, 1.f);
+            fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
           }
-          fieldRowData[base + 0u] = getX0(idx);
-          fieldRowData[base + 1u] = getX1(idx);
-          fieldRowData[base + 2u] = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
+
+          if (fieldRowTextureWidth != rowCount) {
+            // Allocate both lane textures together so either lane can upload via
+            // sub-image immediately after a resize or first-time init.
+            glBindTexture(GL_TEXTURE_2D, fieldRowTextureLeft);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, nullptr);
+            glBindTexture(GL_TEXTURE_2D, fieldRowTextureRight);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, nullptr);
+            fieldRowTextureWidth = rowCount;
+            fieldRowTextureValidLeft = false;
+            fieldRowTextureValidRight = false;
+          }
+          glBindTexture(GL_TEXTURE_2D, rowTex);
+          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
+          rowTexValid = true;
+          rowTexSeq = msg.publishSeq;
         }
 
         int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
         ensureColorLut(scheme);
-        if (fieldRowTextureWidth != rowCount) {
-          glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA32F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, fieldRowData.data());
-          fieldRowTextureWidth = rowCount;
-        } else {
-          glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
-          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
-        }
         if (fieldColorLutScheme != scheme) {
           std::array<GLubyte, 256 * 4> lutBytes {};
           for (int i = 0; i < 256; ++i) {
@@ -1883,18 +1956,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       };
       auto drawFieldLanePass = [&](float renderMain, float renderHalo, float renderContinuity, GLenum srcBlend,
                                    GLenum dstBlend) -> bool {
-        if (!uploadFieldLaneTextures()) {
+        static const GLuint kAttrPos = 0;
+        GLuint rowTex = (fieldLaneSlot != 0) ? fieldRowTextureRight : fieldRowTextureLeft;
+        if (!rowTex) {
           return false;
         }
-        const GlFieldVertex quad[6] = {
-          {0.f, 0.f},
-          {box.size.x, 0.f},
-          {box.size.x, box.size.y},
-          {0.f, 0.f},
-          {box.size.x, box.size.y},
-          {0.f, box.size.y},
-        };
-        static const GLuint kAttrPos = 0;
         glUseProgram(fieldShaderProgram);
         glUniform1i(fieldUniformRowTex, 0);
         glUniform1i(fieldUniformColorLutTex, 1);
@@ -1912,11 +1978,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, fieldRowTexture);
+        glBindTexture(GL_TEXTURE_2D, rowTex);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
         glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STREAM_DRAW);
         glEnableVertexAttribArray(kAttrPos);
         glVertexAttribPointer(
           kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
@@ -1936,7 +2001,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       const bool renderMainField = module->debugRenderMainTraceEnabled;
       const bool renderContinuityField = module->debugRenderConnectorsEnabled;
       if (renderHaloField || renderMainField || renderContinuityField) {
-        bool fieldDrawOk = true;
+        bool fieldDrawOk = uploadFieldLaneTextures();
         if (renderHaloField) {
           fieldDrawOk = drawFieldLanePass(0.f, 1.f, 0.f, GL_ONE, GL_ONE) && fieldDrawOk;
         }
@@ -1981,8 +2046,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         static const GLuint kAttrRadius = 3;
         glUseProgram(segmentShaderProgram);
         glBindBuffer(GL_ARRAY_BUFFER, segmentShaderVbo);
-        glBufferData(
-          GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(GlSegmentQuadVertex)), verts.data(), GL_STREAM_DRAW);
+        GLsizeiptr bytes = GLsizeiptr(verts.size() * sizeof(GlSegmentQuadVertex));
+        if (bytes > segmentShaderVboCapacityBytes) {
+          glBufferData(GL_ARRAY_BUFFER, bytes, verts.data(), GL_STREAM_DRAW);
+          segmentShaderVboCapacityBytes = bytes;
+        } else {
+          glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
+        }
         glEnableVertexAttribArray(kAttrPos);
         glEnableVertexAttribArray(kAttrColor);
         glEnableVertexAttribArray(kAttrSegment);
@@ -2136,7 +2206,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glUniform1f(shaderUniformAlphaScale, shaderParams.alphaScale);
           glUniform1f(shaderUniformAlphaGamma, shaderParams.alphaGamma);
           glBindBuffer(GL_ARRAY_BUFFER, shaderVbo);
-          glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(GlLineVertex)), verts.data(), GL_STREAM_DRAW);
+          GLsizeiptr bytes = GLsizeiptr(verts.size() * sizeof(GlLineVertex));
+          if (bytes > shaderVboCapacityBytes) {
+            glBufferData(GL_ARRAY_BUFFER, bytes, verts.data(), GL_STREAM_DRAW);
+            shaderVboCapacityBytes = bytes;
+          } else {
+            glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
+          }
           glVertexPointer(2, GL_FLOAT, sizeof(GlLineVertex), reinterpret_cast<const GLvoid *>(offsetof(GlLineVertex, x)));
           glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(GlLineVertex), reinterpret_cast<const GLvoid *>(offsetof(GlLineVertex, r)));
         } else {
@@ -2234,11 +2310,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             if (fillAlpha == 0u) {
               continue;
             }
-            std::vector<GlLineVertex> fillVerts = verts;
-            for (GlLineVertex &v : fillVerts) {
+            fillScratchVerts = verts;
+            for (GlLineVertex &v : fillScratchVerts) {
               v.a = fillAlpha;
             }
-            drawBatch(fillVerts, fillW, fillShaderParams);
+            drawBatch(fillScratchVerts, fillW, fillShaderParams);
           }
           glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
@@ -2348,24 +2424,24 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
-        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX);
+        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, 0);
       if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
         drawLane(
           [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
           [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
           [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; }, rowColorDriveRight,
-          [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX);
+          [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX, 1);
       }
     } else {
       drawLane(
         [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
         [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
-        [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX);
+        [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, 0);
       if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
         drawLane(
           [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
           [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,
-          [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX);
+          [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX, 1);
       }
     }
     glDisableClientState(GL_COLOR_ARRAY);
