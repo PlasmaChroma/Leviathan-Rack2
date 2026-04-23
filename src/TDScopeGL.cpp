@@ -687,9 +687,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         for (int iy = startRow; iy <= endRow; ++iy) {
           size_t idx = size_t(iy);
           float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          float prevDrive = clamp((*colorDriveOut)[idx], 0.f, 1.f);
           if (!isValid(idx)) {
-            (*colorDriveOut)[idx] = prevDrive * 0.82f;
+            (*colorDriveOut)[idx] = 0.f;
             continue;
           }
           float center = 0.5f * (getX0(idx) + getX1(idx));
@@ -708,10 +707,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
             accumulateTransientAgainst(size_t(iy + 1));
           }
-          float brightnessLift =
-            clamp((0.38f + 0.92f * baseDrive) * std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f * 0.84f), 0.f, 1.f);
-          float alpha = (brightnessLift > prevDrive) ? 0.42f : 0.14f;
-          (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
+          float transientBoost = std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f);
+          float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * std::pow(transientBoost, 0.84f), 0.f, 1.f);
+          (*colorDriveOut)[idx] = brightnessLift;
         }
       };
       updateRange(0, rowCount - 1);
@@ -733,9 +731,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       for (int iy = startRow; iy <= endRow; ++iy) {
         size_t idx = size_t(iy);
         float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
-        float prevDrive = clamp((*colorDriveOut)[idx], 0.f, 1.f);
         if (!isValid(idx)) {
-          (*colorDriveOut)[idx] = prevDrive * 0.82f;
+          (*colorDriveOut)[idx] = 0.f;
           continue;
         }
         float center = 0.5f * (getX0(idx) + getX1(idx));
@@ -754,10 +751,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
           accumulateTransientAgainst(size_t(iy + 1));
         }
-        float brightnessLift =
-          clamp((0.38f + 0.92f * baseDrive) * std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f * 0.84f), 0.f, 1.f);
-        float alpha = (brightnessLift > prevDrive) ? 0.42f : 0.14f;
-        (*colorDriveOut)[idx] = clamp(prevDrive + (brightnessLift - prevDrive) * alpha, 0.f, 1.f);
+        float transientBoost = std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f);
+        float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * std::pow(transientBoost, 0.84f), 0.f, 1.f);
+        (*colorDriveOut)[idx] = brightnessLift;
       }
     };
     auto shiftVisibleColorDrive = [&](std::vector<float> *colorDriveOut, int shiftRows) {
@@ -1024,21 +1020,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       };
       auto historyIsValidRight = [&](size_t visibleIdx) { return historyValidRight[historyVisibleSlot(visibleIdx)] != 0u; };
 
-      if (fullHistoryRebuild) {
-        std::fill(rowColorDrive.begin(), rowColorDrive.end(), 0.f);
-        if (renderStereo) {
-          std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
-        }
-      } else if (visibleShiftRows != 0) {
-        shiftVisibleColorDrive(&rowColorDrive, visibleShiftRows);
-        if (renderStereo) {
-          shiftVisibleColorDrive(&rowColorDriveRight, visibleShiftRows);
-        }
+      std::fill(rowColorDrive.begin(), rowColorDrive.end(), 0.f);
+      if (renderStereo) {
+        std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
       }
-      int visibleRebuildStart = fullHistoryRebuild ? 0 : (rebuildStart - historyMarginRows);
-      int visibleRebuildEnd = fullHistoryRebuild ? (rowCount - 1) : (rebuildEnd - historyMarginRows);
-      visibleRebuildStart = clamp(visibleRebuildStart - 1, 0, rowCount - 1);
-      visibleRebuildEnd = clamp(visibleRebuildEnd + 1, 0, rowCount - 1);
+      int visibleRebuildStart = 0;
+      int visibleRebuildEnd = rowCount - 1;
       rebuildTransientColorDriveRange(
         historyGetX0, historyGetX1, historyGetVisual, historyIsValid, laneAmpHalfWidth, &rowColorDrive, visibleRebuildStart,
         visibleRebuildEnd);
@@ -1374,9 +1361,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
           float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
+          float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
           float haloT = haloLinear * haloLinear;
-          uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
+          uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
           if (haloAlpha < kHaloMinAlphaToDraw) {
             continue;
           }
@@ -1399,8 +1386,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       }
       if (module->debugRenderMainTraceEnabled) {
-        const ShaderPassParams mainShaderParams = makeShaderPassParams(1.05f, 0.05f, 1.08f, 0.96f);
-        const ShaderPassParams fillShaderParams = makeShaderPassParams(1.10f, 0.10f, 1.18f, 0.88f);
+        const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
+        const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
         for (auto &verts : mainBatchVerts) {
           verts.clear();
         }
@@ -1455,7 +1442,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
       if (module->debugRenderConnectorsEnabled) {
-        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.14f, 0.14f, 1.28f, 0.82f);
+        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.86f, 1.02f);
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
         std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
         for (auto &verts : connectorBodyBatchVerts) {
@@ -1505,7 +1492,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
             if (centerSpan > connectorMinDeltaPx * 1.2f) {
               GLubyte bodyAlpha = GLubyte(std::lround(clamp(
-                float(a) * (0.90f + 0.24f * glDeepZoomEnergyFill), 0.f, 255.f)));
+                float(a) * (0.52f + 0.12f * glDeepZoomEnergyFill), 0.f, 255.f)));
               connectorBodyBatchVerts[size_t(rowBin)].push_back({prevCenter, prevY, r, g, b, bodyAlpha});
               connectorBodyBatchVerts[size_t(rowBin)].push_back({center, rowY[idx], r, g, b, bodyAlpha});
             }
@@ -1523,7 +1510,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             float bodyW =
               (0.92f + 0.52f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * (1.04f + 0.10f * glZoomInWidthComp);
             bodyW *= (1.02f + 0.10f * glDeepZoomEnergyFill);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW, connectorBodyShaderParams);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
           }
