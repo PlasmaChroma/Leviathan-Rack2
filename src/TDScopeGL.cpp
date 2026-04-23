@@ -27,6 +27,19 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     GLubyte b;
     GLubyte a;
   };
+  struct GlSegmentQuadVertex {
+    GLfloat x;
+    GLfloat y;
+    GLubyte r;
+    GLubyte g;
+    GLubyte b;
+    GLubyte a;
+    GLfloat ax;
+    GLfloat ay;
+    GLfloat bx;
+    GLfloat by;
+    GLfloat radius;
+  };
 
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
@@ -100,6 +113,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::array<std::vector<GlLineVertex>, 8> haloBatchVerts;
   std::array<std::vector<GlLineVertex>, 10> mainBatchVerts;
   std::array<std::vector<GlLineVertex>, 8> connectorBatchVerts;
+  std::vector<GlSegmentQuadVertex> haloSegmentVerts;
+  std::vector<GlSegmentQuadVertex> bodySegmentVerts;
+  std::vector<GlSegmentQuadVertex> fillSegmentVerts;
+  std::vector<GlSegmentQuadVertex> continuitySegmentVerts;
   bool shaderInitAttempted = false;
   bool shaderReady = false;
   GLuint shaderProgram = 0;
@@ -110,6 +127,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint shaderUniformColorLift = -1;
   GLint shaderUniformAlphaScale = -1;
   GLint shaderUniformAlphaGamma = -1;
+  bool segmentShaderInitAttempted = false;
+  bool segmentShaderReady = false;
+  GLuint segmentShaderProgram = 0;
+  GLuint segmentShaderVertex = 0;
+  GLuint segmentShaderFragment = 0;
+  GLuint segmentShaderVbo = 0;
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -1289,6 +1312,123 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       shaderReady = true;
       return true;
     };
+    auto initSegmentShaderPipeline = [&]() {
+      if (segmentShaderInitAttempted) {
+        return segmentShaderReady;
+      }
+      segmentShaderInitAttempted = true;
+      static const GLuint kAttrPos = 0;
+      static const GLuint kAttrColor = 1;
+      static const GLuint kAttrSegment = 2;
+      static const GLuint kAttrRadius = 3;
+      static const char *kVertexShaderSrc =
+        "#version 120\n"
+        "attribute vec2 aPos;\n"
+        "attribute vec4 aColor;\n"
+        "attribute vec4 aSegment;\n"
+        "attribute float aRadius;\n"
+        "varying vec2 vLocalPos;\n"
+        "varying vec4 vColor;\n"
+        "varying vec2 vSegA;\n"
+        "varying vec2 vSegB;\n"
+        "varying float vRadius;\n"
+        "void main() {\n"
+        "  gl_Position = gl_ModelViewProjectionMatrix * vec4(aPos, 0.0, 1.0);\n"
+        "  vLocalPos = aPos;\n"
+        "  vColor = aColor;\n"
+        "  vSegA = aSegment.xy;\n"
+        "  vSegB = aSegment.zw;\n"
+        "  vRadius = max(aRadius, 0.001);\n"
+        "}\n";
+      static const char *kFragmentShaderSrc =
+        "#version 120\n"
+        "varying vec2 vLocalPos;\n"
+        "varying vec4 vColor;\n"
+        "varying vec2 vSegA;\n"
+        "varying vec2 vSegB;\n"
+        "varying float vRadius;\n"
+        "void main() {\n"
+        "  vec2 pa = vLocalPos - vSegA;\n"
+        "  vec2 ba = vSegB - vSegA;\n"
+        "  float denom = max(dot(ba, ba), 1e-6);\n"
+        "  float h = clamp(dot(pa, ba) / denom, 0.0, 1.0);\n"
+        "  float dist = length(pa - ba * h);\n"
+        "  float sigma = max(vRadius * 0.70, 0.001);\n"
+        "  float alpha = clamp(vColor.a * exp(-0.5 * (dist * dist) / (sigma * sigma)), 0.0, 1.0);\n"
+        "  gl_FragColor = vec4(vColor.rgb, alpha);\n"
+        "}\n";
+
+      auto compileShader = [](GLenum type, const char *src) -> GLuint {
+        GLuint shader = glCreateShader(type);
+        if (!shader) {
+          return 0;
+        }
+        glShaderSource(shader, 1, &src, nullptr);
+        glCompileShader(shader);
+        GLint status = GL_FALSE;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE) {
+          glDeleteShader(shader);
+          return 0;
+        }
+        return shader;
+      };
+
+      segmentShaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+      segmentShaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+      if (!segmentShaderVertex || !segmentShaderFragment) {
+        if (segmentShaderVertex) {
+          glDeleteShader(segmentShaderVertex);
+          segmentShaderVertex = 0;
+        }
+        if (segmentShaderFragment) {
+          glDeleteShader(segmentShaderFragment);
+          segmentShaderFragment = 0;
+        }
+        return false;
+      }
+
+      segmentShaderProgram = glCreateProgram();
+      if (!segmentShaderProgram) {
+        glDeleteShader(segmentShaderVertex);
+        glDeleteShader(segmentShaderFragment);
+        segmentShaderVertex = 0;
+        segmentShaderFragment = 0;
+        return false;
+      }
+      glAttachShader(segmentShaderProgram, segmentShaderVertex);
+      glAttachShader(segmentShaderProgram, segmentShaderFragment);
+      glBindAttribLocation(segmentShaderProgram, kAttrPos, "aPos");
+      glBindAttribLocation(segmentShaderProgram, kAttrColor, "aColor");
+      glBindAttribLocation(segmentShaderProgram, kAttrSegment, "aSegment");
+      glBindAttribLocation(segmentShaderProgram, kAttrRadius, "aRadius");
+      glLinkProgram(segmentShaderProgram);
+      GLint linkStatus = GL_FALSE;
+      glGetProgramiv(segmentShaderProgram, GL_LINK_STATUS, &linkStatus);
+      if (linkStatus != GL_TRUE) {
+        glDeleteProgram(segmentShaderProgram);
+        glDeleteShader(segmentShaderVertex);
+        glDeleteShader(segmentShaderFragment);
+        segmentShaderProgram = 0;
+        segmentShaderVertex = 0;
+        segmentShaderFragment = 0;
+        return false;
+      }
+
+      glGenBuffers(1, &segmentShaderVbo);
+      if (segmentShaderVbo == 0) {
+        glDeleteProgram(segmentShaderProgram);
+        glDeleteShader(segmentShaderVertex);
+        glDeleteShader(segmentShaderFragment);
+        segmentShaderProgram = 0;
+        segmentShaderVertex = 0;
+        segmentShaderFragment = 0;
+        return false;
+      }
+
+      segmentShaderReady = true;
+      return true;
+    };
     constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
@@ -1322,6 +1462,179 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
       float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
+      auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
+                                   float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
+        if (!verts) {
+          return;
+        }
+        float pad = std::max(radius * 3.0f, 0.75f);
+        float xMin = std::min(ax, bx) - pad;
+        float xMax = std::max(ax, bx) + pad;
+        float yMin = std::min(ay, by) - pad;
+        float yMax = std::max(ay, by) + pad;
+        auto push = [&](float x, float y) {
+          verts->push_back({x, y, r, g, b, a, ax, ay, bx, by, radius});
+        };
+        push(xMin, yMin);
+        push(xMax, yMin);
+        push(xMax, yMax);
+        push(xMin, yMin);
+        push(xMax, yMax);
+        push(xMin, yMax);
+      };
+      auto drawSegmentBatch = [&](std::vector<GlSegmentQuadVertex> &verts) {
+        if (verts.empty() || !initSegmentShaderPipeline()) {
+          return false;
+        }
+        static const GLuint kAttrPos = 0;
+        static const GLuint kAttrColor = 1;
+        static const GLuint kAttrSegment = 2;
+        static const GLuint kAttrRadius = 3;
+        glUseProgram(segmentShaderProgram);
+        glBindBuffer(GL_ARRAY_BUFFER, segmentShaderVbo);
+        glBufferData(
+          GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(GlSegmentQuadVertex)), verts.data(), GL_STREAM_DRAW);
+        glEnableVertexAttribArray(kAttrPos);
+        glEnableVertexAttribArray(kAttrColor);
+        glEnableVertexAttribArray(kAttrSegment);
+        glEnableVertexAttribArray(kAttrRadius);
+        glVertexAttribPointer(kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlSegmentQuadVertex),
+                              reinterpret_cast<const GLvoid *>(offsetof(GlSegmentQuadVertex, x)));
+        glVertexAttribPointer(kAttrColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(GlSegmentQuadVertex),
+                              reinterpret_cast<const GLvoid *>(offsetof(GlSegmentQuadVertex, r)));
+        glVertexAttribPointer(kAttrSegment, 4, GL_FLOAT, GL_FALSE, sizeof(GlSegmentQuadVertex),
+                              reinterpret_cast<const GLvoid *>(offsetof(GlSegmentQuadVertex, ax)));
+        glVertexAttribPointer(kAttrRadius, 1, GL_FLOAT, GL_FALSE, sizeof(GlSegmentQuadVertex),
+                              reinterpret_cast<const GLvoid *>(offsetof(GlSegmentQuadVertex, radius)));
+        glDrawArrays(GL_TRIANGLES, 0, GLsizei(verts.size()));
+        glDisableVertexAttribArray(kAttrRadius);
+        glDisableVertexAttribArray(kAttrSegment);
+        glDisableVertexAttribArray(kAttrColor);
+        glDisableVertexAttribArray(kAttrPos);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glUseProgram(0);
+        return true;
+      };
+      if (initSegmentShaderPipeline()) {
+        haloSegmentVerts.clear();
+        bodySegmentVerts.clear();
+        fillSegmentVerts.clear();
+        continuitySegmentVerts.clear();
+        haloSegmentVerts.reserve(size_t(rowCount) * 6u);
+        bodySegmentVerts.reserve(size_t(rowCount) * 6u);
+        fillSegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
+        continuitySegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
+
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        float prevY = drawTop + 0.5f;
+        float prevVisual = 0.f;
+        float prevColorDrive = 0.f;
+        const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!isValid(idx)) {
+            prevValid = false;
+            continue;
+          }
+          float x0 = getX0(idx);
+          float x1 = getX1(idx);
+          float y = rowY[idx];
+          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          NVGcolor mainColor = brightenColor(
+            gradientColorForIntensity(
+              tone,
+              uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+          GLubyte mainR = encodeColorByte(mainColor.r);
+          GLubyte mainG = encodeColorByte(mainColor.g);
+          GLubyte mainB = encodeColorByte(mainColor.b);
+          GLubyte mainA = encodeColorByte(mainColor.a);
+          float mainW = (0.78f + 0.62f * tone) * zoomThicknessMul * kGlMainWidthGain * glZoomInWidthComp;
+          float mainRadius = std::max(mainW * 0.55f, 0.40f);
+          appendSegmentQuad(&bodySegmentVerts, x0, y, x1, y, mainRadius, mainR, mainG, mainB, mainA);
+
+          if (glDeepZoomEnergyFill > 1e-4f) {
+            GLubyte fillAlpha =
+              GLubyte(std::lround(clamp(255.f * kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, 0.f, 255.f)));
+            appendSegmentQuad(&fillSegmentVerts, x0, y, x1, y, mainRadius * (1.08f + 0.04f * glDeepZoomEnergyFill),
+                              mainR, mainG, mainB, fillAlpha);
+          }
+
+          if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
+            float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
+            float haloT = haloLinear * haloLinear;
+            uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
+            if (haloAlpha >= kHaloMinAlphaToDraw) {
+              float haloW =
+                (mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
+              float haloRadius = std::max(haloW * 0.58f, mainRadius + 0.30f);
+              uint8_t boostedHaloAlpha = uint8_t(std::lround(
+                clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
+              appendSegmentQuad(&haloSegmentVerts, x0, y, x1, y, haloRadius, 255, 255, 255, boostedHaloAlpha);
+            }
+          }
+
+          if (module->debugRenderConnectorsEnabled && prevValid) {
+            if (!(std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx)) {
+              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+              float connectTone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+              NVGcolor c = brightenColor(
+                gradientColorForIntensity(
+                  connectVisual,
+                  uint8_t(std::lround(clamp(
+                    (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+                clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+              GLubyte r = encodeColorByte(c.r);
+              GLubyte g = encodeColorByte(c.g);
+              GLubyte b = encodeColorByte(c.b);
+              GLubyte a = encodeColorByte(c.a);
+              float prevCenter = 0.5f * (prevX0 + prevX1);
+              float center = 0.5f * (x0 + x1);
+              float centerSpan = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
+              if (centerSpan > connectorMinDeltaPx * 1.2f) {
+                GLubyte bodyAlpha = GLubyte(std::lround(clamp(
+                  float(a) * (0.52f + 0.12f * glDeepZoomEnergyFill), 0.f, 255.f)));
+                float continuityRadius =
+                  std::max((0.92f + 0.52f * connectTone) * zoomThicknessMul * kGlConnectorWidthGain *
+                             (1.04f + 0.10f * glZoomInWidthComp) * (1.02f + 0.10f * glDeepZoomEnergyFill) * 0.58f,
+                           0.45f);
+                appendSegmentQuad(&continuitySegmentVerts, prevCenter, prevY, center, y, continuityRadius, r, g, b,
+                                  bodyAlpha);
+              }
+            }
+          }
+
+          prevX0 = x0;
+          prevX1 = x1;
+          prevY = y;
+          prevVisual = visual;
+          prevColorDrive = transientLift;
+          prevValid = true;
+        }
+
+        if (!haloSegmentVerts.empty()) {
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+          drawSegmentBatch(haloSegmentVerts);
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        if (module->debugRenderMainTraceEnabled) {
+          drawSegmentBatch(bodySegmentVerts);
+          if (!fillSegmentVerts.empty()) {
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            drawSegmentBatch(fillSegmentVerts);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+          }
+        }
+        if (!continuitySegmentVerts.empty()) {
+          drawSegmentBatch(continuitySegmentVerts);
+        }
+        return;
+      }
       auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width, const ShaderPassParams &shaderParams) {
         if (verts.empty()) {
           return;
