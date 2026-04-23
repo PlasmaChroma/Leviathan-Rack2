@@ -62,6 +62,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastConnectorsEnabled = false;
   bool redrawLastStereoRightLaneEnabled = false;
   int redrawLastRenderMode = -1;
+  bool fallbackRendererActive = false;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
   std::vector<float> rowX0Right;
@@ -240,6 +241,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
   void drawFramebuffer() override {
     auto drawStart = std::chrono::steady_clock::now();
+    fallbackRendererActive = false;
     if (module) {
       module->uiDebugScopeDrawCalls.fetch_add(1u, std::memory_order_relaxed);
     }
@@ -1252,6 +1254,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       auto compileShader = [](GLenum type, const char *src) -> GLuint {
         GLuint shader = glCreateShader(type);
         if (!shader) {
+          WARN("TDScopeGL field shader: glCreateShader failed for type=%u", unsigned(type));
           return 0;
         }
         glShaderSource(shader, 1, &src, nullptr);
@@ -1259,6 +1262,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         GLint status = GL_FALSE;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
         if (status != GL_TRUE) {
+          GLint logLen = 0;
+          glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+          std::vector<char> logBuf(size_t(std::max(logLen, 1)), '\0');
+          GLsizei written = 0;
+          glGetShaderInfoLog(shader, GLsizei(logBuf.size()), &written, logBuf.data());
+          WARN("TDScopeGL field shader compile failed (type=%u): %s", unsigned(type), logBuf.data());
           glDeleteShader(shader);
           return 0;
         }
@@ -1530,8 +1539,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
-        "  float colorVisual = min(pow(visual, 1.65), 0.64);\n"
-        "  float mainAlpha = clamp(((88.0 + 76.0 * visual) / 255.0) * 0.92 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  float colorVisual = min(0.06 + 0.58 * pow(visual, 1.18), 0.64);\n"
+        "  float mainAlpha = clamp(((136.0 + 52.0 * visual) / 255.0) * 0.94 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
         "  float maxMainW = max(uRowStep * 0.82, 0.70);\n"
@@ -1542,7 +1551,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.25);\n"
         "  float mainCov = clamp(0.72 * mainCovCore + 0.28 * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
-        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.15, 0.0) * 0.42);\n"
+        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.34);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
         "    baseRgb += mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
@@ -1581,7 +1590,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float prevDrive = clamp(rowA.w, 0.0, 1.0);\n"
         "  float drive = clamp(rowB.w, 0.0, 1.0);\n"
         "  float connectVisual = clamp(0.5 * (prevVisual + visual), 0.0, 1.0);\n"
-        "  float connectColorVisual = min(pow(connectVisual, 1.55), 0.60);\n"
+        "  float connectColorVisual = min(0.06 + 0.54 * pow(connectVisual, 1.16), 0.60);\n"
         "  float connectTransientLift = clamp(0.5 * (prevDrive + drive), 0.0, 1.0);\n"
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
         "  vec4 c = gradientColor(connectColorVisual,\n"
@@ -1677,6 +1686,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       GLint linkStatus = GL_FALSE;
       glGetProgramiv(fieldShaderProgram, GL_LINK_STATUS, &linkStatus);
       if (linkStatus != GL_TRUE) {
+        GLint logLen = 0;
+        glGetProgramiv(fieldShaderProgram, GL_INFO_LOG_LENGTH, &logLen);
+        std::vector<char> logBuf(size_t(std::max(logLen, 1)), '\0');
+        GLsizei written = 0;
+        glGetProgramInfoLog(fieldShaderProgram, GLsizei(logBuf.size()), &written, logBuf.data());
+        WARN("TDScopeGL field shader link failed: %s", logBuf.data());
         glDeleteProgram(fieldShaderProgram);
         glDeleteShader(fieldShaderVertex);
         glDeleteShader(fieldShaderFragment);
@@ -1730,9 +1745,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 ||
           fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
-          fieldUniformZoomInLiftComp < 0 || fieldUniformZoomInHaloAlphaComp < 0 ||
+          fieldUniformZoomInHaloAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
           fieldUniformRenderContinuity < 0) {
+        WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
+             "zoomInWidth=%d zoomInHaloWidth=%d zoomInAlpha=%d zoomInLift=%d zoomInHaloAlpha=%d deepZoomFill=%d renderMain=%d "
+             "renderHalo=%d renderContinuity=%d",
+             fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
+             fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInHaloWidthComp,
+             fieldUniformZoomInAlphaComp, fieldUniformZoomInLiftComp, fieldUniformZoomInHaloAlphaComp,
+             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity);
         return false;
       }
 
@@ -1899,9 +1921,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                         fieldDrawOk;
         }
         if (fieldDrawOk) {
+          fallbackRendererActive = false;
           return;
         }
       }
+      fallbackRendererActive = true;
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
         if (!verts) {
@@ -2322,6 +2346,28 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
     glDisable(GL_LINE_SMOOTH);
+    if (fallbackRendererActive) {
+      glDisable(GL_BLEND);
+      glMatrixMode(GL_PROJECTION);
+      glPushMatrix();
+      glLoadIdentity();
+      glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
+      glMatrixMode(GL_MODELVIEW);
+      glPushMatrix();
+      glLoadIdentity();
+      glColor4f(0.92f, 0.12f, 0.12f, 1.0f);
+      glBegin(GL_QUADS);
+      glVertex2f(box.size.x - 11.0f, 5.0f);
+      glVertex2f(box.size.x - 5.0f, 5.0f);
+      glVertex2f(box.size.x - 5.0f, 11.0f);
+      glVertex2f(box.size.x - 11.0f, 11.0f);
+      glEnd();
+      glColor4f(1.f, 1.f, 1.f, 1.f);
+      glPopMatrix();
+      glMatrixMode(GL_PROJECTION);
+      glPopMatrix();
+      glMatrixMode(GL_MODELVIEW);
+    }
 
     publishUiDebugMetrics(densityPct, rowCount);
   }
@@ -2334,6 +2380,8 @@ Widget *createGlDisplay(TDScope *module, math::Rect scopeRectMm) {
   glDisplay->module = module;
   glDisplay->box.pos = mm2px(scopeRectMm.pos);
   glDisplay->box.size = mm2px(scopeRectMm.size);
+  glDisplay->box.pos.y += 1.f;
+  glDisplay->box.size.y = std::max(1.f, glDisplay->box.size.y - 2.f);
   glDisplay->dirtyOnSubpixelChange = false;
   return glDisplay;
 }
