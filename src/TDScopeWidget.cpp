@@ -196,17 +196,6 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
       [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
-    menu->addChild(createSubmenuItem("Field Tuning", "", [=](Menu *submenu) {
-      submenu->addChild(createCheckMenuItem(
-        "Hot center whitening", "", [=]() { return scopeModule->fieldHotCenterWhiteningEnabled; },
-        [=]() { scopeModule->fieldHotCenterWhiteningEnabled = !scopeModule->fieldHotCenterWhiteningEnabled; }));
-      submenu->addChild(createCheckMenuItem(
-        "Main brighten", "", [=]() { return scopeModule->fieldMainBrightenEnabled; },
-        [=]() { scopeModule->fieldMainBrightenEnabled = !scopeModule->fieldMainBrightenEnabled; }));
-      submenu->addChild(createCheckMenuItem(
-        "Deep zoom fill", "", [=]() { return scopeModule->fieldDeepZoomFillEnabled; },
-        [=]() { scopeModule->fieldDeepZoomFillEnabled = !scopeModule->fieldDeepZoomFillEnabled; }));
-    }));
 
     if (isDragonKingDebugEnabled()) {
       menu->addChild(new MenuSeparator());
@@ -240,9 +229,6 @@ struct TDScopeWidget : ModuleWidget {
         submenu->addChild(createCheckMenuItem(
           "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
           [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
-        submenu->addChild(createCheckMenuItem(
-          "Halo", "", [=]() { return scopeModule->debugRenderHaloEnabled; },
-          [=]() { scopeModule->debugRenderHaloEnabled = !scopeModule->debugRenderHaloEnabled; }));
         submenu->addChild(createCheckMenuItem(
           "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
           [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));

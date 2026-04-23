@@ -140,7 +140,6 @@ struct TDScopeDisplayWidget final : Widget {
   int redrawLastColorScheme = -1;
   bool redrawLastHaloEnabled = false;
   bool redrawLastMainTraceEnabled = false;
-  bool redrawLastRenderHaloEnabled = false;
   bool redrawLastConnectorsEnabled = false;
   bool redrawLastStereoRightLaneEnabled = false;
   int redrawLastRenderMode = -1;
@@ -419,10 +418,6 @@ struct TDScopeDisplayWidget final : Widget {
       if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
         dirty = true;
         redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
-      }
-      if (module->debugRenderHaloEnabled != redrawLastRenderHaloEnabled) {
-        dirty = true;
-        redrawLastRenderHaloEnabled = module->debugRenderHaloEnabled;
       }
       if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
         dirty = true;
@@ -1759,7 +1754,7 @@ struct TDScopeDisplayWidget final : Widget {
           int xMin = int(std::lround(std::min(x0[idx], x1[idx])));
           int xMax = int(std::lround(std::max(x0[idx], x1[idx])));
 
-          if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled) {
+          if (module->scopeTransientHaloEnabled) {
             float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
             float haloT = haloLinear * haloLinear;
             uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
@@ -1840,7 +1835,7 @@ struct TDScopeDisplayWidget final : Widget {
         float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
         float haloT = haloLinear * haloLinear;
 
-        if (module->debugRenderHaloEnabled && module->scopeTransientHaloEnabled && haloT > 1e-4f) {
+        if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
           uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
           bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
           // The main trace already renders every supersampled row. For the
