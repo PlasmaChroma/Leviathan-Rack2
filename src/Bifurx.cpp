@@ -1220,6 +1220,11 @@ struct Bifurx final : Module {
 	std::atomic<uint64_t> perfAudioPreviewNs{0};
 	std::atomic<uint64_t> perfAudioAnalysisNs{0};
 	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
+	std::atomic<float> perfSampleRate{0.f};
+	std::atomic<int> perfMode{0};
+	std::atomic<int> perfCircuitMode{0};
+	std::atomic<bool> perfFastPathEligible{false};
+	std::atomic<bool> perfPreviewPitchCvConnected{false};
 
 	Bifurx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -1509,6 +1514,10 @@ struct Bifurx final : Module {
 			&& !inputs[RESO_CV_INPUT].isConnected()
 			&& !inputs[BALANCE_CV_INPUT].isConnected()
 			&& !inputs[SPAN_CV_INPUT].isConnected();
+		perfSampleRate.store(args.sampleRate, std::memory_order_relaxed);
+		perfMode.store(mode, std::memory_order_relaxed);
+		perfCircuitMode.store(effectiveCircuitMode, std::memory_order_relaxed);
+		perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 		const bool updateFastControls = !controlFastCacheValid || !fastPathEligible || controlUpdateDivider.process();
 		if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) {
 			previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f);
@@ -1817,6 +1826,7 @@ struct Bifurx final : Module {
 		const float previewTargetQB = 1.f / std::max(dampingB, 0.05f);
 		const float previewTargetBalance = balance;
 		const bool previewPitchCvConnected = inputs[VOCT_INPUT].isConnected() || inputs[FM_INPUT].isConnected();
+		perfPreviewPitchCvConnected.store(previewPitchCvConnected, std::memory_order_relaxed);
 		const float previewSmoothingAlpha = previewPitchCvConnected ? previewFilterAlphaSlow : previewFilterAlpha;
 		if (!previewTargetMotionInitialized) {
 			previewPrevTargetFreqA = previewTargetFreqA;
@@ -2130,7 +2140,7 @@ void BifurxSpectrumWidget::startPerfDebugCapture() {
 	perfDebugRecorder.file << "# Bifurx performance debug trace v1\n";
 	perfDebugRecorder.file << "# Sampled audio timings plus UI timings aggregated per interval\n";
 	perfDebugRecorder.file
-		<< "seq,t_sec,"
+		<< "seq,t_sec,sample_rate,mode,circuit_mode,fast_path_eligible,preview_pitch_cv_connected,"
 		   "audio_sampled_calls,audio_avg_us,audio_max_us,audio_controls_avg_us,audio_core_avg_us,audio_preview_avg_us,audio_analysis_avg_us,"
 		   "ui_step_calls,ui_step_avg_us,ui_step_max_us,"
 		   "ui_draw_calls,ui_draw_avg_us,ui_draw_max_us,"
@@ -2222,6 +2232,11 @@ void BifurxSpectrumWidget::logPerfDebugSample() {
 	}
 
 	const double tSec = std::max(0.0, system::getTime() - perfDebugRecorder.startTimeSec);
+	const float sampleRate = module->perfSampleRate.load(std::memory_order_acquire);
+	const int mode = module->perfMode.load(std::memory_order_acquire);
+	const int circuitMode = module->perfCircuitMode.load(std::memory_order_acquire);
+	const bool fastPathEligible = module->perfFastPathEligible.load(std::memory_order_acquire);
+	const bool previewPitchCvConnected = module->perfPreviewPitchCvConnected.load(std::memory_order_acquire);
 	const uint64_t audioSampledCount = module->perfAudioSampledCount.load(std::memory_order_acquire);
 	const uint64_t audioProcessNs = module->perfAudioProcessNs.load(std::memory_order_acquire);
 	const uint64_t audioControlsNs = module->perfAudioControlsNs.load(std::memory_order_acquire);
@@ -2265,6 +2280,11 @@ void BifurxSpectrumWidget::logPerfDebugSample() {
 	perfDebugRecorder.file
 		<< perfDebugRecorder.sequence++ << ","
 		<< tSec << ","
+		<< sampleRate << ","
+		<< mode << ","
+		<< circuitMode << ","
+		<< (fastPathEligible ? 1 : 0) << ","
+		<< (previewPitchCvConnected ? 1 : 0) << ","
 		<< audioSampledDelta << ","
 		<< avgUs(audioProcessDeltaNs, audioSampledDelta) << ","
 		<< (double(audioProcessMaxNs) / 1000.0) << ","
