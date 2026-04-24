@@ -82,6 +82,7 @@ struct TDScope final : Module {
   int staleFrames = 0;
   bool previewValid = false;
   int scopeDisplayRangeMode = SCOPE_RANGE_5V;
+  bool scopeVerticalInverted = false;
   int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
   bool scopeTransientHaloEnabled = true;
@@ -157,6 +158,7 @@ struct TDScope final : Module {
   json_t *dataToJson() override {
     json_t *root = json_object();
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
+    json_object_set_new(root, "scopeVerticalInverted", json_boolean(scopeVerticalInverted));
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
     json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
@@ -176,6 +178,10 @@ struct TDScope final : Module {
     json_t *rangeJ = json_object_get(root, "scopeDisplayRangeMode");
     if (rangeJ) {
       scopeDisplayRangeMode = clamp(int(json_integer_value(rangeJ)), SCOPE_RANGE_5V, SCOPE_RANGE_COUNT - 1);
+    }
+    json_t *verticalInvertJ = json_object_get(root, "scopeVerticalInverted");
+    if (verticalInvertJ) {
+      scopeVerticalInverted = json_boolean_value(verticalInvertJ);
     }
     json_t *channelJ = json_object_get(root, "scopeChannelMode");
     if (channelJ) {

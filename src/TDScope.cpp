@@ -90,6 +90,7 @@ struct TDScopeDisplayWidget final : Widget {
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
+  bool cachedVerticalInverted = false;
   bool cachedStereoLayout = false;
   bool cachedGeometryValid = false;
   std::vector<float> historyX0;
@@ -136,6 +137,7 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastPreviewValid = false;
   float redrawLastRackZoom = 1.f;
   int redrawLastRangeMode = -1;
+  bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
   bool redrawLastHaloEnabled = false;
@@ -297,9 +299,11 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float appliedDeltaY = lagDragResidualY;
     lagDragResidualY = 0.f;
+    float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
+    float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && appliedDeltaY > 0.f) {
+    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
       // CONTAINMENT NOTE
       // This is not architecturally "clean". Scope is compensating for live
       // write-head advance here because, without it, slow downward drags in
@@ -317,7 +321,7 @@ struct TDScopeDisplayWidget final : Widget {
       // stutter because compensation fights reversal intent.
       lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
     }
-    lagDragNormalizedOffset += appliedDeltaY / std::max(lagDragReferenceHeight, 1.f);
+    lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
     ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
     if (!map.valid) {
       return;
@@ -402,6 +406,10 @@ struct TDScopeDisplayWidget final : Widget {
       if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
         dirty = true;
         redrawLastRangeMode = module->scopeDisplayRangeMode;
+      }
+      if (module->scopeVerticalInverted != redrawLastVerticalInverted) {
+        dirty = true;
+        redrawLastVerticalInverted = module->scopeVerticalInverted;
       }
       if (module->scopeChannelMode != redrawLastChannelMode) {
         dirty = true;
@@ -720,9 +728,13 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float windowTopLag = msg.lagSamples + backwardWindowSamples;
     float windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    bool verticalInverted = module->scopeVerticalInverted;
     float readHeadT = 0.5f;
     if (windowTopLag != windowBottomLag) {
       readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
+    }
+    if (verticalInverted) {
+      readHeadT = 1.f - readHeadT;
     }
     float readHeadY = drawTop + readHeadT * yDen + 0.5f;
     if (lowSignalWindow && sampleMode) {
@@ -735,7 +747,7 @@ struct TDScopeDisplayWidget final : Widget {
     float readHeadDrawY = readHeadY;
     if (!sampleMode) {
       float nowProximity = clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
-      readHeadDrawY += kReadHeadNowNudgePx * nowProximity;
+      readHeadDrawY += (verticalInverted ? -kReadHeadNowNudgePx : kReadHeadNowNudgePx) * nowProximity;
     }
     float minReadHeadY = drawTop + kReadHeadHalfBandPx + 0.5f;
     // Slightly looser lower bound so the "now" nudge can sit lower without clipping.
@@ -799,7 +811,8 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
-    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || rowCount != cachedRowCount || stereoLayoutChanged;
+    bool shouldRebuild =
+      !cachedGeometryValid || msgChanged || rangeModeChanged || rowCount != cachedRowCount || stereoLayoutChanged;
 
     auto decodeScopeBin = [&](const temporaldeck_expander::ScopeBin &bin, float *minNorm, float *maxNorm) {
       *minNorm = clamp((float(bin.min) / 32767.f) * scopeNormGain, -1.f, 1.f);
@@ -1399,6 +1412,7 @@ struct TDScopeDisplayWidget final : Widget {
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
       cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
       historyValidState = true;
@@ -1442,6 +1456,7 @@ struct TDScopeDisplayWidget final : Widget {
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
       cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
       rebuildTransientColorDrive(rowX0, rowX1, rowVisualIntensity, rowValid, laneAmpHalfWidth, &rowColorDrive);
@@ -1796,6 +1811,10 @@ struct TDScopeDisplayWidget final : Widget {
       };
 
     nvgSave(args.vg);
+    if (verticalInverted) {
+      nvgTranslate(args.vg, 0.f, box.size.y);
+      nvgScale(args.vg, 1.f, -1.f);
+    }
     nvgScissor(args.vg, 0.f, drawTop, box.size.x, drawBottom - drawTop);
 
     auto drawLane = [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
@@ -2264,12 +2283,14 @@ struct TDScopeInputWidget final : Widget {
     }
     float appliedDeltaY = lagDragResidualY;
     lagDragResidualY = 0.f;
+    float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
+    float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && appliedDeltaY > 0.f) {
+    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
       lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
     }
-    lagDragNormalizedOffset += appliedDeltaY / std::max(lagDragReferenceHeight, 1.f);
+    lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
     ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
     if (!map.valid) {
       e.consume(this);

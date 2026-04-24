@@ -152,6 +152,9 @@ struct TDScopeWidget : ModuleWidget {
         "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
         [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
     }));
+    menu->addChild(createCheckMenuItem(
+      "Inverted Verical", "", [=]() { return scopeModule->scopeVerticalInverted; },
+      [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Channel View"));

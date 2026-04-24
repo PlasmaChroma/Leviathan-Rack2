@@ -55,6 +55,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastPreviewValid = false;
   float redrawLastRackZoom = 1.f;
   int redrawLastRangeMode = -1;
+  bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
   bool redrawLastHaloEnabled = false;
@@ -91,6 +92,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
+  bool cachedVerticalInverted = false;
   bool cachedStereoLayout = false;
   bool cachedGeometryValid = false;
   std::vector<float> historyX0;
@@ -201,6 +203,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
       dirty = true;
       redrawLastRangeMode = module->scopeDisplayRangeMode;
+    }
+    if (module->scopeVerticalInverted != redrawLastVerticalInverted) {
+      dirty = true;
+      redrawLastVerticalInverted = module->scopeVerticalInverted;
     }
     if (module->scopeChannelMode != redrawLastChannelMode) {
       dirty = true;
@@ -315,6 +321,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
+    const bool verticalInverted = module->scopeVerticalInverted;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -347,6 +354,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float laneAmpHalfWidth = laneWidth * 0.46f;
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
     const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
+    const bool verticalInversionChanged = cachedVerticalInverted != verticalInverted;
 
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
@@ -433,6 +441,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
     size_t rowCountU = size_t(rowCount);
     const float rowStep = drawHeight / float(rowCount);
+    auto visualRowIndex = [&](int iy) {
+      return verticalInverted ? (rowCount - 1 - iy) : iy;
+    };
 
     if (rowX0.size() != rowCountU) {
       rowX0.assign(rowCountU, lane0CenterX);
@@ -637,8 +648,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           uint8_t prevHold = (*holdOut)[idx];
           float y = drawTop + (float(iy) + 0.5f) * rowStep;
           rowY[idx] = y;
-          float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
-          float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
+          int sampleRow = visualRowIndex(iy);
+          float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
+          float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
           float rowMinNorm = 0.f;
           float rowMaxNorm = 0.f;
           if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
@@ -688,7 +700,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           uint8_t prevHold = (*holdOut)[idx];
           float y = drawTop + (float(iy) + 0.5f) * rowStep;
           rowY[idx] = y;
-          float tMid = clamp((float(iy) + 0.5f) / float(rowCount), 0.f, 1.f);
+          float tMid = clamp((float(visualRowIndex(iy)) + 0.5f) / float(rowCount), 0.f, 1.f);
           float lagMid = windowTopLag + (windowBottomLag - windowTopLag) * tMid;
           int64_t bucketIndex = int64_t(std::floor(lagMid / liveBucketSpanSamples));
           int slot = bucketSlotForIndex(bucketIndex);
@@ -840,8 +852,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
     bool useGeometryHistoryCache = module->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL;
-    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || cachedRowCount != rowCount ||
-                         stereoLayoutChanged;
+    bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || verticalInversionChanged ||
+                         cachedRowCount != rowCount || stereoLayoutChanged;
     if (useGeometryHistoryCache) {
       int historyMargin = rowCount;
       int historyCapacity = rowCount * 3;
@@ -1062,7 +1074,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
 
       auto historyVisibleSlot = [&](size_t visibleIdx) {
-        int slot = historyHeadRow + historyMarginRows + int(visibleIdx);
+        int slot = historyHeadRow + historyMarginRows + visualRowIndex(int(visibleIdx));
         slot %= historyCapacityRows;
         if (slot < 0) {
           slot += historyCapacityRows;
@@ -1126,6 +1138,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
       cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
       historyValidState = true;
@@ -1176,6 +1189,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
       cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
     }
@@ -2411,6 +2425,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    glPushMatrix();
+    if (verticalInverted) {
+      glTranslatef(0.f, box.size.y, 0.f);
+      glScalef(1.f, -1.f, 1.f);
+    }
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -2456,6 +2475,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
+    glPopMatrix();
     glDisable(GL_LINE_SMOOTH);
     if (fallbackRendererActive) {
       glDisable(GL_BLEND);
