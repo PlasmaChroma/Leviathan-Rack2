@@ -51,44 +51,23 @@ struct SemanticExportProfile {
 
 inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
   const int clampedCircuitMode = std::max(0, std::min(3, circuitMode));
-  const int clampedStageIndex = std::max(0, std::min(1, stageIndex));
+  (void)stageIndex;
   SemanticExportProfile profile;
   switch (clampedCircuitMode) {
     case 1:
-      if (clampedStageIndex == 0) {
-        profile.lpScale = 4.5f;
-        profile.bpScale = 1.05f;
-        profile.hpScale = 1.05f;
-      }
-      else {
-        profile.lpScale = 2.4f;
-        profile.bpScale = 0.90f;
-        profile.hpScale = 0.90f;
-      }
+      profile.lpScale = 0.f;
+      profile.bpScale = 5.5f;
+      profile.hpScale = 5.5f;
       return profile;
     case 2:
-      if (clampedStageIndex == 0) {
-        profile.lpScale = 2.0f;
-        profile.bpScale = 0.92f;
-        profile.hpScale = 0.92f;
-      }
-      else {
-        profile.lpScale = 1.1f;
-        profile.bpScale = 0.72f;
-        profile.hpScale = 0.72f;
-      }
+      profile.lpScale = 0.f;
+      profile.bpScale = 6.5f;
+      profile.hpScale = 0.f;
       return profile;
     case 3:
-      if (clampedStageIndex == 0) {
-        profile.lpScale = 2.5f;
-        profile.bpScale = 0.98f;
-        profile.hpScale = 0.98f;
-      }
-      else {
-        profile.lpScale = 1.6f;
-        profile.bpScale = 0.78f;
-        profile.hpScale = 0.78f;
-      }
+      profile.lpScale = 5.5f;
+      profile.bpScale = 3.8f;
+      profile.hpScale = 4.5f;
       return profile;
     default:
       return profile;

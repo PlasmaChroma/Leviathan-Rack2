@@ -60,13 +60,7 @@ float measureRuntimeGainDb(
 ) {
   Bifurx module;
   module.onReset();
-  module.filterCircuitMode = clampCircuitMode(circuitMode);
-  module.activeCircuitMode = 0;
-  module.pendingCircuitSwitch = false;
-  module.pendingSolveSteps = 0;
-  module.activeCircuitAlignA = 1.f;
-  module.activeCircuitAlignB = 1.f;
-  module.resetCircuitStates();
+  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNorm, spanNorm, reso, balance);
   clearCvInputs(module);
@@ -147,13 +141,7 @@ bool capturePreviewState(
   }
   Bifurx module;
   module.onReset();
-  module.filterCircuitMode = clampCircuitMode(circuitMode);
-  module.activeCircuitMode = 0;
-  module.pendingCircuitSwitch = false;
-  module.pendingSolveSteps = 0;
-  module.activeCircuitAlignA = 1.f;
-  module.activeCircuitAlignB = 1.f;
-  module.resetCircuitStates();
+  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   clearCvInputs(module);
@@ -261,7 +249,7 @@ TestResult testRuntimeReportedLowCaseAcrossCircuitsKeepsAudibleOutput() {
   return {
     "Runtime LL low-frequency case keeps non-SVF circuits above collapse floor",
     pass,
-    "gainDb(SVF,DFM,MS2,PRD)=(" + std::to_string(gains[0]) + "," + std::to_string(gains[1]) + "," +
+    "gainDb(SVF,Acid,Vowel,Corrode)=(" + std::to_string(gains[0]) + "," + std::to_string(gains[1]) + "," +
       std::to_string(gains[2]) + "," + std::to_string(gains[3]) + ")"
   };
 }
@@ -334,7 +322,7 @@ TestResult testRuntimeLlDropoutRegressionSweepAcrossCircuits() {
   }
 
   detail =
-    "lowAvg(SVF,DFM,MS2,PRD)=(" + std::to_string(lowAvg[0]) + "," + std::to_string(lowAvg[1]) + "," +
+    "lowAvg(SVF,Acid,Vowel,Corrode)=(" + std::to_string(lowAvg[0]) + "," + std::to_string(lowAvg[1]) + "," +
       std::to_string(lowAvg[2]) + "," + std::to_string(lowAvg[3]) + ") "
     "lowMin=(" + std::to_string(lowMin[0]) + "," + std::to_string(lowMin[1]) + "," +
       std::to_string(lowMin[2]) + "," + std::to_string(lowMin[3]) + ") "
@@ -389,7 +377,7 @@ TestResult testRuntimeCurveFamiliesRemainDistinctPerCircuit() {
   }
 
   return {
-    "Runtime LL/NN/BB/HH curve families stay distinct per circuit",
+    "Runtime LL/NN/BB/HH curve families stay distinct per character mode",
     pass,
     detail
   };
@@ -423,7 +411,7 @@ TestResult testRuntimeCircuitsProduceDifferentBandBandCurves() {
 
   pass = pass && distinct;
   return {
-    "Runtime BB curve differs across SVF/DFM/MS2/PRD",
+    "Runtime BB curve differs across SVF/Acid/Vowel/Corrode",
     pass,
     "d01=" + std::to_string(d01) + " d02=" + std::to_string(d02) + " d03=" + std::to_string(d03) +
       " d12=" + std::to_string(d12) + " d13=" + std::to_string(d13) + " d23=" + std::to_string(d23)
