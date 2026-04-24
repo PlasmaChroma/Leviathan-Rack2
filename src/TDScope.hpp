@@ -96,9 +96,11 @@ struct TDScope final : Module {
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
   bool lastLagDragActive = false;
+  bool lastLagDragStationaryHold = false;
   float lastLagDragSamples = 0.f;
   float lastLagDragVelocity = 0.f;
   std::atomic<bool> uiLagDragActive {false};
+  std::atomic<bool> uiLagDragStationaryHold {false};
   std::atomic<float> uiLagDragSamples {0.f};
   std::atomic<float> uiLagDragVelocity {0.f};
 
@@ -299,8 +301,9 @@ struct TDScope final : Module {
     return false;
   }
 
-  void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f) {
+  void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f, bool stationaryHold = false) {
     uiLagDragActive.store(active, std::memory_order_relaxed);
+    uiLagDragStationaryHold.store(active && stationaryHold, std::memory_order_relaxed);
     uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
     uiLagDragVelocity.store(velocity, std::memory_order_relaxed);
   }
@@ -349,6 +352,7 @@ struct TDScope final : Module {
                                         ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
       bool lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
+      bool lagDragStationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
       float lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
       float lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
       if (!std::isfinite(lagDragSamples) || lagDragSamples < 0.f) {
@@ -361,10 +365,11 @@ struct TDScope final : Module {
       requestPublishTimerSec += args.sampleTime;
       bool formatChanged = requestedScopeFormat != lastRequestedScopeFormat;
       bool lagStateChanged = lagDragActive != lastLagDragActive;
+      bool lagHoldChanged = lagDragStationaryHold != lastLagDragStationaryHold;
       bool lagValueChanged = lagDragActive && (std::fabs(lagDragSamples - lastLagDragSamples) >= (1.f / 16.f) ||
                                                std::fabs(lagDragVelocity - lastLagDragVelocity) >= 0.1f);
       bool timerElapsed = requestPublishTimerSec >= requestIntervalSec;
-      if (formatChanged || lagStateChanged || lagValueChanged || timerElapsed) {
+      if (formatChanged || lagStateChanged || lagHoldChanged || lagValueChanged || timerElapsed) {
         if (timerElapsed) {
           requestPublishTimerSec = std::fmod(requestPublishTimerSec, requestIntervalSec);
         } else {
@@ -375,10 +380,11 @@ struct TDScope final : Module {
         if (request) {
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
-                                                        lagDragSamples, lagDragVelocity);
+                                                        lagDragStationaryHold, lagDragSamples, lagDragVelocity);
           leftExpander.module->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
           lastLagDragActive = lagDragActive;
+          lastLagDragStationaryHold = lagDragStationaryHold;
           lastLagDragSamples = lagDragSamples;
           lastLagDragVelocity = lagDragVelocity;
         }
@@ -387,8 +393,10 @@ struct TDScope final : Module {
       requestPublishTimerSec = 0.f;
       lastRequestedScopeFormat = uint32_t(-1);
       lastLagDragActive = false;
+      lastLagDragStationaryHold = false;
       lastLagDragSamples = 0.f;
       uiLagDragActive.store(false, std::memory_order_relaxed);
+      uiLagDragStationaryHold.store(false, std::memory_order_relaxed);
     }
 
     float uiPublishIntervalSec =

@@ -356,7 +356,7 @@ struct TemporalDeckEngine {
   static constexpr float kScratchTargetJitterThreshold = 0.35f;
   static constexpr float kReverseBiteVelocityThreshold = 22.0f;
   static constexpr float kReverseBiteMaxBoost = 1.55f;
-  static constexpr float kNowSnapThresholdMs = 20.0f;
+  static constexpr float kNowSnapThresholdMs = 33.0f;
   static constexpr float kNowCatchTime = 0.004f;
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;

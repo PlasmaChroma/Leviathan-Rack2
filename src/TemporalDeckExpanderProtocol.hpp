@@ -105,29 +105,37 @@ inline bool isDisplayRequestValid(const DisplayToHost &msg) {
   return msg.magic == DISPLAY_MAGIC && msg.version >= 1u && msg.size >= 24u && msg.size <= 256u;
 }
 
-inline uint32_t encodeLagDragRequest(bool active, float lagSamples) {
+inline uint32_t encodeLagDragRequest(bool active, bool stationaryHold, float lagSamples) {
   constexpr uint32_t kActiveBit = 0x80000000u;
+  constexpr uint32_t kStationaryHoldBit = 0x40000000u;
   constexpr float kLagQuantize = 16.f;
   int32_t lagQ = int32_t(std::lrint(std::max(0.f, lagSamples) * kLagQuantize));
   if (lagQ < 0) {
     lagQ = 0;
   }
-  if (lagQ > 0x7fffffff) {
-    lagQ = 0x7fffffff;
+  if (lagQ > 0x3fffffff) {
+    lagQ = 0x3fffffff;
   }
-  uint32_t packed = uint32_t(lagQ) & 0x7fffffffu;
+  uint32_t packed = uint32_t(lagQ) & 0x3fffffffu;
   if (active) {
     packed |= kActiveBit;
+  }
+  if (stationaryHold) {
+    packed |= kStationaryHoldBit;
   }
   return packed;
 }
 
-inline bool decodeLagDragRequest(uint32_t reserved, float *lagSamplesOut) {
+inline bool decodeLagDragRequest(uint32_t reserved, float *lagSamplesOut, bool *stationaryHoldOut = nullptr) {
   constexpr uint32_t kActiveBit = 0x80000000u;
+  constexpr uint32_t kStationaryHoldBit = 0x40000000u;
   constexpr float kLagQuantize = 16.f;
   if (lagSamplesOut) {
-    uint32_t lagQ = reserved & 0x7fffffffu;
+    uint32_t lagQ = reserved & 0x3fffffffu;
     *lagSamplesOut = float(lagQ) / kLagQuantize;
+  }
+  if (stationaryHoldOut) {
+    *stationaryHoldOut = (reserved & kStationaryHoldBit) != 0u;
   }
   return (reserved & kActiveBit) != 0u;
 }
@@ -292,7 +300,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
 }
 
 inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat,
-                                   bool lagDragActive = false, float lagDragSamples = 0.f, float lagDragVelocity = 0.f) {
+                                   bool lagDragActive = false, bool stationaryHold = false, float lagDragSamples = 0.f,
+                                   float lagDragVelocity = 0.f) {
   if (!out) {
     return;
   }
@@ -301,7 +310,7 @@ inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint
   out->size = uint16_t(sizeof(DisplayToHost));
   out->requestSeq = requestSeq;
   out->requestedScopeFormat = (requestedScopeFormat == SCOPE_FORMAT_STEREO) ? SCOPE_FORMAT_STEREO : SCOPE_FORMAT_MONO;
-  out->reserved = encodeLagDragRequest(lagDragActive, lagDragSamples);
+  out->reserved = encodeLagDragRequest(lagDragActive, stationaryHold, lagDragSamples);
   out->lagDragVelocity = lagDragVelocity;
 }
 

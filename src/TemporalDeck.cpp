@@ -1152,6 +1152,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   bool haveLagDragRequest = false;
   bool lagDragRequestActive = false;
+  bool lagDragRequestStationaryHold = false;
   float lagDragRequestSamples = 0.f;
   float lagDragRequestVelocity = 0.f;
   uint64_t lagDragRequestSeq = 0u;
@@ -1168,7 +1169,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
       requestedScopeFormat = (request->requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO)
                                ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                : temporaldeck_expander::SCOPE_FORMAT_MONO;
-      lagDragRequestActive = temporaldeck_expander::decodeLagDragRequest(request->reserved, &lagDragRequestSamples);
+      lagDragRequestActive =
+        temporaldeck_expander::decodeLagDragRequest(request->reserved, &lagDragRequestSamples, &lagDragRequestStationaryHold);
       if (request->version >= 2u) {
         lagDragRequestVelocity = request->lagDragVelocity;
       }
@@ -1204,6 +1206,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
           impl->platterInput.setTouchHold(true, lagTarget);
           impl->platterInput.setMotionFreshSamples(0);
           scopeTraceVelocityApplied = 0.f;
+        } else if (lagDragRequestStationaryHold) {
+          // TD.Scope now reports explicit stationary-hold intent. Keep the
+          // behavior decision here on the host side instead of inferring it
+          // from stale velocity or request timing.
+          impl->platterInput.setTouchHold(true, lagTarget);
+          impl->platterInput.setMotionFreshSamples(0);
+          scopeTraceVelocityApplied = 0.f;
         } else {
           float velocitySamples = 0.f;
           int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
@@ -1220,43 +1229,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
           } else {
             velocitySamples = derivedVelocity;
           }
-          float lagDelta = std::fabs(impl->expanderLagDragLastLagSamples - lagTarget);
-          constexpr float kLagHoldDeltaSamples = 1.f / 32.f;
-          constexpr float kLagHoldVelocitySamplesPerSec = 0.5f;
-          bool stationaryHold = lagDelta <= kLagHoldDeltaSamples &&
-                                std::fabs(lagDragRequestVelocity) <= kLagHoldVelocitySamplesPerSec &&
-                                std::fabs(derivedVelocity) <= kLagHoldVelocitySamplesPerSec;
-          if (stationaryHold) {
-            // Scope's contract during a hold is just "drag still active,
-            // target stable, velocity near zero". Keep that in direct-hold
-            // mode so the engine can pin playback position on the deck side.
-            impl->platterInput.setTouchHold(true, lagTarget);
-            impl->platterInput.setMotionFreshSamples(0);
-            scopeTraceVelocityApplied = 0.f;
-          } else {
-            // Safety clamp: Scope is an external input path, so guard against
-            // sender-side timing spikes producing unrealistic multi-turn motion.
-            float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
-            velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
-            scopeTraceVelocityApplied = velocitySamples;
-            // CONTAINMENT NOTE
-            // This receive path is where expander-supplied scope drag becomes a
-            // "real" platter gesture for the engine. That means Scope and host
-            // currently share behavior responsibility, even though the intended
-            // architecture is for Scope to be mostly I/O. Keep that in mind when
-            // refactoring: if this translation is simplified without also moving
-            // the live-drag workarounds out of TDScope, regressions will look
-            // like stalled live drags, over-travel, or delayed reversals.
-            // Scope emits equivalent platter-gesture intent. TemporalDeck
-            // realizes that intent through the same scratch gesture path used
-            // by actual platter dragging.
-            impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-            int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
-            int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
-            int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
-            motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
-            impl->platterInput.setMotionFreshSamples(motionFreshSamples);
-          }
+          // Safety clamp: Scope is an external input path, so guard against
+          // sender-side timing spikes producing unrealistic multi-turn motion.
+          float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
+          velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+          scopeTraceVelocityApplied = velocitySamples;
+          impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+          int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
+          int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+          int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
+          motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
+          impl->platterInput.setMotionFreshSamples(motionFreshSamples);
         }
           impl->expanderLagDragLastLagSamples = lagTarget;
           impl->expanderLagDragFramesSinceUpdate = 0;
@@ -1396,8 +1379,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       auto *msg =
         reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
       if (msg) {
-        bool holdPreviewLag =
-          !frame.sampleMode && platterInput.platterTouched && !platterInput.platterMotionActive && !platterInput.wheelScratchHeld;
+        bool holdPreviewLag = frame.sampleMode && platterInput.platterTouchHoldDirect;
         float scopeLagForPreview = float(frame.lag);
         if (holdPreviewLag) {
           if (!impl->expanderScopeLagHoldActive) {

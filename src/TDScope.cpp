@@ -2133,6 +2133,7 @@ Widget *createDisplay(TDScope *module, math::Rect scopeRectMm) {
 } // namespace tdscope
 
 struct TDScopeInputWidget final : Widget {
+  static constexpr double kLagDragHoldDetectSec = 1.0 / 180.0;
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
   bool hasLastGoodMsg = false;
@@ -2225,7 +2226,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
     lagDragNormalizedOffset = 0.f;
     lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
+    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
     return true;
   }
 
@@ -2236,7 +2237,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragTravelSamples = 0.f;
     lagDragNormalizedOffset = 0.f;
     if (module) {
-      module->setLagDragRequest(false, 0.f);
+      module->setLagDragRequest(false, 0.f, 0.f, false);
     }
   }
 
@@ -2263,7 +2264,7 @@ struct TDScopeInputWidget final : Widget {
     }
     refreshLastGoodMsg();
     if (!hasLastGoodMsg) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
       e.consume(this);
       return;
     }
@@ -2277,7 +2278,7 @@ struct TDScopeInputWidget final : Widget {
     float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
       e.consume(this);
       return;
     }
@@ -2319,7 +2320,7 @@ struct TDScopeInputWidget final : Widget {
     float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
     float maxAbsGestureVelocity = sampleRate * 3.0f;
     velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
-    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
+    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples, false);
     e.consume(this);
   }
 
@@ -2330,6 +2331,17 @@ struct TDScopeInputWidget final : Widget {
       return;
     }
     Widget::onDragEnd(e);
+  }
+
+  void step() override {
+    Widget::step();
+    if (!lagDragging || !module) {
+      return;
+    }
+    double nowSec = system::getTime();
+    if ((nowSec - lagDragLastMoveSec) >= kLagDragHoldDetectSec) {
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+    }
   }
 };
 
