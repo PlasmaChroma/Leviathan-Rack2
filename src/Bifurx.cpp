@@ -37,8 +37,6 @@ constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
-constexpr int kGuideCount = 4;
-const float kGuideFreqs[kGuideCount] = {20.f, 100.f, 1000.f, 10000.f};
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxCircuitModeCount = 4;
 // Circuit selection stays active while we normalize each core's exported
@@ -976,6 +974,11 @@ struct BifurxSpectrumWidget final : Widget {
 	float bottomY = 0.f;
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+	float cachedCurveXPlotX = NAN;
+	float cachedCurveXUsableW = NAN;
+	int cachedTopLabelFontHandle = -1;
+	float cachedTopLabelFontSize = NAN;
+	float cachedTopLabelReservedWidth = 0.f;
 	bool lastFftScaleDynamic = true;
 	double lastCurveDebugLogTimeSec = -1.0;
 	float cachedAxisSampleRate = 0.f;
@@ -1040,9 +1043,23 @@ struct BifurxSpectrumWidget final : Widget {
 	);
 	void logPerfDebugSample();
 	void updateAxisCache();
+	void updateCurveXCache(float plotX, float usableW);
+	float getTopLabelReservedWidth(const DrawArgs& args, float fontSize);
 	void updateCurveCache();
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
 
+	void draw(const DrawArgs& args) override;
+};
+
+struct BifurxSpectrumBackgroundWidget final : Widget {
+	Bifurx* module = nullptr;
+	widget::FramebufferWidget* framebuffer = nullptr;
+	uint32_t lastPreviewSeq = 0;
+	float sampleRate = 48000.f;
+	float lastDrawWidth = -1.f;
+	float lastDrawHeight = -1.f;
+
+	void step() override;
 	void draw(const DrawArgs& args) override;
 };
 
@@ -2362,6 +2379,154 @@ void BifurxSpectrumWidget::updateAxisCache() {
 	cachedAxisSampleRate = sampleRate;
 }
 
+void BifurxSpectrumWidget::updateCurveXCache(float plotX, float usableW) {
+	if (std::isfinite(cachedCurveXPlotX) && std::isfinite(cachedCurveXUsableW) &&
+		std::fabs(cachedCurveXPlotX - plotX) <= 1e-5f &&
+		std::fabs(cachedCurveXUsableW - usableW) <= 1e-5f) {
+		return;
+	}
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const float x01 = float(i) / float(kCurvePointCount - 1);
+		curveX[i] = plotX + usableW * x01;
+	}
+	cachedCurveXPlotX = plotX;
+	cachedCurveXUsableW = usableW;
+}
+
+float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float fontSize) {
+	const int fontHandle = (APP && APP->window && APP->window->uiFont) ? APP->window->uiFont->handle : -1;
+	if (fontHandle == cachedTopLabelFontHandle &&
+		std::isfinite(cachedTopLabelFontSize) &&
+		std::fabs(cachedTopLabelFontSize - fontSize) <= 1e-5f &&
+		cachedTopLabelReservedWidth > 0.f) {
+		return cachedTopLabelReservedWidth;
+	}
+
+	auto compactSignedLabel = [](float value, char* out, size_t outSize) {
+		std::snprintf(out, outSize, "%+.1f", value);
+	};
+	auto measureTopLabelWidthForValue = [&](float db) {
+		char sampleValue[12];
+		compactSignedLabel(db, sampleValue, sizeof(sampleValue));
+		char sampleLabel[24];
+		std::snprintf(sampleLabel, sizeof(sampleLabel), "%5s dBFS", sampleValue);
+		return nvgTextBounds(args.vg, 0.f, 0.f, sampleLabel, nullptr, nullptr);
+	};
+
+	float topLabelReservedWidth = 0.f;
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsFloor));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-10.f));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-1.f));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsCeiling));
+	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDynamicCeilingDbfs));
+
+	cachedTopLabelFontHandle = fontHandle;
+	cachedTopLabelFontSize = fontSize;
+	cachedTopLabelReservedWidth = topLabelReservedWidth;
+	return topLabelReservedWidth;
+}
+
+void BifurxSpectrumBackgroundWidget::step() {
+	Widget::step();
+
+	bool dirty = false;
+	if (module) {
+		const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
+		if (previewSeq != lastPreviewSeq) {
+			const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
+			const float newSampleRate = std::max(1.f, module->previewStates[index].sampleRate);
+			if (std::fabs(newSampleRate - sampleRate) > 0.5f) {
+				sampleRate = newSampleRate;
+				dirty = true;
+			}
+			lastPreviewSeq = previewSeq;
+		}
+	}
+
+	if (std::fabs(box.size.x - lastDrawWidth) > 1e-4f || std::fabs(box.size.y - lastDrawHeight) > 1e-4f) {
+		lastDrawWidth = box.size.x;
+		lastDrawHeight = box.size.y;
+		dirty = true;
+	}
+
+	if (dirty && framebuffer) {
+		framebuffer->setDirty();
+	}
+}
+
+void BifurxSpectrumBackgroundWidget::draw(const DrawArgs& args) {
+	const float w = box.size.x;
+	const float h = box.size.y;
+	if (!(w > 0.f && h > 0.f)) {
+		return;
+	}
+
+	const float padX = 0.f;
+	const float padY = std::max(4.f, h * 0.035f);
+	const float plotX = padX;
+	const float usableW = std::max(1.f, w - plotX - padX);
+	const float minHz = 10.f;
+	const float maxHz = std::min(20000.f, 0.46f * sampleRate);
+	const float labelBandHeight = std::max(5.2f, h * 0.072f);
+	const float labelBandTop = h - labelBandHeight;
+	const float spectrumTopY = padY * 0.35f;
+	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+	auto responseYForDb = [&](float db) {
+		return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
+	};
+
+	nvgSave(args.vg);
+	const float clipInset = 0.8f;
+	nvgScissor(args.vg, clipInset, clipInset, std::max(0.f, w - 2.f * clipInset), std::max(0.f, h - 2.f * clipInset));
+
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, w, h);
+	nvgFillColor(args.vg, nvgRGBA(7, 10, 14, 26));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, labelBandTop, w, h - labelBandTop);
+	nvgFillColor(args.vg, nvgRGBA(4, 7, 11, 208));
+	nvgFill(args.vg);
+	nvgBeginPath(args.vg);
+	nvgMoveTo(args.vg, 0.f, labelBandTop);
+	nvgLineTo(args.vg, w, labelBandTop);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 20));
+	nvgStrokeWidth(args.vg, 1.f);
+	nvgStroke(args.vg);
+
+	nvgSave(args.vg);
+	nvgScissor(args.vg, plotX, 0.f, usableW, std::max(1.f, spectrumBottomY));
+
+	for (float decadeStart = 10.f; decadeStart < maxHz; decadeStart *= 10.f) {
+		for (int m = 1; m <= 9; ++m) {
+			const float guideHz = decadeStart * float(m);
+			if (guideHz >= maxHz) {
+				continue;
+			}
+			const bool major = (m == 1);
+			const float guideX = plotX + usableW * logPosition(guideHz, minHz, maxHz);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, guideX, padY * 0.35f);
+			nvgLineTo(args.vg, guideX, spectrumBottomY);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, major ? 34 : 16));
+			nvgStrokeWidth(args.vg, major ? 1.f : 0.7f);
+			nvgStroke(args.vg);
+		}
+	}
+
+	nvgBeginPath(args.vg);
+	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
+	nvgLineTo(args.vg, plotX + usableW, responseYForDb(0.f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+	nvgStrokeWidth(args.vg, 1.2f);
+	nvgStroke(args.vg);
+
+	nvgResetScissor(args.vg);
+	nvgRestore(args.vg);
+	nvgRestore(args.vg);
+}
+
 void BifurxSpectrumWidget::step() {
 	using PerfClock = std::chrono::steady_clock;
 	const bool perfLoggingActive = module && module->perfDebugLogging;
@@ -2812,10 +2977,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 	const BifurxPreviewModel model = makePreviewModel(previewState);
+	updateCurveXCache(plotX, usableW);
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float x01 = float(i) / float(kCurvePointCount - 1);
-		curveX[i] = plotX + usableW * x01;
 		curveY[i] = responseYForDb(curveDb[i]);
 	}
 
@@ -2901,57 +3065,17 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float clipInset = 0.8f;
 	nvgScissor(args.vg, clipInset, clipInset, std::max(0.f, w - 2.f * clipInset), std::max(0.f, h - 2.f * clipInset));
 
-	nvgBeginPath(args.vg);
-	nvgRect(args.vg, 0.f, 0.f, w, h);
-	nvgFillColor(args.vg, nvgRGBA(7, 10, 14, 26));
-	nvgFill(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgRect(args.vg, 0.f, labelBandTop, w, h - labelBandTop);
-	nvgFillColor(args.vg, nvgRGBA(4, 7, 11, 208));
-	nvgFill(args.vg);
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, 0.f, labelBandTop);
-	nvgLineTo(args.vg, w, labelBandTop);
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 20));
-	nvgStrokeWidth(args.vg, 1.f);
-	nvgStroke(args.vg);
-
 	// Clip plot rendering above the bottom label strip so the curve/overlay
 	// never dives into the label area.
 	nvgSave(args.vg);
 	nvgScissor(args.vg, plotX, 0.f, usableW, std::max(1.f, spectrumBottomY));
 
-	for (int i = 0; i < kGuideCount; ++i) {
-		if (kGuideFreqs[i] >= maxHz) {
-			continue;
-		}
-		const float guideX = plotX + usableW * logPosition(kGuideFreqs[i], minHz, maxHz);
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, guideX, padY * 0.35f);
-		nvgLineTo(args.vg, guideX, bottomY);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 18));
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStroke(args.vg);
-	}
-
 	auto spectrumYForDbfs = [&](float dbfs) {
 		return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY);
 	};
 
-	const int tickStartDb = int(std::floor(displayMinDbfs / 3.f)) * 3;
-	const int tickEndDb = int(std::ceil(displayMaxDbfs / 3.f)) * 3;
-	for (int tickDb = tickStartDb; tickDb <= tickEndDb; tickDb += 3) {
-		const float y = spectrumYForDbfs(float(tickDb));
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, plotX, y);
-		nvgLineTo(args.vg, plotX + usableW, y);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, (tickDb == 0) ? 34 : 12));
-		nvgStrokeWidth(args.vg, (tickDb == 0) ? 1.f : 0.65f);
-		nvgStroke(args.vg);
-	}
-
-	nvgFontSize(args.vg, std::max(7.f, h * 0.05f));
+	const float topLabelFontSize = std::max(7.f, h * 0.05f);
+	nvgFontSize(args.vg, topLabelFontSize);
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 	auto compactSignedLabel = [](float value, char* out, size_t outSize) {
@@ -2962,29 +3086,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	compactSignedLabel(displayMaxDbfs, valueLabel, sizeof(valueLabel));
 	char topLabel[24];
 	std::snprintf(topLabel, sizeof(topLabel), "%5s dBFS", valueLabel);
-	auto measureTopLabelWidthForValue = [&](float db) {
-		char sampleValue[12];
-		compactSignedLabel(db, sampleValue, sizeof(sampleValue));
-		char sampleLabel[24];
-		std::snprintf(sampleLabel, sizeof(sampleLabel), "%5s dBFS", sampleValue);
-		return nvgTextBounds(args.vg, 0.f, 0.f, sampleLabel, nullptr, nullptr);
-	};
-	float topLabelReservedWidth = 0.f;
-	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsFloor));
-	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-10.f));
-	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(-1.f));
-	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDbfsCeiling));
-	topLabelReservedWidth = std::max(topLabelReservedWidth, measureTopLabelWidthForValue(kDisplayTopDynamicCeilingDbfs));
+	const float topLabelReservedWidth = getTopLabelReservedWidth(args, topLabelFontSize);
 	const float topLabelRightX = 1.5f + topLabelReservedWidth;
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 	nvgText(args.vg, topLabelRightX, 1.f, topLabel, nullptr);
-
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, plotX, responseYForDb(0.f));
-	nvgLineTo(args.vg, plotX + usableW, responseYForDb(0.f));
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
-	nvgStrokeWidth(args.vg, 1.2f);
-	nvgStroke(args.vg);
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255);
@@ -3044,20 +3149,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			const float spectrumY0 = spectrumYForDbfs(overlayOutputDbfs[i]);
 			const float spectrumY1 = spectrumYForDbfs(overlayOutputDbfs[i + 1]);
 			const float seamPad = 0.45f;
-			float x0 = curveX[i];
-			float x1 = curveX[i + 1];
-			if (i > 0) {
-				x0 -= seamPad;
-			}
-			else {
-				x0 -= seamPad;
-			}
-			if (i < kCurvePointCount - 2) {
-				x1 += seamPad;
-			}
-			else {
-				x1 += seamPad;
-			}
+			const float x0 = curveX[i] - seamPad;
+			const float x1 = curveX[i + 1] + seamPad;
 
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, x0, spectrumY0);
@@ -3290,6 +3383,17 @@ struct BifurxWidget final : ModuleWidget {
 
 		math::Rect spectrumRectMm(Vec(1.32f, 75.43f), Vec(68.45f, 21.41f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &spectrumRectMm);
+		widget::FramebufferWidget* spectrumBgFb = new widget::FramebufferWidget();
+		spectrumBgFb->box.pos = mm2px(spectrumRectMm.pos);
+		spectrumBgFb->box.size = mm2px(spectrumRectMm.size);
+		spectrumBgFb->dirtyOnSubpixelChange = false;
+		BifurxSpectrumBackgroundWidget* spectrumBg = new BifurxSpectrumBackgroundWidget();
+		spectrumBg->module = module;
+		spectrumBg->framebuffer = spectrumBgFb;
+		spectrumBg->box.size = spectrumBgFb->box.size;
+		spectrumBgFb->addChild(spectrumBg);
+		addChild(spectrumBgFb);
+
 		widget::FramebufferWidget* spectrumFb = new widget::FramebufferWidget();
 		spectrumFb->box.pos = mm2px(spectrumRectMm.pos);
 		spectrumFb->box.size = mm2px(spectrumRectMm.size);
