@@ -207,6 +207,18 @@ float shapeCorrodeResonance(float bp, float lp, float hp, float driveNorm, float
 	return foldSoft(core, 0.42f + 0.36f * r + 0.12f * driveNorm);
 }
 
+float previewCharacterDisplayDb(float db, int circuitMode) {
+	const int mode = clampCircuitMode(circuitMode);
+	if (mode != BIFURX_CHARACTER_ACID && mode != BIFURX_CHARACTER_CORRODE) {
+		return db;
+	}
+	if (db <= 0.f) {
+		return db;
+	}
+	const float scale = (mode == BIFURX_CHARACTER_ACID) ? 7.5f : 6.f;
+	return scale * std::tanh(db / scale);
+}
+
 struct SvfOutputs {
 	float lp = 0.f;
 	float bp = 0.f;
@@ -445,15 +457,16 @@ SvfOutputs processCharacterStage(
 	const float driveNorm = clamp01((drive - 1.f) / 3.f);
 	SvfOutputs raw;
 
-		switch (mode) {
-			case BIFURX_CHARACTER_ACID: {
-				const float feedbackDamping = clamp(damping * (0.98f - 0.04f * r), 0.02f, 2.2f);
-				raw = core.process(input, sampleRate, cutoff, feedbackDamping);
-				const float reson = shapeAcidResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
-				raw.lp = 1.02f * raw.lp + 0.08f * reson;
-				raw.bp = saturateAsym(1.02f * raw.bp + 0.48f * reson, 1.12f + 0.10f * r, 1.02f);
-				raw.hp = saturateAsym(1.01f * raw.hp + 0.02f * reson, 1.06f, 1.00f);
-			} break;
+			switch (mode) {
+				case BIFURX_CHARACTER_ACID: {
+					const float feedbackDamping = clamp(damping * (0.98f - 0.04f * r), 0.02f, 2.2f);
+					raw = core.process(input, sampleRate, cutoff, feedbackDamping);
+					const float reson = shapeAcidResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
+					const float peakTakeover = clamp(0.20f + 0.45f * r + 0.12f * driveNorm, 0.f, 0.85f);
+					raw.lp = 1.02f * raw.lp + (0.06f + 0.04f * peakTakeover) * reson;
+					raw.bp = saturateAsym(mixf(1.02f * raw.bp, 1.15f * reson, peakTakeover), 1.12f + 0.10f * r, 1.02f);
+					raw.hp = saturateAsym(1.00f * raw.hp + 0.015f * reson, 1.05f, 1.00f);
+				} break;
 		case BIFURX_CHARACTER_VOWEL: {
 			const float formantDamping = clamp(damping * (0.94f - 0.05f * stage), 0.02f, 2.2f);
 			raw = core.process(input, sampleRate, cutoff, formantDamping);
@@ -466,14 +479,15 @@ SvfOutputs processCharacterStage(
 			raw.bp = bpFormant;
 			raw.hp = hpSoft;
 		} break;
-			case BIFURX_CHARACTER_CORRODE: {
-				const float corrodeDamping = clamp(damping * (0.99f - 0.03f * r), 0.02f, 2.2f);
-				raw = core.process(input, sampleRate, cutoff, corrodeDamping);
-				const float reson = shapeCorrodeResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
-				raw.lp = 1.01f * raw.lp + 0.07f * reson;
-				raw.bp = 1.02f * raw.bp + 0.62f * reson;
-				raw.hp = 1.06f * raw.hp + 0.14f * reson;
-			} break;
+				case BIFURX_CHARACTER_CORRODE: {
+					const float corrodeDamping = clamp(damping * (0.99f - 0.03f * r), 0.02f, 2.2f);
+					raw = core.process(input, sampleRate, cutoff, corrodeDamping);
+					const float reson = shapeCorrodeResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
+					const float peakTakeover = clamp(0.30f + 0.52f * r + 0.14f * driveNorm, 0.f, 0.92f);
+					raw.lp = 1.01f * raw.lp + (0.05f + 0.04f * peakTakeover) * reson;
+					raw.bp = mixf(1.02f * raw.bp, 1.28f * reson, peakTakeover);
+					raw.hp = saturateAsym(1.04f * raw.hp + (0.08f + 0.06f * peakTakeover) * reson, 1.08f + 0.06f * r, 1.00f);
+				} break;
 		case BIFURX_CHARACTER_SVF:
 		default:
 			if (cachedCoeffsOrNull) {
@@ -765,10 +779,10 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	);
 }
 
-float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
-	const float mag = std::abs(previewModelResponse(model, hz));
-	return 20.f * std::log10(std::max(mag, 1e-5f));
-}
+	float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
+		const float mag = std::abs(previewModelResponse(model, hz));
+		return previewCharacterDisplayDb(20.f * std::log10(std::max(mag, 1e-5f)), model.circuitMode);
+	}
 
 constexpr float kPreviewProbeLevelKnob = 0.5f;
 constexpr float kPreviewProbeImpulseAmplitude = 0.01f;
@@ -2729,7 +2743,7 @@ void BifurxSpectrumWidget::updateCurveCache() {
 			const int right = std::min(kFftBinCount - 1, binB + 1);
 			const float smoothA = 0.18f * binResponseDb[left] + 0.64f * binResponseDb[binA] + 0.18f * binResponseDb[right];
 			const float smoothB = 0.18f * binResponseDb[binA] + 0.64f * binResponseDb[binB] + 0.18f * binResponseDb[right];
-			const float db = mixf(smoothA, smoothB, frac);
+			const float db = previewCharacterDisplayDb(mixf(smoothA, smoothB, frac), previewState.circuitMode);
 			curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
 		}
 	}
