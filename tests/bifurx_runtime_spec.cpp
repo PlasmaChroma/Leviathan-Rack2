@@ -56,13 +56,15 @@ float measureRuntimeGainDb(
   float freqNorm,
   float spanNorm,
   float reso,
-  float balance
+  float balance,
+  int tito = 1
 ) {
   Bifurx module;
   module.onReset();
   module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNorm, spanNorm, reso, balance);
+  module.params[Bifurx::TITO_PARAM].setValue(float(tito));
   clearCvInputs(module);
 
   Module::ProcessArgs args;
@@ -92,6 +94,82 @@ float measureRuntimeGainDb(
   const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
   const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
   return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+struct TitoOutputCapture {
+  bool finite = true;
+  float rms = 0.f;
+  std::vector<float> samples;
+};
+
+float titoStimulusSample(float t, int n) {
+  const float toneA = 1.45f * std::sin(2.f * kRuntimePi * 137.f * t);
+  const float toneB = 0.72f * std::sin(2.f * kRuntimePi * 421.f * t + 0.37f);
+  const float toneC = 0.48f * std::sin(2.f * kRuntimePi * 1139.f * t + 1.19f);
+  const float tick = ((n % 997) < 7) ? 0.42f : 0.f;
+  return toneA + toneB + toneC + tick;
+}
+
+TitoOutputCapture captureTitoOutput(
+  int circuitMode,
+  int mode,
+  int tito,
+  float centerHz,
+  float spanNorm,
+  float reso,
+  float balance
+) {
+  Bifurx module;
+  module.onReset();
+  module.setFilterCircuitMode(circuitMode);
+
+  configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
+  module.params[Bifurx::LEVEL_PARAM].setValue(0.82f);
+  module.params[Bifurx::TITO_PARAM].setValue(float(tito));
+  clearCvInputs(module);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+
+  const int settleSamples = 4096;
+  const int measureSamples = 4096;
+  TitoOutputCapture capture;
+  capture.samples.reserve(measureSamples);
+
+  float outSq = 0.f;
+  for (int n = 0; n < settleSamples + measureSamples; ++n) {
+    const float t = float(n) / args.sampleRate;
+    module.inputs[Bifurx::IN_INPUT].setVoltage(titoStimulusSample(t, n));
+    module.process(args);
+    const float out = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    capture.finite = capture.finite && std::isfinite(out);
+    if (n >= settleSamples) {
+      capture.samples.push_back(out);
+      outSq += out * out;
+    }
+  }
+
+  capture.rms = std::sqrt(std::max(outSq / float(std::max(1, measureSamples)), 0.f));
+  capture.finite = capture.finite && std::isfinite(capture.rms);
+  return capture;
+}
+
+float normalizedWaveDistance(const TitoOutputCapture& a, const TitoOutputCapture& b) {
+  const std::size_t n = std::min(a.samples.size(), b.samples.size());
+  if (n == 0) {
+    return 0.f;
+  }
+
+  float diffSq = 0.f;
+  float refSq = 0.f;
+  for (std::size_t i = 0; i < n; ++i) {
+    const float d = a.samples[i] - b.samples[i];
+    diffSq += d * d;
+    refSq += a.samples[i] * a.samples[i];
+  }
+
+  return std::sqrt(diffSq / float(n)) / std::max(std::sqrt(refSq / float(n)), 1e-6f);
 }
 
 bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
@@ -418,6 +496,68 @@ TestResult testRuntimeCircuitsProduceDifferentBandBandCurves() {
   };
 }
 
+TestResult testRuntimeTitoProducesFiniteContrastAcrossModesAndCircuits() {
+  bool pass = true;
+  float worstSmDistance = 1e9f;
+  float worstXmDistance = 1e9f;
+  float bestSmDistance = 0.f;
+  float bestXmDistance = 0.f;
+  int worstSmCircuit = -1;
+  int worstSmMode = -1;
+  int worstXmCircuit = -1;
+  int worstXmMode = -1;
+  std::string weakCases;
+
+  for (int circuit = 0; circuit < 4; ++circuit) {
+    for (int mode = 0; mode < 10; ++mode) {
+      const TitoOutputCapture clean = captureTitoOutput(circuit, mode, 1, 880.f, 0.58f, 0.86f, 0.f);
+      const TitoOutputCapture xm = captureTitoOutput(circuit, mode, 0, 880.f, 0.58f, 0.86f, 0.f);
+      const TitoOutputCapture sm = captureTitoOutput(circuit, mode, 2, 880.f, 0.58f, 0.86f, 0.f);
+
+      const float xmDistance = normalizedWaveDistance(clean, xm);
+      const float smDistance = normalizedWaveDistance(clean, sm);
+      const bool finite = clean.finite && xm.finite && sm.finite
+        && std::isfinite(xmDistance) && std::isfinite(smDistance)
+        && std::isfinite(clean.rms) && std::isfinite(xm.rms) && std::isfinite(sm.rms);
+      const bool audibleContrast = (xmDistance > 0.012f) || (smDistance > 0.012f);
+      pass = pass && finite && audibleContrast;
+
+      if (smDistance < worstSmDistance) {
+        worstSmDistance = smDistance;
+        worstSmCircuit = circuit;
+        worstSmMode = mode;
+      }
+      if (xmDistance < worstXmDistance) {
+        worstXmDistance = xmDistance;
+        worstXmCircuit = circuit;
+        worstXmMode = mode;
+      }
+      bestSmDistance = std::max(bestSmDistance, smDistance);
+      bestXmDistance = std::max(bestXmDistance, xmDistance);
+
+      if (finite && !audibleContrast) {
+        weakCases += " c" + std::to_string(circuit) + "m" + std::to_string(mode)
+          + "(xm=" + std::to_string(xmDistance) + ",sm=" + std::to_string(smDistance) + ")";
+      }
+      else if (!finite) {
+        weakCases += " c" + std::to_string(circuit) + "m" + std::to_string(mode) + "(nonfinite)";
+      }
+    }
+  }
+
+  return {
+    "Runtime TITO XM/SM stays finite and changes output across modes/circuits",
+    pass,
+    "worstXm=c" + std::to_string(worstXmCircuit) + "m" + std::to_string(worstXmMode) +
+      ":" + std::to_string(worstXmDistance) +
+      " worstSm=c" + std::to_string(worstSmCircuit) + "m" + std::to_string(worstSmMode) +
+      ":" + std::to_string(worstSmDistance) +
+      " bestXm=" + std::to_string(bestXmDistance) +
+      " bestSm=" + std::to_string(bestSmDistance) +
+      " weak=" + weakCases
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -428,6 +568,7 @@ int main() {
     testRuntimeLlDropoutRegressionSweepAcrossCircuits(),
     testRuntimeCurveFamiliesRemainDistinctPerCircuit(),
     testRuntimeCircuitsProduceDifferentBandBandCurves(),
+    testRuntimeTitoProducesFiniteContrastAcrossModesAndCircuits(),
   };
 
   int fails = 0;

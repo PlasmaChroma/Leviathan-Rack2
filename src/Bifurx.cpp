@@ -3069,9 +3069,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255);
 	const NVGcolor expectedCyan = nvgRGB(28, 204, 217);
 	const NVGcolor expectedWhite = nvgRGB(206, 210, 216);
-	const float expectedLineWidth = 1.6f;
+	const float expectedLineWidth = 1.05f;
 	nvgShapeAntiAlias(args.vg, 1);
-	for (int i = 0; i < kCurvePointCount; i += 2) {
+	for (int i = 0; i < kCurvePointCount; i += 3) {
 		const float curveDbValue = curveDb[i];
 		const float posAmount = clamp01(curveDbValue / 18.f);
 		const float negAmount = clamp01(-curveDbValue / 18.f);
@@ -3084,7 +3084,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		if (negAmount > 0.f) {
 			tint = mixColor(tint, expectedPurple, clamp01(negAmount * 1.25f));
 		}
-		tint.a = 0.06f + 0.16f * emphasis;
+		tint.a = 0.025f + 0.095f * emphasis;
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, curveX[i], spectrumBottomY);
