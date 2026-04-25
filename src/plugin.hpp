@@ -27,6 +27,10 @@ extern Model* modelTDScope;
 extern Model* modelCrownstep;
 extern Model* modelBifurx;
 
+// Local semantic alias so module code can request a white tiny Befaco knob
+// without depending on another plugin's custom class declarations.
+struct BefacoTinyKnobWhite : BefacoTinyKnob {};
+
 // Runtime feature flag: enabled when `res/dragonking.txt` exists.
 bool isDragonKingDebugEnabled();
 void refreshDragonKingDebugEnabled();

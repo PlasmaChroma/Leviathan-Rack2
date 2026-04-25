@@ -39,7 +39,7 @@ void configureBaseParams(Bifurx& module, int mode, float freqNorm, float spanNor
   module.params[Bifurx::BALANCE_PARAM].setValue(balance);
   module.params[Bifurx::FM_AMT_PARAM].setValue(0.f);
   module.params[Bifurx::SPAN_CV_ATTEN_PARAM].setValue(0.f);
-  module.params[Bifurx::TITO_PARAM].setValue(1.f);   // Clean
+  module.params[Bifurx::TITO_PARAM].setValue(0.f);   // Neutral
 }
 
 void clearCvInputs(Bifurx& module) {
@@ -59,14 +59,14 @@ float measureRuntimeGainDb(
   float spanNorm,
   float reso,
   float balance,
-  int tito = 1
+  float tito = 0.f
 ) {
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
+  (void)circuitMode;
 
   configureBaseParams(module, mode, freqNorm, spanNorm, reso, balance);
-  module.params[Bifurx::TITO_PARAM].setValue(float(tito));
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
   clearCvInputs(module);
 
   Module::ProcessArgs args;
@@ -115,7 +115,7 @@ float titoStimulusSample(float t, int n) {
 TitoOutputCapture captureTitoOutput(
   int circuitMode,
   int mode,
-  int tito,
+  float tito,
   float centerHz,
   float spanNorm,
   float reso,
@@ -123,11 +123,11 @@ TitoOutputCapture captureTitoOutput(
 ) {
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
+  (void)circuitMode;
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(0.82f);
-  module.params[Bifurx::TITO_PARAM].setValue(float(tito));
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
   clearCvInputs(module);
 
   Module::ProcessArgs args;
@@ -180,8 +180,6 @@ bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
   }
   Bifurx module;
   module.onReset();
-  module.filterCircuitMode = 0;
-  module.activeCircuitMode = 0;
   module.resetCircuitStates();
 
   configureBaseParams(module, 0, freqNormForCenterHz(900.f), spanNorm, 0.35f, 0.f);
@@ -221,7 +219,7 @@ bool capturePreviewState(
   }
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
+  (void)circuitMode;
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   clearCvInputs(module);
@@ -512,9 +510,9 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModesAndCircuits() {
 
   for (int circuit = 0; circuit < 4; ++circuit) {
     for (int mode = 0; mode < 10; ++mode) {
-      const TitoOutputCapture clean = captureTitoOutput(circuit, mode, 1, 880.f, 0.58f, 0.86f, 0.f);
-      const TitoOutputCapture xm = captureTitoOutput(circuit, mode, 0, 880.f, 0.58f, 0.86f, 0.f);
-      const TitoOutputCapture sm = captureTitoOutput(circuit, mode, 2, 880.f, 0.58f, 0.86f, 0.f);
+      const TitoOutputCapture clean = captureTitoOutput(circuit, mode, 0.f, 880.f, 0.58f, 0.86f, 0.f);
+      const TitoOutputCapture xm = captureTitoOutput(circuit, mode, 1.f, 880.f, 0.58f, 0.86f, 0.f);
+      const TitoOutputCapture sm = captureTitoOutput(circuit, mode, -1.f, 880.f, 0.58f, 0.86f, 0.f);
 
       const float xmDistance = normalizedWaveDistance(clean, xm);
       const float smDistance = normalizedWaveDistance(clean, sm);

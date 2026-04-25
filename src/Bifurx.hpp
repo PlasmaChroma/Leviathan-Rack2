@@ -43,19 +43,6 @@ constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kBifurxModeCount = 10;
-constexpr int kBifurxCircuitModeCount = 4;
-// Bifurx v1 is intentionally SVF-only. Alternate circuit experiments stay in
-// source for now so the second cleanup pass can remove them deliberately.
-constexpr bool kBifurxTuneSvfOnly = true;
-
-enum BifurxCharacterMode {
-	BIFURX_CHARACTER_SVF = 0,
-	BIFURX_CHARACTER_BITE = 1,
-	BIFURX_CHARACTER_VOWEL = 2,
-	BIFURX_CHARACTER_ERODE = 3
-};
-
-extern const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount];
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
 
@@ -136,22 +123,9 @@ float softLimitOverlayDeltaDb(float db);
 float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
-inline int clampCircuitMode(int mode) {
-	if (kBifurxTuneSvfOnly) {
-		return BIFURX_CHARACTER_SVF;
-	}
-	return clamp(mode, 0, kBifurxCircuitModeCount - 1);
-}
-
 float signedWeight(float balance, bool upperPeak);
 float cascadeWideMorph(float spanNorm);
 float highHighSpanCompGain(float wideMorph);
-float saturateAsym(float x, float positiveDrive, float negativeDrive);
-float foldSoft(float x, float amount);
-float shapeBiteResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex);
-float shapeErodeResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex);
-float previewCharacterDisplayDb(float db, int circuitMode);
-void applyProbeEnvelopeHint(float* dbValues, int count, int circuitMode);
 
 struct SvfOutputs {
 	float lp = 0.f;
@@ -159,36 +133,6 @@ struct SvfOutputs {
 	float hp = 0.f;
 	float notch = 0.f;
 };
-
-float circuitCutoffScale(int circuitMode);
-float circuitQScale(float resoNorm, int circuitMode);
-
-struct SemanticExportProfile {
-	float lpScale = 0.f;
-	float bpScale = 0.f;
-	float hpScale = 0.f;
-};
-
-SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex);
-
-template <typename T>
-T normalizeSemanticComponent(const T& value, float exportScale) {
-	if (!(exportScale > 0.f)) {
-		return value;
-	}
-	const float magnitude = std::abs(value);
-	if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
-		return value;
-	}
-	const float compressed = exportScale * std::tanh(magnitude / exportScale);
-	if (!(compressed > 0.f) || !std::isfinite(compressed)) {
-		return value;
-	}
-	return value * T(compressed / magnitude);
-}
-
-SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex);
-float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph);
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t);
 void formatFrequencyLabel(float hz, char* out, size_t outSize);
 
@@ -212,7 +156,6 @@ void sanitizeCoreState(TptSvf& core);
 
 SvfOutputs processCharacterStage(
 	TptSvf& core,
-	int characterMode,
 	int stageIndex,
 	float input,
 	float sampleRate,
@@ -252,22 +195,20 @@ T combineModeResponse(
 	const T& cascadeHpToHp,
 	float wA,
 	float wB,
-	float wideMorph,
-	int circuitMode
+	float wideMorph
 ) {
-	const T circuitComp = T(modeCircuitSyncCompGain(mode, circuitMode, wideMorph));
 	switch (mode) {
 		case 0:
-			return circuitComp * cascadeLp;
-		case 1: return circuitComp * (T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB));
-		case 2: return circuitComp * (T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA);
+			return cascadeLp;
+		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
+		case 2: return T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA;
 		case 3: return T(1.03f) * cascadeNotch;
 		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
 		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
 		case 6: return T(1.04f) * cascadeHpToLp;
-		case 7: return circuitComp * (T(1.08f) * T(wA) * hpA - T(0.61f) * T(wB) * bpB);
-		case 8: return circuitComp * (T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB));
-		case 9: return circuitComp * (T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp);
+		case 7: return T(1.08f) * T(wA) * hpA - T(0.61f) * T(wB) * bpB;
+		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
+		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -289,12 +230,10 @@ struct BifurxPreviewState {
 	float freqParamNorm = 0.5f;
 	float voctCv = 0.f;
 	int mode = 0;
-	int circuitMode = 0;
 };
 
 struct BifurxLlTelemetryState {
 	bool active = false;
-	int circuitMode = 0;
 	float excitationRms = 0.f;
 	float stageALpRms = 0.f;
 	float stageBLpRms = 0.f;
@@ -319,15 +258,7 @@ struct BifurxPreviewModel {
 	float wB = 1.f;
 	float wideMorph = 0.f;
 	int mode = 0;
-	int circuitMode = 0;
 };
-
-enum BifurxPreviewCurvePolicy {
-	BIFURX_PREVIEW_ANALYTIC,
-	BIFURX_PREVIEW_PROBE_FFT
-};
-
-BifurxPreviewCurvePolicy previewCurvePolicyForCharacter(int characterMode);
 
 struct BifurxAnalysisFrame {
 	alignas(16) float rawInput[kFftSize];
@@ -338,36 +269,6 @@ bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& 
 BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state);
 std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz);
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz);
-
-constexpr float kPreviewProbeLevelKnob = 0.5f;
-constexpr float kPreviewProbeImpulseAmplitude = 0.01f;
-constexpr int kPreviewProbeBurstLength = 64;
-
-float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex);
-
-struct BifurxProbeEngineState {
-	TptSvf svfA;
-	TptSvf svfB;
-};
-
-SvfOutputs processProbeStage(
-	BifurxProbeEngineState& state,
-	int stageIndex,
-	int circuitMode,
-	float input,
-	float sampleRate,
-	float cutoff,
-	float damping,
-	float drive,
-	float resoNorm
-);
-
-void simulatePreviewProbeImpulseResponse(
-	const BifurxPreviewState& state,
-	float* inputBuffer,
-	float* outputBuffer,
-	int sampleCount
-);
 
 struct Bifurx : Module {
 	enum ParamId {
@@ -382,7 +283,6 @@ struct Bifurx : Module {
 		TITO_PARAM,
 		MODE_LEFT_PARAM,
 		MODE_RIGHT_PARAM,
-		FILTER_CIRCUIT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -403,17 +303,11 @@ struct Bifurx : Module {
 		FM_AMT_NEG_LIGHT,
 		SPAN_CV_ATTEN_POS_LIGHT,
 		SPAN_CV_ATTEN_NEG_LIGHT,
-		FILTER_CIRCUIT_TL_LIGHT,
-		FILTER_CIRCUIT_TR_LIGHT,
-		FILTER_CIRCUIT_BR_LIGHT,
-		FILTER_CIRCUIT_BL_LIGHT,
 		LIGHTS_LEN
 	};
 
 	TptSvf coreA;
 	TptSvf coreB;
-	int filterCircuitMode = 0; // 0: SVF, 1: Bite, 2: Vowel, 3: Erode
-	int activeCircuitMode = 0;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -466,7 +360,6 @@ struct Bifurx : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	dsp::SchmittTrigger filterCircuitTrigger;
 	BifurxAnalysisFrame analysisFrames[2];
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
@@ -482,13 +375,11 @@ struct Bifurx : Module {
 	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
 	std::atomic<float> perfSampleRate{0.f};
 	std::atomic<int> perfMode{0};
-	std::atomic<int> perfCircuitMode{0};
 	std::atomic<bool> perfFastPathEligible{false};
 	std::atomic<bool> perfPreviewPitchCvConnected{false};
 
 	Bifurx();
 	void resetCircuitStates();
-	void setFilterCircuitMode(int newMode);
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
 	void resetPerfStats();

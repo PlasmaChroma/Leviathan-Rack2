@@ -178,7 +178,7 @@ struct BifurxSpectrumWidget final : Widget {
 		perfDebugRecorder.path = system::join(bifurxUserRootPath(), "perf_debug_" + std::to_string(std::time(nullptr)) + ".csv");
 		perfDebugRecorder.file.open(perfDebugRecorder.path);
 		if (perfDebugRecorder.file.is_open()) {
-			perfDebugRecorder.file << "sequence,circuitMode,mode,fastPath,pitchCvConnected,"
+			perfDebugRecorder.file << "sequence,mode,fastPath,pitchCvConnected,"
 				<< "audioSampleRate,audioSampledCount,"
 				<< "audioProcessAvgNs,audioControlsAvgNs,audioCoreAvgNs,audioPreviewAvgNs,audioAnalysisAvgNs,audioProcessMaxNs,"
 				<< "uiStepCount,uiStepAvgNs,uiDrawCount,uiDrawAvgNs,"
@@ -250,7 +250,7 @@ struct BifurxSpectrumWidget final : Widget {
 		auto avg = [](uint64_t total, uint64_t count) { return (count > 0) ? (double(total) / double(count)) : 0.0; };
 
 		perfDebugRecorder.file << perfDebugRecorder.sequence++ << ","
-			<< module->perfCircuitMode.load() << "," << module->perfMode.load() << ","
+			<< module->perfMode.load() << ","
 			<< (module->perfFastPathEligible.load() ? 1 : 0) << "," << (module->perfPreviewPitchCvConnected.load() ? 1 : 0) << ","
 			<< module->perfSampleRate.load() << "," << audioSampledCount << ","
 			<< (double(audioProcessNs) * audioScale) << "," << (double(audioControlsNs) * audioScale) << ","
@@ -563,39 +563,10 @@ void BifurxSpectrumWidget::step() {
 void BifurxSpectrumWidget::updateCurveCache() {
 	if (!hasPreview) return;
 	updateAxisCache();
-	const bool compressExpectedCurve = (previewState.circuitMode == BIFURX_CHARACTER_BITE) || (previewState.circuitMode == BIFURX_CHARACTER_ERODE);
-	auto mapExpectedDb = [&](float db) {
-		return compressExpectedCurve ? softLimitExpectedCurveDb(db) : clamp(db, kResponseMinDb, kResponseMaxDb);
-	};
-	if (previewCurvePolicyForCharacter(previewState.circuitMode) == BIFURX_PREVIEW_ANALYTIC) {
-		const BifurxPreviewModel model = makePreviewModel(previewState);
-		for (int i = 0; i < kCurvePointCount; i++) {
-			const float db = previewModelResponseDb(model, curveHz[i]);
-			curveTargetDb[i] = mapExpectedDb(db);
-		}
-	}
-	else {
-		simulatePreviewProbeImpulseResponse(previewState, fftInputTime, fftOutputTime, kFftSize);
-		fft.rfft(fftInputTime, fftInputFreq);
-		fft.rfft(fftOutputTime, fftOutputFreq);
-		float binResponseDb[kFftBinCount];
-		for (int bin = 0; bin < kFftBinCount; bin++) {
-			const float inputAmp = orderedSpectrumMagnitude(fftInputFreq, bin);
-			const float outputAmp = orderedSpectrumMagnitude(fftOutputFreq, bin);
-			binResponseDb[bin] = mapExpectedDb(20.f * std::log10((outputAmp + 1e-9f) / (inputAmp + 1e-9f)));
-		}
-		for (int i = 0; i < kCurvePointCount; i++) {
-			const float binPos = curveBinPos[i];
-			const int binA = clamp(int(std::floor(binPos)), 0, kFftBinCount - 1);
-			const int binB = std::min(binA + 1, kFftBinCount - 1);
-			const float frac = binPos - float(binA);
-			const int left = std::max(0, binA - 1);
-			const int right = std::min(kFftBinCount - 1, binB + 1);
-			const float smoothA = 0.18f * binResponseDb[left] + 0.64f * binResponseDb[binA] + 0.18f * binResponseDb[right];
-			const float smoothB = 0.18f * binResponseDb[binA] + 0.64f * binResponseDb[binB] + 0.18f * binResponseDb[right];
-			curveTargetDb[i] = mapExpectedDb(previewCharacterDisplayDb(mixf(smoothA, smoothB, frac), previewState.circuitMode));
-		}
-		applyProbeEnvelopeHint(curveTargetDb, kCurvePointCount, previewState.circuitMode);
+	const BifurxPreviewModel model = makePreviewModel(previewState);
+	for (int i = 0; i < kCurvePointCount; i++) {
+		const float db = previewModelResponseDb(model, curveHz[i]);
+		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
 	}
 	if (!hasCurveTarget) {
 		for (int i = 0; i < kCurvePointCount; i++) curveDb[i] = curveTargetDb[i];
@@ -717,7 +688,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		struct DisplayAnchor { float x01 = 0.f; float hz = 0.f; };
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
-		const bool valleyAnchorEligible = ((previewState.mode == 2) || (previewState.mode == 3) || (previewState.mode == 7)) && (previewState.circuitMode != BIFURX_CHARACTER_SVF);
+		const bool valleyAnchorEligible = (previewState.mode == 2) || (previewState.mode == 3) || (previewState.mode == 7);
 		if (!valleyAnchorEligible) return anchor;
 		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
 		int bestIndex = centerIndex; float bestScore = curveDb[centerIndex];
@@ -940,7 +911,7 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fP), module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
-		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<CKSSThreeHorizontal>(mm2px(tP), module, Bifurx::TITO_PARAM));
+		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(tP), module, Bifurx::TITO_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
