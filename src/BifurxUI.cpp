@@ -934,24 +934,20 @@ struct BifurxWidget final : ModuleWidget {
 		BifurxSpectrumWidget* s = new BifurxSpectrumWidget(); s->module = module; s->framebuffer = addFb(sRect, s);
 		BifurxModeReadoutWidget* mR = new BifurxModeReadoutWidget(); mR->module = module; mR->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f)); mR->box.size = mm2px(Vec(sRect.size.x, 4.2f)); addChild(mR);
 		Vec mP(13.4f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
-		Vec iP(7.6f, 112.2f), fcP(7.6f, 102.3f), vP(17.15f, 112.2f), fmP(26.7f, 112.2f), rcP(36.25f, 112.2f), bcP(45.8f, 112.2f), scP(55.35f, 112.2f), oP(64.9f, 112.2f);
+		Vec iP(7.6f, 112.2f), vP(17.15f, 112.2f), fmP(26.7f, 112.2f), rcP(36.25f, 112.2f), bcP(45.8f, 112.2f), scP(55.35f, 112.2f), oP(64.9f, 112.2f);
 		applyPt("MODE_PARAM", &mP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
-		applyPt("IN_INPUT", &iP); applyPt("FILTER_CIRCUIT_PARAM", &fcP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
+		applyPt("IN_INPUT", &iP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fP), module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
 		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<CKSSThreeHorizontal>(mm2px(tP), module, Bifurx::TITO_PARAM));
-		addParam(createParamCentered<TL1105>(mm2px(fcP), module, Bifurx::FILTER_CIRCUIT_PARAM)); float cL = 2.7f;
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(fcP.plus(Vec(-cL, -cL))), module, Bifurx::FILTER_CIRCUIT_TL_LIGHT)); addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(fcP.plus(Vec(cL, -cL))), module, Bifurx::FILTER_CIRCUIT_TR_LIGHT));
-		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(fcP.plus(Vec(cL, cL))), module, Bifurx::FILTER_CIRCUIT_BR_LIGHT)); addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(fcP.plus(Vec(-cL, cL))), module, Bifurx::FILTER_CIRCUIT_BL_LIGHT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
 	}
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu); Bifurx* bifurx = dynamic_cast<Bifurx*>(module); if (!bifurx) return;
-		menu->addChild(new MenuSeparator()); menu->addChild(createSubmenuItem("Filter Circuit", "", [=](Menu* submenu) { for (int i = 0; i < kBifurxCircuitModeCount; i++) submenu->addChild(createCheckMenuItem(kBifurxCircuitLabels[i], "", [=]() { return bifurx->filterCircuitMode == i; }, [=]() { bifurx->setFilterCircuitMode(i); })); }));
-		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic)); menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging)); menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
+		menu->addChild(new MenuSeparator()); menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic)); menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging)); menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
 	}
 };
 

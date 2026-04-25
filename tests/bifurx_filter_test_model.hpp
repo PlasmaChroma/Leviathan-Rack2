@@ -50,7 +50,8 @@ struct SemanticExportProfile {
 };
 
 inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
-  const int clampedCircuitMode = std::max(0, std::min(3, circuitMode));
+  (void)circuitMode;
+  const int clampedCircuitMode = 0;
   (void)stageIndex;
   SemanticExportProfile profile;
   switch (clampedCircuitMode) {
@@ -268,7 +269,7 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   model.markerFreqB = freqB;
   model.sampleRate = state.sampleRate;
   model.mode = state.mode;
-  model.circuitMode = int(clampf(float(state.circuitMode), 0.f, 3.f));
+  model.circuitMode = 0;
 
   const float lowW = signedWeight(state.balance, false);
   const float highW = signedWeight(state.balance, true);

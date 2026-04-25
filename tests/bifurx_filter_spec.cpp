@@ -664,7 +664,7 @@ TestResult testModesRemainDistinctAtReferenceState() {
   };
 }
 
-TestResult testPreviewCircuitSelectionRespectsCircuitMode() {
+TestResult testPreviewCircuitSelectionIsPinnedToSvf() {
   PreviewState svf;
   PreviewState dfm;
   svf.sampleRate = 48000.f;
@@ -685,9 +685,9 @@ TestResult testPreviewCircuitSelectionRespectsCircuitMode() {
     sumAbs += std::fabs(responseDb(a, f) - responseDb(b, f));
   }
 
-  const bool same = sumAbs > 0.25f && a.circuitMode == 0 && b.circuitMode == 1;
+  const bool same = sumAbs < 1e-4f && a.circuitMode == 0 && b.circuitMode == 0;
   return {
-    "Preview circuit selection respects circuit mode",
+    "Preview circuit selection is pinned to SVF",
     same,
     "sumAbs=" + std::to_string(sumAbs) + " circuitA=" + std::to_string(a.circuitMode) +
       " circuitB=" + std::to_string(b.circuitMode)
@@ -1101,7 +1101,7 @@ int main() {
     testLowLowAndHighHighRuntimeMirrorAcrossSpans(),
     testBandBandHasTwoLocalPeaksNearMarkers(),
     testModesRemainDistinctAtReferenceState(),
-    testPreviewCircuitSelectionRespectsCircuitMode(),
+    testPreviewCircuitSelectionIsPinnedToSvf(),
     testAllModesMeetSvfTuningQualifier(),
   };
 

@@ -622,7 +622,7 @@ Bifurx::Bifurx() {
 }
 
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
-void Bifurx::setFilterCircuitMode(int newMode) { const int clampedMode = bifurx::clampCircuitMode(newMode); const bool changed = (filterCircuitMode != clampedMode) || (activeCircuitMode != clampedMode); filterCircuitMode = clampedMode; activeCircuitMode = clampedMode; if (changed) resetCircuitStates(); }
+void Bifurx::setFilterCircuitMode(int newMode) { const int clampedMode = bifurx::clampCircuitMode(newMode); const bool changed = (filterCircuitMode != clampedMode) || (activeCircuitMode != clampedMode); filterCircuitMode = clampedMode; activeCircuitMode = clampedMode; params[FILTER_CIRCUIT_PARAM].setValue(0.f); if (changed) resetCircuitStates(); }
 json_t* Bifurx::dataToJson() { json_t* root = Module::dataToJson(); json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic)); json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging)); json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging)); json_object_set_new(root, "filterCircuitMode", json_integer(bifurx::clampCircuitMode(filterCircuitMode))); return root; }
 void Bifurx::dataFromJson(json_t* root) { Module::dataFromJson(root); json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic"); if (fftScaleDynamicJ) fftScaleDynamic = json_is_true(fftScaleDynamicJ); json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging"); if (curveDebugLoggingJ) curveDebugLogging = json_is_true(curveDebugLoggingJ); json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging"); if (perfDebugLoggingJ) perfDebugLogging = json_is_true(perfDebugLoggingJ); json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode"); if (filterCircuitModeJ) setFilterCircuitMode(int(json_integer_value(filterCircuitModeJ))); else setFilterCircuitMode(filterCircuitMode); }
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
@@ -643,7 +643,7 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9); params[MODE_PARAM].setValue(float((currentMode + 9) % 10)); }
 	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9); params[MODE_PARAM].setValue(float((currentMode + 1) % 10)); }
-	if (filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) setFilterCircuitMode((bifurx::clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount);
+	if (!kBifurxTuneSvfOnly && filterCircuitTrigger.process(params[FILTER_CIRCUIT_PARAM].getValue())) setFilterCircuitMode((bifurx::clampCircuitMode(filterCircuitMode) + 1) % kBifurxCircuitModeCount);
 
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
 	const int mode = int(std::round(params[MODE_PARAM].getValue())), tito = int(std::round(params[TITO_PARAM].getValue()));
@@ -727,8 +727,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f)); lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
 	lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f)); lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
 	const int cML = bifurx::clampCircuitMode(filterCircuitMode);
-	lights[FILTER_CIRCUIT_TL_LIGHT].setBrightness(cML == 0 ? 1.f : 0.f); lights[FILTER_CIRCUIT_TR_LIGHT].setBrightness(cML == 1 ? 1.f : 0.f);
-	lights[FILTER_CIRCUIT_BR_LIGHT].setBrightness(cML == 2 ? 1.f : 0.f); lights[FILTER_CIRCUIT_BL_LIGHT].setBrightness(cML == 3 ? 1.f : 0.f);
+	lights[FILTER_CIRCUIT_TL_LIGHT].setBrightness(cML == 0 ? 1.f : 0.f); lights[FILTER_CIRCUIT_TR_LIGHT].setBrightness(0.f);
+	lights[FILTER_CIRCUIT_BR_LIGHT].setBrightness(0.f); lights[FILTER_CIRCUIT_BL_LIGHT].setBrightness(0.f);
 
 	if (measurePerf) {
 		const PerfClock::time_point pE = PerfClock::now();

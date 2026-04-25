@@ -44,7 +44,9 @@ constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxCircuitModeCount = 4;
-constexpr bool kBifurxTuneSvfOnly = false;
+// Bifurx v1 is intentionally SVF-only. Alternate circuit experiments stay in
+// source for now so the second cleanup pass can remove them deliberately.
+constexpr bool kBifurxTuneSvfOnly = true;
 
 enum BifurxCharacterMode {
 	BIFURX_CHARACTER_SVF = 0,
@@ -135,6 +137,9 @@ float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
 inline int clampCircuitMode(int mode) {
+	if (kBifurxTuneSvfOnly) {
+		return BIFURX_CHARACTER_SVF;
+	}
 	return clamp(mode, 0, kBifurxCircuitModeCount - 1);
 }
 
