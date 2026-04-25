@@ -56,8 +56,8 @@ inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageInd
   switch (clampedCircuitMode) {
     case 1:
       profile.lpScale = 0.f;
-      profile.bpScale = 5.5f;
-      profile.hpScale = 5.5f;
+      profile.bpScale = 6.8f;
+      profile.hpScale = 6.2f;
       return profile;
     case 2:
       profile.lpScale = 0.f;
@@ -65,9 +65,9 @@ inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageInd
       profile.hpScale = 0.f;
       return profile;
     case 3:
-      profile.lpScale = 5.5f;
-      profile.bpScale = 3.8f;
-      profile.hpScale = 4.5f;
+      profile.lpScale = 4.4f;
+      profile.bpScale = 4.2f;
+      profile.hpScale = 3.6f;
       return profile;
     default:
       return profile;
