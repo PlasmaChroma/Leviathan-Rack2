@@ -370,7 +370,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const float titoModeScale = 1.22f;
-	const float titoStrength = 2.f * titoAbs;
+	const float titoStrength = 2.4f * titoAbs;
 	const float couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = 5.f * bifurx::softClip(0.2f * in * drive), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 	float cutoffA = freqA0, cutoffB = freqB0;
@@ -427,6 +427,8 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f)); lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
 	lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f)); lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
+	lights[TITO_SM_LIGHT].setBrightness(std::max(-tito, 0.f));
+	lights[TITO_XM_LIGHT].setBrightness(std::max(tito, 0.f));
 
 	if (measurePerf) {
 		const PerfClock::time_point pE = PerfClock::now();

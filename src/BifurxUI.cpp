@@ -684,16 +684,32 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	updateCurveXCache(plotX, usableW);
 	for (int i = 0; i < kCurvePointCount; i++) curveY[i] = responseYForDb(curveDb[i]);
 
-	auto displayAnchorForHz = [&](float targetHz) {
+	auto markerAnchorKind = [&](int markerIndex) {
+		// Keep notch-side markers aligned to valleys, and low/high-side markers aligned to peaks
+		// in asymmetric notch mix modes.
+		switch (previewState.mode) {
+			case 2: // Notch + Low
+				return (markerIndex == 0) ? -1 : 1;
+			case 3: // Notch + Notch
+				return -1;
+			case 7: // High + Notch
+				return (markerIndex == 1) ? -1 : 1;
+			default:
+				return 0;
+		}
+	};
+	auto displayAnchorForMarker = [&](int markerIndex, float targetHz) {
 		struct DisplayAnchor { float x01 = 0.f; float hz = 0.f; };
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
-		const bool valleyAnchorEligible = (previewState.mode == 2) || (previewState.mode == 3) || (previewState.mode == 7);
-		if (!valleyAnchorEligible) return anchor;
+		const int anchorKind = markerAnchorKind(markerIndex); // -1 valley, 0 nominal, +1 peak
+		if (anchorKind == 0) return anchor;
 		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
-		int bestIndex = centerIndex; float bestScore = curveDb[centerIndex];
+		int bestIndex = centerIndex;
+		float bestScore = (anchorKind < 0) ? curveDb[centerIndex] : -curveDb[centerIndex];
 		for (int i = std::max(0, centerIndex - 18); i <= std::min(kCurvePointCount - 1, centerIndex + 18); ++i) {
-			const float score = curveDb[i] + 0.22f * std::fabs(float(i - centerIndex));
+			const float base = (anchorKind < 0) ? curveDb[i] : -curveDb[i];
+			const float score = base + 0.22f * std::fabs(float(i - centerIndex));
 			if (score < bestScore) { bestScore = score; bestIndex = i; }
 		}
 		anchor.x01 = float(bestIndex) / float(kCurvePointCount - 1);
@@ -736,8 +752,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			insertCurveDrawPoint(p);
 		}
 	};
-	const auto markerAAnchor = displayAnchorForHz(model.markerFreqA);
-	const auto markerBAnchor = displayAnchorForHz(model.markerFreqB);
+	const auto markerAAnchor = displayAnchorForMarker(0, model.markerFreqA);
+	const auto markerBAnchor = displayAnchorForMarker(1, model.markerFreqB);
 	addCurveRefinementAroundX01(markerAAnchor.x01); addCurveRefinementAroundX01(markerBAnchor.x01);
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
@@ -765,13 +781,13 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		if (std::fabs(x01 - markerAAnchor.x01) < markerGuideClearanceX01 || std::fabs(x01 - markerBAnchor.x01) < markerGuideClearanceX01) continue;
 		drawExpectedGuideStroke(curveX[i], curveY[i], curveDb[i]);
 	}
-	auto drawExpectedMarkerGuideStroke = [&](float targetHz) {
-		const auto anchor = displayAnchorForHz(targetHz); if (anchor.x01 < 0.f || anchor.x01 > 1.f) return;
+	auto drawExpectedMarkerGuideStroke = [&](int markerIndex, float targetHz) {
+		const auto anchor = displayAnchorForMarker(markerIndex, targetHz); if (anchor.x01 < 0.f || anchor.x01 > 1.f) return;
 		const float x = plotX + usableW * anchor.x01; if (x < plotX + markerOuterRadius + kPeakMarkerEdgePadding || x > plotX + usableW - markerOuterRadius - kPeakMarkerEdgePadding) return;
 		nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, anchorMarkerToBottomLane ? markerBottomLaneY : curveYAtX01(anchor.x01));
 		nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150)); nvgStrokeWidth(args.vg, 1.05f * 1.45f); nvgStroke(args.vg);
 	};
-	drawExpectedMarkerGuideStroke(model.markerFreqA); drawExpectedMarkerGuideStroke(model.markerFreqB);
+	drawExpectedMarkerGuideStroke(0, model.markerFreqA); drawExpectedMarkerGuideStroke(1, model.markerFreqB);
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 	if (hasOverlay) {
@@ -797,14 +813,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 
 	struct PeakMarker { float x = 0.f; float yCurve = 0.f; float yMarker = 0.f; float hz = 0.f; bool visible = false; char label[16] = {}; };
-	auto buildMarkerAtFrequency = [&](float targetHz) {
-		PeakMarker marker; const auto anchor = displayAnchorForHz(targetHz); const float safeHz = std::max(anchor.hz, 1e-6f);
+	auto buildMarkerAtFrequency = [&](int markerIndex, float targetHz) {
+		PeakMarker marker; const auto anchor = displayAnchorForMarker(markerIndex, targetHz); const float safeHz = std::max(anchor.hz, 1e-6f);
 		const float markerX = plotX + usableW * anchor.x01; if (markerX < plotX + markerOuterRadius + kPeakMarkerEdgePadding || markerX > plotX + usableW - markerOuterRadius - kPeakMarkerEdgePadding) { marker.visible = false; return marker; }
 		marker.x = markerX; marker.yCurve = curveYAtX01(anchor.x01); const float markerMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, markerMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
 		marker.yMarker = anchorMarkerToBottomLane ? (spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding) : clamp(marker.yCurve, markerMinY, markerMaxY);
 		marker.hz = safeHz; marker.visible = true; formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label)); return marker;
 	};
-	PeakMarker peaks[2] = { buildMarkerAtFrequency(model.markerFreqA), buildMarkerAtFrequency(model.markerFreqB) };
+	PeakMarker peaks[2] = { buildMarkerAtFrequency(0, model.markerFreqA), buildMarkerAtFrequency(1, model.markerFreqB) };
 	float labelX[2] = { peaks[0].x, peaks[1].x }; const float labelMargin = std::max(18.f, w * 0.08f), minLabelSeparation = std::max(30.f, w * 0.18f), minX = plotX + labelMargin, maxX = plotX + usableW - labelMargin;
 	if (peaks[0].visible && peaks[1].visible) {
 		const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1, rightIndex = 1 - leftIndex;
@@ -912,6 +928,8 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fP), module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
 		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(tP), module, Bifurx::TITO_PARAM));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), module, Bifurx::TITO_XM_LIGHT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
