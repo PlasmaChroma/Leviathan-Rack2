@@ -11,6 +11,8 @@ Plugin* pluginInstance = nullptr;
 
 #include "../src/Bifurx.cpp"
 
+using namespace bifurx;
+
 namespace {
 
 constexpr float kRuntimePi = 3.14159265358979323846f;
