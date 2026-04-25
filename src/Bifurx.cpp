@@ -156,6 +156,19 @@ float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, f
 	return rescale(clampedDb, minDb, 0.f, bottomY, midY);
 }
 
+float softLimitOverlayDeltaDb(float db) {
+	constexpr float kneeDb = 18.f;
+	constexpr float limitDb = 42.f;
+	const float sign = (db < 0.f) ? -1.f : 1.f;
+	const float absDb = std::fabs(db);
+	if (absDb <= kneeDb) {
+		return db;
+	}
+	const float over = absDb - kneeDb;
+	const float compressed = kneeDb + (limitDb - kneeDb) * (1.f - fastExp(-over / (limitDb - kneeDb)));
+	return sign * std::min(compressed, limitDb);
+}
+
 float resoToDamping(float resoNorm) {
 	const float r = clamp01(resoNorm);
 	return 2.f - 1.97f * std::pow(r, 1.18f);
@@ -2848,7 +2861,9 @@ void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) 
 		}
 		const float rawInputAmp = std::sqrt(std::max(0.f, rawInputEnergy));
 		const float outputAmp = std::sqrt(std::max(0.f, outputEnergy));
-		binModuleDeltaDb[bin] = clamp(20.f * std::log10((outputAmp + 1e-6f) / (rawInputAmp + 1e-6f)), -24.f, 24.f);
+		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(
+			20.f * std::log10((outputAmp + 1e-6f) / (rawInputAmp + 1e-6f))
+		);
 		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
 
@@ -2956,6 +2971,52 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		curveY[i] = responseYForDb(curveDb[i]);
 	}
+	auto displayAnchorForHz = [&](float targetHz) {
+		struct DisplayAnchor {
+			float x01 = 0.f;
+			float hz = 0.f;
+		};
+		const float clampedHz = clamp(targetHz, minHz, maxHz);
+		DisplayAnchor anchor;
+		anchor.x01 = logPosition(clampedHz, minHz, maxHz);
+		anchor.hz = clampedHz;
+
+		const bool notchFamilyMode =
+			(previewState.mode == 2) || (previewState.mode == 3) || (previewState.mode == 7);
+		const bool valleyAnchorEligible =
+			notchFamilyMode && (previewState.circuitMode != BIFURX_CHARACTER_SVF);
+		if (!valleyAnchorEligible) {
+			return anchor;
+		}
+
+		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
+		const int searchRadius = 18;
+		const float distancePenaltyDb = 0.22f;
+		int bestIndex = centerIndex;
+		float bestScore = curveDb[centerIndex];
+		for (int i = std::max(0, centerIndex - searchRadius); i <= std::min(kCurvePointCount - 1, centerIndex + searchRadius); ++i) {
+			const float distancePenalty = distancePenaltyDb * std::fabs(float(i - centerIndex));
+			const float score = curveDb[i] + distancePenalty;
+			if (score < bestScore) {
+				bestScore = score;
+				bestIndex = i;
+			}
+		}
+
+		anchor.x01 = float(bestIndex) / float(kCurvePointCount - 1);
+		anchor.hz = logFrequencyAt(anchor.x01, minHz, maxHz);
+		return anchor;
+	};
+	auto curveDbAtX01 = [&](float x01) {
+		const float curveIndex = clamp(x01, 0.f, 1.f) * float(kCurvePointCount - 1);
+		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
+		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
+		const float t = curveIndex - float(i0);
+		return mixf(curveDb[i0], curveDb[i1], t);
+	};
+	auto curveYAtX01 = [&](float x01) {
+		return responseYForDb(curveDbAtX01(x01));
+	};
 
 	struct CurveDrawPoint {
 		float x01 = 0.f;
@@ -2997,29 +3058,22 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		dedupedCurveDrawPoints[insertIndex] = point;
 		dedupedCurveDrawPointCount++;
 	};
-	auto addCurveRefinementAround = [&](float targetHz) {
-		const float clampedHz = clamp(targetHz, minHz, maxHz);
-		const float targetX01 = logPosition(clampedHz, minHz, maxHz);
+	auto addCurveRefinementAroundX01 = [&](float targetX01) {
+		const float clampedX01 = clamp(targetX01, 0.f, 1.f);
 		const float refineDx = 0.35f / float(kCurvePointCount - 1);
 		const float refineX01[3] = {
-			clamp(targetX01 - refineDx, 0.f, 1.f),
-			targetX01,
-			clamp(targetX01 + refineDx, 0.f, 1.f)
+			clamp(clampedX01 - refineDx, 0.f, 1.f),
+			clampedX01,
+			clamp(clampedX01 + refineDx, 0.f, 1.f)
 		};
 		for (int i = 0; i < 3; ++i) {
 			const float sampleX01 = refineX01[i];
-			const float sampleHz = (i == 1) ? clampedHz : logFrequencyAt(sampleX01, minHz, maxHz);
-			const float curveIndex = logPosition(sampleHz, minHz, maxHz) * float(kCurvePointCount - 1);
-			const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
-			const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
-			const float t = curveIndex - float(i0);
 			// Keep refinement points tied to the same smoothed curve cache as
 			// the vertical bars and peak markers so cutoff moves stay coherent.
-			const float sampleDb = mixf(curveDb[i0], curveDb[i1], t);
 			CurveDrawPoint point;
 			point.x01 = sampleX01;
 			point.x = plotX + usableW * sampleX01;
-			point.y = responseYForDb(sampleDb);
+			point.y = curveYAtX01(sampleX01);
 			if (anchorMarkerToBottomLane && i == 1) {
 				// In NN mode, present notch centers as pinned cut points at the marker lane.
 				point.y = markerBottomLaneY;
@@ -3031,8 +3085,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			insertCurveDrawPoint(point);
 		}
 	};
-	addCurveRefinementAround(model.markerFreqA);
-	addCurveRefinementAround(model.markerFreqB);
+	const auto markerAAnchor = displayAnchorForHz(model.markerFreqA);
+	const auto markerBAnchor = displayAnchorForHz(model.markerFreqB);
+	addCurveRefinementAroundX01(markerAAnchor.x01);
+	addCurveRefinementAroundX01(markerBAnchor.x01);
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
 	nvgSave(args.vg);
@@ -3071,8 +3127,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const NVGcolor expectedWhite = nvgRGB(206, 210, 216);
 	const float expectedLineWidth = 1.05f;
 	nvgShapeAntiAlias(args.vg, 1);
-	for (int i = 0; i < kCurvePointCount; i += 3) {
-		const float curveDbValue = curveDb[i];
+	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbValue, float strokeWidthScale = 1.f) {
 		const float posAmount = clamp01(curveDbValue / 18.f);
 		const float negAmount = clamp01(-curveDbValue / 18.f);
 		const float emphasis = std::max(posAmount, negAmount);
@@ -3087,12 +3142,46 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		tint.a = 0.025f + 0.095f * emphasis;
 
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, curveX[i], spectrumBottomY);
-		nvgLineTo(args.vg, curveX[i], curveY[i]);
+		nvgMoveTo(args.vg, x, spectrumBottomY);
+		nvgLineTo(args.vg, x, y);
 		nvgStrokeColor(args.vg, tint);
-		nvgStrokeWidth(args.vg, expectedLineWidth);
+		nvgStrokeWidth(args.vg, expectedLineWidth * strokeWidthScale);
 		nvgStroke(args.vg);
+	};
+	const float markerAX01 = markerAAnchor.x01;
+	const float markerBX01 = markerBAnchor.x01;
+	const float markerGuideClearanceX01 = 1.35f / float(kCurvePointCount - 1);
+	for (int i = 0; i < kCurvePointCount; i += 3) {
+		const float x01 = float(i) / float(kCurvePointCount - 1);
+		if (std::fabs(x01 - markerAX01) < markerGuideClearanceX01 ||
+			std::fabs(x01 - markerBX01) < markerGuideClearanceX01) {
+			continue;
+		}
+		drawExpectedGuideStroke(curveX[i], curveY[i], curveDb[i]);
 	}
+	auto drawExpectedMarkerGuideStroke = [&](float targetHz) {
+		const auto anchor = displayAnchorForHz(targetHz);
+		const float targetX01 = anchor.x01;
+		if (targetX01 < 0.f || targetX01 > 1.f) {
+			return;
+		}
+		const float markerRadius = markerOuterRadius;
+		const float x = plotX + usableW * targetX01;
+		const float markerXMin = plotX + markerRadius + kPeakMarkerEdgePadding;
+		const float markerXMax = plotX + usableW - markerRadius - kPeakMarkerEdgePadding;
+		if (x < markerXMin || x > markerXMax) {
+			return;
+		}
+		const float y = anchorMarkerToBottomLane ? markerBottomLaneY : curveYAtX01(targetX01);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x, spectrumBottomY);
+		nvgLineTo(args.vg, x, y);
+		nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150));
+		nvgStrokeWidth(args.vg, expectedLineWidth * 1.45f);
+		nvgStroke(args.vg);
+	};
+	drawExpectedMarkerGuideStroke(model.markerFreqA);
+	drawExpectedMarkerGuideStroke(model.markerFreqB);
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 		if (hasOverlay) {
@@ -3187,8 +3276,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 	auto buildMarkerAtFrequency = [&](float targetHz) {
 		PeakMarker marker;
-		const float safeHz = std::max(targetHz, 1e-6f);
-		const float targetX01 = std::log(safeHz / minHz) / std::log(maxHz / minHz);
+		const auto anchor = displayAnchorForHz(targetHz);
+		const float safeHz = std::max(anchor.hz, 1e-6f);
+		const float targetX01 = anchor.x01;
 		const float markerRadius = markerOuterRadius;
 		const float markerX = plotX + usableW * targetX01;
 		const float markerXMin = plotX + markerRadius + kPeakMarkerEdgePadding;
@@ -3198,11 +3288,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			return marker;
 		}
 		marker.x = markerX;
-		const float curveIndex = targetX01 * float(kCurvePointCount - 1);
-		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
-		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
-		const float t = curveIndex - float(i0);
-		marker.yCurve = mixf(curveY[i0], curveY[i1], t);
+		marker.yCurve = curveYAtX01(targetX01);
 		const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
 		const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
 		const float bottomLaneY = markerBottomLaneY;
