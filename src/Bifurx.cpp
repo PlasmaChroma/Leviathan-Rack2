@@ -44,11 +44,11 @@ constexpr int kBifurxCircuitModeCount = 4;
 constexpr bool kBifurxTuneSvfOnly = false;
 enum BifurxCharacterMode {
 	BIFURX_CHARACTER_SVF = 0,
-	BIFURX_CHARACTER_ACID = 1,
+	BIFURX_CHARACTER_BITE = 1,
 	BIFURX_CHARACTER_VOWEL = 2,
-	BIFURX_CHARACTER_CORRODE = 3
+	BIFURX_CHARACTER_ERODE = 3
 };
-const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "Acid", "Vowel", "Erode"};
+const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount] = {"SVF", "Bite", "Vowel", "Erode"};
 constexpr int kBifurxModeParamIndex = 0;
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Low + Low",
@@ -169,6 +169,19 @@ float softLimitOverlayDeltaDb(float db) {
 	return sign * std::min(compressed, limitDb);
 }
 
+float softLimitExpectedCurveDb(float db) {
+	constexpr float kneeDb = 26.f;
+	constexpr float limitDb = 48.f;
+	const float sign = (db < 0.f) ? -1.f : 1.f;
+	const float absDb = std::fabs(db);
+	if (absDb <= kneeDb) {
+		return clamp(db, -limitDb, limitDb);
+	}
+	const float over = absDb - kneeDb;
+	const float compressed = kneeDb + (limitDb - kneeDb) * (1.f - fastExp(-over / (limitDb - kneeDb)));
+	return sign * std::min(compressed, limitDb);
+}
+
 float resoToDamping(float resoNorm) {
 	const float r = clamp01(resoNorm);
 	return 2.f - 1.97f * std::pow(r, 1.18f);
@@ -205,7 +218,7 @@ float foldSoft(float x, float amount) {
 	return sanitizeFinite(folded);
 }
 
-float shapeAcidResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex) {
+float shapeBiteResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex) {
 	const float r = clamp01(resoNorm);
 	const float stage = clamp(float(stageIndex), 0.f, 1.f);
 	const float gain = 1.06f + 0.92f * r + 0.18f * driveNorm + 0.07f * stage;
@@ -213,7 +226,7 @@ float shapeAcidResonance(float bp, float lp, float hp, float driveNorm, float re
 	return saturateAsym(gain * bp + bias, 1.38f + 0.24f * r, 0.96f);
 }
 
-float shapeCorrodeResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex) {
+float shapeErodeResonance(float bp, float lp, float hp, float driveNorm, float resoNorm, int stageIndex) {
 	const float r = clamp01(resoNorm);
 	const float stage = clamp(float(stageIndex), 0.f, 1.f);
 	const float core = (0.82f + 0.92f * r + 0.38f * driveNorm + 0.14f * stage) * bp
@@ -224,14 +237,20 @@ float shapeCorrodeResonance(float bp, float lp, float hp, float driveNorm, float
 
 float previewCharacterDisplayDb(float db, int circuitMode) {
 	const int mode = clampCircuitMode(circuitMode);
-	if (mode != BIFURX_CHARACTER_ACID && mode != BIFURX_CHARACTER_CORRODE) {
+	if (mode != BIFURX_CHARACTER_BITE && mode != BIFURX_CHARACTER_ERODE) {
 		return db;
 	}
 	if (db <= 0.f) {
 		return db;
 	}
-	const float scale = (mode == BIFURX_CHARACTER_ACID) ? 7.5f : 6.f;
-	return scale * std::tanh(db / scale);
+	// Keep nonlinear modes visually bounded without early hard-looking plateaus.
+	const float kneeDb = (mode == BIFURX_CHARACTER_BITE) ? 10.f : 8.5f;
+	const float limitDb = (mode == BIFURX_CHARACTER_BITE) ? 24.f : 20.f;
+	if (db <= kneeDb) {
+		return db;
+	}
+	const float over = db - kneeDb;
+	return kneeDb + (limitDb - kneeDb) * (1.f - fastExp(-over / (limitDb - kneeDb)));
 }
 
 void applyProbeEnvelopeHint(float* dbValues, int count, int circuitMode) {
@@ -239,21 +258,21 @@ void applyProbeEnvelopeHint(float* dbValues, int count, int circuitMode) {
 		return;
 	}
 	const int mode = clampCircuitMode(circuitMode);
-	if (mode != BIFURX_CHARACTER_ACID && mode != BIFURX_CHARACTER_CORRODE) {
+	if (mode != BIFURX_CHARACTER_BITE && mode != BIFURX_CHARACTER_ERODE) {
 		return;
 	}
 
 	// Keep the coarse probe shape but suppress narrow ripple trains that are
 	// technically real yet visually too literal for nonlinear modes.
-	const int radius = (mode == BIFURX_CHARACTER_ACID) ? 4 : 6;
-	const float blend = (mode == BIFURX_CHARACTER_ACID) ? 0.42f : 0.55f;
+	const int radius = (mode == BIFURX_CHARACTER_BITE) ? 4 : 6;
+	const float blend = (mode == BIFURX_CHARACTER_BITE) ? 0.42f : 0.55f;
 	float envelope[kCurvePointCount];
 	for (int i = 0; i < count; ++i) {
 		float weightedMax = dbValues[i];
 		for (int k = -radius; k <= radius; ++k) {
 			const int idx = clamp(i + k, 0, count - 1);
 			const float dist = std::fabs(float(k)) / float(std::max(radius, 1));
-			const float penalty = (mode == BIFURX_CHARACTER_ACID ? 1.6f : 1.2f) * dist;
+			const float penalty = (mode == BIFURX_CHARACTER_BITE ? 1.6f : 1.2f) * dist;
 			weightedMax = std::max(weightedMax, dbValues[idx] - penalty);
 		}
 		envelope[i] = weightedMax;
@@ -280,11 +299,11 @@ struct SvfOutputs {
 
 float circuitCutoffScale(int circuitMode) {
 	switch (clampCircuitMode(circuitMode)) {
-		case BIFURX_CHARACTER_ACID:
+		case BIFURX_CHARACTER_BITE:
 			return 1.f;
 		case BIFURX_CHARACTER_VOWEL:
 			return 0.92f;
-		case BIFURX_CHARACTER_CORRODE:
+		case BIFURX_CHARACTER_ERODE:
 			return 1.08f;
 		default:
 			return 1.f;
@@ -294,11 +313,11 @@ float circuitCutoffScale(int circuitMode) {
 float circuitQScale(float resoNorm, int circuitMode) {
 	const float r = clamp01(resoNorm);
 	switch (clampCircuitMode(circuitMode)) {
-		case BIFURX_CHARACTER_ACID:
+		case BIFURX_CHARACTER_BITE:
 			return 1.18f + 0.95f * r;
 		case BIFURX_CHARACTER_VOWEL:
 			return 1.20f + 0.45f * r;
-		case BIFURX_CHARACTER_CORRODE:
+		case BIFURX_CHARACTER_ERODE:
 			return 0.92f + 0.60f * r;
 		default:
 			return 1.f;
@@ -315,7 +334,7 @@ SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
 	const int clampedCircuitMode = clampCircuitMode(circuitMode);
 	SemanticExportProfile profile;
 	switch (clampedCircuitMode) {
-		case BIFURX_CHARACTER_ACID:
+		case BIFURX_CHARACTER_BITE:
 			profile.lpScale = 0.f;
 			profile.bpScale = 6.8f;
 			profile.hpScale = 6.2f;
@@ -325,7 +344,7 @@ SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
 			profile.bpScale = 6.5f;
 			profile.hpScale = 0.f;
 			return profile;
-		case BIFURX_CHARACTER_CORRODE:
+		case BIFURX_CHARACTER_ERODE:
 			profile.lpScale = 4.4f;
 			profile.bpScale = 4.2f;
 			profile.hpScale = 3.6f;
@@ -393,7 +412,7 @@ float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
 			static const float kBaseByCircuit[kBifurxCircuitModeCount] = {1.f, 1.06f, 0.95f, 1.00f};
 			float gain = kBaseByCircuit[clampedCircuitMode];
 			const float hiSpan = clamp01((wideMorph - 0.72f) / 0.28f);
-			if (clampedCircuitMode == BIFURX_CHARACTER_ACID || clampedCircuitMode == BIFURX_CHARACTER_CORRODE) {
+			if (clampedCircuitMode == BIFURX_CHARACTER_BITE || clampedCircuitMode == BIFURX_CHARACTER_ERODE) {
 				gain -= 0.02f * hiSpan;
 			}
 			else if (clampedCircuitMode == BIFURX_CHARACTER_VOWEL) {
@@ -510,10 +529,10 @@ SvfOutputs processCharacterStage(
 	SvfOutputs raw;
 
 	switch (mode) {
-		case BIFURX_CHARACTER_ACID: {
+		case BIFURX_CHARACTER_BITE: {
 			const float feedbackDamping = clamp(damping * (0.95f - 0.08f * r), 0.02f, 2.2f);
 			raw = core.process(input, sampleRate, cutoff, feedbackDamping);
-			const float reson = shapeAcidResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
+			const float reson = shapeBiteResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
 			const float peakTakeover = clamp(0.24f + 0.50f * r + 0.10f * driveNorm, 0.f, 0.88f);
 			raw.lp = 1.03f * raw.lp + (0.045f + 0.035f * peakTakeover) * reson;
 			raw.bp = saturateAsym(mixf(1.02f * raw.bp, 1.22f * reson, peakTakeover), 1.18f + 0.12f * r, 0.98f);
@@ -531,10 +550,10 @@ SvfOutputs processCharacterStage(
 			raw.bp = bpFormant;
 			raw.hp = hpSoft;
 		} break;
-		case BIFURX_CHARACTER_CORRODE: {
+		case BIFURX_CHARACTER_ERODE: {
 			const float corrodeDamping = clamp(damping * (1.08f + 0.08f * (1.f - r)), 0.02f, 2.2f);
 			raw = core.process(input, sampleRate, cutoff, corrodeDamping);
-			const float reson = shapeCorrodeResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
+			const float reson = shapeErodeResonance(raw.bp, raw.lp, raw.hp, driveNorm, r, stageIndex);
 			const float peakTakeover = clamp(0.24f + 0.42f * r + 0.18f * driveNorm, 0.f, 0.86f);
 			raw.lp = 0.90f * raw.lp + (0.025f + 0.025f * peakTakeover) * reson;
 			raw.bp = saturateAsym(mixf(0.96f * raw.bp, 1.34f * reson, peakTakeover), 1.08f, 0.90f);
@@ -719,8 +738,8 @@ BifurxPreviewCurvePolicy previewCurvePolicyForCharacter(int characterMode) {
 		case BIFURX_CHARACTER_SVF:
 		case BIFURX_CHARACTER_VOWEL:
 			return BIFURX_PREVIEW_ANALYTIC;
-		case BIFURX_CHARACTER_ACID:
-		case BIFURX_CHARACTER_CORRODE:
+		case BIFURX_CHARACTER_BITE:
+		case BIFURX_CHARACTER_ERODE:
 		default:
 			return BIFURX_PREVIEW_PROBE_FFT;
 	}
@@ -845,13 +864,13 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 		return 0.f;
 	}
 	const int circuitMode = clampCircuitMode(state.circuitMode);
-	if (circuitMode == BIFURX_CHARACTER_ACID || circuitMode == BIFURX_CHARACTER_CORRODE) {
+	if (circuitMode == BIFURX_CHARACTER_BITE || circuitMode == BIFURX_CHARACTER_ERODE) {
 		if (sampleIndex >= kPreviewProbeBurstLength) {
 			return 0.f;
 		}
 		const float t = float(sampleIndex) / float(std::max(kPreviewProbeBurstLength - 1, 1));
 		const float window = 0.5f - 0.5f * std::cos(2.f * kPi * t);
-		const float burstCycles = (circuitMode == BIFURX_CHARACTER_CORRODE) ? 2.25f : 1.5f;
+		const float burstCycles = (circuitMode == BIFURX_CHARACTER_ERODE) ? 2.25f : 1.5f;
 		const float oscillation = std::sin(2.f * kPi * burstCycles * t);
 		const float polarity = (sampleIndex & 1) ? -1.f : 1.f;
 		return 0.09f * window * oscillation + 0.015f * window * polarity;
@@ -1243,7 +1262,7 @@ struct Bifurx final : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
-	int filterCircuitMode = 0; // 0: SVF, 1: Acid, 2: Vowel, 3: Erode
+	int filterCircuitMode = 0; // 0: SVF, 1: Bite, 2: Vowel, 3: Erode
 	int activeCircuitMode = 0;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
@@ -1625,19 +1644,21 @@ struct Bifurx final : Module {
 
 		auto titoCharacterScale = [&](int characterMode) {
 			switch (clampCircuitMode(characterMode)) {
-				case BIFURX_CHARACTER_ACID:
-					return 0.75f;
+				case BIFURX_CHARACTER_BITE:
+					return 0.92f;
 				case BIFURX_CHARACTER_VOWEL:
-					return 0.90f;
-				case BIFURX_CHARACTER_CORRODE:
-					return 0.55f;
+					return 1.05f;
+				case BIFURX_CHARACTER_ERODE:
+					return 0.78f;
 				case BIFURX_CHARACTER_SVF:
 				default:
 					return 1.f;
 			}
 		};
+		const float titoModeScale = (tito == 0) ? 1.22f : ((tito == 2) ? 1.10f : 0.f);
 		const float couplingDepth = titoCharacterScale(effectiveCircuitMode)
-			* (0.018f + 0.20f * resoNorm * resoNorm) * (tito == 1 ? 0.f : 1.f);
+			* titoModeScale
+			* (0.026f + 0.28f * resoNorm * resoNorm);
 		const float drivenIn = 5.f * softClip(0.2f * in * drive);
 		const float excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 
@@ -1982,7 +2003,7 @@ struct Bifurx final : Module {
 
 			const int circuitModeLight = clampCircuitMode(filterCircuitMode);
 			lights[FILTER_CIRCUIT_TL_LIGHT].setBrightness(circuitModeLight == 0 ? 1.f : 0.f); // SVF
-			lights[FILTER_CIRCUIT_TR_LIGHT].setBrightness(circuitModeLight == 1 ? 1.f : 0.f); // Acid
+			lights[FILTER_CIRCUIT_TR_LIGHT].setBrightness(circuitModeLight == 1 ? 1.f : 0.f); // Bite
 			lights[FILTER_CIRCUIT_BR_LIGHT].setBrightness(circuitModeLight == 2 ? 1.f : 0.f); // Vowel
 			lights[FILTER_CIRCUIT_BL_LIGHT].setBrightness(circuitModeLight == 3 ? 1.f : 0.f); // Erode
 			if (measurePerf) {
@@ -2763,11 +2784,19 @@ void BifurxSpectrumWidget::updateCurveCache() {
 	}
 
 	updateAxisCache();
+	const bool compressExpectedCurve =
+		(previewState.circuitMode == BIFURX_CHARACTER_BITE) ||
+		(previewState.circuitMode == BIFURX_CHARACTER_ERODE);
+	auto mapExpectedDb = [&](float db) {
+		return compressExpectedCurve
+			? softLimitExpectedCurveDb(db)
+			: clamp(db, kResponseMinDb, kResponseMaxDb);
+	};
 	if (previewCurvePolicyForCharacter(previewState.circuitMode) == BIFURX_PREVIEW_ANALYTIC) {
 		const BifurxPreviewModel model = makePreviewModel(previewState);
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			const float db = previewModelResponseDb(model, curveHz[i]);
-			curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
+			curveTargetDb[i] = mapExpectedDb(db);
 		}
 	}
 	else {
@@ -2779,10 +2808,8 @@ void BifurxSpectrumWidget::updateCurveCache() {
 		for (int bin = 0; bin < kFftBinCount; ++bin) {
 			const float inputAmp = orderedSpectrumMagnitude(fftInputFreq, bin);
 			const float outputAmp = orderedSpectrumMagnitude(fftOutputFreq, bin);
-			binResponseDb[bin] = clamp(
-				20.f * std::log10((outputAmp + 1e-9f) / (inputAmp + 1e-9f)),
-				kResponseMinDb,
-				kResponseMaxDb
+			binResponseDb[bin] = mapExpectedDb(
+				20.f * std::log10((outputAmp + 1e-9f) / (inputAmp + 1e-9f))
 			);
 		}
 
@@ -2795,10 +2822,8 @@ void BifurxSpectrumWidget::updateCurveCache() {
 			const int right = std::min(kFftBinCount - 1, binB + 1);
 			const float smoothA = 0.18f * binResponseDb[left] + 0.64f * binResponseDb[binA] + 0.18f * binResponseDb[right];
 			const float smoothB = 0.18f * binResponseDb[binA] + 0.64f * binResponseDb[binB] + 0.18f * binResponseDb[right];
-			curveTargetDb[i] = clamp(
-				previewCharacterDisplayDb(mixf(smoothA, smoothB, frac), previewState.circuitMode),
-				kResponseMinDb,
-				kResponseMaxDb
+			curveTargetDb[i] = mapExpectedDb(
+				previewCharacterDisplayDb(mixf(smoothA, smoothB, frac), previewState.circuitMode)
 			);
 		}
 		applyProbeEnvelopeHint(curveTargetDb, kCurvePointCount, previewState.circuitMode);
