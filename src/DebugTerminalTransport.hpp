@@ -20,4 +20,13 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  int scopeStride,
                                  bool scopeMetricValid);
 
+void submitBifurxUiMetrics(uint32_t instanceId,
+                           float uiMs,
+                           int circuitMode,
+                           int filterMode,
+                           bool renderOpengl,
+                           uint32_t previewSeq,
+                           uint32_t analysisSeq,
+                           uint64_t drawVertexCount);
+
 } // namespace debug_terminal

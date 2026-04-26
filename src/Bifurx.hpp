@@ -600,6 +600,7 @@ struct Bifurx : Module {
 	std::atomic<int> perfCircuitMode{0};
 	std::atomic<bool> perfFastPathEligible{false};
 	std::atomic<bool> perfPreviewPitchCvConnected{false};
+	uint32_t debugInstanceId = 0;
 
 	Bifurx();
 	void resetCircuitStates();

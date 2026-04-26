@@ -1,7 +1,12 @@
 #include "Bifurx.hpp"
+#include "DebugTerminalTransport.hpp"
 #include <nanovg_gl.h>
+#include <unordered_map>
 
 namespace bifurx {
+
+static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	struct GlVertex {
@@ -21,6 +26,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
+	uint64_t lastDrawNs = 0;
+	float lastDrawMsEma = 0.f;
+	uint64_t lastDrawVertexCount = 0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 	}
@@ -78,9 +86,34 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (state.lastPreviewSeq != prevP || state.lastAnalysisSeq != prevA || state.hasCurveTarget || state.hasOverlayTarget) {
 			setDirty();
 		}
+
+		if (isDragonKingDebugEnabled() && module && module->renderMode == Bifurx::RENDER_OPENGL) {
+			double nowSec = system::getTime();
+			uint32_t debugId = module->debugInstanceId;
+			double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
+			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
+				const int circuitMode = bifurx::clampCircuitMode(state.previewState.circuitMode);
+				const int filterMode = clamp(int(state.previewState.mode), 0, kBifurxModeCount - 1);
+				lastSubmitSec = nowSec;
+				debug_terminal::submitBifurxUiMetrics(
+					debugId,
+					lastDrawMsEma,
+					circuitMode,
+					filterMode,
+					true, // opengl
+					state.lastPreviewSeq,
+					state.lastAnalysisSeq,
+					lastDrawVertexCount
+				);
+			}
+		}
 	}
 
 	void drawFramebuffer() override {
+		using PerfClock = std::chrono::steady_clock;
+		const bool perfLoggingActive = module && module->perfDebugLogging;
+		const PerfClock::time_point perfDrawStart = PerfClock::now();
+
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
 		if (!vbo) glGenBuffers(1, &vbo);
 
@@ -205,6 +238,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glDisableClientState(GL_COLOR_ARRAY);
 		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisable(GL_LINE_SMOOTH);
+		lastDrawVertexCount = uint64_t(fillVertices.size() + curveVertices.size() + cyanVertices.size());
+
+		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
+		{
+			const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
+			lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
+		}
 	}
 
 	void draw(const DrawArgs& args) override {

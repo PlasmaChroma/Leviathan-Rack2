@@ -598,7 +598,10 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 	}
 }
 
+static std::atomic<uint32_t> gBifurxDebugInstanceCounter{1u};
+
 Bifurx::Bifurx() {
+	debugInstanceId = gBifurxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(MODE_PARAM, 0.f, 9.f, 0.f, "Mode", {kBifurxModeLabels[0], kBifurxModeLabels[1], kBifurxModeLabels[2], kBifurxModeLabels[3], kBifurxModeLabels[4], kBifurxModeLabels[5], kBifurxModeLabels[6], kBifurxModeLabels[7], kBifurxModeLabels[8], kBifurxModeLabels[9]});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.5f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
@@ -610,7 +613,7 @@ Bifurx::Bifurx() {
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 void Bifurx::setFilterCircuitMode(int newMode) { const int clampedMode = bifurx::clampCircuitMode(newMode); const bool changed = (filterCircuitMode != clampedMode) || (activeCircuitMode != clampedMode); filterCircuitMode = clampedMode; activeCircuitMode = clampedMode; if (changed) resetCircuitStates(); }
 json_t* Bifurx::dataToJson() {
-	json_t* root = Module::dataToJson();
+	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
@@ -620,6 +623,9 @@ json_t* Bifurx::dataToJson() {
 }
 
 void Bifurx::dataFromJson(json_t* root) {
+	if (!root) {
+		return;
+	}
 	Module::dataFromJson(root);
 	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 	if (fftScaleDynamicJ) {
@@ -633,10 +639,32 @@ void Bifurx::dataFromJson(json_t* root) {
 	if (perfDebugLoggingJ) {
 		perfDebugLogging = json_is_true(perfDebugLoggingJ);
 	}
+
+	auto decodeRenderMode = [](int rawRenderMode) {
+		// Keep compatibility with earlier enum encodings where OpenGL could be 2 (or higher in migrated values).
+		switch (rawRenderMode) {
+			case RENDER_OPENGL:
+			case 2:
+			case 5:
+			case 6:
+				return RENDER_OPENGL;
+			default:
+				return RENDER_NANOVG;
+		}
+	};
+
+	bool loadedRenderMode = false;
 	json_t* renderModeJ = json_object_get(root, "renderMode");
 	if (renderModeJ) {
-		const int rawRenderMode = int(json_integer_value(renderModeJ));
-		renderMode = (rawRenderMode == RENDER_OPENGL) ? RENDER_OPENGL : RENDER_NANOVG;
+		renderMode = (RenderMode) decodeRenderMode(int(json_integer_value(renderModeJ)));
+		loadedRenderMode = true;
+	}
+	if (!loadedRenderMode) {
+		// Legacy key used by older renderer debug menus.
+		json_t* legacyRenderModeJ = json_object_get(root, "debugRenderMode");
+		if (legacyRenderModeJ) {
+			renderMode = (RenderMode) decodeRenderMode(int(json_integer_value(legacyRenderModeJ)));
+		}
 	}
 	json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode");
 	if (filterCircuitModeJ) {

@@ -364,4 +364,27 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
   transport().submit("TemporalDeck", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitBifurxUiMetrics(uint32_t instanceId,
+                           float uiMs,
+                           int circuitMode,
+                           int filterMode,
+                           bool renderOpengl,
+                           uint32_t previewSeq,
+                           uint32_t analysisSeq,
+                           uint64_t drawVertexCount) {
+  char dataBuf[384];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"circuit\":%d,\"filter\":%d,\"opengl\":%d,\"preview_seq\":%u,\"analysis_seq\":%u,\"vertex_count\":%llu}",
+                std::max(0.f, uiMs),
+                circuitMode,
+                filterMode,
+                renderOpengl ? 1 : 0,
+                previewSeq,
+                analysisSeq,
+                (unsigned long long) drawVertexCount);
+  double ts = system::getTime();
+  transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
+}
+
 } // namespace debug_terminal
