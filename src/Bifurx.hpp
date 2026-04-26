@@ -92,6 +92,11 @@ inline float fastLog2(float x) {
 	return y - 126.94269504f;
 }
 
+inline float fastTan(float x) {
+	const float x2 = x * x;
+	return x * (15.f - x2) / (15.f - 6.f * x2);
+}
+
 inline float amplitudeRatioDb(float numerator, float denominator) {
 	return 20.f * std::log10((std::fabs(numerator) + 1e-6f) / (std::fabs(denominator) + 1e-6f));
 }

@@ -181,9 +181,8 @@ void formatFrequencyLabel(float hz, char* out, size_t outSize) {
 }
 
 SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
-	const float sr = std::max(sampleRate, 1.f);
-	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sr);
-	const float g = std::tan(kPi * limitedCutoff / sr);
+	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sampleRate);
+	const float g = fastTan(kPi * limitedCutoff / sampleRate);
 	const float k = clamp(damping, 0.02f, 2.2f);
 	const float a1 = 1.f / (1.f + g * (g + k));
 	SvfCoeffs coeffs;
@@ -518,13 +517,26 @@ void Bifurx::process(const ProcessArgs& args) {
 		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedFreqA0 = freqA0; cachedFreqB0 = freqB0; cachedBalance = balance; cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA); cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB); controlFastCacheValid = true;
 	}
 
-	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm), drivenIn = 5.f * bifurx::softClip(0.2f * in * drive), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
+	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
+	const float drivenIn = 5.f * bifurx::softClip(0.2f * in * drive), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 	float cutoffA = freqA0, cutoffB = freqB0;
-	if (!fastPathEligible) { float modA = 0.f, modB = 0.f; if (tito < 0.f) { modA = couplingDepth * coreA.ic1eq / 5.f; modB = couplingDepth * coreB.ic1eq / 5.f; } else if (tito > 0.f) { modA = couplingDepth * coreB.ic1eq / 5.f; modB = couplingDepth * coreA.ic1eq / 5.f; } cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f)); }
+	if (!titoNeutral) {
+		const float depthScaled = couplingDepth * 0.2f;
+		float modA = 0.f, modB = 0.f;
+		if (tito < 0.f) { modA = depthScaled * coreA.ic1eq; modB = depthScaled * coreB.ic1eq; }
+		else { modA = depthScaled * coreB.ic1eq; modB = depthScaled * coreA.ic1eq; }
+		cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
+	}
 	if (measurePerf) perfCoreStart = PerfClock::now();
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
-	auto pA = [&](float s) { return processCharacterStage(coreA, effectiveCircuitMode, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, fastPathEligible ? &cachedCoeffsA : nullptr); };
-	auto pB = [&](float s) { return processCharacterStage(coreB, effectiveCircuitMode, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, fastPathEligible ? &cachedCoeffsB : nullptr); };
+	auto pA = [&](float s) {
+		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffA == freqA0)) ? &cachedCoeffsA : nullptr;
+		return processCharacterStage(coreA, effectiveCircuitMode, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, coeffs);
+	};
+	auto pB = [&](float s) {
+		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffB == freqB0)) ? &cachedCoeffsB : nullptr;
+		return processCharacterStage(coreB, effectiveCircuitMode, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, coeffs);
+	};
 
 	switch (mode) {
 		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
