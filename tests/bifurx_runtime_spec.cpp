@@ -63,7 +63,7 @@ float measureRuntimeGainDb(
 ) {
   Bifurx module;
   module.onReset();
-  (void)circuitMode;
+  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNorm, spanNorm, reso, balance);
   module.params[Bifurx::TITO_PARAM].setValue(tito);
@@ -123,7 +123,7 @@ TitoOutputCapture captureTitoOutput(
 ) {
   Bifurx module;
   module.onReset();
-  (void)circuitMode;
+  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(0.82f);
@@ -219,7 +219,7 @@ bool capturePreviewState(
   }
   Bifurx module;
   module.onReset();
-  (void)circuitMode;
+  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   clearCvInputs(module);

@@ -2,7 +2,7 @@
 
 namespace bifurx {
 
-struct BifurxSpectrumWidget final : Widget {
+struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	struct CurveDebugRecorder {
 		bool active = false;
 		std::ofstream file;
@@ -45,27 +45,10 @@ struct BifurxSpectrumWidget final : Widget {
 		uint64_t lastUiDrawMarkersNs = 0;
 	};
 
-	Bifurx* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
-	dsp::RealFFT fft;
-	alignas(16) float window[kFftSize];
-	alignas(16) float fftInputTime[kFftSize];
-	alignas(16) float fftOutputTime[kFftSize];
-	alignas(16) float fftInputFreq[2 * kFftSize];
-	alignas(16) float fftOutputFreq[2 * kFftSize];
-	float curveDb[kCurvePointCount];
-	float curveTargetDb[kCurvePointCount];
-	float overlayModuleDb[kCurvePointCount];
-	float overlayTargetModuleDb[kCurvePointCount];
-	float overlayOutputDbfs[kCurvePointCount];
-	float overlayTargetOutputDbfs[kCurvePointCount];
 	float curveX[kCurvePointCount];
 	float curveY[kCurvePointCount];
-	float curveHz[kCurvePointCount];
-	float curveBinPos[kCurvePointCount];
 	float bottomY = 0.f;
-	float displayTopDbfs = kDisplayTopDbfsCeiling;
-	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	float cachedCurveXPlotX = NAN;
 	float cachedCurveXUsableW = NAN;
 	int cachedTopLabelFontHandle = -1;
@@ -73,17 +56,11 @@ struct BifurxSpectrumWidget final : Widget {
 	float cachedTopLabelReservedWidth = 0.f;
 	bool lastFftScaleDynamic = true;
 	double lastCurveDebugLogTimeSec = -1.0;
-	float cachedAxisSampleRate = 0.f;
-	BifurxPreviewState previewState;
+	
 	BifurxLlTelemetryState llTelemetryState;
-	bool hasPreview = false;
 	bool hasLlTelemetry = false;
-	bool hasOverlay = false;
-	bool hasCurveTarget = false;
-	bool hasOverlayTarget = false;
-	uint32_t lastPreviewSeq = 0;
 	uint32_t lastLlTelemetrySeq = 0;
-	uint32_t lastAnalysisSeq = 0;
+	
 	CurveDebugRecorder curveDebugRecorder;
 	PerfDebugRecorder perfDebugRecorder;
 	uint64_t uiStepCount = 0;
@@ -109,18 +86,7 @@ struct BifurxSpectrumWidget final : Widget {
 	uint64_t uiDrawMarkersCount = 0;
 	uint64_t uiDrawMarkersNs = 0;
 
-	BifurxSpectrumWidget() : fft(kFftSize) {
-		for (int i = 0; i < kFftSize; i++) {
-			window[i] = 0.5f - 0.5f * std::cos(2.f * kPi * float(i) / float(kFftSize - 1));
-		}
-		for (int i = 0; i < kCurvePointCount; i++) {
-			curveDb[i] = kResponseMinDb;
-			curveTargetDb[i] = kResponseMinDb;
-			overlayModuleDb[i] = 0.f;
-			overlayTargetModuleDb[i] = 0.f;
-			overlayOutputDbfs[i] = kOverlayDbfsFloor;
-			overlayTargetOutputDbfs[i] = kOverlayDbfsFloor;
-		}
+	BifurxSpectrumWidget() : BifurxSpectrumBase() {
 	}
 
 	~BifurxSpectrumWidget() override {
@@ -178,7 +144,7 @@ struct BifurxSpectrumWidget final : Widget {
 		perfDebugRecorder.path = system::join(bifurxUserRootPath(), "perf_debug_" + std::to_string(std::time(nullptr)) + ".csv");
 		perfDebugRecorder.file.open(perfDebugRecorder.path);
 		if (perfDebugRecorder.file.is_open()) {
-			perfDebugRecorder.file << "sequence,mode,fastPath,pitchCvConnected,"
+			perfDebugRecorder.file << "sequence,circuitMode,mode,fastPath,pitchCvConnected,"
 				<< "audioSampleRate,audioSampledCount,"
 				<< "audioProcessAvgNs,audioControlsAvgNs,audioCoreAvgNs,audioPreviewAvgNs,audioAnalysisAvgNs,audioProcessMaxNs,"
 				<< "uiStepCount,uiStepAvgNs,uiDrawCount,uiDrawAvgNs,"
@@ -250,7 +216,7 @@ struct BifurxSpectrumWidget final : Widget {
 		auto avg = [](uint64_t total, uint64_t count) { return (count > 0) ? (double(total) / double(count)) : 0.0; };
 
 		perfDebugRecorder.file << perfDebugRecorder.sequence++ << ","
-			<< module->perfMode.load() << ","
+			<< module->perfCircuitMode.load() << "," << module->perfMode.load() << ","
 			<< (module->perfFastPathEligible.load() ? 1 : 0) << "," << (module->perfPreviewPitchCvConnected.load() ? 1 : 0) << ","
 			<< module->perfSampleRate.load() << "," << audioSampledCount << ","
 			<< (double(audioProcessNs) * audioScale) << "," << (double(audioControlsNs) * audioScale) << ","
@@ -276,19 +242,6 @@ struct BifurxSpectrumWidget final : Widget {
 		uiDrawMarkersCount = 0; uiDrawMarkersNs = 0;
 	}
 
-	void updateAxisCache() {
-		if (std::fabs(cachedAxisSampleRate - previewState.sampleRate) < 0.5f) return;
-		cachedAxisSampleRate = previewState.sampleRate;
-		const float minHz = 10.f;
-		const float maxHz = std::min(20000.f, 0.46f * cachedAxisSampleRate);
-		for (int i = 0; i < kCurvePointCount; i++) {
-			const float x01 = float(i) / float(kCurvePointCount - 1);
-			const float hz = logFrequencyAt(x01, minHz, maxHz);
-			curveHz[i] = hz;
-			curveBinPos[i] = (hz * float(kFftSize)) / cachedAxisSampleRate;
-		}
-	}
-
 	void updateCurveXCache(float plotX, float usableW) {
 		if (std::fabs(cachedCurveXPlotX - plotX) < 1e-4f && std::fabs(cachedCurveXUsableW - usableW) < 1e-4f) return;
 		cachedCurveXPlotX = plotX;
@@ -299,8 +252,6 @@ struct BifurxSpectrumWidget final : Widget {
 	}
 
 	float getTopLabelReservedWidth(const DrawArgs& args, float fontSize);
-	void updateCurveCache();
-	void updateOverlayCache(const BifurxAnalysisFrame& frame);
 	void step() override;
 	void draw(const DrawArgs& args) override;
 };
@@ -345,40 +296,46 @@ void BifurxSpectrumWidget::step() {
 	Widget::step();
 	syncCurveDebugCaptureState();
 	syncPerfDebugCaptureState();
-	if (!module) {
-		return;
-	}
+	if (!module) return;
+
+	uint32_t prevP = state.lastPreviewSeq;
+	uint32_t prevA = state.lastAnalysisSeq;
+	
+	syncBase();
 
 	bool dirty = false;
-	bool previewUpdatedThisStep = false;
-	bool analysisUpdatedThisStep = false;
+	bool previewUpdated = (state.lastPreviewSeq != prevP);
+	bool analysisUpdated = (state.lastAnalysisSeq != prevA);
+
 	const bool fftScaleDynamicNow = module->fftScaleDynamic;
 	if (fftScaleDynamicNow != lastFftScaleDynamic) {
 		lastFftScaleDynamic = fftScaleDynamicNow;
 		if (!fftScaleDynamicNow) {
-			displayTopDbfs = kDisplayTopDbfsCeiling;
-			displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+			state.displayTopDbfs = kDisplayTopDbfsCeiling;
+			state.displayTopTargetDbfs = kDisplayTopDbfsCeiling;
 		}
 		dirty = true;
 	}
 
-	const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
-	if (previewSeq != lastPreviewSeq) {
-		const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
-		previewState = module->previewStates[index];
-		hasPreview = true;
-		updateAxisCache();
-		lastPreviewSeq = previewSeq;
-		previewUpdatedThisStep = true;
-		const PerfClock::time_point perfCurveStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
-		updateCurveCache();
-		if (perfLoggingActive) {
-			const uint64_t curveUpdateNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfCurveStart).count();
-			uiCurveUpdateCount++;
-			uiCurveUpdateNs += curveUpdateNs;
-		}
+	if (previewUpdated) {
 		dirty = true;
 	}
+	
+	if (analysisUpdated) {
+		dirty = true;
+	}
+
+	float uiFrameSec = 1.f / 60.f;
+	if (APP && APP->window) {
+		const float frameSec = float(APP->window->getLastFrameDuration());
+		if (std::isfinite(frameSec) && frameSec > 0.f) {
+			uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
+		}
+	}
+	
+	updateAnimation(uiFrameSec);
+	// For now we just mark dirty if has target, can be optimized later
+	if (state.hasCurveTarget || state.hasOverlayTarget) dirty = true;
 
 	const uint32_t llTelemetrySeq = module->llTelemetryPublishSeq.load(std::memory_order_acquire);
 	if (llTelemetrySeq != lastLlTelemetrySeq) {
@@ -388,79 +345,7 @@ void BifurxSpectrumWidget::step() {
 		lastLlTelemetrySeq = llTelemetrySeq;
 	}
 
-	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
-	if (analysisSeq != lastAnalysisSeq) {
-		const int index = module->analysisPublishedIndex.load(std::memory_order_acquire);
-		const PerfClock::time_point perfOverlayStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
-		updateOverlayCache(module->analysisFrames[index]);
-		if (perfLoggingActive) {
-			const uint64_t overlayUpdateNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfOverlayStart).count();
-			uiOverlayUpdateCount++;
-			uiOverlayUpdateNs += overlayUpdateNs;
-		}
-		hasOverlay = true;
-		lastAnalysisSeq = analysisSeq;
-		analysisUpdatedThisStep = true;
-		dirty = true;
-	}
-
-	if (hasCurveTarget) {
-		bool curveAnimating = false;
-		float uiFrameSec = 1.f / 60.f;
-		if (APP && APP->window) {
-			const float frameSec = float(APP->window->getLastFrameDuration());
-			if (std::isfinite(frameSec) && frameSec > 0.f) {
-				uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
-			}
-		}
-		const float curveMaxStepDb = std::max(0.25f, kCurveVisualSlewDbPerSec * uiFrameSec);
-		for (int i = 0; i < kCurvePointCount; ++i) {
-			const float prev = curveDb[i];
-			float delta = curveTargetDb[i] - prev;
-			delta = clamp(delta, -curveMaxStepDb, curveMaxStepDb);
-			const float next = prev + delta;
-			curveDb[i] = next;
-			if (std::fabs(next - prev) > 0.01f) {
-				curveAnimating = true;
-			}
-		}
-		dirty = dirty || curveAnimating;
-	}
-
-	if (hasOverlayTarget) {
-		bool overlayAnimating = false;
-		const float overlayDbSmoothing = 0.22f;
-		const float overlayLevelSmoothing = 0.20f;
-		for (int i = 0; i < kCurvePointCount; ++i) {
-			const float prevModuleDb = overlayModuleDb[i];
-			const float nextModuleDb = mixf(prevModuleDb, overlayTargetModuleDb[i], overlayDbSmoothing);
-			overlayModuleDb[i] = nextModuleDb;
-			if (std::fabs(nextModuleDb - prevModuleDb) > 0.02f) {
-				overlayAnimating = true;
-			}
-
-			const float prevLevel = overlayOutputDbfs[i];
-			const float nextLevel = mixf(prevLevel, overlayTargetOutputDbfs[i], overlayLevelSmoothing);
-			overlayOutputDbfs[i] = nextLevel;
-			if (std::fabs(nextLevel - prevLevel) > 0.02f) {
-				overlayAnimating = true;
-			}
-		}
-
-		const float prevTop = displayTopDbfs;
-		float topSmoothing = (displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
-		if (module && module->fftScaleDynamic && displayTopTargetDbfs > prevTop) {
-			topSmoothing = 0.70f;
-		}
-		displayTopDbfs = mixf(prevTop, displayTopTargetDbfs, topSmoothing);
-		if (std::fabs(displayTopDbfs - prevTop) > 0.02f) {
-			overlayAnimating = true;
-		}
-
-		dirty = dirty || overlayAnimating;
-	}
-
-	if (module->curveDebugLogging && hasPreview) {
+	if (module->curveDebugLogging && state.hasPreview) {
 		const double nowSec = system::getTime();
 		const double minIntervalSec = 1.0 / 60.0;
 		if (lastCurveDebugLogTimeSec < 0.0 || (nowSec - lastCurveDebugLogTimeSec) >= minIntervalSec) {
@@ -474,66 +359,35 @@ void BifurxSpectrumWidget::step() {
 				}
 			}
 
-			float peakAX = NAN;
-			float peakAYCurve = NAN;
-			float peakAYMarker = NAN;
-			float peakBX = NAN;
-			float peakBYCurve = NAN;
-			float peakBYMarker = NAN;
-			const float w = box.size.x;
-			const float h = box.size.y;
+			float peakAX = NAN, peakAYCurve = NAN, peakAYMarker = NAN;
+			float peakBX = NAN, peakBYCurve = NAN, peakBYMarker = NAN;
+			const float w = box.size.x, h = box.size.y;
 			if (w > 0.f && h > 0.f) {
-				const BifurxPreviewModel model = makePreviewModel(previewState);
-				const float padX = 0.f;
+				const BifurxPreviewModel model = makePreviewModel(state.previewState);
 				const float padY = std::max(4.f, h * 0.035f);
-				const float plotX = padX;
-				const float usableW = std::max(1.f, w - plotX - padX);
-				const float minHz = 10.f;
-				const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
-				const float labelBandHeight = std::max(5.2f, h * 0.072f);
-				const float labelBandTop = h - labelBandHeight;
-				const float spectrumTopY = padY * 0.35f;
-				const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
-				auto responseYForDb = [&](float db) {
-					return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY);
-				};
-				const bool anchorMarkerToBottomLane = (previewState.mode == 3);
-				auto evalPeak = [&](float targetHz, float* outX, float* outYCurve, float* outYMarker) {
-					const float clampedHz = clamp(targetHz, minHz, maxHz);
-					const float targetX01 = logPosition(clampedHz, minHz, maxHz);
+				const float plotX = 0.f, usableW = std::max(1.f, w - plotX);
+				const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+				const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
+				const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+				auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
+				const bool anchorMarkerToBottomLane = (state.previewState.mode == 3);
+				auto evalPeak = [&](int idx, float targetHz, float* outX, float* outYCurve, float* outYMarker) {
+					const auto anchor = displayAnchorForMarker(idx, targetHz, minHz, maxHz);
 					const float markerRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
-					const float curveIndex = targetX01 * float(kCurvePointCount - 1);
-					const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
-					const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
-					const float t = curveIndex - float(i0);
-					const float curveDbAtHz = mixf(curveDb[i0], curveDb[i1], t);
-					const float yCurve = responseYForDb(curveDbAtHz);
-					const float markerX = plotX + usableW * targetX01;
-					const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding;
-					const float markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
-					const float bottomLaneY = spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding;
-					const float yMarker = anchorMarkerToBottomLane ? bottomLaneY : clamp(yCurve, markerMinY, markerMaxY);
-					*outX = clamp(
-						markerX,
-						plotX + markerRadius + kPeakMarkerEdgePadding,
-						plotX + usableW - markerRadius - kPeakMarkerEdgePadding
-					);
-					*outYCurve = yCurve;
-					*outYMarker = yMarker;
+					const float curveIndex = anchor.x01 * float(kCurvePointCount - 1);
+					const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1), i1 = std::min(i0 + 1, kCurvePointCount - 1);
+					const float curveDbAtHz = mixf(state.curveDb[i0], state.curveDb[i1], curveIndex - float(i0));
+					const float yCurve = responseYForDb(curveDbAtHz), markerX = plotX + usableW * anchor.x01;
+					const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding, markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
+					const float yMarker = anchorMarkerToBottomLane ? (spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding) : clamp(yCurve, markerMinY, markerMaxY);
+					*outX = clamp(markerX, plotX + markerRadius + kPeakMarkerEdgePadding, plotX + usableW - markerRadius - kPeakMarkerEdgePadding);
+					*outYCurve = yCurve; *outYMarker = yMarker;
 				};
-				evalPeak(model.markerFreqA, &peakAX, &peakAYCurve, &peakAYMarker);
-				evalPeak(model.markerFreqB, &peakBX, &peakBYCurve, &peakBYMarker);
+				evalPeak(0, model.markerFreqA, &peakAX, &peakAYCurve, &peakAYMarker);
+				evalPeak(1, model.markerFreqB, &peakBX, &peakBYCurve, &peakBYMarker);
 			}
 
-			logCurveDebugSample(
-				previewState,
-				hasLlTelemetry ? llTelemetryState : BifurxLlTelemetryState{},
-				peakAX, peakAYCurve, peakAYMarker,
-				peakBX, peakBYCurve, peakBYMarker,
-				uiFrameMs,
-				previewSeq, previewUpdatedThisStep,
-				analysisSeq, analysisUpdatedThisStep
-			);
+			logCurveDebugSample(state.previewState, hasLlTelemetry ? llTelemetryState : BifurxLlTelemetryState{}, peakAX, peakAYCurve, peakAYMarker, peakBX, peakBYCurve, peakBYMarker, uiFrameMs, state.lastPreviewSeq, previewUpdated, state.lastAnalysisSeq, analysisUpdated);
 		}
 	}
 	else if (lastCurveDebugLogTimeSec >= 0.0) {
@@ -549,113 +403,16 @@ void BifurxSpectrumWidget::step() {
 		}
 	}
 
-	if (dirty && framebuffer) {
-		framebuffer->setDirty();
-	}
+	if (dirty && framebuffer) framebuffer->setDirty();
 	if (perfLoggingActive) {
 		const uint64_t stepNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfStepStart).count();
-		uiStepCount++;
-		uiStepNs += stepNs;
-		uiStepMaxNs = std::max(uiStepMaxNs, stepNs);
-	}
-}
-
-void BifurxSpectrumWidget::updateCurveCache() {
-	if (!hasPreview) return;
-	updateAxisCache();
-	const BifurxPreviewModel model = makePreviewModel(previewState);
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const float db = previewModelResponseDb(model, curveHz[i]);
-		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
-	}
-	if (!hasCurveTarget) {
-		for (int i = 0; i < kCurvePointCount; i++) curveDb[i] = curveTargetDb[i];
-		hasCurveTarget = true;
-	}
-}
-
-void BifurxSpectrumWidget::updateOverlayCache(const BifurxAnalysisFrame& frame) {
-	if (!hasPreview) return;
-	updateAxisCache();
-	const float amplitudeScale = 4.f / float(kFftSize);
-	for (int i = 0; i < kFftSize; i++) fftOutputTime[i] = frame.output[i] * window[i];
-	fft.rfft(fftOutputTime, fftOutputFreq);
-	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
-	float fftRawInputFreq[2 * kFftSize];
-	fft.rfft(fftInputTime, fftRawInputFreq);
-	float binModuleDeltaDb[kFftBinCount];
-	float binOutputDbfs[kFftBinCount];
-	float binRawInputAmp[kFftBinCount];
-	float binOutputAmp[kFftBinCount];
-	for (int bin = 0; bin < kFftBinCount; bin++) {
-		const float binHz = (float(bin) * previewState.sampleRate) / float(kFftSize);
-		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
-		const float weightedRawInputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftRawInputFreq, bin);
-		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
-		binRawInputAmp[bin] = weightedRawInputAmp;
-		binOutputAmp[bin] = weightedOutputAmp;
-	}
-	constexpr int kOverlayBandRadius = 2;
-	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
-	for (int bin = 0; bin < kFftBinCount; bin++) {
-		float rawInputEnergy = 0.f; float outputEnergy = 0.f;
-		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; k++) {
-			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
-			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
-			rawInputEnergy += w * binRawInputAmp[sampleBin] * binRawInputAmp[sampleBin];
-			outputEnergy += w * binOutputAmp[sampleBin] * binOutputAmp[sampleBin];
-		}
-		const float rawInputAmp = std::sqrt(std::max(0.f, rawInputEnergy));
-		const float outputAmp = std::sqrt(std::max(0.f, outputEnergy));
-		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(20.f * std::log10((outputAmp + 1e-6f) / (rawInputAmp + 1e-6f)));
-		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
-	}
-	float sampledModuleDeltaDb[kCurvePointCount];
-	float sampledOutputDbfs[kCurvePointCount];
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const float binPos = curveBinPos[i];
-		const int binA = std::max(2, int(std::floor(binPos)));
-		const int binB = std::min(binA + 1, kFftSize / 2);
-		const float frac = binPos - float(binA);
-		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
-		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
-	}
-	float framePeakDbfs = kOverlayDbfsFloor;
-	float frameSmoothedOutputDbfs[kCurvePointCount];
-	const float targetSmoothing = hasOverlayTarget ? 0.45f : 1.f;
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const int left = std::max(0, i - 1);
-		const int right = std::min(kCurvePointCount - 1, i + 1);
-		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
-		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
-		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
-		overlayTargetModuleDb[i] = mixf(overlayTargetModuleDb[i], smoothModuleDeltaDb, targetSmoothing);
-		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
-		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
-	}
-	if (!hasOverlayTarget) {
-		for (int i = 0; i < kCurvePointCount; i++) {
-			overlayModuleDb[i] = overlayTargetModuleDb[i];
-			overlayOutputDbfs[i] = overlayTargetOutputDbfs[i];
-		}
-		hasOverlayTarget = true;
-	}
-	if (module && !module->fftScaleDynamic) {
-		displayTopTargetDbfs = kDisplayTopDbfsCeiling;
-	}
-	else {
-		float sortedOutputDbfs[kCurvePointCount];
-		for (int i = 0; i < kCurvePointCount; i++) sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
-		const int p95Index = int(0.95f * float(kCurvePointCount - 1));
-		std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
-		const float robustTopRefDbfs = std::max(sortedOutputDbfs[p95Index], framePeakDbfs - 18.f);
-		displayTopTargetDbfs = clamp(std::max(robustTopRefDbfs + 6.f, framePeakDbfs + kDisplayPeakHeadroomDb), kDisplayTopDbfsFloor, kDisplayTopDynamicCeilingDbfs);
+		uiStepCount++; uiStepNs += stepNs; uiStepMaxNs = std::max(uiStepMaxNs, stepNs);
 	}
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
-	if (!hasPreview) return;
-	const float w = box.size.x; const float h = box.size.y;
+	if (!state.hasPreview) return;
+	const float w = box.size.x, h = box.size.y;
 	if (!(w > 0.f && h > 0.f)) return;
 	using PerfClock = std::chrono::steady_clock;
 	const bool perfLoggingActive = module && module->perfDebugLogging;
@@ -666,95 +423,55 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		const uint64_t ns = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfSectionStart).count();
 		count++; totalNs += ns; perfSectionStart = PerfClock::now();
 	};
-	const float padX = 0.f; const float padY = std::max(4.f, h * 0.035f);
-	const float plotX = padX; const float usableW = std::max(1.f, w - plotX - padX);
-	const float minHz = 10.f; const float maxHz = std::min(20000.f, 0.46f * previewState.sampleRate);
-	const float labelBandHeight = std::max(5.2f, h * 0.072f);
-	const float labelBandTop = h - labelBandHeight;
-	const float spectrumTopY = padY * 0.35f;
-	const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+	const float padY = std::max(4.f, h * 0.035f), plotX = 0.f, usableW = std::max(1.f, w - plotX);
+	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight, spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 	bottomY = spectrumBottomY;
-	const float displayMaxDbfs = displayTopDbfs;
-	const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
+	const float displayMaxDbfs = state.displayTopDbfs, displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 	auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
-	const bool anchorMarkerToBottomLane = (previewState.mode == 3);
+	const bool anchorMarkerToBottomLane = (state.previewState.mode == 3);
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
-	const BifurxPreviewModel model = makePreviewModel(previewState);
+	const BifurxPreviewModel model = makePreviewModel(state.previewState);
 	updateCurveXCache(plotX, usableW);
-	for (int i = 0; i < kCurvePointCount; i++) curveY[i] = responseYForDb(curveDb[i]);
+	for (int i = 0; i < kCurvePointCount; i++) curveY[i] = responseYForDb(state.curveDb[i]);
 
-	auto markerAnchorKind = [&](int markerIndex) {
-		// Keep notch-side markers aligned to valleys, and low/high-side markers aligned to peaks
-		// in asymmetric notch mix modes.
-		switch (previewState.mode) {
-			case 2: // Notch + Low
-				return (markerIndex == 0) ? -1 : 1;
-			case 3: // Notch + Notch
-				return -1;
-			case 7: // High + Notch
-				return (markerIndex == 1) ? -1 : 1;
-			default:
-				return 0;
-		}
-	};
-	auto displayAnchorForMarker = [&](int markerIndex, float targetHz) {
-		struct DisplayAnchor { float x01 = 0.f; float hz = 0.f; };
-		const float clampedHz = clamp(targetHz, minHz, maxHz);
-		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
-		const int anchorKind = markerAnchorKind(markerIndex); // -1 valley, 0 nominal, +1 peak
-		if (anchorKind == 0) return anchor;
-		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
-		int bestIndex = centerIndex;
-		float bestScore = (anchorKind < 0) ? curveDb[centerIndex] : -curveDb[centerIndex];
-		for (int i = std::max(0, centerIndex - 18); i <= std::min(kCurvePointCount - 1, centerIndex + 18); ++i) {
-			const float base = (anchorKind < 0) ? curveDb[i] : -curveDb[i];
-			const float score = base + 0.22f * std::fabs(float(i - centerIndex));
-			if (score < bestScore) { bestScore = score; bestIndex = i; }
-		}
-		anchor.x01 = float(bestIndex) / float(kCurvePointCount - 1);
-		anchor.hz = logFrequencyAt(anchor.x01, minHz, maxHz);
-		return anchor;
-	};
 	auto curveYAtX01 = [&](float x01) {
 		const float curveIndex = clamp(x01, 0.f, 1.f) * float(kCurvePointCount - 1);
-		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1);
-		const int i1 = std::min(i0 + 1, kCurvePointCount - 1);
-		return responseYForDb(mixf(curveDb[i0], curveDb[i1], curveIndex - float(i0)));
+		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1), i1 = std::min(i0 + 1, kCurvePointCount - 1);
+		return responseYForDb(mixf(state.curveDb[i0], state.curveDb[i1], curveIndex - float(i0)));
 	};
 
 	struct CurveDrawPoint { float x01 = 0.f; float x = 0.f; float y = 0.f; int priority = 0; };
 	CurveDrawPoint dedupedCurveDrawPoints[kCurvePointCount + 6]; int dedupedCurveDrawPointCount = 0;
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		CurveDrawPoint point; point.x01 = float(i) / float(kCurvePointCount - 1); point.x = curveX[i]; point.y = curveY[i];
-		dedupedCurveDrawPoints[dedupedCurveDrawPointCount++] = point;
+		CurveDrawPoint p; p.x01 = float(i) / float(kCurvePointCount - 1); p.x = curveX[i]; p.y = curveY[i];
+		dedupedCurveDrawPoints[dedupedCurveDrawPointCount++] = p;
 	}
-	auto insertCurveDrawPoint = [&](const CurveDrawPoint& point) {
-		int insertIndex = dedupedCurveDrawPointCount;
+	auto insertCurveDrawPoint = [&](const CurveDrawPoint& pt) {
+		int insIdx = dedupedCurveDrawPointCount;
 		for (int i = 0; i < dedupedCurveDrawPointCount; ++i) {
-			if (std::fabs(point.x01 - dedupedCurveDrawPoints[i].x01) <= 1e-6f) {
-				if (point.priority >= dedupedCurveDrawPoints[i].priority) dedupedCurveDrawPoints[i] = point;
-				return;
-			}
-			if (point.x01 < dedupedCurveDrawPoints[i].x01) { insertIndex = i; break; }
+			if (std::fabs(pt.x01 - dedupedCurveDrawPoints[i].x01) <= 1e-6f) { if (pt.priority >= dedupedCurveDrawPoints[i].priority) dedupedCurveDrawPoints[i] = pt; return; }
+			if (pt.x01 < dedupedCurveDrawPoints[i].x01) { insIdx = i; break; }
 		}
 		if (dedupedCurveDrawPointCount >= (kCurvePointCount + 6)) return;
-		for (int i = dedupedCurveDrawPointCount; i > insertIndex; --i) dedupedCurveDrawPoints[i] = dedupedCurveDrawPoints[i - 1];
-		dedupedCurveDrawPoints[insertIndex] = point; dedupedCurveDrawPointCount++;
+		for (int i = dedupedCurveDrawPointCount; i > insIdx; --i) dedupedCurveDrawPoints[i] = dedupedCurveDrawPoints[i - 1];
+		dedupedCurveDrawPoints[insIdx] = pt; dedupedCurveDrawPointCount++;
 	};
-	auto addCurveRefinementAroundX01 = [&](float targetX01) {
-		const float clampedX01 = clamp(targetX01, 0.f, 1.f); const float refineDx = 0.35f / float(kCurvePointCount - 1);
-		const float refineX01[3] = { clamp(clampedX01 - refineDx, 0.f, 1.f), clampedX01, clamp(clampedX01 + refineDx, 0.f, 1.f) };
+	auto addCurveRefinementAroundX01 = [&](int mIdx, float targetHz) {
+		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
+		const float refineDx = 0.35f / float(kCurvePointCount - 1);
+		const float rX[3] = { clamp(anchor.x01 - refineDx, 0.f, 1.f), anchor.x01, clamp(anchor.x01 + refineDx, 0.f, 1.f) };
 		for (int i = 0; i < 3; ++i) {
-			CurveDrawPoint p; p.x01 = refineX01[i]; p.x = plotX + usableW * p.x01; p.y = curveYAtX01(p.x01);
+			CurveDrawPoint p; p.x01 = rX[i]; p.x = plotX + usableW * p.x01; p.y = curveYAtX01(p.x01);
 			if (anchorMarkerToBottomLane && i == 1) { p.y = markerBottomLaneY; p.priority = 2; }
 			else p.priority = 1;
 			insertCurveDrawPoint(p);
 		}
 	};
-	const auto markerAAnchor = displayAnchorForMarker(0, model.markerFreqA);
-	const auto markerBAnchor = displayAnchorForMarker(1, model.markerFreqB);
-	addCurveRefinementAroundX01(markerAAnchor.x01); addCurveRefinementAroundX01(markerBAnchor.x01);
+	addCurveRefinementAroundX01(0, model.markerFreqA); addCurveRefinementAroundX01(1, model.markerFreqB);
+	const auto markerAAnchor = displayAnchorForMarker(0, model.markerFreqA, minHz, maxHz);
+	const auto markerBAnchor = displayAnchorForMarker(1, model.markerFreqB, minHz, maxHz);
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
 	nvgSave(args.vg);
@@ -769,20 +486,19 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255), expectedCyan = nvgRGB(28, 204, 217), expectedWhite = nvgRGB(206, 210, 216);
-	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbValue) {
-		const float posAmount = clamp01(curveDbValue / 18.f), negAmount = clamp01(-curveDbValue / 18.f), emphasis = std::max(posAmount, negAmount);
-		NVGcolor tint = expectedWhite; if (posAmount > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posAmount * 1.35f)); if (negAmount > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negAmount * 1.25f));
-		tint.a = 0.025f + 0.095f * emphasis; nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, y);
-		nvgStrokeColor(args.vg, tint); nvgStrokeWidth(args.vg, 1.05f); nvgStroke(args.vg);
+	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbVal) {
+		const float posAmt = clamp01(curveDbVal / 18.f), negAmt = clamp01(-curveDbVal / 18.f), emph = std::max(posAmt, negAmt);
+		NVGcolor tint = expectedWhite; if (posAmt > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posAmt * 1.35f)); if (negAmt > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negAmt * 1.25f));
+		tint.a = 0.025f + 0.095f * emph; nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, y); nvgStrokeColor(args.vg, tint); nvgStrokeWidth(args.vg, 1.05f); nvgStroke(args.vg);
 	};
 	const float markerGuideClearanceX01 = 1.35f / float(kCurvePointCount - 1);
 	for (int i = 0; i < kCurvePointCount; i += 3) {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
 		if (std::fabs(x01 - markerAAnchor.x01) < markerGuideClearanceX01 || std::fabs(x01 - markerBAnchor.x01) < markerGuideClearanceX01) continue;
-		drawExpectedGuideStroke(curveX[i], curveY[i], curveDb[i]);
+		drawExpectedGuideStroke(curveX[i], curveY[i], state.curveDb[i]);
 	}
-	auto drawExpectedMarkerGuideStroke = [&](int markerIndex, float targetHz) {
-		const auto anchor = displayAnchorForMarker(markerIndex, targetHz); if (anchor.x01 < 0.f || anchor.x01 > 1.f) return;
+	auto drawExpectedMarkerGuideStroke = [&](int mIdx, float targetHz) {
+		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz); if (anchor.x01 < 0.f || anchor.x01 > 1.f) return;
 		const float x = plotX + usableW * anchor.x01; if (x < plotX + markerOuterRadius + kPeakMarkerEdgePadding || x > plotX + usableW - markerOuterRadius - kPeakMarkerEdgePadding) return;
 		nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, anchorMarkerToBottomLane ? markerBottomLaneY : curveYAtX01(anchor.x01));
 		nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150)); nvgStrokeWidth(args.vg, 1.05f * 1.45f); nvgStroke(args.vg);
@@ -790,18 +506,17 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	drawExpectedMarkerGuideStroke(0, model.markerFreqA); drawExpectedMarkerGuideStroke(1, model.markerFreqB);
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
-	if (hasOverlay) {
+	if (state.hasOverlay) {
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
-			const float avgDeltaDb = 0.5f * (overlayModuleDb[i] + overlayModuleDb[i + 1]), avgOutputDbfs = 0.5f * (overlayOutputDbfs[i] + overlayOutputDbfs[i + 1]), energyAmount = clamp01(rescale(avgOutputDbfs, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
-			if (energyAmount <= 0.005f) continue;
-			const float posAmount = clamp01(avgDeltaDb / 18.f), negAmount = clamp01(-avgDeltaDb / 18.f);
-			NVGcolor tint = expectedWhite; if (posAmount > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posAmount * 1.40f)); if (negAmount > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negAmount * 1.25f));
-			NVGcolor fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energyAmount); fill.a = 1.f;
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, curveX[i] - 0.45f, spectrumYForDbfs(overlayOutputDbfs[i])); nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumYForDbfs(overlayOutputDbfs[i + 1]));
-			nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumBottomY); nvgLineTo(args.vg, curveX[i] - 0.45f, spectrumBottomY); nvgClosePath(args.vg);
-			nvgFillColor(args.vg, fill); nvgFill(args.vg);
+			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]), avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
+			if (energy <= 0.005f) continue;
+			const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
+			NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
+			NVGcolor fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy); fill.a = 1.f;
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, curveX[i] - 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i])); nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i + 1]));
+			nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumBottomY); nvgLineTo(args.vg, curveX[i] - 0.45f, spectrumBottomY); nvgClosePath(args.vg); nvgFillColor(args.vg, fill); nvgFill(args.vg);
 		}
-		nvgBeginPath(args.vg); for (int i = 0; i < kCurvePointCount; ++i) { float y = responseYForDb(overlayModuleDb[i]); if (i == 0) nvgMoveTo(args.vg, curveX[i], y); else nvgLineTo(args.vg, curveX[i], y); }
+		nvgBeginPath(args.vg); for (int i = 0; i < kCurvePointCount; ++i) { float y = responseYForDb(state.overlayModuleDb[i]); if (i == 0) nvgMoveTo(args.vg, curveX[i], y); else nvgLineTo(args.vg, curveX[i], y); }
 		NVGcolor ml = mixColor(expectedWhite, expectedCyan, 0.35f); ml.a = 0.95f; nvgStrokeWidth(args.vg, 1.4f); nvgStrokeColor(args.vg, ml); nvgStroke(args.vg);
 		recordDrawSection(uiDrawOverlayCount, uiDrawOverlayNs);
 	}
@@ -813,30 +528,30 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 
 	struct PeakMarker { float x = 0.f; float yCurve = 0.f; float yMarker = 0.f; float hz = 0.f; bool visible = false; char label[16] = {}; };
-	auto buildMarkerAtFrequency = [&](int markerIndex, float targetHz) {
-		PeakMarker marker; const auto anchor = displayAnchorForMarker(markerIndex, targetHz); const float safeHz = std::max(anchor.hz, 1e-6f);
-		const float markerX = plotX + usableW * anchor.x01; if (markerX < plotX + markerOuterRadius + kPeakMarkerEdgePadding || markerX > plotX + usableW - markerOuterRadius - kPeakMarkerEdgePadding) { marker.visible = false; return marker; }
-		marker.x = markerX; marker.yCurve = curveYAtX01(anchor.x01); const float markerMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, markerMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-		marker.yMarker = anchorMarkerToBottomLane ? (spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding) : clamp(marker.yCurve, markerMinY, markerMaxY);
-		marker.hz = safeHz; marker.visible = true; formatFrequencyLabel(marker.hz, marker.label, sizeof(marker.label)); return marker;
+	auto buildMarkerAtFrequency = [&](int mIdx, float targetHz) {
+		PeakMarker m; const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
+		const float mX = plotX + usableW * anchor.x01; if (mX < plotX + markerOuterRadius + kPeakMarkerEdgePadding || mX > plotX + usableW - markerOuterRadius - kPeakMarkerEdgePadding) { m.visible = false; return m; }
+		m.x = mX; m.yCurve = curveYAtX01(anchor.x01); const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
+		m.yMarker = anchorMarkerToBottomLane ? (spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding) : clamp(m.yCurve, mMinY, mMaxY);
+		m.hz = std::max(anchor.hz, 1e-6f); m.visible = true; formatFrequencyLabel(m.hz, m.label, sizeof(m.label)); return m;
 	};
-	PeakMarker peaks[2] = { buildMarkerAtFrequency(0, model.markerFreqA), buildMarkerAtFrequency(1, model.markerFreqB) };
-	float labelX[2] = { peaks[0].x, peaks[1].x }; const float labelMargin = std::max(18.f, w * 0.08f), minLabelSeparation = std::max(30.f, w * 0.18f), minX = plotX + labelMargin, maxX = plotX + usableW - labelMargin;
-	if (peaks[0].visible && peaks[1].visible) {
-		const int leftIndex = (labelX[0] <= labelX[1]) ? 0 : 1, rightIndex = 1 - leftIndex;
-		float leftX = clamp(labelX[leftIndex], minX, maxX), rightX = clamp(labelX[rightIndex], minX, maxX), needed = std::min(minLabelSeparation, std::max(0.f, maxX - minX)) - (rightX - leftX);
-		if (needed > 0.f) { float moveLeft = std::min(0.5f * needed, leftX - minX), moveRight = std::min(0.5f * needed, maxX - rightX); leftX -= moveLeft; rightX += moveRight; needed -= (moveLeft + moveRight); if (needed > 0.f) { float extraLeft = std::min(needed, leftX - minX); leftX -= extraLeft; needed -= extraLeft; } if (needed > 0.f) rightX += std::min(needed, maxX - rightX); }
-		labelX[leftIndex] = leftX; labelX[rightIndex] = rightX;
-	} else { for (int i = 0; i < 2; ++i) if (peaks[i].visible) labelX[i] = clamp(labelX[i], minX, maxX); }
-	const float freqLabelFontSize = std::max(7.f, h * 0.055f), labelTextY = labelBandTop + 0.5f * labelBandHeight, guideYBottom = clamp(labelBandTop + std::min(2.1f, 0.18f * labelBandHeight), labelBandTop + 0.2f, labelTextY - 0.5f * freqLabelFontSize - 0.6f);
+	PeakMarker pks[2] = { buildMarkerAtFrequency(0, model.markerFreqA), buildMarkerAtFrequency(1, model.markerFreqB) };
+	float lX[2] = { pks[0].x, pks[1].x }; const float lM = std::max(18.f, w * 0.08f), minLS = std::max(30.f, w * 0.18f), mnX = plotX + lM, mxX = plotX + usableW - lM;
+	if (pks[0].visible && pks[1].visible) {
+		const int li = (lX[0] <= lX[1]) ? 0 : 1, ri = 1 - li;
+		float lx = clamp(lX[li], mnX, mxX), rx = clamp(lX[ri], mnX, mxX), nd = std::min(minLS, std::max(0.f, mxX - mnX)) - (rx - lx);
+		if (nd > 0.f) { float ml = std::min(0.5f * nd, lx - mnX), mr = std::min(0.5f * nd, mxX - rx); lx -= ml; rx += mr; nd -= (ml + mr); if (nd > 0.f) { float el = std::min(nd, lx - mnX); lx -= el; nd -= el; } if (nd > 0.f) rx += std::min(nd, mxX - rx); }
+		lX[li] = lx; lX[ri] = rx;
+	} else { for (int i = 0; i < 2; ++i) if (pks[i].visible) lX[i] = clamp(lX[i], mnX, mxX); }
+	const float fS = std::max(7.f, h * 0.055f), lTY = labelBandTop + 0.5f * labelBandHeight, gYB = clamp(labelBandTop + std::min(2.1f, 0.18f * labelBandHeight), labelBandTop + 0.2f, lTY - 0.5f * fS - 0.6f);
 	for (int i = 0; i < 2; ++i) {
-		if (!peaks[i].visible) continue;
-		nvgBeginPath(args.vg); nvgMoveTo(args.vg, peaks[i].x, peaks[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, peaks[i].x, guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170)); nvgStrokeWidth(args.vg, 1.1f); nvgStroke(args.vg);
-		nvgBeginPath(args.vg); nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
-		nvgBeginPath(args.vg); nvgCircle(args.vg, peaks[i].x, peaks[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
+		if (!pks[i].visible) continue;
+		nvgBeginPath(args.vg); nvgMoveTo(args.vg, pks[i].x, pks[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, pks[i].x, gYB); nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170)); nvgStrokeWidth(args.vg, 1.1f); nvgStroke(args.vg);
+		nvgBeginPath(args.vg); nvgCircle(args.vg, pks[i].x, pks[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
+		nvgBeginPath(args.vg); nvgCircle(args.vg, pks[i].x, pks[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
 	}
-	nvgFontSize(args.vg, freqLabelFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-	for (int i = 0; i < 2; ++i) { if (!peaks[i].visible) continue; nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240)); nvgText(args.vg, labelX[i], labelTextY + 0.75f, peaks[i].label, nullptr); nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250)); nvgText(args.vg, labelX[i], labelTextY, peaks[i].label, nullptr); }
+	nvgFontSize(args.vg, fS); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+	for (int i = 0; i < 2; ++i) { if (!pks[i].visible) continue; nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240)); nvgText(args.vg, lX[i], lTY + 0.75f, pks[i].label, nullptr); nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250)); nvgText(args.vg, lX[i], lTY, pks[i].label, nullptr); }
 	nvgResetScissor(args.vg); nvgRestore(args.vg);
 	recordDrawSection(uiDrawMarkersCount, uiDrawMarkersNs);
 	if (perfLoggingActive) {
@@ -907,6 +622,9 @@ struct BifurxModeReadoutWidget final : Widget {
 };
 
 struct BifurxWidget final : ModuleWidget {
+	Widget* spectrumNanoVG = nullptr;
+	Widget* spectrumOpenGL = nullptr;
+
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/bifurx.svg");
@@ -918,7 +636,13 @@ struct BifurxWidget final : ModuleWidget {
 		math::Rect sRect(Vec(1.32f, 75.43f), Vec(68.45f, 21.41f)); panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &sRect);
 		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new widget::FramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
 		BifurxSpectrumBackgroundWidget* sBg = new BifurxSpectrumBackgroundWidget(); sBg->module = module; sBg->framebuffer = addFb(sRect, sBg);
-		BifurxSpectrumWidget* s = new BifurxSpectrumWidget(); s->module = module; s->framebuffer = addFb(sRect, s);
+		
+		BifurxSpectrumWidget* sNano = new BifurxSpectrumWidget(); sNano->module = module; sNano->framebuffer = addFb(sRect, sNano);
+		spectrumNanoVG = sNano->framebuffer;
+		
+		spectrumOpenGL = createGlSpectrumDisplay(module, sRect);
+		addChild(spectrumOpenGL);
+
 		BifurxModeReadoutWidget* mR = new BifurxModeReadoutWidget(); mR->module = module; mR->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f)); mR->box.size = mm2px(Vec(sRect.size.x, 4.2f)); addChild(mR);
 		Vec mP(13.4f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
 		Vec iP(7.6f, 112.2f), vP(17.15f, 112.2f), fmP(26.7f, 112.2f), rcP(36.25f, 112.2f), bcP(45.8f, 112.2f), scP(55.35f, 112.2f), oP(64.9f, 112.2f);
@@ -934,9 +658,38 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<PJ301MPort>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
 	}
+
+	void step() override {
+		ModuleWidget::step();
+		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
+		if (!bifurx) return;
+
+		bool showGL = (bifurx->renderMode == Bifurx::RENDER_OPENGL);
+		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
+		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+	}
+
+	void draw(const DrawArgs& args) override {
+		ModuleWidget::draw(args);
+		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
+		if (bifurx && bifurx->renderMode == Bifurx::RENDER_OPENGL && spectrumOpenGL && spectrumOpenGL->visible) {
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, spectrumOpenGL->box.pos.x, spectrumOpenGL->box.pos.y);
+			if (auto* base = dynamic_cast<BifurxSpectrumBase*>(spectrumOpenGL)) {
+				base->drawNanoVG(args);
+			}
+			nvgRestore(args.vg);
+		}
+	}
+
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu); Bifurx* bifurx = dynamic_cast<Bifurx*>(module); if (!bifurx) return;
-		menu->addChild(new MenuSeparator()); menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic)); menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging)); menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
+			submenu->addChild(createCheckMenuItem("NanoVG", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; }, [=]() { bifurx->renderMode = Bifurx::RENDER_NANOVG; }));
+			submenu->addChild(createCheckMenuItem("OpenGL", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL; }, [=]() { bifurx->renderMode = Bifurx::RENDER_OPENGL; }));
+		}));
+		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic)); menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging)); menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
 	}
 };
 
