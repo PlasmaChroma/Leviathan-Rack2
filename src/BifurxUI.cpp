@@ -430,13 +430,11 @@ void BifurxSpectrumWidget::step() {
 		uint32_t debugId = module->debugInstanceId;
 		double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
 		if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-			const int circuitMode = bifurx::clampCircuitMode(state.previewState.circuitMode);
 			const int filterMode = clamp(int(state.previewState.mode), 0, kBifurxModeCount - 1);
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
 				debugId,
 				lastDrawMsEma,
-				circuitMode,
 				filterMode,
 				false, // opengl
 				state.lastPreviewSeq,

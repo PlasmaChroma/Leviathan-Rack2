@@ -44,7 +44,6 @@ MODULE_COLUMNS = {
     ),
     "Bifurx": (
         ("ui_ms", "UI ms"),
-        ("circuit", "Circ"),
         ("filter", "Filt"),
         ("opengl", "GL"),
         ("preview_seq", "P-Seq"),

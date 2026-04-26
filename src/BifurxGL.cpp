@@ -92,13 +92,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-				const int circuitMode = bifurx::clampCircuitMode(state.previewState.circuitMode);
 				const int filterMode = clamp(int(state.previewState.mode), 0, kBifurxModeCount - 1);
 				lastSubmitSec = nowSec;
 				debug_terminal::submitBifurxUiMetrics(
 					debugId,
 					lastDrawMsEma,
-					circuitMode,
 					filterMode,
 					true, // opengl
 					state.lastPreviewSeq,
@@ -177,8 +175,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
 				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
 
-				if (fillEdgeVertices.empty()) fillEdgeVertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
-				fillEdgeVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				// White top-edge stroke segments (independent lines to avoid artifacts)
+				fillEdgeVertices.push_back({x0, y0, 1.0f, 1.0f, 1.0f, 0.65f});
+				fillEdgeVertices.push_back({x1, y1, 1.0f, 1.0f, 1.0f, 0.65f});
 			}
 		}
 
@@ -218,7 +217,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glLineWidth(1.0f);
 			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].x);
 			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].r);
-			glDrawArrays(GL_LINE_STRIP, 0, fillEdgeVertices.size());
+			glDrawArrays(GL_LINES, 0, fillEdgeVertices.size());
 		}
 
 		if (!cyanVertices.empty()) {

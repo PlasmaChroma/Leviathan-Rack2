@@ -22,7 +22,6 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 
 void submitBifurxUiMetrics(uint32_t instanceId,
                            float uiMs,
-                           int circuitMode,
                            int filterMode,
                            bool renderOpengl,
                            uint32_t previewSeq,
