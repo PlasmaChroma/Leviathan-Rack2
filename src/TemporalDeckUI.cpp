@@ -1,8 +1,11 @@
 #include "TemporalDeck.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "TemporalDeckMenuUtils.hpp"
+#include "PanelSvgUtils.hpp"
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -26,6 +29,8 @@ static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
+static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -141,49 +146,11 @@ struct TemporalDeckPlatterWidget : OpaqueWidget {
   ~TemporalDeckPlatterWidget() override { stopTraceCapture(); }
 };
 
-static bool loadSvgCircleMm(const std::string &svgPath, const std::string &circleId, Vec *outCenterMm,
-                            float *outRadiusMm) {
-  std::ifstream svgFile(svgPath);
-  if (!svgFile.good()) {
-    return false;
-  }
-  std::ostringstream svgBuffer;
-  svgBuffer << svgFile.rdbuf();
-  const std::string svgText = svgBuffer.str();
-
-  const std::regex tagRe("<circle\\b[^>]*\\bid\\s*=\\s*\"" + circleId + "\"[^>]*/?>", std::regex::icase);
-  std::smatch tagMatch;
-  if (!std::regex_search(svgText, tagMatch, tagRe) || tagMatch.empty()) {
-    return false;
-  }
-
-  const std::string tag = tagMatch.str(0);
-  auto parseAttr = [&](const char *attr, float *out) {
-    const std::regex attrRe(std::string("\\b") + attr + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
-    std::smatch attrMatch;
-    if (!std::regex_search(tag, attrMatch, attrRe)) {
-      return false;
-    }
-    *out = std::stof(attrMatch.str(1));
-    return true;
-  };
-
-  float cxMm = 0.f;
-  float cyMm = 0.f;
-  float radiusMm = 0.f;
-  if (!parseAttr("cx", &cxMm) || !parseAttr("cy", &cyMm) || !parseAttr("r", &radiusMm)) {
-    return false;
-  }
-
-  *outCenterMm = Vec(cxMm, cyMm);
-  *outRadiusMm = radiusMm;
-  return true;
-}
-
 static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
   Vec centerMm;
   float radiusMm = 0.f;
-  if (!loadSvgCircleMm(asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm)) {
+  if (!panel_svg::loadCircleFromSvg(
+          asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
     return false;
   }
   centerPx = mm2px(centerMm);
@@ -475,6 +442,8 @@ static std::string jsonEscape(std::string text) {
 struct VinylSignatureRecord {
   std::string id;
   std::string label;
+  std::string submenu;
+  int submenuOrder = -1;
   std::string file;
   bool menuVisible = true;
   int menuId = -1;
@@ -493,6 +462,8 @@ enum VinylInventorySource {
 struct VinylInventoryEntry {
   std::string id;
   std::string label;
+  std::string submenu;
+  int submenuOrder = -1;
   std::string file;
   bool menuVisible = true;
   int menuId = -1;
@@ -643,8 +614,10 @@ static std::string joinInventoryRelativePath(const std::string &basePath, const 
 }
 
 static constexpr int kExpandedMenuIdOffset = 10000;
-static const char *kVinylExpansionBaseUrl =
-  "https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/main/Vinyl";
+static std::string vinylExpansionBaseUrl() {
+  const char *branch = isDragonKingDebugEnabled() ? "test" : "main";
+  return std::string("https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/") + branch + "/Vinyl";
+}
 static std::atomic<int> gExpandedVinylSyncDepth {0};
 static std::atomic<bool> gExpandedVinylDownloadRunning {false};
 static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
@@ -654,6 +627,20 @@ static std::atomic<int> gExpandedVinylDownloadCurrentIndex {0};
 static std::atomic<int> gExpandedVinylDownloadTotalFiles {0};
 static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
 static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
+static std::mutex gExpandedVinylDownloadThreadMutex;
+static std::thread gExpandedVinylDownloadThread;
+static std::atomic<bool> gExpandedVinylDownloadThreadFinished {false};
+
+struct ScopedExpandedVinylDownloadThreadCleanup {
+  ~ScopedExpandedVinylDownloadThreadCleanup() {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+    if (gExpandedVinylDownloadThread.joinable()) {
+      gExpandedVinylDownloadThread.join();
+    }
+  }
+};
+
+static ScopedExpandedVinylDownloadThreadCleanup gScopedExpandedVinylDownloadThreadCleanup;
 
 static bool isExpandedVinylSyncActive() {
   return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
@@ -671,6 +658,17 @@ static std::string expandedVinylSyncLabel() {
     return string::f("SYNC (%d/%d)", current, total);
   }
   return "SYNC";
+}
+
+static void finalizeExpandedVinylDownloadThreadIfFinished() {
+  if (!gExpandedVinylDownloadThreadFinished.load(std::memory_order_acquire)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+  if (gExpandedVinylDownloadThread.joinable()) {
+    gExpandedVinylDownloadThread.join();
+  }
+  gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
 }
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
@@ -768,6 +766,7 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
   json_t *vinylJ = json_object_get(root, "vinyl");
   std::set<std::string> seenIds;
   std::set<int> seenMenuIds;
+  std::map<std::string, int> submenuOrderByLabel;
   if (!json_is_array(vinylJ)) {
     state.error = "inventory.json must contain a vinyl[] array";
     json_decref(root);
@@ -784,6 +783,8 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     }
     json_t *idJ = json_object_get(itemJ, "id");
     json_t *labelJ = json_object_get(itemJ, "label");
+    json_t *submenuJ = json_object_get(itemJ, "submenu");
+    json_t *submenuOrderJ = json_object_get(itemJ, "submenuOrder");
     json_t *fileJ = json_object_get(itemJ, "file");
     json_t *menuVisibleJ = json_object_get(itemJ, "menuVisible");
     json_t *menuIdJ = json_object_get(itemJ, "menuId");
@@ -798,6 +799,31 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     entry.id = trimAsciiWhitespace(json_string_value(idJ));
     entry.file = trimAsciiWhitespace(json_string_value(fileJ));
     entry.label = json_is_string(labelJ) ? trimAsciiWhitespace(json_string_value(labelJ)) : "";
+    entry.submenu = json_is_string(submenuJ) ? trimAsciiWhitespace(json_string_value(submenuJ)) : "";
+    if (json_is_integer(submenuOrderJ)) {
+      entry.submenuOrder = int(json_integer_value(submenuOrderJ));
+      if (entry.submenuOrder < 0) {
+        state.error = string::f("vinyl[%zu] has invalid submenuOrder", i);
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+      if (entry.submenu.empty()) {
+        state.error = string::f("vinyl[%zu] defines submenuOrder without submenu", i);
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+      auto found = submenuOrderByLabel.find(entry.submenu);
+      if (found == submenuOrderByLabel.end()) {
+        submenuOrderByLabel[entry.submenu] = entry.submenuOrder;
+      } else if (found->second != entry.submenuOrder) {
+        state.error = string::f("vinyl[%zu] has conflicting submenuOrder for submenu '%s'", i, entry.submenu.c_str());
+        state.entries.clear();
+        json_decref(root);
+        return state;
+      }
+    }
     entry.menuVisible = !menuVisibleJ || json_is_true(menuVisibleJ);
     if (entry.menuVisible) {
       if (!json_is_integer(menuIdJ)) {
@@ -840,6 +866,16 @@ static VinylInventoryState loadVinylInventoryStateFromPath(const std::string &pa
     entry.basePath = state.basePath;
     entry.absolutePath = inventoryAbsolutePath(entry);
     state.entries.push_back(entry);
+  }
+
+  for (VinylInventoryEntry &entry : state.entries) {
+    if (entry.submenu.empty() || entry.submenuOrder >= 0) {
+      continue;
+    }
+    auto found = submenuOrderByLabel.find(entry.submenu);
+    if (found != submenuOrderByLabel.end()) {
+      entry.submenuOrder = found->second;
+    }
   }
 
   if (state.entries.empty()) {
@@ -1119,6 +1155,18 @@ static VinylInventoryState mergeVinylInventoryStates(const VinylInventoryState &
   appendEntries(builtIn, false);
   appendEntries(expanded, true);
 
+  if (merged.entries.empty()) {
+    merged.valid = false;
+    if (!builtIn.valid) {
+      merged.error = builtIn.error;
+    } else if (!expanded.valid) {
+      merged.error = expanded.error;
+    } else {
+      merged.error = "No vinyl entries available";
+    }
+    return merged;
+  }
+
   merged.verifiedEntryCount = 0;
   for (const VinylInventoryEntry &entry : merged.entries) {
     if (entry.signatureVerified) {
@@ -1365,6 +1413,9 @@ static std::vector<const VinylInventoryEntry *> visibleCustomVinylEntriesFromInv
     if (a->menuId != b->menuId) {
       return a->menuId < b->menuId;
     }
+    if (a->submenu != b->submenu) {
+      return a->submenu < b->submenu;
+    }
     return a->label < b->label;
   });
   return entries;
@@ -1507,6 +1558,8 @@ static bool collectVinylSignatureRecords(const VinylInventoryState &inventory, i
     VinylSignatureRecord rec;
     rec.id = entry.id;
     rec.label = entry.label;
+    rec.submenu = entry.submenu;
+    rec.submenuOrder = entry.submenuOrder;
     rec.file = entry.file;
     rec.menuVisible = entry.menuVisible;
     rec.menuId = entry.menuId;
@@ -1687,7 +1740,8 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
 
   const std::string inventoryPath = system::join(tempRoot, "expanded.json");
-  const std::string inventoryUrl = std::string(kVinylExpansionBaseUrl) + "/expanded.json?" + cacheBuster;
+  const std::string baseUrl = vinylExpansionBaseUrl();
+  const std::string inventoryUrl = baseUrl + "/expanded.json?" + cacheBuster;
   if (!network::requestDownload(inventoryUrl, inventoryPath)) {
     system::removeRecursively(tempRoot);
     if (errorOut) {
@@ -1749,7 +1803,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
       }
       gExpandedVinylDownloadCurrentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
       std::string encodedFile = network::encodeUrl(item->file);
-      std::string fileUrl = std::string(kVinylExpansionBaseUrl) + "/" + encodedFile + "?" + cacheBuster;
+      std::string fileUrl = baseUrl + "/" + encodedFile + "?" + cacheBuster;
       std::string filePath = system::join(tempRoot, item->file);
       if (!network::requestDownload(fileUrl, filePath)) {
         if (errorOut) {
@@ -1789,6 +1843,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
 }
 
 static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
+  finalizeExpandedVinylDownloadThreadIfFinished();
   bool expected = false;
   if (!gExpandedVinylDownloadRunning.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
     if (errorOut) {
@@ -1803,23 +1858,32 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
     std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
     gExpandedVinylDownloadResultError.clear();
   }
-  std::thread([]() {
-    std::string error;
-    int fileCount = 0;
-    bool ok = downloadExpandedVinylInventory(&error, &fileCount);
-    {
-      std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-      gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+  {
+    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
+    if (gExpandedVinylDownloadThread.joinable()) {
+      gExpandedVinylDownloadThread.join();
     }
-    gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-    gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
-    gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
-    gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
-  }).detach();
+    gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
+    gExpandedVinylDownloadThread = std::thread([]() {
+      std::string error;
+      int fileCount = 0;
+      bool ok = downloadExpandedVinylInventory(&error, &fileCount);
+      {
+        std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
+        gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+      }
+      gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+      gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
+      gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
+      gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
+      gExpandedVinylDownloadThreadFinished.store(true, std::memory_order_release);
+    });
+  }
   return true;
 }
 
 static void pumpExpandedVinylDownloadNotifications() {
+  finalizeExpandedVinylDownloadThreadIfFinished();
   if (!gExpandedVinylDownloadResultPending.exchange(false, std::memory_order_relaxed)) {
     return;
   }
@@ -1894,6 +1958,7 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
   out << "  \"version\": 1,\n";
   out << "  \"basePath\": \"" << jsonEscape(basePath) << "\",\n";
   out << "  \"vinyl\": [\n";
+  std::set<std::string> writtenSubmenuOrders;
   for (size_t i = 0; i < records.size(); ++i) {
     const VinylSignatureRecord &record = records[i];
     std::string ext = lowercaseExtension(record.file);
@@ -1904,6 +1969,13 @@ static bool writeSignedVinylManifest(const std::string &path, const VinylInvento
     out << "    {\n";
     out << "      \"id\": \"" << jsonEscape(record.id) << "\",\n";
     out << "      \"label\": \"" << jsonEscape(record.label) << "\",\n";
+    if (!record.submenu.empty()) {
+      out << "      \"submenu\": \"" << jsonEscape(record.submenu) << "\",\n";
+    }
+    if (record.submenuOrder >= 0 && (!record.submenu.empty()) &&
+        writtenSubmenuOrders.insert(record.submenu).second) {
+      out << "      \"submenuOrder\": " << record.submenuOrder << ",\n";
+    }
     out << "      \"file\": \"" << jsonEscape(record.file) << "\",\n";
     out << "      \"format\": \"" << jsonEscape(format) << "\",\n";
     out << "      \"menuVisible\": " << (record.menuVisible ? "true" : "false") << ",\n";
@@ -2320,19 +2392,17 @@ bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
 }
 
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
-  if (!module) {
-    return;
-  }
-  double accessibleLag = std::max(1.0, module->getUiAccessibleLagSamples());
-  double lag = std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag));
+  double accessibleLag = module ? std::max(1.0, module->getUiAccessibleLagSamples()) : 1.0;
+  double lag = module ? std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag)) : 0.0;
   nvgSave(args.vg);
   float arcRadius = platterRadiusPx + mm2px(Vec(3.5f, 0.f)).x;
 
   if (APP && APP->window && APP->window->uiFont) {
-    bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+    bool sampleDisplay = module && module->isSampleModeEnabled() && module->hasLoadedSample();
     if (!sampleDisplay) {
       std::string displayText;
-      double lagMs = 1000.0 * lag / std::max(module->getUiSampleRate(), 1.f);
+      float sampleRate = module ? module->getUiSampleRate() : 44100.f;
+      double lagMs = 1000.0 * lag / std::max(sampleRate, 1.f);
       displayText = string::f("%.0f ms", lagMs);
       // Keep readouts above the arc LED strip so they don't visually collide.
       Vec textPos = centerMm.plus(Vec(arcRadius + mm2px(Vec(8.0f, 0.f)).x, -arcRadius * 1.02f));
@@ -2348,8 +2418,8 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       float topY = centerMm.y - arcRadius * 1.02f;
       float dividerY = topY + 6.2f;
       float bottomY = dividerY + 6.2f;
-      std::string currentText = formatSecondsPrecise(module->getUiSamplePlayheadSeconds());
-      std::string totalText = formatSecondsPrecise(module->getUiSampleDurationSeconds());
+      std::string currentText = formatSecondsPrecise(module ? module->getUiSamplePlayheadSeconds() : 0.f);
+      std::string totalText = formatSecondsPrecise(module ? module->getUiSampleDurationSeconds() : 0.f);
 
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
       nvgFontSize(args.vg, 10.4f);
@@ -2370,7 +2440,7 @@ void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
       nvgStrokeWidth(args.vg, 1.0f);
       nvgStroke(args.vg);
 
-      bool loopEnabled = module->isSampleLoopEnabled();
+      bool loopEnabled = module && module->isSampleLoopEnabled();
       NVGcolor loopColor = loopEnabled ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(120, 120, 120, 255);
       Vec loopCenter = sampleLoopIconCenter();
       constexpr float kLoopIconScale = 1.35f;
@@ -2555,13 +2625,14 @@ void TemporalDeckTonearmWidget::draw(const DrawArgs &args) {
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).plus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
     drawHole(shellBack.plus(armDir.mult(mm2px(Vec(2.2f, 0.f)).x)).minus(armNormal.mult(mm2px(Vec(0.72f, 0.f)).x)), 0.32f);
   }
-  if (module && APP && APP->window && APP->window->uiFont) {
+  if (APP && APP->window && APP->window->uiFont) {
     Vec labelPos = armPivot.plus(Vec(0.f, mm2px(Vec(7.8f, 0.f)).x));
+    int cartridgeCharacter = module ? module->getCartridgeCharacter() : TemporalDeck::CARTRIDGE_CLEAN;
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFontSize(args.vg, 11.f);
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-    nvgText(args.vg, labelPos.x, labelPos.y, TemporalDeck::cartridgeLabelFor(module->getCartridgeCharacter()), nullptr);
+    nvgText(args.vg, labelPos.x, labelPos.y, TemporalDeck::cartridgeLabelFor(cartridgeCharacter), nullptr);
   }
   nvgRestore(args.vg);
 }
@@ -3098,10 +3169,36 @@ struct BananutBlack : app::SvgPort {
   BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
 };
 
+static PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
+  }
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
+
+static bool isTDScopeModule(const engine::Module *neighbor) {
+  if (!neighbor || !neighbor->model) {
+    return false;
+  }
+  return (neighbor->model == modelTDScope) || (neighbor->model->slug == "TDScope");
+}
+
 struct TemporalDeckWidget : ModuleWidget {
+  PanelBorder *panelBorder = nullptr;
+  static constexpr float kTopBarYmm = 9.522227f;
+  static constexpr float kTopBarRightEndMm = 97.413935f;
+
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
     setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
+    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      panelBorder = findPanelBorder(svgPanel->fb);
+    }
 
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -3136,6 +3233,10 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.8, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(33.2, 95.3)), module, TemporalDeck::SLIP_LIGHT));
     addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.6, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(
+      createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_LINK_LIGHT));
+    addChild(
+      createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_READY_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
@@ -3186,6 +3287,87 @@ struct TemporalDeckWidget : ModuleWidget {
     addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
   }
 
+  void draw(const DrawArgs &args) override {
+    auto drawStart = std::chrono::steady_clock::now();
+    auto publishUiDrawMetric = [&](TemporalDeck *deckModule) {
+      if (!deckModule) {
+        return;
+      }
+      auto drawEnd = std::chrono::steady_clock::now();
+      float drawUs =
+        std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
+      deckModule->setUiDrawCostUs(drawUs);
+    };
+
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    if (linkedToScope) {
+      DrawArgs adjusted = args;
+      adjusted.clipBox.size.x += mm2px(0.3f);
+      ModuleWidget::draw(adjusted);
+
+      // Bridge the top purple divider to the right panel edge when docked.
+      float y = mm2px(kTopBarYmm);
+      float x0 = mm2px(kTopBarRightEndMm);
+      float x1 = box.size.x;
+      if (x1 > x0 + 0.1f) {
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, x0, y);
+        nvgLineTo(args.vg, x1, y);
+        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
+        nvgStrokeWidth(args.vg, mm2px(0.50f));
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgStroke(args.vg);
+      }
+    } else {
+      ModuleWidget::draw(args);
+    }
+    publishUiDrawMetric(deckModule);
+
+    if (deckModule) {
+      bool metricValid = deckModule->isUiScopePreviewMetricValid();
+      if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+        double nowSec = system::getTime();
+        uint32_t debugId = deckModule->getDebugInstanceId();
+        double &lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
+        if (lastSubmitSec < 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
+          lastSubmitSec = nowSec;
+          debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
+                                                      deckModule->getUiDrawCostUs() * 0.001f,
+                                                      deckModule->getUiScopePreviewCostUs(),
+                                                      deckModule->getUiScopePreviewStride(),
+                                                      metricValid);
+        }
+        char debugIdLabel[32];
+        std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", deckModule->getDebugInstanceId());
+        const float x = box.size.x - mm2px(0.9f);
+        const float y = mm2px(2.5f);
+        nvgSave(args.vg);
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 6.8f);
+        nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+        nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+        nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+        nvgText(args.vg, x, y, debugIdLabel, nullptr);
+        nvgRestore(args.vg);
+      }
+    }
+  }
+
+  void step() override {
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    const float borderGrowPx = linkedToScope ? 3.f : 0.f;
+    if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
+      panelBorder->box.size.x = box.size.x + borderGrowPx;
+      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+        svgPanel->fb->dirty = true;
+      }
+    }
+    ModuleWidget::step();
+  }
+
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
     assert(menu);
@@ -3218,14 +3400,19 @@ struct TemporalDeckWidget : ModuleWidget {
         }
 
         std::vector<int> visibleModes = visiblePlatterArtModesFromInventory();
-        if (visibleModes.empty()) {
-          submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
-        } else {
-          for (int mode : visibleModes) {
+        std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
+        if (visibleModes.empty() && customEntries.empty()) {
+          if (!inventoryState.error.empty()) {
+            submenu->addChild(createMenuLabel(inventoryState.error));
+          } else {
+            submenu->addChild(createMenuLabel("No platter art entries marked menuVisible"));
+          }
+        } else if (!visibleModes.empty()) {
+          auto addModeMenuItem = [=](Menu *targetMenu, int mode) {
             std::string modeLabel = vinylLabelForPlatterArtMode(mode);
             bool modeVerified = isInventoryPlatterArtModeVerified(mode);
             std::string rightText = modeVerified ? "" : "Signiture error";
-            submenu->addChild(createCheckMenuItem(
+            targetMenu->addChild(createCheckMenuItem(
               modeLabel, rightText, [=]() { return module->getPlatterArtMode() == mode; },
               [=]() {
                 if (isInventoryPlatterArtModeVerified(mode)) {
@@ -3235,9 +3422,36 @@ struct TemporalDeckWidget : ModuleWidget {
                 }
               },
               !modeVerified));
+          };
+
+          std::vector<temporaldeck_menu::SubmenuItem> modeSubmenuItems;
+          modeSubmenuItems.reserve(visibleModes.size());
+          for (int i = 0; i < int(visibleModes.size()); ++i) {
+            int mode = visibleModes[i];
+            const VinylInventoryEntry *modeEntry = findVinylInventoryEntryForPlatterArtMode(mode);
+            temporaldeck_menu::SubmenuItem item;
+            item.menuId = modeEntry ? modeEntry->menuId : i;
+            item.submenu = modeEntry ? modeEntry->submenu : "";
+            item.submenuOrder = modeEntry ? modeEntry->submenuOrder : -1;
+            item.index = i;
+            modeSubmenuItems.push_back(item);
+          }
+          temporaldeck_menu::SubmenuLayout modeSubmenuLayout = temporaldeck_menu::buildSubmenuLayout(modeSubmenuItems);
+          for (const temporaldeck_menu::SubmenuGroup &group : modeSubmenuLayout.groups) {
+            submenu->addChild(createSubmenuItem(group.label, "", [=](Menu *groupMenu) {
+              for (int idx : group.indices) {
+                if (idx >= 0 && idx < int(visibleModes.size())) {
+                  addModeMenuItem(groupMenu, visibleModes[idx]);
+                }
+              }
+            }));
+          }
+          for (int idx : modeSubmenuLayout.rootIndices) {
+            if (idx >= 0 && idx < int(visibleModes.size())) {
+              addModeMenuItem(submenu, visibleModes[idx]);
+            }
           }
         }
-        std::vector<const VinylInventoryEntry *> customEntries = visibleCustomVinylEntriesFromInventory();
         if (!customEntries.empty()) {
           auto addCustomEntryMenuItem = [=](Menu *targetMenu, const VinylInventoryEntry *entry) {
             if (!entry) {
@@ -3266,20 +3480,33 @@ struct TemporalDeckWidget : ModuleWidget {
               !entryVerified || !system::isFile(absolutePath)));
           };
 
-          const int kArtChunkSize = 12;
-          std::vector<temporaldeck_menu::ArtBatch> artBatches =
-            temporaldeck_menu::buildArtBatches(int(customEntries.size()), kArtChunkSize);
-          if (!artBatches.empty()) {
-            for (const temporaldeck_menu::ArtBatch &batch : artBatches) {
-              submenu->addChild(createSubmenuItem(batch.label, "", [=](Menu *artBatchMenu) {
-                for (int i = batch.begin; i < batch.endExclusive; ++i) {
-                  addCustomEntryMenuItem(artBatchMenu, customEntries[i]);
-                }
-              }));
+          std::vector<temporaldeck_menu::SubmenuItem> submenuItems;
+          submenuItems.reserve(customEntries.size());
+          for (int i = 0; i < int(customEntries.size()); ++i) {
+            const VinylInventoryEntry *entry = customEntries[i];
+            if (!entry) {
+              continue;
             }
-          } else {
-            for (const VinylInventoryEntry *entry : customEntries) {
-              addCustomEntryMenuItem(submenu, entry);
+            temporaldeck_menu::SubmenuItem item;
+            item.menuId = entry->menuId;
+            item.submenu = entry->submenu;
+            item.submenuOrder = entry->submenuOrder;
+            item.index = i;
+            submenuItems.push_back(item);
+          }
+          temporaldeck_menu::SubmenuLayout submenuLayout = temporaldeck_menu::buildSubmenuLayout(submenuItems);
+          for (const temporaldeck_menu::SubmenuGroup &group : submenuLayout.groups) {
+            submenu->addChild(createSubmenuItem(group.label, "", [=](Menu *groupMenu) {
+              for (int idx : group.indices) {
+                if (idx >= 0 && idx < int(customEntries.size())) {
+                  addCustomEntryMenuItem(groupMenu, customEntries[idx]);
+                }
+              }
+            }));
+          }
+          for (int idx : submenuLayout.rootIndices) {
+            if (idx >= 0 && idx < int(customEntries.size())) {
+              addCustomEntryMenuItem(submenu, customEntries[idx]);
             }
           }
         }
@@ -3335,6 +3562,10 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setScratchInterpolationMode(i); }));
         }
       }));
+      menu->addChild(createCheckMenuItem(
+        "HQ rate interpolation", "",
+        [=]() { return module->isHighQualityRateInterpolationEnabled(); },
+        [=]() { module->setHighQualityRateInterpolationEnabled(!module->isHighQualityRateInterpolationEnabled()); }));
       menu->addChild(createSubmenuItem("Gate+Pos mode", "", [=](Menu *submenu) {
         for (int i = 0; i < TemporalDeck::EXTERNAL_GATE_POS_COUNT; ++i) {
           submenu->addChild(createCheckMenuItem(
@@ -3382,6 +3613,11 @@ struct TemporalDeckWidget : ModuleWidget {
                                            [=]() { return module->isPlatterTraceLoggingEnabled(); },
                                            [=]() {
                                              module->setPlatterTraceLoggingEnabled(!module->isPlatterTraceLoggingEnabled());
+                                           }));
+        menu->addChild(createCheckMenuItem("Log scope drag events", "",
+                                           [=]() { return module->isScopeDragTraceLoggingEnabled(); },
+                                           [=]() {
+                                             module->setScopeDragTraceLoggingEnabled(!module->isScopeDragTraceLoggingEnabled());
                                            }));
       }
       if (isDragonKingDebugEnabled()) {

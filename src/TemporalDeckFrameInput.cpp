@@ -25,6 +25,7 @@ temporaldeck::TemporalDeckEngine::FrameInput buildFrameInput(const SignalInputs 
   frameInput.rateCv = signals.rateCv;
   frameInput.rateCvConnected = signals.rateCvConnected;
   frameInput.platterTouched = platterInput.platterTouched;
+  frameInput.platterTouchHoldDirect = platterInput.platterTouchHoldDirect;
   frameInput.wheelScratchHeld = platterInput.wheelScratchHeld;
   frameInput.platterMotionActive = platterInput.platterMotionActive;
   frameInput.platterGestureRevision = platterInput.platterGestureRevision;

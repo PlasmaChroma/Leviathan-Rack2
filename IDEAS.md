@@ -28,4 +28,9 @@
 - Also LUFS display?
 - Could have a tail that progressively lights up with level
 
-## Unknown Title - Filter module based on Xaoc Belgrad
+## Bifurx - Filter module based on Xaoc Belgrad
+
+## Oscillator
+- Arbitrary waveform input similar to Operator from abletone
+- Set of presets that makes sense, user can customize any of them
+- FM to let the user create complex chains of oscillators (build up like Operator does)

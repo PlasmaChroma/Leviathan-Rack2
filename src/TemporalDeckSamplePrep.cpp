@@ -7,8 +7,6 @@ namespace temporaldeck {
 
 namespace {
 
-static constexpr float kSampleFileVoltageScale = 5.f;
-
 int maxFramesForModeAtSampleRate(int mode, float sampleRate) {
   return std::max(1, int(std::floor(temporaldeck_modes::usableBufferSecondsForMode(mode) * std::max(sampleRate, 1.f))));
 }
@@ -55,7 +53,7 @@ int chooseSampleBufferMode(const DecodedSampleFile &sample) {
 }
 
 bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
-                         bool autoPlayOnLoad, PreparedSampleData *outPrepared) {
+                         PreparedSampleData *outPrepared) {
   if (!outPrepared) {
     return false;
   }
@@ -68,7 +66,6 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
   prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
                               TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
   prepared.sampleRate = targetSampleRate;
-  prepared.autoPlayOnLoad = autoPlayOnLoad;
   prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
 
   int outFrames = resampledFrameCount(decodedSample.frames, decodedSample.sampleRate, targetSampleRate);
@@ -86,11 +83,11 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
   if (prepared.monoStorage) {
     std::vector<float> leftResampled;
     resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &leftResampled,
-                          kSampleFileVoltageScale);
+                          sampleFileToBufferVoltage(1.f));
     if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
       std::vector<float> rightResampled;
       resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &rightResampled,
-                            kSampleFileVoltageScale);
+                            sampleFileToBufferVoltage(1.f));
       for (int i = 0; i < outFrames; ++i) {
         leftResampled[i] = 0.5f * (leftResampled[i] + rightResampled[i]);
       }
@@ -99,10 +96,10 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
     std::vector<float>().swap(prepared.right);
   } else {
     resampleSampleChannel(decodedSample.left, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.left,
-                          kSampleFileVoltageScale);
+                          sampleFileToBufferVoltage(1.f));
     if (decodedSample.channels > 1 && !decodedSample.right.empty()) {
       resampleSampleChannel(decodedSample.right, decodedSample.sampleRate, targetSampleRate, outFrames, &prepared.right,
-                            kSampleFileVoltageScale);
+                            sampleFileToBufferVoltage(1.f));
     } else {
       prepared.right = prepared.left;
     }

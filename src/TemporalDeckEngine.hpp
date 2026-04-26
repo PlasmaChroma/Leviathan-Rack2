@@ -1,8 +1,10 @@
 #pragma once
 
+#include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -185,6 +187,43 @@ struct TemporalDeckBuffer {
     return sinc * blackman;
   }
 
+  static constexpr int kSincRadius = 8;
+  static constexpr int kSincTapCount = kSincRadius * 2;
+  static constexpr int kSincPhaseCount = 1024;
+
+  struct SincKernel {
+    std::array<float, kSincTapCount> weights {};
+    float invWeightSum = 1.f;
+  };
+
+  static const std::array<SincKernel, kSincPhaseCount> &sincKernelLut() {
+    struct LutBuilder {
+      std::array<SincKernel, kSincPhaseCount> kernels {};
+      LutBuilder() {
+        for (int phase = 0; phase < kSincPhaseCount; ++phase) {
+          float frac = float(phase) / float(kSincPhaseCount);
+          float weightSum = 0.f;
+          for (int tap = 0; tap < kSincTapCount; ++tap) {
+            int k = tap - kSincRadius + 1; // [-7, 8]
+            float w = windowedSinc(float(k) - frac, float(kSincRadius));
+            kernels[phase].weights[size_t(tap)] = w;
+            weightSum += w;
+          }
+          kernels[phase].invWeightSum = (std::fabs(weightSum) > 1e-6f) ? (1.f / weightSum) : 1.f;
+        }
+      }
+    };
+    static const LutBuilder lutBuilder;
+    return lutBuilder.kernels;
+  }
+
+  static const SincKernel &sincKernelForFraction(float frac) {
+    frac = clamp(frac, 0.f, 0.999999f);
+    int phase = int(std::lround(frac * float(kSincPhaseCount)));
+    phase = clamp(phase, 0, kSincPhaseCount - 1);
+    return sincKernelLut()[size_t(phase)];
+  }
+
   std::pair<float, float> readCubic(double pos) const {
     if (size <= 0 || filled <= 0) {
       return {0.f, 0.f};
@@ -252,25 +291,32 @@ struct TemporalDeckBuffer {
       return {left[idx], rightSample(idx)};
     }
 
-    constexpr int kRadius = 8;
     float accL = 0.f;
     float accR = 0.f;
-    float weightSum = 0.f;
-    for (int k = -kRadius + 1; k <= kRadius; ++k) {
+    const SincKernel &kernel = sincKernelForFraction(frac);
+    for (int tap = 0; tap < kSincTapCount; ++tap) {
+      int k = tap - kSincRadius + 1;
       int idx = wrapIndex(center + k);
-      float dist = float(k) - frac;
-      float w = windowedSinc(dist, float(kRadius));
+      float w = kernel.weights[size_t(tap)];
       accL += left[idx] * w;
       accR += rightSample(idx) * w;
-      weightSum += w;
     }
-    if (std::fabs(weightSum) > 1e-6f) {
-      float inv = 1.f / weightSum;
-      accL *= inv;
-      accR *= inv;
-    }
+    accL *= kernel.invWeightSum;
+    accR *= kernel.invWeightSum;
     return {accL, accR};
   }
+};
+
+struct LiveScopeEnvelopeBlock {
+  int64_t key = -1;
+  float minL = 0.f;
+  float maxL = 0.f;
+  float minR = 0.f;
+  float maxR = 0.f;
+  float minMid = 0.f;
+  float maxMid = 0.f;
+  int sampleCount = 0;
+  bool hasData = false;
 };
 
 struct TemporalDeckEngine {
@@ -310,7 +356,7 @@ struct TemporalDeckEngine {
   static constexpr float kScratchTargetJitterThreshold = 0.35f;
   static constexpr float kReverseBiteVelocityThreshold = 22.0f;
   static constexpr float kReverseBiteMaxBoost = 1.55f;
-  static constexpr float kNowSnapThresholdMs = 20.0f;
+  static constexpr float kNowSnapThresholdMs = 33.0f;
   static constexpr float kNowCatchTime = 0.004f;
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
@@ -339,6 +385,7 @@ struct TemporalDeckEngine {
   static constexpr float kInertiaBlend = 0.25f;
   static constexpr float kNominalPlatterRpm = 33.333333f;
   static constexpr float kLofiModControlRateHz = 3000.f;
+  static constexpr int kLiveScopeEnvelopeBlockSamples = 32;
 
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
@@ -429,6 +476,7 @@ struct TemporalDeckEngine {
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
   int sampleFrames = 0;
+  float sampleAbsolutePeakVolts = 0.f;
   double samplePlayhead = 0.0;
   double readHead = 0.0;
   double timelineHead = 0.0;
@@ -437,6 +485,7 @@ struct TemporalDeckEngine {
   bool freezeState = false;
   bool reverseState = false;
   bool slipState = false;
+  bool highQualityRateInterpolation = false;
   int scratchInterpolationMode = SCRATCH_INTERP_LAGRANGE6;
   int externalGatePosMode = EXTERNAL_GATE_POS_GLIDE;
   int slipReturnMode = SLIP_RETURN_NORMAL;
@@ -465,6 +514,8 @@ struct TemporalDeckEngine {
   double filteredManualLagTargetSamples = 0.0;
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
+  bool platterTouchHoldLatched = false;
+  double platterTouchHoldReadHead = 0.0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
   int bufferDurationMode = BUFFER_DURATION_10S;
   int lastSlipReturnMode = SLIP_RETURN_NORMAL;
@@ -516,16 +567,170 @@ struct TemporalDeckEngine {
   bool scratchOutGateHigh = false;
   double scratchOutAnchorLagSamples = 0.0;
   float prevBaseSpeed = 1.f;
+  temporaldeck_expander::PreviewAccumulator preview;
+  uint64_t bufferGeneration = 1;
+  std::vector<LiveScopeEnvelopeBlock> liveScopeEnvelope;
+  uint64_t liveScopeEnvelopeWriteCount = 0;
+
+  void resetPreviewAccumulator(uint32_t capacityFrames = 0u) {
+    uint32_t effectiveCapacity = capacityFrames > 0u ? capacityFrames : uint32_t(std::max(1, buffer.size));
+    preview.reset(effectiveCapacity);
+  }
+
+  void rebuildPreviewFromCurrentSample() {
+    resetPreviewAccumulator(uint32_t(std::max(1, sampleFrames)));
+    sampleAbsolutePeakVolts = 0.f;
+    if (!sampleLoaded || sampleFrames <= 0 || buffer.size <= 0) {
+      return;
+    }
+    for (int i = 0; i < sampleFrames; ++i) {
+      float l = buffer.left[i];
+      float r = buffer.rightSample(i);
+      sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(l));
+      sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(r));
+      preview.pushMonoSample(0.5f * (l + r));
+    }
+    preview.finalizePartialBin();
+  }
+
+  void bumpBufferGeneration() {
+    if (bufferGeneration == UINT64_MAX) {
+      bufferGeneration = 1;
+    } else {
+      bufferGeneration += 1;
+    }
+  }
+
+  void resetLiveScopeEnvelope() {
+    int blockCount = std::max(1, (buffer.size + kLiveScopeEnvelopeBlockSamples - 1) / kLiveScopeEnvelopeBlockSamples + 4);
+    liveScopeEnvelope.assign(size_t(blockCount), LiveScopeEnvelopeBlock());
+    liveScopeEnvelopeWriteCount = 0;
+  }
+
+  void pushLiveScopeEnvelopeSample(float inL, float inR) {
+    if (liveScopeEnvelope.empty()) {
+      resetLiveScopeEnvelope();
+    }
+    if (liveScopeEnvelope.empty()) {
+      return;
+    }
+    uint64_t sampleIndex = liveScopeEnvelopeWriteCount;
+    int64_t blockKey = int64_t(sampleIndex / uint64_t(kLiveScopeEnvelopeBlockSamples));
+    size_t slot = size_t(uint64_t(blockKey) % uint64_t(liveScopeEnvelope.size()));
+    LiveScopeEnvelopeBlock &block = liveScopeEnvelope[slot];
+    float mid = 0.5f * (inL + inR);
+    if (block.key != blockKey || !block.hasData) {
+      block = LiveScopeEnvelopeBlock();
+      block.key = blockKey;
+      block.minL = block.maxL = inL;
+      block.minR = block.maxR = inR;
+      block.minMid = block.maxMid = mid;
+      block.sampleCount = 1;
+      block.hasData = true;
+    } else {
+      block.minL = std::min(block.minL, inL);
+      block.maxL = std::max(block.maxL, inL);
+      block.minR = std::min(block.minR, inR);
+      block.maxR = std::max(block.maxR, inR);
+      block.minMid = std::min(block.minMid, mid);
+      block.maxMid = std::max(block.maxMid, mid);
+      block.sampleCount += 1;
+    }
+    liveScopeEnvelopeWriteCount += 1;
+  }
+
+  double newestReadableAbsolutePos() const {
+    if (sampleModeEnabled && sampleLoaded) {
+      return std::max(0.0, double(sampleFrames - 1));
+    }
+    if (liveScopeEnvelopeWriteCount == 0u) {
+      return 0.0;
+    }
+    return double(liveScopeEnvelopeWriteCount - 1u);
+  }
+
+  bool readLiveScopeEnvelopeRange(double newestAbsolutePos, float lagLow, float lagHigh, int channelMode,
+                                  float *minOut, float *maxOut) const {
+    if (!minOut || !maxOut || liveScopeEnvelope.empty() || liveScopeEnvelopeWriteCount == 0u || buffer.filled <= 0) {
+      return false;
+    }
+    float overlapLow = std::max(0.f, std::min(lagLow, lagHigh));
+    float overlapHigh = std::max(lagLow, lagHigh);
+    if (!(overlapHigh >= overlapLow)) {
+      return false;
+    }
+
+    double newestAvailableAbs = double(liveScopeEnvelopeWriteCount - 1u);
+    double oldestAvailableAbs = newestAvailableAbs - double(std::max(0, buffer.filled - 1));
+    double absLow = newestAbsolutePos - double(overlapHigh);
+    double absHigh = newestAbsolutePos - double(overlapLow);
+    if (absHigh < oldestAvailableAbs || absLow > newestAvailableAbs) {
+      return false;
+    }
+    absLow = std::max(absLow, oldestAvailableAbs);
+    absHigh = std::min(absHigh, newestAvailableAbs);
+    if (!(absHigh >= absLow)) {
+      return false;
+    }
+
+    int64_t blockKey0 = int64_t(std::floor(absLow / double(kLiveScopeEnvelopeBlockSamples)));
+    int64_t blockKey1 = int64_t(std::floor(absHigh / double(kLiveScopeEnvelopeBlockSamples)));
+    bool any = false;
+    float rangeMin = 0.f;
+    float rangeMax = 0.f;
+    for (int64_t blockKey = blockKey0; blockKey <= blockKey1; ++blockKey) {
+      size_t slot = size_t(uint64_t(blockKey) % uint64_t(liveScopeEnvelope.size()));
+      const LiveScopeEnvelopeBlock &block = liveScopeEnvelope[slot];
+      if (block.key != blockKey || !block.hasData) {
+        continue;
+      }
+      float blockMin = 0.f;
+      float blockMax = 0.f;
+      switch (channelMode) {
+      case 0:
+        blockMin = block.minL;
+        blockMax = block.maxL;
+        break;
+      case 1:
+        blockMin = block.minR;
+        blockMax = block.maxR;
+        break;
+      case 2:
+      default:
+        blockMin = block.minMid;
+        blockMax = block.maxMid;
+        break;
+      }
+      if (!any) {
+        rangeMin = blockMin;
+        rangeMax = blockMax;
+        any = true;
+      } else {
+        rangeMin = std::min(rangeMin, blockMin);
+        rangeMax = std::max(rangeMax, blockMax);
+      }
+    }
+    if (!any) {
+      return false;
+    }
+    *minOut = rangeMin;
+    *maxOut = rangeMax;
+    return true;
+  }
 
   void reset(float sr, bool resetBuffer = true) {
     sampleRate = sr;
     if (resetBuffer) {
       buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
+      resetPreviewAccumulator();
+      resetLiveScopeEnvelope();
+      bumpBufferGeneration();
     }
     sampleLoaded = false;
     sampleTransportPlaying = false;
     sampleTruncated = false;
     sampleFrames = 0;
+    sampleAbsolutePeakVolts = 0.f;
     samplePlayhead = 0.f;
     readHead = 0.f;
     timelineHead = 0.f;
@@ -556,6 +761,8 @@ struct TemporalDeckEngine {
     filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
     lastPlatterGestureRevision = 0;
+    platterTouchHoldLatched = false;
+    platterTouchHoldReadHead = 0.0;
     cartridgeLeft.reset();
     cartridgeRight.reset();
     lofiWowPhaseA = 0.f;
@@ -1339,35 +1546,30 @@ struct TemporalDeckEngine {
     }
 
     if (interpolationMode == SCRATCH_INTERP_SINC) {
-      constexpr int kRadius = 8;
       float accL = 0.f;
       float accR = 0.f;
-      float weightSum = 0.f;
-      bool interior = !loopActive && (i1 - (kRadius - 1) >= 0) && (i1 + kRadius <= readMaxIndex);
+      const TemporalDeckBuffer::SincKernel &kernel = TemporalDeckBuffer::sincKernelForFraction(t);
+      bool interior = !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
+                      (i1 + TemporalDeckBuffer::kSincRadius <= readMaxIndex);
       if (interior) {
-        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+        for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
+          int k = tap - TemporalDeckBuffer::kSincRadius + 1;
           int idx = i1 + k;
-          float dist = float(k) - t;
-          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          float w = kernel.weights[size_t(tap)];
           accL += leftData[idx] * w;
           accR += rightData[idx] * w;
-          weightSum += w;
         }
       } else {
-        for (int k = -kRadius + 1; k <= kRadius; ++k) {
+        for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
+          int k = tap - TemporalDeckBuffer::kSincRadius + 1;
           int idx = clampSampleIndex(i1 + k, maxIndex);
-          float dist = float(k) - t;
-          float w = TemporalDeckBuffer::windowedSinc(dist, float(kRadius));
+          float w = kernel.weights[size_t(tap)];
           accL += leftData[idx] * w;
           accR += rightData[idx] * w;
-          weightSum += w;
         }
       }
-      if (std::fabs(weightSum) > 1e-6f) {
-        float inv = 1.f / weightSum;
-        accL *= inv;
-        accR *= inv;
-      }
+      accL *= kernel.invWeightSum;
+      accR *= kernel.invWeightSum;
       return {accL, accR};
     }
 
@@ -1413,6 +1615,11 @@ struct TemporalDeckEngine {
             TemporalDeckBuffer::cubicSample(rightAt(i0), rightAt(i1), rightAt(i2), rightAt(i3), t)};
   }
 
+  float getLiveAbsolutePeakVolts() const {
+    int16_t q = preview.getAbsolutePeakQ();
+    return (float(q) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+  }
+
   std::pair<float, float> readLiveInterpolatedAt(double pos, int interpolationMode) const {
     if (interpolationMode == SCRATCH_INTERP_LAGRANGE6) {
       return buffer.readHighQuality(pos);
@@ -1438,6 +1645,9 @@ struct TemporalDeckEngine {
     timelineHead = 0.0;
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    resetPreviewAccumulator();
+    resetLiveScopeEnvelope();
+    bumpBufferGeneration();
     if (sampleFrames <= 0) {
       return;
     }
@@ -1455,13 +1665,14 @@ struct TemporalDeckEngine {
         buffer.right[i] = r;
       }
     }
+    rebuildPreviewFromCurrentSample();
   }
 
-  void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool autoplay,
-                             bool truncated, bool monoStorage) {
+  void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool truncated,
+                             bool monoStorage) {
     sampleLoaded = frames > 0 && !left.empty();
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
-    sampleTransportPlaying = autoplay && sampleLoaded;
+    sampleTransportPlaying = sampleLoaded;
     sampleTruncated = truncated;
     samplePlayhead = 0.0;
     readHead = 0.0;
@@ -1487,9 +1698,12 @@ struct TemporalDeckEngine {
     sampleFrames = std::max(0, std::min(frames, buffer.size));
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    resetLiveScopeEnvelope();
+    rebuildPreviewFromCurrentSample();
+    bumpBufferGeneration();
   }
 
-  bool convertLiveWindowToSample(float bufferKnob, bool autoplay) {
+  bool convertLiveWindowToSample(float bufferKnob) {
     bool sampleModeActive = sampleModeEnabled && sampleLoaded && sampleFrames > 0;
     if (sampleModeActive || buffer.filled <= 0 || buffer.size <= 0) {
       return false;
@@ -1518,7 +1732,7 @@ struct TemporalDeckEngine {
       }
     }
 
-    installPreparedSample(std::move(left), std::move(right), capturedFrames, autoplay, false, buffer.monoStorage);
+    installPreparedSample(std::move(left), std::move(right), capturedFrames, false, buffer.monoStorage);
     sampleModeEnabled = sampleLoaded;
     return sampleLoaded;
   }
@@ -1786,6 +2000,7 @@ struct TemporalDeckEngine {
     float rateCv = 0.f;
     bool rateCvConnected = false;
     bool platterTouched = false;
+    bool platterTouchHoldDirect = false;
     bool wheelScratchHeld = false;
     bool platterMotionActive = false;
     uint32_t platterGestureRevision = 0;
@@ -1814,6 +2029,7 @@ struct TemporalDeckEngine {
     const float rateCv = input.rateCv;
     const bool rateCvConnected = input.rateCvConnected;
     const bool platterTouched = input.platterTouched;
+    const bool platterTouchHoldDirect = input.platterTouchHoldDirect;
     const bool wheelScratchHeld = input.wheelScratchHeld;
     const bool platterMotionActive = input.platterMotionActive;
     const uint32_t platterGestureRevision = input.platterGestureRevision;
@@ -2145,26 +2361,14 @@ struct TemporalDeckEngine {
             nowCatchActive = false;
           }
           double targetLag = clampLag(platterLagTarget, limit);
-          if (!sampleModeActive) {
-            // Mouse drag in live mode should feel freeze-like while held, but
-            // the forward edge still needs to reach the real current NOW rather
-            // than the scratch-start anchor. Keep full drift compensation
-            // across most of the range so sensitivity stays stable, then only
-            // taper it out in a small near-NOW window.
+          if (!sampleModeActive && freezeState) {
+            // Explicit freeze in live mode keeps write-head drift compensation
+            // so held gestures stay anchored while transport is paused.
             double driftLag = std::max(0.0, newestPos - liveManualScratchAnchorNewestPos);
             double nearNowWindow = std::max(1.0, double(sampleRate) * 0.060);
             double driftMix = 1.0;
             if (targetLag < nearNowWindow) {
               driftMix = clampd(targetLag / nearNowWindow, 0.0, 1.0);
-            }
-            // In unfrozen live mode, forward/toward-NOW gestures should not
-            // fight accumulated write-head drift from earlier reverse motion.
-            // Keep full compensation while moving away from NOW, but reset the
-            // drift anchor when direction flips toward NOW.
-            bool towardNowGesture = targetLag < (lastPlatterLagTarget - 1e-4);
-            if (!freezeState && towardNowGesture) {
-              driftLag = 0.0;
-              liveManualScratchAnchorNewestPos = newestPos;
             }
             targetLag += driftLag * driftMix;
             // Keep drift compensation anchored to scratch-start timing so
@@ -2203,8 +2407,32 @@ struct TemporalDeckEngine {
           lastPlatterGestureRevision = platterGestureRevision;
         }
 
+        bool directTouchHoldActive = manualTouchScratch && platterTouchHoldDirect;
+        if (!directTouchHoldActive) {
+          platterTouchHoldLatched = false;
+        }
+
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
-        if (stationaryManualHold) {
+        if (directTouchHoldActive) {
+          // Direct-position requests are only for stationary hold behavior.
+          // Active scope movement should arrive through the normal scratch
+          // gesture path instead.
+          double targetLag = clampLag(platterLagTarget, limit);
+          if (!platterTouchHoldLatched || hasFreshPlatterGesture) {
+            platterTouchHoldReadHead =
+              isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
+                                   : buffer.wrapPosition(newestPos - targetLag);
+            platterTouchHoldLatched = true;
+          }
+          readHead = platterTouchHoldReadHead;
+          double heldLag = clampLag(currentLagFromNewest(newestPos), limit);
+          scratchLagSamples = heldLag;
+          scratchLagTargetSamples = heldLag;
+          scratchHandVelocity = 0.f;
+          scratchMotionVelocity = 0.f;
+          scratch3LagVelocity = 0.f;
+          lastPlatterGestureRevision = platterGestureRevision;
+        } else if (stationaryManualHold) {
           scratchLagTargetSamples = scratchLagSamples;
           scratchHandVelocity = 0.f;
           scratchMotionVelocity = 0.f;
@@ -2234,7 +2462,20 @@ struct TemporalDeckEngine {
             gestureDirection = (targetReadVelocity > 0.f) ? 1.f : -1.f;
           }
           bool reverseGestureIntent = gestureDirection < 0.f;
-          if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
+          if (manualTouchScratch && manualMotionActive && platterGestureVelocity < 0.f) {
+            // CONTAINMENT NOTE
+            // This branch exists because slow live drags away from NOW were
+            // getting classified too weakly to overcome write-head baseline
+            // compensation, which manifested as a downward "barrier" in
+            // TD.Scope-driven drag. The cleaner architecture would be for the
+            // expander/host contract to encode this intent unambiguously before
+            // it gets here; for now the engine preserves reverse intent for any
+            // negative touch velocity during active manual motion.
+            // In live touch drag, even slow negative gesture velocity means the
+            // user is pulling away from NOW. Preserve reverse intent so write
+            // compensation does not create a false downward "barrier".
+            reverseGestureIntent = true;
+          } else if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
             // Preserve reverse intent across sparse gesture updates. Using raw
             // platter velocity avoids sign flips caused by write compensation.
             reverseGestureIntent = true;
@@ -2374,8 +2615,12 @@ struct TemporalDeckEngine {
     }
     std::pair<float, float> wet;
     if (sampleModeActive) {
-      // Match live-mode behavior: normal transport playback uses cubic.
-      int sampleInterp = scratchReadPath ? effectiveScratchInterpolation : SCRATCH_INTERP_CUBIC;
+      int sampleInterp = SCRATCH_INTERP_CUBIC;
+      if (scratchReadPath) {
+        sampleInterp = effectiveScratchInterpolation;
+      } else if (highQualityRateInterpolation) {
+        sampleInterp = SCRATCH_INTERP_LAGRANGE6;
+      }
       wet = readSampleBounded(readHead, sampleInterp, sampleWindowEndPos);
     } else if (slipBlendActive) {
       std::pair<float, float> catchWet = readLiveInterpolatedAt(readHead, effectiveScratchInterpolation);
@@ -2537,11 +2782,18 @@ struct TemporalDeckEngine {
 
     bool writeAdvanced = false;
     if (!sampleModeActive && !freezeState && !holdAtBufferEdge) {
+      float writeL = 0.f;
+      float writeR = 0.f;
       if (noFeedback) {
-        buffer.write(inL, inR);
+        writeL = inL;
+        writeR = inR;
       } else {
-        buffer.write(inL + outL * feedback, inR + outR * feedback);
+        writeL = inL + outL * feedback;
+        writeR = inR + outR * feedback;
       }
+      pushLiveScopeEnvelopeSample(writeL, writeR);
+      buffer.write(writeL, writeR);
+      preview.pushMonoSample(0.5f * (writeL + writeR));
       writeAdvanced = true;
       newestPos = newestReadablePos();
       if (pinToNow) {

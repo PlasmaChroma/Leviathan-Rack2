@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.6.0]
+- New module Bifurx
+- Resolve trigger issue in Integral Flux and Proc allowing trigger restarts in rising edge
+- Fix save sample from Temporal Deck being at totally the wrong level
+
+## [v2.5.0]
+- New module TD.Scope
+- New module Crownstep
+
+## [v2.3.12]
+
+### Temporal Deck
+- Allow for more organization of Vinyl art assets
+- Fix scratch sensitivity
+- Prep for adding for expander feature
+
 ## [v2.3.11]
 
 ### Integral Flux

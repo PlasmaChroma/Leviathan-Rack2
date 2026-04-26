@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.3.11",
+  "version": "2.6.0",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -44,6 +44,36 @@
         "Distortion",
         "Sampler"
       ]
+    },
+    {
+      "slug": "TDScope",
+      "name": "TD.Scope",
+      "description": "Expander: Waveform display for Temporal Deck.",
+      "tags": [
+        "Visualizer",
+        "Expander"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Crownstep",
+      "name": "Crownstep",
+      "description": "Checkers-driven sequencer.",
+      "tags": [
+        "Sequencer"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Bifurx",
+      "name": "Bifurx",
+      "description": "Dual-peak multimode filter with live response and spectrum preview.",
+      "tags": [
+        "Filter",
+        "Distortion",
+        "Visualizer"
+      ],
+      "hidden": false
     }
   ]
 }

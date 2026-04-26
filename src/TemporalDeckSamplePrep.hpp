@@ -7,6 +7,16 @@
 
 namespace temporaldeck {
 
+constexpr float kSampleFileVoltageScale = 5.f;
+
+inline float sampleFileToBufferVoltage(float x) {
+  return x * kSampleFileVoltageScale;
+}
+
+inline float bufferVoltageToSampleFile(float x) {
+  return x / kSampleFileVoltageScale;
+}
+
 struct PreparedSampleData {
   std::vector<float> left;
   std::vector<float> right;
@@ -14,7 +24,6 @@ struct PreparedSampleData {
   int bufferMode = TemporalDeckEngine::BUFFER_DURATION_10S;
   float sampleRate = 44100.f;
   bool truncated = false;
-  bool autoPlayOnLoad = true;
   bool monoStorage = false;
   bool valid = false;
 };
@@ -22,6 +31,6 @@ struct PreparedSampleData {
 int chooseSampleBufferMode(const DecodedSampleFile &sample);
 
 bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
-                         bool autoPlayOnLoad, PreparedSampleData *outPrepared);
+                         PreparedSampleData *outPrepared);
 
 } // namespace temporaldeck
