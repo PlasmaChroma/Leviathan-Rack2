@@ -382,6 +382,12 @@ struct BifurxMarkerLayout {
 	bool anchorToBottomLane;
 };
 
+struct BifurxRenderTickResult {
+	bool previewUpdated = false;
+	bool analysisUpdated = false;
+	bool animationActive = false;
+};
+
 struct BifurxSpectrumBase {
 	Bifurx* module = nullptr;
 	BifurxSpectrumState state;
@@ -419,7 +425,8 @@ struct BifurxSpectrumBase {
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
-	void updateAnimation(float dt);
+	bool updateAnimation(float dt);
+	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
 
 	int markerAnchorKind(int markerIndex) const {
@@ -598,6 +605,7 @@ struct Bifurx : Module {
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
+	bool showModuleResponseOverlay = false;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;
 	std::atomic<uint64_t> perfAudioSampledCount{0};

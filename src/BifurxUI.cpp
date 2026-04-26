@@ -60,6 +60,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
 	bool lastFftScaleDynamic = true;
+	bool lastShowModuleResponseOverlay = false;
 	double lastCurveDebugLogTimeSec = -1.0;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
@@ -318,14 +319,9 @@ void BifurxSpectrumWidget::step() {
 	syncPerfDebugCaptureState();
 	if (!module) return;
 
-	uint32_t prevP = state.lastPreviewSeq;
-	uint32_t prevA = state.lastAnalysisSeq;
-	
-	syncBase();
-
 	bool dirty = false;
-	bool previewUpdated = (state.lastPreviewSeq != prevP);
-	bool analysisUpdated = (state.lastAnalysisSeq != prevA);
+	bool previewUpdated = false;
+	bool analysisUpdated = false;
 
 	const bool fftScaleDynamicNow = module->fftScaleDynamic;
 	if (fftScaleDynamicNow != lastFftScaleDynamic) {
@@ -336,12 +332,9 @@ void BifurxSpectrumWidget::step() {
 		}
 		dirty = true;
 	}
-
-	if (previewUpdated) {
-		dirty = true;
-	}
-	
-	if (analysisUpdated) {
+	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
+	if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
+		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
 		dirty = true;
 	}
 
@@ -352,10 +345,13 @@ void BifurxSpectrumWidget::step() {
 			uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
 		}
 	}
-	
-	updateAnimation(uiFrameSec);
-	// For now we just mark dirty if has target, can be optimized later
-	if (state.hasCurveTarget || state.hasOverlayTarget) dirty = true;
+
+	const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
+	previewUpdated = tick.previewUpdated;
+	analysisUpdated = tick.analysisUpdated;
+	if (previewUpdated || analysisUpdated || tick.animationActive) {
+		dirty = true;
+	}
 
 	const uint32_t llTelemetrySeq = module->llTelemetryPublishSeq.load(std::memory_order_acquire);
 	if (llTelemetrySeq != lastLlTelemetrySeq) {
@@ -511,8 +507,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 	if (state.hasOverlay) {
+		const bool showModuleResponse = module && module->showModuleResponseOverlay;
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
-			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]), avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
+			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
+			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 			if (energy <= 0.005f) continue;
 			const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
 			NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
@@ -520,8 +518,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			nvgBeginPath(args.vg); nvgMoveTo(args.vg, curveX[i] - 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i])); nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i + 1]));
 			nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumBottomY); nvgLineTo(args.vg, curveX[i] - 0.45f, spectrumBottomY); nvgClosePath(args.vg); nvgFillColor(args.vg, fill); nvgFill(args.vg);
 		}
-		nvgBeginPath(args.vg); for (int i = 0; i < kCurvePointCount; ++i) { float y = responseYForDb(state.overlayModuleDb[i]); if (i == 0) nvgMoveTo(args.vg, curveX[i], y); else nvgLineTo(args.vg, curveX[i], y); }
-		NVGcolor ml = mixColor(expectedWhite, expectedCyan, 0.35f); ml.a = 0.95f; nvgStrokeWidth(args.vg, 1.4f); nvgStrokeColor(args.vg, ml); nvgStroke(args.vg);
+		if (showModuleResponse) {
+			nvgBeginPath(args.vg); for (int i = 0; i < kCurvePointCount; ++i) { float y = responseYForDb(state.overlayModuleDb[i]); if (i == 0) nvgMoveTo(args.vg, curveX[i], y); else nvgLineTo(args.vg, curveX[i], y); }
+			NVGcolor ml = mixColor(expectedWhite, expectedCyan, 0.35f); ml.a = 0.95f; nvgStrokeWidth(args.vg, 1.4f); nvgStrokeColor(args.vg, ml); nvgStroke(args.vg);
+		}
 		recordDrawSection(uiDrawOverlayCount, uiDrawOverlayNs);
 	}
 
@@ -716,6 +716,7 @@ struct BifurxWidget final : ModuleWidget {
 			submenu->addChild(createCheckMenuItem("OpenGL", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL; }, [=]() { setRenderModeWithHistory(Bifurx::RENDER_OPENGL); }));
 		}));
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
+		menu->addChild(createBoolPtrMenuItem("Show Module Response (Cyan)", "", &bifurx->showModuleResponseOverlay));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));

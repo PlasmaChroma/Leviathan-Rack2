@@ -416,6 +416,7 @@ void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.
 json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
+	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
@@ -430,6 +431,10 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 	if (fftScaleDynamicJ) {
 		fftScaleDynamic = json_is_true(fftScaleDynamicJ);
+	}
+	json_t* showModuleResponseOverlayJ = json_object_get(root, "showModuleResponseOverlay");
+	if (showModuleResponseOverlayJ) {
+		showModuleResponseOverlay = json_is_true(showModuleResponseOverlayJ);
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
 	if (curveDebugLoggingJ) {
@@ -666,51 +671,51 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
 	fft.rfft(fftInputTime, fftRawInputFreq);
-	float binModuleDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
-	float binRawInputAmp[kFftBinCount];
 	float binOutputAmp[kFftBinCount];
+	float binRawInputAmp[kFftBinCount];
+	float binModuleDeltaDb[kFftBinCount];
 	for (int bin = 0; bin < kFftBinCount; bin++) {
 		const float binHz = (float(bin) * state.previewState.sampleRate) / float(kFftSize);
 		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
-		const float weightedRawInputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftRawInputFreq, bin);
 		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
-		binRawInputAmp[bin] = weightedRawInputAmp;
 		binOutputAmp[bin] = weightedOutputAmp;
+		binRawInputAmp[bin] = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftRawInputFreq, bin);
 	}
 	constexpr int kOverlayBandRadius = 2;
 	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
 	for (int bin = 0; bin < kFftBinCount; bin++) {
-		float rawInputEnergy = 0.f; float outputEnergy = 0.f;
+		float outputEnergy = 0.f;
+		float rawInputEnergy = 0.f;
 		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; k++) {
 			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
-			rawInputEnergy += w * binRawInputAmp[sampleBin] * binRawInputAmp[sampleBin];
 			outputEnergy += w * binOutputAmp[sampleBin] * binOutputAmp[sampleBin];
+			rawInputEnergy += w * binRawInputAmp[sampleBin] * binRawInputAmp[sampleBin];
 		}
-		rawInputEnergy += 1e-12f; outputEnergy += 1e-12f;
+		rawInputEnergy += 1e-12f;
 		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10(outputEnergy / rawInputEnergy));
+		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
-	float sampledModuleDeltaDb[kCurvePointCount];
 	float sampledOutputDbfs[kCurvePointCount];
+	float sampledModuleDeltaDb[kCurvePointCount];
 	for (int i = 0; i < kCurvePointCount; i++) {
 		const float binPos = state.curveBinPos[i];
 		const int binA = std::max(2, int(std::floor(binPos)));
 		const int binB = std::min(binA + 1, kFftSize / 2);
 		const float frac = binPos - float(binA);
-		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
 		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
+		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
 	}
 	float framePeakDbfs = kOverlayDbfsFloor;
 	float frameSmoothedOutputDbfs[kCurvePointCount];
 	const float targetSmoothing = state.hasOverlayTarget ? 0.45f : 1.f;
 	for (int i = 0; i < kCurvePointCount; i++) {
-		const int left = std::max(0, i - 1);
-		const int right = std::min(kCurvePointCount - 1, i + 1);
-		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
+		const int left = std::max(0, i - 1), right = std::min(kCurvePointCount - 1, i + 1);
 		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
 		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
+		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
 		state.overlayTargetModuleDb[i] = mixf(state.overlayTargetModuleDb[i], smoothModuleDeltaDb, targetSmoothing);
 		state.overlayTargetOutputDbfs[i] = mixf(state.overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
 		framePeakDbfs = std::max(framePeakDbfs, state.overlayTargetOutputDbfs[i]);
@@ -735,7 +740,12 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	}
 }
 
-void BifurxSpectrumBase::updateAnimation(float dt) {
+bool BifurxSpectrumBase::updateAnimation(float dt) {
+	bool animationActive = false;
+	constexpr float kCurveEpsilonDb = 0.01f;
+	constexpr float kOverlayEpsilonDb = 0.02f;
+	constexpr float kTopEpsilonDbfs = 0.02f;
+
 	if (state.hasCurveTarget) {
 		const float curveMaxStepDb = std::max(0.25f, kCurveVisualSlewDbPerSec * dt);
 		for (int i = 0; i < kCurvePointCount; ++i) {
@@ -743,6 +753,9 @@ void BifurxSpectrumBase::updateAnimation(float dt) {
 			float delta = state.curveTargetDb[i] - prev;
 			delta = clamp(delta, -curveMaxStepDb, curveMaxStepDb);
 			state.curveDb[i] = prev + delta;
+			if (std::fabs(state.curveTargetDb[i] - state.curveDb[i]) > kCurveEpsilonDb) {
+				animationActive = true;
+			}
 		}
 	}
 
@@ -760,7 +773,32 @@ void BifurxSpectrumBase::updateAnimation(float dt) {
 			topSmoothing = 0.70f;
 		}
 		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, topSmoothing);
+
+		if (std::fabs(state.displayTopTargetDbfs - state.displayTopDbfs) > kTopEpsilonDbfs) {
+			animationActive = true;
+		}
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			if (std::fabs(state.overlayTargetModuleDb[i] - state.overlayModuleDb[i]) > kOverlayEpsilonDb ||
+				std::fabs(state.overlayTargetOutputDbfs[i] - state.overlayOutputDbfs[i]) > kOverlayEpsilonDb) {
+				animationActive = true;
+				break;
+			}
+		}
 	}
+
+	return animationActive;
+}
+
+BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
+	BifurxRenderTickResult result;
+	const uint32_t prevPreviewSeq = state.lastPreviewSeq;
+	const uint32_t prevAnalysisSeq = state.lastAnalysisSeq;
+
+	syncBase();
+	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq);
+	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq);
+	result.animationActive = updateAnimation(dt);
+	return result;
 }
 
 void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const {

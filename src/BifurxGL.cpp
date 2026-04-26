@@ -16,7 +16,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	// Persistent buffers to avoid per-frame allocations
 	std::vector<GlVertex> fillVertices;
-	std::vector<GlVertex> fillEdgeVertices;
 	std::vector<GlVertex> curveVertices;
 	std::vector<GlVertex> cyanVertices;
 	std::vector<BifurxCurvePoint> refinedPoints;
@@ -26,6 +25,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
+	bool lastShowModuleResponseOverlay = false;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	uint64_t lastDrawVertexCount = 0;
@@ -68,11 +68,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	void step() override {
 		OpenGlWidget::step();
 		if (!module) return;
-		
-		uint32_t prevP = state.lastPreviewSeq;
-		uint32_t prevA = state.lastAnalysisSeq;
-		syncBase();
-		
+
 		float uiFrameSec = 1.f / 60.f;
 		if (APP && APP->window) {
 			const float frameSec = float(APP->window->getLastFrameDuration());
@@ -80,10 +76,15 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
 			}
 		}
-		updateAnimation(uiFrameSec);
+		const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
+		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
 
-		// Dirty tracking: Redraw if data changed or animation is still active
-		if (state.lastPreviewSeq != prevP || state.lastAnalysisSeq != prevA || state.hasCurveTarget || state.hasOverlayTarget) {
+		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
+		if (tick.previewUpdated || tick.analysisUpdated || tick.animationActive) {
+			setDirty();
+		}
+		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
+			lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
 			setDirty();
 		}
 
@@ -142,14 +143,15 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
 
 		fillVertices.clear();
-		fillEdgeVertices.clear();
 		curveVertices.clear();
 		cyanVertices.clear();
+		const bool showModuleResponse = module && module->showModuleResponseOverlay;
 
 		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
 			for (int i = 0; i < kCurvePointCount - 1; i++) {
-				const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]), avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
+				const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
+				const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
 				const float energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 				if (energy <= 0.005f) continue;
 				
@@ -173,15 +175,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
 				fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
 				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-
-				// White top-edge stroke segments (independent lines to avoid artifacts)
-				fillEdgeVertices.push_back({x0, y0, 1.0f, 1.0f, 1.0f, 0.65f});
-				fillEdgeVertices.push_back({x1, y1, 1.0f, 1.0f, 1.0f, 0.65f});
 			}
 		}
 
 		// 2. Cyan Module Response
-		if (state.hasOverlay) {
+		if (state.hasOverlay && showModuleResponse) {
 			NVGcolor expectedWhite = nvgRGB(206, 210, 216);
 			NVGcolor expectedCyan = nvgRGB(28, 204, 217);
 			NVGcolor cyanColor = mixColor(expectedWhite, expectedCyan, 0.35f);
@@ -212,11 +210,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].x);
 			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].r);
 			glDrawArrays(GL_TRIANGLES, 0, fillVertices.size());
-			
-			glLineWidth(1.0f);
-			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].x);
-			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].r);
-			glDrawArrays(GL_LINES, 0, fillEdgeVertices.size());
 		}
 
 		if (!cyanVertices.empty()) {
