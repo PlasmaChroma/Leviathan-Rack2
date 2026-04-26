@@ -343,6 +343,29 @@ struct BifurxSpectrumState {
 	BifurxPreviewState previewState;
 };
 
+struct BifurxCurvePoint {
+	float x01;
+	float y;
+	int priority; // 0: regular, 1: refinement, 2: anchor pin
+};
+
+struct BifurxMarkerLayout {
+	struct Marker {
+		float x;
+		float yCurve;
+		float yMarker;
+		float hz;
+		bool visible = false;
+		char label[16] = {};
+	};
+	Marker markers[2];
+	float labelX[2];
+	float labelY;
+	float labelFontSize;
+	float guideYBottom;
+	bool anchorToBottomLane;
+};
+
 struct BifurxSpectrumBase {
 	Bifurx* module = nullptr;
 	BifurxSpectrumState state;
@@ -368,6 +391,8 @@ struct BifurxSpectrumBase {
 			state.overlayTargetOutputDbfs[i] = kOverlayDbfsFloor;
 		}
 	}
+
+	virtual ~BifurxSpectrumBase() {}
 
 	void syncBase();
 	void updateAxisCache();
@@ -403,6 +428,16 @@ struct BifurxSpectrumBase {
 		anchor.hz = logFrequencyAt(anchor.x01, minHz, maxHz);
 		return anchor;
 	}
+
+	float curveYAtX01(float x01, float spectrumBottomY, float spectrumTopY) const {
+		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
+		const float curveIndex = clamp(x01, 0.f, 1.f) * float(kCurvePointCount - 1);
+		const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1), i1 = std::min(i0 + 1, kCurvePointCount - 1);
+		return responseYForDb(mixf(state.curveDb[i0], state.curveDb[i1], curveIndex - float(i0)));
+	}
+
+	void calculateMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const;
+	void calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const;
 };
 
 bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& b);

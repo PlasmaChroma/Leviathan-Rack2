@@ -9,6 +9,15 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		float r, g, b, a;
 	};
 
+	// Persistent buffers to avoid per-frame allocations
+	std::vector<GlVertex> fillVertices;
+	std::vector<GlVertex> fillEdgeVertices;
+	std::vector<GlVertex> curveVertices;
+	std::vector<GlVertex> cyanVertices;
+	std::vector<BifurxCurvePoint> refinedPoints;
+
+	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
+	GLuint vbo = 0;
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
@@ -17,6 +26,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	~BifurxSpectrumGLWidget() {
+		if (vbo) glDeleteBuffers(1, &vbo);
 	}
 
 	float getTopLabelReservedWidth(const DrawArgs& args, float fontSize) {
@@ -50,6 +60,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	void step() override {
 		OpenGlWidget::step();
 		if (!module) return;
+		
+		uint32_t prevP = state.lastPreviewSeq;
+		uint32_t prevA = state.lastAnalysisSeq;
 		syncBase();
 		
 		float uiFrameSec = 1.f / 60.f;
@@ -60,22 +73,25 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			}
 		}
 		updateAnimation(uiFrameSec);
+
+		// Dirty tracking: Redraw if data changed or animation is still active
+		if (state.lastPreviewSeq != prevP || state.lastAnalysisSeq != prevA || state.hasCurveTarget || state.hasOverlayTarget) {
+			setDirty();
+		}
 	}
 
 	void drawFramebuffer() override {
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
+		if (!vbo) glGenBuffers(1, &vbo);
 
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		
-		// 1. CLEAR: Use pure transparent black
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		const float w = box.size.x, h = box.size.y;
 		if (!(w > 0.f && h > 0.f)) return;
 
-		// 2. PROJECTION: Ensure we use the full widget area
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
 		glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
@@ -84,26 +100,24 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_CULL_FACE);
-		glDisable(GL_SCISSOR_TEST); // NanoVG might have left a scissor active
+		glDisable(GL_SCISSOR_TEST);
 
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 		const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 		
-		// Use current state (which includes animation/smoothing)
 		const float displayMaxDbfs = state.displayTopDbfs;
 		const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
-
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
 
-		std::vector<GlVertex> vertices;
-		vertices.reserve(kCurvePointCount * 12);
+		fillVertices.clear();
+		fillEdgeVertices.clear();
+		curveVertices.clear();
+		cyanVertices.clear();
 
-		// 3. RENDER FILL (FFT Overlay)
-		std::vector<GlVertex> fillTopVertices; // For softening the edge
+		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
-			fillTopVertices.reserve(kCurvePointCount);
 			for (int i = 0; i < kCurvePointCount - 1; i++) {
 				const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]), avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
 				const float energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
@@ -123,36 +137,23 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				float y0 = spectrumYForDbfs(state.overlayOutputDbfs[i]);
 				float y1 = spectrumYForDbfs(state.overlayOutputDbfs[i + 1]);
 
-				// Fill triangles
-				vertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
-				vertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
-				vertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-				
-				vertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
-				vertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-				vertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
 
-				// Top edge line vertices for AA
-				if (i == 0) fillTopVertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
-				fillTopVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				if (fillEdgeVertices.empty()) fillEdgeVertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
+				fillEdgeVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
 			}
 		}
 
-		// 4. RENDER CURVE (Response Line)
-		std::vector<GlVertex> curveVertices;
-		curveVertices.reserve(kCurvePointCount);
-		NVGcolor curveColor = nvgRGBA(255, 248, 208, 244);
-		for (int i = 0; i < kCurvePointCount; i++) {
-			float x = w * (float(i) / float(kCurvePointCount - 1));
-			float y = responseYForDb(state.curveDb[i]);
-			curveVertices.push_back({x, y, curveColor.r, curveColor.g, curveColor.b, curveColor.a});
-		}
-
-		// 5. RENDER OVERLAY MODULE CURVE (Cyan Line)
-		std::vector<GlVertex> cyanVertices;
+		// 2. Cyan Module Response
 		if (state.hasOverlay) {
-			cyanVertices.reserve(kCurvePointCount);
-			NVGcolor cyanColor = nvgRGB(28, 204, 217);
+			NVGcolor expectedWhite = nvgRGB(206, 210, 216);
+			NVGcolor expectedCyan = nvgRGB(28, 204, 217);
+			NVGcolor cyanColor = mixColor(expectedWhite, expectedCyan, 0.35f);
 			cyanColor.a = 0.95f;
 			for (int i = 0; i < kCurvePointCount; i++) {
 				float x = w * (float(i) / float(kCurvePointCount - 1));
@@ -161,7 +162,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			}
 		}
 
-		if (vertices.empty() && curveVertices.empty() && cyanVertices.empty()) return;
+		// 3. Main Yellow Filter Curve (with shared refinements)
+		calculateRefinedCurvePoints(&refinedPoints, w, h);
+		NVGcolor curveColor = nvgRGBA(255, 248, 208, 244);
+		for (const auto& p : refinedPoints) {
+			curveVertices.push_back({w * p.x01, p.y, curveColor.r, curveColor.g, curveColor.b, curveColor.a});
+		}
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -171,32 +177,26 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glEnableClientState(GL_VERTEX_ARRAY);
 		glEnableClientState(GL_COLOR_ARRAY);
 
-		// Draw Fill
-		if (!vertices.empty()) {
-			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &vertices[0].x);
-			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &vertices[0].r);
-			glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+		if (!fillVertices.empty()) {
+			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].x);
+			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].r);
+			glDrawArrays(GL_TRIANGLES, 0, fillVertices.size());
 			
-			// Draw softening top edge for the fill
-			if (!fillTopVertices.empty()) {
-				glLineWidth(1.0f);
-				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillTopVertices[0].x);
-				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillTopVertices[0].r);
-				glDrawArrays(GL_LINE_STRIP, 0, fillTopVertices.size());
-			}
+			glLineWidth(1.0f);
+			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].x);
+			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillEdgeVertices[0].r);
+			glDrawArrays(GL_LINE_STRIP, 0, fillEdgeVertices.size());
 		}
 
-		// Draw Cyan Curve
 		if (!cyanVertices.empty()) {
-			glLineWidth(1.8f);
+			glLineWidth(2.2f);
 			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].x);
 			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].r);
 			glDrawArrays(GL_LINE_STRIP, 0, cyanVertices.size());
 		}
 
-		// Draw Main Curve
 		if (!curveVertices.empty()) {
-			glLineWidth(2.2f);
+			glLineWidth(3.0f);
 			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].x);
 			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].r);
 			glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
@@ -216,53 +216,67 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (!state.hasPreview) return;
 		
 		const float w = box.size.x, h = box.size.y;
+		BifurxMarkerLayout layout;
+		calculateMarkerLayout(&layout, w, h);
+
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
-		const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
-		const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
-		const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
-		const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
-		const BifurxPreviewModel model = makePreviewModel(state.previewState);
-		
-		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
-		auto curveYAtX01 = [&](float x01) {
-			const float curveIndex = clamp(x01, 0.f, 1.f) * float(kCurvePointCount - 1);
-			const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1), i1 = std::min(i0 + 1, kCurvePointCount - 1);
-			return responseYForDb(mixf(state.curveDb[i0], state.curveDb[i1], curveIndex - float(i0)));
-		};
+		const float spectrumBottomY = std::max(padY * 0.35f + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 
-		struct PeakMarker { float x = 0.f; float yCurve = 0.f; float yMarker = 0.f; float hz = 0.f; bool visible = false; char label[16] = {}; };
-		auto buildMarkerAtFrequency = [&](int mIdx, float targetHz) {
-			PeakMarker m; const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
-			const float mX = w * anchor.x01; if (mX < markerOuterRadius + kPeakMarkerEdgePadding || mX > w - markerOuterRadius - kPeakMarkerEdgePadding) { m.visible = false; return m; }
-			m.x = mX; m.yCurve = curveYAtX01(anchor.x01); const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-			m.yMarker = (state.previewState.mode == 3) ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
-			m.hz = std::max(anchor.hz, 1e-6f); m.visible = true; formatFrequencyLabel(m.hz, m.label, sizeof(m.label)); return m;
-		};
-		PeakMarker pks[2] = { buildMarkerAtFrequency(0, model.markerFreqA), buildMarkerAtFrequency(1, model.markerFreqB) };
-		float lX[2] = { pks[0].x, pks[1].x }; const float lM = std::max(18.f, w * 0.08f), minLS = std::max(30.f, w * 0.18f), mnX = lM, mxX = w - lM;
-		if (pks[0].visible && pks[1].visible) {
-			const int li = (lX[0] <= lX[1]) ? 0 : 1, ri = 1 - li;
-			float lx = clamp(lX[li], mnX, mxX), rx = clamp(lX[ri], mnX, mxX), nd = std::min(minLS, std::max(0.f, mxX - mnX)) - (rx - lx);
-			if (nd > 0.f) { float ml = std::min(0.5f * nd, lx - mnX), mr = std::min(0.5f * nd, mxX - rx); lx -= ml; rx += mr; nd -= (ml + mr); if (nd > 0.f) { float el = std::min(nd, lx - mnX); lx -= el; nd -= el; } if (nd > 0.f) rx += std::min(nd, mxX - rx); }
-			lX[li] = lx; lX[ri] = rx;
-		} else { for (int i = 0; i < 2; ++i) if (pks[i].visible) lX[i] = clamp(lX[i], mnX, mxX); }
-		const float fS = std::max(7.f, h * 0.055f), lTY = labelBandTop + 0.5f * labelBandHeight, gYB = clamp(labelBandTop + std::min(2.1f, 0.18f * labelBandHeight), labelBandTop + 0.2f, lTY - 0.5f * fS - 0.6f);
-		for (int i = 0; i < 2; ++i) {
-			if (!pks[i].visible) continue;
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, pks[i].x, pks[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, pks[i].x, gYB); nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170)); nvgStrokeWidth(args.vg, 1.1f); nvgStroke(args.vg);
-			nvgBeginPath(args.vg); nvgCircle(args.vg, pks[i].x, pks[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
-			nvgBeginPath(args.vg); nvgCircle(args.vg, pks[i].x, pks[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
+		// 1. Vertical Guide Lines
+		for (int i = 0; i < 2; i++) {
+			if (!layout.markers[i].visible) continue;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+			nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150));
+			nvgStrokeWidth(args.vg, 1.05f * 1.45f);
+			nvgStroke(args.vg);
 		}
-		nvgFontSize(args.vg, fS); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		for (int i = 0; i < 2; ++i) { if (!pks[i].visible) continue; nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240)); nvgText(args.vg, lX[i], lTY + 0.75f, pks[i].label, nullptr); nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250)); nvgText(args.vg, lX[i], lTY, pks[i].label, nullptr); }
 
-		// Top Label
-		const float topLabelFontSize = std::max(7.f, h * 0.05f);
-		nvgFontSize(args.vg, topLabelFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-		char topLabel[32]; std::snprintf(topLabel, sizeof(topLabel), "%+5.1f dBFS", state.displayTopDbfs);
-		const float topLabelReservedWidth = getTopLabelReservedWidth(args, topLabelFontSize);
-		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP); nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
+		// 2. Peak Markers
+		for (int i = 0; i < 2; i++) {
+			if (!layout.markers[i].visible) continue;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+			nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170));
+			nvgStrokeWidth(args.vg, 1.1f);
+			nvgStroke(args.vg);
+			
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
+			nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
+			nvgFill(args.vg);
+			
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius);
+			nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
+			nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
+			nvgStroke(args.vg);
+		}
+
+		// 3. Labels
+		nvgFontSize(args.vg, layout.labelFontSize);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		for (int i = 0; i < 2; i++) {
+			if (!layout.markers[i].visible) continue;
+			nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
+			nvgText(args.vg, layout.labelX[i], layout.labelY + 0.75f, layout.markers[i].label, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
+			nvgText(args.vg, layout.labelX[i], layout.labelY, layout.markers[i].label, nullptr);
+		}
+
+		// 4. dBFS Label
+		nvgFontSize(args.vg, std::max(7.f, h * 0.05f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		char topLabel[32];
+		std::snprintf(topLabel, sizeof(topLabel), "%+5.1f dBFS", state.displayTopDbfs);
+		const float topLabelReservedWidth = getTopLabelReservedWidth(args, std::max(7.f, h * 0.05f));
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+		nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
 	}
 };
 

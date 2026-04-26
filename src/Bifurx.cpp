@@ -609,8 +609,43 @@ Bifurx::Bifurx() {
 
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 void Bifurx::setFilterCircuitMode(int newMode) { const int clampedMode = bifurx::clampCircuitMode(newMode); const bool changed = (filterCircuitMode != clampedMode) || (activeCircuitMode != clampedMode); filterCircuitMode = clampedMode; activeCircuitMode = clampedMode; if (changed) resetCircuitStates(); }
-json_t* Bifurx::dataToJson() { json_t* root = Module::dataToJson(); json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic)); json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging)); json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging)); json_object_set_new(root, "renderMode", json_integer(renderMode)); json_object_set_new(root, "filterCircuitMode", json_integer(bifurx::clampCircuitMode(filterCircuitMode))); return root; }
-void Bifurx::dataFromJson(json_t* root) { Module::dataFromJson(root); json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic"); if (fftScaleDynamicJ) fftScaleDynamic = json_is_true(fftScaleDynamicJ); json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging"); if (curveDebugLoggingJ) curveDebugLogging = json_is_true(curveDebugLoggingJ); json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging"); if (perfDebugLoggingJ) perfDebugLogging = json_is_true(perfDebugLoggingJ); json_t* renderModeJ = json_object_get(root, "renderMode"); if (renderModeJ) renderMode = (RenderMode)json_integer_value(renderModeJ); json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode"); if (filterCircuitModeJ) setFilterCircuitMode(int(json_integer_value(filterCircuitModeJ))); else setFilterCircuitMode(filterCircuitMode); }
+json_t* Bifurx::dataToJson() {
+	json_t* root = Module::dataToJson();
+	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
+	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
+	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
+	json_object_set_new(root, "renderMode", json_integer(renderMode));
+	json_object_set_new(root, "filterCircuitMode", json_integer(bifurx::clampCircuitMode(filterCircuitMode)));
+	return root;
+}
+
+void Bifurx::dataFromJson(json_t* root) {
+	Module::dataFromJson(root);
+	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
+	if (fftScaleDynamicJ) {
+		fftScaleDynamic = json_is_true(fftScaleDynamicJ);
+	}
+	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
+	if (curveDebugLoggingJ) {
+		curveDebugLogging = json_is_true(curveDebugLoggingJ);
+	}
+	json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging");
+	if (perfDebugLoggingJ) {
+		perfDebugLogging = json_is_true(perfDebugLoggingJ);
+	}
+	json_t* renderModeJ = json_object_get(root, "renderMode");
+	if (renderModeJ) {
+		const int rawRenderMode = int(json_integer_value(renderModeJ));
+		renderMode = (rawRenderMode == RENDER_OPENGL) ? RENDER_OPENGL : RENDER_NANOVG;
+	}
+	json_t* filterCircuitModeJ = json_object_get(root, "filterCircuitMode");
+	if (filterCircuitModeJ) {
+		setFilterCircuitMode(int(json_integer_value(filterCircuitModeJ)));
+	}
+	else {
+		setFilterCircuitMode(filterCircuitMode);
+	}
+}
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
 void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
@@ -885,6 +920,109 @@ void BifurxSpectrumBase::updateAnimation(float dt) {
 			topSmoothing = 0.70f;
 		}
 		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, topSmoothing);
+	}
+}
+
+void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const {
+	if (!layout) return;
+	const float padY = std::max(4.f, h * 0.035f);
+	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
+	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
+	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
+	const BifurxPreviewModel model = makePreviewModel(state.previewState);
+
+	layout->anchorToBottomLane = (state.previewState.mode == 3);
+	layout->markers[0].visible = false; layout->markers[1].visible = false;
+
+	auto populateMarker = [&](int mIdx, float targetHz) {
+		auto& m = layout->markers[mIdx];
+		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
+		const float mX = w * anchor.x01;
+		if (mX < markerOuterRadius + kPeakMarkerEdgePadding || mX > w - markerOuterRadius - kPeakMarkerEdgePadding) {
+			return;
+		}
+		m.x = mX;
+		m.yCurve = curveYAtX01(anchor.x01, spectrumBottomY, spectrumTopY);
+		const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
+		m.yMarker = layout->anchorToBottomLane ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
+		m.hz = std::max(anchor.hz, 1e-6f);
+		m.visible = true;
+		formatFrequencyLabel(m.hz, m.label, sizeof(m.label));
+	};
+
+	populateMarker(0, model.markerFreqA);
+	populateMarker(1, model.markerFreqB);
+
+	layout->labelX[0] = layout->markers[0].x;
+	layout->labelX[1] = layout->markers[1].x;
+	const float labelMargin = std::max(18.f, w * 0.08f), minLabelSeparation = std::max(30.f, w * 0.18f), minX = labelMargin, maxX = w - labelMargin;
+	if (layout->markers[0].visible && layout->markers[1].visible) {
+		const int leftIndex = (layout->labelX[0] <= layout->labelX[1]) ? 0 : 1, rightIndex = 1 - leftIndex;
+		float leftX = clamp(layout->labelX[leftIndex], minX, maxX), rightX = clamp(layout->labelX[rightIndex], minX, maxX), needed = std::min(minLabelSeparation, std::max(0.f, maxX - minX)) - (rightX - leftX);
+		if (needed > 0.f) {
+			float moveLeft = std::min(0.5f * needed, leftX - minX), moveRight = std::min(0.5f * needed, maxX - rightX);
+			leftX -= moveLeft; rightX += moveRight; needed -= (moveLeft + moveRight);
+			if (needed > 0.f) { float extraLeft = std::min(needed, leftX - minX); leftX -= extraLeft; needed -= extraLeft; }
+			if (needed > 0.f) rightX += std::min(needed, maxX - rightX);
+		}
+		layout->labelX[leftIndex] = leftX; layout->labelX[rightIndex] = rightX;
+	} else {
+		for (int i = 0; i < 2; ++i) if (layout->markers[i].visible) layout->labelX[i] = clamp(layout->labelX[i], minX, maxX);
+	}
+
+	layout->labelFontSize = std::max(7.f, h * 0.055f);
+	layout->labelY = labelBandTop + 0.5f * labelBandHeight;
+	layout->guideYBottom = clamp(labelBandTop + std::min(2.1f, 0.18f * labelBandHeight), labelBandTop + 0.2f, layout->labelY - 0.5f * layout->labelFontSize - 0.6f);
+}
+
+void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const {
+	if (!points) return;
+	points->clear();
+	points->reserve(kCurvePointCount + 6);
+	
+	const float padY = std::max(4.f, h * 0.035f);
+	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
+	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
+	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const BifurxPreviewModel model = makePreviewModel(state.previewState);
+	const bool anchorToBottomLane = (state.previewState.mode == 3);
+	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
+	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
+
+	// Initial grid points
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		points->push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
+	}
+
+	auto insertPoint = [&](float x01, int priority) {
+		auto it = std::lower_bound(points->begin(), points->end(), x01, [](const BifurxCurvePoint& a, float val) { return a.x01 < val; });
+		if (it != points->end() && std::fabs(it->x01 - x01) < 1e-6f) {
+			if (priority > it->priority) it->priority = priority;
+		} else {
+			points->insert(it, {x01, 0.f, priority});
+		}
+	};
+
+	auto addRefinement = [&](int mIdx, float targetHz) {
+		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
+		const float dx = 0.35f / float(kCurvePointCount - 1);
+		insertPoint(clamp(anchor.x01 - dx, 0.f, 1.f), 1);
+		insertPoint(clamp(anchor.x01, 0.f, 1.f), 2);
+		insertPoint(clamp(anchor.x01 + dx, 0.f, 1.f), 1);
+	};
+
+	addRefinement(0, model.markerFreqA);
+	addRefinement(1, model.markerFreqB);
+
+	// Evaluate Y coordinates for all final points
+	for (auto& p : *points) {
+		if (anchorToBottomLane && p.priority == 2) {
+			p.y = markerBottomLaneY;
+		} else {
+			p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
+		}
 	}
 }
 
