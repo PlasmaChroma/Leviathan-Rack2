@@ -85,6 +85,13 @@ inline float fastExp(float x) {
 	return fastExp2(x * kLog2e);
 }
 
+inline float fastLog2(float x) {
+	union { float f; uint32_t i; } vx = {x};
+	float y = (float)vx.i;
+	y *= 1.1920928955078125e-7f;
+	return y - 126.94269504f;
+}
+
 inline float amplitudeRatioDb(float numerator, float denominator) {
 	return 20.f * std::log10((std::fabs(numerator) + 1e-6f) / (std::fabs(denominator) + 1e-6f));
 }
@@ -97,8 +104,16 @@ inline float shapedSpan(float value) {
 
 float levelDriveGain(float knob);
 
+inline float fastTanh(float x) {
+	const float x2 = x * x;
+	if (x2 < 9.f) {
+		return x * (27.f + x2) / (27.f + 9.f * x2);
+	}
+	return (x > 0.f) ? 1.f : -1.f;
+}
+
 inline float softClip(float x) {
-	return std::tanh(x);
+	return fastTanh(x);
 }
 
 inline float sanitizeFinite(float x, float fallback = 0.f) {
@@ -157,7 +172,7 @@ T normalizeSemanticComponent(const T& value, float exportScale) {
 	if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
 		return value;
 	}
-	const float compressed = exportScale * std::tanh(magnitude / exportScale);
+	const float compressed = exportScale * fastTanh(magnitude / exportScale);
 	if (!(compressed > 0.f) || !std::isfinite(compressed)) {
 		return value;
 	}
@@ -214,6 +229,7 @@ struct DisplayBiquad {
 	float a2 = 0.f;
 
 	std::complex<float> response(float omega) const;
+	std::complex<float> response(std::complex<float> z1, std::complex<float> z2) const;
 };
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type);
@@ -372,6 +388,10 @@ struct BifurxSpectrumBase {
 	alignas(16) float fftOutputTime[kFftSize];
 	alignas(16) float fftInputFreq[2 * kFftSize];
 	alignas(16) float fftOutputFreq[2 * kFftSize];
+	alignas(16) float fftRawInputFreq[2 * kFftSize];
+
+	uint32_t lastModelUpdateSeq = 0;
+	mutable BifurxPreviewModel cachedModel;
 
 	BifurxSpectrumBase() : fft(kFftSize) {
 		for (int i = 0; i < kFftSize; i++) {
@@ -392,6 +412,7 @@ struct BifurxSpectrumBase {
 	void syncBase();
 	void updateAxisCache();
 	void updateCurveCache();
+	const BifurxPreviewModel& getOrUpdateModel() const;
 	void updateOverlayCache(const BifurxAnalysisFrame& frame);
 	void updateAnimation(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}

@@ -245,7 +245,10 @@ SvfOutputs processCharacterStage(
 
 std::complex<float> DisplayBiquad::response(float omega) const {
 	const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
-	const std::complex<float> z2 = z1 * z1;
+	return response(z1, z1 * z1);
+}
+
+std::complex<float> DisplayBiquad::response(std::complex<float> z1, std::complex<float> z2) const {
 	const std::complex<float> numerator = b0 + b1 * z1 + b2 * z2;
 	const std::complex<float> denominator = 1.f + a1 * z1 + a2 * z2;
 	return numerator / denominator;
@@ -303,8 +306,8 @@ bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& 
 	if (a.circuitMode != b.circuitMode) return true;
 	if (std::fabs(a.sampleRate - b.sampleRate) > 0.5f) return true;
 	if (std::fabs(a.balance - b.balance) > 1e-3f) return true;
-	if (std::fabs(std::log2(std::max(a.freqA, 1.f) / std::max(b.freqA, 1.f))) > 1e-3f) return true;
-	if (std::fabs(std::log2(std::max(a.freqB, 1.f) / std::max(b.freqB, 1.f))) > 1e-3f) return true;
+	if (std::fabs(fastLog2(std::max(a.freqA, 1.f)) - fastLog2(std::max(b.freqA, 1.f))) > 1e-3f) return true;
+	if (std::fabs(fastLog2(std::max(a.freqB, 1.f)) - fastLog2(std::max(b.freqB, 1.f))) > 1e-3f) return true;
 	if (std::fabs(a.qA - b.qA) > 1e-3f) return true;
 	if (std::fabs(a.qB - b.qB) > 1e-3f) return true;
 	return false;
@@ -341,14 +344,17 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 
 std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
 	const float omega = 2.f * kPi * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
+	const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
+	const std::complex<float> z2 = z1 * z1;
+
 	const SemanticExportProfile profileA = semanticExportProfile(model.circuitMode, 0);
 	const SemanticExportProfile profileB = semanticExportProfile(model.circuitMode, 1);
-	std::complex<float> lpA = bifurx::normalizeSemanticComponent(model.lowA.response(omega), profileA.lpScale);
-	std::complex<float> bpA = bifurx::normalizeSemanticComponent(model.bandA.response(omega), profileA.bpScale);
-	std::complex<float> hpA = bifurx::normalizeSemanticComponent(model.highA.response(omega), profileA.hpScale);
-	std::complex<float> lpB = bifurx::normalizeSemanticComponent(model.lowB.response(omega), profileB.lpScale);
-	std::complex<float> bpB = bifurx::normalizeSemanticComponent(model.bandB.response(omega), profileB.bpScale);
-	std::complex<float> hpB = bifurx::normalizeSemanticComponent(model.highB.response(omega), profileB.hpScale);
+	std::complex<float> lpA = bifurx::normalizeSemanticComponent(model.lowA.response(z1, z2), profileA.lpScale);
+	std::complex<float> bpA = bifurx::normalizeSemanticComponent(model.bandA.response(z1, z2), profileA.bpScale);
+	std::complex<float> hpA = bifurx::normalizeSemanticComponent(model.highA.response(z1, z2), profileA.hpScale);
+	std::complex<float> lpB = bifurx::normalizeSemanticComponent(model.lowB.response(z1, z2), profileB.lpScale);
+	std::complex<float> bpB = bifurx::normalizeSemanticComponent(model.bandB.response(z1, z2), profileB.bpScale);
+	std::complex<float> hpB = bifurx::normalizeSemanticComponent(model.highB.response(z1, z2), profileB.hpScale);
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeHpToLp = lpB * hpA, cascadeHpToHp = hpB * hpA;
 	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp, model.wA, model.wB, model.wideMorph, model.circuitMode);
 }
@@ -554,12 +560,12 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.circuitMode = effectiveCircuitMode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
 	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
+	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
 	bool adpTick = false;
-	if (hasLastPreviewState && previewAdaptiveCooldown <= 0) {
-		const float fMA = std::fabs(std::log2(std::max(pS.freqA, 1.f) / std::max(lastPreviewState.freqA, 1.f))), fMB = std::fabs(std::log2(std::max(pS.freqB, 1.f) / std::max(lastPreviewState.freqB, 1.f))), sMO = std::fabs(pS.spanOct - lastPreviewState.spanOct), qMA = std::fabs(pS.qA - lastPreviewState.qA), qMB = std::fabs(pS.qB - lastPreviewState.qB), bM = std::fabs(pS.balance - lastPreviewState.balance);
+	if (hasLastPreviewState && previewAdaptiveCooldown <= 0 && perTick) {
+		const float fMA = std::fabs(fastLog2(std::max(pS.freqA, 1.f)) - fastLog2(std::max(lastPreviewState.freqA, 1.f))), fMB = std::fabs(fastLog2(std::max(pS.freqB, 1.f)) - fastLog2(std::max(lastPreviewState.freqB, 1.f))), sMO = std::fabs(pS.spanOct - lastPreviewState.spanOct), qMA = std::fabs(pS.qA - lastPreviewState.qA), qMB = std::fabs(pS.qB - lastPreviewState.qB), bM = std::fabs(pS.balance - lastPreviewState.balance);
 		if (fMA > kPreviewAdaptiveOctaveThreshold || fMB > kPreviewAdaptiveOctaveThreshold || sMO > kPreviewAdaptiveSpanOctThreshold || qMA > kPreviewAdaptiveQThreshold || qMB > kPreviewAdaptiveQThreshold || bM > kPreviewAdaptiveBalanceThreshold) { adpTick = true; previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples; }
 	}
-	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
 	if (!hasLastPreviewState || ((perTick || adpTick) && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
 	if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.circuitMode = effectiveCircuitMode; llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
 	if (measurePerf) perfAnalysisStart = PerfClock::now();
@@ -621,7 +627,7 @@ void BifurxSpectrumBase::updateAxisCache() {
 void BifurxSpectrumBase::updateCurveCache() {
 	if (!state.hasPreview) return;
 	updateAxisCache();
-	const BifurxPreviewModel model = makePreviewModel(state.previewState);
+	const BifurxPreviewModel& model = getOrUpdateModel();
 	for (int i = 0; i < kCurvePointCount; i++) {
 		const float db = previewModelResponseDb(model, state.curveHz[i]);
 		state.curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
@@ -632,6 +638,14 @@ void BifurxSpectrumBase::updateCurveCache() {
 	}
 }
 
+const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
+	if (state.lastPreviewSeq != lastModelUpdateSeq) {
+		cachedModel = makePreviewModel(state.previewState);
+		const_cast<BifurxSpectrumBase*>(this)->lastModelUpdateSeq = state.lastPreviewSeq;
+	}
+	return cachedModel;
+}
+
 void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	if (!state.hasPreview) return;
 	updateAxisCache();
@@ -639,7 +653,6 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	for (int i = 0; i < kFftSize; i++) fftOutputTime[i] = frame.output[i] * window[i];
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
-	float fftRawInputFreq[2 * kFftSize];
 	fft.rfft(fftInputTime, fftRawInputFreq);
 	float binModuleDeltaDb[kFftBinCount];
 	float binOutputDbfs[kFftBinCount];
@@ -663,10 +676,9 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 			rawInputEnergy += w * binRawInputAmp[sampleBin] * binRawInputAmp[sampleBin];
 			outputEnergy += w * binOutputAmp[sampleBin] * binOutputAmp[sampleBin];
 		}
-		const float rawInputAmp = std::sqrt(std::max(0.f, rawInputEnergy));
-		const float outputAmp = std::sqrt(std::max(0.f, outputEnergy));
-		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(20.f * std::log10((outputAmp + 1e-6f) / (rawInputAmp + 1e-6f)));
-		binOutputDbfs[bin] = clamp(20.f * std::log10(outputAmp / 5.f + 1e-6f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
+		rawInputEnergy += 1e-12f; outputEnergy += 1e-12f;
+		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10(outputEnergy / rawInputEnergy));
+		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
 	float sampledModuleDeltaDb[kCurvePointCount];
 	float sampledOutputDbfs[kCurvePointCount];
@@ -747,7 +759,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
-	const BifurxPreviewModel model = makePreviewModel(state.previewState);
+	const BifurxPreviewModel& model = getOrUpdateModel();
 
 	layout->anchorToBottomLane = (state.previewState.mode == 3);
 	layout->markers[0].visible = false; layout->markers[1].visible = false;
@@ -802,7 +814,7 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
-	const BifurxPreviewModel model = makePreviewModel(state.previewState);
+	const BifurxPreviewModel& model = getOrUpdateModel();
 	const bool anchorToBottomLane = (state.previewState.mode == 3);
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
@@ -812,25 +824,24 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 		points->push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
 	}
 
-	auto insertPoint = [&](float x01, int priority) {
-		auto it = std::lower_bound(points->begin(), points->end(), x01, [](const BifurxCurvePoint& a, float val) { return a.x01 < val; });
-		if (it != points->end() && std::fabs(it->x01 - x01) < 1e-6f) {
-			if (priority > it->priority) it->priority = priority;
-		} else {
-			points->insert(it, {x01, 0.f, priority});
-		}
-	};
-
 	auto addRefinement = [&](int mIdx, float targetHz) {
 		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
 		const float dx = 0.35f / float(kCurvePointCount - 1);
-		insertPoint(clamp(anchor.x01 - dx, 0.f, 1.f), 1);
-		insertPoint(clamp(anchor.x01, 0.f, 1.f), 2);
-		insertPoint(clamp(anchor.x01 + dx, 0.f, 1.f), 1);
+		points->push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 0.f, 1});
+		points->push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, 2});
+		points->push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 0.f, 1});
 	};
 
 	addRefinement(0, model.markerFreqA);
 	addRefinement(1, model.markerFreqB);
+
+	std::sort(points->begin(), points->end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+		if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
+		return a.priority > b.priority;
+	});
+	points->erase(std::unique(points->begin(), points->end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+		return std::fabs(a.x01 - b.x01) < 1e-7f;
+	}), points->end());
 
 	// Evaluate Y coordinates for all final points
 	for (auto& p : *points) {

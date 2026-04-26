@@ -383,7 +383,7 @@ void BifurxSpectrumWidget::step() {
 			float peakBX = NAN, peakBYCurve = NAN, peakBYMarker = NAN;
 			const float w = box.size.x, h = box.size.y;
 			if (w > 0.f && h > 0.f) {
-				const BifurxPreviewModel model = makePreviewModel(state.previewState);
+				const BifurxPreviewModel& model = getOrUpdateModel();
 				const float padY = std::max(4.f, h * 0.035f);
 				const float plotX = 0.f, usableW = std::max(1.f, w - plotX);
 				const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
