@@ -109,7 +109,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawFramebuffer() override {
 		using PerfClock = std::chrono::steady_clock;
-		const bool perfLoggingActive = module && module->perfDebugLogging;
 		const PerfClock::time_point perfDrawStart = PerfClock::now();
 
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;

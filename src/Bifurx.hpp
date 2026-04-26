@@ -49,14 +49,8 @@ constexpr int kBifurxModeCount = 10;
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
 
-constexpr int kBifurxCircuitModeCount = 4;
-enum BifurxCharacterMode {
-	BIFURX_CHARACTER_SVF = 0,
-	BIFURX_CHARACTER_BITE = 1,
-	BIFURX_CHARACTER_VOWEL = 2,
-	BIFURX_CHARACTER_ERODE = 3
-};
-extern const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount];
+constexpr int kBifurxCircuitModeCount = 1;
+constexpr int BIFURX_CHARACTER_SVF = 0;
 
 constexpr float kResponseMinDb = -48.f;
 constexpr float kResponseMaxDb = 48.f;
@@ -136,7 +130,8 @@ float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
 inline int clampCircuitMode(int mode) {
-	return clamp(mode, 0, kBifurxCircuitModeCount - 1);
+	(void) mode;
+	return BIFURX_CHARACTER_SVF;
 }
 
 float signedWeight(float balance, bool upperPeak);
@@ -488,7 +483,6 @@ struct Bifurx : Module {
 		TITO_PARAM,
 		MODE_LEFT_PARAM,
 		MODE_RIGHT_PARAM,
-		FILTER_CIRCUIT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -511,10 +505,6 @@ struct Bifurx : Module {
 		SPAN_CV_ATTEN_NEG_LIGHT,
 		TITO_SM_LIGHT,
 		TITO_XM_LIGHT,
-		FILTER_CIRCUIT_TL_LIGHT,
-		FILTER_CIRCUIT_TR_LIGHT,
-		FILTER_CIRCUIT_BR_LIGHT,
-		FILTER_CIRCUIT_BL_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -525,9 +515,6 @@ struct Bifurx : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
-	int filterCircuitMode = 0; // 0: SVF, 1: Bite, 2: Vowel, 3: Erode
-	int activeCircuitMode = 0;
-	static constexpr bool kBifurxTuneSvfOnly = false;
 	RenderMode renderMode = RENDER_NANOVG;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
@@ -581,7 +568,6 @@ struct Bifurx : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	dsp::SchmittTrigger filterCircuitTrigger;
 	BifurxAnalysisFrame analysisFrames[2];
 	std::atomic<int> analysisPublishedIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
@@ -604,7 +590,6 @@ struct Bifurx : Module {
 
 	Bifurx();
 	void resetCircuitStates();
-	void setFilterCircuitMode(int newMode);
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
 	void resetPerfStats();

@@ -61,9 +61,9 @@ float measureRuntimeGainDb(
   float balance,
   float tito = 0.f
 ) {
+  (void)circuitMode;
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNorm, spanNorm, reso, balance);
   module.params[Bifurx::TITO_PARAM].setValue(tito);
@@ -121,9 +121,9 @@ TitoOutputCapture captureTitoOutput(
   float reso,
   float balance
 ) {
+  (void)circuitMode;
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(0.82f);
@@ -217,9 +217,9 @@ bool capturePreviewState(
   if (!outState) {
     return false;
   }
+  (void)circuitMode;
   Bifurx module;
   module.onReset();
-  module.setFilterCircuitMode(circuitMode);
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   clearCvInputs(module);
@@ -305,252 +305,149 @@ TestResult testRuntimeBalanceTiltsBandBandInSvf() {
   };
 }
 
-TestResult testRuntimeReportedLowCaseAcrossCircuitsKeepsAudibleOutput() {
-  // User-reported scenario: 40Hz input with first LL marker around 53.9Hz.
+TestResult testRuntimeReportedLowCaseKeepsAudibleOutput() {
   const float centerHz = std::sqrt(53.9f * 114.f);
   const float freqNorm = freqNormForCenterHz(centerHz);
   const float spanNorm = clamp(std::log2(114.f / 53.9f) / 8.f, 0.f, 1.f);
-
-  float gains[4] = {};
-  for (int circuit = 0; circuit < 4; ++circuit) {
-    gains[circuit] = measureRuntimeGainDb(circuit, 0, 40.f, 0.25f, freqNorm, spanNorm, 0.35f, 0.f);
-  }
-
-  const float svf = gains[0];
-  bool pass = true;
-  for (int i = 0; i < 4; ++i) {
-    pass = pass && std::isfinite(gains[i]);
-    pass = pass && (gains[i] > -36.f);
-    pass = pass && (gains[i] > (svf - 30.f));
-  }
-
+  const float gain = measureRuntimeGainDb(0, 0, 40.f, 0.25f, freqNorm, spanNorm, 0.35f, 0.f);
+  const bool pass = std::isfinite(gain) && (gain > -36.f);
   return {
-    "Runtime LL low-frequency case keeps non-SVF circuits above collapse floor",
+    "Runtime LL low-frequency case stays above floor",
     pass,
-    "gainDb(SVF,Acid,Vowel,Corrode)=(" + std::to_string(gains[0]) + "," + std::to_string(gains[1]) + "," +
-      std::to_string(gains[2]) + "," + std::to_string(gains[3]) + ")"
+    "gainDb=" + std::to_string(gain)
   };
 }
 
-TestResult testRuntimeLlDropoutRegressionSweepAcrossCircuits() {
-  // Regression guard aimed at the reported LL dropout behavior for
-  // non-SVF circuits near the first marker pair.
+TestResult testRuntimeLlDropoutRegressionSweep() {
   const float centerHz = std::sqrt(53.9f * 114.f);
   const float freqNorm = freqNormForCenterHz(centerHz);
   const float spanNorm = clamp(std::log2(114.f / 53.9f) / 8.f, 0.f, 1.f);
   const float reso = 0.35f;
   const float balance = 0.f;
   const float amp = 0.18f;
-
   const float lowBandHz[] = {32.f, 40.f, 53.9f, 70.f, 90.f, 114.f};
   const float upperBandHz[] = {250.f, 500.f, 1200.f};
 
-  float lowAvg[4] = {};
-  float lowMin[4] = {};
-  float lowMinHz[4] = {};
-  float upperAvg[4] = {};
-  bool pass = true;
-  std::string detail;
-
-  for (int circuit = 0; circuit < 4; ++circuit) {
-    float lowSum = 0.f;
-    float lowFloor = 1e9f;
-    int lowCount = 0;
-    for (float hz : lowBandHz) {
-      const float g = measureRuntimeGainDb(circuit, 0, hz, amp, freqNorm, spanNorm, reso, balance);
-      lowSum += g;
-      if (g < lowFloor) {
-        lowFloor = g;
-        lowMinHz[circuit] = hz;
-      }
-      lowCount++;
-      if (!std::isfinite(g)) {
-        pass = false;
-      }
+  float lowSum = 0.f;
+  float lowMin = 1e9f;
+  float lowMinHz = 0.f;
+  for (float hz : lowBandHz) {
+    const float g = measureRuntimeGainDb(0, 0, hz, amp, freqNorm, spanNorm, reso, balance);
+    if (!std::isfinite(g)) {
+      return {"Runtime LL dropout sweep remains finite", false, "non-finite low-band gain"};
     }
-
-    float upperSum = 0.f;
-    int upperCount = 0;
-    for (float hz : upperBandHz) {
-      const float g = measureRuntimeGainDb(circuit, 0, hz, amp, freqNorm, spanNorm, reso, balance);
-      upperSum += g;
-      upperCount++;
-      if (!std::isfinite(g)) {
-        pass = false;
-      }
+    lowSum += g;
+    if (g < lowMin) {
+      lowMin = g;
+      lowMinHz = hz;
     }
-
-    lowAvg[circuit] = lowSum / std::max(1, lowCount);
-    lowMin[circuit] = lowFloor;
-    upperAvg[circuit] = upperSum / std::max(1, upperCount);
-
-    // LL should keep low-band energy from collapsing and remain "low-forward"
-    // relative to upper content for the reported marker placement.
-    const bool circuitPass = (lowMin[circuit] > -30.f)
-      && (lowAvg[circuit] > -20.f)
-      && (lowAvg[circuit] > (upperAvg[circuit] - 10.f));
-    pass = pass && circuitPass;
+  }
+  float upperSum = 0.f;
+  for (float hz : upperBandHz) {
+    const float g = measureRuntimeGainDb(0, 0, hz, amp, freqNorm, spanNorm, reso, balance);
+    if (!std::isfinite(g)) {
+      return {"Runtime LL dropout sweep remains finite", false, "non-finite upper-band gain"};
+    }
+    upperSum += g;
   }
 
-  const float svfLowAvg = lowAvg[0];
-  for (int circuit = 1; circuit < 4; ++circuit) {
-    // Non-SVF circuits may differ in voicing, but should not collapse compared
-    // to SVF by an extreme margin in this LL regression window.
-    pass = pass && (lowAvg[circuit] > (svfLowAvg - 24.f));
-  }
-
-  detail =
-    "lowAvg(SVF,Acid,Vowel,Corrode)=(" + std::to_string(lowAvg[0]) + "," + std::to_string(lowAvg[1]) + "," +
-      std::to_string(lowAvg[2]) + "," + std::to_string(lowAvg[3]) + ") "
-    "lowMin=(" + std::to_string(lowMin[0]) + "," + std::to_string(lowMin[1]) + "," +
-      std::to_string(lowMin[2]) + "," + std::to_string(lowMin[3]) + ") "
-    "lowMinHz=(" + std::to_string(lowMinHz[0]) + "," + std::to_string(lowMinHz[1]) + "," +
-      std::to_string(lowMinHz[2]) + "," + std::to_string(lowMinHz[3]) + ") "
-    "upperAvg=(" + std::to_string(upperAvg[0]) + "," + std::to_string(upperAvg[1]) + "," +
-      std::to_string(upperAvg[2]) + "," + std::to_string(upperAvg[3]) + ")";
-
+  const float lowAvg = lowSum / float(sizeof(lowBandHz) / sizeof(lowBandHz[0]));
+  const float upperAvg = upperSum / float(sizeof(upperBandHz) / sizeof(upperBandHz[0]));
+  const bool pass = (lowMin > -30.f) && (lowAvg > -20.f) && (lowAvg > (upperAvg - 10.f));
   return {
-    "Runtime LL dropout regression sweep stays above floor across circuits",
+    "Runtime LL dropout sweep stays above floor",
     pass,
-    detail
+    "lowAvg=" + std::to_string(lowAvg) +
+      " lowMin=" + std::to_string(lowMin) +
+      " lowMinHz=" + std::to_string(lowMinHz) +
+      " upperAvg=" + std::to_string(upperAvg)
   };
 }
 
-TestResult testRuntimeCurveFamiliesRemainDistinctPerCircuit() {
+TestResult testRuntimeCurveFamiliesRemainDistinct() {
   const std::vector<int> modes = {0, 3, 5, 9};  // LL, NN, BB, HH
   const std::vector<float> hz = {40.f, 120.f, 320.f, 900.f, 2200.f, 6000.f};
-  std::string detail;
-  bool pass = true;
-
-  for (int circuit = 0; circuit < 4; ++circuit) {
-    std::vector<std::vector<float>> signatures;
-    signatures.reserve(modes.size());
-    for (int mode : modes) {
-      BifurxPreviewState state;
-      const bool ok = capturePreviewState(circuit, mode, 900.f, 0.55f, 0.35f, 0.f, &state);
-      if (!ok) {
-        pass = false;
-        detail += " c" + std::to_string(circuit) + "m" + std::to_string(mode) + "=no_preview";
-        continue;
-      }
-      signatures.push_back(curveSignatureDb(state, hz));
-    }
-
-    if (signatures.size() != modes.size()) {
-      continue;
-    }
-
-    const float d03 = l1Distance(signatures[0], signatures[1]);
-    const float d05 = l1Distance(signatures[0], signatures[2]);
-    const float d09 = l1Distance(signatures[0], signatures[3]);
-    const float d35 = l1Distance(signatures[1], signatures[2]);
-    const float d39 = l1Distance(signatures[1], signatures[3]);
-    const float d59 = l1Distance(signatures[2], signatures[3]);
-    const bool distinct = (d03 > 10.f) && (d05 > 10.f) && (d09 > 10.f)
-      && (d35 > 10.f) && (d39 > 10.f) && (d59 > 10.f);
-    pass = pass && distinct;
-    detail += " c" + std::to_string(circuit) + "(d03,d05,d09,d35,d39,d59)=(" +
-      std::to_string(d03) + "," + std::to_string(d05) + "," + std::to_string(d09) + "," +
-      std::to_string(d35) + "," + std::to_string(d39) + "," + std::to_string(d59) + ")";
-  }
-
-  return {
-    "Runtime LL/NN/BB/HH curve families stay distinct per character mode",
-    pass,
-    detail
-  };
-}
-
-TestResult testRuntimeCircuitsProduceDifferentBandBandCurves() {
-  const std::vector<float> hz = {90.f, 220.f, 500.f, 1100.f, 2500.f, 5600.f};
   std::vector<std::vector<float>> signatures;
-  signatures.reserve(4);
-  bool pass = true;
+  signatures.reserve(modes.size());
 
-  for (int circuit = 0; circuit < 4; ++circuit) {
+  for (int mode : modes) {
     BifurxPreviewState state;
-    const bool ok = capturePreviewState(circuit, 5, 900.f, 0.65f, 0.42f, 0.f, &state);  // BB
+    const bool ok = capturePreviewState(0, mode, 900.f, 0.55f, 0.35f, 0.f, &state);
     if (!ok) {
-      pass = false;
-      signatures.push_back({});
-      continue;
+      return {
+        "Runtime LL/NN/BB/HH curve families stay distinct",
+        false,
+        "preview publish failed for mode=" + std::to_string(mode)
+      };
     }
     signatures.push_back(curveSignatureDb(state, hz));
   }
 
-  const float d01 = l1Distance(signatures[0], signatures[1]);
-  const float d02 = l1Distance(signatures[0], signatures[2]);
-  const float d03 = l1Distance(signatures[0], signatures[3]);
-  const float d12 = l1Distance(signatures[1], signatures[2]);
-  const float d13 = l1Distance(signatures[1], signatures[3]);
-  const float d23 = l1Distance(signatures[2], signatures[3]);
-  const bool distinct = (d01 > 0.8f) && (d02 > 0.8f) && (d03 > 0.8f)
-    && (d12 > 0.8f) && (d13 > 0.8f) && (d23 > 0.8f);
+  const float d03 = l1Distance(signatures[0], signatures[1]);
+  const float d05 = l1Distance(signatures[0], signatures[2]);
+  const float d09 = l1Distance(signatures[0], signatures[3]);
+  const float d35 = l1Distance(signatures[1], signatures[2]);
+  const float d39 = l1Distance(signatures[1], signatures[3]);
+  const float d59 = l1Distance(signatures[2], signatures[3]);
+  const bool pass = (d03 > 10.f) && (d05 > 10.f) && (d09 > 10.f)
+    && (d35 > 10.f) && (d39 > 10.f) && (d59 > 10.f);
 
-  pass = pass && distinct;
   return {
-    "Runtime BB curve differs across SVF/Acid/Vowel/Corrode",
+    "Runtime LL/NN/BB/HH curve families stay distinct",
     pass,
-    "d01=" + std::to_string(d01) + " d02=" + std::to_string(d02) + " d03=" + std::to_string(d03) +
-      " d12=" + std::to_string(d12) + " d13=" + std::to_string(d13) + " d23=" + std::to_string(d23)
+    "d03=" + std::to_string(d03) + " d05=" + std::to_string(d05) + " d09=" + std::to_string(d09) +
+      " d35=" + std::to_string(d35) + " d39=" + std::to_string(d39) + " d59=" + std::to_string(d59)
   };
 }
 
-TestResult testRuntimeTitoProducesFiniteContrastAcrossModesAndCircuits() {
+TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   bool pass = true;
   float worstSmDistance = 1e9f;
   float worstXmDistance = 1e9f;
   float bestSmDistance = 0.f;
   float bestXmDistance = 0.f;
-  int worstSmCircuit = -1;
   int worstSmMode = -1;
-  int worstXmCircuit = -1;
   int worstXmMode = -1;
   std::string weakCases;
 
-  for (int circuit = 0; circuit < 4; ++circuit) {
-    for (int mode = 0; mode < 10; ++mode) {
-      const TitoOutputCapture clean = captureTitoOutput(circuit, mode, 0.f, 880.f, 0.58f, 0.86f, 0.f);
-      const TitoOutputCapture xm = captureTitoOutput(circuit, mode, 1.f, 880.f, 0.58f, 0.86f, 0.f);
-      const TitoOutputCapture sm = captureTitoOutput(circuit, mode, -1.f, 880.f, 0.58f, 0.86f, 0.f);
+  for (int mode = 0; mode < 10; ++mode) {
+    const TitoOutputCapture clean = captureTitoOutput(0, mode, 0.f, 880.f, 0.58f, 0.86f, 0.f);
+    const TitoOutputCapture xm = captureTitoOutput(0, mode, 1.f, 880.f, 0.58f, 0.86f, 0.f);
+    const TitoOutputCapture sm = captureTitoOutput(0, mode, -1.f, 880.f, 0.58f, 0.86f, 0.f);
 
-      const float xmDistance = normalizedWaveDistance(clean, xm);
-      const float smDistance = normalizedWaveDistance(clean, sm);
-      const bool finite = clean.finite && xm.finite && sm.finite
-        && std::isfinite(xmDistance) && std::isfinite(smDistance)
-        && std::isfinite(clean.rms) && std::isfinite(xm.rms) && std::isfinite(sm.rms);
-      const bool audibleContrast = (xmDistance > 0.012f) || (smDistance > 0.012f);
-      pass = pass && finite && audibleContrast;
+    const float xmDistance = normalizedWaveDistance(clean, xm);
+    const float smDistance = normalizedWaveDistance(clean, sm);
+    const bool finite = clean.finite && xm.finite && sm.finite
+      && std::isfinite(xmDistance) && std::isfinite(smDistance)
+      && std::isfinite(clean.rms) && std::isfinite(xm.rms) && std::isfinite(sm.rms);
+    const bool audibleContrast = (xmDistance > 0.012f) || (smDistance > 0.012f);
+    pass = pass && finite && audibleContrast;
 
-      if (smDistance < worstSmDistance) {
-        worstSmDistance = smDistance;
-        worstSmCircuit = circuit;
-        worstSmMode = mode;
-      }
-      if (xmDistance < worstXmDistance) {
-        worstXmDistance = xmDistance;
-        worstXmCircuit = circuit;
-        worstXmMode = mode;
-      }
-      bestSmDistance = std::max(bestSmDistance, smDistance);
-      bestXmDistance = std::max(bestXmDistance, xmDistance);
+    if (smDistance < worstSmDistance) {
+      worstSmDistance = smDistance;
+      worstSmMode = mode;
+    }
+    if (xmDistance < worstXmDistance) {
+      worstXmDistance = xmDistance;
+      worstXmMode = mode;
+    }
+    bestSmDistance = std::max(bestSmDistance, smDistance);
+    bestXmDistance = std::max(bestXmDistance, xmDistance);
 
-      if (finite && !audibleContrast) {
-        weakCases += " c" + std::to_string(circuit) + "m" + std::to_string(mode)
-          + "(xm=" + std::to_string(xmDistance) + ",sm=" + std::to_string(smDistance) + ")";
-      }
-      else if (!finite) {
-        weakCases += " c" + std::to_string(circuit) + "m" + std::to_string(mode) + "(nonfinite)";
-      }
+    if (finite && !audibleContrast) {
+      weakCases += " m" + std::to_string(mode)
+        + "(xm=" + std::to_string(xmDistance) + ",sm=" + std::to_string(smDistance) + ")";
+    }
+    else if (!finite) {
+      weakCases += " m" + std::to_string(mode) + "(nonfinite)";
     }
   }
 
   return {
-    "Runtime TITO XM/SM stays finite and changes output across modes/circuits",
+    "Runtime TITO XM/SM stays finite and changes output across modes",
     pass,
-    "worstXm=c" + std::to_string(worstXmCircuit) + "m" + std::to_string(worstXmMode) +
-      ":" + std::to_string(worstXmDistance) +
-      " worstSm=c" + std::to_string(worstSmCircuit) + "m" + std::to_string(worstSmMode) +
+    "worstXm=m" + std::to_string(worstXmMode) + ":" + std::to_string(worstXmDistance) +
+      " worstSm=m" + std::to_string(worstSmMode) +
       ":" + std::to_string(worstSmDistance) +
       " bestXm=" + std::to_string(bestXmDistance) +
       " bestSm=" + std::to_string(bestSmDistance) +
@@ -564,11 +461,10 @@ int main() {
   const std::vector<TestResult> tests = {
     testRuntimeSpanMonotonicInPreviewState(),
     testRuntimeBalanceTiltsBandBandInSvf(),
-    testRuntimeReportedLowCaseAcrossCircuitsKeepsAudibleOutput(),
-    testRuntimeLlDropoutRegressionSweepAcrossCircuits(),
-    testRuntimeCurveFamiliesRemainDistinctPerCircuit(),
-    testRuntimeCircuitsProduceDifferentBandBandCurves(),
-    testRuntimeTitoProducesFiniteContrastAcrossModesAndCircuits(),
+    testRuntimeReportedLowCaseKeepsAudibleOutput(),
+    testRuntimeLlDropoutRegressionSweep(),
+    testRuntimeCurveFamiliesRemainDistinct(),
+    testRuntimeTitoProducesFiniteContrastAcrossModes(),
   };
 
   int fails = 0;
