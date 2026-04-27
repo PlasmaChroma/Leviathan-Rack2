@@ -226,8 +226,24 @@ struct TDScopeWidget : ModuleWidget {
           [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL; }));
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   !scopeModule->debugUseGlShaderRenderer;
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer = false;
+          }));
+        submenu->addChild(createCheckMenuItem(
+          "OpenGL SHDR", "",
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   scopeModule->debugUseGlShaderRenderer;
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer = true;
+          }));
         submenu->addChild(new MenuSeparator());
         submenu->addChild(createCheckMenuItem(
           "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },

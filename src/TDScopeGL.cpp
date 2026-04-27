@@ -62,6 +62,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastMainTraceEnabled = false;
   bool redrawLastConnectorsEnabled = false;
   bool redrawLastStereoRightLaneEnabled = false;
+  bool redrawLastUseGlShaderRenderer = false;
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
   std::vector<float> rowX0;
@@ -231,6 +232,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
       dirty = true;
       redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
+    }
+    if (module->debugUseGlShaderRenderer != redrawLastUseGlShaderRenderer) {
+      dirty = true;
+      redrawLastUseGlShaderRenderer = module->debugUseGlShaderRenderer;
     }
     if (module->debugRenderMode != redrawLastRenderMode) {
       dirty = true;
@@ -2013,10 +2018,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
+      const bool useGlShaderRenderer = module->debugUseGlShaderRenderer;
       const bool renderHaloField = module->scopeTransientHaloEnabled;
       const bool renderMainField = module->debugRenderMainTraceEnabled;
       const bool renderContinuityField = module->debugRenderConnectorsEnabled;
-      if (renderHaloField || renderMainField || renderContinuityField) {
+      if (useGlShaderRenderer && (renderHaloField || renderMainField || renderContinuityField)) {
         bool fieldDrawOk = uploadFieldLaneTextures();
         if (renderHaloField) {
           fieldDrawOk = drawFieldLanePass(0.f, 1.f, 0.f, GL_ONE, GL_ONE) && fieldDrawOk;
@@ -2030,8 +2036,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fallbackRendererActive = false;
           return;
         }
+        fallbackRendererActive = true;
+      } else {
+        fallbackRendererActive = false;
       }
-      fallbackRendererActive = true;
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
         if (!verts) {
@@ -2090,7 +2098,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      if (initSegmentShaderPipeline()) {
+      if (useGlShaderRenderer && initSegmentShaderPipeline()) {
         haloSegmentVerts.clear();
         bodySegmentVerts.clear();
         fillSegmentVerts.clear();
@@ -2219,7 +2227,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           return;
         }
         glLineWidth(width);
-        if (initShaderPipeline()) {
+        if (useGlShaderRenderer && initShaderPipeline()) {
           glUseProgram(shaderProgram);
           glUniform1f(shaderUniformColorScale, shaderParams.colorScale);
           glUniform1f(shaderUniformColorLift, shaderParams.colorLift);

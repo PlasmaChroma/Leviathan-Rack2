@@ -738,29 +738,40 @@ struct BifurxWidget final : ModuleWidget {
 
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu); Bifurx* bifurx = dynamic_cast<Bifurx*>(module); if (!bifurx) return;
-		auto setRenderModeWithHistory = [=](Bifurx::RenderMode newMode) {
-			if (!bifurx || bifurx->renderMode == newMode) return;
+		auto setRenderStateWithHistory = [=](Bifurx::RenderMode newMode, bool newUseShaderRenderer) {
+			if (!bifurx || (bifurx->renderMode == newMode && bifurx->useGlShaderRenderer == newUseShaderRenderer)) return;
 			if (APP && APP->history) {
 				history::ModuleChange* h = new history::ModuleChange();
 				h->name = "change render engine";
 				h->moduleId = bifurx->id;
 				h->oldModuleJ = bifurx->toJson();
 				bifurx->renderMode = newMode;
+				bifurx->useGlShaderRenderer = newUseShaderRenderer;
 				h->newModuleJ = bifurx->toJson();
 				APP->history->push(h);
 			}
 			else {
 				bifurx->renderMode = newMode;
+				bifurx->useGlShaderRenderer = newUseShaderRenderer;
 			}
 		};
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
-			submenu->addChild(createCheckMenuItem("NanoVG", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; }, [=]() { setRenderModeWithHistory(Bifurx::RENDER_NANOVG); }));
-			submenu->addChild(createCheckMenuItem("OpenGL", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL; }, [=]() { setRenderModeWithHistory(Bifurx::RENDER_OPENGL); }));
+			submenu->addChild(createCheckMenuItem(
+				"NanoVG", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_NANOVG, false); }));
+			submenu->addChild(createCheckMenuItem(
+				"OpenGL", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && !bifurx->useGlShaderRenderer; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, false); }));
+			submenu->addChild(createCheckMenuItem(
+				"OpenGL SHDR", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
 		}));
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 		menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
-		menu->addChild(createBoolPtrMenuItem("Use GL Shader Renderer", "", &bifurx->useGlShaderRenderer));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));

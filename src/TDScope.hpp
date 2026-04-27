@@ -89,6 +89,7 @@ struct TDScope final : Module {
   bool debugRenderMainTraceEnabled = true;
   bool debugRenderConnectorsEnabled = true;
   bool debugRenderStereoRightLaneEnabled = true;
+  bool debugUseGlShaderRenderer = true;
   bool debugFramebufferCacheEnabled = true;
   int debugRenderMode = DEBUG_RENDER_STANDARD;
   int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
@@ -167,6 +168,7 @@ struct TDScope final : Module {
     json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
     json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
     json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
+    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
     json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
@@ -208,6 +210,10 @@ struct TDScope final : Module {
     json_t *stereoRightLaneJ = json_object_get(root, "debugRenderStereoRightLaneEnabled");
     if (stereoRightLaneJ) {
       debugRenderStereoRightLaneEnabled = json_boolean_value(stereoRightLaneJ);
+    }
+    json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
+    if (glShaderRendererJ) {
+      debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
     }
     json_t *framebufferCacheJ = json_object_get(root, "debugFramebufferCacheEnabled");
     if (framebufferCacheJ) {
