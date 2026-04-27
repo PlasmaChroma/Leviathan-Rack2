@@ -394,6 +394,99 @@ TestResult testRuntimeCurveFamiliesRemainDistinct() {
   };
 }
 
+TestResult testRuntimePreviewPublishesHighQBeyondLegacyClamp() {
+  BifurxPreviewState state;
+  const bool ok = capturePreviewState(5, 900.f, 0.58f, 1.f, 0.f, &state);
+  if (!ok) {
+    return {"Runtime preview publishes high-Q state", false, "preview publish failed"};
+  }
+
+  const bool pass = state.qA > 25.f && state.qB > 25.f;
+  return {
+    "Runtime preview publishes high Q beyond legacy clamp",
+    pass,
+    "qA=" + std::to_string(state.qA) + " qB=" + std::to_string(state.qB)
+  };
+}
+
+TestResult testRuntimePreviewMarkerGainTracksBandHeavyModes() {
+  struct Scenario {
+    int mode = 0;
+    float centerHz = 900.f;
+    float spanNorm = 0.5f;
+    float reso = 0.35f;
+    float balance = 0.f;
+    std::vector<float> probesHz;
+    const char* label = "";
+  };
+
+  const std::vector<Scenario> scenarios = {
+    {1, 900.f, 0.52f, 0.70f, 0.f, {}, "LB"},
+    {5, 900.f, 0.58f, 1.00f, 0.f, {}, "BB"},
+    {8, 900.f, 0.52f, 0.70f, 0.f, {}, "BH"},
+  };
+
+  bool pass = true;
+  float worstDeltaDb = 0.f;
+  std::string detail;
+
+  for (const Scenario& scenario : scenarios) {
+    BifurxPreviewState state;
+    const bool ok = capturePreviewState(
+      scenario.mode, scenario.centerHz, scenario.spanNorm, scenario.reso, scenario.balance, &state
+    );
+    if (!ok) {
+      return {
+        "Runtime preview marker gain tracks band-heavy modes",
+        false,
+        std::string("preview publish failed for ") + scenario.label
+      };
+    }
+
+    const BifurxPreviewModel model = makePreviewModel(state);
+    std::vector<float> probesHz = scenario.probesHz;
+    if (probesHz.empty()) {
+      if (scenario.mode == 1) {
+        probesHz.push_back(state.freqB);
+      }
+      else if (scenario.mode == 5) {
+        probesHz.push_back(state.freqA);
+        probesHz.push_back(state.freqB);
+      }
+      else {
+        probesHz.push_back(state.freqA);
+      }
+    }
+
+    const float freqNorm = freqNormForCenterHz(scenario.centerHz);
+    for (float hz : probesHz) {
+      const float previewDb = previewModelResponseDb(model, hz);
+      const float runtimeDb = measureRuntimeGainDb(
+        scenario.mode, hz, 0.05f, freqNorm, scenario.spanNorm, scenario.reso, scenario.balance
+      );
+      const float deltaDb = std::fabs(previewDb - runtimeDb);
+      worstDeltaDb = std::max(worstDeltaDb, deltaDb);
+      if (deltaDb > 6.f) {
+        pass = false;
+      }
+      if (!detail.empty()) {
+        detail += " ";
+      }
+      detail += std::string(scenario.label) +
+        "@"+ std::to_string(hz) +
+        "(p=" + std::to_string(previewDb) +
+        ",r=" + std::to_string(runtimeDb) +
+        ",d=" + std::to_string(deltaDb) + ")";
+    }
+  }
+
+  return {
+    "Runtime preview marker gain tracks band-heavy modes",
+    pass,
+    "worstDelta=" + std::to_string(worstDeltaDb) + " " + detail
+  };
+}
+
 TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   bool pass = true;
   float worstSmDistance = 1e9f;
@@ -458,6 +551,8 @@ int main() {
     testRuntimeReportedLowCaseKeepsAudibleOutput(),
     testRuntimeLlDropoutRegressionSweep(),
     testRuntimeCurveFamiliesRemainDistinct(),
+    testRuntimePreviewPublishesHighQBeyondLegacyClamp(),
+    testRuntimePreviewMarkerGainTracksBandHeavyModes(),
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
   };
 

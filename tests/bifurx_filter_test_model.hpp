@@ -11,6 +11,8 @@ namespace bifurx_test_model {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kFreqMinHz = 4.f;
 constexpr float kFreqMaxHz = 28000.f;
+constexpr float kSvfDampingMin = 0.02f;
+constexpr float kSvfDampingMax = 2.2f;
 
 inline float clampf(float x, float lo, float hi) {
   return std::max(lo, std::min(hi, x));
@@ -71,7 +73,8 @@ inline DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, 
   const float omega = 2.f * kPi * freq / sr;
   const float cosW = std::cos(omega);
   const float sinW = std::sin(omega);
-  const float alpha = sinW / (2.f * std::max(q, 0.05f));
+  const float clampedQ = std::max(q, 1.f / kSvfDampingMax);
+  const float alpha = sinW / (2.f * clampedQ);
 
   float b0 = 0.f;
   float b1 = 0.f;
@@ -87,9 +90,9 @@ inline DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, 
       b2 = 0.5f * (1.f - cosW);
       break;
     case 1: // bandpass
-      b0 = alpha;
+      b0 = alpha * clampedQ;
       b1 = 0.f;
-      b2 = -alpha;
+      b2 = -b0;
       break;
     case 2: // highpass
       b0 = 0.5f * (1.f + cosW);
@@ -190,13 +193,10 @@ struct PreviewModel {
 
 inline PreviewModel makePreviewModel(const PreviewState& state) {
   PreviewModel model;
-  float qScale = 1.f;
-  float cutoffScale = 1.f;
-
-  const float freqA = clampf(state.freqA * cutoffScale, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
-  const float freqB = clampf(state.freqB * cutoffScale, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
-  const float qA = clampf(state.qA * qScale, 0.2f, 18.f);
-  const float qB = clampf(state.qB * qScale, 0.2f, 18.f);
+  const float freqA = clampf(state.freqA, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
+  const float freqB = clampf(state.freqB, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
+  const float qA = clampf(state.qA, 1.f / kSvfDampingMax, 1.f / kSvfDampingMin);
+  const float qB = clampf(state.qB, 1.f / kSvfDampingMax, 1.f / kSvfDampingMin);
 
   model.lowA = makeDisplayBiquad(state.sampleRate, freqA, qA, 0);
   model.bandA = makeDisplayBiquad(state.sampleRate, freqA, qA, 1);
@@ -272,7 +272,7 @@ inline SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
   const float sr = std::max(sampleRate, 1.f);
   const float limitedCutoff = clampf(cutoff, kFreqMinHz, 0.46f * sr);
   const float g = std::tan(kPi * limitedCutoff / sr);
-  const float k = clampf(damping, 0.02f, 2.2f);
+  const float k = clampf(damping, kSvfDampingMin, kSvfDampingMax);
   const float a1 = 1.f / (1.f + g * (g + k));
   SvfCoeffs c;
   c.g = g;

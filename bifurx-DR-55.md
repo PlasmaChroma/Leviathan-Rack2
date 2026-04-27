@@ -201,36 +201,57 @@ Validation:
 
 Goal: remove small source-of-truth drift before touching behavior.
 
+Status:
+
+- Completed, but the actual cleanup went further than the original narrow API-fix plan.
+- Bifurx is now materially simpler and explicitly SVF-only in code, not just in comments.
+
 Primary files:
 
 - `src/Bifurx.hpp`
 - `src/Bifurx.cpp`
 - `bifurx-DR-55.md`
+- `tests/bifurx_filter_test_model.hpp`
+- `tests/bifurx_filter_spec.cpp`
+- `tests/bifurx_runtime_spec.cpp`
 
-Implementation steps:
+Completed work:
 
-1. Update the header declaration of `processCharacterStage()` in `src/Bifurx.hpp` so it matches the actual definition in `src/Bifurx.cpp`:
-   - add `int characterMode` before `int stageIndex`
-   - keep the cached-coefficients tail argument unchanged
-2. Rename the local argument or comment if needed so the intent is explicit:
-   - today `characterMode` is effectively `circuitMode`
-   - the function currently ignores it, so comments should say that this path is intentionally SVF-only for now
-3. Search for any stale call sites, tests, or prose that still imply alternate circuit implementations are active inside Bifurx.
-4. Keep this phase behavior-neutral. No DSP or UI logic should move here.
+1. Removed the stale `processCharacterStage()` declaration mismatch, then simplified the function to an SVF-only signature instead of preserving dead character-mode plumbing.
+2. Removed no-op circuit abstraction hooks from runtime and preview code:
+   - `clampCircuitMode()`
+   - circuit scaling helpers
+   - semantic-export helpers
+   - mode sync compensation hook
+3. Removed dead circuit-mode fields from preview and telemetry structs where they no longer carried useful information.
+4. Simplified the test model and test suite so they no longer imply active DFM / Acid / MS2 / PRD / related alternate circuit paths.
+5. Kept patch compatibility behavior where it still mattered:
+   - legacy `filterCircuitMode` JSON is still read and intentionally ignored
+   - panel/order/serialization behavior was otherwise left alone
 
 Validation:
 
-- Build `build/tests/bifurx_runtime_spec`
 - Run `make test-fast`
+- Optionally build `build/tests/bifurx_runtime_spec` when Rack SDK include paths are available
 
-Exit criteria:
+Validation status:
 
-- Header and implementation signatures match exactly.
-- There is no dead declaration left behind to confuse later edits.
+- `make test-fast` passed after the stronger cleanup.
+- Standalone `bifurx_runtime_spec` build was not treated as authoritative in this environment because Rack SDK headers were unavailable.
+
+Outcome:
+
+- Phase 1 should be treated as complete.
+- The original Phase 1 text below this point is now historical context, not a remaining to-do.
 
 ### Phase 2: Preview Accuracy Fix
 
 Goal: make the preview curve match the runtime SVF closely enough that the display is trustworthy in bandpass-heavy modes and at high resonance.
+
+Status:
+
+- In progress, with the core implementation already landed.
+- The main remaining work is confirmation and follow-up tuning, not first-pass math cleanup.
 
 Primary files:
 
@@ -240,26 +261,13 @@ Primary files:
 - `tests/bifurx_filter_spec.cpp`
 - `tests/bifurx_runtime_spec.cpp`
 
-Implementation steps:
+Completed work:
 
-1. Change preview Q derivation so it uses the same runtime damping bounds:
-   - runtime clamps damping through `makeSvfCoeffs()` to `0.02f..2.2f`
-   - preview currently clamps `qA`/`qB` to `0.2f..18.f`
-   - derive preview Q from clamped damping rather than maintaining a separate arbitrary Q ceiling
-2. Rework `makeDisplayBiquad()` bandpass behavior:
-   - current type `1` response is the unity-peak RBJ form
-   - runtime `TptSvf::processWithCoeffs()` exposes `bp = v1`, which rises with Q
-   - first patch target: multiply the bandpass numerator by Q or otherwise restate the transfer function so center gain tracks the TPT SVF
-3. Keep lowpass, highpass, and notch preview shapes unchanged unless tests show collateral drift.
-4. Mirror the exact math in `tests/bifurx_filter_test_model.hpp` immediately after changing runtime preview math.
-5. Add explicit regression coverage for the modes already called out in this document:
-   - mode `1` (`Low + Band`)
-   - mode `5` (`Band + Band`)
-   - mode `8` (`Band + High`)
-6. Prefer response-shape assertions over brittle exact-value comparisons:
-   - compare preview peak ordering
-   - compare preview-vs-runtime gain deltas at selected probe frequencies
-   - assert that high-Q bandpass peaks are no longer unity-clamped
+1. Added shared SVF damping bounds in the runtime and mirrored test model so preview and runtime use the same clamping contract.
+2. Changed preview bandpass construction from unity-peak RBJ gain to Q-scaled numerator gain so the preview center response rises with Q like the runtime TPT SVF.
+3. Updated preview Q handling so published preview Q can reflect the true runtime damping range instead of the old legacy clamp.
+4. Mirrored the exact preview math changes in `tests/bifurx_filter_test_model.hpp`.
+5. Added a direct fast-test regression proving the preview bandpass peak now rises well above `0 dB` at high Q.
 
 Suggested test additions:
 
@@ -267,10 +275,24 @@ Suggested test additions:
 - In `tests/bifurx_runtime_spec.cpp`, use `capturePreviewState()` plus `measureRuntimeGainDb()` to compare preview and runtime around each marker frequency for modes `1`, `5`, and `8`.
 - Reuse the existing helpers instead of introducing a second measurement harness.
 
+Additional current notes:
+
+- `tests/bifurx_runtime_spec.cpp` now includes:
+  - a high-Q preview publish check beyond the old legacy preview clamp
+  - a band-heavy marker-gain tracking check for modes `1`, `5`, and `8`
+- Those runtime-oriented checks are written but have not been exercised in this environment because the Rack SDK include path is still missing for standalone compilation.
+- `make test-fast` is currently green after the Phase 2 math change.
+
 Risks:
 
 - A cosmetic Q fix without fixing bandpass transfer scaling will still leave the preview lying near resonance.
 - If preview math and test-model math diverge, the tests will start validating the wrong model instead of the code the user sees.
+
+Remaining work:
+
+1. Build and run `bifurx_runtime_spec` in an environment with Rack SDK headers available.
+2. Review whether the current preview/runtime deltas in modes `1`, `5`, and `8` are good enough, or whether a more exact SVF-derived preview transfer function is warranted later.
+3. If the current approximation proves sufficient, mark Phase 2 complete and move to Phase 3.
 
 Exit criteria:
 

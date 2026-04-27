@@ -455,6 +455,36 @@ TestResult testSvfBandBandResonanceLiftIncreasesWithQ() {
   };
 }
 
+TestResult testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ() {
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.mode = 5;      // Band + Band
+  s.freqA = 420.f;
+  s.freqB = 1800.f;
+  s.qA = 12.f;
+  s.qB = 12.f;
+  s.balance = 0.f;
+  s.spanNorm = 0.58f;
+  const PreviewModel m = makePreviewModel(s);
+
+  auto directBandDb = [&](const bifurx_test_model::DisplayBiquad& biquad, float hz) {
+    const float omega = 2.f * bifurx_test_model::kPi * hz / s.sampleRate;
+    return 20.f * std::log10(std::max(std::abs(biquad.response(omega)), 1e-5f));
+  };
+
+  const float centerDb = directBandDb(m.bandA, s.freqA);
+  const float shoulderLoDb = directBandDb(m.bandA, s.freqA * 0.82f);
+  const float shoulderHiDb = directBandDb(m.bandA, s.freqA * 1.22f);
+  const bool pass = centerDb > 6.f && centerDb > (shoulderLoDb + 6.f) && centerDb > (shoulderHiDb + 6.f);
+  return {
+    "SVF preview bandpass peak rises above unity at high Q",
+    pass,
+    "center=" + std::to_string(centerDb) +
+      " lo=" + std::to_string(shoulderLoDb) +
+      " hi=" + std::to_string(shoulderHiDb)
+  };
+}
+
 TestResult testSvfLowLowRuntimeDoesNotCollapseNearLowPeak() {
   // Regression guard for the reported 40Hz tone with first LL peak near 53.9Hz.
   const float sampleRate = 48000.f;
@@ -1011,6 +1041,7 @@ int main() {
     testSvfFrequencyKnobMappingIsMonotonic(),
     testSvfVoctTrackingIsMonotonicPerVolt(),
     testSvfBandBandResonanceLiftIncreasesWithQ(),
+    testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ(),
     testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),
     testSvfLowLowPreviewRuntimeTrendAgreement(),
     testSpanIncreasesMarkerSeparationAtFixedCenter(),

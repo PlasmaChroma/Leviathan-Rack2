@@ -138,7 +138,7 @@ void formatFrequencyLabel(float hz, char* out, size_t outSize) {
 SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
 	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sampleRate);
 	const float g = fastTan(kPi * limitedCutoff / sampleRate);
-	const float k = clamp(damping, 0.02f, 2.2f);
+	const float k = clamp(damping, kSvfDampingMin, kSvfDampingMax);
 	const float a1 = 1.f / (1.f + g * (g + k));
 	SvfCoeffs coeffs;
 	coeffs.g = g;
@@ -212,7 +212,8 @@ DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int typ
 	const float omega = 2.f * kPi * freq / sr;
 	const float cosW = std::cos(omega);
 	const float sinW = std::sin(omega);
-	const float alpha = sinW / (2.f * std::max(q, 0.05f));
+	const float clampedQ = std::max(q, 1.f / kSvfDampingMax);
+	const float alpha = sinW / (2.f * clampedQ);
 
 	float b0 = 0.f;
 	float b1 = 0.f;
@@ -228,9 +229,9 @@ DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int typ
 			b2 = 0.5f * (1.f - cosW);
 			break;
 		case 1: // bandpass
-			b0 = alpha;
+			b0 = alpha * clampedQ;
 			b1 = 0.f;
-			b2 = -alpha;
+			b2 = -b0;
 			break;
 		case 2: // highpass
 			b0 = 0.5f * (1.f + cosW);
@@ -268,8 +269,10 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	BifurxPreviewModel model;
 	const float freqA = clamp(state.freqA, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
 	const float freqB = clamp(state.freqB, 4.f, 0.46f * std::max(state.sampleRate, 1.f));
-	const float qA = clamp(state.qA, 0.2f, 18.f);
-	const float qB = clamp(state.qB, 0.2f, 18.f);
+	const float qMin = 1.f / kSvfDampingMax;
+	const float qMax = 1.f / kSvfDampingMin;
+	const float qA = clamp(state.qA, qMin, qMax);
+	const float qB = clamp(state.qB, qMin, qMax);
 	model.lowA = makeDisplayBiquad(state.sampleRate, freqA, qA, 0);
 	model.bandA = makeDisplayBiquad(state.sampleRate, freqA, qA, 1);
 	model.highA = makeDisplayBiquad(state.sampleRate, freqA, qA, 2);
@@ -519,7 +522,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
 	if (measurePerf) perfPreviewStart = PerfClock::now();
 
-	const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / std::max(dampingA, 0.05f), pTQB = 1.f / std::max(dampingB, 0.05f), pTBal = balance;
+	const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
 	const bool pPitchCvConn = voctConnected || inputs[FM_INPUT].isConnected();
 	perfPreviewPitchCvConnected.store(pPitchCvConn, std::memory_order_relaxed);
 	const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
