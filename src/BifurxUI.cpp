@@ -94,8 +94,11 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	uint64_t uiDrawCurveNs = 0;
 	uint64_t uiDrawMarkersCount = 0;
 	uint64_t uiDrawMarkersNs = 0;
+	std::vector<BifurxCurvePoint> refinedPoints;
 
 	BifurxSpectrumWidget() : BifurxSpectrumBase() {
+		const size_t refinedPointReserve = size_t(kCurvePointCount) + 8;
+		refinedPoints.reserve(refinedPointReserve);
 	}
 
 	~BifurxSpectrumWidget() override {
@@ -467,7 +470,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 	updateCurveXCache(plotX, usableW);
 	
-	std::vector<BifurxCurvePoint> refinedPoints;
 	calculateRefinedCurvePoints(&refinedPoints, w, h);
 
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);

@@ -44,6 +44,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	uint64_t lastDrawVertexCount = 0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
+		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
+		const size_t refinedPointReserve = size_t(kCurvePointCount) + 8;
+		fillVertices.reserve(overlaySegmentCount * 6);
+		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
+		curveVertices.reserve(refinedPointReserve);
+		cyanVertices.reserve(size_t(kCurvePointCount));
+		refinedPoints.reserve(refinedPointReserve);
 	}
 
 	void releaseShaderResources() {

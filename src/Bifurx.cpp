@@ -840,7 +840,10 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const {
 	if (!points) return;
 	points->clear();
-	points->reserve(kCurvePointCount + 6);
+	const size_t refinedPointReserve = size_t(kCurvePointCount) + 6;
+	if (points->capacity() < refinedPointReserve) {
+		points->reserve(refinedPointReserve);
+	}
 	
 	const float padY = std::max(4.f, h * 0.035f);
 	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;

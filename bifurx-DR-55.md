@@ -250,8 +250,8 @@ Goal: make the preview curve match the runtime SVF closely enough that the displ
 
 Status:
 
-- In progress, with the core implementation already landed.
-- The main remaining work is confirmation and follow-up tuning, not first-pass math cleanup.
+- Completed for the current scope.
+- Core math changes are landed and validated in both fast and runtime-oriented test suites.
 
 Primary files:
 
@@ -280,8 +280,8 @@ Additional current notes:
 - `tests/bifurx_runtime_spec.cpp` now includes:
   - a high-Q preview publish check beyond the old legacy preview clamp
   - a band-heavy marker-gain tracking check for modes `1`, `5`, and `8`
-- Those runtime-oriented checks are written but have not been exercised in this environment because the Rack SDK include path is still missing for standalone compilation.
-- `make test-fast` is currently green after the Phase 2 math change.
+- Runtime-oriented checks have been exercised in this environment through `make test`, including `bifurx_runtime_spec`.
+- `make test-fast` is green after the Phase 2 math change.
 
 Risks:
 
@@ -290,9 +290,8 @@ Risks:
 
 Remaining work:
 
-1. Build and run `bifurx_runtime_spec` in an environment with Rack SDK headers available.
-2. Review whether the current preview/runtime deltas in modes `1`, `5`, and `8` are good enough, or whether a more exact SVF-derived preview transfer function is warranted later.
-3. If the current approximation proves sufficient, mark Phase 2 complete and move to Phase 3.
+1. Optional future tuning only: decide whether preview/runtime deltas in modes `1`, `5`, and `8` warrant a more exact SVF-derived preview transfer function.
+2. Keep current tests as regression guards while proceeding to later phases.
 
 Exit criteria:
 
@@ -303,7 +302,7 @@ Exit criteria:
 
 Goal: stop the display from continuing to animate and redraw after values have effectively converged.
 
-Current status: core convergence fix and inactive-renderer tick guard are both landed. This phase is still being executed as a narrow state-machine fix, not a general renderer optimization pass.
+Current status: complete for the planned scope. Core convergence fix and inactive-renderer tick guard are both landed.
 
 Completed in code:
 
@@ -312,11 +311,11 @@ Completed in code:
 - On convergence, overlay arrays plus `displayTopDbfs` snap to targets and clear `hasOverlayTarget`.
 - `animationActive` now naturally falls false after convergence, allowing existing dirty gating to stop redraw.
 - Inactive renderer widgets now early-return before `runRenderTick()`, so only the active backend consumes preview/analysis work each frame.
-- Validation run: `make test-fast` passed after this change.
+- Validation runs: `make test-fast` and `make test` passed after this change.
 
 Remaining for Phase 3:
 
-- Runtime validation in an environment where `bifurx_runtime_spec` is buildable.
+- No blocking work remains in this phase for the current plan.
 
 Primary files:
 
@@ -430,36 +429,80 @@ Exit criteria:
 
 ### Phase 4: Small UI Allocation Cleanup
 
-Goal: remove predictable per-draw allocation churn once redraw frequency is under control.
+Goal: remove predictable per-draw allocation churn once redraw frequency is under control, without claiming or requiring "zero dynamic allocation ever."
 
 Primary files:
 
 - `src/BifurxUI.cpp`
 - `src/BifurxGL.cpp`
 
-Implementation steps:
+Status intent:
 
-1. Move NanoVG `refinedPoints` storage from a local draw-time vector to a persistent widget member.
-2. Reserve stable capacities during widget construction or first use:
-   - NanoVG refined curve storage
-   - GL `refinedPoints`
-   - GL fill/curve vertex buffers
-3. Keep backend semantics frozen:
-   - do not change shader compilation flow
+- This phase is a container-lifetime and reserve-policy pass.
+- It is not a geometry algorithm rewrite and not a renderer behavior change.
+- Current status: implemented for the scoped goals (persistent NanoVG `refinedPoints`, one-time reserve policy, and reuse-oriented shared helper behavior).
+
+Required behavior contract:
+
+- Persistent container lifetime:
+  - NanoVG refined curve storage must be a long-lived widget member, not a draw-local vector.
+  - GL scratch vectors stay long-lived members (already true) and are reused frame-to-frame.
+- Reserve-once policy:
+  - Reserve expected capacities during construction or first-use init.
+  - `reserve()` must not run every draw call.
+- Grow-allowed policy:
+  - Vectors are allowed to grow if future geometry exceeds reserved capacity.
+  - Growth is treated as rare fallback behavior, not steady-state behavior.
+- No-shrink policy:
+  - Do not call `shrink_to_fit()` in draw paths.
+  - Do not add per-frame clear+reallocate patterns that defeat reuse.
+- Semantic freeze:
+  - Same geometry points, same draw order, same shader/fallback selection semantics.
+  - This phase must not alter visual output intent.
+
+Concrete implementation requirements:
+
+1. NanoVG path:
+   - move `refinedPoints` from draw-local storage to a persistent member on `BifurxSpectrumWidget`.
+   - ensure helper calls reuse that same vector each frame.
+2. Reserve policy:
+   - NanoVG `refinedPoints`: reserve a known bound (`kCurvePointCount + refinement margin`) once.
+   - GL `refinedPoints`: reserve once.
+   - GL fill/curve/cyan vertex vectors: reserve once from known worst-case geometry counts.
+3. Keep helper logic stable:
+   - do not change refinement math, sort/unique behavior, marker anchor behavior, or response sampling in this phase.
+4. Keep renderer backend behavior stable:
+   - do not change shader compile/init flow
    - do not remove fixed-function fallback
-   - do not alter the shader/fallback selection condition in the same patch
-4. Keep the calculation helpers unchanged unless profiling shows the point count itself is the problem.
+   - do not change backend selection logic in this phase
+
+Out of scope:
+
+- "No dynamic memory allocation ever" guarantees
+- VBO upload strategy changes
+- shader feature changes
+- preview/runtime filter math changes
+- redraw policy changes already covered by Phase 3
 
 Validation:
 
 - Build and run existing fast tests.
-- Spot-check perf logging to confirm reduced draw-time churn, but treat this as secondary to Phase 3.
 - Exercise both GL backends after any `src/BifurxGL.cpp` edit.
+- Spot-check perf logging to confirm reduced draw-time churn, but treat this as secondary to Phase 3.
+- Verify no visible rendering regressions (markers, curve continuity, overlays, top readout) in both GL shader and fixed-function modes.
+
+Validation status:
+
+- `make test-fast` passed after Phase 4 implementation.
+- `make test` passed in this environment.
+- Manual in-Rack visual/perf spot-check remains recommended as a follow-up verification step.
 
 Exit criteria:
 
-- No per-draw `std::vector` construction remains on the NanoVG curve path.
-- GL vectors have explicit reserve policy sized for the known point counts.
+- No per-draw `std::vector` construction remains on the NanoVG curve-refinement path.
+- Reserve policy exists and is one-time/initialization-oriented, not per-frame.
+- Steady-state draw path reuses existing vector capacities in both NanoVG and GL paths.
+- Occasional growth remains allowed when needed; shrinking is not introduced in draw paths.
 - Shader and fallback rendering behavior are unchanged apart from reduced allocation churn.
 
 ### Phase 5: Audio-Thread Guardrails And Cheap Caches
