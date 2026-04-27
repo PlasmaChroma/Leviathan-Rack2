@@ -509,11 +509,25 @@ Exit criteria:
 
 Goal: trim obvious always-on work without changing modulation behavior.
 
+Status:
+
+- Partially complete.
+- Low-risk cache work is landed; higher-risk behavior-affecting items remain pending.
+
 Primary files:
 
 - `src/Bifurx.cpp`
 - `src/Bifurx.hpp`
 - `tests/bifurx_runtime_spec.cpp`
+
+Completed work:
+
+1. Cached LL telemetry alpha by sample rate:
+   - added persistent `llTelemetryAlpha` / `llTelemetryAlphaSampleRate` state
+   - compute on `onSampleRateChange()`
+   - keep a process-time sample-rate mismatch fallback to refresh cache safely
+   - replaced per-sample `onePoleAlpha(args.sampleTime, kLlTelemetryTauSeconds)` calls with cached alpha usage
+2. Validation run: `make test-fast` passed after this change.
 
 Implementation steps:
 
@@ -531,6 +545,12 @@ Implementation steps:
    - large input level
    - both TITO polarities
    - finite output is the invariant, not waveform identity
+
+Remaining work:
+
+1. Add sanitation divider for `sanitizeCoreState(coreA/coreB)` only after stress-coverage guardrails are in place.
+2. Decide whether/when to gate analysis publishing with an explicit consumer-activity contract.
+3. Add and run focused runtime stress coverage before landing either of the two items above.
 
 Validation:
 

@@ -527,6 +527,8 @@ struct Bifurx : Module {
 	bool voctCvFilterInitialized = false;
 	float voctCvFilterAlpha = 0.f;
 	float voctCvFilterSampleRate = 0.f;
+	float llTelemetryAlpha = 0.f;
+	float llTelemetryAlphaSampleRate = 0.f;
 	float previewPrevTargetFreqA = 440.f;
 	float previewPrevTargetFreqB = 440.f;
 	bool previewTargetMotionInitialized = false;
