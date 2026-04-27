@@ -303,7 +303,7 @@ Exit criteria:
 
 Goal: stop the display from continuing to animate and redraw after values have effectively converged.
 
-Current status: core convergence fix landed (snap-on-settle + target-flag clear); second-pass inactive-renderer guard is still optional and not yet landed. This phase is being executed as a narrow state-machine fix, not a general renderer optimization pass.
+Current status: core convergence fix and inactive-renderer tick guard are both landed. This phase is still being executed as a narrow state-machine fix, not a general renderer optimization pass.
 
 Completed in code:
 
@@ -311,11 +311,11 @@ Completed in code:
 - On convergence, curve state snaps to `curveTargetDb[]` and clears `hasCurveTarget`.
 - On convergence, overlay arrays plus `displayTopDbfs` snap to targets and clear `hasOverlayTarget`.
 - `animationActive` now naturally falls false after convergence, allowing existing dirty gating to stop redraw.
+- Inactive renderer widgets now early-return before `runRenderTick()`, so only the active backend consumes preview/analysis work each frame.
 - Validation run: `make test-fast` passed after this change.
 
 Remaining for Phase 3:
 
-- Optional second-pass guarding of inactive renderer `syncBase()` / analysis consumption, only if done without backend semantic changes.
 - Runtime validation in an environment where `bifurx_runtime_spec` is buildable.
 
 Primary files:

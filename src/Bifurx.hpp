@@ -574,6 +574,7 @@ struct Bifurx : Module {
 	std::atomic<bool> perfFastPathEligible{false};
 	std::atomic<bool> perfPreviewPitchCvConnected{false};
 	uint32_t debugInstanceId = 0;
+	double createdUnixTimeSec = 0.0;
 
 	Bifurx();
 	void resetCircuitStates();

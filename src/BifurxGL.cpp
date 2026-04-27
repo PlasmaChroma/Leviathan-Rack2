@@ -257,6 +257,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	void step() override {
 		OpenGlWidget::step();
 		if (!module) return;
+		if (module->renderMode != Bifurx::RENDER_OPENGL) return;
 
 		float uiFrameSec = 1.f / 60.f;
 		if (APP && APP->window) {

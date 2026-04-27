@@ -318,6 +318,7 @@ void BifurxSpectrumWidget::step() {
 	syncCurveDebugCaptureState();
 	syncPerfDebugCaptureState();
 	if (!module) return;
+	if (module->renderMode != Bifurx::RENDER_NANOVG) return;
 
 	bool dirty = false;
 	bool previewUpdated = false;
@@ -679,6 +680,25 @@ struct BifurxWidget final : ModuleWidget {
 				base->drawNanoVG(args);
 			}
 			nvgRestore(args.vg);
+		}
+		if (bifurx && APP && APP->window && APP->window->uiFont) {
+			const double createdUnixTimeSec = bifurx->createdUnixTimeSec;
+			if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
+				const double ageSec = system::getUnixTime() - createdUnixTimeSec;
+				if (ageSec >= 666.0) {
+					const float x = mm2px(54.8f);
+					const float y = mm2px(4.47f);
+					nvgSave(args.vg);
+					nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+					nvgFontSize(args.vg, 12.5f);
+					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+					nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 214));
+					nvgText(args.vg, x + 0.45f, y + 0.45f, "$", nullptr);
+					nvgFillColor(args.vg, nvgRGBA(252, 223, 118, 244));
+					nvgText(args.vg, x, y, "$", nullptr);
+					nvgRestore(args.vg);
+				}
+			}
 		}
 		if (bifurx && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
 			char debugIdLabel[32];

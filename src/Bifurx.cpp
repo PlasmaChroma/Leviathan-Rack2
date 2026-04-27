@@ -356,6 +356,7 @@ static std::atomic<uint32_t> gBifurxDebugInstanceCounter{1u};
 
 Bifurx::Bifurx() {
 	debugInstanceId = gBifurxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
+	createdUnixTimeSec = system::getUnixTime();
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(MODE_PARAM, 0.f, 9.f, 0.f, "Mode", {kBifurxModeLabels[0], kBifurxModeLabels[1], kBifurxModeLabels[2], kBifurxModeLabels[3], kBifurxModeLabels[4], kBifurxModeLabels[5], kBifurxModeLabels[6], kBifurxModeLabels[7], kBifurxModeLabels[8], kBifurxModeLabels[9]});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.5f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
@@ -373,6 +374,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
+	json_object_set_new(root, "createdUnixTimeSec", json_real(createdUnixTimeSec));
 	return root;
 }
 
@@ -400,6 +402,13 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging");
 	if (perfDebugLoggingJ) {
 		perfDebugLogging = json_is_true(perfDebugLoggingJ);
+	}
+	json_t* createdUnixTimeSecJ = json_object_get(root, "createdUnixTimeSec");
+	if (createdUnixTimeSecJ && json_is_number(createdUnixTimeSecJ)) {
+		const double loadedCreatedUnixTimeSec = json_number_value(createdUnixTimeSecJ);
+		if (std::isfinite(loadedCreatedUnixTimeSec) && loadedCreatedUnixTimeSec > 0.0) {
+			createdUnixTimeSec = loadedCreatedUnixTimeSec;
+		}
 	}
 
 	auto decodeRenderMode = [](int rawRenderMode) {
