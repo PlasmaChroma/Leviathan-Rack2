@@ -138,9 +138,52 @@ Recommended design:
 
 Do not call this a pure optimization. It is a behavior change for CV-rate modulation.
 
-### VBO Rework
+### GL Backend Cleanup
 
-The GL widget creates a VBO but still draws from client-side vectors. That is untidy, but it is not the first performance target. Dirty-gating redraws should come before VBO work. If draw frequency drops correctly, the VBO change may not matter.
+The GL renderer is no longer a single path. It now has:
+
+- a fixed-function fallback path using client-side vertex arrays
+- a shader-backed path using `shaderVbo` uploads and `drawVertsShader()`
+
+That changes the implementation risk profile. The main concern is no longer "add a VBO". The concern is "do not destabilize two rendering backends that already produce working output."
+
+Current shape:
+
+- `src/BifurxGL.cpp` builds the same CPU-side geometry for both backends:
+  - `fillVertices`
+  - `fillSoftCapVertices`
+  - `cyanVertices`
+  - `curveVertices`
+  - shared `refinedPoints`
+- backend selection happens late in `drawFramebuffer()`:
+  - shader path when `useGlShaderRenderer` is enabled and `ensureShaderReady()` succeeds
+  - fixed-function fallback otherwise
+- the widget also exposes backend state visually through the NanoVG badge:
+  - `GL SHDR`
+  - `GL FIXED`
+  - `GL FALLBACK`
+
+Implications:
+
+- Dirty-gating and animation convergence still matter more than GPU upload changes, because both backends pay the same CPU-side preparation cost before issuing draw calls.
+- Any GL cleanup should preserve identical geometry generation and only narrow backend-specific differences.
+- Do not combine "render behavior changes" and "render backend refactors" in the same patch unless a regression harness exists.
+
+Recommended constraint:
+
+- Treat the shader renderer as an optional acceleration path, not the new semantic source of truth.
+- Keep the fixed-function fallback working until the shader path has equivalent visual behavior across the expected environments.
+- When making GL edits, prefer changes that are backend-agnostic:
+  - redraw gating
+  - convergence stopping
+  - persistent vector storage
+  - explicit reserve policy
+
+Validation:
+
+- Check both `useGlShaderRenderer = false` and `useGlShaderRenderer = true`.
+- Confirm the same patch still renders sensible output when shader compilation fails and the widget falls back automatically.
+- Avoid claiming a perf win from the shader path alone unless draw frequency is held constant during measurement.
 
 ## Recommended Implementation Order
 
@@ -148,9 +191,258 @@ The GL widget creates a VBO but still draws from client-side vectors. That is un
 2. Preview bandpass/Q fix plus mirrored test-model update.
 3. Add preview/runtime response tests for bandpass-heavy modes.
 4. UI animation convergence and dirty-gating.
-5. NanoVG/GL vector reserve and persistent NanoVG refined points.
+5. NanoVG/GL vector reserve and persistent refined-point storage, without changing GL backend semantics.
 6. Cache LL telemetry alpha and throttle state sanitation.
 7. Only then implement tiered control-rate updates behind tests.
+
+## Detailed Implementation Plans
+
+### Phase 1: Header/API Cleanup
+
+Goal: remove small source-of-truth drift before touching behavior.
+
+Primary files:
+
+- `src/Bifurx.hpp`
+- `src/Bifurx.cpp`
+- `bifurx-DR-55.md`
+
+Implementation steps:
+
+1. Update the header declaration of `processCharacterStage()` in `src/Bifurx.hpp` so it matches the actual definition in `src/Bifurx.cpp`:
+   - add `int characterMode` before `int stageIndex`
+   - keep the cached-coefficients tail argument unchanged
+2. Rename the local argument or comment if needed so the intent is explicit:
+   - today `characterMode` is effectively `circuitMode`
+   - the function currently ignores it, so comments should say that this path is intentionally SVF-only for now
+3. Search for any stale call sites, tests, or prose that still imply alternate circuit implementations are active inside Bifurx.
+4. Keep this phase behavior-neutral. No DSP or UI logic should move here.
+
+Validation:
+
+- Build `build/tests/bifurx_runtime_spec`
+- Run `make test-fast`
+
+Exit criteria:
+
+- Header and implementation signatures match exactly.
+- There is no dead declaration left behind to confuse later edits.
+
+### Phase 2: Preview Accuracy Fix
+
+Goal: make the preview curve match the runtime SVF closely enough that the display is trustworthy in bandpass-heavy modes and at high resonance.
+
+Primary files:
+
+- `src/Bifurx.cpp`
+- `src/Bifurx.hpp`
+- `tests/bifurx_filter_test_model.hpp`
+- `tests/bifurx_filter_spec.cpp`
+- `tests/bifurx_runtime_spec.cpp`
+
+Implementation steps:
+
+1. Change preview Q derivation so it uses the same runtime damping bounds:
+   - runtime clamps damping through `makeSvfCoeffs()` to `0.02f..2.2f`
+   - preview currently clamps `qA`/`qB` to `0.2f..18.f`
+   - derive preview Q from clamped damping rather than maintaining a separate arbitrary Q ceiling
+2. Rework `makeDisplayBiquad()` bandpass behavior:
+   - current type `1` response is the unity-peak RBJ form
+   - runtime `TptSvf::processWithCoeffs()` exposes `bp = v1`, which rises with Q
+   - first patch target: multiply the bandpass numerator by Q or otherwise restate the transfer function so center gain tracks the TPT SVF
+3. Keep lowpass, highpass, and notch preview shapes unchanged unless tests show collateral drift.
+4. Mirror the exact math in `tests/bifurx_filter_test_model.hpp` immediately after changing runtime preview math.
+5. Add explicit regression coverage for the modes already called out in this document:
+   - mode `1` (`Low + Band`)
+   - mode `5` (`Band + Band`)
+   - mode `8` (`Band + High`)
+6. Prefer response-shape assertions over brittle exact-value comparisons:
+   - compare preview peak ordering
+   - compare preview-vs-runtime gain deltas at selected probe frequencies
+   - assert that high-Q bandpass peaks are no longer unity-clamped
+
+Suggested test additions:
+
+- In `tests/bifurx_filter_spec.cpp`, add a case that builds a high-Q preview model and checks that the bandpass peak rises materially above `0 dB`.
+- In `tests/bifurx_runtime_spec.cpp`, use `capturePreviewState()` plus `measureRuntimeGainDb()` to compare preview and runtime around each marker frequency for modes `1`, `5`, and `8`.
+- Reuse the existing helpers instead of introducing a second measurement harness.
+
+Risks:
+
+- A cosmetic Q fix without fixing bandpass transfer scaling will still leave the preview lying near resonance.
+- If preview math and test-model math diverge, the tests will start validating the wrong model instead of the code the user sees.
+
+Exit criteria:
+
+- Preview and runtime agree within a narrow tolerance in the targeted bandpass modes.
+- High-resonance bandpass peaks are visibly and numerically higher than the current unity-peak preview.
+
+### Phase 3: UI Idle And Redraw Gating
+
+Goal: stop the display from continuing to animate and redraw after values have effectively converged.
+
+Primary files:
+
+- `src/Bifurx.cpp`
+- `src/Bifurx.hpp`
+- `src/BifurxUI.cpp`
+- `src/BifurxGL.cpp`
+
+Implementation steps:
+
+1. Finish the animation state machine in `BifurxSpectrumBase::updateAnimation()`:
+   - after curve values fall within epsilon, snap `curveDb[i] = curveTargetDb[i]`
+   - clear `state.hasCurveTarget` once the whole curve is settled
+   - do the same for overlay arrays and `displayTopDbfs`, then clear `state.hasOverlayTarget`
+2. Be careful with initialization semantics:
+   - `updateCurveCache()` and `updateOverlayCache()` currently use `hasCurveTarget` / `hasOverlayTarget` as “have we initialized the displayed arrays yet?”
+   - after introducing clearing-on-settle, verify those methods still repopulate immediately when a new preview or analysis frame arrives
+3. Keep dirtying only for real work:
+   - NanoVG path should continue using framebuffer dirtiness based on `previewUpdated`, `analysisUpdated`, and `animationActive`
+   - GL path should stop forcing redraw behavior that bypasses the same dirty policy
+   - apply the same redraw-stop rules regardless of whether the GL widget ends up in shader or fixed-function mode
+4. Add visibility/render-mode guards before expensive sync work:
+   - avoid `syncBase()` / FFT overlay work for widgets that are not actually the active renderer
+   - if a widget is hidden because the other renderer is active, it should not consume analysis frames just to throw them away
+5. Do not fold backend refactors into this phase:
+   - the goal here is to stop unnecessary redraws
+   - shader-path and fallback-path draw code should remain semantically unchanged while this is being verified
+6. Preserve current visual smoothing while active; the fix is to stop once settled, not to make the UI jumpy.
+
+Suggested instrumentation pass:
+
+- Use `perf_debug_*.csv` and compare `uiDrawCount`, `uiDrawAvgNs`, `uiCurveUpdateAvgNs`, and `uiOverlayUpdateAvgNs` before and after.
+- Specifically confirm that an idle module with no parameter movement stops drawing continuously after the curve and overlay settle.
+- Repeat the idle check in both GL modes:
+  - shader renderer enabled and compiling successfully
+  - shader renderer disabled or falling back to fixed-function
+
+Risks:
+
+- Clearing `hasCurveTarget` too early can cause one-frame pops if new targets arrive during the same UI frame.
+- Clearing `hasOverlayTarget` without snapping all arrays can leave perpetual one-LSB animation churn.
+- A redraw-policy fix that is only tested in one GL backend can silently break the other backend's perceived stability.
+
+Exit criteria:
+
+- Idle Bifurx no longer redraws at frame rate after state convergence.
+- New preview or analysis publishes still restart animation cleanly.
+- Shader and fixed-function GL output both remain visually sane after the redraw changes.
+
+### Phase 4: Small UI Allocation Cleanup
+
+Goal: remove predictable per-draw allocation churn once redraw frequency is under control.
+
+Primary files:
+
+- `src/BifurxUI.cpp`
+- `src/BifurxGL.cpp`
+
+Implementation steps:
+
+1. Move NanoVG `refinedPoints` storage from a local draw-time vector to a persistent widget member.
+2. Reserve stable capacities during widget construction or first use:
+   - NanoVG refined curve storage
+   - GL `refinedPoints`
+   - GL fill/curve vertex buffers
+3. Keep backend semantics frozen:
+   - do not change shader compilation flow
+   - do not remove fixed-function fallback
+   - do not alter the shader/fallback selection condition in the same patch
+4. Keep the calculation helpers unchanged unless profiling shows the point count itself is the problem.
+
+Validation:
+
+- Build and run existing fast tests.
+- Spot-check perf logging to confirm reduced draw-time churn, but treat this as secondary to Phase 3.
+- Exercise both GL backends after any `src/BifurxGL.cpp` edit.
+
+Exit criteria:
+
+- No per-draw `std::vector` construction remains on the NanoVG curve path.
+- GL vectors have explicit reserve policy sized for the known point counts.
+- Shader and fallback rendering behavior are unchanged apart from reduced allocation churn.
+
+### Phase 5: Audio-Thread Guardrails And Cheap Caches
+
+Goal: trim obvious always-on work without changing modulation behavior.
+
+Primary files:
+
+- `src/Bifurx.cpp`
+- `src/Bifurx.hpp`
+- `tests/bifurx_runtime_spec.cpp`
+
+Implementation steps:
+
+1. Cache LL telemetry alpha on sample-rate change:
+   - today `onePoleAlpha(args.sampleTime, kLlTelemetryTauSeconds)` runs every sample
+   - mirror the existing cached pattern used for preview filter alpha and V/oct smoothing
+2. Add a sanitation divider for core state:
+   - run `sanitizeCoreState(coreA/coreB)` every `16` or `32` samples instead of every sample
+   - keep final output finite-sanitized every sample
+3. Only make analysis publishing conditional if the UI-side consumption contract is understood:
+   - current `pushAnalysisSample(in, out)` is unconditional
+   - a future `analysisConsumerActive` atomic is reasonable, but it should default safe and must not race hidden-but-soon-visible widgets into stale overlays
+4. Add runtime stress tests before landing sanitation throttling:
+   - max resonance
+   - large input level
+   - both TITO polarities
+   - finite output is the invariant, not waveform identity
+
+Validation:
+
+- `make test-fast`
+- `build/tests/bifurx_runtime_spec`
+- Perf comparison with `perfAudioProcessAvgNs`, `perfAudioControlsAvgNs`, and `perfAudioAnalysisAvgNs`
+
+Exit criteria:
+
+- No NaN/Inf regressions under the stress cases.
+- Audio-thread savings are measurable in perf logging.
+
+### Phase 6: Tiered Control-Rate Updates
+
+Goal: reduce worst-case control-path cost when CV is connected, while explicitly treating this as a modulation-behavior change.
+
+Primary files:
+
+- `src/Bifurx.cpp`
+- `src/Bifurx.hpp`
+- `tests/bifurx_runtime_spec.cpp`
+
+Implementation steps:
+
+1. Split the current monolithic `updateFastControls` decision into named buckets:
+   - static control recalculation
+   - slow CV recalculation
+   - conservative pitch recalculation
+   - mandatory audio-rate recalculation
+2. Keep these paths audio-rate:
+   - FM when connected with nontrivial amount
+   - TITO whenever non-neutral
+3. Start with only slow CV throttling:
+   - resonance CV
+   - balance CV
+   - span CV
+4. Treat V/oct separately:
+   - default conservative behavior is to keep it effectively fast unless tests prove a slower path is acceptable
+   - if a pitch divider is introduced, bypass it whenever delta-per-sample exceeds a threshold or FM is connected
+5. Preserve smoothing semantics:
+   - any downsampled control path should be paired with explicit smoothing so stepped control updates do not alias visibly or audibly
+6. Land this phase only behind new tests and before/after perf evidence.
+
+Suggested runtime coverage:
+
+- Static no-CV patch remains unchanged.
+- Slow resonance CV and slow span CV stay finite and qualitatively smooth.
+- Audio-rate FM remains measurably different from a downsampled approximation.
+- TITO still responds sample-accurately and does not collapse onto the cached-coefficient path.
+
+Exit criteria:
+
+- CPU drops materially for CV-connected cases.
+- Fast modulation behavior that should stay audio-rate is preserved by tests.
 
 ## Concrete Test Plan
 

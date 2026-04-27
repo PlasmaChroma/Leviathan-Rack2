@@ -165,7 +165,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 		perfDebugRecorder.path = system::join(bifurxUserRootPath(), "perf_debug_" + std::to_string(std::time(nullptr)) + ".csv");
 		perfDebugRecorder.file.open(perfDebugRecorder.path);
 		if (perfDebugRecorder.file.is_open()) {
-			perfDebugRecorder.file << "sequence,circuitMode,mode,fastPath,pitchCvConnected,"
+			perfDebugRecorder.file << "sequence,mode,fastPath,pitchCvConnected,"
 				<< "audioSampleRate,audioSampledCount,"
 				<< "audioProcessAvgNs,audioControlsAvgNs,audioCoreAvgNs,audioPreviewAvgNs,audioAnalysisAvgNs,audioProcessMaxNs,"
 				<< "uiStepCount,uiStepAvgNs,uiDrawCount,uiDrawAvgNs,"
@@ -237,7 +237,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 		auto avg = [](uint64_t total, uint64_t count) { return (count > 0) ? (double(total) / double(count)) : 0.0; };
 
 		perfDebugRecorder.file << perfDebugRecorder.sequence++ << ","
-			<< module->perfCircuitMode.load() << "," << module->perfMode.load() << ","
+			<< module->perfMode.load() << ","
 			<< (module->perfFastPathEligible.load() ? 1 : 0) << "," << (module->perfPreviewPitchCvConnected.load() ? 1 : 0) << ","
 			<< module->perfSampleRate.load() << "," << audioSampledCount << ","
 			<< (double(audioProcessNs) * audioScale) << "," << (double(audioControlsNs) * audioScale) << ","

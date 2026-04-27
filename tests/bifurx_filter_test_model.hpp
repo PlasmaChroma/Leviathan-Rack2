@@ -43,68 +43,11 @@ inline float highHighSpanCompGain(float wideMorph) {
   return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
-struct SemanticExportProfile {
-  float lpScale = 0.f;
-  float bpScale = 0.f;
-  float hpScale = 0.f;
-};
-
-inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
-  (void)circuitMode;
-  const int clampedCircuitMode = 0;
-  (void)stageIndex;
-  SemanticExportProfile profile;
-  switch (clampedCircuitMode) {
-    case 1:
-      profile.lpScale = 0.f;
-      profile.bpScale = 6.8f;
-      profile.hpScale = 6.2f;
-      return profile;
-    case 2:
-      profile.lpScale = 0.f;
-      profile.bpScale = 6.5f;
-      profile.hpScale = 0.f;
-      return profile;
-    case 3:
-      profile.lpScale = 4.4f;
-      profile.bpScale = 4.2f;
-      profile.hpScale = 3.6f;
-      return profile;
-    default:
-      return profile;
-  }
-}
-
-template <typename T>
-inline T normalizeSemanticComponent(const T& value, float exportScale) {
-  if (!(exportScale > 0.f)) {
-    return value;
-  }
-  const float magnitude = std::abs(value);
-  if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
-    return value;
-  }
-  const float compressed = exportScale * std::tanh(magnitude / exportScale);
-  if (!(compressed > 0.f) || !std::isfinite(compressed)) {
-    return value;
-  }
-  return value * T(compressed / magnitude);
-}
-
 struct SvfOutputs {
   float lp = 0.f;
   float bp = 0.f;
   float hp = 0.f;
 };
-
-inline SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
-  const SemanticExportProfile profile = semanticExportProfile(circuitMode, stageIndex);
-  SvfOutputs out;
-  out.lp = normalizeSemanticComponent(raw.lp, profile.lpScale);
-  out.bp = normalizeSemanticComponent(raw.bp, profile.bpScale);
-  out.hp = normalizeSemanticComponent(raw.hp, profile.hpScale);
-  return out;
-}
 
 struct DisplayBiquad {
   float b0 = 0.f;
@@ -225,7 +168,6 @@ struct PreviewState {
   float resoNorm = 0.f;
   float spanNorm = 0.5f;
   int mode = 0;
-  int circuitMode = 0;
 };
 
 struct PreviewModel {
@@ -244,7 +186,6 @@ struct PreviewModel {
   float wB = 1.f;
   float wideMorph = 0.f;
   int mode = 0;
-  int circuitMode = 0;
 };
 
 inline PreviewModel makePreviewModel(const PreviewState& state) {
@@ -269,7 +210,6 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   model.markerFreqB = freqB;
   model.sampleRate = state.sampleRate;
   model.mode = state.mode;
-  model.circuitMode = 0;
 
   const float lowW = signedWeight(state.balance, false);
   const float highW = signedWeight(state.balance, true);
@@ -282,15 +222,13 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
 
 inline std::complex<float> response(const PreviewModel& model, float hz) {
   const float omega = 2.f * kPi * clampf(hz, kFreqMinHz, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-  const SemanticExportProfile profileA = semanticExportProfile(model.circuitMode, 0);
-  const SemanticExportProfile profileB = semanticExportProfile(model.circuitMode, 1);
-  const std::complex<float> lpA = normalizeSemanticComponent(model.lowA.response(omega), profileA.lpScale);
-  const std::complex<float> bpA = normalizeSemanticComponent(model.bandA.response(omega), profileA.bpScale);
-  const std::complex<float> hpA = normalizeSemanticComponent(model.highA.response(omega), profileA.hpScale);
+  const std::complex<float> lpA = model.lowA.response(omega);
+  const std::complex<float> bpA = model.bandA.response(omega);
+  const std::complex<float> hpA = model.highA.response(omega);
   const std::complex<float> ntA = lpA + hpA;
-  const std::complex<float> lpB = normalizeSemanticComponent(model.lowB.response(omega), profileB.lpScale);
-  const std::complex<float> bpB = normalizeSemanticComponent(model.bandB.response(omega), profileB.bpScale);
-  const std::complex<float> hpB = normalizeSemanticComponent(model.highB.response(omega), profileB.hpScale);
+  const std::complex<float> lpB = model.lowB.response(omega);
+  const std::complex<float> bpB = model.bandB.response(omega);
+  const std::complex<float> hpB = model.highB.response(omega);
   const std::complex<float> ntB = lpB + hpB;
   const std::complex<float> cascadeLp = lpB * lpA;
   const std::complex<float> cascadeNotch = ntB * ntA;
@@ -384,8 +322,7 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -407,8 +344,8 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
     const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.lp, cB), circuitMode, 1);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.lp, cB);
     const float modeOut = oB.lp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 
@@ -439,8 +376,7 @@ inline std::vector<LlRuntimeSweepPoint> makeLlRuntimeSweep(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   std::vector<LlRuntimeSweepPoint> sweep;
   sweep.reserve(freqsHz.size());
@@ -455,8 +391,7 @@ inline std::vector<LlRuntimeSweepPoint> makeLlRuntimeSweep(
       cutoffA,
       cutoffB,
       dampingA,
-      dampingB,
-      circuitMode
+      dampingB
     );
     sweep.push_back(point);
   }
@@ -471,11 +406,10 @@ inline float simulateLlRuntimeGainDb(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   const LlRuntimeTelemetry telemetry = measureLlRuntimeTelemetry(
-    sampleRate, inputHz, inputAmplitude, levelKnob, cutoffA, cutoffB, dampingA, dampingB, circuitMode
+    sampleRate, inputHz, inputAmplitude, levelKnob, cutoffA, cutoffB, dampingA, dampingB
   );
   return telemetry.outputOverInputDb;
 }
@@ -489,8 +423,7 @@ inline float simulateHhRuntimeGainDb(
   float cutoffB,
   float dampingA,
   float dampingB,
-  float wideMorph,
-  int circuitMode = 0
+  float wideMorph
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -511,8 +444,8 @@ inline float simulateHhRuntimeGainDb(
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
     const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.hp, cB), circuitMode, 1);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.hp, cB);
     const float modeOut = hhGain * oB.hp;
     const float out = 5.5f * softClip(modeOut / 5.5f);
 

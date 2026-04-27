@@ -51,7 +51,6 @@ void clearCvInputs(Bifurx& module) {
 }
 
 float measureRuntimeGainDb(
-  int circuitMode,
   int mode,
   float inputHz,
   float inputAmplitude,
@@ -61,7 +60,6 @@ float measureRuntimeGainDb(
   float balance,
   float tito = 0.f
 ) {
-  (void)circuitMode;
   Bifurx module;
   module.onReset();
 
@@ -113,7 +111,6 @@ float titoStimulusSample(float t, int n) {
 }
 
 TitoOutputCapture captureTitoOutput(
-  int circuitMode,
   int mode,
   float tito,
   float centerHz,
@@ -121,7 +118,6 @@ TitoOutputCapture captureTitoOutput(
   float reso,
   float balance
 ) {
-  (void)circuitMode;
   Bifurx module;
   module.onReset();
 
@@ -206,7 +202,6 @@ bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
 }
 
 bool capturePreviewState(
-  int circuitMode,
   int mode,
   float centerHz,
   float spanNorm,
@@ -217,7 +212,6 @@ bool capturePreviewState(
   if (!outState) {
     return false;
   }
-  (void)circuitMode;
   Bifurx module;
   module.onReset();
 
@@ -290,10 +284,10 @@ TestResult testRuntimeBalanceTiltsBandBandInSvf() {
   const float freqNorm = freqNormForCenterHz(centerHz);
   const float spanNorm = clamp(std::log2(1500.f / 340.f) / 8.f, 0.f, 1.f);
 
-  const float negLow = measureRuntimeGainDb(0, 5, 340.f, 0.10f, freqNorm, spanNorm, 0.35f, -0.85f);
-  const float negHigh = measureRuntimeGainDb(0, 5, 1500.f, 0.10f, freqNorm, spanNorm, 0.35f, -0.85f);
-  const float posLow = measureRuntimeGainDb(0, 5, 340.f, 0.10f, freqNorm, spanNorm, 0.35f, 0.85f);
-  const float posHigh = measureRuntimeGainDb(0, 5, 1500.f, 0.10f, freqNorm, spanNorm, 0.35f, 0.85f);
+  const float negLow = measureRuntimeGainDb(5, 340.f, 0.10f, freqNorm, spanNorm, 0.35f, -0.85f);
+  const float negHigh = measureRuntimeGainDb(5, 1500.f, 0.10f, freqNorm, spanNorm, 0.35f, -0.85f);
+  const float posLow = measureRuntimeGainDb(5, 340.f, 0.10f, freqNorm, spanNorm, 0.35f, 0.85f);
+  const float posHigh = measureRuntimeGainDb(5, 1500.f, 0.10f, freqNorm, spanNorm, 0.35f, 0.85f);
 
   const bool lowFavoredWhenNegative = negLow > (negHigh + 1.f);
   const bool highFavoredWhenPositive = posHigh > (posLow + 1.f);
@@ -309,7 +303,7 @@ TestResult testRuntimeReportedLowCaseKeepsAudibleOutput() {
   const float centerHz = std::sqrt(53.9f * 114.f);
   const float freqNorm = freqNormForCenterHz(centerHz);
   const float spanNorm = clamp(std::log2(114.f / 53.9f) / 8.f, 0.f, 1.f);
-  const float gain = measureRuntimeGainDb(0, 0, 40.f, 0.25f, freqNorm, spanNorm, 0.35f, 0.f);
+  const float gain = measureRuntimeGainDb(0, 40.f, 0.25f, freqNorm, spanNorm, 0.35f, 0.f);
   const bool pass = std::isfinite(gain) && (gain > -36.f);
   return {
     "Runtime LL low-frequency case stays above floor",
@@ -332,7 +326,7 @@ TestResult testRuntimeLlDropoutRegressionSweep() {
   float lowMin = 1e9f;
   float lowMinHz = 0.f;
   for (float hz : lowBandHz) {
-    const float g = measureRuntimeGainDb(0, 0, hz, amp, freqNorm, spanNorm, reso, balance);
+    const float g = measureRuntimeGainDb(0, hz, amp, freqNorm, spanNorm, reso, balance);
     if (!std::isfinite(g)) {
       return {"Runtime LL dropout sweep remains finite", false, "non-finite low-band gain"};
     }
@@ -344,7 +338,7 @@ TestResult testRuntimeLlDropoutRegressionSweep() {
   }
   float upperSum = 0.f;
   for (float hz : upperBandHz) {
-    const float g = measureRuntimeGainDb(0, 0, hz, amp, freqNorm, spanNorm, reso, balance);
+    const float g = measureRuntimeGainDb(0, hz, amp, freqNorm, spanNorm, reso, balance);
     if (!std::isfinite(g)) {
       return {"Runtime LL dropout sweep remains finite", false, "non-finite upper-band gain"};
     }
@@ -372,7 +366,7 @@ TestResult testRuntimeCurveFamiliesRemainDistinct() {
 
   for (int mode : modes) {
     BifurxPreviewState state;
-    const bool ok = capturePreviewState(0, mode, 900.f, 0.55f, 0.35f, 0.f, &state);
+    const bool ok = capturePreviewState(mode, 900.f, 0.55f, 0.35f, 0.f, &state);
     if (!ok) {
       return {
         "Runtime LL/NN/BB/HH curve families stay distinct",
@@ -411,9 +405,9 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   std::string weakCases;
 
   for (int mode = 0; mode < 10; ++mode) {
-    const TitoOutputCapture clean = captureTitoOutput(0, mode, 0.f, 880.f, 0.58f, 0.86f, 0.f);
-    const TitoOutputCapture xm = captureTitoOutput(0, mode, 1.f, 880.f, 0.58f, 0.86f, 0.f);
-    const TitoOutputCapture sm = captureTitoOutput(0, mode, -1.f, 880.f, 0.58f, 0.86f, 0.f);
+    const TitoOutputCapture clean = captureTitoOutput(mode, 0.f, 880.f, 0.58f, 0.86f, 0.f);
+    const TitoOutputCapture xm = captureTitoOutput(mode, 1.f, 880.f, 0.58f, 0.86f, 0.f);
+    const TitoOutputCapture sm = captureTitoOutput(mode, -1.f, 880.f, 0.58f, 0.86f, 0.f);
 
     const float xmDistance = normalizedWaveDistance(clean, xm);
     const float smDistance = normalizedWaveDistance(clean, sm);

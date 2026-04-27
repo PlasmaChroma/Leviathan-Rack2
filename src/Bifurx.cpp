@@ -103,46 +103,6 @@ float highHighSpanCompGain(float wideMorph) {
 	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
-float previewCharacterDisplayDb(float db, int circuitMode) {
-	(void) circuitMode;
-	return db;
-}
-
-float circuitCutoffScale(int circuitMode) {
-	(void) circuitMode;
-	return 1.f;
-}
-
-float circuitQScale(float resoNorm, int circuitMode) {
-	(void) resoNorm;
-	(void) circuitMode;
-	return 1.f;
-}
-
-SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
-	(void) circuitMode;
-	(void) stageIndex;
-	SemanticExportProfile profile;
-	return profile;
-}
-
-SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
-	const SemanticExportProfile profile = semanticExportProfile(circuitMode, stageIndex);
-	SvfOutputs out;
-	out.lp = bifurx::normalizeSemanticComponent(raw.lp, profile.lpScale);
-	out.bp = bifurx::normalizeSemanticComponent(raw.bp, profile.bpScale);
-	out.hp = bifurx::normalizeSemanticComponent(raw.hp, profile.hpScale);
-	out.notch = out.lp + out.hp;
-	return out;
-}
-
-float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph) {
-	(void) mode;
-	(void) circuitMode;
-	(void) wideMorph;
-	return 1.f;
-}
-
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	const float clampedT = bifurx::clamp01(t);
 	NVGcolor out;
@@ -151,11 +111,6 @@ NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	out.b = bifurx::mixf(a.b, b.b, clampedT);
 	out.a = bifurx::mixf(a.a, b.a, clampedT);
 	return out;
-}
-
-BifurxPreviewCurvePolicy previewCurvePolicyForCharacter(int characterMode) {
-	(void) characterMode;
-	return BIFURX_PREVIEW_ANALYTIC;
 }
 
 void formatFrequencyLabel(float hz, char* out, size_t outSize) {
@@ -222,7 +177,6 @@ void sanitizeCoreState(TptSvf& core) {
 
 SvfOutputs processCharacterStage(
 	TptSvf& core,
-	int characterMode,
 	int stageIndex,
 	float input,
 	float sampleRate,
@@ -232,7 +186,6 @@ SvfOutputs processCharacterStage(
 	float resoNorm,
 	const SvfCoeffs* cachedCoeffsOrNull
 ) {
-	(void) characterMode;
 	(void) stageIndex;
 	(void) drive;
 	(void) resoNorm;
@@ -302,7 +255,6 @@ DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int typ
 
 bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& b) {
 	if (a.mode != b.mode) return true;
-	if (a.circuitMode != b.circuitMode) return true;
 	if (std::fabs(a.sampleRate - b.sampleRate) > 0.5f) return true;
 	if (std::fabs(a.balance - b.balance) > 1e-3f) return true;
 	if (std::fabs(fastLog2(std::max(a.freqA, 1.f)) - fastLog2(std::max(b.freqA, 1.f))) > 1e-3f) return true;
@@ -330,7 +282,6 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
 	model.mode = state.mode;
-	model.circuitMode = bifurx::clampCircuitMode(state.circuitMode);
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -346,21 +297,19 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
 	const std::complex<float> z2 = z1 * z1;
 
-	const SemanticExportProfile profileA = semanticExportProfile(model.circuitMode, 0);
-	const SemanticExportProfile profileB = semanticExportProfile(model.circuitMode, 1);
-	std::complex<float> lpA = bifurx::normalizeSemanticComponent(model.lowA.response(z1, z2), profileA.lpScale);
-	std::complex<float> bpA = bifurx::normalizeSemanticComponent(model.bandA.response(z1, z2), profileA.bpScale);
-	std::complex<float> hpA = bifurx::normalizeSemanticComponent(model.highA.response(z1, z2), profileA.hpScale);
-	std::complex<float> lpB = bifurx::normalizeSemanticComponent(model.lowB.response(z1, z2), profileB.lpScale);
-	std::complex<float> bpB = bifurx::normalizeSemanticComponent(model.bandB.response(z1, z2), profileB.bpScale);
-	std::complex<float> hpB = bifurx::normalizeSemanticComponent(model.highB.response(z1, z2), profileB.hpScale);
+	std::complex<float> lpA = model.lowA.response(z1, z2);
+	std::complex<float> bpA = model.bandA.response(z1, z2);
+	std::complex<float> hpA = model.highA.response(z1, z2);
+	std::complex<float> lpB = model.lowB.response(z1, z2);
+	std::complex<float> bpB = model.bandB.response(z1, z2);
+	std::complex<float> hpB = model.highB.response(z1, z2);
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeHpToLp = lpB * hpA, cascadeHpToHp = hpB * hpA;
-	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp, model.wA, model.wB, model.wideMorph, model.circuitMode);
+	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp, model.wA, model.wB, model.wideMorph);
 }
 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
 	const float mag = std::abs(previewModelResponse(model, hz));
-	return previewCharacterDisplayDb(20.f * std::log10(std::max(mag, 1e-5f)), model.circuitMode);
+	return 20.f * std::log10(std::max(mag, 1e-5f));
 }
 
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex) {
@@ -369,32 +318,32 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 	return (sampleIndex == 0) ? kPreviewProbeImpulseAmplitude : 0.f;
 }
 
-SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, int circuitMode, float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
+SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
 	TptSvf& core = (stageIndex == 0) ? state.svfA : state.svfB;
-	return processCharacterStage(core, circuitMode, stageIndex, input, sampleRate, cutoff, damping, drive, resoNorm, nullptr);
+	return processCharacterStage(core, stageIndex, input, sampleRate, cutoff, damping, drive, resoNorm, nullptr);
 }
 
 void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float* inputBuffer, float* outputBuffer, int sampleCount) {
 	if (!inputBuffer || !outputBuffer || sampleCount <= 0) return;
 	BifurxProbeEngineState engine;
 	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, wideMorph = cascadeWideMorph(state.spanNorm), drive = levelDriveGain(kPreviewProbeLevelKnob);
-	const int mode = clamp(state.mode, 0, kBifurxModeCount - 1), circuitMode = bifurx::clampCircuitMode(state.circuitMode);
+	const int mode = clamp(state.mode, 0, kBifurxModeCount - 1);
 	for (int i = 0; i < sampleCount; ++i) {
 		const float rawIn = previewProbeStimulusSample(state, i), excitation = 5.f * bifurx::softClip(0.2f * rawIn * drive);
-		const SvfOutputs a = processProbeStage(engine, 0, circuitMode, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm);
+		const SvfOutputs a = processProbeStage(engine, 0, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm);
 		SvfOutputs b; float modeOut = 0.f;
 		switch (mode) {
-			case 0: b = processProbeStage(engine, 1, circuitMode, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, wideMorph, circuitMode); break;
+			case 0: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
 			case 1:
 			case 2:
 			case 4:
 			case 5:
 			case 7:
-			case 8: b = processProbeStage(engine, 1, circuitMode, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph, circuitMode); break;
-			case 3: b = processProbeStage(engine, 1, circuitMode, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, wideMorph, circuitMode); break;
-			case 6: b = processProbeStage(engine, 1, circuitMode, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, wideMorph, circuitMode); break;
+			case 8: b = processProbeStage(engine, 1, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, wideMorph); break;
 			case 9:
-			default: b = processProbeStage(engine, 1, circuitMode, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph, circuitMode); break;
+			default: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
 		}
 		inputBuffer[i] = excitation; outputBuffer[i] = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
 	}
@@ -477,8 +426,11 @@ void Bifurx::dataFromJson(json_t* root) {
 		}
 	}
 	// Legacy key retained for backward patch compatibility.
+	// Bifurx is SVF-only, so this key is intentionally ignored if present.
 	json_t* legacyFilterCircuitModeJ = json_object_get(root, "filterCircuitMode");
-	(void) legacyFilterCircuitModeJ;
+	if (legacyFilterCircuitModeJ) {
+		// Intentionally ignored.
+	}
 }
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
@@ -493,7 +445,6 @@ void Bifurx::process(const ProcessArgs& args) {
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfCoreStart, perfPreviewStart, perfAnalysisStart;
 
-	const int effectiveCircuitMode = BIFURX_CHARACTER_SVF;
 	sanitizeCoreState(coreA); sanitizeCoreState(coreB);
 
 	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9); params[MODE_PARAM].setValue(float((currentMode + 9) % 10)); }
@@ -513,15 +464,15 @@ void Bifurx::process(const ProcessArgs& args) {
 	else { voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = inputs[FM_INPUT].isConnected() ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt, resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f, resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f), balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f, balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f), spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f), spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f), spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f, spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f), spanOct = 8.f * bifurx::shapedSpan(spanNorm), spanWideMorph = cascadeWideMorph(spanNorm);
 	const bool fastPathEligible = titoNeutral && !voctConnected && !inputs[FM_INPUT].isConnected() && !inputs[RESO_CV_INPUT].isConnected() && !inputs[BALANCE_CV_INPUT].isConnected() && !inputs[SPAN_CV_INPUT].isConnected();
-	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfCircuitMode.store(effectiveCircuitMode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
+	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 	const bool updateFastControls = !controlFastCacheValid || !fastPathEligible || controlUpdateDivider.process();
 	if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) { previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f); previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f); previewFilterAlphaSampleRate = args.sampleRate; }
 
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
 	if (updateFastControls) {
 		balance = balanceNorm; const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm), sr = std::max(args.sampleRate, 1.f);
-		auto computeCircuitFreqs = [&](int cMode, float *fAOut, float *fBOut) { const float cScale = circuitCutoffScale(cMode), safeCenterHz = clamp(centerHz * cScale, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
-		const int sEM = bifurx::clampCircuitMode(effectiveCircuitMode); const float qScale = circuitQScale(resoNorm, sEM); computeCircuitFreqs(sEM, &freqA0, &freqB0); const float baseDamping = resoToDamping(resoNorm) / std::max(qScale, 1e-4f);
+		auto computeFreqs = [&](float* fAOut, float* fBOut) { const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
+		computeFreqs(&freqA0, &freqB0); const float baseDamping = resoToDamping(resoNorm);
 		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
 		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedFreqA0 = freqA0; cachedFreqB0 = freqB0; cachedBalance = balance; cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA); cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB); controlFastCacheValid = true;
@@ -541,24 +492,24 @@ void Bifurx::process(const ProcessArgs& args) {
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
 		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffA == freqA0)) ? &cachedCoeffsA : nullptr;
-		return processCharacterStage(coreA, effectiveCircuitMode, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, coeffs);
+		return processCharacterStage(coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, coeffs);
 	};
 	auto pB = [&](float s) {
 		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffB == freqB0)) ? &cachedCoeffsB : nullptr;
-		return processCharacterStage(coreB, effectiveCircuitMode, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, coeffs);
+		return processCharacterStage(coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, coeffs);
 	};
 
 	switch (mode) {
-		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 2: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 7: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
-		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph, effectiveCircuitMode); } break;
+		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 2: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, spanWideMorph); } break;
+		case 7: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
 	}
 
 	const float out = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
@@ -580,7 +531,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	if (!previewFilterInitialized || pInstSettle) { previewFreqAFiltered = pTFqA; previewFreqBFiltered = pTFqB; previewQAFiltered = pTQA; previewQBFiltered = pTQB; previewBalanceFiltered = pTBal; previewFilterInitialized = true; }
 	else { const float a = pSmAlpha; previewFreqAFiltered += a * (pTFqA - previewFreqAFiltered); previewFreqBFiltered += a * (pTFqB - previewFreqBFiltered); previewQAFiltered += a * (pTQA - previewQAFiltered); previewQBFiltered += a * (pTQB - previewQBFiltered); previewBalanceFiltered += a * (pTBal - previewBalanceFiltered); }
 
-	BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.circuitMode = effectiveCircuitMode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
+	BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
 	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
 	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
 	bool adpTick = false;
@@ -589,7 +540,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		if (fMA > kPreviewAdaptiveOctaveThreshold || fMB > kPreviewAdaptiveOctaveThreshold || sMO > kPreviewAdaptiveSpanOctThreshold || qMA > kPreviewAdaptiveQThreshold || qMB > kPreviewAdaptiveQThreshold || bM > kPreviewAdaptiveBalanceThreshold) { adpTick = true; previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples; }
 	}
 	if (!hasLastPreviewState || ((perTick || adpTick) && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
-	if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.circuitMode = effectiveCircuitMode; llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
+	if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
 	if (measurePerf) perfAnalysisStart = PerfClock::now();
 	pushAnalysisSample(in, out);
 

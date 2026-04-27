@@ -111,37 +111,30 @@ TestResult testLowLowRuntimeRetainsPrePeakLowBand() {
   };
 }
 
-TestResult testLowLowRuntimeSemanticExportsTrackSvfBaseline() {
+TestResult testLowLowRuntimeReferenceTelemetryIsFinite() {
   const float sampleRate = 48000.f;
   const float cutoffA = 140.f;
   const float cutoffB = 950.f;
   const float dampingA = 1.f / 1.1f;
   const float dampingB = 1.f / 1.1f;
 
-  const float svf = simulateLlRuntimeGainDb(
-    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 0
+  const auto telemetry = bifurx_test_model::measureLlRuntimeTelemetry(
+    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB
   );
-  const float dfm = simulateLlRuntimeGainDb(
-    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 1
-  );
-  const float ms2 = simulateLlRuntimeGainDb(
-    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 2
-  );
-  const float prd = simulateLlRuntimeGainDb(
-    sampleRate, 40.f, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 3
-  );
-
-  const float maxDelta = std::max(
-    std::max(std::fabs(dfm - svf), std::fabs(ms2 - svf)),
-    std::fabs(prd - svf)
-  );
-  const bool pass = maxDelta < 5.0f;
+  const bool pass =
+    std::isfinite(telemetry.inputRms) &&
+    std::isfinite(telemetry.stageALpRms) &&
+    std::isfinite(telemetry.stageBLpRms) &&
+    std::isfinite(telemetry.outputRms) &&
+    std::isfinite(telemetry.stageBOverADb) &&
+    std::isfinite(telemetry.outputOverInputDb);
   return {
-    "LL semantic exports keep alternate circuits near SVF baseline",
+    "LL runtime reference telemetry remains finite",
     pass,
-    "svf=" + std::to_string(svf) + " dfm=" + std::to_string(dfm) +
-      " ms2=" + std::to_string(ms2) + " prd=" + std::to_string(prd) +
-      " maxDelta=" + std::to_string(maxDelta)
+    "inRms=" + std::to_string(telemetry.inputRms) +
+      " stageA=" + std::to_string(telemetry.stageALpRms) +
+      " stageB=" + std::to_string(telemetry.stageBLpRms) +
+      " out=" + std::to_string(telemetry.outputRms)
   };
 }
 
@@ -154,80 +147,75 @@ TestResult testLowLowSweepDatasetHasStableShape() {
   const std::vector<float> freqs = llSweepFrequenciesHz();
   bool pass = true;
 
-  for (int circuit = 0; circuit <= 3; ++circuit) {
-    const std::vector<LlRuntimeSweepPoint> sweep = makeLlRuntimeSweep(
-      sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, circuit
-    );
-    if (sweep.size() != freqs.size()) {
+  const std::vector<LlRuntimeSweepPoint> sweep = makeLlRuntimeSweep(
+    sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB
+  );
+  if (sweep.size() != freqs.size()) {
+    pass = false;
+  }
+  for (size_t i = 0; pass && i < sweep.size(); ++i) {
+    const LlRuntimeSweepPoint& p = sweep[i];
+    if (!(p.freqHz > 0.f) || (i > 0 && !(p.freqHz > sweep[i - 1].freqHz))) {
       pass = false;
       break;
     }
-    for (size_t i = 0; i < sweep.size(); ++i) {
-      const LlRuntimeSweepPoint& p = sweep[i];
-      if (!(p.freqHz > 0.f) || (i > 0 && !(p.freqHz > sweep[i - 1].freqHz))) {
-        pass = false;
-        break;
-      }
-      if (!std::isfinite(p.telemetry.inputRms) || !std::isfinite(p.telemetry.stageALpRms)
-          || !std::isfinite(p.telemetry.stageBLpRms) || !std::isfinite(p.telemetry.outputRms)
-          || !std::isfinite(p.telemetry.stageBOverADb) || !std::isfinite(p.telemetry.outputOverInputDb)) {
-        pass = false;
-        break;
-      }
-    }
-    if (!pass) {
+    if (!std::isfinite(p.telemetry.inputRms) || !std::isfinite(p.telemetry.stageALpRms)
+        || !std::isfinite(p.telemetry.stageBLpRms) || !std::isfinite(p.telemetry.outputRms)
+        || !std::isfinite(p.telemetry.stageBOverADb) || !std::isfinite(p.telemetry.outputOverInputDb)) {
+      pass = false;
       break;
     }
   }
 
   return {
-    "LL sweep dataset is finite, ordered, and complete for all circuits",
+    "LL sweep dataset is finite, ordered, and complete",
     pass,
     "freq_count=" + std::to_string(freqs.size())
   };
 }
 
-TestResult testLowLowSweepContractEnvelopeAgainstSvf() {
+TestResult testLowLowSweepContractEnvelope() {
   const float sampleRate = 48000.f;
   const float cutoffA = 140.f;
   const float cutoffB = 950.f;
   const float dampingA = 1.f / 1.1f;
   const float dampingB = 1.f / 1.1f;
   const std::vector<float> freqs = llSweepFrequenciesHz();
-  const std::vector<LlRuntimeSweepPoint> svf = makeLlRuntimeSweep(
-    sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, 0
+  const std::vector<LlRuntimeSweepPoint> sweep = makeLlRuntimeSweep(
+    sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB
   );
 
   bool pass = true;
-  float worstOutputDeltaDb = 0.f;
-  float worstStageDeltaDb = 0.f;
+  float minOutputDb = 1e9f;
+  float maxOutputDb = -1e9f;
+  float minStageDb = 1e9f;
+  float maxStageDb = -1e9f;
 
-  for (int circuit = 1; circuit <= 3; ++circuit) {
-    const std::vector<LlRuntimeSweepPoint> alt = makeLlRuntimeSweep(
-      sampleRate, freqs, 0.10f, 0.5f, cutoffA, cutoffB, dampingA, dampingB, circuit
-    );
-    for (size_t i = 0; i < alt.size(); ++i) {
-      const float outputDelta = alt[i].telemetry.outputOverInputDb - svf[i].telemetry.outputOverInputDb;
-      const float stageDelta = alt[i].telemetry.stageBOverADb - svf[i].telemetry.stageBOverADb;
-      worstOutputDeltaDb = std::max(worstOutputDeltaDb, std::fabs(outputDelta));
-      worstStageDeltaDb = std::max(worstStageDeltaDb, std::fabs(stageDelta));
+  for (size_t i = 0; i < sweep.size(); ++i) {
+    const float outputDb = sweep[i].telemetry.outputOverInputDb;
+    const float stageDb = sweep[i].telemetry.stageBOverADb;
+    minOutputDb = std::min(minOutputDb, outputDb);
+    maxOutputDb = std::max(maxOutputDb, outputDb);
+    minStageDb = std::min(minStageDb, stageDb);
+    maxStageDb = std::max(maxStageDb, stageDb);
 
-      // Contract guardrails: broad enough for nonlinear behavior, narrow enough
-      // to flag collapse/blow-up regressions.
-      if (outputDelta < -12.f || outputDelta > 8.f) {
-        pass = false;
-      }
-      if (stageDelta < -6.f || stageDelta > 6.f) {
-        pass = false;
-      }
+    // Broad absolute envelope guard against collapse/blow-up regressions.
+    if (!std::isfinite(outputDb) || !std::isfinite(stageDb)) {
+      pass = false;
+    }
+    if (outputDb < -80.f || outputDb > 36.f) {
+      pass = false;
+    }
+    if (stageDb < -80.f || stageDb > 36.f) {
+      pass = false;
     }
   }
 
   return {
-    "LL sweep contract remains within broad SVF-relative envelopes",
+    "LL sweep contract remains within broad absolute envelopes",
     pass,
-    "worstOutputDeltaDb=" + std::to_string(worstOutputDeltaDb) +
-      " worstStageDeltaDb=" + std::to_string(worstStageDeltaDb)
+    "out[min,max]=(" + std::to_string(minOutputDb) + "," + std::to_string(maxOutputDb) + ")" +
+      " stage[min,max]=(" + std::to_string(minStageDb) + "," + std::to_string(maxStageDb) + ")"
   };
 }
 
@@ -664,36 +652,6 @@ TestResult testModesRemainDistinctAtReferenceState() {
   };
 }
 
-TestResult testPreviewCircuitSelectionIsPinnedToSvf() {
-  PreviewState svf;
-  PreviewState dfm;
-  svf.sampleRate = 48000.f;
-  svf.mode = 4;
-  svf.freqA = 300.f;
-  svf.freqB = 1800.f;
-  svf.qA = 1.5f;
-  svf.qB = 1.7f;
-  svf.circuitMode = 0;
-  dfm = svf;
-  dfm.circuitMode = 1;
-
-  const PreviewModel a = makePreviewModel(svf);
-  const PreviewModel b = makePreviewModel(dfm);
-  float sumAbs = 0.f;
-  const float hz[5] = {80.f, 200.f, 600.f, 1700.f, 4500.f};
-  for (float f : hz) {
-    sumAbs += std::fabs(responseDb(a, f) - responseDb(b, f));
-  }
-
-  const bool same = sumAbs < 1e-4f && a.circuitMode == 0 && b.circuitMode == 0;
-  return {
-    "Preview circuit selection is pinned to SVF",
-    same,
-    "sumAbs=" + std::to_string(sumAbs) + " circuitA=" + std::to_string(a.circuitMode) +
-      " circuitB=" + std::to_string(b.circuitMode)
-  };
-}
-
 std::vector<float> qualifierSweepFrequenciesHz() {
   return {
     30.f, 40.f, 55.f, 75.f, 100.f, 135.f, 180.f, 240.f, 320.f, 430.f,
@@ -754,7 +712,7 @@ std::vector<LlQualifierScenario> llQualifierScenarios() {
   };
 }
 
-SvfQualifierMetrics qualifyModeAgainstSvf(int mode, int circuitMode) {
+SvfQualifierMetrics qualifyModeAgainstSvf(int mode) {
   const std::vector<float> freqs = qualifierSweepFrequenciesHz();
 
   PreviewState base;
@@ -768,11 +726,9 @@ SvfQualifierMetrics qualifyModeAgainstSvf(int mode, int circuitMode) {
 
   PreviewState svfState = base;
   svfState.mode = mode;
-  svfState.circuitMode = 0;
   const PreviewModel svfModel = makePreviewModel(svfState);
 
   PreviewState altState = svfState;
-  altState.circuitMode = circuitMode;
   const PreviewModel altModel = makePreviewModel(altState);
 
   std::vector<float> deltasDb;
@@ -849,7 +805,7 @@ SvfQualifierMetrics qualifyModeAgainstSvf(int mode, int circuitMode) {
   return metrics;
 }
 
-SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios(int circuitMode) {
+SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios() {
   const std::vector<float> freqs = qualifierSweepFrequenciesHz();
   const std::vector<LlQualifierScenario> scenarios = llQualifierScenarios();
 
@@ -872,7 +828,6 @@ SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios(int circuitMode) {
     PreviewState svfState;
     svfState.sampleRate = 48000.f;
     svfState.mode = 0;
-    svfState.circuitMode = 0;
     svfState.freqA = scenario.freqA;
     svfState.freqB = scenario.freqB;
     svfState.qA = scenario.qA;
@@ -882,7 +837,6 @@ SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios(int circuitMode) {
     const PreviewModel svfModel = makePreviewModel(svfState);
 
     PreviewState altState = svfState;
-    altState.circuitMode = circuitMode;
     const PreviewModel altModel = makePreviewModel(altState);
 
     for (float hz : freqs) {
@@ -943,28 +897,18 @@ SvfQualifierMetrics qualifyLowLowAgainstSvfAcrossScenarios(int circuitMode) {
 }
 
 TestResult testLowLowMeetsDedicatedSvfTuningQualifier() {
-  bool pass = true;
-  std::string detail;
-  for (int circuit = 1; circuit <= 3; ++circuit) {
-    const SvfQualifierMetrics metrics = qualifyLowLowAgainstSvfAcrossScenarios(circuit);
-    const bool circuitPass =
-      metrics.p95AbsDeltaDb <= 1.5f &&
-      metrics.maxAbsDeltaDb <= 2.0f &&
-      metrics.meanSlopeAbsDeltaDb <= 0.45f &&
-      metrics.maxSlopeAbsDeltaDb <= 1.2f;
-    pass = pass && circuitPass;
-
-    if (!detail.empty()) {
-      detail += " ";
-    }
-    detail +=
-      "[c" + std::to_string(circuit) +
-      (circuitPass ? " PASS" : " FAIL") +
-      " p95Abs=" + std::to_string(metrics.p95AbsDeltaDb) +
-      " maxAbs=" + std::to_string(metrics.maxAbsDeltaDb) +
-      " meanSlope=" + std::to_string(metrics.meanSlopeAbsDeltaDb) +
-      " maxSlope=" + std::to_string(metrics.maxSlopeAbsDeltaDb) + "]";
-  }
+  const SvfQualifierMetrics metrics = qualifyLowLowAgainstSvfAcrossScenarios();
+  const bool pass =
+    metrics.p95AbsDeltaDb <= 1.5f &&
+    metrics.maxAbsDeltaDb <= 2.0f &&
+    metrics.meanSlopeAbsDeltaDb <= 0.45f &&
+    metrics.maxSlopeAbsDeltaDb <= 1.2f;
+  const std::string detail =
+    "[" + std::string(pass ? "PASS" : "FAIL") +
+    " p95Abs=" + std::to_string(metrics.p95AbsDeltaDb) +
+    " maxAbs=" + std::to_string(metrics.maxAbsDeltaDb) +
+    " meanSlope=" + std::to_string(metrics.meanSlopeAbsDeltaDb) +
+    " maxSlope=" + std::to_string(metrics.maxSlopeAbsDeltaDb) + "]";
 
   return {
     "LL dedicated SVF tuning qualifier holds across representative states",
@@ -978,44 +922,29 @@ TestResult testAllModesMeetSvfTuningQualifier() {
   int violations = 0;
   float worstScore = -1.f;
   int worstMode = -1;
-  int worstCircuit = -1;
   SvfQualifierMetrics worstMetrics;
   std::vector<SvfQualifierPairResult> offenders;
   std::vector<SvfQualifierPairResult> llPairs;
 
   for (int mode = 0; mode <= 9; ++mode) {
-    for (int circuit = 1; circuit <= 3; ++circuit) {
-      const SvfQualifierMetrics metrics = qualifyModeAgainstSvf(mode, circuit);
-      float score = metrics.p95CenteredAbsDeltaDb + 0.75f * metrics.meanSlopeAbsDeltaDb + 0.15f * metrics.p95AbsDeltaDb;
-      if (mode == 0) {
-        llPairs.push_back({mode, circuit, score, metrics});
-      }
-      bool pairPass = false;
-      if (circuit == 2) {
-        pairPass =
-          metrics.maxAbsDeltaDb <= 12.f &&
-          metrics.p95AbsDeltaDb <= 8.f &&
-          metrics.p95CenteredAbsDeltaDb <= 3.f &&
-          metrics.meanSlopeAbsDeltaDb <= 1.5f &&
-          metrics.maxSlopeAbsDeltaDb <= 4.f;
-      }
-      else {
-        pairPass =
-          metrics.maxAbsDeltaDb <= 14.f &&
-          metrics.p95AbsDeltaDb <= 9.f;
-      }
-      if (!pairPass) {
-        pass = false;
-        violations++;
-        offenders.push_back({mode, circuit, score, metrics});
-      }
+    const SvfQualifierMetrics metrics = qualifyModeAgainstSvf(mode);
+    float score = metrics.p95CenteredAbsDeltaDb + 0.75f * metrics.meanSlopeAbsDeltaDb + 0.15f * metrics.p95AbsDeltaDb;
+    if (mode == 0) {
+      llPairs.push_back({mode, 0, score, metrics});
+    }
+    const bool pairPass =
+      metrics.maxAbsDeltaDb <= 14.f &&
+      metrics.p95AbsDeltaDb <= 9.f;
+    if (!pairPass) {
+      pass = false;
+      violations++;
+      offenders.push_back({mode, 0, score, metrics});
+    }
 
-      if (score > worstScore) {
-        worstScore = score;
-        worstMode = mode;
-        worstCircuit = circuit;
-        worstMetrics = metrics;
-      }
+    if (score > worstScore) {
+      worstScore = score;
+      worstMode = mode;
+      worstMetrics = metrics;
     }
   }
 
@@ -1061,10 +990,9 @@ TestResult testAllModesMeetSvfTuningQualifier() {
   return {
     "Character preview curves stay within mode-appropriate SVF-relative bounds",
     pass,
-    "violations=" + std::to_string(violations) +
+      "violations=" + std::to_string(violations) +
       " worstScore=" + std::to_string(worstScore) +
       " mode=" + std::to_string(worstMode) +
-      " circuit=" + std::to_string(worstCircuit) +
       " p95Centered=" + std::to_string(worstMetrics.p95CenteredAbsDeltaDb) +
       " meanSlope=" + std::to_string(worstMetrics.meanSlopeAbsDeltaDb) +
       " p95Abs=" + std::to_string(worstMetrics.p95AbsDeltaDb) +
@@ -1091,9 +1019,9 @@ int main() {
     testLowLowMaintainsDoubleSlopeOrdering(),
     testLowLowMidpointDipNotOverlyDeep(),
     testLowLowRuntimeRetainsPrePeakLowBand(),
-    testLowLowRuntimeSemanticExportsTrackSvfBaseline(),
+    testLowLowRuntimeReferenceTelemetryIsFinite(),
     testLowLowSweepDatasetHasStableShape(),
-    testLowLowSweepContractEnvelopeAgainstSvf(),
+    testLowLowSweepContractEnvelope(),
     testLowLowMeetsDedicatedSvfTuningQualifier(),
     testLowLowAndHighHighPreviewMirrorLowSpan(),
     testLowLowAndHighHighPreviewMirrorMidSpan(),
@@ -1101,7 +1029,6 @@ int main() {
     testLowLowAndHighHighRuntimeMirrorAcrossSpans(),
     testBandBandHasTwoLocalPeaksNearMarkers(),
     testModesRemainDistinctAtReferenceState(),
-    testPreviewCircuitSelectionIsPinnedToSvf(),
     testAllModesMeetSvfTuningQualifier(),
   };
 
