@@ -303,6 +303,21 @@ Exit criteria:
 
 Goal: stop the display from continuing to animate and redraw after values have effectively converged.
 
+Current status: core convergence fix landed (snap-on-settle + target-flag clear); second-pass inactive-renderer guard is still optional and not yet landed. This phase is being executed as a narrow state-machine fix, not a general renderer optimization pass.
+
+Completed in code:
+
+- `BifurxSpectrumBase::updateAnimation()` now tracks residuals for curve, overlay, and top readout.
+- On convergence, curve state snaps to `curveTargetDb[]` and clears `hasCurveTarget`.
+- On convergence, overlay arrays plus `displayTopDbfs` snap to targets and clear `hasOverlayTarget`.
+- `animationActive` now naturally falls false after convergence, allowing existing dirty gating to stop redraw.
+- Validation run: `make test-fast` passed after this change.
+
+Remaining for Phase 3:
+
+- Optional second-pass guarding of inactive renderer `syncBase()` / analysis consumption, only if done without backend semantic changes.
+- Runtime validation in an environment where `bifurx_runtime_spec` is buildable.
+
 Primary files:
 
 - `src/Bifurx.cpp`
@@ -310,26 +325,77 @@ Primary files:
 - `src/BifurxUI.cpp`
 - `src/BifurxGL.cpp`
 
+Execution guardrails:
+
+- Prefer a first patch that edits only `BifurxSpectrumBase::updateAnimation()` and, if needed, the minimal redraw gating that consumes its result.
+- Do not change DSP, preview transfer math, serialization, shader compilation, shader/fallback renderer selection, or draw geometry generation in this phase.
+- Do not mix Phase 3 with Phase 4 allocation cleanup. If a patch touches `refinedPoints`, `reserve()`, VBO sizing, or vector lifetime, it is too broad.
+- Do not refactor `syncBase()` aggressively in the first pass. Prove convergence and redraw-stop first, then consider any inactive-renderer guard as a second patch.
+
+Exact intended behavior:
+
+- Curve animation:
+  - keep the existing smoothing while any point is materially different from its target
+  - after smoothing all points, compute the maximum residual `abs(curveDb[i] - curveTargetDb[i])`
+  - if the maximum residual is at or below `kCurveEpsilonDb`, snap every `curveDb[i]` directly to `curveTargetDb[i]`
+  - only after the full snap, clear `state.hasCurveTarget = false`
+- Overlay animation:
+  - keep the existing smoothing for `overlayModuleDb`, `overlayOutputDbfs`, and `displayTopDbfs` while any residual is still above threshold
+  - after smoothing, compute the maximum residual across both overlay arrays plus the top readout residual `abs(displayTopDbfs - displayTopTargetDbfs)`
+  - if all overlay residuals are at or below `kOverlayEpsilonDb` and the top residual is at or below `kTopEpsilonDbfs`, snap:
+    - `overlayModuleDb[i] = overlayTargetModuleDb[i]`
+    - `overlayOutputDbfs[i] = overlayTargetOutputDbfs[i]`
+    - `displayTopDbfs = displayTopTargetDbfs`
+  - only after the full snap, clear `state.hasOverlayTarget = false`
+- Redraw policy:
+  - `animationActive` must become `false` after both curve and overlay state have converged and snapped
+  - new preview publishes must re-arm curve animation through `updateCurveCache()`
+  - new analysis publishes must re-arm overlay animation through `updateOverlayCache()`
+  - do not add any always-dirty fallback in either renderer to mask a bad convergence fix
+
+Important semantic note:
+
+- `hasCurveTarget` and `hasOverlayTarget` are currently overloaded. They mean both:
+  - the display arrays have been initialized at least once
+  - the animation path has an active target to converge toward
+- That means clearing them is only safe after a full snap-to-target, not merely because the remaining residual is small.
+- The follow-up publish path must remain:
+  - `updateCurveCache()` sees `hasCurveTarget == false`, copies new targets into the live arrays if needed, and marks the new target active
+  - `updateOverlayCache()` does the same for overlay arrays and top readout
+
+Recommended edit order:
+
+1. Patch `BifurxSpectrumBase::updateAnimation()` only.
+2. Verify that it snaps and clears target flags after convergence instead of slewing forever inside epsilon.
+3. Re-run the existing dirty-gating path without changing renderer selection logic.
+4. Only if redraws are still being consumed unnecessarily, add a second narrow patch for hidden/inactive renderer guards.
+
 Implementation steps:
 
 1. Finish the animation state machine in `BifurxSpectrumBase::updateAnimation()`:
-   - after curve values fall within epsilon, snap `curveDb[i] = curveTargetDb[i]`
-   - clear `state.hasCurveTarget` once the whole curve is settled
-   - do the same for overlay arrays and `displayTopDbfs`, then clear `state.hasOverlayTarget`
-2. Be careful with initialization semantics:
-   - `updateCurveCache()` and `updateOverlayCache()` currently use `hasCurveTarget` / `hasOverlayTarget` as “have we initialized the displayed arrays yet?”
+   - keep the current smoothing constants and easing behavior while active
+   - add residual tracking for curve, overlay, and top readout
+   - when residuals are all within epsilon, snap to the exact targets and clear the corresponding target-active flag
+2. Verify initialization semantics immediately after the convergence patch:
+   - `updateCurveCache()` and `updateOverlayCache()` currently rely on `hasCurveTarget` / `hasOverlayTarget`
    - after introducing clearing-on-settle, verify those methods still repopulate immediately when a new preview or analysis frame arrives
 3. Keep dirtying only for real work:
    - NanoVG path should continue using framebuffer dirtiness based on `previewUpdated`, `analysisUpdated`, and `animationActive`
-   - GL path should stop forcing redraw behavior that bypasses the same dirty policy
+   - GL path should continue using the same shared convergence result rather than inventing a backend-specific redraw rule
    - apply the same redraw-stop rules regardless of whether the GL widget ends up in shader or fixed-function mode
-4. Add visibility/render-mode guards before expensive sync work:
-   - avoid `syncBase()` / FFT overlay work for widgets that are not actually the active renderer
-   - if a widget is hidden because the other renderer is active, it should not consume analysis frames just to throw them away
-5. Do not fold backend refactors into this phase:
-   - the goal here is to stop unnecessary redraws
-   - shader-path and fallback-path draw code should remain semantically unchanged while this is being verified
-6. Preserve current visual smoothing while active; the fix is to stop once settled, not to make the UI jumpy.
+4. Treat inactive-renderer guards as optional second-pass work:
+   - avoid `syncBase()` / FFT overlay work for widgets that are not actually the active renderer only if this can be done without changing backend semantics
+   - if that guard is not obviously safe in one pass, defer it and keep Phase 3 focused on convergence
+5. Preserve current visual smoothing while active; the fix is to stop once settled, not to make the UI jumpy.
+
+Out of scope for this phase:
+
+- any shader-path rewrite
+- any fixed-function fallback rewrite
+- any VBO upload optimization
+- any persistent-vector or `reserve()` cleanup
+- any preview math or filter-model changes
+- any patch-format or JSON behavior changes
 
 Suggested instrumentation pass:
 
@@ -344,12 +410,23 @@ Risks:
 - Clearing `hasCurveTarget` too early can cause one-frame pops if new targets arrive during the same UI frame.
 - Clearing `hasOverlayTarget` without snapping all arrays can leave perpetual one-LSB animation churn.
 - A redraw-policy fix that is only tested in one GL backend can silently break the other backend's perceived stability.
+- A patch that adds hidden-renderer guards before proving base convergence can make the redraw problem harder to diagnose, because the wrong widget may simply stop updating instead of truly settling.
+
+Model-safe acceptance checklist:
+
+- `updateAnimation()` returns `true` while values are still materially moving and `false` after snap-to-target convergence.
+- `state.hasCurveTarget` becomes `false` only after the full curve has been snapped to `curveTargetDb`.
+- `state.hasOverlayTarget` becomes `false` only after both overlay arrays and `displayTopDbfs` have been snapped to their targets.
+- A fresh preview publish makes curve animation active again on the next render tick.
+- A fresh analysis publish makes overlay animation active again on the next render tick.
+- No code in this phase changes renderer selection or rendering backend semantics.
 
 Exit criteria:
 
 - Idle Bifurx no longer redraws at frame rate after state convergence.
 - New preview or analysis publishes still restart animation cleanly.
 - Shader and fixed-function GL output both remain visually sane after the redraw changes.
+- The implementation is narrow enough that a lower-capability model can be instructed to touch `updateAnimation()` first without needing to reinterpret the architectural intent.
 
 ### Phase 4: Small UI Allocation Cleanup
 

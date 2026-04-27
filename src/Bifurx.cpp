@@ -707,23 +707,35 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 
 	if (state.hasCurveTarget) {
 		const float curveMaxStepDb = std::max(0.25f, kCurveVisualSlewDbPerSec * dt);
+		float maxCurveResidualDb = 0.f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			const float prev = state.curveDb[i];
 			float delta = state.curveTargetDb[i] - prev;
 			delta = clamp(delta, -curveMaxStepDb, curveMaxStepDb);
 			state.curveDb[i] = prev + delta;
-			if (std::fabs(state.curveTargetDb[i] - state.curveDb[i]) > kCurveEpsilonDb) {
-				animationActive = true;
+			maxCurveResidualDb = std::max(maxCurveResidualDb, std::fabs(state.curveTargetDb[i] - state.curveDb[i]));
+		}
+		if (maxCurveResidualDb <= kCurveEpsilonDb) {
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				state.curveDb[i] = state.curveTargetDb[i];
 			}
+			state.hasCurveTarget = false;
+		}
+		else {
+			animationActive = true;
 		}
 	}
 
 	if (state.hasOverlayTarget) {
 		const float overlayDbSmoothing = 0.22f;
 		const float overlayLevelSmoothing = 0.20f;
+		float maxOverlayResidualDb = 0.f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			state.overlayModuleDb[i] = mixf(state.overlayModuleDb[i], state.overlayTargetModuleDb[i], overlayDbSmoothing);
 			state.overlayOutputDbfs[i] = mixf(state.overlayOutputDbfs[i], state.overlayTargetOutputDbfs[i], overlayLevelSmoothing);
+			const float moduleResidual = std::fabs(state.overlayTargetModuleDb[i] - state.overlayModuleDb[i]);
+			const float outputResidual = std::fabs(state.overlayTargetOutputDbfs[i] - state.overlayOutputDbfs[i]);
+			maxOverlayResidualDb = std::max(maxOverlayResidualDb, std::max(moduleResidual, outputResidual));
 		}
 
 		const float prevTop = state.displayTopDbfs;
@@ -732,16 +744,18 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 			topSmoothing = 0.70f;
 		}
 		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, topSmoothing);
+		const float topResidualDbfs = std::fabs(state.displayTopTargetDbfs - state.displayTopDbfs);
 
-		if (std::fabs(state.displayTopTargetDbfs - state.displayTopDbfs) > kTopEpsilonDbfs) {
-			animationActive = true;
-		}
-		for (int i = 0; i < kCurvePointCount; ++i) {
-			if (std::fabs(state.overlayTargetModuleDb[i] - state.overlayModuleDb[i]) > kOverlayEpsilonDb ||
-				std::fabs(state.overlayTargetOutputDbfs[i] - state.overlayOutputDbfs[i]) > kOverlayEpsilonDb) {
-				animationActive = true;
-				break;
+		if (maxOverlayResidualDb <= kOverlayEpsilonDb && topResidualDbfs <= kTopEpsilonDbfs) {
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
+				state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
 			}
+			state.displayTopDbfs = state.displayTopTargetDbfs;
+			state.hasOverlayTarget = false;
+		}
+		else {
+			animationActive = true;
 		}
 	}
 

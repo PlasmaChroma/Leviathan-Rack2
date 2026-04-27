@@ -166,8 +166,25 @@ test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
 
-test: test-fast test-rack
-	@$(MAKE) --no-print-directory test-odr
+test:
+	@fast_rc=0; \
+	rack_rc=0; \
+	odr_rc=0; \
+	$(MAKE) --no-print-directory test-fast || fast_rc=$$?; \
+	$(MAKE) --no-print-directory test-rack || rack_rc=$$?; \
+	$(MAKE) --no-print-directory test-odr || odr_rc=$$?; \
+	failed=0; \
+	if [ "$$fast_rc" -eq 0 ]; then fast_status="PASS"; else fast_status="FAIL"; failed=$$((failed + 1)); fi; \
+	if [ "$$rack_rc" -eq 0 ]; then rack_status="PASS"; else rack_status="FAIL"; failed=$$((failed + 1)); fi; \
+	if [ "$$odr_rc" -eq 0 ]; then odr_status="PASS"; else odr_status="FAIL"; failed=$$((failed + 1)); fi; \
+	passed=$$((3 - failed)); \
+	echo "--------------------------------"; \
+	echo "[TEST SUMMARY] targets=3 passed=$$passed failed=$$failed"; \
+	echo "[TEST SUMMARY] test-fast=$$fast_status"; \
+	echo "[TEST SUMMARY] test-rack=$$rack_status"; \
+	echo "[TEST SUMMARY] test-odr=$$odr_status"; \
+	echo "--------------------------------"; \
+	if [ "$$failed" -ne 0 ]; then exit 1; fi
 
 test-odr: plugin.so
 	@set -- $$(nm -C --defined-only plugin.so | awk '\
