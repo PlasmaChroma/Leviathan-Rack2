@@ -623,6 +623,8 @@ struct BifurxModeReadoutWidget final : Widget {
 struct BifurxWidget final : ModuleWidget {
 	Widget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
+	std::shared_ptr<window::Svg> ageSigilSvg;
+	bool ageSigilUnlocked = false;
 
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
@@ -645,6 +647,14 @@ struct BifurxWidget final : ModuleWidget {
 		bool showGL = (module && module->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+
+		try {
+			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/Vahdrim'Keth.svg"));
+		}
+		catch (const std::exception& e) {
+			WARN("Bifurx: failed to load age sigil SVG: %s", e.what());
+			ageSigilSvg.reset();
+		}
 
 		BifurxModeReadoutWidget* mR = new BifurxModeReadoutWidget(); mR->module = module; mR->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f)); mR->box.size = mm2px(Vec(sRect.size.x, 4.2f)); addChild(mR);
 		Vec mP(13.4f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
@@ -670,11 +680,32 @@ struct BifurxWidget final : ModuleWidget {
 		bool showGL = (bifurx->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+		if (!ageSigilUnlocked) {
+			const double createdUnixTimeSec = bifurx->createdUnixTimeSec;
+			if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
+				ageSigilUnlocked = (system::getUnixTime() - createdUnixTimeSec) >= 666.0;
+			}
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
 		ModuleWidget::draw(args);
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
+		if (bifurx && ageSigilSvg && ageSigilUnlocked) {
+				const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
+				const Vec sigilCenter = mm2px(Vec(54.8f, 4.47f));
+				const Vec svgSize = ageSigilSvg->getSize();
+				if (svgSize.x > 1.f && svgSize.y > 1.f) {
+					const float scaleX = sigilSize.x / svgSize.x;
+					const float scaleY = sigilSize.y / svgSize.y;
+					nvgSave(args.vg);
+					nvgTranslate(args.vg, sigilCenter.x, sigilCenter.y);
+					nvgScale(args.vg, scaleX, scaleY);
+					nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+					ageSigilSvg->draw(args.vg);
+					nvgRestore(args.vg);
+				}
+		}
 		if (bifurx && bifurx->renderMode == Bifurx::RENDER_OPENGL && spectrumOpenGL && spectrumOpenGL->visible) {
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, spectrumOpenGL->box.pos.x, spectrumOpenGL->box.pos.y);
@@ -682,25 +713,6 @@ struct BifurxWidget final : ModuleWidget {
 				base->drawNanoVG(args);
 			}
 			nvgRestore(args.vg);
-		}
-		if (bifurx && APP && APP->window && APP->window->uiFont) {
-			const double createdUnixTimeSec = bifurx->createdUnixTimeSec;
-			if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
-				const double ageSec = system::getUnixTime() - createdUnixTimeSec;
-				if (ageSec >= 666.0) {
-					const float x = mm2px(54.8f);
-					const float y = mm2px(4.47f);
-					nvgSave(args.vg);
-					nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-					nvgFontSize(args.vg, 12.5f);
-					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-					nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 214));
-					nvgText(args.vg, x + 0.45f, y + 0.45f, "$", nullptr);
-					nvgFillColor(args.vg, nvgRGBA(252, 223, 118, 244));
-					nvgText(args.vg, x, y, "$", nullptr);
-					nvgRestore(args.vg);
-				}
-			}
 		}
 		if (bifurx && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
 			char debugIdLabel[32];
