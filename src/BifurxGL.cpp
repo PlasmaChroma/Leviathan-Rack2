@@ -1,6 +1,7 @@
 #include "Bifurx.hpp"
 #include "DebugTerminalTransport.hpp"
 #include <nanovg_gl.h>
+#include <cstddef>
 #include <unordered_map>
 
 namespace bifurx {
@@ -16,16 +17,28 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	// Persistent buffers to avoid per-frame allocations
 	std::vector<GlVertex> fillVertices;
+	std::vector<GlVertex> fillSoftCapVertices;
 	std::vector<GlVertex> curveVertices;
 	std::vector<GlVertex> cyanVertices;
 	std::vector<BifurxCurvePoint> refinedPoints;
 
 	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
 	GLuint vbo = 0;
+	bool shaderInitAttempted = false;
+	bool shaderReady = false;
+	GLuint shaderProgram = 0;
+	GLuint shaderVertex = 0;
+	GLuint shaderFragment = 0;
+	GLuint shaderVbo = 0;
+	GLint shaderUniformViewport = -1;
+	GLsizeiptr shaderVboCapacityBytes = 0;
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
 	bool lastShowModuleResponseOverlay = false;
+	bool lastUseGlShaderRenderer = false;
+	bool shaderRendererActiveLastFrame = false;
+	bool shaderRendererFallbackLastFrame = false;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	uint64_t lastDrawVertexCount = 0;
@@ -33,8 +46,184 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 	}
 
+	void releaseShaderResources() {
+		if (shaderVbo) {
+			glDeleteBuffers(1, &shaderVbo);
+			shaderVbo = 0;
+		}
+		if (shaderProgram) {
+			glDeleteProgram(shaderProgram);
+			shaderProgram = 0;
+		}
+		if (shaderVertex) {
+			glDeleteShader(shaderVertex);
+			shaderVertex = 0;
+		}
+		if (shaderFragment) {
+			glDeleteShader(shaderFragment);
+			shaderFragment = 0;
+		}
+		shaderUniformViewport = -1;
+		shaderVboCapacityBytes = 0;
+		shaderReady = false;
+		shaderInitAttempted = false;
+	}
+
 	~BifurxSpectrumGLWidget() {
 		if (vbo) glDeleteBuffers(1, &vbo);
+		releaseShaderResources();
+	}
+
+	bool ensureShaderReady() {
+		if (shaderInitAttempted) {
+			return shaderReady;
+		}
+		shaderInitAttempted = true;
+
+		static const char* const kVertexShaderSrc = R"GLSL(
+			#version 120
+			attribute vec2 aPos;
+			attribute vec4 aColor;
+			uniform vec2 uViewport;
+			varying vec4 vColor;
+			void main() {
+				vec2 ndc = vec2((aPos.x / uViewport.x) * 2.0 - 1.0, 1.0 - (aPos.y / uViewport.y) * 2.0);
+				gl_Position = vec4(ndc, 0.0, 1.0);
+				vColor = aColor;
+			}
+		)GLSL";
+
+		static const char* const kFragmentShaderSrc = R"GLSL(
+			#version 120
+			varying vec4 vColor;
+			void main() {
+				gl_FragColor = vColor;
+			}
+		)GLSL";
+
+		auto compileShader = [](GLenum type, const char* src) -> GLuint {
+			GLuint shader = glCreateShader(type);
+			if (!shader) {
+				WARN("BifurxGL shader: glCreateShader failed for type=%u", unsigned(type));
+				return 0;
+			}
+			glShaderSource(shader, 1, &src, nullptr);
+			glCompileShader(shader);
+			GLint status = GL_FALSE;
+			glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+			if (status != GL_TRUE) {
+				GLint logLen = 0;
+				glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+				std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+				GLsizei written = 0;
+				glGetShaderInfoLog(shader, GLsizei(logBuf.size()), &written, logBuf.data());
+				WARN("BifurxGL shader compile failed (type=%u): %s", unsigned(type), logBuf.data());
+				glDeleteShader(shader);
+				return 0;
+			}
+			return shader;
+		};
+
+		shaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+		shaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+		if (!shaderVertex || !shaderFragment) {
+			if (shaderVertex) {
+				glDeleteShader(shaderVertex);
+				shaderVertex = 0;
+			}
+			if (shaderFragment) {
+				glDeleteShader(shaderFragment);
+				shaderFragment = 0;
+			}
+			return false;
+		}
+
+		shaderProgram = glCreateProgram();
+		if (!shaderProgram) {
+			WARN("BifurxGL shader: glCreateProgram failed");
+			glDeleteShader(shaderVertex);
+			glDeleteShader(shaderFragment);
+			shaderVertex = 0;
+			shaderFragment = 0;
+			return false;
+		}
+
+		glAttachShader(shaderProgram, shaderVertex);
+		glAttachShader(shaderProgram, shaderFragment);
+		glBindAttribLocation(shaderProgram, 0, "aPos");
+		glBindAttribLocation(shaderProgram, 1, "aColor");
+		glLinkProgram(shaderProgram);
+		GLint linkStatus = GL_FALSE;
+		glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+		if (linkStatus != GL_TRUE) {
+			GLint logLen = 0;
+			glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &logLen);
+			std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+			GLsizei written = 0;
+			glGetProgramInfoLog(shaderProgram, GLsizei(logBuf.size()), &written, logBuf.data());
+			WARN("BifurxGL shader link failed: %s", logBuf.data());
+			glDeleteProgram(shaderProgram);
+			glDeleteShader(shaderVertex);
+			glDeleteShader(shaderFragment);
+			shaderProgram = 0;
+			shaderVertex = 0;
+			shaderFragment = 0;
+			return false;
+		}
+
+		shaderUniformViewport = glGetUniformLocation(shaderProgram, "uViewport");
+		if (shaderUniformViewport < 0) {
+			WARN("BifurxGL shader uniform lookup failed: uViewport");
+			glDeleteProgram(shaderProgram);
+			glDeleteShader(shaderVertex);
+			glDeleteShader(shaderFragment);
+			shaderProgram = 0;
+			shaderVertex = 0;
+			shaderFragment = 0;
+			return false;
+		}
+
+		glGenBuffers(1, &shaderVbo);
+		if (!shaderVbo) {
+			WARN("BifurxGL shader: glGenBuffers failed");
+			glDeleteProgram(shaderProgram);
+			glDeleteShader(shaderVertex);
+			glDeleteShader(shaderFragment);
+			shaderProgram = 0;
+			shaderVertex = 0;
+			shaderFragment = 0;
+			return false;
+		}
+
+		shaderReady = true;
+		return true;
+	}
+
+	void drawVertsShader(const std::vector<GlVertex>& verts, GLenum primitive, float lineWidth, float w, float h) {
+		if (!shaderReady || verts.empty()) return;
+		glUseProgram(shaderProgram);
+		glUniform2f(shaderUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
+		glBindBuffer(GL_ARRAY_BUFFER, shaderVbo);
+		const GLsizeiptr bytes = GLsizeiptr(verts.size() * sizeof(GlVertex));
+		if (bytes > shaderVboCapacityBytes) {
+			glBufferData(GL_ARRAY_BUFFER, bytes, verts.data(), GL_DYNAMIC_DRAW);
+			shaderVboCapacityBytes = bytes;
+		}
+		else {
+			glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
+		}
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GlVertex), (const GLvoid*) offsetof(GlVertex, x));
+		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GlVertex), (const GLvoid*) offsetof(GlVertex, r));
+		if (primitive == GL_LINE_STRIP || primitive == GL_LINES) {
+			glLineWidth(std::max(1.f, lineWidth));
+		}
+		glDrawArrays(primitive, 0, GLsizei(verts.size()));
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(0);
 	}
 
 	float getTopLabelReservedWidth(const DrawArgs& args, float fontSize) {
@@ -78,6 +267,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
 		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
+		const bool useGlShaderRendererNow = module->useGlShaderRenderer;
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
 		if (tick.previewUpdated || tick.analysisUpdated || tick.animationActive) {
@@ -85,6 +275,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
 			lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
+			setDirty();
+		}
+		if (useGlShaderRendererNow != lastUseGlShaderRenderer) {
+			lastUseGlShaderRenderer = useGlShaderRendererNow;
 			setDirty();
 		}
 
@@ -143,6 +337,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
 
 		fillVertices.clear();
+		fillSoftCapVertices.clear();
 		curveVertices.clear();
 		cyanVertices.clear();
 		const bool showModuleResponse = module && module->showModuleResponseOverlay;
@@ -168,13 +363,33 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				float x1 = w * (float(i + 1) / float(kCurvePointCount - 1));
 				float y0 = spectrumYForDbfs(state.overlayOutputDbfs[i]);
 				float y1 = spectrumYForDbfs(state.overlayOutputDbfs[i + 1]);
+				const float topAlpha = clamp(0.78f + 0.18f * energy, 0.78f, 0.96f);
 
-				fillVertices.push_back({x0, y0, fill.r, fill.g, fill.b, 1.0f});
-				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x0, y0, fill.r, fill.g, fill.b, topAlpha});
+				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
 				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, 1.0f});
+				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
 				fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
 				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+
+				// Feather the crest to mimic NanoVG's softer anti-aliased top blend.
+				const float featherPxNear = 1.8f;
+				const float capAlphaNear = clamp(0.08f + 0.18f * energy, 0.f, 0.26f);
+				fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaNear});
+				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
+				fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
+				fillSoftCapVertices.push_back({x1, y1 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+				fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+
+				const float featherPxFar = 3.4f;
+				const float capAlphaFar = clamp(0.03f + 0.10f * energy, 0.f, 0.13f);
+				fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaFar});
+				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
+				fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
+				fillSoftCapVertices.push_back({x1, y1 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+				fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
 			}
 		}
 
@@ -203,33 +418,49 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glEnable(GL_LINE_SMOOTH);
 		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
 
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_COLOR_ARRAY);
-
-		if (!fillVertices.empty()) {
-			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].x);
-			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].r);
-			glDrawArrays(GL_TRIANGLES, 0, fillVertices.size());
+		const bool useShaderRenderer = module->useGlShaderRenderer && ensureShaderReady();
+		shaderRendererActiveLastFrame = useShaderRenderer;
+		shaderRendererFallbackLastFrame = module->useGlShaderRenderer && !useShaderRenderer;
+		if (useShaderRenderer) {
+			drawVertsShader(fillVertices, GL_TRIANGLES, 1.f, w, h);
+			drawVertsShader(fillSoftCapVertices, GL_TRIANGLES, 1.f, w, h);
+			drawVertsShader(cyanVertices, GL_LINE_STRIP, 2.2f, w, h);
+			drawVertsShader(curveVertices, GL_LINE_STRIP, 3.0f, w, h);
 		}
+		else {
+			glEnableClientState(GL_VERTEX_ARRAY);
+			glEnableClientState(GL_COLOR_ARRAY);
 
-		if (!cyanVertices.empty()) {
-			glLineWidth(2.2f);
-			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].x);
-			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].r);
-			glDrawArrays(GL_LINE_STRIP, 0, cyanVertices.size());
+			if (!fillVertices.empty()) {
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillVertices[0].r);
+				glDrawArrays(GL_TRIANGLES, 0, fillVertices.size());
+			}
+			if (!fillSoftCapVertices.empty()) {
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillSoftCapVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillSoftCapVertices[0].r);
+				glDrawArrays(GL_TRIANGLES, 0, fillSoftCapVertices.size());
+			}
+
+			if (!cyanVertices.empty()) {
+				glLineWidth(2.2f);
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].r);
+				glDrawArrays(GL_LINE_STRIP, 0, cyanVertices.size());
+			}
+
+			if (!curveVertices.empty()) {
+				glLineWidth(3.0f);
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].r);
+				glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
+			}
+
+			glDisableClientState(GL_COLOR_ARRAY);
+			glDisableClientState(GL_VERTEX_ARRAY);
 		}
-
-		if (!curveVertices.empty()) {
-			glLineWidth(3.0f);
-			glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].x);
-			glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].r);
-			glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
-		}
-
-		glDisableClientState(GL_COLOR_ARRAY);
-		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisable(GL_LINE_SMOOTH);
-		lastDrawVertexCount = uint64_t(fillVertices.size() + curveVertices.size() + cyanVertices.size());
+		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + curveVertices.size() + cyanVertices.size());
 
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		{
@@ -308,6 +539,22 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float topLabelReservedWidth = getTopLabelReservedWidth(args, std::max(7.f, h * 0.05f));
 		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 		nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
+
+		const char* renderBadge = "GL FIXED";
+		if (shaderRendererActiveLastFrame) {
+			renderBadge = "GL SHDR";
+		}
+		else if (shaderRendererFallbackLastFrame) {
+			renderBadge = "GL FALLBACK";
+		}
+		const float badgeFontSize = std::max(6.6f, h * 0.045f);
+		nvgFontSize(args.vg, badgeFontSize);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+		nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
+		nvgText(args.vg, w - 2.2f + 0.5f, 1.6f + 0.5f, renderBadge, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
+		nvgText(args.vg, w - 2.2f, 1.6f, renderBadge, nullptr);
 	}
 };
 

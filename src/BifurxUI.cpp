@@ -480,6 +480,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	char topLabel[32]; std::snprintf(topLabel, sizeof(topLabel), "%+5.1f dBFS", displayMaxDbfs);
 	const float topLabelReservedWidth = getTopLabelReservedWidth(args, topLabelFontSize);
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP); nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
+	const float badgeFontSize = std::max(6.6f, h * 0.045f);
+	nvgFontSize(args.vg, badgeFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgText(args.vg, w - 2.2f + 0.5f, 1.6f + 0.5f, "NVG", nullptr);
+	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230)); nvgText(args.vg, w - 2.2f, 1.6f, "NVG", nullptr);
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255), expectedCyan = nvgRGB(28, 204, 217), expectedWhite = nvgRGB(206, 210, 216);
@@ -716,7 +720,8 @@ struct BifurxWidget final : ModuleWidget {
 			submenu->addChild(createCheckMenuItem("OpenGL", "", [=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL; }, [=]() { setRenderModeWithHistory(Bifurx::RENDER_OPENGL); }));
 		}));
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
-		menu->addChild(createBoolPtrMenuItem("Show Module Response (Cyan)", "", &bifurx->showModuleResponseOverlay));
+		menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
+		menu->addChild(createBoolPtrMenuItem("Use GL Shader Renderer", "", &bifurx->useGlShaderRenderer));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));

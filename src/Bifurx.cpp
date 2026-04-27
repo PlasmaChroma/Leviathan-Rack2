@@ -417,6 +417,7 @@ json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay));
+	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
@@ -435,6 +436,10 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* showModuleResponseOverlayJ = json_object_get(root, "showModuleResponseOverlay");
 	if (showModuleResponseOverlayJ) {
 		showModuleResponseOverlay = json_is_true(showModuleResponseOverlayJ);
+	}
+	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
+	if (useGlShaderRendererJ) {
+		useGlShaderRenderer = json_is_true(useGlShaderRendererJ);
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
 	if (curveDebugLoggingJ) {

@@ -606,6 +606,7 @@ struct Bifurx : Module {
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
+	bool useGlShaderRenderer = false;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;
 	std::atomic<uint64_t> perfAudioSampledCount{0};
