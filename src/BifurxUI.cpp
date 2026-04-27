@@ -693,17 +693,22 @@ struct BifurxWidget final : ModuleWidget {
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		if (bifurx && ageSigilSvg && ageSigilUnlocked) {
 				const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
-				const Vec sigilCenter = mm2px(Vec(54.8f, 4.47f));
+				const Vec rightSigilCenter = mm2px(Vec(54.8f, 4.47f));
+				const Vec leftSigilCenter(box.size.x - rightSigilCenter.x, rightSigilCenter.y);
 				const Vec svgSize = ageSigilSvg->getSize();
 				if (svgSize.x > 1.f && svgSize.y > 1.f) {
 					const float scaleX = sigilSize.x / svgSize.x;
 					const float scaleY = sigilSize.y / svgSize.y;
-					nvgSave(args.vg);
-					nvgTranslate(args.vg, sigilCenter.x, sigilCenter.y);
-					nvgScale(args.vg, scaleX, scaleY);
-					nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
-					ageSigilSvg->draw(args.vg);
-					nvgRestore(args.vg);
+					auto drawSigilAt = [&](const Vec& center) {
+						nvgSave(args.vg);
+						nvgTranslate(args.vg, center.x, center.y);
+						nvgScale(args.vg, scaleX, scaleY);
+						nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+						ageSigilSvg->draw(args.vg);
+						nvgRestore(args.vg);
+					};
+					drawSigilAt(leftSigilCenter);
+					drawSigilAt(rightSigilCenter);
 				}
 		}
 		if (bifurx && bifurx->renderMode == Bifurx::RENDER_OPENGL && spectrumOpenGL && spectrumOpenGL->visible) {
