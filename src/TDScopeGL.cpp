@@ -291,6 +291,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       publishUiDebugMetrics(0.f, 0);
       return;
     }
+    if (!tdscope::isTemporalDeckModule(module->leftExpander.module)) {
+      publishUiDebugMetrics(0.f, 0);
+      return;
+    }
 
     bool linkActive = module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module->uiPreviewValid.load(std::memory_order_relaxed);

@@ -136,7 +136,6 @@ struct TDScopeWidget : ModuleWidget {
       return;
     }
 
-    menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
         "Auto (window peak)", "",
@@ -200,62 +199,60 @@ struct TDScopeWidget : ModuleWidget {
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
       [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
 
-    if (isDragonKingDebugEnabled()) {
-      menu->addChild(new MenuSeparator());
-      menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
-        submenu->addChild(createMenuLabel("Scope Rate"));
-        submenu->addChild(createCheckMenuItem(
-          "120 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_120HZ; },
-          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_120HZ; }));
-        submenu->addChild(createCheckMenuItem(
-          "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
-          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
-        submenu->addChild(createCheckMenuItem(
-          "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
-          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
-        submenu->addChild(new MenuSeparator());
-        submenu->addChild(createCheckMenuItem(
-          "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled; },
-          [=]() { scopeModule->debugFramebufferCacheEnabled = !scopeModule->debugFramebufferCacheEnabled; }));
-        submenu->addChild(createMenuLabel("Render Mode"));
-        submenu->addChild(createCheckMenuItem(
-          "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_STANDARD; }));
-        submenu->addChild(createCheckMenuItem(
-          "Tail raster", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
-        submenu->addChild(createCheckMenuItem(
-          "OpenGL", "",
-          [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   !scopeModule->debugUseGlShaderRenderer;
-          },
-          [=]() {
-            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer = false;
-          }));
-        submenu->addChild(createCheckMenuItem(
-          "OpenGL SHDR", "",
-          [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   scopeModule->debugUseGlShaderRenderer;
-          },
-          [=]() {
-            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer = true;
-          }));
-        submenu->addChild(new MenuSeparator());
-        submenu->addChild(createCheckMenuItem(
-          "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
-          [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
-        submenu->addChild(createCheckMenuItem(
-          "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
-          [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));
-        submenu->addChild(createCheckMenuItem(
-          "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled; },
-          [=]() { scopeModule->debugRenderStereoRightLaneEnabled = !scopeModule->debugRenderStereoRightLaneEnabled; }));
-      }));
-    }
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
+      submenu->addChild(createMenuLabel("Scope Rate"));
+      submenu->addChild(createCheckMenuItem(
+        "120 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_120HZ; },
+        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_120HZ; }));
+      submenu->addChild(createCheckMenuItem(
+        "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
+        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
+      submenu->addChild(createCheckMenuItem(
+        "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
+        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
+      submenu->addChild(new MenuSeparator());
+      submenu->addChild(createCheckMenuItem(
+        "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled; },
+        [=]() { scopeModule->debugFramebufferCacheEnabled = !scopeModule->debugFramebufferCacheEnabled; }));
+      submenu->addChild(createMenuLabel("Render Mode"));
+      submenu->addChild(createCheckMenuItem(
+        "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
+        [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_STANDARD; }));
+      submenu->addChild(createCheckMenuItem(
+        "Tail raster", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER; },
+        [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
+      submenu->addChild(createCheckMenuItem(
+        "OpenGL", "",
+        [=]() {
+          return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                 !scopeModule->debugUseGlShaderRenderer;
+        },
+        [=]() {
+          scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+          scopeModule->debugUseGlShaderRenderer = false;
+        }));
+      submenu->addChild(createCheckMenuItem(
+        "OpenGL SHDR", "",
+        [=]() {
+          return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                 scopeModule->debugUseGlShaderRenderer;
+        },
+        [=]() {
+          scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+          scopeModule->debugUseGlShaderRenderer = true;
+        }));
+      submenu->addChild(new MenuSeparator());
+      submenu->addChild(createCheckMenuItem(
+        "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
+        [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
+      submenu->addChild(createCheckMenuItem(
+        "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
+        [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));
+      submenu->addChild(createCheckMenuItem(
+        "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled; },
+        [=]() { scopeModule->debugRenderStereoRightLaneEnabled = !scopeModule->debugRenderStereoRightLaneEnabled; }));
+    }));
   }
 };
 

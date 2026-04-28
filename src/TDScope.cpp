@@ -171,6 +171,9 @@ struct TDScopeDisplayWidget final : Widget {
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
   }
+  bool isPhysicallyAttachedToTemporalDeck() const {
+    return module && tdscope::isTemporalDeckModule(module->leftExpander.module);
+  }
 
   struct ScopeWindowMap {
     float drawTop = 0.f;
@@ -251,8 +254,13 @@ struct TDScopeDisplayWidget final : Widget {
   void onButton(const event::Button &e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        (void)beginLagDragAt(e.pos);
-        e.consume(this);
+        if (!isPhysicallyAttachedToTemporalDeck()) {
+          Widget::onButton(e);
+          return;
+        }
+        if (beginLagDragAt(e.pos)) {
+          e.consume(this);
+        }
         return;
       }
       if (e.action == GLFW_RELEASE && lagDragging) {
@@ -518,6 +526,12 @@ struct TDScopeDisplayWidget final : Widget {
     };
 
     if (!module) {
+      drawStatusMessage("Attach to", "Temporal Deck");
+      publishUiDebugMetrics(0.f, 0);
+      return;
+    }
+    bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(module->leftExpander.module);
+    if (!hasTemporalDeckNeighbor) {
       drawStatusMessage("Attach to", "Temporal Deck");
       publishUiDebugMetrics(0.f, 0);
       return;
@@ -2150,6 +2164,9 @@ struct TDScopeInputWidget final : Widget {
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
   }
+  bool isPhysicallyAttachedToTemporalDeck() const {
+    return module && tdscope::isTemporalDeckModule(module->leftExpander.module);
+  }
 
   struct ScopeWindowMap {
     float drawTop = 0.f;
@@ -2244,8 +2261,13 @@ struct TDScopeInputWidget final : Widget {
   void onButton(const event::Button &e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        (void) beginLagDragAt(e.pos);
-        e.consume(this);
+        if (!isPhysicallyAttachedToTemporalDeck()) {
+          Widget::onButton(e);
+          return;
+        }
+        if (beginLagDragAt(e.pos)) {
+          e.consume(this);
+        }
         return;
       }
       if (e.action == GLFW_RELEASE && lagDragging) {
