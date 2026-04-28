@@ -405,6 +405,7 @@ void Crownstep::setGameMode(int mode, bool startFreshGame) {
 	switch (gameMode) {
 		case GAME_MODE_CHESS:
 			gameRules = &crownstep::chessRules();
+			boardTextureMode = BOARD_TEXTURE_WOOD;
 			break;
 		case GAME_MODE_OTHELLO:
 			gameRules = &crownstep::othelloRules();

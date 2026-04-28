@@ -1046,6 +1046,22 @@ struct CrownstepBoardWidget final : Widget {
 			return true;
 		};
 		bool othelloBoard = module && module->isOthelloMode();
+		auto darkenHighlightOnLightSquare = [&](NVGcolor color, int row, int col) {
+			if (othelloBoard) {
+				return color;
+			}
+			bool lightSquare = ((row + col) & 1) == 0;
+			if (!lightSquare) {
+				return color;
+			}
+			constexpr float kLightSquareHighlightDarken = 0.66f;
+			return nvgRGBAf(
+				clamp(color.r * kLightSquareHighlightDarken, 0.f, 1.f),
+				clamp(color.g * kLightSquareHighlightDarken, 0.f, 1.f),
+				clamp(color.b * kLightSquareHighlightDarken, 0.f, 1.f),
+				color.a
+			);
+		};
 		const bool woodTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 		const bool redBlackTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
@@ -1347,11 +1363,17 @@ struct CrownstepBoardWidget final : Widget {
 						float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(24.f + 48.f * pulse)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(24.f + 48.f * pulse)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(188.f + 54.f * pulse)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(188.f + 54.f * pulse)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 2.15f);
 						nvgStroke(args.vg);
 					}
@@ -1370,11 +1392,17 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.17f + 0.06f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(44.f + 50.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(44.f + 50.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.105f);
-						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, 255),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 						if (renderOpponentMoveHints) for (int destinationIndex : module->opponentHighlightedDestinations) {
@@ -1403,11 +1431,17 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.16f + 0.055f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, highlightShellColor(module->highlightMode, int(36.f + 48.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightShellColor(module->highlightMode, int(36.f + 48.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.092f);
-						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, 255),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 				}
@@ -1423,7 +1457,10 @@ struct CrownstepBoardWidget final : Widget {
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
 						if (module->lastMoveSide == module->humanSide()) {
-							nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(20.f + 38.f * pulse)));
+							nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+								highlightGlowColor(module->highlightMode, int(20.f + 38.f * pulse)),
+								row,
+								col));
 						}
 						else {
 							nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(18.f + 34.f * pulse)));
@@ -1432,7 +1469,10 @@ struct CrownstepBoardWidget final : Widget {
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth + 1.f, row * cellHeight + 1.f, cellWidth - 2.f, cellHeight - 2.f);
 						if (module->lastMoveSide == module->humanSide()) {
-							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(192.f + 48.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightBandColor(module->highlightMode, int(192.f + 48.f * pulse)),
+								row,
+								col));
 						}
 						else {
 							nvgStrokeColor(args.vg, nvgRGB(255, 213, 79));
@@ -2092,7 +2132,10 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(186.f + 62.f * breath)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(186.f + 62.f * breath)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 1.9f);
 						nvgStroke(args.vg);
 					}
@@ -2131,12 +2174,18 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(180.f + 68.f * breath)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(180.f + 68.f * breath)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 1.85f);
 						nvgStroke(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.062f);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(190.f + 56.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(190.f + 56.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 				}
@@ -2201,13 +2250,19 @@ struct CrownstepBoardWidget final : Widget {
 									// Fixed contour shell.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, highlightShellColor(module->highlightMode, 172));
+									nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+										highlightShellColor(module->highlightMode, 172),
+										row,
+										col));
 									nvgStrokeWidth(args.vg, outerStroke);
 									nvgStroke(args.vg);
 									// Fixed bright band keeps contour solid at all pulse phases.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, 244));
+									nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+										highlightBandColor(module->highlightMode, 244),
+										row,
+										col));
 									nvgStrokeWidth(args.vg, innerStroke);
 									nvgStroke(args.vg);
 									continue;
@@ -2216,13 +2271,19 @@ struct CrownstepBoardWidget final : Widget {
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, highlightGlowColor(module->highlightMode, int(38.f + 44.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightGlowColor(module->highlightMode, int(38.f + 44.f * pulse)),
+								row,
+								col));
 							nvgStrokeWidth(args.vg, 3.6f);
 							nvgStroke(args.vg);
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(182.f + 58.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightBandColor(module->highlightMode, int(182.f + 58.f * pulse)),
+								row,
+								col));
 							nvgStrokeWidth(args.vg, 1.85f);
 							nvgStroke(args.vg);
 						}
