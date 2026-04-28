@@ -21,7 +21,8 @@ std::string bifurxUserRootPath() {
 
 float levelDriveGain(float knob) {
 	const float x = bifurx::clamp01(knob);
-	return 0.06f + 0.95f * x + 3.6f * x * x * x;
+	// Midpoint should be exactly unity so the default LEVEL setting is neutral.
+	return 0.075f + 0.95f * x + 3.6f * x * x * x;
 }
 
 float onePoleAlpha(float dt, float tauSeconds) {

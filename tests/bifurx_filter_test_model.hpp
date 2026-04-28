@@ -255,7 +255,7 @@ inline float responseDb(const PreviewModel& model, float hz) {
 
 inline float levelDriveGain(float knob) {
   const float x = clamp01(knob);
-  return 0.06f + 0.95f * x + 3.6f * x * x * x;
+  return 0.075f + 0.95f * x + 3.6f * x * x * x;
 }
 
 inline float softClip(float x) {
