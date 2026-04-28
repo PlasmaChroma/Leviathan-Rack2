@@ -518,7 +518,7 @@ struct Bifurx : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
-	RenderMode renderMode = RENDER_NANOVG;
+	RenderMode renderMode = RENDER_OPENGL;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -578,7 +578,7 @@ struct Bifurx : Module {
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
-	bool useGlShaderRenderer = false;
+	bool useGlShaderRenderer = true;
 	int controlUpdateMode = CONTROL_UPDATE_TIERED;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;

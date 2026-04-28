@@ -91,7 +91,7 @@ struct TDScope final : Module {
   bool debugRenderStereoRightLaneEnabled = true;
   bool debugUseGlShaderRenderer = true;
   bool debugFramebufferCacheEnabled = true;
-  int debugRenderMode = DEBUG_RENDER_STANDARD;
+  int debugRenderMode = DEBUG_RENDER_OPENGL;
   int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
