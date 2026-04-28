@@ -3,6 +3,13 @@
 
 namespace {
 
+struct ChessSearchStats {
+	uint64_t nodes = 0;
+	uint64_t evals = 0;
+	uint64_t legalMoveGenerations = 0;
+	uint64_t cutoffs = 0;
+};
+
 int sideAwareScoreForSide(int scoreFromNegativePerspective, int maximizingSide) {
 	return (maximizingSide == AI_SIDE) ? scoreFromNegativePerspective : -scoreFromNegativePerspective;
 }
@@ -56,8 +63,23 @@ Move chooseCheckersMoveForSide(const BoardState& board, int difficulty, int aiSi
 	return moves[size_t(bestIndex)];
 }
 
-int chessEvaluateForSide(const BoardState& board, const ChessState& state, int maximizingSide) {
-	return sideAwareScoreForSide(crownstep::chessEvaluatePosition(board, state), maximizingSide);
+int chessEvaluateForSide(const BoardState& board, const ChessState& state, int maximizingSide, ChessSearchStats* stats) {
+	(void) state;
+	if (stats) {
+		stats->evals++;
+	}
+	return sideAwareScoreForSide(crownstep::chessEvaluatePositionFast(board), maximizingSide);
+}
+
+int chessTerminalEvaluateForSide(const BoardState& board, int sideToMove, int maximizingSide, ChessSearchStats* stats) {
+	if (stats) {
+		stats->evals++;
+	}
+	int score = crownstep::chessEvaluateBoardMaterial(board);
+	if (crownstep::chessIsKingInCheck(board, sideToMove)) {
+		score += (sideToMove == HUMAN_SIDE) ? 100000 : -100000;
+	}
+	return sideAwareScoreForSide(score, maximizingSide);
 }
 
 int chessSearchForSide(
@@ -67,15 +89,22 @@ int chessSearchForSide(
 	int maximizingSide,
 	int depth,
 	int alpha,
-	int beta
+	int beta,
+	ChessSearchStats* stats
 ) {
+	if (stats) {
+		stats->nodes++;
+	}
 	if (depth <= 0) {
-		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		int eval = chessEvaluateForSide(board, state, maximizingSide, stats);
 		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	if (stats) {
+		stats->legalMoveGenerations++;
 	}
 	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, sideToMove, state);
 	if (moves.empty()) {
-		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		int eval = chessTerminalEvaluateForSide(board, sideToMove, maximizingSide, stats);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
 	crownstep::chessSortMovesForSearch(board, &moves);
@@ -83,17 +112,23 @@ int chessSearchForSide(
 	for (const Move& move : moves) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, move, state, &nextState);
-		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha, stats);
 		best = std::max(best, value);
 		alpha = std::max(alpha, value);
 		if (alpha >= beta) {
+			if (stats) {
+				stats->cutoffs++;
+			}
 			break;
 		}
 	}
 	return best;
 }
 
-Move chooseChessMoveForSide(const BoardState& board, int difficulty, const ChessState& state, int aiSide) {
+Move chooseChessMoveForSide(const BoardState& board, int difficulty, const ChessState& state, int aiSide, ChessSearchStats* stats) {
+	if (stats) {
+		stats->legalMoveGenerations++;
+	}
 	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, aiSide, state);
 	if (moves.empty()) {
 		return Move();
@@ -102,6 +137,8 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 	int depth = crownstep::chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
@@ -111,12 +148,14 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 			-aiSide,
 			aiSide,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha,
+			stats
 		);
 		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];
@@ -225,7 +264,7 @@ Move Crownstep::chooseAiMoveForSnapshot(const AiWorkerRequest& request) {
 	int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
 	switch (request.gameMode) {
 		case GAME_MODE_CHESS:
-			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide);
+			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide, nullptr);
 		case GAME_MODE_OTHELLO:
 			return chooseOthelloMoveForSide(request.board, request.difficulty, requestAiSide);
 		case GAME_MODE_CHECKERS:
@@ -252,7 +291,18 @@ void Crownstep::runAiWorkerLoop() {
 		AiWorkerResult result;
 		result.id = request.id;
 		const auto thinkStart = std::chrono::steady_clock::now();
-		result.move = chooseAiMoveForSnapshot(request);
+		if (request.gameMode == GAME_MODE_CHESS) {
+			ChessSearchStats stats;
+			int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
+			result.move = chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide, &stats);
+			result.searchNodes = stats.nodes;
+			result.searchEvals = stats.evals;
+			result.searchLegalMoveGenerations = stats.legalMoveGenerations;
+			result.searchCutoffs = stats.cutoffs;
+		}
+		else {
+			result.move = chooseAiMoveForSnapshot(request);
+		}
 		const auto thinkEnd = std::chrono::steady_clock::now();
 		result.thinkMs = int(std::chrono::duration_cast<std::chrono::milliseconds>(thinkEnd - thinkStart).count());
 
@@ -320,6 +370,10 @@ bool Crownstep::consumeReadyAiResult(Move* outMove, int* outThinkMs) {
 	aiWorkerHasResult = false;
 	if (aiWorkerInFlightRequestId != 0 && resultId == aiWorkerInFlightRequestId) {
 		aiWorkerInFlightRequestId = 0;
+		lastAiSearchNodes = aiWorkerResult.searchNodes;
+		lastAiSearchEvals = aiWorkerResult.searchEvals;
+		lastAiSearchLegalMoveGenerations = aiWorkerResult.searchLegalMoveGenerations;
+		lastAiSearchCutoffs = aiWorkerResult.searchCutoffs;
 		return true;
 	}
 	return false;

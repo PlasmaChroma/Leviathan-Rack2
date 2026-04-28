@@ -1,5 +1,6 @@
 #include "../src/CrownstepCore.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -23,6 +24,33 @@ BoardState emptyBoard() {
   BoardState board {};
   board.fill(0);
   return board;
+}
+
+bool containsMove(const std::vector<Move>& moves, int origin, int destination) {
+  for (const Move& move : moves) {
+    if (move.originIndex == origin && move.destinationIndex == destination) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool applyChessMoveBySquares(BoardState* board, crownstep::ChessState* state, int side, int origin, int destination) {
+  if (!board || !state) {
+    return false;
+  }
+  std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(*board, side, *state);
+  for (const Move& move : moves) {
+    if (move.originIndex == origin && move.destinationIndex == destination) {
+      *board = crownstep::chessApplyMoveToBoard(*board, move, *state, state);
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string moveLabel(const Move& move) {
+  return std::to_string(move.originIndex) + "->" + std::to_string(move.destinationIndex);
 }
 
 TestResult testInitialBoardHasExpectedPieceCounts() {
@@ -366,6 +394,57 @@ TestResult testChessEnPassantImmediateCapture() {
             " ep=" + std::to_string(foundEnPassant ? 1 : 0)};
 }
 
+TestResult testChessAiDepthFourSampleSuite() {
+  struct Sample {
+    const char* name;
+    BoardState board;
+    crownstep::ChessState state;
+    int expectedOrigin = -1;
+    int expectedDestination = -1;
+  };
+
+  std::vector<Sample> samples;
+
+  Sample initial {"initial", crownstep::chessMakeInitialBoard(), crownstep::chessInitialState(), 12, 20};
+  samples.push_back(initial);
+
+  Sample italian {"italian-ish", crownstep::chessMakeInitialBoard(), crownstep::chessInitialState(), -1, -1};
+  bool italianOk = true;
+  italianOk = italianOk && applyChessMoveBySquares(&italian.board, &italian.state, HUMAN_SIDE, crownstep::chessCoordToIndex(6, 4), crownstep::chessCoordToIndex(4, 4));
+  italianOk = italianOk && applyChessMoveBySquares(&italian.board, &italian.state, AI_SIDE, crownstep::chessCoordToIndex(1, 4), crownstep::chessCoordToIndex(3, 4));
+  italianOk = italianOk && applyChessMoveBySquares(&italian.board, &italian.state, HUMAN_SIDE, crownstep::chessCoordToIndex(7, 6), crownstep::chessCoordToIndex(5, 5));
+  italianOk = italianOk && applyChessMoveBySquares(&italian.board, &italian.state, AI_SIDE, crownstep::chessCoordToIndex(0, 1), crownstep::chessCoordToIndex(2, 2));
+  italianOk = italianOk && applyChessMoveBySquares(&italian.board, &italian.state, HUMAN_SIDE, crownstep::chessCoordToIndex(7, 5), crownstep::chessCoordToIndex(4, 2));
+  samples.push_back(italian);
+
+  Sample tactical {"reduced tactical", emptyBoard(), crownstep::chessInitialState(), 27, 24};
+  tactical.board[size_t(crownstep::chessCoordToIndex(7, 4))] = crownstep::CHESS_KING;
+  tactical.board[size_t(crownstep::chessCoordToIndex(0, 4))] = -crownstep::CHESS_KING;
+  tactical.board[size_t(crownstep::chessCoordToIndex(3, 3))] = -crownstep::CHESS_QUEEN;
+  tactical.board[size_t(crownstep::chessCoordToIndex(3, 0))] = crownstep::CHESS_ROOK;
+  tactical.board[size_t(crownstep::chessCoordToIndex(6, 4))] = crownstep::CHESS_PAWN;
+  tactical.board[size_t(crownstep::chessCoordToIndex(1, 7))] = -crownstep::CHESS_PAWN;
+  tactical.state = crownstep::chessInferStateFromBoard(tactical.board);
+  samples.push_back(tactical);
+
+  bool pass = italianOk;
+  std::string detail;
+  const auto start = std::chrono::steady_clock::now();
+  for (const Sample& sample : samples) {
+    Move move = crownstep::chessChooseAiMove(sample.board, 3, sample.state);
+    std::vector<Move> legalMoves = crownstep::chessGenerateLegalMovesForSide(sample.board, AI_SIDE, sample.state);
+    bool legal = containsMove(legalMoves, move.originIndex, move.destinationIndex);
+    bool expectedOk = sample.expectedOrigin < 0 ||
+                      (move.originIndex == sample.expectedOrigin && move.destinationIndex == sample.expectedDestination);
+    pass = pass && legal && expectedOk;
+    detail += std::string(sample.name) + "=" + moveLabel(move) + (legal ? "/legal" : "/illegal") + " ";
+  }
+  const auto end = std::chrono::steady_clock::now();
+  const double elapsedMs = double(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) * 0.001;
+  detail += "elapsedMs=" + std::to_string(elapsedMs);
+  return {"Chess AI depth-4 sample suite", pass, detail};
+}
+
 TestResult testOthelloInitialBoardAndMoves() {
   const crownstep::IGameRules& rules = crownstep::othelloRules();
   BoardState board = rules.makeInitialBoard();
@@ -441,6 +520,7 @@ int main() {
   tests.push_back(testChessKingCannotCaptureEnemyKing());
   tests.push_back(testChessCastlingMovesAndRookShift());
   tests.push_back(testChessEnPassantImmediateCapture());
+  tests.push_back(testChessAiDepthFourSampleSuite());
   tests.push_back(testOthelloInitialBoardAndMoves());
   tests.push_back(testOthelloMoveFlipsBracketedDiscs());
   tests.push_back(testOthelloWinnerByDiscCount());

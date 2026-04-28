@@ -164,6 +164,10 @@ struct Crownstep : Module {
 	int lastMoveSide = 0;
 	int aiDifficulty = 1;
 	int lastAiThinkMs = 0;
+	uint64_t lastAiSearchNodes = 0;
+	uint64_t lastAiSearchEvals = 0;
+	uint64_t lastAiSearchLegalMoveGenerations = 0;
+	uint64_t lastAiSearchCutoffs = 0;
 	bool quantizationEnabled = true;
 	bool pitchBipolarEnabled = false;
 	bool melodicBiasEnabled = false;
@@ -210,6 +214,10 @@ struct Crownstep : Module {
 		uint64_t id = 0;
 		Move move;
 		int thinkMs = 0;
+		uint64_t searchNodes = 0;
+		uint64_t searchEvals = 0;
+		uint64_t searchLegalMoveGenerations = 0;
+		uint64_t searchCutoffs = 0;
 	};
 	std::thread aiWorkerThread;
 	std::mutex aiWorkerMutex;

@@ -773,6 +773,22 @@ struct BifurxWidget final : ModuleWidget {
 		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 		menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
 		if (isDragonKingDebugEnabled()) {
+			menu->addChild(createSubmenuItem("Control Update", "", [=](Menu* submenu) {
+				submenu->addChild(createCheckMenuItem(
+					"Tiered", "",
+					[=]() { return bifurx->controlUpdateMode == Bifurx::CONTROL_UPDATE_TIERED; },
+					[=]() {
+						bifurx->controlUpdateMode = Bifurx::CONTROL_UPDATE_TIERED;
+						bifurx->controlFastCacheValid = false;
+					}));
+				submenu->addChild(createCheckMenuItem(
+					"Audio-rate", "",
+					[=]() { return bifurx->controlUpdateMode == Bifurx::CONTROL_UPDATE_AUDIO_RATE; },
+					[=]() {
+						bifurx->controlUpdateMode = Bifurx::CONTROL_UPDATE_AUDIO_RATE;
+						bifurx->controlFastCacheValid = false;
+					}));
+			}));
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
 		}

@@ -140,6 +140,18 @@ inline float orderedSpectrumMagnitude(const float* fftData, int bin) {
 	return std::sqrt(re * re + im * im);
 }
 
+inline float orderedSpectrumPower(const float* fftData, int bin) {
+	if (bin <= 0) {
+		return fftData[0] * fftData[0];
+	}
+	if (bin >= kFftSize / 2) {
+		return fftData[1] * fftData[1];
+	}
+	const float re = fftData[2 * bin];
+	const float im = fftData[2 * bin + 1];
+	return re * re + im * im;
+}
+
 float onePoleAlpha(float dt, float tauSeconds);
 float logPosition(float hz, float minHz, float maxHz);
 float logFrequencyAt(float x01, float minHz, float maxHz);
@@ -498,6 +510,11 @@ struct Bifurx : Module {
 		RENDER_NANOVG,
 		RENDER_OPENGL
 	};
+	enum ControlUpdateMode {
+		CONTROL_UPDATE_TIERED = 0,
+		CONTROL_UPDATE_AUDIO_RATE,
+		CONTROL_UPDATE_COUNT
+	};
 
 	TptSvf coreA;
 	TptSvf coreB;
@@ -562,6 +579,7 @@ struct Bifurx : Module {
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
 	bool useGlShaderRenderer = false;
+	int controlUpdateMode = CONTROL_UPDATE_TIERED;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;
 	std::atomic<uint64_t> perfAudioSampledCount{0};

@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace crownstep {
@@ -994,6 +995,19 @@ inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& source
 	return chessGenerateLegalMovesForSide(sourceBoard, side, inferred);
 }
 
+inline int chessCountPseudoMovesForSide(const BoardState& sourceBoard, int side) {
+	std::vector<Move> pseudo;
+	pseudo.reserve(64);
+	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
+		int piece = sourceBoard[size_t(i)];
+		if (piece == 0 || pieceSide(piece) != side) {
+			continue;
+		}
+		chessAddPseudoMovesForPiece(sourceBoard, i, &pseudo, nullptr);
+	}
+	return int(pseudo.size());
+}
+
 inline int chessPieceMaterialValue(int pieceType) {
 	switch (pieceType) {
 		case CHESS_PAWN: return 100;
@@ -1033,6 +1047,13 @@ inline int chessEvaluatePosition(const BoardState& board, const ChessState& stat
 	if (aiMoves.empty()) {
 		score -= chessIsKingInCheck(board, AI_SIDE) ? 100000 : 0;
 	}
+	return score;
+}
+
+inline int chessEvaluatePositionFast(const BoardState& board) {
+	int score = chessEvaluateBoardMaterial(board);
+	score += chessCountPseudoMovesForSide(board, AI_SIDE) * 4;
+	score -= chessCountPseudoMovesForSide(board, HUMAN_SIDE) * 4;
 	return score;
 }
 
@@ -1104,17 +1125,23 @@ inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* 
 	if (!moves || moves->size() < 2) {
 		return;
 	}
-	std::stable_sort(moves->begin(), moves->end(), [&](const Move& a, const Move& b) {
-		int scoreA = chessMoveOrderingScore(board, a);
-		int scoreB = chessMoveOrderingScore(board, b);
-		if (scoreA != scoreB) {
-			return scoreA > scoreB;
+	std::vector<std::pair<Move, int>> scoredMoves;
+	scoredMoves.reserve(moves->size());
+	for (const Move& move : *moves) {
+		scoredMoves.push_back({move, chessMoveOrderingScore(board, move)});
+	}
+	std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<Move, int>& a, const std::pair<Move, int>& b) {
+		if (a.second != b.second) {
+			return a.second > b.second;
 		}
-		if (a.originIndex != b.originIndex) {
-			return a.originIndex < b.originIndex;
+		if (a.first.originIndex != b.first.originIndex) {
+			return a.first.originIndex < b.first.originIndex;
 		}
-		return a.destinationIndex < b.destinationIndex;
+		return a.first.destinationIndex < b.first.destinationIndex;
 	});
+	for (size_t i = 0; i < scoredMoves.size(); ++i) {
+		(*moves)[i] = scoredMoves[i].first;
+	}
 }
 
 inline int chessSearchDepthForDifficulty(int difficulty) {
@@ -1128,12 +1155,15 @@ inline int chessSearchDepthForDifficulty(int difficulty) {
 
 inline int chessSearchScore(const BoardState& board, const ChessState& state, int sideToMove, int depth, int alpha, int beta) {
 	if (depth <= 0) {
-		int score = chessEvaluatePosition(board, state);
+		int score = chessEvaluatePositionFast(board);
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
 	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove, state);
 	if (moves.empty()) {
-		int score = chessEvaluatePosition(board, state);
+		int score = chessEvaluateBoardMaterial(board);
+		if (chessIsKingInCheck(board, sideToMove)) {
+			score += (sideToMove == HUMAN_SIDE) ? 100000 : -100000;
+		}
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
 	chessSortMovesForSearch(board, &moves);
@@ -1165,6 +1195,8 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty, const Che
 	int depth = chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		ChessState nextState;
 		BoardState nextBoard = chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
@@ -1173,13 +1205,14 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty, const Che
 			nextState,
 			HUMAN_SIDE,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha
 		);
 		// Prefer captures when scores tie to keep the AI active in MVP mode.
 		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];

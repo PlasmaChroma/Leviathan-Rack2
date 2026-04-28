@@ -371,6 +371,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay));
 	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer));
+	json_object_set_new(root, "controlUpdateMode", json_integer(controlUpdateMode));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
@@ -394,6 +395,11 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
 	if (useGlShaderRendererJ) {
 		useGlShaderRenderer = json_is_true(useGlShaderRendererJ);
+	}
+	json_t* controlUpdateModeJ = json_object_get(root, "controlUpdateMode");
+	if (controlUpdateModeJ) {
+		controlUpdateMode = clamp(int(json_integer_value(controlUpdateModeJ)), CONTROL_UPDATE_TIERED, CONTROL_UPDATE_COUNT - 1);
+		controlFastCacheValid = false;
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
 	if (curveDebugLoggingJ) {
@@ -481,10 +487,19 @@ void Bifurx::process(const ProcessArgs& args) {
 	float voctCv = 0.f;
 	if (voctConnected) { if (!voctCvFilterInitialized) { voctCvFiltered = voctCvRaw; voctCvFilterInitialized = true; } else voctCvFiltered += voctCvFilterAlpha * (voctCvRaw - voctCvFiltered); voctCv = (std::fabs(voctCvFiltered) < kVoctDeadbandVolts) ? 0.f : voctCvFiltered; }
 	else { voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
-	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = inputs[FM_INPUT].isConnected() ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt, resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f, resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f), balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f, balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f), spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f), spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f), spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f, spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f), spanOct = 8.f * bifurx::shapedSpan(spanNorm), spanWideMorph = cascadeWideMorph(spanNorm);
-	const bool fastPathEligible = titoNeutral && !voctConnected && !inputs[FM_INPUT].isConnected() && !inputs[RESO_CV_INPUT].isConnected() && !inputs[BALANCE_CV_INPUT].isConnected() && !inputs[SPAN_CV_INPUT].isConnected();
+	const bool fmConnected = inputs[FM_INPUT].isConnected();
+	const bool resoCvConnected = inputs[RESO_CV_INPUT].isConnected();
+	const bool balanceCvConnected = inputs[BALANCE_CV_INPUT].isConnected();
+	const bool spanCvConnected = inputs[SPAN_CV_INPUT].isConnected();
+	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt, resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f, resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f), balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f, balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f), spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f), spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f), spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f, spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f), spanOct = 8.f * bifurx::shapedSpan(spanNorm), spanWideMorph = cascadeWideMorph(spanNorm);
+	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
+	const bool audioRateControlsActive = !titoNeutral || voctConnected || fmConnected;
+	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
 	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
-	const bool updateFastControls = !controlFastCacheValid || !fastPathEligible || controlUpdateDivider.process();
+	const bool controlDividerTick = controlUpdateDivider.process();
+	const bool forceAudioRateControls = controlUpdateMode == CONTROL_UPDATE_AUDIO_RATE;
+	const bool updateFastControls =
+		!controlFastCacheValid || audioRateControlsActive || (forceAudioRateControls && slowCvConnected) || controlDividerTick;
 	if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) { previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f); previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f); previewFilterAlphaSampleRate = args.sampleRate; }
 	if (std::fabs(llTelemetryAlphaSampleRate - args.sampleRate) > 0.5f) {
 		llTelemetryAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kLlTelemetryTauSeconds);
@@ -651,15 +666,16 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
 	fft.rfft(fftInputTime, fftRawInputFreq);
 	float binOutputDbfs[kFftBinCount];
-	float binOutputAmp[kFftBinCount];
-	float binRawInputAmp[kFftBinCount];
+	float binOutputPower[kFftBinCount];
+	float binRawInputPower[kFftBinCount];
 	float binModuleDeltaDb[kFftBinCount];
+	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
 	for (int bin = 0; bin < kFftBinCount; bin++) {
 		const float binHz = (float(bin) * state.previewState.sampleRate) / float(kFftSize);
 		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
-		const float weightedOutputAmp = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftOutputFreq, bin);
-		binOutputAmp[bin] = weightedOutputAmp;
-		binRawInputAmp[bin] = subsonicWeight * amplitudeScale * orderedSpectrumMagnitude(fftRawInputFreq, bin);
+		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
+		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
+		binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
 	}
 	constexpr int kOverlayBandRadius = 2;
 	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
@@ -669,8 +685,8 @@ void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; k++) {
 			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
-			outputEnergy += w * binOutputAmp[sampleBin] * binOutputAmp[sampleBin];
-			rawInputEnergy += w * binRawInputAmp[sampleBin] * binRawInputAmp[sampleBin];
+			outputEnergy += w * binOutputPower[sampleBin];
+			rawInputEnergy += w * binRawInputPower[sampleBin];
 		}
 		rawInputEnergy += 1e-12f;
 		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10(outputEnergy / rawInputEnergy));
