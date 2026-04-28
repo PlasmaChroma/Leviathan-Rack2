@@ -107,6 +107,12 @@ inline float shapedSpan(float value) {
 }
 
 float levelDriveGain(float knob);
+float smoothstep01(float x);
+float levelInputGain(float knob);
+float levelDriveAmount(float knob);
+float levelOutputClipWet(float knob);
+float applyLevelInputStage(float in, float levelKnob);
+float applyLevelOutputStage(float modeOut, float levelKnob);
 
 inline float fastTanh(float x) {
 	const float x2 = x * x;

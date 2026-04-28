@@ -258,8 +258,54 @@ inline float levelDriveGain(float knob) {
   return 0.075f + 0.95f * x + 3.6f * x * x * x;
 }
 
+inline float smoothstep01(float x) {
+  const float t = clamp01(x);
+  return t * t * (3.f - 2.f * t);
+}
+
+inline float levelInputGain(float knob) {
+  const float x = clamp01(knob);
+  if (x <= 0.5f) {
+    return 2.f * x;
+  }
+  const float hot = 2.f * (x - 0.5f);
+  return 1.f + 2.5f * hot * hot;
+}
+
+inline float levelDriveAmount(float knob) {
+  const float x = clamp01(knob);
+  if (x <= 0.5f) {
+    return 0.f;
+  }
+  const float hot = 2.f * (x - 0.5f);
+  return hot * hot;
+}
+
+inline float levelOutputClipWet(float knob) {
+  const float x = clamp01(knob);
+  return smoothstep01(2.f * (x - 0.5f));
+}
+
 inline float softClip(float x) {
   return std::tanh(x);
+}
+
+inline float applyLevelInputStage(float in, float levelKnob) {
+  constexpr float kLevelMaxDriveGain = 4.5f;
+  const float clean = in * levelInputGain(levelKnob);
+  const float driveAmount = levelDriveAmount(levelKnob);
+  if (driveAmount <= 1e-5f) {
+    return clean;
+  }
+  const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
+  const float driven = 5.f * softClip((clean * driveGain) / 5.f);
+  return clean + (driven - clean) * driveAmount;
+}
+
+inline float applyLevelOutputStage(float modeOut, float levelKnob) {
+  const float clippedOut = 5.5f * softClip(modeOut / 5.5f);
+  const float clipWet = levelOutputClipWet(levelKnob);
+  return modeOut + (clippedOut - modeOut) * clipWet;
 }
 
 inline float amplitudeRatioDb(float numerator, float denominator) {
@@ -337,7 +383,6 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   SvfState a;
   SvfState b;
 
-  const float drive = levelDriveGain(levelKnob);
   float inSq = 0.f;
   float aSq = 0.f;
   float bSq = 0.f;
@@ -347,11 +392,11 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   for (int n = 0; n < totalSamples; ++n) {
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
-    const float drivenIn = 5.f * softClip(0.2f * in * drive);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.lp, cB);
     const float modeOut = oB.lp;
-    const float out = 5.5f * softClip(modeOut / 5.5f);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {
       inSq += in * in;
@@ -438,7 +483,6 @@ inline float simulateHhRuntimeGainDb(
   SvfState a;
   SvfState b;
 
-  const float drive = levelDriveGain(levelKnob);
   const float hhGain = 1.06f * highHighSpanCompGain(wideMorph);
   float inSq = 0.f;
   float outSq = 0.f;
@@ -447,11 +491,11 @@ inline float simulateHhRuntimeGainDb(
   for (int n = 0; n < totalSamples; ++n) {
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
-    const float drivenIn = 5.f * softClip(0.2f * in * drive);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.hp, cB);
     const float modeOut = hhGain * oB.hp;
-    const float out = 5.5f * softClip(modeOut / 5.5f);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {
       inSq += in * in;

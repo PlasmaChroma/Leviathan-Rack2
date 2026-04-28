@@ -25,6 +25,53 @@ float levelDriveGain(float knob) {
 	return 0.075f + 0.95f * x + 3.6f * x * x * x;
 }
 
+float smoothstep01(float x) {
+	const float t = bifurx::clamp01(x);
+	return t * t * (3.f - 2.f * t);
+}
+
+float levelInputGain(float knob) {
+	const float x = bifurx::clamp01(knob);
+	if (x <= 0.5f) {
+		return 2.f * x;
+	}
+	const float hot = 2.f * (x - 0.5f);
+	return 1.f + 2.5f * hot * hot;
+}
+
+float levelDriveAmount(float knob) {
+	const float x = bifurx::clamp01(knob);
+	if (x <= 0.5f) {
+		return 0.f;
+	}
+	const float hot = 2.f * (x - 0.5f);
+	return hot * hot;
+}
+
+float levelOutputClipWet(float knob) {
+	const float x = bifurx::clamp01(knob);
+	return smoothstep01(2.f * (x - 0.5f));
+}
+
+float applyLevelInputStage(float in, float levelKnob) {
+	constexpr float kLevelMaxDriveGain = 4.5f;
+	const float clean = in * levelInputGain(levelKnob);
+	const float driveAmount = levelDriveAmount(levelKnob);
+	if (driveAmount <= 1e-5f) {
+		return clean;
+	}
+	const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
+	const float driven = 5.f * bifurx::softClip((clean * driveGain) / 5.f);
+	return bifurx::mixf(clean, driven, driveAmount);
+}
+
+float applyLevelOutputStage(float modeOut, float levelKnob) {
+	const float cleanOut = bifurx::sanitizeFinite(modeOut);
+	const float clippedOut = 5.5f * bifurx::softClip(cleanOut / 5.5f);
+	const float clipWet = levelOutputClipWet(levelKnob);
+	return bifurx::sanitizeFinite(bifurx::mixf(cleanOut, clippedOut, clipWet));
+}
+
 float onePoleAlpha(float dt, float tauSeconds) {
 	if (tauSeconds <= 0.f) {
 		return 1.f;
@@ -333,7 +380,7 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, wideMorph = cascadeWideMorph(state.spanNorm), drive = levelDriveGain(kPreviewProbeLevelKnob);
 	const int mode = clamp(state.mode, 0, kBifurxModeCount - 1);
 	for (int i = 0; i < sampleCount; ++i) {
-		const float rawIn = previewProbeStimulusSample(state, i), excitation = 5.f * bifurx::softClip(0.2f * rawIn * drive);
+		const float rawIn = previewProbeStimulusSample(state, i), excitation = applyLevelInputStage(rawIn, kPreviewProbeLevelKnob);
 		const SvfOutputs a = processProbeStage(engine, 0, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm);
 		SvfOutputs b; float modeOut = 0.f;
 		switch (mode) {
@@ -349,7 +396,7 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 			case 9:
 			default: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
 		}
-		inputBuffer[i] = excitation; outputBuffer[i] = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
+		inputBuffer[i] = excitation; outputBuffer[i] = applyLevelOutputStage(modeOut, kPreviewProbeLevelKnob);
 	}
 }
 
@@ -518,7 +565,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
-	const float drivenIn = 5.f * bifurx::softClip(0.2f * in * drive), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
+	const float drivenIn = applyLevelInputStage(in, level), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
 	float cutoffA = freqA0, cutoffB = freqB0;
 	if (!titoNeutral) {
 		const float depthScaled = couplingDepth * 0.2f;
@@ -551,7 +598,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
 	}
 
-	const float out = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
+	const float out = applyLevelOutputStage(modeOut, level);
 	outputs[OUT_OUTPUT].setChannels(1); outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;
 	if (mode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }

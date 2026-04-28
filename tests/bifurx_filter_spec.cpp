@@ -485,6 +485,49 @@ TestResult testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ() {
   };
 }
 
+TestResult testLevelMidpointInputStageIsCleanUnity() {
+  const float smallSignal = 0.2f;
+  const float modularSignal = 5.f;
+  const float midSmall = bifurx_test_model::applyLevelInputStage(smallSignal, 0.5f);
+  const float midModular = bifurx_test_model::applyLevelInputStage(modularSignal, 0.5f);
+  const bool pass = std::fabs(midSmall - smallSignal) < 1e-5f
+    && std::fabs(midModular - modularSignal) < 1e-4f;
+  return {
+    "LEVEL midpoint keeps input stage clean at unity",
+    pass,
+    "small(in,out)=(" + std::to_string(smallSignal) + "," + std::to_string(midSmall) + ") "
+      "modular(in,out)=(" + std::to_string(modularSignal) + "," + std::to_string(midModular) + ")"
+  };
+}
+
+TestResult testLevelMidpointOutputStageIsDry() {
+  const float modeOut = 6.f;
+  const float midOut = bifurx_test_model::applyLevelOutputStage(modeOut, 0.5f);
+  const bool pass = std::fabs(midOut - modeOut) < 1e-5f;
+  return {
+    "LEVEL midpoint keeps output stage dry",
+    pass,
+    "modeOut=" + std::to_string(modeOut) + " out=" + std::to_string(midOut)
+  };
+}
+
+TestResult testLevelUpperHalfIntroducesSaturation() {
+  const float hotIn = 1.f;
+  const float hotModeOut = 8.f;
+  const float neutralIn = bifurx_test_model::applyLevelInputStage(hotIn, 0.5f);
+  const float drivenIn = bifurx_test_model::applyLevelInputStage(hotIn, 1.0f);
+  const float neutralOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 0.5f);
+  const float clippedOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 1.0f);
+  const bool pass = (std::fabs(drivenIn - neutralIn) > 0.2f)
+    && (std::fabs(clippedOut) < std::fabs(neutralOut));
+  return {
+    "LEVEL upper half introduces drive and output soft limiting",
+    pass,
+    "input(mid,max)=(" + std::to_string(neutralIn) + "," + std::to_string(drivenIn) + ") "
+      "output(mid,max)=(" + std::to_string(neutralOut) + "," + std::to_string(clippedOut) + ")"
+  };
+}
+
 TestResult testMixedNotchModesDoNotTurnNotchIntoHighQPeak() {
   struct Scenario {
     int mode = 0;
@@ -1094,6 +1137,9 @@ int main() {
     testSvfVoctTrackingIsMonotonicPerVolt(),
     testSvfBandBandResonanceLiftIncreasesWithQ(),
     testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ(),
+    testLevelMidpointInputStageIsCleanUnity(),
+    testLevelMidpointOutputStageIsDry(),
+    testLevelUpperHalfIntroducesSaturation(),
     testMixedNotchModesDoNotTurnNotchIntoHighQPeak(),
     testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),
     testSvfLowLowPreviewRuntimeTrendAgreement(),
