@@ -513,18 +513,43 @@ TestResult testLevelMidpointOutputStageIsDry() {
 
 TestResult testLevelUpperHalfIntroducesSaturation() {
   const float hotIn = 1.f;
-  const float hotModeOut = 8.f;
   const float neutralIn = bifurx_test_model::applyLevelInputStage(hotIn, 0.5f);
   const float drivenIn = bifurx_test_model::applyLevelInputStage(hotIn, 1.0f);
-  const float neutralOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 0.5f);
-  const float clippedOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 1.0f);
-  const bool pass = (std::fabs(drivenIn - neutralIn) > 0.2f)
-    && (std::fabs(clippedOut) < std::fabs(neutralOut));
+  const bool pass = (std::fabs(drivenIn - neutralIn) > 0.2f);
   return {
-    "LEVEL upper half introduces drive and output soft limiting",
+    "LEVEL upper half introduces input drive",
     pass,
-    "input(mid,max)=(" + std::to_string(neutralIn) + "," + std::to_string(drivenIn) + ") "
-      "output(mid,max)=(" + std::to_string(neutralOut) + "," + std::to_string(clippedOut) + ")"
+    "input(mid,max)=(" + std::to_string(neutralIn) + "," + std::to_string(drivenIn) + ")"
+  };
+}
+
+TestResult testLevelOutputStageRemainsDryAtMax() {
+  const float hotModeOut = 8.f;
+  const float maxOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 1.0f);
+  const bool pass = std::fabs(maxOut - hotModeOut) < 1e-5f;
+  return {
+    "LEVEL output stage remains transparent at max",
+    pass,
+    "modeOut=" + std::to_string(hotModeOut) + " out=" + std::to_string(maxOut)
+  };
+}
+
+TestResult testLowHighModeRetainsLowPeakAtHighLevel() {
+  const float sampleRate = 48000.f;
+  const float cutoffA = 121.f;
+  const float cutoffB = 923.f;
+  const float damping = 1.f / 1.5f;
+  const float gainAt80 = bifurx_test_model::simulateLhRuntimeFundamentalGainDb(
+    sampleRate, cutoffA, 0.25f, 0.80f, cutoffA, cutoffB, damping, damping, 0.f
+  );
+  const float gainAt100 = bifurx_test_model::simulateLhRuntimeFundamentalGainDb(
+    sampleRate, cutoffA, 0.25f, 1.00f, cutoffA, cutoffB, damping, damping, 0.f
+  );
+  const bool pass = gainAt100 >= (gainAt80 - 1.0f);
+  return {
+    "Low + High low fundamental survives upper LEVEL range",
+    pass,
+    "gain(0.80,1.00)=(" + std::to_string(gainAt80) + "," + std::to_string(gainAt100) + ")"
   };
 }
 
@@ -1140,6 +1165,8 @@ int main() {
     testLevelMidpointInputStageIsCleanUnity(),
     testLevelMidpointOutputStageIsDry(),
     testLevelUpperHalfIntroducesSaturation(),
+    testLevelOutputStageRemainsDryAtMax(),
+    testLowHighModeRetainsLowPeakAtHighLevel(),
     testMixedNotchModesDoNotTurnNotchIntoHighQPeak(),
     testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),
     testSvfLowLowPreviewRuntimeTrendAgreement(),

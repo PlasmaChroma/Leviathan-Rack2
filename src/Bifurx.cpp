@@ -41,20 +41,26 @@ float levelInputGain(float knob) {
 
 float levelDriveAmount(float knob) {
 	const float x = bifurx::clamp01(knob);
-	if (x <= 0.5f) {
+	constexpr float kLevelDriveStart = 0.62f;
+	if (x <= kLevelDriveStart) {
 		return 0.f;
 	}
-	const float hot = 2.f * (x - 0.5f);
+	const float hot = bifurx::clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
 	return hot * hot;
 }
 
 float levelOutputClipWet(float knob) {
-	const float x = bifurx::clamp01(knob);
-	return smoothstep01(2.f * (x - 0.5f));
+	(void) knob;
+	return 0.f;
+}
+
+float levelOutputMakeupGain(float knob) {
+	(void) knob;
+	return 1.f;
 }
 
 float applyLevelInputStage(float in, float levelKnob) {
-	constexpr float kLevelMaxDriveGain = 4.5f;
+	constexpr float kLevelMaxDriveGain = 2.5f;
 	const float clean = in * levelInputGain(levelKnob);
 	const float driveAmount = levelDriveAmount(levelKnob);
 	if (driveAmount <= 1e-5f) {
@@ -66,10 +72,8 @@ float applyLevelInputStage(float in, float levelKnob) {
 }
 
 float applyLevelOutputStage(float modeOut, float levelKnob) {
-	const float cleanOut = bifurx::sanitizeFinite(modeOut);
-	const float clippedOut = 5.5f * bifurx::softClip(cleanOut / 5.5f);
-	const float clipWet = levelOutputClipWet(levelKnob);
-	return bifurx::sanitizeFinite(bifurx::mixf(cleanOut, clippedOut, clipWet));
+	(void) levelKnob;
+	return bifurx::sanitizeFinite(modeOut);
 }
 
 float onePoleAlpha(float dt, float tauSeconds) {

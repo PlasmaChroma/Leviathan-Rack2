@@ -7,7 +7,6 @@
 namespace bifurx {
 
 static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
-static constexpr double kActiveDrawWindowSec = 1.0;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
@@ -45,7 +44,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	uint64_t lastDrawVertexCount = 0;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
-	double lastDrawActivitySec = -1.0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
@@ -277,17 +275,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
 			}
 		}
-		const double nowSec = system::getTime();
-		const bool activelyDrawnRecently = (lastDrawActivitySec > 0.0) && ((nowSec - lastDrawActivitySec) <= kActiveDrawWindowSec);
 		BifurxRenderTickResult tick;
-		if (activelyDrawnRecently) {
-			tick = runRenderTick(uiFrameSec);
-			if (tick.curvePrepUs > 0.f) {
-				lastCurvePrepUs = tick.curvePrepUs;
-			}
-			if (tick.overlayPrepUs > 0.f) {
-				lastOverlayPrepUs = tick.overlayPrepUs;
-			}
+		tick = runRenderTick(uiFrameSec);
+		if (tick.curvePrepUs > 0.f) {
+			lastCurvePrepUs = tick.curvePrepUs;
+		}
+		if (tick.overlayPrepUs > 0.f) {
+			lastOverlayPrepUs = tick.overlayPrepUs;
 		}
 		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer;
@@ -328,7 +322,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void drawFramebuffer() override {
-		lastDrawActivitySec = system::getTime();
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point perfDrawStart = PerfClock::now();
 

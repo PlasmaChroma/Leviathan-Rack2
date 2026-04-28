@@ -274,16 +274,22 @@ inline float levelInputGain(float knob) {
 
 inline float levelDriveAmount(float knob) {
   const float x = clamp01(knob);
-  if (x <= 0.5f) {
+  constexpr float kLevelDriveStart = 0.62f;
+  if (x <= kLevelDriveStart) {
     return 0.f;
   }
-  const float hot = 2.f * (x - 0.5f);
+  const float hot = clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
   return hot * hot;
 }
 
 inline float levelOutputClipWet(float knob) {
-  const float x = clamp01(knob);
-  return smoothstep01(2.f * (x - 0.5f));
+  (void) knob;
+  return 0.f;
+}
+
+inline float levelOutputMakeupGain(float knob) {
+  (void) knob;
+  return 1.f;
 }
 
 inline float softClip(float x) {
@@ -291,7 +297,7 @@ inline float softClip(float x) {
 }
 
 inline float applyLevelInputStage(float in, float levelKnob) {
-  constexpr float kLevelMaxDriveGain = 4.5f;
+  constexpr float kLevelMaxDriveGain = 2.5f;
   const float clean = in * levelInputGain(levelKnob);
   const float driveAmount = levelDriveAmount(levelKnob);
   if (driveAmount <= 1e-5f) {
@@ -303,9 +309,8 @@ inline float applyLevelInputStage(float in, float levelKnob) {
 }
 
 inline float applyLevelOutputStage(float modeOut, float levelKnob) {
-  const float clippedOut = 5.5f * softClip(modeOut / 5.5f);
-  const float clipWet = levelOutputClipWet(levelKnob);
-  return modeOut + (clippedOut - modeOut) * clipWet;
+  (void) levelKnob;
+  return modeOut;
 }
 
 inline float amplitudeRatioDb(float numerator, float denominator) {
@@ -507,6 +512,107 @@ inline float simulateHhRuntimeGainDb(
   const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
   const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
   return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+inline float simulateLhRuntimeGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB,
+  float balance
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float lowW = signedWeight(balance, false);
+  const float highW = signedWeight(balance, true);
+  const float norm = 2.f / (lowW + highW);
+  const float wA = lowW * norm;
+  const float wB = highW * norm;
+  float inSq = 0.f;
+  float outSq = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, drivenIn, cB);
+    const float modeOut = 0.98f * wA * oA.lp + 0.98f * wB * oB.hp - 0.06f * (oA.bp + oB.bp);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
+
+    if (n >= settleSamples) {
+      inSq += in * in;
+      outSq += out * out;
+      nAccum++;
+    }
+  }
+
+  const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
+  const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
+  return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+inline float simulateLhRuntimeFundamentalGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB,
+  float balance
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float lowW = signedWeight(balance, false);
+  const float highW = signedWeight(balance, true);
+  const float norm = 2.f / (lowW + highW);
+  const float wA = lowW * norm;
+  const float wB = highW * norm;
+
+  float outI = 0.f;
+  float outQ = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, drivenIn, cB);
+    const float modeOut = 0.98f * wA * oA.lp + 0.98f * wB * oB.hp - 0.06f * (oA.bp + oB.bp);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
+
+    if (n >= settleSamples) {
+      const float phase = 2.f * kPi * inputHz * t;
+      outI += out * std::sin(phase);
+      outQ += out * std::cos(phase);
+      nAccum++;
+    }
+  }
+
+  const float outAmp = (2.f / std::max(1, nAccum)) * std::sqrt(outI * outI + outQ * outQ);
+  return 20.f * std::log10(std::max(outAmp / std::max(inputAmplitude, 1e-6f), 1e-6f));
 }
 
 } // namespace bifurx_test_model

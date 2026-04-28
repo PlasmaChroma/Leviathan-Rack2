@@ -4,11 +4,28 @@
 
 namespace {
 constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+
+const char *debugRenderModeLabel(const TDScope *scopeModule) {
+  if (!scopeModule) {
+    return "STD";
+  }
+  switch (scopeModule->debugRenderMode) {
+    case TDScope::DEBUG_RENDER_STANDARD:
+      return "STD";
+    case TDScope::DEBUG_RENDER_TAIL_RASTER:
+      return "RASTER";
+    case TDScope::DEBUG_RENDER_OPENGL:
+      return scopeModule->debugUseGlShaderRenderer ? "GL SHDR" : "GL";
+    default:
+      return "STD";
+  }
+}
 }
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
+  math::Rect scopeRectPx;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarLeftStartMm = 2.2491839f;
 
@@ -34,6 +51,8 @@ struct TDScopeWidget : ModuleWidget {
       scopeRectMm.pos = Vec(1.1138f, 10.9404f);
       scopeRectMm.size = Vec(38.5563f, 109.4206f);
     }
+    scopeRectPx.pos = mm2px(scopeRectMm.pos);
+    scopeRectPx.size = mm2px(scopeRectMm.size);
 
     glDisplay = tdscope::createGlDisplay(module, scopeRectMm);
     glDisplay->setVisible(module && module->useOpenGlGeometryRenderMode());
@@ -116,10 +135,17 @@ struct TDScopeWidget : ModuleWidget {
         std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", scopeModule->debugInstanceId);
         const float x = box.size.x - mm2px(0.9f);
         const float y = mm2px(2.5f);
+        const float modeX = scopeRectPx.pos.x + scopeRectPx.size.x - 1.2f;
+        const float modeY = std::max(1.5f, mm2px(9.522227f) - mm2px(0.75f));
+        const char *modeLabel = debugRenderModeLabel(scopeModule);
         nvgSave(args.vg);
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFontSize(args.vg, 6.8f);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
+        nvgText(args.vg, modeX + 0.45f, modeY + 0.45f, modeLabel, nullptr);
+        nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
+        nvgText(args.vg, modeX, modeY, modeLabel, nullptr);
         nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
         nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
         nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
