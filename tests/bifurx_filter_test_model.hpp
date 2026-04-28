@@ -122,13 +122,15 @@ inline T combineModeResponse(
   const T& bpA,
   const T& hpA,
   const T& /*ntA*/,
-  const T& lpB,
+  const T& /*lpB*/,
   const T& bpB,
   const T& hpB,
   const T& /*ntB*/,
   const T& cascadeLp,
   const T& cascadeNotch,
+  const T& cascadeNotchToLow,
   const T& cascadeHpToLp,
+  const T& cascadeHighToNotch,
   const T& cascadeHpToHp,
   float wA,
   float wB,
@@ -141,7 +143,7 @@ inline T combineModeResponse(
     case 1:
       return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
     case 2:
-      return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
+      return T(1.04f) * cascadeNotchToLow;
     case 3:
       return T(1.03f) * cascadeNotch;
     case 4:
@@ -151,7 +153,7 @@ inline T combineModeResponse(
     case 6:
       return T(1.04f) * cascadeHpToLp;
     case 7:
-      return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
+      return T(1.04f) * cascadeHighToNotch;
     case 8:
       return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
     case 9:
@@ -232,14 +234,16 @@ inline std::complex<float> response(const PreviewModel& model, float hz) {
   const std::complex<float> ntB = lpB + hpB;
   const std::complex<float> cascadeLp = lpB * lpA;
   const std::complex<float> cascadeNotch = ntB * ntA;
+  const std::complex<float> cascadeNotchToLow = lpB * ntA;
   const std::complex<float> cascadeHpToLp = lpB * hpA;
+  const std::complex<float> cascadeHighToNotch = ntB * hpA;
   const std::complex<float> cascadeHpToHp = hpB * hpA;
 
   return combineModeResponse<std::complex<float>>(
     model.mode,
     lpA, bpA, hpA, ntA,
     lpB, bpB, hpB, ntB,
-    cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
+    cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp,
     model.wA, model.wB, model.wideMorph
   );
 }

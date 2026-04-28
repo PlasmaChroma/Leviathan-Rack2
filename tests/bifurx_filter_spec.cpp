@@ -485,6 +485,58 @@ TestResult testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ() {
   };
 }
 
+TestResult testMixedNotchModesDoNotTurnNotchIntoHighQPeak() {
+  struct Scenario {
+    int mode = 0;
+    float notchHz = 0.f;
+    float shoulderLo = 0.f;
+    float shoulderHi = 0.f;
+  };
+
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.qA = 24.f;
+  s.qB = 24.f;
+  s.balance = 0.f;
+  s.spanNorm = 0.60f;
+
+  std::vector<Scenario> scenarios;
+  s.mode = 2;      // Notch + Low
+  s.freqA = 520.f;
+  s.freqB = 1900.f;
+  scenarios.push_back({s.mode, s.freqA, s.freqA * 0.86f, s.freqA * 1.16f});
+  s.mode = 7;      // High + Notch
+  s.freqA = 520.f;
+  s.freqB = 1900.f;
+  scenarios.push_back({s.mode, s.freqB, s.freqB * 0.86f, s.freqB * 1.16f});
+
+  bool pass = true;
+  std::string detail;
+  for (const Scenario& scenario : scenarios) {
+    s.mode = scenario.mode;
+    const PreviewModel m = makePreviewModel(s);
+    const float notchDb = responseDb(m, scenario.notchHz);
+    const float loDb = responseDb(m, scenario.shoulderLo);
+    const float hiDb = responseDb(m, scenario.shoulderHi);
+    const bool notchIsCut = notchDb < std::min(loDb, hiDb) - 6.f;
+    const bool notchBelowUnity = notchDb <= 0.25f;
+    pass = pass && notchIsCut && notchBelowUnity;
+    if (!detail.empty()) {
+      detail += " ";
+    }
+    detail += "m" + std::to_string(scenario.mode) +
+      "(notch=" + std::to_string(notchDb) +
+      ",lo=" + std::to_string(loDb) +
+      ",hi=" + std::to_string(hiDb) + ")";
+  }
+
+  return {
+    "Mixed notch modes keep high-Q notch as a cut, not a peak",
+    pass,
+    detail
+  };
+}
+
 TestResult testSvfLowLowRuntimeDoesNotCollapseNearLowPeak() {
   // Regression guard for the reported 40Hz tone with first LL peak near 53.9Hz.
   const float sampleRate = 48000.f;
@@ -1042,6 +1094,7 @@ int main() {
     testSvfVoctTrackingIsMonotonicPerVolt(),
     testSvfBandBandResonanceLiftIncreasesWithQ(),
     testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ(),
+    testMixedNotchModesDoNotTurnNotchIntoHighQPeak(),
     testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),
     testSvfLowLowPreviewRuntimeTrendAgreement(),
     testSpanIncreasesMarkerSeparationAtFixedCenter(),

@@ -306,8 +306,8 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	std::complex<float> lpB = model.lowB.response(z1, z2);
 	std::complex<float> bpB = model.bandB.response(z1, z2);
 	std::complex<float> hpB = model.highB.response(z1, z2);
-	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeHpToLp = lpB * hpA, cascadeHpToHp = hpB * hpA;
-	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp, model.wA, model.wB, model.wideMorph);
+	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeNotchToLow = lpB * ntA, cascadeHpToLp = lpB * hpA, cascadeHighToNotch = ntB * hpA, cascadeHpToHp = hpB * hpA;
+	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB, model.wideMorph);
 }
 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
@@ -336,17 +336,17 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 		const SvfOutputs a = processProbeStage(engine, 0, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm);
 		SvfOutputs b; float modeOut = 0.f;
 		switch (mode) {
-			case 0: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 0: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
 			case 1:
-			case 2:
 			case 4:
 			case 5:
-			case 7:
-			case 8: b = processProbeStage(engine, 1, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, wideMorph); break;
+			case 8: b = processProbeStage(engine, 1, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 2: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 7: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, wideMorph); break;
 			case 9:
-			default: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
+			default: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
 		}
 		inputBuffer[i] = excitation; outputBuffer[i] = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
 	}
@@ -538,16 +538,16 @@ void Bifurx::process(const ProcessArgs& args) {
 	};
 
 	switch (mode) {
-		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 2: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, wA, wB, spanWideMorph); } break;
-		case 7: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
+		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 2: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, spanWideMorph); } break;
+		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
 	}
 
 	const float out = bifurx::sanitizeFinite(5.5f * bifurx::softClip(bifurx::sanitizeFinite(modeOut) / 5.5f));
@@ -601,6 +601,110 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 }
 
+namespace {
+
+inline void prepareCurveTargets(const BifurxPreviewModel& model, const float* curveHz, float* curveTargetDb) {
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const float db = previewModelResponseDb(model, curveHz[i]);
+		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
+	}
+}
+
+inline float computeDisplayTopTargetDbfs(
+	const float* frameSmoothedOutputDbfs,
+	const float* overlayTargetOutputDbfs,
+	bool fftScaleDynamic
+) {
+	if (!fftScaleDynamic) {
+		return kDisplayTopDbfsCeiling;
+	}
+
+	float framePeakDbfs = kOverlayDbfsFloor;
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
+	}
+
+	float sortedOutputDbfs[kCurvePointCount];
+	for (int i = 0; i < kCurvePointCount; i++) sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
+	const int p95Index = int(0.95f * float(kCurvePointCount - 1));
+	std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
+	const float robustTopRefDbfs = std::max(sortedOutputDbfs[p95Index], framePeakDbfs - 18.f);
+	return clamp(
+		std::max(robustTopRefDbfs + 6.f, framePeakDbfs + kDisplayPeakHeadroomDb),
+		kDisplayTopDbfsFloor,
+		kDisplayTopDynamicCeilingDbfs
+	);
+}
+
+inline void prepareOverlayTargetsFromSpectra(
+	float sampleRate,
+	const float* curveBinPos,
+	const float* fftOutputFreq,
+	const float* fftRawInputFreq,
+	bool hasOverlayTarget,
+	bool fftScaleDynamic,
+	float* overlayTargetModuleDb,
+	float* overlayTargetOutputDbfs,
+	float* displayTopTargetDbfs
+) {
+	float binOutputDbfs[kFftBinCount];
+	float binOutputPower[kFftBinCount];
+	float binRawInputPower[kFftBinCount];
+	float binModuleDeltaDb[kFftBinCount];
+	const float amplitudeScale = 4.f / float(kFftSize);
+	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
+	for (int bin = 0; bin < kFftBinCount; ++bin) {
+		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
+		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
+		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
+		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
+		binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
+	}
+
+	constexpr int kOverlayBandRadius = 2;
+	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
+	for (int bin = 0; bin < kFftBinCount; ++bin) {
+		float outputEnergy = 0.f;
+		float rawInputEnergy = 0.f;
+		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; ++k) {
+			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
+			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
+			outputEnergy += w * binOutputPower[sampleBin];
+			rawInputEnergy += w * binRawInputPower[sampleBin];
+		}
+		rawInputEnergy += 1e-12f;
+		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10(outputEnergy / rawInputEnergy));
+		outputEnergy += 1e-12f;
+		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
+	}
+
+	float sampledOutputDbfs[kCurvePointCount];
+	float sampledModuleDeltaDb[kCurvePointCount];
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const float binPos = curveBinPos[i];
+		const int binA = std::max(2, int(std::floor(binPos)));
+		const int binB = std::min(binA + 1, kFftSize / 2);
+		const float frac = binPos - float(binA);
+		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
+		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
+	}
+
+	float frameSmoothedOutputDbfs[kCurvePointCount];
+	const float targetSmoothing = hasOverlayTarget ? 0.45f : 1.f;
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const int left = std::max(0, i - 1), right = std::min(kCurvePointCount - 1, i + 1);
+		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
+		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
+		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
+		overlayTargetModuleDb[i] = mixf(overlayTargetModuleDb[i], smoothModuleDeltaDb, targetSmoothing);
+		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
+	}
+
+	*displayTopTargetDbfs = computeDisplayTopTargetDbfs(frameSmoothedOutputDbfs, overlayTargetOutputDbfs, fftScaleDynamic);
+}
+
+} // namespace
+
 void BifurxSpectrumBase::syncBase() {
 	if (!module) return;
 	const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
@@ -610,13 +714,19 @@ void BifurxSpectrumBase::syncBase() {
 		state.hasPreview = true;
 		state.lastPreviewSeq = previewSeq;
 		updateAxisCache();
+		const auto curvePrepStart = std::chrono::steady_clock::now();
 		updateCurveCache();
+		lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now() - curvePrepStart).count());
 	}
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != state.lastAnalysisSeq) {
 		const int index = module->analysisPublishedIndex.load(std::memory_order_acquire);
+		const auto overlayPrepStart = std::chrono::steady_clock::now();
 		updateOverlayCache(module->analysisFrames[index]);
+		lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now() - overlayPrepStart).count());
 		state.hasOverlay = true;
 		state.lastAnalysisSeq = analysisSeq;
 	}
@@ -639,10 +749,7 @@ void BifurxSpectrumBase::updateCurveCache() {
 	if (!state.hasPreview) return;
 	updateAxisCache();
 	const BifurxPreviewModel& model = getOrUpdateModel();
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const float db = previewModelResponseDb(model, state.curveHz[i]);
-		state.curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
-	}
+	prepareCurveTargets(model, state.curveHz, state.curveTargetDb);
 	if (!state.hasCurveTarget) {
 		for (int i = 0; i < kCurvePointCount; i++) state.curveDb[i] = state.curveTargetDb[i];
 		state.hasCurveTarget = true;
@@ -660,78 +767,29 @@ const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
 void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
 	if (!state.hasPreview) return;
 	updateAxisCache();
-	const float amplitudeScale = 4.f / float(kFftSize);
 	for (int i = 0; i < kFftSize; i++) fftOutputTime[i] = frame.output[i] * window[i];
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
 	fft.rfft(fftInputTime, fftRawInputFreq);
-	float binOutputDbfs[kFftBinCount];
-	float binOutputPower[kFftBinCount];
-	float binRawInputPower[kFftBinCount];
-	float binModuleDeltaDb[kFftBinCount];
-	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
-	for (int bin = 0; bin < kFftBinCount; bin++) {
-		const float binHz = (float(bin) * state.previewState.sampleRate) / float(kFftSize);
-		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
-		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
-		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
-		binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
-	}
-	constexpr int kOverlayBandRadius = 2;
-	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
-	for (int bin = 0; bin < kFftBinCount; bin++) {
-		float outputEnergy = 0.f;
-		float rawInputEnergy = 0.f;
-		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; k++) {
-			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
-			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
-			outputEnergy += w * binOutputPower[sampleBin];
-			rawInputEnergy += w * binRawInputPower[sampleBin];
-		}
-		rawInputEnergy += 1e-12f;
-		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10(outputEnergy / rawInputEnergy));
-		outputEnergy += 1e-12f;
-		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
-	}
-	float sampledOutputDbfs[kCurvePointCount];
-	float sampledModuleDeltaDb[kCurvePointCount];
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const float binPos = state.curveBinPos[i];
-		const int binA = std::max(2, int(std::floor(binPos)));
-		const int binB = std::min(binA + 1, kFftSize / 2);
-		const float frac = binPos - float(binA);
-		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
-		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
-	}
-	float framePeakDbfs = kOverlayDbfsFloor;
-	float frameSmoothedOutputDbfs[kCurvePointCount];
-	const float targetSmoothing = state.hasOverlayTarget ? 0.45f : 1.f;
-	for (int i = 0; i < kCurvePointCount; i++) {
-		const int left = std::max(0, i - 1), right = std::min(kCurvePointCount - 1, i + 1);
-		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
-		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
-		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
-		state.overlayTargetModuleDb[i] = mixf(state.overlayTargetModuleDb[i], smoothModuleDeltaDb, targetSmoothing);
-		state.overlayTargetOutputDbfs[i] = mixf(state.overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
-		framePeakDbfs = std::max(framePeakDbfs, state.overlayTargetOutputDbfs[i]);
-	}
+	const bool fftScaleDynamic = module ? module->fftScaleDynamic : true;
+	prepareOverlayTargetsFromSpectra(
+		state.previewState.sampleRate,
+		state.curveBinPos,
+		fftOutputFreq,
+		fftRawInputFreq,
+		state.hasOverlayTarget,
+		fftScaleDynamic,
+		state.overlayTargetModuleDb,
+		state.overlayTargetOutputDbfs,
+		&state.displayTopTargetDbfs
+	);
+
 	if (!state.hasOverlayTarget) {
 		for (int i = 0; i < kCurvePointCount; i++) {
 			state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
 			state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
 		}
 		state.hasOverlayTarget = true;
-	}
-	if (module && !module->fftScaleDynamic) {
-		state.displayTopTargetDbfs = kDisplayTopDbfsCeiling;
-	}
-	else {
-		float sortedOutputDbfs[kCurvePointCount];
-		for (int i = 0; i < kCurvePointCount; i++) sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
-		const int p95Index = int(0.95f * float(kCurvePointCount - 1));
-		std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
-		const float robustTopRefDbfs = std::max(sortedOutputDbfs[p95Index], framePeakDbfs - 18.f);
-		state.displayTopTargetDbfs = clamp(std::max(robustTopRefDbfs + 6.f, framePeakDbfs + kDisplayPeakHeadroomDb), kDisplayTopDbfsFloor, kDisplayTopDynamicCeilingDbfs);
 	}
 }
 
@@ -807,6 +865,8 @@ BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
 	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq);
 	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq);
 	result.animationActive = updateAnimation(dt);
+	result.curvePrepUs = result.previewUpdated ? lastCurvePrepUs : 0.f;
+	result.overlayPrepUs = result.analysisUpdated ? lastOverlayPrepUs : 0.f;
 	return result;
 }
 

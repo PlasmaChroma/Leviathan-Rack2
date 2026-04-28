@@ -49,6 +49,8 @@ MODULE_COLUMNS = {
         ("preview_seq", "P-Seq"),
         ("analysis_seq", "A-Seq"),
         ("vertex_count", "Verts"),
+        ("curve_prep_us", "Curve us"),
+        ("overlay_prep_us", "Overlay us"),
     ),
 }
 

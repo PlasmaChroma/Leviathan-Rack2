@@ -5,6 +5,7 @@
 namespace bifurx {
 
 static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static constexpr double kActiveDrawWindowSec = 1.0;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
@@ -65,6 +66,9 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	uint64_t lastDrawVertexCount = 0;
+	float lastCurvePrepUs = 0.f;
+	float lastOverlayPrepUs = 0.f;
+	double lastDrawActivitySec = -1.0;
 	
 	BifurxLlTelemetryState llTelemetryState;
 	bool hasLlTelemetry = false;
@@ -350,11 +354,21 @@ void BifurxSpectrumWidget::step() {
 		}
 	}
 
-	const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
-	previewUpdated = tick.previewUpdated;
-	analysisUpdated = tick.analysisUpdated;
-	if (previewUpdated || analysisUpdated || tick.animationActive) {
-		dirty = true;
+	const double nowSec = system::getTime();
+	const bool activelyDrawnRecently = (lastDrawActivitySec > 0.0) && ((nowSec - lastDrawActivitySec) <= kActiveDrawWindowSec);
+	if (activelyDrawnRecently) {
+		const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
+		previewUpdated = tick.previewUpdated;
+		analysisUpdated = tick.analysisUpdated;
+		if (tick.curvePrepUs > 0.f) {
+			lastCurvePrepUs = tick.curvePrepUs;
+		}
+		if (tick.overlayPrepUs > 0.f) {
+			lastOverlayPrepUs = tick.overlayPrepUs;
+		}
+		if (previewUpdated || analysisUpdated || tick.animationActive) {
+			dirty = true;
+		}
 	}
 
 	const uint32_t llTelemetrySeq = module->llTelemetryPublishSeq.load(std::memory_order_acquire);
@@ -439,7 +453,9 @@ void BifurxSpectrumWidget::step() {
 				false, // opengl
 				state.lastPreviewSeq,
 				state.lastAnalysisSeq,
-				lastDrawVertexCount
+				lastDrawVertexCount,
+				lastCurvePrepUs,
+				lastOverlayPrepUs
 			);
 		}
 	}
@@ -451,6 +467,7 @@ void BifurxSpectrumWidget::step() {
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
+	lastDrawActivitySec = system::getTime();
 	if (!state.hasPreview) return;
 	const float w = box.size.x, h = box.size.y;
 	if (!(w > 0.f && h > 0.f)) return;

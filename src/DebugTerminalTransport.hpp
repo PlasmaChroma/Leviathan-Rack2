@@ -26,6 +26,8 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            bool renderOpengl,
                            uint32_t previewSeq,
                            uint32_t analysisSeq,
-                           uint64_t drawVertexCount);
+                           uint64_t drawVertexCount,
+                           float curvePrepUs,
+                           float overlayPrepUs);
 
 } // namespace debug_terminal

@@ -230,7 +230,9 @@ T combineModeResponse(
 	const T& ntB,
 	const T& cascadeLp,
 	const T& cascadeNotch,
+	const T& cascadeNotchToLow,
 	const T& cascadeHpToLp,
+	const T& cascadeHighToNotch,
 	const T& cascadeHpToHp,
 	float wA,
 	float wB,
@@ -240,12 +242,12 @@ T combineModeResponse(
 		case 0:
 			return cascadeLp;
 		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
-		case 2: return T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA;
+		case 2: return T(1.04f) * cascadeNotchToLow;
 		case 3: return T(1.03f) * cascadeNotch;
 		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
 		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
 		case 6: return T(1.04f) * cascadeHpToLp;
-		case 7: return T(1.08f) * T(wA) * hpA - T(0.61f) * T(wB) * bpB;
+		case 7: return T(1.04f) * cascadeHighToNotch;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
 		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
 		default: return T(1.f);
@@ -352,6 +354,8 @@ struct BifurxRenderTickResult {
 	bool previewUpdated = false;
 	bool analysisUpdated = false;
 	bool animationActive = false;
+	float curvePrepUs = 0.f;
+	float overlayPrepUs = 0.f;
 };
 
 struct BifurxSpectrumBase {
@@ -369,6 +373,8 @@ struct BifurxSpectrumBase {
 
 	uint32_t lastModelUpdateSeq = 0;
 	mutable BifurxPreviewModel cachedModel;
+	float lastCurvePrepUs = 0.f;
+	float lastOverlayPrepUs = 0.f;
 
 	BifurxSpectrumBase() : fft(kFftSize) {
 		for (int i = 0; i < kFftSize; i++) {

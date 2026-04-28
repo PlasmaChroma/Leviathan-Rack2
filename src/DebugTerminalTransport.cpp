@@ -370,17 +370,21 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            bool renderOpengl,
                            uint32_t previewSeq,
                            uint32_t analysisSeq,
-                           uint64_t drawVertexCount) {
-  char dataBuf[384];
+                           uint64_t drawVertexCount,
+                           float curvePrepUs,
+                           float overlayPrepUs) {
+  char dataBuf[448];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"filter\":%d,\"opengl\":%d,\"preview_seq\":%u,\"analysis_seq\":%u,\"vertex_count\":%llu}",
+                "{\"ui_ms\":%.4f,\"filter\":%d,\"opengl\":%d,\"preview_seq\":%u,\"analysis_seq\":%u,\"vertex_count\":%llu,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f}",
                 std::max(0.f, uiMs),
                 filterMode,
                 renderOpengl ? 1 : 0,
                 previewSeq,
                 analysisSeq,
-                (unsigned long long) drawVertexCount);
+                (unsigned long long) drawVertexCount,
+                std::max(0.f, curvePrepUs),
+                std::max(0.f, overlayPrepUs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
 }
