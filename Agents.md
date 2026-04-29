@@ -18,6 +18,16 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
   - Full plugin builds are expected to work.
   - You should run and verify full plugin linking as part of validation.
 
+## Patterns
+
+- We have an established pattern that allows placement of Rack components dynamically using the components layer in the SVG and helper functions.  See PanelSvgUtils for information.
+
+- Performance is king, for expensive math functions we prefer to use optimized less CPU intense versions for transcendental functions
+
+- We have a pattern of isDragonKingDebugEnabled to gate debug and developer functionality across the entire codebase
+
+- We have a debug terminal seen in tools/debug_terminal/server.py that allows us to get small debug data packets over a socket to be viewed outside of rack.  This type of debug should be gated by isDragonKingDebugEnabled.
+
 ## Testing Note
 
 - In either environment the simple test-fast set is expected to pass, although test-rack is a work in progress and will not be able to run.  Stick to test-fast for now if tests are required.
