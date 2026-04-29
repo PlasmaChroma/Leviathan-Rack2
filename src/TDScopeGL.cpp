@@ -58,6 +58,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
+  float redrawLastColorBrightness = NAN;
   bool redrawLastHaloEnabled = false;
   bool redrawLastMainTraceEnabled = false;
   bool redrawLastConnectorsEnabled = false;
@@ -167,6 +168,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
+  float fieldColorLutBrightness = NAN;
   uint64_t fieldRowTexturePublishSeqLeft = 0;
   uint64_t fieldRowTexturePublishSeqRight = 0;
   bool fieldRowTextureValidLeft = false;
@@ -216,6 +218,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (module->scopeColorScheme != redrawLastColorScheme) {
       dirty = true;
       redrawLastColorScheme = module->scopeColorScheme;
+    }
+    if (std::fabs(module->scopeColorBrightness - redrawLastColorBrightness) > 1e-4f) {
+      dirty = true;
+      redrawLastColorBrightness = module->scopeColorBrightness;
     }
     if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
       dirty = true;
@@ -1244,6 +1250,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       c.r = c.r + (1.f - c.r) * hotLift;
       c.g = c.g + (1.f - c.g) * hotLift;
       c.b = c.b + (1.f - c.b) * hotLift;
+      c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
     };
@@ -1963,10 +1970,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
         int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
         ensureColorLut(scheme);
-        if (fieldColorLutScheme != scheme) {
+        float colorBrightness = module->scopeColorBrightnessClamped();
+        if (fieldColorLutScheme != scheme || std::fabs(fieldColorLutBrightness - colorBrightness) > 1e-4f) {
           std::array<GLubyte, 256 * 4> lutBytes {};
           for (int i = 0; i < 256; ++i) {
-            const NVGcolor &c = colorLut[size_t(scheme)][size_t(i)];
+            NVGcolor c = module->applyScopeColorBrightness(colorLut[size_t(scheme)][size_t(i)]);
             lutBytes[size_t(i) * 4u + 0u] = encodeColorByte(c.r);
             lutBytes[size_t(i) * 4u + 1u] = encodeColorByte(c.g);
             lutBytes[size_t(i) * 4u + 2u] = encodeColorByte(c.b);
@@ -1975,6 +1983,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
           glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, lutBytes.data());
           fieldColorLutScheme = scheme;
+          fieldColorLutBrightness = colorBrightness;
         }
 
         return true;

@@ -19,7 +19,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	std::vector<GlVertex> fillVertices;
 	std::vector<GlVertex> fillSoftCapVertices;
 	std::vector<GlVertex> curveVertices;
+	std::vector<GlVertex> curveHaloVertices;
 	std::vector<GlVertex> cyanVertices;
+	std::vector<GlVertex> cyanHaloVertices;
 	std::vector<BifurxCurvePoint> refinedPoints;
 
 	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
@@ -51,7 +53,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillVertices.reserve(overlaySegmentCount * 6);
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
 		curveVertices.reserve(refinedPointReserve);
+		curveHaloVertices.reserve(refinedPointReserve);
 		cyanVertices.reserve(size_t(kCurvePointCount));
+		cyanHaloVertices.reserve(size_t(kCurvePointCount));
 		refinedPoints.reserve(refinedPointReserve);
 	}
 
@@ -354,11 +358,17 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
+		float drawZoom = std::max(getAbsoluteZoom(), 0.1f);
+		const float zoomOutT = clamp((1.f - drawZoom) / 0.55f, 0.f, 1.f);
+		const float haloAlphaScale = mixf(1.f, 0.35f, zoomOutT);
+		const float coreAlphaScale = mixf(1.f, 0.86f, zoomOutT);
 
 		fillVertices.clear();
 		fillSoftCapVertices.clear();
 		curveVertices.clear();
+		curveHaloVertices.clear();
 		cyanVertices.clear();
+		cyanHaloVertices.clear();
 		const bool showModuleResponse = module && module->showModuleResponseOverlay;
 
 		// 1. FFT Fill Overlay
@@ -417,25 +427,41 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			NVGcolor expectedWhite = nvgRGB(206, 210, 216);
 			NVGcolor expectedCyan = nvgRGB(28, 204, 217);
 			NVGcolor cyanColor = mixColor(expectedWhite, expectedCyan, 0.35f);
-			cyanColor.a = 0.95f;
+			cyanColor = mixColor(cyanColor, nvgRGB(236, 244, 250), 0.10f);
+			cyanColor.a = clamp(0.98f * coreAlphaScale, 0.f, 1.f);
+			NVGcolor cyanHaloColor = cyanColor;
+			cyanHaloColor.a = clamp(0.34f * haloAlphaScale, 0.f, 1.f);
 			for (int i = 0; i < kCurvePointCount; i++) {
 				float x = w * (float(i) / float(kCurvePointCount - 1));
 				float y = responseYForDb(state.overlayModuleDb[i]);
 				cyanVertices.push_back({x, y, cyanColor.r, cyanColor.g, cyanColor.b, cyanColor.a});
+				cyanHaloVertices.push_back({x, y, cyanHaloColor.r, cyanHaloColor.g, cyanHaloColor.b, cyanHaloColor.a});
 			}
 		}
 
 		// 3. Main Yellow Filter Curve (with shared refinements)
 		calculateRefinedCurvePoints(&refinedPoints, w, h);
-		NVGcolor curveColor = nvgRGBA(255, 248, 208, 244);
+		NVGcolor curveColor = nvgRGBA(255, 250, 216, 250);
+		curveColor.a = clamp(curveColor.a * coreAlphaScale, 0.f, 1.f);
+		NVGcolor curveHaloColor = curveColor;
+		curveHaloColor.a = clamp(0.38f * haloAlphaScale, 0.f, 1.f);
 		for (const auto& p : refinedPoints) {
 			curveVertices.push_back({w * p.x01, p.y, curveColor.r, curveColor.g, curveColor.b, curveColor.a});
+			curveHaloVertices.push_back({w * p.x01, p.y, curveHaloColor.r, curveHaloColor.g, curveHaloColor.b, curveHaloColor.a});
 		}
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_LINE_SMOOTH);
 		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+		const float lineZoomScale = std::pow(clamp(drawZoom, 0.35f, 1.0f), 1.65f);
+		const float haloWidthScale = std::pow(clamp(drawZoom, 0.35f, 1.0f), 1.95f);
+		auto scaledLineWidth = [&](float baseWidth) {
+			return std::max(1.0f, baseWidth * lineZoomScale);
+		};
+		auto scaledHaloLineWidth = [&](float baseWidth) {
+			return std::max(1.0f, baseWidth * haloWidthScale);
+		};
 
 		const bool useShaderRenderer = module->useGlShaderRenderer && ensureShaderReady();
 		shaderRendererActiveLastFrame = useShaderRenderer;
@@ -443,8 +469,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (useShaderRenderer) {
 			drawVertsShader(fillVertices, GL_TRIANGLES, 1.f, w, h);
 			drawVertsShader(fillSoftCapVertices, GL_TRIANGLES, 1.f, w, h);
-			drawVertsShader(cyanVertices, GL_LINE_STRIP, 2.2f, w, h);
-			drawVertsShader(curveVertices, GL_LINE_STRIP, 3.0f, w, h);
+			drawVertsShader(cyanHaloVertices, GL_LINE_STRIP, scaledHaloLineWidth(4.55f), w, h);
+			drawVertsShader(cyanVertices, GL_LINE_STRIP, scaledLineWidth(2.05f), w, h);
+			drawVertsShader(curveHaloVertices, GL_LINE_STRIP, scaledHaloLineWidth(5.55f), w, h);
+			drawVertsShader(curveVertices, GL_LINE_STRIP, scaledLineWidth(2.95f), w, h);
 		}
 		else {
 			glEnableClientState(GL_VERTEX_ARRAY);
@@ -461,15 +489,29 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				glDrawArrays(GL_TRIANGLES, 0, fillSoftCapVertices.size());
 			}
 
+			if (!cyanHaloVertices.empty()) {
+				glLineWidth(scaledHaloLineWidth(4.2f));
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &cyanHaloVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &cyanHaloVertices[0].r);
+				glDrawArrays(GL_LINE_STRIP, 0, cyanHaloVertices.size());
+			}
+
 			if (!cyanVertices.empty()) {
-				glLineWidth(2.2f);
+				glLineWidth(scaledLineWidth(2.05f));
 				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].x);
 				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &cyanVertices[0].r);
 				glDrawArrays(GL_LINE_STRIP, 0, cyanVertices.size());
 			}
 
+			if (!curveHaloVertices.empty()) {
+				glLineWidth(scaledHaloLineWidth(5.1f));
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &curveHaloVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &curveHaloVertices[0].r);
+				glDrawArrays(GL_LINE_STRIP, 0, curveHaloVertices.size());
+			}
+
 			if (!curveVertices.empty()) {
-				glLineWidth(3.0f);
+				glLineWidth(scaledLineWidth(2.9f));
 				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].x);
 				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &curveVertices[0].r);
 				glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
@@ -510,8 +552,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
 			nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150));
-			nvgStrokeWidth(args.vg, 1.05f * 1.45f);
+			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 122));
+			nvgStrokeWidth(args.vg, 1.28f);
 			nvgStroke(args.vg);
 		}
 
@@ -521,8 +563,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
 			nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170));
-			nvgStrokeWidth(args.vg, 1.1f);
+			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 138));
+			nvgStrokeWidth(args.vg, 1.0f);
 			nvgStroke(args.vg);
 			
 			nvgBeginPath(args.vg);

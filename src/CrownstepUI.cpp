@@ -1047,20 +1047,9 @@ struct CrownstepBoardWidget final : Widget {
 		};
 		bool othelloBoard = module && module->isOthelloMode();
 		auto darkenHighlightOnLightSquare = [&](NVGcolor color, int row, int col) {
-			if (othelloBoard) {
-				return color;
-			}
-			bool lightSquare = ((row + col) & 1) == 0;
-			if (!lightSquare) {
-				return color;
-			}
-			constexpr float kLightSquareHighlightDarken = 0.66f;
-			return nvgRGBAf(
-				clamp(color.r * kLightSquareHighlightDarken, 0.f, 1.f),
-				clamp(color.g * kLightSquareHighlightDarken, 0.f, 1.f),
-				clamp(color.b * kLightSquareHighlightDarken, 0.f, 1.f),
-				color.a
-			);
+			(void)row;
+			(void)col;
+			return color;
 		};
 		const bool woodTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;

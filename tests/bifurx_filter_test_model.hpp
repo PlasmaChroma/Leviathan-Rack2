@@ -31,8 +31,10 @@ inline float fastExp(float x) {
 }
 
 inline float signedWeight(float balance, bool upperPeak) {
+  const float b = clampf(balance, -1.f, 1.f);
+  const float shaped = clampf(b + 0.35f * b * b * b, -1.f, 1.f);
   const float sign = upperPeak ? 1.f : -1.f;
-  return fastExp(0.82f * sign * clampf(balance, -1.f, 1.f));
+  return fastExp(0.82f * sign * shaped);
 }
 
 inline float cascadeWideMorph(float spanNorm) {

@@ -141,8 +141,11 @@ float resoToDamping(float resoNorm) {
 }
 
 float signedWeight(float balance, bool upperPeak) {
+	const float b = clamp(balance, -1.f, 1.f);
+	// Slight cubic emphasis: keep midpoint behavior close, push harder near extremes.
+	const float shaped = clamp(b + 0.35f * b * b * b, -1.f, 1.f);
 	const float sign = upperPeak ? 1.f : -1.f;
-	return fastExp(0.82f * sign * clamp(balance, -1.f, 1.f));
+	return fastExp(0.82f * sign * shaped);
 }
 
 float cascadeWideMorph(float spanNorm) {

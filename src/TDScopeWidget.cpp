@@ -5,6 +5,50 @@
 namespace {
 constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 
+struct TDScopeBrightnessQuantity final : Quantity {
+  TDScope *module = nullptr;
+
+  explicit TDScopeBrightnessQuantity(TDScope *module) : module(module) {}
+
+  void setValue(float value) override {
+    if (module) {
+      module->scopeColorBrightness = clamp(value, 0.f, 1.f);
+    }
+  }
+
+  float getValue() override {
+    return module ? module->scopeColorBrightnessClamped() : 0.5f;
+  }
+
+  float getDefaultValue() override {
+    return 0.5f;
+  }
+
+  float getMinValue() override {
+    return 0.f;
+  }
+
+  float getMaxValue() override {
+    return 1.f;
+  }
+
+  std::string getLabel() override {
+    return "Brightness";
+  }
+
+  std::string getUnit() override {
+    return "%";
+  }
+
+  float getDisplayValue() override {
+    return getValue() * 100.f;
+  }
+
+  void setDisplayValue(float displayValue) override {
+    setValue(displayValue / 100.f);
+  }
+};
+
 const char *debugRenderModeLabel(const TDScope *scopeModule) {
   if (!scopeModule) {
     return "STD";
@@ -107,6 +151,21 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
+    if (scopeModule && APP && APP->window && APP->window->uiFont) {
+      const float modeX = scopeRectPx.pos.x + scopeRectPx.size.x - 1.2f;
+      const float modeY = std::max(1.5f, mm2px(9.522227f) - mm2px(0.75f));
+      const char *modeLabel = debugRenderModeLabel(scopeModule);
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 6.8f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
+      nvgText(args.vg, modeX + 0.45f, modeY + 0.45f, modeLabel, nullptr);
+      nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
+      nvgText(args.vg, modeX, modeY, modeLabel, nullptr);
+      nvgRestore(args.vg);
+    }
+
     if (scopeModule && isDragonKingDebugEnabled()) {
       double nowSec = system::getTime();
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
@@ -135,17 +194,10 @@ struct TDScopeWidget : ModuleWidget {
         std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", scopeModule->debugInstanceId);
         const float x = box.size.x - mm2px(0.9f);
         const float y = mm2px(2.5f);
-        const float modeX = scopeRectPx.pos.x + scopeRectPx.size.x - 1.2f;
-        const float modeY = std::max(1.5f, mm2px(9.522227f) - mm2px(0.75f));
-        const char *modeLabel = debugRenderModeLabel(scopeModule);
         nvgSave(args.vg);
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFontSize(args.vg, 6.8f);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
-        nvgText(args.vg, modeX + 0.45f, modeY + 0.45f, modeLabel, nullptr);
-        nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
-        nvgText(args.vg, modeX, modeY, modeLabel, nullptr);
         nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
         nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
         nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
@@ -162,6 +214,25 @@ struct TDScopeWidget : ModuleWidget {
       return;
     }
 
+    auto addBrightnessSlider = [=](Menu *targetMenu) {
+      auto *brightnessSlider = new ui::Slider();
+      brightnessSlider->box.size = Vec(180.f, 24.f);
+      brightnessSlider->quantity = new TDScopeBrightnessQuantity(scopeModule);
+      targetMenu->addChild(brightnessSlider);
+    };
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Channel View"));
+    menu->addChild(createCheckMenuItem(
+      "Mono", "", [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_MONO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_MONO; }));
+    menu->addChild(createCheckMenuItem(
+      "Stereo (side-by-side)", "",
+      [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
+    menu->addChild(createCheckMenuItem(
+      "Inverted Verical", "", [=]() { return scopeModule->scopeVerticalInverted; },
+      [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
     menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
         "Auto (window peak)", "",
@@ -177,19 +248,6 @@ struct TDScopeWidget : ModuleWidget {
         "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
         [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
     }));
-    menu->addChild(createCheckMenuItem(
-      "Inverted Verical", "", [=]() { return scopeModule->scopeVerticalInverted; },
-      [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
-
-    menu->addChild(new MenuSeparator());
-    menu->addChild(createMenuLabel("Channel View"));
-    menu->addChild(createCheckMenuItem(
-      "Mono", "", [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_MONO; },
-      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_MONO; }));
-    menu->addChild(createCheckMenuItem(
-      "Stereo (side-by-side)", "",
-      [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
-      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {
@@ -221,6 +279,7 @@ struct TDScopeWidget : ModuleWidget {
         "Emerald", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_EMERALD; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_EMERALD; }));
     }));
+    addBrightnessSlider(menu);
     menu->addChild(createCheckMenuItem(
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
       [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));

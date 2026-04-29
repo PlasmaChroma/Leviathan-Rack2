@@ -1665,6 +1665,7 @@ struct TDScopeDisplayWidget final : Widget {
       c.r = c.r + (1.f - c.r) * hotLift;
       c.g = c.g + (1.f - c.g) * hotLift;
       c.b = c.b + (1.f - c.b) * hotLift;
+      c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
     };

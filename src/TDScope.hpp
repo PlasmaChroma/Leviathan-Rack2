@@ -85,6 +85,7 @@ struct TDScope final : Module {
   bool scopeVerticalInverted = false;
   int scopeChannelMode = SCOPE_CHANNEL_MONO;
   int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
+  float scopeColorBrightness = 0.5f;
   bool scopeTransientHaloEnabled = true;
   bool debugRenderMainTraceEnabled = true;
   bool debugRenderConnectorsEnabled = true;
@@ -158,12 +159,45 @@ struct TDScope final : Module {
     return debugRenderMode == DEBUG_RENDER_OPENGL;
   }
 
+  float scopeColorBrightnessClamped() const {
+    return clamp(scopeColorBrightness, 0.f, 1.f);
+  }
+
+  float scopeColorBrightnessScale() const {
+    float brightness = scopeColorBrightnessClamped();
+    if (brightness <= 0.5f) {
+      return rescale(brightness, 0.f, 0.5f, 0.35f, 1.f);
+    }
+    return 1.f;
+  }
+
+  float scopeColorBrightnessLift() const {
+    float brightness = scopeColorBrightnessClamped();
+    if (brightness <= 0.5f) {
+      return 0.f;
+    }
+    return rescale(brightness, 0.5f, 1.f, 0.f, 0.42f);
+  }
+
+  NVGcolor applyScopeColorBrightness(NVGcolor c) const {
+    float colorScale = scopeColorBrightnessScale();
+    float colorLift = scopeColorBrightnessLift();
+    c.r = clamp(c.r * colorScale, 0.f, 1.f);
+    c.g = clamp(c.g * colorScale, 0.f, 1.f);
+    c.b = clamp(c.b * colorScale, 0.f, 1.f);
+    c.r = c.r + (1.f - c.r) * colorLift;
+    c.g = c.g + (1.f - c.g) * colorLift;
+    c.b = c.b + (1.f - c.b) * colorLift;
+    return c;
+  }
+
   json_t *dataToJson() override {
     json_t *root = json_object();
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
     json_object_set_new(root, "scopeVerticalInverted", json_boolean(scopeVerticalInverted));
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
+    json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
     json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
     json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
     json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
@@ -194,6 +228,10 @@ struct TDScope final : Module {
     json_t *schemeJ = json_object_get(root, "scopeColorScheme");
     if (schemeJ) {
       scopeColorScheme = clamp(int(json_integer_value(schemeJ)), COLOR_SCHEME_TEMPORAL_DECK, COLOR_SCHEME_COUNT - 1);
+    }
+    json_t *brightnessJ = json_object_get(root, "scopeColorBrightness");
+    if (brightnessJ) {
+      scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
     json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
     if (haloJ) {
