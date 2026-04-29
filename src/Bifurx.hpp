@@ -416,12 +416,25 @@ struct BifurxSpectrumBase {
 		}
 	}
 
+	bool markerPinnedToBottomLane(int markerIndex) const {
+		switch (state.previewState.mode) {
+			case 2: return markerIndex == 0; // Notch + Low
+			case 3: return true;            // Notch + Notch
+			case 7: return markerIndex == 1; // High + Notch
+			default: return false;
+		}
+	}
+
 	struct DisplayAnchor { float x01 = 0.f; float hz = 0.f; };
 	DisplayAnchor displayAnchorForMarker(int markerIndex, float targetHz, float minHz, float maxHz) const {
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
 		const int anchorKind = markerAnchorKind(markerIndex);
 		if (anchorKind == 0) return anchor;
+		if ((state.previewState.mode == 2 || state.previewState.mode == 7) &&
+			std::fabs(std::log2(std::max(state.previewState.freqB, 1e-6f) / std::max(state.previewState.freqA, 1e-6f))) < 0.08f) {
+			return anchor;
+		}
 		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
 		int bestIndex = centerIndex;
 		float bestScore = (anchorKind < 0) ? state.curveDb[centerIndex] : -state.curveDb[centerIndex];

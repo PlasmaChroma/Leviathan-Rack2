@@ -932,7 +932,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 	const BifurxPreviewModel& model = getOrUpdateModel();
 
-	layout->anchorToBottomLane = (state.previewState.mode == 3);
+	layout->anchorToBottomLane = markerPinnedToBottomLane(0) || markerPinnedToBottomLane(1);
 	layout->markers[0].visible = false; layout->markers[1].visible = false;
 
 	auto populateMarker = [&](int mIdx, float targetHz) {
@@ -945,7 +945,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 		m.x = mX;
 		m.yCurve = curveYAtX01(anchor.x01, spectrumBottomY, spectrumTopY);
 		const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-		m.yMarker = layout->anchorToBottomLane ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
+		m.yMarker = markerPinnedToBottomLane(mIdx) ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
 		m.hz = std::max(anchor.hz, 1e-6f);
 		m.visible = true;
 		formatFrequencyLabel(m.hz, m.label, sizeof(m.label));
@@ -989,7 +989,6 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
 	const BifurxPreviewModel& model = getOrUpdateModel();
-	const bool anchorToBottomLane = (state.previewState.mode == 3);
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 
@@ -1019,10 +1018,15 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 
 	// Evaluate Y coordinates for all final points
 	for (auto& p : *points) {
-		if (anchorToBottomLane && p.priority == 2) {
-			p.y = markerBottomLaneY;
-		} else {
-			p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
+		p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
+	}
+	for (int markerIndex = 0; markerIndex < 2; ++markerIndex) {
+		if (!markerPinnedToBottomLane(markerIndex)) continue;
+		const auto anchor = displayAnchorForMarker(markerIndex, markerIndex == 0 ? model.markerFreqA : model.markerFreqB, minHz, maxHz);
+		for (auto& p : *points) {
+			if (p.priority == 2 && std::fabs(p.x01 - anchor.x01) < 1e-7f) {
+				p.y = markerBottomLaneY;
+			}
 		}
 	}
 }
