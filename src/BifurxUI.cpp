@@ -765,6 +765,18 @@ struct BifurxWidget final : ModuleWidget {
 			}
 		};
 		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("Filter Mode", "", [=](Menu* submenu) {
+			for (int mode = 0; mode < kBifurxModeCount; ++mode) {
+				submenu->addChild(createCheckMenuItem(
+					kBifurxModeLabels[mode], "",
+					[=]() {
+						return int(std::round(bifurx->params[Bifurx::MODE_PARAM].getValue())) == mode;
+					},
+					[=]() {
+						bifurx->params[Bifurx::MODE_PARAM].setValue(float(mode));
+					}));
+			}
+		}));
 		menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"NanoVG", "",
