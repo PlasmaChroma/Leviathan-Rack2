@@ -52,6 +52,10 @@ constexpr int TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_MODULE_SYNC;
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_COUNT;
 
+constexpr int TemporalDeck::REVERSE_CV_MODE_PULSED;
+constexpr int TemporalDeck::REVERSE_CV_MODE_GATE;
+constexpr int TemporalDeck::REVERSE_CV_MODE_COUNT;
+
 constexpr int TemporalDeck::SAMPLE_SOURCE_LIVE;
 constexpr int TemporalDeck::SAMPLE_SOURCE_FILE;
 
@@ -700,6 +704,7 @@ struct TemporalDeck::Impl {
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
+  int reverseCvMode = TemporalDeck::REVERSE_CV_MODE_PULSED;
   int platterArtMode = TemporalDeck::PLATTER_ART_DRAGON_KING;
   int platterBrightnessMode = TemporalDeck::PLATTER_BRIGHTNESS_FULL;
   std::string customPlatterArtPath;
@@ -897,6 +902,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "scratchInterpolationMode", json_integer(impl->scratchInterpolationMode));
   json_object_set_new(root, "highQualityRateInterpolation", json_boolean(impl->highQualityRateInterpolation));
   json_object_set_new(root, "externalGatePosMode", json_integer(impl->externalGatePosMode));
+  json_object_set_new(root, "reverseCvMode", json_integer(impl->reverseCvMode));
   json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
@@ -924,6 +930,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *scratchInterpModeJ = json_object_get(root, "scratchInterpolationMode");
   json_t *highQualityRateInterpJ = json_object_get(root, "highQualityRateInterpolation");
   json_t *externalGatePosModeJ = json_object_get(root, "externalGatePosMode");
+  json_t *reverseCvModeJ = json_object_get(root, "reverseCvMode");
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
@@ -954,6 +961,10 @@ void TemporalDeck::dataFromJson(json_t *root) {
   if (externalGatePosModeJ) {
     impl->externalGatePosMode =
       clamp((int)json_integer_value(externalGatePosModeJ), EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
+  }
+  if (reverseCvModeJ) {
+    impl->reverseCvMode =
+      clamp((int)json_integer_value(reverseCvModeJ), REVERSE_CV_MODE_PULSED, REVERSE_CV_MODE_COUNT - 1);
   }
   if (slipReturnModeJ) {
     impl->transportControl.slipReturnMode = clamp((int)json_integer_value(slipReturnModeJ), SLIP_RETURN_SLOW, SLIP_RETURN_COUNT - 1);
@@ -1068,11 +1079,27 @@ void TemporalDeck::process(const ProcessArgs &args) {
   temporaldeck_transport::TransportButtonEvents transportButtons;
   transportButtons.freezePressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
   bool reverseButtonPressed = impl->reverseTrigger.process(params[REVERSE_PARAM].getValue());
+  bool reverseCvConnected = inputs[REVERSE_CV_INPUT].isConnected();
+  bool reverseCvHigh = inputs[REVERSE_CV_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
   bool reverseCvPressed = impl->reverseCvTrigger.process(inputs[REVERSE_CV_INPUT].getVoltage());
-  transportButtons.reversePressed = reverseButtonPressed || reverseCvPressed;
+  bool reverseGateModeActive = (impl->reverseCvMode == REVERSE_CV_MODE_GATE) && reverseCvConnected;
+  transportButtons.reversePressed =
+    reverseGateModeActive ? false : (reverseButtonPressed || reverseCvPressed);
   transportButtons.slipPressed = impl->slipTrigger.process(params[SLIP_PARAM].getValue());
   temporaldeck_transport::TransportButtonResult transportResult = temporaldeck_transport::applyTransportButtonEvents(
     impl->transportControl, transportButtons, desiredSampleModeEnabled, impl->engine.sampleLoaded);
+
+  if (reverseGateModeActive) {
+    impl->transportControl.reverseLatched = reverseCvHigh;
+    if (reverseCvHigh) {
+      impl->transportControl.freezeLatched = false;
+      impl->transportControl.freezeLatchedByButton = false;
+      impl->transportControl.slipLatched = false;
+      if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
+        transportResult.forceSampleTransportPlay = true;
+      }
+    }
+  }
   if (transportResult.forceSampleTransportPlay) {
     impl->engine.sampleTransportPlaying = true;
     impl->uiSampleTransportPlaying.store(true, std::memory_order_relaxed);
@@ -1882,6 +1909,14 @@ void TemporalDeck::setExternalGatePosMode(int mode) {
   impl->externalGatePosMode = clamp(mode, EXTERNAL_GATE_POS_GLIDE, EXTERNAL_GATE_POS_COUNT - 1);
 }
 
+int TemporalDeck::getReverseCvMode() const {
+  return impl->reverseCvMode;
+}
+
+void TemporalDeck::setReverseCvMode(int mode) {
+  impl->reverseCvMode = clamp(mode, REVERSE_CV_MODE_PULSED, REVERSE_CV_MODE_COUNT - 1);
+}
+
 const char *TemporalDeck::cartridgeLabelFor(int index) {
   switch (index) {
   case CARTRIDGE_M44_7:
@@ -1963,6 +1998,16 @@ const char *TemporalDeck::externalGatePosLabelFor(int index) {
   case EXTERNAL_GATE_POS_GLIDE:
   default:
     return "Glide / inertia";
+  }
+}
+
+const char *TemporalDeck::reverseCvModeLabelFor(int index) {
+  switch (index) {
+  case REVERSE_CV_MODE_GATE:
+    return "Gate Control";
+  case REVERSE_CV_MODE_PULSED:
+  default:
+    return "Pulsed Control";
   }
 }
 

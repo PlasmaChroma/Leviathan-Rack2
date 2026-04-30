@@ -3692,6 +3692,14 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setExternalGatePosMode(i); }));
         }
       }));
+      menu->addChild(createSubmenuItem("Reverse CV", "", [=](Menu *submenu) {
+        for (int i = 0; i < TemporalDeck::REVERSE_CV_MODE_COUNT; ++i) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::reverseCvModeLabelFor(i), "",
+            [=]() { return module->getReverseCvMode() == i; },
+            [=]() { module->setReverseCvMode(i); }));
+        }
+      }));
       if (!module->isSampleModeEnabled()) {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
           auto bufferModeMenuLabel = [=](int mode) {
