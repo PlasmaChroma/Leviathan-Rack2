@@ -71,20 +71,21 @@ struct TemporalDeckTonearmWidget : Widget {
 static void drawTemporalDeckStepTriangle(const Widget::DrawArgs &args, const Vec &size, bool pointRight) {
   const float cx = 0.5f * size.x;
   const float cy = 0.5f * size.y;
-  const float halfW = size.x * 0.16f;
-  const float halfH = size.y * 0.20f;
+  const float halfW = 2.8f;
+  const float halfH = 3.3f;
+  const float offset = pointRight ? (halfW / 3.f) : (-halfW / 3.f);
   nvgBeginPath(args.vg);
   if (pointRight) {
-    nvgMoveTo(args.vg, cx - halfW, cy - halfH);
-    nvgLineTo(args.vg, cx - halfW, cy + halfH);
-    nvgLineTo(args.vg, cx + halfW, cy);
+    nvgMoveTo(args.vg, cx - halfW + offset, cy - halfH);
+    nvgLineTo(args.vg, cx + halfW + offset, cy);
+    nvgLineTo(args.vg, cx - halfW + offset, cy + halfH);
   } else {
-    nvgMoveTo(args.vg, cx + halfW, cy - halfH);
-    nvgLineTo(args.vg, cx + halfW, cy + halfH);
-    nvgLineTo(args.vg, cx - halfW, cy);
+    nvgMoveTo(args.vg, cx + halfW + offset, cy - halfH);
+    nvgLineTo(args.vg, cx - halfW + offset, cy);
+    nvgLineTo(args.vg, cx + halfW + offset, cy + halfH);
   }
   nvgClosePath(args.vg);
-  nvgFillColor(args.vg, nvgRGBA(236, 242, 250, 236));
+  nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
   nvgFill(args.vg);
 }
 
@@ -3869,7 +3870,9 @@ void TemporalDeckWidget::spawnTDScopeRight() {
   if (!deckModule || !APP || !APP->scene || !APP->scene->rack || !modelTDScope) {
     return;
   }
-  if (isTDScopeModule(deckModule->rightExpander.module)) {
+
+  Module* right = deckModule->rightExpander.module;
+  if (isTDScopeModule(right)) {
     return;
   }
 
@@ -3885,8 +3888,11 @@ void TemporalDeckWidget::spawnTDScopeRight() {
 
   app::RackWidget *rack = APP->scene->rack;
   const Vec scopePos = box.pos.plus(Vec(box.size.x, 0.f));
+
+  APP->engine->addModule(scopeModule);
   rack->setModulePosForce(scopeWidget, scopePos);
   rack->addModule(scopeWidget);
+
   if (APP->history) {
     history::ModuleAdd *h = new history::ModuleAdd;
     h->name = "add TD.Scope";

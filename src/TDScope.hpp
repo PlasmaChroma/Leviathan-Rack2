@@ -385,13 +385,14 @@ struct TDScope final : Module {
       invalidPreviewTimerSec = std::min(invalidPreviewTimerSec + args.sampleTime, 1e9f);
     }
 
-    bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(leftExpander.module);
+    Module* left = leftExpander.module;
+    bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(left);
     bool linkActive = hasTemporalDeckNeighbor && staleFrames < 2048 && invalidMessageTimerSec <= kLinkDropGraceSec;
     bool previewVisible = invalidPreviewTimerSec <= kPreviewDropGraceSec;
     uiLinkActive.store(linkActive, std::memory_order_relaxed);
     uiPreviewValid.store(linkActive && previewVisible, std::memory_order_relaxed);
 
-    if (tdscope::isTemporalDeckModule(leftExpander.module) && leftExpander.module->rightExpander.producerMessage) {
+    if (tdscope::isTemporalDeckModule(left) && left->rightExpander.producerMessage) {
       uint32_t requestedScopeFormat = (scopeChannelMode == SCOPE_CHANNEL_STEREO)
                                         ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
@@ -420,12 +421,12 @@ struct TDScope final : Module {
           requestPublishTimerSec = 0.f;
         }
         auto *request =
-          reinterpret_cast<temporaldeck_expander::DisplayToHost *>(leftExpander.module->rightExpander.producerMessage);
+          reinterpret_cast<temporaldeck_expander::DisplayToHost *>(left->rightExpander.producerMessage);
         if (request) {
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
                                                         lagDragStationaryHold, lagDragSamples, lagDragVelocity);
-          leftExpander.module->rightExpander.messageFlipRequested = true;
+          left->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
           lastLagDragActive = lagDragActive;
           lastLagDragStationaryHold = lagDragStationaryHold;

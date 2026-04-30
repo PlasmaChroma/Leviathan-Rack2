@@ -1148,8 +1148,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->scopeDragTracePath.clear();
   }
 
+  Module* right = rightExpander.module;
   bool expanderConnected =
-    isTDScopeModule(rightExpander.module) && rightExpander.module->leftExpander.producerMessage;
+    isTDScopeModule(right) && right->leftExpander.producerMessage;
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   bool haveLagDragRequest = false;
   bool lagDragRequestActive = false;
@@ -1161,7 +1162,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool scopeTraceDragJustStarted = false;
   float scopeTraceLagTarget = 0.f;
   float scopeTraceVelocityApplied = 0.f;
-  if (isTDScopeModule(rightExpander.module) && rightExpander.consumerMessage) {
+  if (isTDScopeModule(right) && rightExpander.consumerMessage) {
     const auto *request =
       reinterpret_cast<const temporaldeck_expander::DisplayToHost *>(rightExpander.consumerMessage);
     if (request && temporaldeck_expander::isDisplayRequestValid(*request)) {
@@ -1378,7 +1379,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         impl->expanderPublishTimerSec = 0.f;
       }
       auto *msg =
-        reinterpret_cast<temporaldeck_expander::HostToDisplay *>(rightExpander.module->leftExpander.producerMessage);
+        reinterpret_cast<temporaldeck_expander::HostToDisplay *>(right->leftExpander.producerMessage);
       if (msg) {
         bool holdPreviewLag = frame.sampleMode && platterInput.platterTouchHoldDirect;
         float scopeLagForPreview = float(frame.lag);
@@ -1484,7 +1485,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
           uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
           scopeBinSpanSamples, scopeNewestPosSamples, scopeBinCount, scopeBins.data(),
-          wantStereoScope ? scopeBinsRight.data() : nullptr);        rightExpander.module->leftExpander.messageFlipRequested = true;
+          wantStereoScope ? scopeBinsRight.data() : nullptr);
+        right->leftExpander.messageFlipRequested = true;
         impl->expanderLastPublishedGeneration = impl->engine.bufferGeneration;
         impl->expanderPreviewValid = scopeReady;
       } else {
