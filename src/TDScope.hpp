@@ -391,7 +391,7 @@ struct TDScope final : Module {
       invalidPreviewTimerSec = std::min(invalidPreviewTimerSec + args.sampleTime, 1e9f);
     }
 
-    Module* left = leftExpander.module;
+    Module *left = leftExpander.module;
     bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(left);
     bool linkActive = hasTemporalDeckNeighbor && staleFrames < 2048 && invalidMessageTimerSec <= kLinkDropGraceSec;
     bool previewVisible = invalidPreviewTimerSec <= kPreviewDropGraceSec;

@@ -32,7 +32,6 @@ TransportButtonResult applyTransportButtonEvents(TransportControlState &state, c
     if (next) {
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.slipLatched = false;
       if (sampleModeEnabled && sampleLoaded) {
         result.forceSampleTransportPlay = true;
       }
@@ -45,17 +44,14 @@ TransportButtonResult applyTransportButtonEvents(TransportControlState &state, c
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_SLOW;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else if (state.slipReturnMode == temporaldeck::TemporalDeckEngine::SLIP_RETURN_SLOW) {
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_NORMAL;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else if (state.slipReturnMode == temporaldeck::TemporalDeckEngine::SLIP_RETURN_NORMAL) {
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_INSTANT;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else {
       state.slipLatched = false;
     }

@@ -1094,7 +1094,6 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (reverseCvHigh) {
       impl->transportControl.freezeLatched = false;
       impl->transportControl.freezeLatchedByButton = false;
-      impl->transportControl.slipLatched = false;
       if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
         transportResult.forceSampleTransportPlay = true;
       }
@@ -1310,7 +1309,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   controls.feedbackKnob = params[FEEDBACK_PARAM].getValue();
   controls.freezeButton = impl->transportControl.freezeLatched;
   controls.reverseButton = impl->transportControl.reverseLatched;
-  controls.slipButton = impl->transportControl.slipLatched;
+  controls.slipButton = impl->transportControl.slipLatched && !impl->transportControl.reverseLatched;
 
   ProcessSignalInputs frameSignals;
   frameSignals.inL = inL;
@@ -1889,7 +1888,6 @@ void TemporalDeck::setSlipLatched(bool enabled) {
   if (enabled) {
     impl->transportControl.freezeLatched = false;
     impl->transportControl.freezeLatchedByButton = false;
-    impl->transportControl.reverseLatched = false;
   }
 }
 
