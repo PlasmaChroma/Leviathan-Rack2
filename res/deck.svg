@@ -254,7 +254,7 @@
        opacity="0.55"
        fill="none"
        id="rev_and_rev"
-       style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
+       style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1"
        sodipodi:nodetypes="cc" />
     <g
        id="waves_layer"
