@@ -1258,6 +1258,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
       impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
     }
   } else {
+    if (impl->expanderLagDragWasActive) {
+      // Scope can disappear while a drag request is active (module deleted or
+      // detached). Force-release host scratch state so lag does not keep
+      // climbing from a stale touched/gesture condition.
+      impl->platterInput.setScratch(false, impl->expanderLagDragLastLagSamples, 0.f);
+      impl->platterInput.setMotionFreshSamples(0);
+    }
+    impl->expanderLagDragWasActive = false;
+    impl->expanderLagDragFramesSinceUpdate = 0;
     impl->expanderLagDragRequestSeen = false;
   }
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
