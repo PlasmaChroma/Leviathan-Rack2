@@ -777,7 +777,7 @@ struct BifurxWidget final : ModuleWidget {
 					}));
 			}
 		}));
-		menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
+			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"NanoVG", "",
 				[=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; },
@@ -790,9 +790,10 @@ struct BifurxWidget final : ModuleWidget {
 				"OpenGL SHDR", "",
 				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer; },
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
-		}));
-		menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
-		menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
+			}));
+			menu->addChild(createBoolPtrMenuItem("High Resonance Self-Osc", "", &bifurx->highResonanceSelfOscEnabled));
+			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
+			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createSubmenuItem("Control Update", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(

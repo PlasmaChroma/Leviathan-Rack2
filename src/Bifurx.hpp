@@ -208,6 +208,7 @@ SvfOutputs processCharacterStage(
 	float damping,
 	float drive,
 	float resoNorm,
+	bool highResonanceSelfOscEnabled,
 	const SvfCoeffs* cachedCoeffsOrNull = nullptr
 );
 
@@ -605,6 +606,7 @@ struct Bifurx : Module {
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
 	bool useGlShaderRenderer = true;
+	bool highResonanceSelfOscEnabled = true;
 	int controlUpdateMode = CONTROL_UPDATE_TIERED;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;

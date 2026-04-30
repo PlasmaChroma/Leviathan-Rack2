@@ -278,9 +278,16 @@ SvfOutputs processCharacterStage(
 	float damping,
 	float drive,
 	float resoNorm,
+	bool highResonanceSelfOscEnabled,
 	const SvfCoeffs* cachedCoeffsOrNull
 ) {
 	(void) stageIndex;
+	if (!highResonanceSelfOscEnabled) {
+		if (cachedCoeffsOrNull) {
+			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
+		}
+		return core.process(input, sampleRate, cutoff, damping);
+	}
 	const float oscNorm = smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
 	if (oscNorm <= 0.f) {
 		if (cachedCoeffsOrNull) {
@@ -432,7 +439,7 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 
 SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm) {
 	TptSvf& core = (stageIndex == 0) ? state.svfA : state.svfB;
-	return processCharacterStage(core, stageIndex, input, sampleRate, cutoff, damping, drive, resoNorm, nullptr);
+	return processCharacterStage(core, stageIndex, input, sampleRate, cutoff, damping, drive, resoNorm, true, nullptr);
 }
 
 void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float* inputBuffer, float* outputBuffer, int sampleCount) {
@@ -483,6 +490,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "controlUpdateMode", json_integer(controlUpdateMode));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
+	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
 	json_object_set_new(root, "createdUnixTimeSec", json_real(createdUnixTimeSec));
 	return root;
@@ -517,6 +525,10 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging");
 	if (perfDebugLoggingJ) {
 		perfDebugLogging = json_is_true(perfDebugLoggingJ);
+	}
+	json_t* highResonanceSelfOscEnabledJ = json_object_get(root, "highResonanceSelfOscEnabled");
+	if (highResonanceSelfOscEnabledJ) {
+		highResonanceSelfOscEnabled = json_is_true(highResonanceSelfOscEnabledJ);
 	}
 	json_t* createdUnixTimeSecJ = json_object_get(root, "createdUnixTimeSec");
 	if (createdUnixTimeSecJ && json_is_number(createdUnixTimeSecJ)) {
@@ -627,7 +639,9 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = applyLevelInputStage(in, level);
-	const float oscNorm = smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
+	const float oscNorm = highResonanceSelfOscEnabled
+		? smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart))
+		: 0.f;
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
 	const float excitation = drivenIn + selfOscSeed;
 	float cutoffA = freqA0, cutoffB = freqB0;
@@ -642,11 +656,15 @@ void Bifurx::process(const ProcessArgs& args) {
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
 		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffA == freqA0)) ? &cachedCoeffsA : nullptr;
-		return processCharacterStage(coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, coeffs);
+		return processCharacterStage(
+			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabled, coeffs
+		);
 	};
 	auto pB = [&](float s) {
 		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffB == freqB0)) ? &cachedCoeffsB : nullptr;
-		return processCharacterStage(coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, coeffs);
+		return processCharacterStage(
+			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabled, coeffs
+		);
 	};
 
 	switch (mode) {
