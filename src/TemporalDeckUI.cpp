@@ -3225,6 +3225,7 @@ static bool isTDScopeModule(const engine::Module *neighbor) {
 
 struct TemporalDeckWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
+  TemporalDeckScopeSpawnButton *scopeSpawnButton = nullptr;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarRightEndMm = 97.413935f;
 
@@ -3339,11 +3340,13 @@ struct TemporalDeckWidget : ModuleWidget {
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
     loadPlatterAnchor(platterCenter, platterRadius);
-    Vec cartridgeCycleMm(92.28f, 66.56f);
+    Vec cartridgeCycleMm;
     Vec platterAnchorMm;
     float platterAnchorRadiusMm = 0.f;
     if (panel_svg::loadCircleFromSvg(panelPath, "PLATTER_AREA", &platterAnchorMm, &platterAnchorRadiusMm, 1.f)) {
       cartridgeCycleMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm * 1.12f, platterAnchorRadiusMm * 0.34f));
+    } else {
+      cartridgeCycleMm = Vec(50.8f, 72.f).plus(Vec(29.5f * 1.12f, 29.5f * 0.34f));
     }
     applyPointOverride("CARTRIDGE_CYCLE", &cartridgeCycleMm);
 
@@ -3383,12 +3386,16 @@ struct TemporalDeckWidget : ModuleWidget {
     // Add after platter/tonearm so this control is visible on top.
     addParam(createParamCentered<LEDButton>(mm2px(cartridgeCycleMm), module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
 
-    Vec scopeSpawnPosMm(90.6f, 53.95f);
+    Vec scopeSpawnPosMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm + 3.5f, 0.f));
+    if (platterAnchorRadiusMm <= 0.f) {
+      scopeSpawnPosMm = Vec(50.8f, 72.f).plus(Vec(29.5f + 3.5f, 0.f));
+    }
     applyPointOverride("TD_SCOPE_SPAWN", &scopeSpawnPosMm);
     auto *scopeSpawn =
       createParamCentered<TemporalDeckScopeSpawnButton>(mm2px(scopeSpawnPosMm), module, TemporalDeck::ADD_SCOPE_PARAM);
     scopeSpawn->module = module;
     scopeSpawn->owner = this;
+    scopeSpawnButton = scopeSpawn;
     addParam(scopeSpawn);
   }
 
@@ -3463,6 +3470,9 @@ struct TemporalDeckWidget : ModuleWidget {
   void step() override {
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    if (scopeSpawnButton) {
+      scopeSpawnButton->setVisible(!linkedToScope);
+    }
     const float borderGrowPx = linkedToScope ? 3.f : 0.f;
     if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
       panelBorder->box.size.x = box.size.x + borderGrowPx;
