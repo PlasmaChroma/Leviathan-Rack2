@@ -1090,10 +1090,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   temporaldeck_transport::TransportButtonEvents transportButtons;
-  transportButtons.freezePressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
+  bool freezeButtonPressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
   bool freezeCvConnected = inputs[FREEZE_GATE_INPUT].isConnected();
+  bool freezeCvHigh = inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
   bool freezeCvPressed = impl->freezeCvTrigger.process(inputs[FREEZE_GATE_INPUT].getVoltage());
   bool freezeGateModeActive = (impl->freezeCvMode == FREEZE_CV_MODE_GATE) && freezeCvConnected;
+  transportButtons.freezePressed = freezeGateModeActive ? false : freezeButtonPressed;
   if (!freezeGateModeActive && freezeCvConnected && freezeCvPressed) {
     transportButtons.freezePressed = true;
   }
@@ -1116,6 +1118,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
       if (desiredSampleModeEnabled && impl->engine.sampleLoaded) {
         transportResult.forceSampleTransportPlay = true;
       }
+    }
+  }
+  if (freezeGateModeActive) {
+    impl->transportControl.freezeLatched = freezeCvHigh;
+    impl->transportControl.freezeLatchedByButton = false;
+    if (freezeCvHigh) {
+      impl->transportControl.slipLatched = false;
     }
   }
   if (transportResult.forceSampleTransportPlay) {
