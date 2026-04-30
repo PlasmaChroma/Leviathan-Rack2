@@ -3339,7 +3339,13 @@ struct TemporalDeckWidget : ModuleWidget {
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
     loadPlatterAnchor(platterCenter, platterRadius);
-    Vec tonearmPivot = platterCenter.plus(Vec(platterRadius * 1.12f, platterRadius * 0.34f));
+    Vec cartridgeCycleMm(92.28f, 66.56f);
+    Vec platterAnchorMm;
+    float platterAnchorRadiusMm = 0.f;
+    if (panel_svg::loadCircleFromSvg(panelPath, "PLATTER_AREA", &platterAnchorMm, &platterAnchorRadiusMm, 1.f)) {
+      cartridgeCycleMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm * 1.12f, platterAnchorRadiusMm * 0.34f));
+    }
+    applyPointOverride("CARTRIDGE_CYCLE", &cartridgeCycleMm);
 
     float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
@@ -3375,7 +3381,7 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(tonearm);
 
     // Add after platter/tonearm so this control is visible on top.
-    addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(cartridgeCycleMm), module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
 
     Vec scopeSpawnPosMm(90.6f, 53.95f);
     applyPointOverride("TD_SCOPE_SPAWN", &scopeSpawnPosMm);

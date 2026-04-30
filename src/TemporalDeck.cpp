@@ -786,7 +786,7 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configButton(REVERSE_PARAM, "Reverse");
   configButton(SLIP_PARAM, "Slip");
   configButton(CARTRIDGE_CYCLE_PARAM, "Cycle cartridge");
-  configButton(ADD_SCOPE_PARAM, "Add TD.Scope");
+  configButton(ADD_SCOPE_PARAM, "Spawn TD.Scope");
   configInput(POSITION_CV_INPUT, "Position CV");
   configInput(RATE_CV_INPUT, "Rate CV");
   configInput(INPUT_L_INPUT, "Left audio");
