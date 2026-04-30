@@ -3694,11 +3694,23 @@ struct TemporalDeckWidget : ModuleWidget {
         }
       }));
       menu->addChild(createSubmenuItem("Reverse CV", "", [=](Menu *submenu) {
-        for (int i = 0; i < TemporalDeck::REVERSE_CV_MODE_COUNT; ++i) {
+        std::array<int, TemporalDeck::REVERSE_CV_MODE_COUNT> modeOrder = {
+          TemporalDeck::REVERSE_CV_MODE_GATE, TemporalDeck::REVERSE_CV_MODE_PULSED};
+        for (int i : modeOrder) {
           submenu->addChild(createCheckMenuItem(
             TemporalDeck::reverseCvModeLabelFor(i), "",
             [=]() { return module->getReverseCvMode() == i; },
             [=]() { module->setReverseCvMode(i); }));
+        }
+      }));
+      menu->addChild(createSubmenuItem("Freeze CV", "", [=](Menu *submenu) {
+        std::array<int, TemporalDeck::FREEZE_CV_MODE_COUNT> modeOrder = {
+          TemporalDeck::FREEZE_CV_MODE_GATE, TemporalDeck::FREEZE_CV_MODE_PULSED};
+        for (int i : modeOrder) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::freezeCvModeLabelFor(i), "",
+            [=]() { return module->getFreezeCvMode() == i; },
+            [=]() { module->setFreezeCvMode(i); }));
         }
       }));
       if (!module->isSampleModeEnabled()) {

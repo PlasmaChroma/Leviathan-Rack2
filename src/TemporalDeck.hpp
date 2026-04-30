@@ -46,6 +46,10 @@ struct TemporalDeck final : Module {
   static constexpr int REVERSE_CV_MODE_GATE = 1;
   static constexpr int REVERSE_CV_MODE_COUNT = 2;
 
+  static constexpr int FREEZE_CV_MODE_PULSED = 0;
+  static constexpr int FREEZE_CV_MODE_GATE = 1;
+  static constexpr int FREEZE_CV_MODE_COUNT = 2;
+
   static constexpr int SAMPLE_SOURCE_LIVE = 0;
   static constexpr int SAMPLE_SOURCE_FILE = 1;
   static constexpr int PLATTER_ART_BUILTIN_SVG = 0;
@@ -114,6 +118,7 @@ struct TemporalDeck final : Module {
   static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
   static const char *externalGatePosLabelFor(int index);
+  static const char *freezeCvModeLabelFor(int index);
   static const char *reverseCvModeLabelFor(int index);
   static const char *platterArtModeLabelFor(int index);
   static const char *platterBrightnessLabelFor(int index);
@@ -193,6 +198,8 @@ struct TemporalDeck final : Module {
   void setSlipReturnMode(int mode);
   int getExternalGatePosMode() const;
   void setExternalGatePosMode(int mode);
+  int getFreezeCvMode() const;
+  void setFreezeCvMode(int mode);
   int getReverseCvMode() const;
   void setReverseCvMode(int mode);
 

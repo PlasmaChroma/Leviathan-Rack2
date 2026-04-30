@@ -1,0 +1,3 @@
+# Camera based wavetable "oscillator"
+
+- Base a plugin on this concept, we convert an image from a camera into a wavetable, and then use that wavetable to generate sound. The plugin would allow users to manipulate the image in real-time, creating dynamic and evolving sounds based on the visual input. This could be used for creative sound design, live performances, or even as an educational tool to explore the relationship between visual and auditory stimuli.
