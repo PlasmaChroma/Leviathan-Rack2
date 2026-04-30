@@ -3265,6 +3265,7 @@ struct TemporalDeckWidget : ModuleWidget {
     Vec inputRMm(8.478f, 112.9f);
     Vec scratchGateMm(33.403f, 112.9f);
     Vec freezeGateMm(57.5f, 112.9f);
+    Vec reverseCvMm(39.5f, 112.9f);
     Vec outputLMm(94.241f, 99.012f);
     Vec outputRMm(94.2f, 113.146f);
     Vec sGateOutMm(83.037f, 99.135f);
@@ -3288,6 +3289,7 @@ struct TemporalDeckWidget : ModuleWidget {
     applyPointOverride("INPUT_R", &inputRMm);
     applyPointOverride("SCRATCH_GATE", &scratchGateMm);
     applyPointOverride("FREEZE_GATE", &freezeGateMm);
+    applyPointOverride("REV_CV", &reverseCvMm);
     applyPointOverride("OUTPUT_L", &outputLMm);
     applyPointOverride("OUTPUT_R", &outputRMm);
     applyPointOverride("S_GATE_O", &sGateOutMm);
@@ -3312,6 +3314,7 @@ struct TemporalDeckWidget : ModuleWidget {
     addInput(createInputCentered<PJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
     addInput(createInputCentered<PJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
     addInput(createInputCentered<PJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
 
     addOutput(createOutputCentered<BananutBlack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
     addOutput(createOutputCentered<BananutBlack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));

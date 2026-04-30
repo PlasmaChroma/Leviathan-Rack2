@@ -630,6 +630,7 @@ struct TemporalDeck::Impl {
   TemporalDeckEngine engine;
   dsp::SchmittTrigger freezeTrigger;
   dsp::SchmittTrigger reverseTrigger;
+  dsp::SchmittTrigger reverseCvTrigger;
   dsp::SchmittTrigger slipTrigger;
   dsp::SchmittTrigger cartridgeCycleTrigger;
   float cachedSampleRate = 0.f;
@@ -793,6 +794,7 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configInput(INPUT_R_INPUT, "Right audio");
   configInput(SCRATCH_GATE_INPUT, "Scratch gate");
   configInput(FREEZE_GATE_INPUT, "Freeze gate");
+  configInput(REVERSE_CV_INPUT, "Reverse gate");
   configOutput(OUTPUT_L_OUTPUT, "Left audio");
   configOutput(S_GATE_O_OUTPUT, "Scratch gate");
   configOutput(OUTPUT_R_OUTPUT, "Right audio");
@@ -1065,7 +1067,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool desiredSampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
   temporaldeck_transport::TransportButtonEvents transportButtons;
   transportButtons.freezePressed = impl->freezeTrigger.process(params[FREEZE_PARAM].getValue());
-  transportButtons.reversePressed = impl->reverseTrigger.process(params[REVERSE_PARAM].getValue());
+  bool reverseButtonPressed = impl->reverseTrigger.process(params[REVERSE_PARAM].getValue());
+  bool reverseCvPressed = impl->reverseCvTrigger.process(inputs[REVERSE_CV_INPUT].getVoltage());
+  transportButtons.reversePressed = reverseButtonPressed || reverseCvPressed;
   transportButtons.slipPressed = impl->slipTrigger.process(params[SLIP_PARAM].getValue());
   temporaldeck_transport::TransportButtonResult transportResult = temporaldeck_transport::applyTransportButtonEvents(
     impl->transportControl, transportButtons, desiredSampleModeEnabled, impl->engine.sampleLoaded);

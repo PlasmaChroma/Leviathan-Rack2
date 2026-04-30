@@ -82,6 +82,7 @@ struct TemporalDeck final : Module {
     INPUT_R_INPUT,
     SCRATCH_GATE_INPUT,
     FREEZE_GATE_INPUT,
+    REVERSE_CV_INPUT,
     INPUTS_LEN
   };
   enum OutputId { OUTPUT_L_OUTPUT, S_GATE_O_OUTPUT, OUTPUT_R_OUTPUT, S_POS_O_OUTPUT, OUTPUTS_LEN };
