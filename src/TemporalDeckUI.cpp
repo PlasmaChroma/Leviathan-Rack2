@@ -4,6 +4,7 @@
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -3704,20 +3705,33 @@ struct TemporalDeckWidget : ModuleWidget {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
           auto bufferModeMenuLabel = [=](int mode) {
             std::string label = TemporalDeck::bufferDurationLabelFor(mode);
-            if (mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
+            if (mode != TemporalDeck::BUFFER_DURATION_1M_STEREO && mode != TemporalDeck::BUFFER_DURATION_2M_STEREO &&
+                mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
               return label;
             }
-            // 10-minute modes use 601s internal allocation (extra 1s headroom).
+            // Long-duration modes include +1s internal headroom.
             float sr = std::max(module->getUiSampleRate(), 1.f);
             float channels = (mode == TemporalDeck::BUFFER_DURATION_10M_MONO) ? 1.f : 2.f;
-            double bytes = double(sr) * 601.0 * double(channels) * double(sizeof(float));
+            double seconds = 11.0;
+            if (mode == TemporalDeck::BUFFER_DURATION_1M_STEREO) {
+              seconds = 61.0;
+            } else if (mode == TemporalDeck::BUFFER_DURATION_2M_STEREO) {
+              seconds = 121.0;
+            } else if (mode == TemporalDeck::BUFFER_DURATION_10M_STEREO || mode == TemporalDeck::BUFFER_DURATION_10M_MONO) {
+              seconds = 601.0;
+            }
+            double bytes = double(sr) * seconds * double(channels) * double(sizeof(float));
             double mib = bytes / (1024.0 * 1024.0);
             return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
           };
-          for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {
-            submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(i), "",
-                                                  [=]() { return module->getBufferDurationMode() == i; },
-                                                  [=]() { module->applyBufferDurationMode(i); }));
+          std::array<int, TemporalDeck::BUFFER_DURATION_COUNT> menuOrder = {
+            TemporalDeck::BUFFER_DURATION_10S,       TemporalDeck::BUFFER_DURATION_20S,
+            TemporalDeck::BUFFER_DURATION_1M_STEREO, TemporalDeck::BUFFER_DURATION_2M_STEREO,
+            TemporalDeck::BUFFER_DURATION_10M_STEREO, TemporalDeck::BUFFER_DURATION_10M_MONO};
+          for (int mode : menuOrder) {
+            submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(mode), "",
+                                                  [=]() { return module->getBufferDurationMode() == mode; },
+                                                  [=]() { module->applyBufferDurationMode(mode); }));
           }
         }));
       }

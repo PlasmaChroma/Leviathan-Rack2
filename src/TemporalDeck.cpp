@@ -46,6 +46,8 @@ constexpr int TemporalDeck::BUFFER_DURATION_10S;
 constexpr int TemporalDeck::BUFFER_DURATION_20S;
 constexpr int TemporalDeck::BUFFER_DURATION_10M_STEREO;
 constexpr int TemporalDeck::BUFFER_DURATION_10M_MONO;
+constexpr int TemporalDeck::BUFFER_DURATION_1M_STEREO;
+constexpr int TemporalDeck::BUFFER_DURATION_2M_STEREO;
 constexpr int TemporalDeck::BUFFER_DURATION_COUNT;
 
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
@@ -1979,6 +1981,10 @@ const char *TemporalDeck::bufferDurationLabelFor(int index) {
   switch (index) {
   case BUFFER_DURATION_20S:
     return "20 s";
+  case BUFFER_DURATION_1M_STEREO:
+    return "1 min stereo";
+  case BUFFER_DURATION_2M_STEREO:
+    return "2 min stereo";
   case BUFFER_DURATION_10M_STEREO:
     return "10 min stereo";
   case BUFFER_DURATION_10M_MONO:

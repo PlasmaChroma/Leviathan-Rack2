@@ -34,7 +34,9 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_20S = 1;
   static constexpr int BUFFER_DURATION_10M_STEREO = 2;
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
-  static constexpr int BUFFER_DURATION_COUNT = 4;
+  static constexpr int BUFFER_DURATION_1M_STEREO = 4;
+  static constexpr int BUFFER_DURATION_2M_STEREO = 5;
+  static constexpr int BUFFER_DURATION_COUNT = 6;
 
   static constexpr int EXTERNAL_GATE_POS_GLIDE = 0;
   static constexpr int EXTERNAL_GATE_POS_MODULE_SYNC = 1;

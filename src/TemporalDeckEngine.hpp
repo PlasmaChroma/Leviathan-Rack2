@@ -23,6 +23,10 @@ inline float realBufferSecondsForMode(int index) {
   case 2:
   case 3:
     return 601.f; // 10m modes with guard second
+  case 4:
+    return 61.f; // 1m stereo mode with guard second
+  case 5:
+    return 121.f; // 2m stereo mode with guard second
   default:
     return 11.f;
   }
@@ -401,6 +405,8 @@ struct TemporalDeckEngine {
     BUFFER_DURATION_20S,
     BUFFER_DURATION_10MIN_STEREO,
     BUFFER_DURATION_10MIN_MONO,
+    BUFFER_DURATION_1MIN_STEREO,
+    BUFFER_DURATION_2MIN_STEREO,
     BUFFER_DURATION_COUNT
   };
   enum ScratchInterpolationMode {

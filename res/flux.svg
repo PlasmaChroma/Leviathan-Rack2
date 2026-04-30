@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="19.084432"
-   inkscape:cx="189.39521"
-   inkscape:cy="59.079569"
+   inkscape:zoom="2.385554"
+   inkscape:cx="227.62008"
+   inkscape:cy="113.39085"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -793,27 +793,27 @@
   <path
    id="leviathan_inner_left"
    d="M 5078,1450 C 5000,1365 4886,1332 4778,1365 C 4650,1405 4567,1525 4567,1668 C 4567,1800 4628,1912 4722,2012 C 4818,2112 4914,2198 4965,2315"
-   style="stroke:#7a5cff;stroke-width:13;opacity:0.92" />
+   style="stroke:#7a5cff;stroke-width:30.00000038;opacity:0.92;stroke-dasharray:none" />
   <path
    id="leviathan_inner_right"
    d="M 5078,1450 C 5156,1365 5270,1332 5378,1365 C 5506,1405 5589,1525 5589,1668 C 5589,1800 5528,1912 5434,2012 C 5338,2112 5242,2198 5191,2315"
-   style="stroke:#1cccd9;stroke-width:13;opacity:0.92" />
+   style="stroke:#1cccd9;stroke-width:30.00000038;opacity:0.92;stroke-dasharray:none" />
   <path
    id="leviathan_lower_left"
    d="M 4965,2315 C 4870,2508 4850,2730 4895,2968 C 4940,3210 4938,3435 4845,3668 C 4790,3805 4702,3952 4588,4105"
-   style="stroke:#7a5cff;stroke-width:13;opacity:0.9" />
+   style="stroke:#7a5cff;stroke-width:30.00000038;opacity:0.9;stroke-dasharray:none" />
   <path
    id="leviathan_lower_right"
    d="M 5191,2315 C 5286,2508 5306,2730 5261,2968 C 5216,3210 5218,3435 5311,3668 C 5366,3805 5454,3952 5568,4105"
-   style="stroke:#1cccd9;stroke-width:13;opacity:0.9" />
+   style="stroke:#1cccd9;stroke-width:30.00000038;opacity:0.9;stroke-dasharray:none" />
   <path
    id="leviathan_brow_left"
    d="M 5078,1336 C 5027,1270 4957,1230 4888,1216"
-   style="stroke:#7a5cff;stroke-width:11;opacity:0.88" />
+   style="stroke:#7a5cff;stroke-width:40.00000033;opacity:0.88;stroke-dasharray:none" />
   <path
    id="leviathan_brow_right"
    d="M 5078,1336 C 5129,1270 5199,1230 5268,1216"
-   style="stroke:#1cccd9;stroke-width:11;opacity:0.88" />
+   style="stroke:#1cccd9;stroke-width:40.00000033;opacity:0.88;stroke-dasharray:none" />
   
   
 </g><path
