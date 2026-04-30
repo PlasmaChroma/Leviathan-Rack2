@@ -165,6 +165,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint fieldUniformRenderMain = -1;
   GLint fieldUniformRenderHalo = -1;
   GLint fieldUniformRenderContinuity = -1;
+  GLint fieldUniformTime = -1;
+  GLint fieldUniformShdrEffect = -1;
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
@@ -1549,6 +1551,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRenderMain;\n"
         "uniform float uRenderHalo;\n"
         "uniform float uRenderContinuity;\n"
+        "uniform float uTime;\n"
+        "uniform float uShdrEffect;\n"
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
         "  float t = (clamp(idx, 0.0, uRowCount - 1.0) + 0.5) / max(uRowCount, 1.0);\n"
@@ -1583,6 +1587,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float sigma = max(radius * sigmaScale, 0.001);\n"
         "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
         "}\n"
+        "float hash(float n) { return fract(sin(n) * 43758.5453123); }\n"
         "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax,\n"
         "                   inout vec3 haloRgb, inout float haloAlphaMax) {\n"
         "  if (!rowValid(row)) {\n"
@@ -1595,39 +1600,44 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
         "  float colorVisual = tone;\n"
-        "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * 1.16 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  float mainAlpha = clamp(((155.0 + 100.0 * colorVisual) / 255.0) * 1.25 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
-        "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
-        "  float mainHotLift = 0.24 * mainHotT * mainHotT;\n"
+        "  float mainHotT = clamp((colorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
+        "  float mainHotLift = 0.32 * mainHotT * mainHotT;\n"
         "  mainColor.rgb = mainColor.rgb + (vec3(1.0) - mainColor.rgb) * mainHotLift;\n"
-        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.90, 0.0, 1.0));\n"
-        "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
-        "  float lowVisualBoost = 1.0 + 0.32 * (1.0 - clamp(visual, 0.0, 1.0));\n"
+        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.95, 0.0, 1.0));\n"
+        "  float mainW = (0.85 + 0.65 * tone) * uZoomThickness * 1.15 * uZoomInWidthComp;\n"
+        "  float lowVisualBoost = 1.0 + 0.35 * (1.0 - clamp(visual, 0.0, 1.0));\n"
         "  mainW *= lowVisualBoost;\n"
-        "  float maxMainW = max(uRowStep * 0.82, 0.70);\n"
+        "  float maxMainW = max(uRowStep * 0.95, 0.85);\n"
         "  mainW = min(mainW, maxMainW);\n"
-        "  float mainRadius = max(mainW * 0.55, 0.40);\n"
-        "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
-        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.82);\n"
-        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.25);\n"
-        "  float mainCov = clamp(0.72 * mainCovCore + 0.28 * mainCovSoft, 0.0, 1.0);\n"
+        "  float mainRadius = max(mainW * 0.55, 0.45);\n"
+        "  float jitter = (hash(rowIdx + uTime) - 0.5) * transientLift * 3.0 * uShdrEffect;\n"
+        "  float dist = segmentDistance(p, vec2(x0 + jitter, y), vec2(x1 + jitter, y));\n"
+        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.80);\n"
+        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.35);\n"
+        "  float mainCov = clamp(0.75 * mainCovCore + 0.35 * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
-        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.34);\n"
+        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.28);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
         "    baseRgb += mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
         "  }\n"
         "  if (uRenderHalo > 0.5) {\n"
-        "    float haloLinear = clamp((transientLift - 0.030) / 0.800, 0.0, 1.0);\n"
+        "    float haloLinear = clamp((transientLift - 0.020) / 0.750, 0.0, 1.0);\n"
         "    float haloT = haloLinear * haloLinear;\n"
-        "    float haloAlpha = ((88.0 + 196.0 * max(visual, 0.24)) / 255.0) * haloT;\n"
-        "    float boostedHaloAlpha = clamp(haloAlpha * 0.98 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
-        "    if (haloAlpha >= (26.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
-        "      float haloW = (mainW + (1.10 + 2.20 * haloT) * uZoomThickness) * 1.10 * uZoomInHaloWidthComp;\n"
-        "      float haloRadius = max(haloW * 0.48, mainRadius + 0.18);\n"
-        "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.54);\n"
+        "    float haloAlpha = ((110.0 + 145.0 * max(visual, 0.20)) / 255.0) * haloT;\n"
+        "    float boostedHaloAlpha = clamp(haloAlpha * 1.15 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
+        "    if (haloAlpha >= (20.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
+        "      float haloW = (mainW + (1.20 + 3.50 * haloT) * uZoomThickness) * 1.25 * uZoomInHaloWidthComp;\n"
+        "      float haloRadius = max(haloW * 0.52, mainRadius + 0.25);\n"
+        "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.52);\n"
         "      float haloPremult = boostedHaloAlpha * haloCov;\n"
-        "      haloRgb += vec3(1.0) * haloPremult;\n"
+        "      vec3 haloColor = vec3(1.0);\n"
+        "      float hueShift = sin(uTime * 3.0 + rowIdx * 0.1) * transientLift * 0.3 * uShdrEffect;\n"
+        "      haloColor.r += hueShift;\n"
+        "      haloColor.b -= hueShift;\n"
+        "      haloRgb += haloColor * haloPremult;\n"
         "      haloAlphaMax = max(haloAlphaMax, haloPremult);\n"
         "    }\n"
         "  }\n"
@@ -1642,7 +1652,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float x0b = rowB.x;\n"
         "  float x1b = rowB.y;\n"
         "  float delta = max(abs(x0b - x0a), abs(x1b - x1a));\n"
-        "  float connectorMinDelta = max(0.60 * uZoomThickness, 0.40);\n"
+        "  float connectorMinDelta = max(0.55 * uZoomThickness, 0.35);\n"
         "  if (delta < connectorMinDelta) {\n"
         "    return;\n"
         "  }\n"
@@ -1655,54 +1665,70 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
         "  float connectColorVisual = connectTone;\n"
         "  vec4 c = gradientColor(connectColorVisual,\n"
-        "                         clamp(((88.0 + 92.0 * connectColorVisual) / 255.0) * uZoomInAlphaComp, 0.0, 1.0));\n"
-        "  float connectHotT = clamp((connectColorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
-        "  float connectHotLift = 0.24 * connectHotT * connectHotT;\n"
+        "                         clamp(((110.0 + 110.0 * connectColorVisual) / 255.0) * 1.15 * uZoomInAlphaComp, 0.0, 1.0));\n"
+        "  float connectHotT = clamp((connectColorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
+        "  float connectHotLift = 0.30 * connectHotT * connectHotT;\n"
         "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
-        "  c = brightenColor(c, clamp(connectTransientLift * 0.72, 0.0, 1.0));\n"
+        "  c = brightenColor(c, clamp(connectTransientLift * 0.82, 0.0, 1.0));\n"
         "  float drift0 = abs(x0b - x0a);\n"
         "  float drift1 = abs(x1b - x1a);\n"
         "  float edgeDrift = max(drift0, drift1);\n"
         "  float spanAvg = 0.5 * (abs(x1a - x0a) + abs(x1b - x0b));\n"
-        "  if (spanAvg <= connectorMinDelta * 1.2 || edgeDrift <= connectorMinDelta * 0.70) {\n"
+        "  if (spanAvg <= connectorMinDelta * 1.1 || edgeDrift <= connectorMinDelta * 0.65) {\n"
         "    return;\n"
         "  }\n"
-        "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.70) / max(connectorMinDelta * 1.80, 1e-4), 0.0, 1.0);\n"
-        "  float continuityRadius = max((0.80 + 0.40 * connectTone) * uZoomThickness * 1.04 *\n"
-        "                               (1.02 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.62,\n"
-        "                               0.45);\n"
+        "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.65) / max(connectorMinDelta * 1.60, 1e-4), 0.0, 1.0);\n"
+        "  float continuityRadius = max((0.85 + 0.45 * connectTone) * uZoomThickness * 1.10 *\n"
+        "                               (1.02 + 0.10 * uZoomInWidthComp) * (1.01 + 0.08 * uDeepZoomEnergyFill) * 0.65,\n"
+        "                               0.48);\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
-        "  float contAlphaBase = clamp(c.a * (0.20 + 0.04 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
+        "  float contAlphaBase = clamp(c.a * (0.28 + 0.08 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
         "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
         "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
-        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.46;\n"
+        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.52;\n"
         "  baseRgb += c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
         "}\n"
         "void main() {\n"
         "  vec2 p = vLocalPos;\n"
         "  float rowPos = ((p.y - uDrawTop) / max(uRowStep, 1e-6)) - 0.5;\n"
-        "  float i0 = floor(rowPos);\n"
-        "  float i1 = i0 + 1.0;\n"
-        "  vec4 row0 = fetchRow(i0);\n"
-        "  vec4 row1 = fetchRow(i1);\n"
-        "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
+        "  float iMid = floor(rowPos);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
         "  vec3 haloRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
         "  float haloAlphaMax = 0.0;\n"
-        "  accumulateRow(p, row0, i0, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateRow(p, row1, i1, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
-        "  accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
+        "  float scanline = mix(1.0, 0.96 + 0.04 * sin(p.y * 1.5 + uTime * 10.0), uShdrEffect);\n"
+        "  for (float di = -1.0; di <= 2.0; di += 1.0) {\n"
+        "    float i0 = iMid + di - 1.0;\n"
+        "    float i1 = iMid + di;\n"
+        "    vec4 row0 = fetchRow(i0);\n"
+        "    vec4 row1 = fetchRow(i1);\n"
+        "    float chroma = clamp(row1.w * 2.5, 0.0, 1.0) * uShdrEffect;\n"
+        "    vec2 pR = p + vec2(0.0, chroma * 1.2);\n"
+        "    vec2 pB = p - vec2(0.0, chroma * 1.2);\n"
+        "    vec3 rRgb = vec3(0.0), hRgb = vec3(0.0);\n"
+        "    float rA = 0.0, hA = 0.0;\n"
+        "    accumulateRow(pR, row1, i1, rRgb, rA, hRgb, hA);\n"
+        "    baseRgb.r += rRgb.r; baseAlphaMax = max(baseAlphaMax, rA);\n"
+        "    rRgb = vec3(0.0); rA = 0.0; hRgb = vec3(0.0); hA = 0.0;\n"
+        "    accumulateRow(p, row1, i1, rRgb, rA, hRgb, hA);\n"
+        "    baseRgb.g += rRgb.g; baseAlphaMax = max(baseAlphaMax, rA);\n"
+        "    haloRgb += hRgb; haloAlphaMax = max(haloAlphaMax, hA);\n"
+        "    rRgb = vec3(0.0); rA = 0.0; hRgb = vec3(0.0); hA = 0.0;\n"
+        "    accumulateRow(pB, row1, i1, rRgb, rA, hRgb, hA);\n"
+        "    baseRgb.b += rRgb.b; baseAlphaMax = max(baseAlphaMax, rA);\n"
+        "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
+        "  }\n"
+        "  float vignetteFx = clamp(1.0 - length((p / vec2(uRowCount * uRowStep, uRowCount * uRowStep)) - 0.5) * 0.5, 0.0, 1.0);\n"
+        "  float vignette = mix(1.0, vignetteFx, uShdrEffect);\n"
         "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
         "  if (haloOnly) {\n"
-        "    vec3 haloOut = clamp(haloRgb, 0.0, 1.0);\n"
+        "    vec3 haloOut = clamp(haloRgb * scanline * vignette, 0.0, 1.0);\n"
         "    float haloAlpha = clamp(haloAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(haloOut, haloAlpha);\n"
         "  } else {\n"
-        "    vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
+        "    vec3 baseOut = clamp(baseRgb * scanline * vignette, 0.0, 1.0);\n"
         "    float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(baseOut, baseAlpha);\n"
         "  }\n"
@@ -1813,20 +1839,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderHalo = glGetUniformLocation(fieldShaderProgram, "uRenderHalo");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
+      fieldUniformTime = glGetUniformLocation(fieldShaderProgram, "uTime");
+      fieldUniformShdrEffect = glGetUniformLocation(fieldShaderProgram, "uShdrEffect");
       if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 ||
           fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformZoomInHaloAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
-          fieldUniformRenderContinuity < 0) {
+          fieldUniformRenderContinuity < 0 || fieldUniformTime < 0 || fieldUniformShdrEffect < 0) {
         WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
              "zoomInWidth=%d zoomInHaloWidth=%d zoomInAlpha=%d zoomInLift=%d zoomInHaloAlpha=%d deepZoomFill=%d renderMain=%d "
-             "renderHalo=%d renderContinuity=%d",
+             "renderHalo=%d renderContinuity=%d time=%d shdrEffect=%d",
              fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
              fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInHaloWidthComp,
              fieldUniformZoomInAlphaComp, fieldUniformZoomInLiftComp, fieldUniformZoomInHaloAlphaComp,
-             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity);
+             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity, fieldUniformTime, fieldUniformShdrEffect);
         return false;
       }
 
@@ -2011,6 +2039,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRenderMain, renderMain);
         glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
+        glUniform1f(fieldUniformTime, (float)system::getTime());
+        glUniform1f(fieldUniformShdrEffect, module->debugShdrEffectEnabled ? 1.f : 0.f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
         glActiveTexture(GL_TEXTURE1);

@@ -327,6 +327,9 @@ struct TDScopeWidget : ModuleWidget {
           scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
           scopeModule->debugUseGlShaderRenderer = true;
         }));
+      submenu->addChild(createCheckMenuItem(
+        "SHDR Effect", "", [=]() { return scopeModule->debugShdrEffectEnabled; },
+        [=]() { scopeModule->debugShdrEffectEnabled = !scopeModule->debugShdrEffectEnabled; }));
       submenu->addChild(new MenuSeparator());
       submenu->addChild(createCheckMenuItem(
         "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
