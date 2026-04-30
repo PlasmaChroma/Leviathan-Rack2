@@ -102,6 +102,12 @@ struct TitoOutputCapture {
   std::vector<float> samples;
 };
 
+struct ZeroInputCapture {
+  bool finite = true;
+  float rms = 0.f;
+  float peakAbs = 0.f;
+};
+
 float titoStimulusSample(float t, int n) {
   const float toneA = 1.45f * std::sin(2.f * kRuntimePi * 137.f * t);
   const float toneB = 0.72f * std::sin(2.f * kRuntimePi * 421.f * t + 0.37f);
@@ -168,6 +174,47 @@ float normalizedWaveDistance(const TitoOutputCapture& a, const TitoOutputCapture
   }
 
   return std::sqrt(diffSq / float(n)) / std::max(std::sqrt(refSq / float(n)), 1e-6f);
+}
+
+ZeroInputCapture captureZeroInputOutput(
+  int mode,
+  float centerHz,
+  float spanNorm,
+  float reso,
+  float balance,
+  float level,
+  int settleSamples,
+  int measureSamples
+) {
+  Bifurx module;
+  module.onReset();
+
+  configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
+  module.params[Bifurx::LEVEL_PARAM].setValue(level);
+  module.params[Bifurx::TITO_PARAM].setValue(0.f);
+  clearCvInputs(module);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+
+  ZeroInputCapture capture;
+  float outSq = 0.f;
+  int nAccum = 0;
+  for (int n = 0; n < settleSamples + measureSamples; ++n) {
+    module.inputs[Bifurx::IN_INPUT].setVoltage(0.f);
+    module.process(args);
+    const float out = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    capture.finite = capture.finite && std::isfinite(out);
+    if (n >= settleSamples) {
+      outSq += out * out;
+      capture.peakAbs = std::max(capture.peakAbs, std::fabs(out));
+      nAccum++;
+    }
+  }
+  capture.rms = std::sqrt(std::max(outSq / float(std::max(1, nAccum)), 0.f));
+  capture.finite = capture.finite && std::isfinite(capture.rms) && std::isfinite(capture.peakAbs);
+  return capture;
 }
 
 bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
@@ -542,6 +589,36 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   };
 }
 
+TestResult testRuntimeSelfOscSoftOnsetRamp() {
+  const ZeroInputCapture low = captureZeroInputOutput(5, 900.f, 0.58f, 0.78f, 0.f, 0.5f, 12000, 20000);
+  const ZeroInputCapture onset = captureZeroInputOutput(5, 900.f, 0.58f, 0.90f, 0.f, 0.5f, 12000, 20000);
+  const ZeroInputCapture hot = captureZeroInputOutput(5, 900.f, 0.58f, 1.00f, 0.f, 0.5f, 12000, 20000);
+
+  const bool finite = low.finite && onset.finite && hot.finite;
+  const bool onsetRises = onset.rms > std::max(low.rms * 1.4f, 1e-4f);
+  const bool hotRemainsActive = hot.rms > 0.02f;
+  const bool bounded = onset.peakAbs < 20.f && hot.peakAbs < 20.f;
+  const bool pass = finite && onsetRises && hotRemainsActive && bounded;
+  return {
+    "Runtime self-osc onset ramps near upper-RESO region without abrupt jump",
+    pass,
+    "rms(low,onset,hot)=(" + std::to_string(low.rms) + "," + std::to_string(onset.rms) + "," +
+      std::to_string(hot.rms) + ") peak(onset,hot)=(" + std::to_string(onset.peakAbs) + "," +
+      std::to_string(hot.peakAbs) + ")"
+  };
+}
+
+TestResult testRuntimeSelfOscHighResBounded() {
+  const ZeroInputCapture hot = captureZeroInputOutput(0, 900.f, 0.55f, 1.00f, 0.f, 0.5f, 12000, 96000);
+  const bool pass = hot.finite && hot.rms > 0.02f && hot.peakAbs < 20.f;
+  return {
+    "Runtime high-RESO self-osc stays finite and bounded",
+    pass,
+    "finite=" + std::to_string(int(hot.finite)) + " rms=" + std::to_string(hot.rms) +
+      " peakAbs=" + std::to_string(hot.peakAbs)
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -554,6 +631,8 @@ int main() {
     testRuntimePreviewPublishesHighQBeyondLegacyClamp(),
     testRuntimePreviewMarkerGainTracksBandHeavyModes(),
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
+    testRuntimeSelfOscSoftOnsetRamp(),
+    testRuntimeSelfOscHighResBounded(),
   };
 
   int fails = 0;

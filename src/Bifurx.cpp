@@ -19,6 +19,14 @@ std::string bifurxUserRootPath() {
 	return system::join(asset::user(), "Leviathan/Bifurx");
 }
 
+constexpr float kSelfOscResoStart = 0.80f;
+constexpr float kSelfOscResoFull = 0.98f;
+constexpr float kSelfOscHeatStart = 0.90f;
+constexpr float kSelfOscPush = 0.120f;
+constexpr float kSelfOscAmpDampingClean = 0.060f;
+constexpr float kSelfOscAmpDampingHot = 0.120f;
+constexpr float kSvfSelfOscDampingMin = 0.0005f;
+
 float levelDriveGain(float knob) {
 	const float x = bifurx::clamp01(knob);
 	// Midpoint should be exactly unity so the default LEVEL setting is neutral.
@@ -190,10 +198,10 @@ void formatFrequencyLabel(float hz, char* out, size_t outSize) {
 	std::snprintf(out, outSize, "%.2fHz", safeHz);
 }
 
-SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
+SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dampingMin) {
 	const float limitedCutoff = clamp(cutoff, 4.f, 0.46f * sampleRate);
 	const float g = fastTan(kPi * limitedCutoff / sampleRate);
-	const float k = clamp(damping, kSvfDampingMin, kSvfDampingMax);
+	const float k = clamp(damping, dampingMin, kSvfDampingMax);
 	const float a1 = 1.f / (1.f + g * (g + k));
 	SvfCoeffs coeffs;
 	coeffs.g = g;
@@ -213,6 +221,37 @@ SvfOutputs TptSvf::processWithCoeffs(float input, const SvfCoeffs& coeffs) {
 	out.bp = v1;
 	out.lp = v2;
 	out.hp = input - coeffs.k * v1 - v2;
+	out.notch = out.lp + out.hp;
+	return out;
+}
+
+SvfOutputs TptSvf::processSelfOscWithCoeffs(
+	const SvfCoeffs& coeffs,
+	float input,
+	float oscOnset,
+	float oscHeat,
+	float oscDrive
+) {
+	const float m = ic1eq + coeffs.g * (input - ic2eq);
+	const float onePlusG2 = 1.f + coeffs.g * coeffs.g;
+	float v1 = m / std::max(onePlusG2 + coeffs.g * coeffs.k, 1e-5f);
+
+	const float drive = std::max(oscDrive, 1e-4f);
+	const float amp = v1 * drive;
+	const float ampDamping = mixf(kSelfOscAmpDampingClean, kSelfOscAmpDampingHot, clamp01(oscHeat));
+	const float kEff = coeffs.k - kSelfOscPush * clamp01(oscOnset) + ampDamping * amp * amp;
+	v1 = m / std::max(onePlusG2 + coeffs.g * kEff, 1e-5f);
+
+	const float v2 = ic2eq + coeffs.g * v1;
+	ic1eq = 2.f * v1 - ic1eq;
+	ic2eq = 2.f * v2 - ic2eq;
+
+	SvfOutputs out;
+	out.bp = v1;
+	out.lp = v2;
+	const float outAmp = v1 * drive;
+	const float outKEff = coeffs.k - kSelfOscPush * clamp01(oscOnset) + ampDamping * outAmp * outAmp;
+	out.hp = input - outKEff * v1 - v2;
 	out.notch = out.lp + out.hp;
 	return out;
 }
@@ -242,12 +281,27 @@ SvfOutputs processCharacterStage(
 	const SvfCoeffs* cachedCoeffsOrNull
 ) {
 	(void) stageIndex;
-	(void) drive;
-	(void) resoNorm;
-	if (cachedCoeffsOrNull) {
-		return core.processWithCoeffs(input, *cachedCoeffsOrNull);
+	const float oscNorm = smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
+	if (oscNorm <= 0.f) {
+		if (cachedCoeffsOrNull) {
+			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
+		}
+		return core.process(input, sampleRate, cutoff, damping);
 	}
-	return core.process(input, sampleRate, cutoff, damping);
+	const float oscOnset = std::sqrt(std::max(oscNorm, 0.f));
+	const float oscHeat = smoothstep01((clamp01(resoNorm) - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
+	const float oscDrive = mixf(0.75f, 2.6f, oscHeat) * mixf(0.85f, 1.35f, clamp01((drive - 1.f) / 2.f));
+	const float selfDamping = mixf(damping, kSvfSelfOscDampingMin, oscOnset);
+	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, selfDamping, kSvfSelfOscDampingMin);
+	SvfOutputs out = core.processSelfOscWithCoeffs(coeffs, input, oscOnset, oscHeat, oscDrive);
+	if (!std::isfinite(out.lp) || !std::isfinite(out.bp) || !std::isfinite(out.hp) || !std::isfinite(out.notch)) {
+		sanitizeCoreState(core);
+		if (cachedCoeffsOrNull) {
+			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
+		}
+		return core.process(input, sampleRate, cutoff, damping);
+	}
+	return out;
 }
 
 std::complex<float> DisplayBiquad::response(float omega) const {
@@ -572,7 +626,10 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
-	const float drivenIn = applyLevelInputStage(in, level), excitation = drivenIn + (resoNorm > 0.985f ? 1e-6f : 0.f);
+	const float drivenIn = applyLevelInputStage(in, level);
+	const float oscNorm = smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
+	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
+	const float excitation = drivenIn + selfOscSeed;
 	float cutoffA = freqA0, cutoffB = freqB0;
 	if (!titoNeutral) {
 		const float depthScaled = couplingDepth * 0.2f;

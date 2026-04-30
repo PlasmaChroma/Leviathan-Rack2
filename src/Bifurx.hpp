@@ -186,13 +186,14 @@ struct SvfCoeffs {
 	float a1 = 1.f;
 };
 
-SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping);
+SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dampingMin = kSvfDampingMin);
 
 struct TptSvf {
 	float ic1eq = 0.f;
 	float ic2eq = 0.f;
 
 	SvfOutputs processWithCoeffs(float input, const SvfCoeffs& coeffs);
+	SvfOutputs processSelfOscWithCoeffs(const SvfCoeffs& coeffs, float input, float oscOnset, float oscHeat, float oscDrive);
 	SvfOutputs process(float input, float sampleRate, float cutoff, float damping);
 };
 
