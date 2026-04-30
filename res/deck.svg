@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="1.737808"
-     inkscape:cx="8.3438448"
-     inkscape:cy="252.32938"
+     inkscape:zoom="4.9152633"
+     inkscape:cx="237.22025"
+     inkscape:cy="218.40132"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -293,7 +293,7 @@
   </g>
   <g
      id="components"
-     style="display:none">
+     style="display:inline">
     <circle
        cx="8.4081755"
        cy="17.086493"
@@ -420,6 +420,12 @@
        id="S_POS_O"
        r="4.1500001"
        style="display:inline;fill:#0000ff;fill-opacity:1;stroke:none" />
+    <circle
+       cx="98.5"
+       cy="53.950001"
+       id="TD_SCOPE_SPAWN"
+       r="1.9"
+       style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
   </g>
   <g
      id="custom_anchors"

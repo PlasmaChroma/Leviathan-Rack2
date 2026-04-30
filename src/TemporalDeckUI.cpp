@@ -29,8 +29,10 @@ static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
+static bool isTDScopeModule(const engine::Module *neighbor);
 static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
+struct TemporalDeckWidget;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -64,6 +66,38 @@ struct TemporalDeckTonearmWidget : Widget {
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 
   void draw(const DrawArgs &args) override;
+};
+
+static void drawTemporalDeckStepTriangle(const Widget::DrawArgs &args, const Vec &size, bool pointRight) {
+  const float cx = 0.5f * size.x;
+  const float cy = 0.5f * size.y;
+  const float halfW = size.x * 0.16f;
+  const float halfH = size.y * 0.20f;
+  nvgBeginPath(args.vg);
+  if (pointRight) {
+    nvgMoveTo(args.vg, cx - halfW, cy - halfH);
+    nvgLineTo(args.vg, cx - halfW, cy + halfH);
+    nvgLineTo(args.vg, cx + halfW, cy);
+  } else {
+    nvgMoveTo(args.vg, cx + halfW, cy - halfH);
+    nvgLineTo(args.vg, cx + halfW, cy + halfH);
+    nvgLineTo(args.vg, cx - halfW, cy);
+  }
+  nvgClosePath(args.vg);
+  nvgFillColor(args.vg, nvgRGBA(236, 242, 250, 236));
+  nvgFill(args.vg);
+}
+
+struct TemporalDeckScopeSpawnButton : TL1105 {
+  TemporalDeck *module = nullptr;
+  TemporalDeckWidget *owner = nullptr;
+
+  void draw(const DrawArgs &args) override {
+    TL1105::draw(args);
+    drawTemporalDeckStepTriangle(args, box.size, true);
+  }
+
+  void onButton(const event::Button &e) override;
 };
 
 struct TemporalDeckPlatterWidget : OpaqueWidget {
@@ -3193,9 +3227,12 @@ struct TemporalDeckWidget : ModuleWidget {
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarRightEndMm = 97.413935f;
 
+  void spawnTDScopeRight();
+
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
-    setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
+    const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
+    setPanel(createPanel(panelPath));
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
     }
@@ -3205,44 +3242,97 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-    Vec bufferKnobPos = mm2px(Vec(8.408f, 17.086f));
-    addParam(createParamCentered<RoundBlackKnob>(bufferKnobPos, module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(20.889, 99.226)), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 98.872)), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module,
+    auto applyPointOverride = [&](const char *elementId, Vec *outPos) {
+      Vec pointMm;
+      if (panel_svg::loadCircleFromSvg(panelPath, elementId, &pointMm, nullptr, 1.f)) {
+        *outPos = pointMm;
+      }
+    };
+
+    Vec bufferKnobMm(8.408f, 17.086f);
+    Vec rateKnobMm(20.889f, 99.226f);
+    Vec mixKnobMm(70.982f, 98.872f);
+    Vec feedbackKnobMm(70.982f, 112.996f);
+    Vec sensitivityKnobMm(9.459f, 84.07f);
+    Vec freezeButtonMm(57.5f, 101.1f);
+    Vec reverseButtonMm(45.6f, 101.1f);
+    Vec slipButtonMm(33.2f, 101.1f);
+    Vec positionCvMm(45.665f, 112.9f);
+    Vec rateCvMm(20.905f, 112.9f);
+    Vec inputLMm(8.437f, 99.012f);
+    Vec inputRMm(8.478f, 112.9f);
+    Vec scratchGateMm(33.403f, 112.9f);
+    Vec freezeGateMm(57.5f, 112.9f);
+    Vec outputLMm(94.241f, 99.012f);
+    Vec outputRMm(94.2f, 113.146f);
+    Vec sGateOutMm(83.037f, 99.135f);
+    Vec sPosOutMm(82.996f, 113.269f);
+    Vec freezeLightMm(57.5f, 95.3f);
+    Vec reverseLightMm(45.6f, 95.3f);
+    Vec slipLightMm(33.2f, 95.3f);
+    Vec expanderLightMm(98.4f, 5.8f);
+
+    applyPointOverride("BUFFER", &bufferKnobMm);
+    applyPointOverride("RATE", &rateKnobMm);
+    applyPointOverride("MIX", &mixKnobMm);
+    applyPointOverride("FEEDBACK", &feedbackKnobMm);
+    applyPointOverride("SENSITIVITY", &sensitivityKnobMm);
+    applyPointOverride("FREEZE", &freezeButtonMm);
+    applyPointOverride("REVERSE", &reverseButtonMm);
+    applyPointOverride("SLIP", &slipButtonMm);
+    applyPointOverride("POSITION_CV", &positionCvMm);
+    applyPointOverride("RATE_CV", &rateCvMm);
+    applyPointOverride("INPUT_L", &inputLMm);
+    applyPointOverride("INPUT_R", &inputRMm);
+    applyPointOverride("SCRATCH_GATE", &scratchGateMm);
+    applyPointOverride("FREEZE_GATE", &freezeGateMm);
+    applyPointOverride("OUTPUT_L", &outputLMm);
+    applyPointOverride("OUTPUT_R", &outputRMm);
+    applyPointOverride("S_GATE_O", &sGateOutMm);
+    applyPointOverride("S_POS_O", &sPosOutMm);
+    applyPointOverride("FREEZE_LIGHT", &freezeLightMm);
+    applyPointOverride("REVERSE_LIGHT", &reverseLightMm);
+    applyPointOverride("SLIP_LIGHT", &slipLightMm);
+
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(sensitivityKnobMm), module,
                                                  TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(57.5, 101.1)), module, TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(45.6, 101.1)), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(33.2, 101.1)), module, TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(45.665, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.905, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.437, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.478, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(33.403, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(57.5, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
 
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.241, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(83.037, 99.135)), module, TemporalDeck::S_GATE_O_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.2, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(82.996, 113.269)), module, TemporalDeck::S_POS_O_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(outputRMm), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(sPosOutMm), module, TemporalDeck::S_POS_O_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(57.5, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(45.6, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.8, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(33.2, 95.3)), module, TemporalDeck::SLIP_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.6, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(freezeLightMm), module, TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(reverseLightMm), module, TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
+                                                       TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
+                                                       TemporalDeck::SLIP_FAST_LIGHT));
     addChild(
-      createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_LINK_LIGHT));
+      createLightCentered<SmallLight<YellowLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
     addChild(
-      createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_READY_LIGHT));
+      createLightCentered<SmallLight<GreenLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_READY_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
     bufferMode->box.pos = Vec(0.f, 0.f);
     bufferMode->box.size = box.size;
-    bufferMode->labelPosPx = bufferKnobPos.plus(Vec(mm2px(Vec(10.4f, 0.f)).x, 0.f));
+    bufferMode->labelPosPx = mm2px(bufferKnobMm).plus(Vec(mm2px(Vec(10.4f, 0.f)).x, 0.f));
     addChild(bufferMode);
 
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
@@ -3285,6 +3375,14 @@ struct TemporalDeckWidget : ModuleWidget {
 
     // Add after platter/tonearm so this control is visible on top.
     addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
+
+    Vec scopeSpawnPosMm(90.6f, 53.95f);
+    applyPointOverride("TD_SCOPE_SPAWN", &scopeSpawnPosMm);
+    auto *scopeSpawn =
+      createParamCentered<TemporalDeckScopeSpawnButton>(mm2px(scopeSpawnPosMm), module, TemporalDeck::ADD_SCOPE_PARAM);
+    scopeSpawn->module = module;
+    scopeSpawn->owner = this;
+    addParam(scopeSpawn);
   }
 
   void draw(const DrawArgs &args) override {
@@ -3765,5 +3863,47 @@ struct TemporalDeckWidget : ModuleWidget {
     }
   }
 };
+
+void TemporalDeckWidget::spawnTDScopeRight() {
+  TemporalDeck *deckModule = dynamic_cast<TemporalDeck *>(module);
+  if (!deckModule || !APP || !APP->scene || !APP->scene->rack || !modelTDScope) {
+    return;
+  }
+  if (isTDScopeModule(deckModule->rightExpander.module)) {
+    return;
+  }
+
+  engine::Module *scopeModule = modelTDScope->createModule();
+  if (!scopeModule) {
+    return;
+  }
+  app::ModuleWidget *scopeWidget = modelTDScope->createModuleWidget(scopeModule);
+  if (!scopeWidget) {
+    delete scopeModule;
+    return;
+  }
+
+  app::RackWidget *rack = APP->scene->rack;
+  const Vec scopePos = box.pos.plus(Vec(box.size.x, 0.f));
+  rack->setModulePosForce(scopeWidget, scopePos);
+  rack->addModule(scopeWidget);
+  if (APP->history) {
+    history::ModuleAdd *h = new history::ModuleAdd;
+    h->name = "add TD.Scope";
+    h->setModule(scopeWidget);
+    APP->history->push(h);
+  }
+}
+
+void TemporalDeckScopeSpawnButton::onButton(const event::Button &e) {
+  TL1105::onButton(e);
+  if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+    return;
+  }
+  if (owner) {
+    owner->spawnTDScopeRight();
+  }
+  e.consume(this);
+}
 
 Model *modelTemporalDeck = createModel<TemporalDeck, TemporalDeckWidget>("TemporalDeck");

@@ -72,6 +72,7 @@ struct TemporalDeck final : Module {
     REVERSE_PARAM,
     SLIP_PARAM,
     CARTRIDGE_CYCLE_PARAM,
+    ADD_SCOPE_PARAM,
     PARAMS_LEN
   };
   enum InputId {
