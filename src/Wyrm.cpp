@@ -7,7 +7,8 @@
 
 namespace {
 
-constexpr int kWyrmPointCount = 32;
+constexpr int kWyrmPointCountDefault = 32;
+constexpr int kWyrmPointCountMax = 64;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
 
@@ -49,12 +50,13 @@ inline float foldWave(float x, float amount) {
 	return std::sin(0.5f * float(M_PI) * d);
 }
 
-inline float catmullPeriodic(const std::array<float, kWyrmPointCount>& points, float phase) {
-	const float p = wrap01(phase) * float(kWyrmPointCount);
-	const int i1 = int(std::floor(p)) % kWyrmPointCount;
-	const int i0 = (i1 + kWyrmPointCount - 1) % kWyrmPointCount;
-	const int i2 = (i1 + 1) % kWyrmPointCount;
-	const int i3 = (i1 + 2) % kWyrmPointCount;
+inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points, int pointCount, float phase) {
+	const int count = clamp(pointCount, 2, kWyrmPointCountMax);
+	const float p = wrap01(phase) * float(count);
+	const int i1 = int(std::floor(p)) % count;
+	const int i0 = (i1 + count - 1) % count;
+	const int i2 = (i1 + 1) % count;
+	const int i3 = (i1 + 2) % count;
 	const float t = p - std::floor(p);
 	const float p0 = points[i0];
 	const float p1 = points[i1];
@@ -91,7 +93,7 @@ struct Wyrm : Module {
 		LIGHTS_LEN
 	};
 
-	std::array<std::atomic<float>, kWyrmPointCount> wavePoints {};
+	std::array<std::atomic<float>, kWyrmPointCountMax> wavePoints {};
 	std::array<float, kWyrmTableSize> wavetable {};
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
@@ -101,6 +103,7 @@ struct Wyrm : Module {
 	bool lfoMode = false;
 	bool editorLocked = true;
 	int selectedShape = SHAPE_SINE;
+	int pointCount = kWyrmPointCountDefault;
 
 	Wyrm() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -119,7 +122,7 @@ struct Wyrm : Module {
 	}
 
 	void setWavePoint(int index, float value) {
-		if (index < 0 || index >= kWyrmPointCount) {
+		if (index < 0 || index >= pointCount) {
 			return;
 		}
 		wavePoints[index].store(clamp(value, -1.f, 1.f), std::memory_order_relaxed);
@@ -127,7 +130,7 @@ struct Wyrm : Module {
 	}
 
 	float getWavePoint(int index) const {
-		if (index < 0 || index >= kWyrmPointCount) {
+		if (index < 0 || index >= pointCount) {
 			return 0.f;
 		}
 		return wavePoints[index].load(std::memory_order_relaxed);
@@ -136,8 +139,8 @@ struct Wyrm : Module {
 	void setFactoryShape(int shapeId) {
 		shapeId = clamp(shapeId, 0, SHAPE_COUNT - 1);
 		selectedShape = shapeId;
-		for (int i = 0; i < kWyrmPointCount; ++i) {
-			const float p = float(i) / float(kWyrmPointCount);
+		for (int i = 0; i < pointCount; ++i) {
+			const float p = float(i) / float(pointCount);
 			float v = 0.f;
 			switch (shapeId) {
 				case SHAPE_SINE: v = std::sin(2.f * float(M_PI) * p); break;
@@ -155,15 +158,27 @@ struct Wyrm : Module {
 		waveVersion.fetch_add(1u, std::memory_order_release);
 	}
 
+	void setPointCount(int newPointCount) {
+		newPointCount = clamp(newPointCount, 32, kWyrmPointCountMax);
+		if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64) {
+			newPointCount = kWyrmPointCountDefault;
+		}
+		if (newPointCount == pointCount) {
+			return;
+		}
+		pointCount = newPointCount;
+		setFactoryShape(selectedShape);
+	}
+
 	void rebuildWavetable() {
-		std::array<float, kWyrmPointCount> local {};
-		for (int i = 0; i < kWyrmPointCount; ++i) {
+		std::array<float, kWyrmPointCountMax> local {};
+		for (int i = 0; i < pointCount; ++i) {
 			local[i] = wavePoints[i].load(std::memory_order_relaxed);
 		}
 		float maxAbs = 1e-6f;
 		for (int i = 0; i < kWyrmTableSize; ++i) {
 			const float ph = float(i) / float(kWyrmTableSize);
-			const float y = catmullPeriodic(local, ph);
+			const float y = catmullPeriodic(local, pointCount, ph);
 			wavetable[i] = y;
 			maxAbs = std::max(maxAbs, std::fabs(y));
 		}
@@ -186,8 +201,9 @@ struct Wyrm : Module {
 		json_object_set_new(root, "lfoMode", json_boolean(lfoMode));
 		json_object_set_new(root, "editorLocked", json_boolean(editorLocked));
 		json_object_set_new(root, "selectedShape", json_integer(selectedShape));
+		json_object_set_new(root, "pointCount", json_integer(pointCount));
 		json_t* pts = json_array();
-		for (int i = 0; i < kWyrmPointCount; ++i) {
+		for (int i = 0; i < pointCount; ++i) {
 			json_array_append_new(pts, json_real(getWavePoint(i)));
 		}
 		json_object_set_new(root, "wavePoints", pts);
@@ -201,10 +217,17 @@ struct Wyrm : Module {
 		if (lockJ) editorLocked = json_is_true(lockJ);
 		json_t* shapeJ = json_object_get(root, "selectedShape");
 		if (shapeJ) selectedShape = clamp(int(json_integer_value(shapeJ)), 0, SHAPE_COUNT - 1);
+		json_t* pointCountJ = json_object_get(root, "pointCount");
+		if (pointCountJ) {
+			int loadedPointCount = int(json_integer_value(pointCountJ));
+			if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64) {
+				pointCount = loadedPointCount;
+			}
+		}
 		json_t* pts = json_object_get(root, "wavePoints");
 		if (pts && json_is_array(pts)) {
 			const size_t n = json_array_size(pts);
-			for (int i = 0; i < kWyrmPointCount && i < int(n); ++i) {
+			for (int i = 0; i < pointCount && i < int(n); ++i) {
 				json_t* v = json_array_get(pts, i);
 				if (v) {
 					wavePoints[i].store(clamp(float(json_number_value(v)), -1.f, 1.f), std::memory_order_relaxed);
@@ -266,7 +289,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	int indexFromX(float x) const {
 		if (box.size.x <= 1.f) return 0;
 		const float n = clamp(x / box.size.x, 0.f, 1.f);
-		return clamp(int(std::floor(n * float(kWyrmPointCount))), 0, kWyrmPointCount - 1);
+		const int count = module ? module->pointCount : kWyrmPointCountDefault;
+		return clamp(int(std::floor(n * float(count))), 0, count - 1);
 	}
 
 	float valueFromY(float y) const {
@@ -355,10 +379,36 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		if (!module) return;
 
+		Vec mouseLocal = currentLocalMousePos();
+		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
+		if (mouseInside) {
+			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
+			const int hoverIdx = indexFromX(mouseLocal.x);
+			const int count = module->pointCount;
+			const float dxHover = box.size.x / float(count);
+			const float x0 = hoverIdx * dxHover;
+			const float x1 = x0 + dxHover;
+
+			// Hover segment lane preview.
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x0, 0.f, x1 - x0, box.size.y);
+			nvgFillColor(args.vg, nvgRGBA(255, 230, 120, 28));
+			nvgFill(args.vg);
+
+			// Hover target-height guide.
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, 0.f, guideY);
+			nvgLineTo(args.vg, box.size.x, guideY);
+			nvgStrokeWidth(args.vg, 1.4f);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 140, 180));
+			nvgStroke(args.vg);
+		}
+
 		// Draw as discrete segments so each point reads as an editable bar.
 		const float midY = 0.5f * box.size.y;
-		const float dx = box.size.x / float(kWyrmPointCount);
-		for (int i = 0; i < kWyrmPointCount; ++i) {
+		const int count = module->pointCount;
+		const float dx = box.size.x / float(count);
+		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			nvgBeginPath(args.vg);
@@ -375,7 +425,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		nvgBeginPath(args.vg);
-		for (int i = 0; i < kWyrmPointCount; ++i) {
+		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			if (i == 0) nvgMoveTo(args.vg, x, y);
@@ -385,10 +435,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(220, 190, 72, 110));
 		nvgStroke(args.vg);
 
-		nvgFontSize(args.vg, 12.f);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-		nvgFillColor(args.vg, nvgRGBA(210, 210, 210, 180));
-		nvgText(args.vg, 4.f, 4.f, module->editorLocked ? "LOCKED" : "DRAW", nullptr);
 	}
 };
 
@@ -403,6 +449,23 @@ struct WyrmShapeMenuItem : MenuItem {
 
 	void step() override {
 		rightText = (module && module->selectedShape == shape) ? "✓" : "";
+		MenuItem::step();
+	}
+};
+
+struct WyrmPointCountMenuItem : MenuItem {
+	Wyrm* module = nullptr;
+	int count = kWyrmPointCountDefault;
+
+	void onAction(const event::Action& e) override {
+		if (module) {
+			module->setPointCount(count);
+		}
+		MenuItem::onAction(e);
+	}
+
+	void step() override {
+		rightText = (module && module->pointCount == count) ? "✓" : "";
 		MenuItem::step();
 	}
 };
@@ -453,7 +516,7 @@ struct WyrmWidget : ModuleWidget {
 		editor->box.size = mm2px(editorRectMm.size);
 		addChild(editor);
 
-		addParam(createParamCentered<RoundHugeBlackKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
@@ -475,6 +538,15 @@ struct WyrmWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("LFO Mode", "", &module->lfoMode));
 		menu->addChild(createBoolPtrMenuItem("Lock Wave Editor", "", &module->editorLocked));
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel("Point Count"));
+		for (int count : {32, 48, 64}) {
+			auto* item = new WyrmPointCountMenuItem();
+			item->text = string::f("%d", count);
+			item->module = module;
+			item->count = count;
+			menu->addChild(item);
+		}
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Factory Shape"));
 		for (int i = 0; i < SHAPE_COUNT; ++i) {
