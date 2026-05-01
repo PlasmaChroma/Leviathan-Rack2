@@ -333,30 +333,38 @@ struct Wyrm : Module {
 		return dx;
 	}
 
-	float rockEdgeY(const WyrmRock& rock, float dx) const {
-		if (std::fabs(dx) >= rock.radiusPhase) {
+	float rockClearancePhase(const WyrmRock& rock) const {
+		return kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
+	}
+
+	float rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue = 0.f) const {
+		const float radiusPhase = rock.radiusPhase + ((clearanceValue > 0.f) ? rockClearancePhase(rock) : 0.f);
+		const float radiusValue = rock.radiusValue + clearanceValue;
+		if (std::fabs(dx) >= radiusPhase) {
 			return 0.f;
 		}
-		const float nx = dx / std::max(rock.radiusPhase, 1e-4f);
-		return rock.radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+		const float nx = dx / std::max(radiusPhase, 1e-4f);
+		return radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
 	}
 
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const {
-		const float edgeY = rockEdgeY(rock, rockDx(ph, rock));
+		const float edgeY = rockEdgeY(rock, rockDx(ph, rock), kWyrmRockClearance);
 		if (edgeY <= 0.f) {
 			return false;
 		}
-		if (lower) *lower = rock.value - edgeY - kWyrmRockClearance;
-		if (upper) *upper = rock.value + edgeY + kWyrmRockClearance;
+		if (lower) *lower = rock.value - edgeY;
+		if (upper) *upper = rock.value + edgeY;
 		return true;
 	}
 
 	bool pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide) {
 		if (pointIndex < 0 || pointIndex >= pointCount) return false;
 		const float ph = (float(pointIndex) + 0.5f) / float(pointCount);
-		float lower = rock.value - rock.radiusValue - kWyrmRockClearance;
-		float upper = rock.value + rock.radiusValue + kWyrmRockClearance;
-		rockBoundsAtPhase(rock, ph, &lower, &upper);
+		float lower = 0.f;
+		float upper = 0.f;
+		if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
+			return false;
+		}
 		const float base = wavePoints[pointIndex].load(std::memory_order_relaxed);
 		if (!forceSide && (base <= lower || base >= upper)) {
 			return false;
@@ -375,6 +383,38 @@ struct Wyrm : Module {
 		return true;
 	}
 
+	bool segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const {
+		const float rx = rock.radiusPhase + rockClearancePhase(rock);
+		const float ry = rock.radiusValue + kWyrmRockClearance;
+		float x0 = rockDx(ph0, rock);
+		float x1 = rockDx(ph1, rock);
+		if (x1 - x0 > 0.5f) {
+			x1 -= 1.f;
+		}
+		else if (x1 - x0 < -0.5f) {
+			x1 += 1.f;
+		}
+		y0 -= rock.value;
+		y1 -= rock.value;
+
+		const float dx = x1 - x0;
+		const float dy = y1 - y0;
+		const float invRx = 1.f / std::max(rx, 1e-4f);
+		const float invRy = 1.f / std::max(ry, 1e-4f);
+		const float a = dx * dx * invRx * invRx + dy * dy * invRy * invRy;
+		const float b = 2.f * (x0 * dx * invRx * invRx + y0 * dy * invRy * invRy);
+		const float c = x0 * x0 * invRx * invRx + y0 * y0 * invRy * invRy - 1.f;
+		const float t = (a > 1e-8f) ? clamp(-b / (2.f * a), 0.f, 1.f) : 0.f;
+		const float closest = a * t * t + b * t + c;
+		if (closest > 0.f) {
+			return false;
+		}
+		if (preferUpper) {
+			*preferUpper = (y0 + dy * t) >= 0.f;
+		}
+		return true;
+	}
+
 	void pushWavePointsOutsideRock(int rockIndex) {
 		if (rockIndex < 0 || rockIndex >= rockCount) return;
 		const WyrmRock& rock = rocks[rockIndex];
@@ -387,22 +427,10 @@ struct Wyrm : Module {
 			const float ph1 = (float(i + 1) + 0.5f) / float(pointCount);
 			const float y0 = wavePoints[i].load(std::memory_order_relaxed);
 			const float y1 = wavePoints[i + 1].load(std::memory_order_relaxed);
-			for (int sample = 1; sample <= 4; ++sample) {
-				const float t = float(sample) / 5.f;
-				const float ph = ph0 + (ph1 - ph0) * t;
-				float lower = 0.f;
-				float upper = 0.f;
-				if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
-					continue;
-				}
-				const float y = y0 + (y1 - y0) * t;
-				if (y <= lower || y >= upper) {
-					continue;
-				}
-				const bool preferUpper = (std::fabs(y - upper) < std::fabs(y - lower)) ? true : (y >= rock.value);
+			bool preferUpper = false;
+			if (segmentIntersectsRockBounds(rock, ph0, y0, ph1, y1, &preferUpper)) {
 				changed = pushPointOutsideRock(i, rock, preferUpper, true) || changed;
 				changed = pushPointOutsideRock(i + 1, rock, preferUpper, true) || changed;
-				break;
 			}
 		}
 		if (changed) {
@@ -420,15 +448,15 @@ struct Wyrm : Module {
 			const WyrmRock& rock = rocks[i];
 			const float dx = rockDx(ph, rock);
 			const float dyCenter = rock.value - base;
-			const float edgeY = rockEdgeY(rock, dx);
+			const float edgeY = rockEdgeY(rock, dx, kWyrmRockClearance);
 			if (edgeY <= 0.f) continue;
-			const float influence = smoother01(1.f - std::fabs(dx) / rock.radiusPhase);
+			const float influence = smoother01(1.f - std::fabs(dx) / (rock.radiusPhase + rockClearancePhase(rock)));
 			if (dyCenter > 0.f && clampedOffset > 0.f) {
-				const float blocked = std::max(0.f, dyCenter - edgeY - kWyrmRockClearance);
+				const float blocked = std::max(0.f, dyCenter - edgeY);
 				clampedOffset = clampedOffset + influence * (std::min(clampedOffset, blocked) - clampedOffset);
 			}
 			else if (dyCenter < 0.f && clampedOffset < 0.f) {
-				const float blocked = std::min(0.f, dyCenter + edgeY + kWyrmRockClearance);
+				const float blocked = std::min(0.f, dyCenter + edgeY);
 				clampedOffset = clampedOffset + influence * (std::max(clampedOffset, blocked) - clampedOffset);
 			}
 		}
