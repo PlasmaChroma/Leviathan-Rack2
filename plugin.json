@@ -74,6 +74,17 @@
         "Visualizer"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Wyrm",
+      "name": "Wyrm",
+      "description": "Custom drawable wavetable oscillator with FM, sync, and fold.",
+      "tags": [
+        "Oscillator",
+        "Waveshaper",
+        "LFO"
+      ],
+      "hidden": false
     }
   ]
 }
