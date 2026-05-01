@@ -110,6 +110,11 @@ inline float slitherOffset(float phase, float travelPhase, float amount) {
 	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (wrap01(phase) - wrap01(travelPhase)));
 }
 
+inline float slitherSpeedFactor(float speedKnob) {
+	// Midpoint (0.5) preserves previous baseline speed. Left slows, right speeds up.
+	return std::pow(2.f, (clamp01(speedKnob) - 0.5f) * 4.f);
+}
+
 } // namespace
 
 struct Wyrm;
@@ -127,6 +132,7 @@ struct Wyrm : Module {
 		FM_ATTEN_PARAM,
 		FOLD_PARAM,
 		SLITHER_PARAM,
+		SLITHER_SPEED_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -165,6 +171,7 @@ struct Wyrm : Module {
 		configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuator");
 		configParam(FOLD_PARAM, 0.f, 1.f, 0.f, "Fold amount");
 		configParam(SLITHER_PARAM, 0.f, 1.f, 0.f, "Slither", "%", 0.f, 100.f);
+		configParam(SLITHER_SPEED_PARAM, 0.f, 1.f, 0.5f, "Slither speed");
 		configInput(VOCT_INPUT, "V/Oct");
 		configInput(FM_INPUT, "FM");
 		configInput(SYNC_INPUT, "Sync");
@@ -315,6 +322,7 @@ struct Wyrm : Module {
 		const float fine = params[FINE_PARAM].getValue() / 1200.f;
 		const float foldBase = params[FOLD_PARAM].getValue();
 		const float slitherAmount = clamp01(params[SLITHER_PARAM].getValue());
+		const float slitherSpeed = slitherSpeedFactor(params[SLITHER_SPEED_PARAM].getValue());
 
 		for (int c = 0; c < channels; ++c) {
 			if (inputs[SYNC_INPUT].isConnected()) {
@@ -329,7 +337,8 @@ struct Wyrm : Module {
 			float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 			hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 			phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
-			const float slitherHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
+			const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
+			const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 			slitherPhase[c] = wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
 			const float raw = clamp(lookupWave(phase[c]) + slitherOffset(phase[c], slitherPhase[c], slitherAmount), -1.f, 1.f);
 			const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(inputs[FOLD_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
@@ -371,6 +380,8 @@ std::string WyrmFreqQuantity::getDisplayValueString() {
 struct WyrmWaveEditor : TransparentWidget {
 	Wyrm* module = nullptr;
 	int lastIndex = -1;
+	float visualSlitherPhase = 0.f;
+	double lastVisualUpdateSec = -1.0;
 
 	explicit WyrmWaveEditor(Wyrm* m) {
 		module = m;
@@ -389,16 +400,30 @@ struct WyrmWaveEditor : TransparentWidget {
 		return clamp(1.f - 2.f * n, -1.f, 1.f);
 	}
 
+	void advanceVisualSlitherPhase(double nowSec) {
+		if (!std::isfinite(nowSec)) return;
+		if (lastVisualUpdateSec < 0.0 || !std::isfinite(lastVisualUpdateSec)) {
+			lastVisualUpdateSec = nowSec;
+			return;
+		}
+		const float elapsed = clamp(float(nowSec - lastVisualUpdateSec), 0.f, 0.25f);
+		lastVisualUpdateSec = nowSec;
+		if (!module) return;
+		const float speedFactor = slitherSpeedFactor(module->params[Wyrm::SLITHER_SPEED_PARAM].getValue());
+		visualSlitherPhase = wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
+	}
+
+	float slitherOffsetForIndex(int index) const {
+		if (!module || module->pointCount <= 0) return 0.f;
+		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
+		if (amount <= 1e-5f) return 0.f;
+		const float phase = (float(index) + 0.5f) / float(module->pointCount);
+		return slitherOffset(phase, visualSlitherPhase, amount);
+	}
+
 	float displayWavePoint(int index) const {
 		if (!module) return 0.f;
-		float v = module->getWavePoint(index);
-		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
-		if (amount > 1e-5f && module->pointCount > 0) {
-			const float phase = (float(index) + 0.5f) / float(module->pointCount);
-			const float travelPhase = float(std::fmod(0.65 * system::getTime(), 1.0));
-			v += slitherOffset(phase, travelPhase, amount);
-		}
-		return clamp(v, -1.f, 1.f);
+		return clamp(module->getWavePoint(index) + slitherOffsetForIndex(index), -1.f, 1.f);
 	}
 
 	Vec currentLocalMousePos() const {
@@ -411,17 +436,22 @@ struct WyrmWaveEditor : TransparentWidget {
 	void applyPointFromPos(Vec pos) {
 		if (!module || module->editorLocked) return;
 		const int idx = indexFromX(pos.x);
-		const float v = valueFromY(pos.y);
+		const float targetDisplayValue = valueFromY(pos.y);
+		const double nowSec = system::getTime();
+		advanceVisualSlitherPhase(nowSec);
+		auto writeDisplayValue = [&](int pointIndex) {
+			module->setWavePoint(pointIndex, targetDisplayValue - slitherOffsetForIndex(pointIndex));
+		};
 		if (lastIndex >= 0 && lastIndex != idx) {
 			const int lo = std::min(lastIndex, idx);
 			const int hi = std::max(lastIndex, idx);
 			for (int i = lo; i <= hi; ++i) {
 				// Operator-style paint gesture: each crossed segment is set directly.
-				module->setWavePoint(i, v);
+				writeDisplayValue(i);
 			}
 		}
 		else {
-			module->setWavePoint(idx, v);
+			writeDisplayValue(idx);
 		}
 		lastIndex = idx;
 	}
@@ -456,6 +486,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!args.vg) return;
+		advanceVisualSlitherPhase(system::getTime());
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -690,6 +721,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
 		Vec slitherPos(17.50f, 112.80f);
+		Vec slitherSpeedPos(26.50f, 112.80f);
 		Vec voctPos(14.0f, 111.0f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
@@ -701,6 +733,7 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FM_ATTEN_PARAM", &fmAttenPos);
 		applyPt("WYRM_FOLD_PARAM", &foldPos);
 		applyPt("WYRM_SLITHER_PARAM", &slitherPos);
+		applyPt("WYRM_SLITHER_SPEED_PARAM", &slitherSpeedPos);
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
@@ -718,6 +751,7 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
