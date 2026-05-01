@@ -415,15 +415,16 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgMoveTo(args.vg, x, midY);
 			nvgLineTo(args.vg, x, y);
 			nvgStrokeWidth(args.vg, 2.f);
-			nvgStrokeColor(args.vg, nvgRGBA(246, 214, 62, 230));
+			nvgStrokeColor(args.vg, nvgRGBA(203, 165, 83, 210));
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, 2.1f);
-			nvgFillColor(args.vg, nvgRGBA(255, 232, 120, 250));
+			nvgFillColor(args.vg, nvgRGBA(235, 203, 124, 250));
 			nvgFill(args.vg);
 		}
 
+		// Sandwyrm body under-stroke.
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
@@ -431,9 +432,32 @@ struct WyrmWaveEditor : TransparentWidget {
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
 		}
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStrokeColor(args.vg, nvgRGBA(220, 190, 72, 110));
+		nvgStrokeWidth(args.vg, 3.2f);
+		nvgStrokeColor(args.vg, nvgRGBA(121, 86, 38, 135));
 		nvgStroke(args.vg);
+
+		// Sandwyrm body highlight stroke.
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < count; ++i) {
+			const float x = (float(i) + 0.5f) * dx;
+			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
+			if (i == 0) nvgMoveTo(args.vg, x, y);
+			else nvgLineTo(args.vg, x, y);
+		}
+		nvgStrokeWidth(args.vg, 1.35f);
+		nvgStrokeColor(args.vg, nvgRGBA(238, 202, 120, 205));
+		nvgStroke(args.vg);
+
+		// Sparse scale-like beads along the body.
+		for (int i = 1; i < count; i += 2) {
+			const float x = (float(i) + 0.5f) * dx;
+			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
+			const float r = 1.1f + 0.55f * std::sin(0.45f * float(i));
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r);
+			nvgFillColor(args.vg, nvgRGBA(166, 124, 62, 185));
+			nvgFill(args.vg);
+		}
 
 	}
 };
@@ -517,9 +541,9 @@ struct WyrmWidget : ModuleWidget {
 		addChild(editor);
 
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
