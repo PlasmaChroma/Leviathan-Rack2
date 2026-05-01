@@ -266,13 +266,20 @@ struct WyrmWaveEditor : TransparentWidget {
 	int indexFromX(float x) const {
 		if (box.size.x <= 1.f) return 0;
 		const float n = clamp(x / box.size.x, 0.f, 1.f);
-		return clamp(int(std::round(n * float(kWyrmPointCount - 1))), 0, kWyrmPointCount - 1);
+		return clamp(int(std::floor(n * float(kWyrmPointCount))), 0, kWyrmPointCount - 1);
 	}
 
 	float valueFromY(float y) const {
 		if (box.size.y <= 1.f) return 0.f;
 		const float n = clamp(y / box.size.y, 0.f, 1.f);
 		return clamp(1.f - 2.f * n, -1.f, 1.f);
+	}
+
+	Vec currentLocalMousePos() const {
+		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+			return Vec();
+		}
+		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 	}
 
 	void applyPointFromPos(Vec pos) {
@@ -283,10 +290,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			const int lo = std::min(lastIndex, idx);
 			const int hi = std::max(lastIndex, idx);
 			for (int i = lo; i <= hi; ++i) {
-				const float t = (hi == lo) ? 0.f : float(i - lo) / float(hi - lo);
-				const float y0 = module->getWavePoint(lastIndex);
-				const float yi = std::fma(v - y0, t, y0);
-				module->setWavePoint(i, yi);
+				// Operator-style paint gesture: each crossed segment is set directly.
+				module->setWavePoint(i, v);
 			}
 		}
 		else {
@@ -315,12 +320,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	void onDragMove(const event::DragMove& e) override {
-		if (!module || module->editorLocked) {
+		if (!module || module->editorLocked || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 			Widget::onDragMove(e);
 			return;
 		}
-		const Vec local = e.mouseDelta + APP->scene->rack->getMousePos() - getAbsoluteOffset(Vec());
-		applyPointFromPos(local);
+		applyPointFromPos(currentLocalMousePos());
 		e.consume(this);
 	}
 
@@ -351,15 +355,34 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		if (!module) return;
 
+		// Draw as discrete segments so each point reads as an editable bar.
+		const float midY = 0.5f * box.size.y;
+		const float dx = box.size.x / float(kWyrmPointCount);
+		for (int i = 0; i < kWyrmPointCount; ++i) {
+			const float x = (float(i) + 0.5f) * dx;
+			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, x, midY);
+			nvgLineTo(args.vg, x, y);
+			nvgStrokeWidth(args.vg, 2.f);
+			nvgStrokeColor(args.vg, nvgRGBA(246, 214, 62, 230));
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, 2.1f);
+			nvgFillColor(args.vg, nvgRGBA(255, 232, 120, 250));
+			nvgFill(args.vg);
+		}
+
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < kWyrmPointCount; ++i) {
-			const float x = (float(i) / float(kWyrmPointCount - 1)) * box.size.x;
+			const float x = (float(i) + 0.5f) * dx;
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
 		}
-		nvgStrokeWidth(args.vg, 2.f);
-		nvgStrokeColor(args.vg, nvgRGBA(246, 214, 62, 255));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStrokeColor(args.vg, nvgRGBA(220, 190, 72, 110));
 		nvgStroke(args.vg);
 
 		nvgFontSize(args.vg, 12.f);
