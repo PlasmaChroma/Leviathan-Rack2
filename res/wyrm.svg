@@ -249,13 +249,13 @@
    inkscape:document-units="mm"
    inkscape:zoom="2"
    inkscape:cx="7.5000001"
-   inkscape:cy="151.75"
+   inkscape:cy="271.75"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="wyrm_components"
+   inkscape:current-layer="panel_labels_reworked"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -416,7 +416,7 @@
   <g
    id="panel_labels_reworked"
    inkscape:groupmode="layer"
-   inkscape:label="Labels Reworked"
+   inkscape:label="Labels"
    style="display:inline"><text
    id="reworked_module_title_text"
    x="3541.4487"
@@ -476,99 +476,99 @@
      id="tspan16">oscillator</tspan></text>
         <text
    id="signal_in"
-   x="2591.3838"
-   y="11995.578"
+   x="1750"
+   y="7300"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan45"
-     x="2591.3838"
-     y="11995.578">IN</tspan></text><text
+     x="1750"
+     y="7300">FREQ</tspan></text><text
    id="reso_cv_label"
-   x="1634.9987"
-   y="11995.578"
+   x="3556"
+   y="7300"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan44"
-     x="1634.9987"
-     y="11995.578">RES</tspan></text><text
+     x="3556"
+     y="7300">FINE</tspan></text><text
    id="level_lbl"
-   x="1646.7407"
-   y="9375.2188"
+   x="5362"
+   y="7300"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan43"
-     x="1646.7407"
-     y="9375.2188">LEVEL</tspan></text><text
+     x="5362"
+     y="7300">FM ATTEN</tspan></text><text
    id="span_lbl"
-   x="5450.1885"
-   y="9378"
+   x="3556"
+   y="9150"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan50"
-     x="5450.1885"
-     y="9378">SPAN</tspan></text><text
+     x="3556"
+     y="9150">FOLD</tspan></text><text
    id="fm_cv_label"
-   x="679.99829"
-   y="11995.578"
+   x="1400"
+   y="10620"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan_fm"
-     x="679.99829"
-     y="11995.578">FM</tspan></text><text
+     x="1400"
+     y="10620">V/OCT</tspan></text><text
    id="voct_label"
-   x="3544.9988"
-   y="11995.578"
+   x="2800"
+   y="10620"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan46"
-     x="3544.9988"
-     y="11995.578">V/OCT</tspan></text><text
+     x="2800"
+     y="10620">FM</tspan></text><text
    id="span_cv_label"
-   x="6409.9985"
-   y="11995.578"
+   x="4300"
+   y="10620"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan49"
-     x="6409.9985"
-     y="11995.578">SPAN</tspan></text><text
+     x="4300"
+     y="10620">SYNC</tspan></text><text
    id="balance_cv_label"
-   x="5454.9985"
-   y="11995.578"
+   x="5700"
+   y="10620"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan48"
-     x="5454.9985"
-     y="11995.578">BAL</tspan></text><text
+     x="5700"
+     y="10620">FOLD CV</tspan></text><text
    id="signal_out"
-   x="4509.9985"
-   y="11995.578"
+   x="2400"
+   y="11720"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan47"
-     x="4509.9985"
-     y="11995.578">OUT</tspan></text><text
+     x="2400"
+     y="11720">RAW</tspan></text><text
    id="sm_lbl"
-   x="2846.76"
-   y="9016.75"
+   x="4700"
+   y="11720"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan60"
-     x="2846.76"
-     y="9016.75">SM</tspan></text><text
+     x="4700"
+     y="11720">OUT</tspan></text><text
    id="xm_lbl"
    x="4254.6919"
    y="9019.8945"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan61"
