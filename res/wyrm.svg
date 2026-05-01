@@ -419,6 +419,12 @@
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
+   id="WYRM_SLITHER_PARAM"
+   cx="1750"
+   cy="11280"
+   r="220"
+   style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
    id="WYRM_VOCT_INPUT"
    cx="1400"
    cy="9690"
@@ -554,6 +560,15 @@
      id="tspan50"
      x="3556"
      y="11970">FOLD</tspan></text><text
+   id="slither_lbl"
+   x="1750"
+   y="11970"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan_slither"
+     x="1750"
+     y="11970">SLITHER</tspan></text><text
    id="fm_cv_label"
    x="1400"
    y="10380.049"
