@@ -189,7 +189,7 @@ struct Wyrm : Module {
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
 
 	bool lfoMode = false;
-	bool editorLocked = true;
+	bool editorLocked = false;
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;
 	int rockCount = 0;
@@ -804,16 +804,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 120));
 		nvgStroke(args.vg);
 
-		for (int i = 1; i < 4; ++i) {
-			const float x = (box.size.x * i) / 4.f;
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, x, 0.f);
-			nvgLineTo(args.vg, x, box.size.y);
-			nvgStrokeWidth(args.vg, 1.f);
-			nvgStrokeColor(args.vg, nvgRGBA(120, 120, 120, 48));
-			nvgStroke(args.vg);
-		}
-
 		if (!module) return;
 
 		Vec mouseLocal = currentLocalMousePos();
@@ -1051,6 +1041,150 @@ struct WyrmPointCountMenuItem : MenuItem {
 	}
 };
 
+struct WyrmEditorIconButton : TransparentWidget {
+	enum Kind {
+		LOCK,
+		RESET
+	};
+
+	Wyrm* module = nullptr;
+	Kind kind = LOCK;
+	bool hovered = false;
+
+	WyrmEditorIconButton(Wyrm* module, Kind kind) {
+		this->module = module;
+		this->kind = kind;
+	}
+
+	void step() override {
+		hovered = false;
+		if (parent && APP && APP->scene && APP->scene->rack) {
+			const Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
+			hovered = (local.x >= 0.f && local.x <= box.size.x && local.y >= 0.f && local.y <= box.size.y);
+		}
+		TransparentWidget::step();
+	}
+
+	void onHover(const event::Hover& e) override {
+		hovered = true;
+		TransparentWidget::onHover(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		hovered = false;
+		TransparentWidget::onLeave(e);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			TransparentWidget::onButton(e);
+			return;
+		}
+		if (kind == LOCK) {
+			module->editorLocked = !module->editorLocked;
+		}
+		else {
+			module->setFactoryShape(module->selectedShape);
+		}
+		e.consume(this);
+	}
+
+	void drawLockIcon(const DrawArgs& args, NVGcolor color) {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		const float cx = 0.5f * w;
+		const float bodyW = 0.54f * w;
+		const float bodyH = 0.32f * h;
+		const float bodyX = cx - 0.5f * bodyW;
+		const float bodyY = 0.51f * h;
+		const float bodyR = 0.06f * w;
+		const float shackleW = 0.34f * w;
+		const float shackleTop = 0.19f * h;
+		const float shackleY = bodyY + 0.03f * h;
+		const bool locked = module && module->editorLocked;
+
+		nvgStrokeWidth(args.vg, 2.3f);
+		nvgStrokeColor(args.vg, color);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+
+		nvgBeginPath(args.vg);
+		if (locked) {
+			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
+			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.18f * h);
+			nvgQuadTo(args.vg, cx, shackleTop, cx + 0.5f * shackleW, shackleTop + 0.18f * h);
+			nvgLineTo(args.vg, cx + 0.5f * shackleW, shackleY);
+		}
+		else {
+			const float detachedY = shackleY - 0.22f * h;
+			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
+			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.02f * h);
+			nvgQuadTo(args.vg, cx, shackleTop - 0.16f * h, cx + 0.5f * shackleW, shackleTop + 0.02f * h);
+			nvgLineTo(args.vg, cx + 0.5f * shackleW, detachedY);
+		}
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, bodyX, bodyY, bodyW, bodyH, bodyR);
+		nvgFillColor(args.vg, color);
+		nvgFill(args.vg);
+
+		NVGcolor cutout = nvgRGBA(14, 14, 14, 255);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx, bodyY + 0.40f * bodyH, 0.054f * w);
+		nvgFillColor(args.vg, cutout);
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, cx - 0.024f * w, bodyY + 0.40f * bodyH, 0.048f * w, 0.22f * bodyH, 0.9f);
+		nvgFillColor(args.vg, cutout);
+		nvgFill(args.vg);
+	}
+
+	void drawResetIcon(const DrawArgs& args, NVGcolor color) {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		const float cx = 0.56f * w;
+		const float cy = 0.56f * h;
+		const float r = 0.27f * std::min(w, h);
+		const float shaftAngle = 0.90f * float(M_PI);
+		const float endAngle = -0.30f * float(M_PI);
+		const Vec shaftBottom(cx + std::cos(shaftAngle) * r, cy + std::sin(shaftAngle) * r);
+		const Vec shaftTop(shaftBottom.x, cy - 0.98f * r);
+		const float tipX = shaftTop.x - 0.20f * w;
+		const float baseX = shaftTop.x + 0.01f * w;
+		const float halfH = 0.105f * h;
+
+		nvgStrokeWidth(args.vg, 1.95f);
+		nvgStrokeColor(args.vg, color);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, cx, cy, r, shaftAngle, endAngle, NVG_CCW);
+		nvgMoveTo(args.vg, shaftBottom.x, shaftBottom.y);
+		nvgLineTo(args.vg, shaftTop.x, shaftTop.y);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, tipX, shaftTop.y);
+		nvgLineTo(args.vg, baseX, shaftTop.y - halfH);
+		nvgLineTo(args.vg, baseX, shaftTop.y + halfH);
+		nvgClosePath(args.vg);
+		nvgFillColor(args.vg, color);
+		nvgFill(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const int level = hovered ? 218 : 118;
+		NVGcolor color = nvgRGBA(level, level, level, 255);
+		if (kind == LOCK) {
+			drawLockIcon(args, color);
+		}
+		else {
+			drawResetIcon(args, color);
+		}
+	}
+};
+
 struct WyrmWidget : ModuleWidget {
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
@@ -1075,6 +1209,8 @@ struct WyrmWidget : ModuleWidget {
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
+		Vec lockPos(10.50f, 75.50f);
+		Vec resetPos(17.25f, 75.50f);
 		Vec slitherPos(17.50f, 112.80f);
 		Vec slitherSpeedPos(26.50f, 112.80f);
 		Vec voctPos(14.0f, 111.0f);
@@ -1087,6 +1223,8 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FINE_PARAM", &finePos);
 		applyPt("WYRM_FM_ATTEN_PARAM", &fmAttenPos);
 		applyPt("WYRM_FOLD_PARAM", &foldPos);
+		applyPt("WYRM_LOCK_BUTTON", &lockPos);
+		applyPt("WYRM_RESET_BUTTON", &resetPos);
 		applyPt("WYRM_SLITHER_PARAM", &slitherPos);
 		applyPt("WYRM_SLITHER_SPEED_PARAM", &slitherSpeedPos);
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
@@ -1101,8 +1239,17 @@ struct WyrmWidget : ModuleWidget {
 		editor->box.size = mm2px(editorRectMm.size);
 		addChild(editor);
 
+		auto addEditorIconButton = [&](WyrmEditorIconButton::Kind kind, Vec posMm) {
+			auto* button = new WyrmEditorIconButton(module, kind);
+			button->box.size = mm2px(Vec(5.2f, 5.2f));
+			button->box.pos = mm2px(posMm).minus(button->box.size.mult(0.5f));
+			addChild(button);
+		};
+		addEditorIconButton(WyrmEditorIconButton::LOCK, lockPos);
+		addEditorIconButton(WyrmEditorIconButton::RESET, resetPos);
+
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
+		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));

@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="wyrm.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.3 (1:1.4.3+202512261034+0d15f75042)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -248,14 +248,14 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="2.8284271"
-   inkscape:cx="95.105862"
-   inkscape:cy="367.8723"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:cx="95.105863"
+   inkscape:cy="367.87231"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="1978"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="svg488"
+   inkscape:current-layer="wyrm_components"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -419,14 +419,26 @@
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
+   id="WYRM_LOCK_BUTTON"
+   cx="320"
+   cy="7550"
+   r="160"
+   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_RESET_BUTTON"
+   cx="755"
+   cy="7550"
+   r="160"
+   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
    id="WYRM_SLITHER_PARAM"
-   cx="1750"
+   cx="709.98511"
    cy="11280"
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_SLITHER_SPEED_PARAM"
-   cx="2650"
+   cx="1819.9965"
    cy="11280"
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -567,23 +579,21 @@
      x="3556"
      y="11970">FOLD</tspan></text><text
    id="slither_lbl"
-   x="1750"
+   x="709.98511"
    y="11970"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
-     id="tspan_slither"
-     x="1750"
-     y="11970">SLITHER</tspan></text><text
+     id="tspan2">SL.AMP</tspan></text><text
    id="speed_lbl"
-   x="2650"
+   x="1819.9965"
    y="11970"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
-     id="tspan_speed"
-     x="2650"
-     y="11970">SPEED</tspan></text><text
+     id="tspan3"
+     x="1819.9965"
+     y="11970">SL.SPD</tspan></text><text
    id="fm_cv_label"
    x="1400"
    y="10380.049"
