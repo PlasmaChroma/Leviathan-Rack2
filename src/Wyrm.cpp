@@ -459,9 +459,14 @@ struct WyrmWaveEditor : TransparentWidget {
 		// Draw as discrete segments so each point reads as an editable bar.
 		const float midY = 0.5f * box.size.y;
 		const int count = module->pointCount;
-		const float dx = box.size.x / float(count);
+		const float edgeInset = 2.2f;
+		const float drawWidth = std::max(1.f, box.size.x - 2.f * edgeInset);
+		const float dx = drawWidth / float(count);
+		auto xAt = [&](int i) {
+			return edgeInset + (float(i) + 0.5f) * dx;
+		};
 		for (int i = 0; i < count; ++i) {
-			const float x = (float(i) + 0.5f) * dx;
+			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, x, midY);
@@ -481,7 +486,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
-			const float x = (float(i) + 0.5f) * dx;
+			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
@@ -495,7 +500,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
-			const float x = (float(i) + 0.5f) * dx;
+			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
@@ -509,7 +514,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
-			const float x = (float(i) + 0.5f) * dx;
+			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
@@ -520,7 +525,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		// Scale plates along the body.
 		for (int i = 0; i < count; ++i) {
-			const float x = (float(i) + 0.5f) * dx;
+			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
 			const float plateW = clamp(0.31f * dx, 1.0f, 3.4f);
 			const float plateH = 0.95f + 0.35f * std::sin(0.33f * float(i));
@@ -537,11 +542,42 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 		}
 
-		// Small head marker on the right end of the wyrm.
+		// Tail marker on the left end of the wyrm (rounded/organic).
 		if (count >= 2) {
-			const float xHead = (float(count - 1) + 0.5f) * dx;
+			const float xTail = xAt(0);
+			const float yTail = (0.5f - 0.5f * module->getWavePoint(0)) * box.size.y;
+			const float xNext = xAt(1);
+			const float yNext = (0.5f - 0.5f * module->getWavePoint(1)) * box.size.y;
+			Vec tangent = Vec(xNext - xTail, yNext - yTail);
+			const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
+			if (tangentLen > 1e-4f) {
+				tangent = tangent.div(tangentLen);
+			}
+			else {
+				tangent = Vec(1.f, 0.f);
+			}
+			const Vec normal(-tangent.y, tangent.x);
+			const Vec base = Vec(xTail, yTail);
+			const Vec tip = base.minus(tangent.mult(4.4f));
+			const Vec leftBase = base.plus(normal.mult(1.45f));
+			const Vec rightBase = base.minus(normal.mult(1.45f));
+			const Vec leftCtrl = base.minus(tangent.mult(2.1f)).plus(normal.mult(2.15f));
+			const Vec rightCtrl = base.minus(tangent.mult(2.1f)).minus(normal.mult(2.15f));
+
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, leftBase.x, leftBase.y);
+			nvgQuadTo(args.vg, leftCtrl.x, leftCtrl.y, tip.x, tip.y);
+			nvgQuadTo(args.vg, rightCtrl.x, rightCtrl.y, rightBase.x, rightBase.y);
+			nvgClosePath(args.vg);
+			nvgFillColor(args.vg, nvgRGBA(152, 116, 63, 220));
+			nvgFill(args.vg);
+		}
+
+		// Head marker on the right end of the wyrm (compact/organic).
+		if (count >= 2) {
+			const float xHead = xAt(count - 1);
 			const float yHead = (0.5f - 0.5f * module->getWavePoint(count - 1)) * box.size.y;
-			const float xPrev = (float(count - 2) + 0.5f) * dx;
+			const float xPrev = xAt(count - 2);
 			const float yPrev = (0.5f - 0.5f * module->getWavePoint(count - 2)) * box.size.y;
 			Vec tangent = Vec(xHead - xPrev, yHead - yPrev);
 			const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
@@ -552,23 +588,38 @@ struct WyrmWaveEditor : TransparentWidget {
 				tangent = Vec(1.f, 0.f);
 			}
 			const Vec normal(-tangent.y, tangent.x);
-			const Vec nose = Vec(xHead, yHead).plus(tangent.mult(4.4f));
-			const Vec leftJaw = Vec(xHead, yHead).minus(tangent.mult(1.6f)).plus(normal.mult(2.0f));
-			const Vec rightJaw = Vec(xHead, yHead).minus(tangent.mult(1.6f)).minus(normal.mult(2.0f));
+			const Vec center = Vec(xHead, yHead);
+			const Vec tip = center.plus(tangent.mult(3.35f));
+			const Vec leftBase = center.minus(tangent.mult(1.25f)).plus(normal.mult(1.85f));
+			const Vec rightBase = center.minus(tangent.mult(1.25f)).minus(normal.mult(1.85f));
+			const Vec leftCtrl = center.plus(tangent.mult(0.55f)).plus(normal.mult(2.15f));
+			const Vec rightCtrl = center.plus(tangent.mult(0.55f)).minus(normal.mult(2.15f));
+			const Vec backCtrl = center.minus(tangent.mult(2.25f));
 
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, nose.x, nose.y);
-			nvgLineTo(args.vg, leftJaw.x, leftJaw.y);
-			nvgLineTo(args.vg, rightJaw.x, rightJaw.y);
+			nvgMoveTo(args.vg, leftBase.x, leftBase.y);
+			nvgQuadTo(args.vg, leftCtrl.x, leftCtrl.y, tip.x, tip.y);
+			nvgQuadTo(args.vg, rightCtrl.x, rightCtrl.y, rightBase.x, rightBase.y);
+			nvgQuadTo(args.vg, backCtrl.x, backCtrl.y, leftBase.x, leftBase.y);
 			nvgClosePath(args.vg);
 			nvgFillColor(args.vg, nvgRGBA(204, 168, 102, 235));
 			nvgFill(args.vg);
 
+			// Integrated eye socket + slit to avoid detached "floating eye" look.
+			const Vec eye = center.minus(tangent.mult(0.35f)).plus(normal.mult(0.78f));
 			nvgBeginPath(args.vg);
-			const Vec eye = Vec(xHead, yHead).minus(tangent.mult(0.2f)).plus(normal.mult(0.95f));
-			nvgCircle(args.vg, eye.x, eye.y, 0.95f);
-			nvgFillColor(args.vg, nvgRGBA(248, 236, 182, 235));
+			nvgEllipse(args.vg, eye.x, eye.y, 1.05f, 0.72f);
+			nvgFillColor(args.vg, nvgRGBA(88, 60, 30, 195));
 			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			const Vec slitL = eye.minus(tangent.mult(0.70f));
+			const Vec slitR = eye.plus(tangent.mult(0.70f));
+			nvgMoveTo(args.vg, slitL.x, slitL.y);
+			nvgLineTo(args.vg, slitR.x, slitR.y);
+			nvgStrokeWidth(args.vg, 0.9f);
+			nvgStrokeColor(args.vg, nvgRGBA(232, 206, 132, 220));
+			nvgStroke(args.vg);
 		}
 
 	}
