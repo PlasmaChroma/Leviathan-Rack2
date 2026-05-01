@@ -8,7 +8,7 @@
 namespace {
 
 constexpr int kWyrmPointCountDefault = 32;
-constexpr int kWyrmPointCountMax = 64;
+constexpr int kWyrmPointCountMax = 128;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
 
@@ -29,6 +29,12 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Square"
 };
 
+constexpr float kWyrmAudioMinHz = 20.f;
+constexpr float kWyrmAudioMaxHz = 20000.f;
+constexpr float kWyrmLfoMinHz = 0.01f;
+constexpr float kWyrmLfoMaxHz = 100.f;
+constexpr float kWyrmFoldMakeupGain = 1.0f / std::tanh(1.f);
+
 inline float clamp01(float x) {
 	return clamp(x, 0.f, 1.f);
 }
@@ -39,6 +45,19 @@ inline float wrap01(float x) {
 
 inline float softClip(float x) {
 	return std::tanh(x);
+}
+
+inline float wyrmBaseFrequencyFromKnob(float knobNorm, bool lfoMode) {
+	const float minFreq = lfoMode ? kWyrmLfoMinHz : kWyrmAudioMinHz;
+	const float maxFreq = lfoMode ? kWyrmLfoMaxHz : kWyrmAudioMaxHz;
+	return minFreq * std::pow(maxFreq / minFreq, clamp01(knobNorm));
+}
+
+inline float wyrmKnobValueForFrequency(float hz, bool lfoMode) {
+	const float minFreq = lfoMode ? kWyrmLfoMinHz : kWyrmAudioMinHz;
+	const float maxFreq = lfoMode ? kWyrmLfoMaxHz : kWyrmAudioMaxHz;
+	hz = clamp(hz, minFreq, maxFreq);
+	return std::log(hz / minFreq) / std::log(maxFreq / minFreq);
 }
 
 inline float foldWave(float x, float amount) {
@@ -68,6 +87,14 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 }
 
 } // namespace
+
+struct Wyrm;
+
+struct WyrmFreqQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
 
 struct Wyrm : Module {
 	enum ParamId {
@@ -107,7 +134,7 @@ struct Wyrm : Module {
 
 	Wyrm() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(FREQ_PARAM, 0.f, 1.f, 0.45f, "Frequency");
+		configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.45f, "Frequency");
 		configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
 		configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuator");
 		configParam(FOLD_PARAM, 0.f, 1.f, 0.f, "Fold amount");
@@ -160,7 +187,7 @@ struct Wyrm : Module {
 
 	void setPointCount(int newPointCount) {
 		newPointCount = clamp(newPointCount, 32, kWyrmPointCountMax);
-		if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64) {
+		if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64 && newPointCount != 128) {
 			newPointCount = kWyrmPointCountDefault;
 		}
 		if (newPointCount == pointCount) {
@@ -184,7 +211,7 @@ struct Wyrm : Module {
 		}
 		const float inv = 1.f / maxAbs;
 		for (int i = 0; i < kWyrmTableSize; ++i) {
-			wavetable[i] = clamp(wavetable[i] * inv, -1.2f, 1.2f);
+			wavetable[i] = clamp(wavetable[i] * inv, -1.f, 1.f);
 		}
 	}
 
@@ -220,7 +247,7 @@ struct Wyrm : Module {
 		json_t* pointCountJ = json_object_get(root, "pointCount");
 		if (pointCountJ) {
 			int loadedPointCount = int(json_integer_value(pointCountJ));
-			if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64) {
+			if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64 || loadedPointCount == 128) {
 				pointCount = loadedPointCount;
 			}
 		}
@@ -248,10 +275,8 @@ struct Wyrm : Module {
 		outputs[OUT_OUTPUT].setChannels(channels);
 		outputs[RAW_OUTPUT].setChannels(channels);
 
-		const float minFreq = lfoMode ? 0.01f : 20.f;
-		const float maxFreq = lfoMode ? 100.f : 20000.f;
 		const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
-		const float baseFreq = minFreq * std::pow(maxFreq / minFreq, knobNorm);
+		const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoMode);
 		const float fmAtten = params[FM_ATTEN_PARAM].getValue();
 		const float fine = params[FINE_PARAM].getValue() / 1200.f;
 		const float foldBase = params[FOLD_PARAM].getValue();
@@ -268,15 +293,42 @@ struct Wyrm : Module {
 			float hz = baseFreq * std::pow(2.f, voct + fm + fine);
 			hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 			phase[c] = wrap01(phase[c] + hz * args.sampleTime);
-			const float raw = lookupWave(phase[c]);
+			const float raw = clamp(lookupWave(phase[c]), -1.f, 1.f);
 			const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(inputs[FOLD_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
 			const float foldAmt = clamp(foldBase + foldCv, 0.f, 2.f);
-			const float folded = softClip(foldWave(raw, foldAmt));
+			float folded = raw;
+			if (foldAmt > 1e-5f) {
+				folded = clamp(softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain, -1.f, 1.f);
+			}
 			outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 			outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);
 		}
 	}
 };
+
+float WyrmFreqQuantity::getDisplayValue() {
+	const auto* wyrm = static_cast<const Wyrm*>(module);
+	return wyrmBaseFrequencyFromKnob(getValue(), wyrm ? wyrm->lfoMode : false);
+}
+
+void WyrmFreqQuantity::setDisplayValue(float displayValue) {
+	const auto* wyrm = static_cast<const Wyrm*>(module);
+	setImmediateValue(wyrmKnobValueForFrequency(displayValue, wyrm ? wyrm->lfoMode : false));
+}
+
+std::string WyrmFreqQuantity::getDisplayValueString() {
+	const float hz = getDisplayValue();
+	if (hz >= 1000.f) {
+		return string::f("%.2f kHz", hz / 1000.f);
+	}
+	if (hz < 0.1f) {
+		return string::f("%.3f Hz", hz);
+	}
+	if (hz < 10.f) {
+		return string::f("%.2f Hz", hz);
+	}
+	return string::f("%.1f Hz", hz);
+}
 
 struct WyrmWaveEditor : TransparentWidget {
 	Wyrm* module = nullptr;
@@ -415,16 +467,18 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgMoveTo(args.vg, x, midY);
 			nvgLineTo(args.vg, x, y);
 			nvgStrokeWidth(args.vg, 2.f);
-			nvgStrokeColor(args.vg, nvgRGBA(203, 165, 83, 210));
+			nvgStrokeColor(args.vg, nvgRGBA(158, 132, 78, 170));
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, 2.1f);
-			nvgFillColor(args.vg, nvgRGBA(235, 203, 124, 250));
+			nvgFillColor(args.vg, nvgRGBA(235, 204, 128, 245));
 			nvgFill(args.vg);
 		}
 
-		// Sandwyrm body under-stroke.
+		// Ouroboros body under-stroke.
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
@@ -432,11 +486,13 @@ struct WyrmWaveEditor : TransparentWidget {
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
 		}
-		nvgStrokeWidth(args.vg, 3.2f);
-		nvgStrokeColor(args.vg, nvgRGBA(121, 86, 38, 135));
+		nvgStrokeWidth(args.vg, 4.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
 		nvgStroke(args.vg);
 
-		// Sandwyrm body highlight stroke.
+		// Mid-tone bronze body.
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
@@ -444,18 +500,74 @@ struct WyrmWaveEditor : TransparentWidget {
 			if (i == 0) nvgMoveTo(args.vg, x, y);
 			else nvgLineTo(args.vg, x, y);
 		}
-		nvgStrokeWidth(args.vg, 1.35f);
-		nvgStrokeColor(args.vg, nvgRGBA(238, 202, 120, 205));
+		nvgStrokeWidth(args.vg, 2.6f);
+		nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
 		nvgStroke(args.vg);
 
-		// Sparse scale-like beads along the body.
-		for (int i = 1; i < count; i += 2) {
+		// Verdigris/gold highlight along the top of the body.
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < count; ++i) {
 			const float x = (float(i) + 0.5f) * dx;
 			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
-			const float r = 1.1f + 0.55f * std::sin(0.45f * float(i));
+			if (i == 0) nvgMoveTo(args.vg, x, y);
+			else nvgLineTo(args.vg, x, y);
+		}
+		nvgStrokeWidth(args.vg, 1.15f);
+		nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
+		nvgStroke(args.vg);
+
+		// Scale plates along the body.
+		for (int i = 0; i < count; ++i) {
+			const float x = (float(i) + 0.5f) * dx;
+			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
+			const float plateW = clamp(0.31f * dx, 1.0f, 3.4f);
+			const float plateH = 0.95f + 0.35f * std::sin(0.33f * float(i));
+			for (int lane = 0; lane < 2; ++lane) {
+				const float laneOffset = (lane == 0) ? -1.1f : 1.1f;
+				const float laneShift = (lane == 0) ? -0.18f * dx : 0.18f * dx;
+				nvgBeginPath(args.vg);
+				nvgEllipse(args.vg, x + laneShift, y + laneOffset, plateW, plateH);
+				nvgFillColor(args.vg,
+					((i + lane) % 3) == 0
+						? nvgRGBA(202, 168, 102, 185)
+						: nvgRGBA(150, 110, 56, 150));
+				nvgFill(args.vg);
+			}
+		}
+
+		// Small head marker on the right end of the wyrm.
+		if (count >= 2) {
+			const float xHead = (float(count - 1) + 0.5f) * dx;
+			const float yHead = (0.5f - 0.5f * module->getWavePoint(count - 1)) * box.size.y;
+			const float xPrev = (float(count - 2) + 0.5f) * dx;
+			const float yPrev = (0.5f - 0.5f * module->getWavePoint(count - 2)) * box.size.y;
+			Vec tangent = Vec(xHead - xPrev, yHead - yPrev);
+			const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
+			if (tangentLen > 1e-4f) {
+				tangent = tangent.div(tangentLen);
+			}
+			else {
+				tangent = Vec(1.f, 0.f);
+			}
+			const Vec normal(-tangent.y, tangent.x);
+			const Vec nose = Vec(xHead, yHead).plus(tangent.mult(4.4f));
+			const Vec leftJaw = Vec(xHead, yHead).minus(tangent.mult(1.6f)).plus(normal.mult(2.0f));
+			const Vec rightJaw = Vec(xHead, yHead).minus(tangent.mult(1.6f)).minus(normal.mult(2.0f));
+
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, r);
-			nvgFillColor(args.vg, nvgRGBA(166, 124, 62, 185));
+			nvgMoveTo(args.vg, nose.x, nose.y);
+			nvgLineTo(args.vg, leftJaw.x, leftJaw.y);
+			nvgLineTo(args.vg, rightJaw.x, rightJaw.y);
+			nvgClosePath(args.vg);
+			nvgFillColor(args.vg, nvgRGBA(204, 168, 102, 235));
+			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			const Vec eye = Vec(xHead, yHead).minus(tangent.mult(0.2f)).plus(normal.mult(0.95f));
+			nvgCircle(args.vg, eye.x, eye.y, 0.95f);
+			nvgFillColor(args.vg, nvgRGBA(248, 236, 182, 235));
 			nvgFill(args.vg);
 		}
 
@@ -564,7 +676,7 @@ struct WyrmWidget : ModuleWidget {
 		menu->addChild(createBoolPtrMenuItem("Lock Wave Editor", "", &module->editorLocked));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Point Count"));
-		for (int count : {32, 48, 64}) {
+		for (int count : {32, 48, 64, 128}) {
 			auto* item = new WyrmPointCountMenuItem();
 			item->text = string::f("%d", count);
 			item->module = module;
