@@ -43,8 +43,26 @@ inline float wrap01(float x) {
 	return x - std::floor(x);
 }
 
+inline float wrap01Fast(float x) {
+	if (x >= 1.f) {
+		x -= 1.f;
+	}
+	else if (x < 0.f) {
+		x += 1.f;
+	}
+	return x;
+}
+
+inline float fastTanh(float x) {
+	const float x2 = x * x;
+	if (x2 < 9.f) {
+		return x * (27.f + x2) / (27.f + 9.f * x2);
+	}
+	return (x > 0.f) ? 1.f : -1.f;
+}
+
 inline float softClip(float x) {
-	return std::tanh(x);
+	return fastTanh(x);
 }
 
 inline float wyrmBaseFrequencyFromKnob(float knobNorm, bool lfoMode) {
@@ -216,10 +234,17 @@ struct Wyrm : Module {
 	}
 
 	float lookupWave(float ph) const {
-		const float x = wrap01(ph) * float(kWyrmTableSize);
-		const int i0 = int(std::floor(x)) % kWyrmTableSize;
-		const int i1 = (i0 + 1) % kWyrmTableSize;
-		const float t = x - std::floor(x);
+		float p = ph;
+		if (p >= 1.f) {
+			p -= 1.f;
+		}
+		else if (p < 0.f) {
+			p += 1.f;
+		}
+		const float x = p * float(kWyrmTableSize);
+		const int i0 = int(x);
+		const int i1 = (i0 + 1 < kWyrmTableSize) ? (i0 + 1) : 0;
+		const float t = x - float(i0);
 		return std::fma((wavetable[i1] - wavetable[i0]), t, wavetable[i0]);
 	}
 
@@ -290,9 +315,9 @@ struct Wyrm : Module {
 			}
 			const float voct = inputs[VOCT_INPUT].isConnected() ? inputs[VOCT_INPUT].getPolyVoltage(c) : 0.f;
 			const float fm = inputs[FM_INPUT].isConnected() ? inputs[FM_INPUT].getPolyVoltage(c) * fmAtten : 0.f;
-			float hz = baseFreq * std::pow(2.f, voct + fm + fine);
+			float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 			hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
-			phase[c] = wrap01(phase[c] + hz * args.sampleTime);
+			phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
 			const float raw = clamp(lookupWave(phase[c]), -1.f, 1.f);
 			const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(inputs[FOLD_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
 			const float foldAmt = clamp(foldBase + foldCv, 0.f, 2.f);
@@ -481,16 +506,62 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFill(args.vg);
 		}
 
+		// Constrain stylized body/texture rendering to the waveform editor bounds.
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+
 		// Ouroboros body under-stroke.
+		auto emitRoundedBodyPath = [&]() {
+			const float roundCosThreshold = -0.25f; // smooth most corners, preserve very sharp reversals
+			if (count <= 0) {
+				return;
+			}
+			if (count == 1) {
+				const float x = xAt(0);
+				const float y = (0.5f - 0.5f * module->getWavePoint(0)) * box.size.y;
+				nvgMoveTo(args.vg, x, y);
+				return;
+			}
+
+			auto pointAt = [&](int i) {
+				return Vec(xAt(i), (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y);
+			};
+
+			const Vec pStart = pointAt(0);
+			nvgMoveTo(args.vg, pStart.x, pStart.y);
+
+			for (int i = 1; i < count - 1; ++i) {
+				const Vec p0 = pointAt(i - 1);
+				const Vec p1 = pointAt(i);
+				const Vec p2 = pointAt(i + 1);
+				Vec vIn = p1.minus(p0);
+				Vec vOut = p2.minus(p1);
+				const float inLen = std::sqrt(vIn.x * vIn.x + vIn.y * vIn.y);
+				const float outLen = std::sqrt(vOut.x * vOut.x + vOut.y * vOut.y);
+				if (inLen < 1e-4f || outLen < 1e-4f) {
+					nvgLineTo(args.vg, p1.x, p1.y);
+					continue;
+				}
+				vIn = vIn.div(inLen);
+				vOut = vOut.div(outLen);
+				const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
+				if (cornerCos >= roundCosThreshold) {
+					const Vec midOut = p1.plus(p2).mult(0.5f);
+					nvgQuadTo(args.vg, p1.x, p1.y, midOut.x, midOut.y);
+				}
+				else {
+					nvgLineTo(args.vg, p1.x, p1.y);
+				}
+			}
+
+			const Vec pEnd = pointAt(count - 1);
+			nvgLineTo(args.vg, pEnd.x, pEnd.y);
+		};
+
 		nvgLineJoin(args.vg, NVG_ROUND);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
-		for (int i = 0; i < count; ++i) {
-			const float x = xAt(i);
-			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
-			if (i == 0) nvgMoveTo(args.vg, x, y);
-			else nvgLineTo(args.vg, x, y);
-		}
+		emitRoundedBodyPath();
 		nvgStrokeWidth(args.vg, 4.0f);
 		nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
 		nvgStroke(args.vg);
@@ -499,12 +570,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineJoin(args.vg, NVG_ROUND);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
-		for (int i = 0; i < count; ++i) {
-			const float x = xAt(i);
-			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
-			if (i == 0) nvgMoveTo(args.vg, x, y);
-			else nvgLineTo(args.vg, x, y);
-		}
+		emitRoundedBodyPath();
 		nvgStrokeWidth(args.vg, 2.6f);
 		nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
 		nvgStroke(args.vg);
@@ -513,12 +579,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineJoin(args.vg, NVG_ROUND);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgBeginPath(args.vg);
-		for (int i = 0; i < count; ++i) {
-			const float x = xAt(i);
-			const float y = (0.5f - 0.5f * module->getWavePoint(i)) * box.size.y;
-			if (i == 0) nvgMoveTo(args.vg, x, y);
-			else nvgLineTo(args.vg, x, y);
-		}
+		emitRoundedBodyPath();
 		nvgStrokeWidth(args.vg, 1.15f);
 		nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
 		nvgStroke(args.vg);
@@ -541,86 +602,8 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgFill(args.vg);
 			}
 		}
-
-		// Tail marker on the left end of the wyrm (rounded/organic).
-		if (count >= 2) {
-			const float xTail = xAt(0);
-			const float yTail = (0.5f - 0.5f * module->getWavePoint(0)) * box.size.y;
-			const float xNext = xAt(1);
-			const float yNext = (0.5f - 0.5f * module->getWavePoint(1)) * box.size.y;
-			Vec tangent = Vec(xNext - xTail, yNext - yTail);
-			const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-			if (tangentLen > 1e-4f) {
-				tangent = tangent.div(tangentLen);
-			}
-			else {
-				tangent = Vec(1.f, 0.f);
-			}
-			const Vec normal(-tangent.y, tangent.x);
-			const Vec base = Vec(xTail, yTail);
-			const Vec tip = base.minus(tangent.mult(4.4f));
-			const Vec leftBase = base.plus(normal.mult(1.45f));
-			const Vec rightBase = base.minus(normal.mult(1.45f));
-			const Vec leftCtrl = base.minus(tangent.mult(2.1f)).plus(normal.mult(2.15f));
-			const Vec rightCtrl = base.minus(tangent.mult(2.1f)).minus(normal.mult(2.15f));
-
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, leftBase.x, leftBase.y);
-			nvgQuadTo(args.vg, leftCtrl.x, leftCtrl.y, tip.x, tip.y);
-			nvgQuadTo(args.vg, rightCtrl.x, rightCtrl.y, rightBase.x, rightBase.y);
-			nvgClosePath(args.vg);
-			nvgFillColor(args.vg, nvgRGBA(152, 116, 63, 220));
-			nvgFill(args.vg);
-		}
-
-		// Head marker on the right end of the wyrm (compact/organic).
-		if (count >= 2) {
-			const float xHead = xAt(count - 1);
-			const float yHead = (0.5f - 0.5f * module->getWavePoint(count - 1)) * box.size.y;
-			const float xPrev = xAt(count - 2);
-			const float yPrev = (0.5f - 0.5f * module->getWavePoint(count - 2)) * box.size.y;
-			Vec tangent = Vec(xHead - xPrev, yHead - yPrev);
-			const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-			if (tangentLen > 1e-4f) {
-				tangent = tangent.div(tangentLen);
-			}
-			else {
-				tangent = Vec(1.f, 0.f);
-			}
-			const Vec normal(-tangent.y, tangent.x);
-			const Vec center = Vec(xHead, yHead);
-			const Vec tip = center.plus(tangent.mult(3.35f));
-			const Vec leftBase = center.minus(tangent.mult(1.25f)).plus(normal.mult(1.85f));
-			const Vec rightBase = center.minus(tangent.mult(1.25f)).minus(normal.mult(1.85f));
-			const Vec leftCtrl = center.plus(tangent.mult(0.55f)).plus(normal.mult(2.15f));
-			const Vec rightCtrl = center.plus(tangent.mult(0.55f)).minus(normal.mult(2.15f));
-			const Vec backCtrl = center.minus(tangent.mult(2.25f));
-
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, leftBase.x, leftBase.y);
-			nvgQuadTo(args.vg, leftCtrl.x, leftCtrl.y, tip.x, tip.y);
-			nvgQuadTo(args.vg, rightCtrl.x, rightCtrl.y, rightBase.x, rightBase.y);
-			nvgQuadTo(args.vg, backCtrl.x, backCtrl.y, leftBase.x, leftBase.y);
-			nvgClosePath(args.vg);
-			nvgFillColor(args.vg, nvgRGBA(204, 168, 102, 235));
-			nvgFill(args.vg);
-
-			// Integrated eye socket + slit to avoid detached "floating eye" look.
-			const Vec eye = center.minus(tangent.mult(0.35f)).plus(normal.mult(0.78f));
-			nvgBeginPath(args.vg);
-			nvgEllipse(args.vg, eye.x, eye.y, 1.05f, 0.72f);
-			nvgFillColor(args.vg, nvgRGBA(88, 60, 30, 195));
-			nvgFill(args.vg);
-
-			nvgBeginPath(args.vg);
-			const Vec slitL = eye.minus(tangent.mult(0.70f));
-			const Vec slitR = eye.plus(tangent.mult(0.70f));
-			nvgMoveTo(args.vg, slitL.x, slitL.y);
-			nvgLineTo(args.vg, slitR.x, slitR.y);
-			nvgStrokeWidth(args.vg, 0.9f);
-			nvgStrokeColor(args.vg, nvgRGBA(232, 206, 132, 220));
-			nvgStroke(args.vg);
-		}
+		nvgResetScissor(args.vg);
+		nvgRestore(args.vg);
 
 	}
 };
