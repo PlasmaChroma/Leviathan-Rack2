@@ -22,6 +22,11 @@ enum WyrmShapeId {
 	SHAPE_COUNT
 };
 
+enum WyrmRockMouseMode {
+	ROCK_MOUSE_DRAGS = 0,
+	ROCK_MOUSE_LIFTS,
+};
+
 const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Sine",
 	"Triangle",
@@ -54,11 +59,6 @@ inline float wrap01Fast(float x) {
 		x += 1.f;
 	}
 	return x;
-}
-
-inline float phaseDistance(float a, float b) {
-	float d = std::fabs(wrap01(a) - wrap01(b));
-	return std::min(d, 1.f - d);
 }
 
 inline float smoother01(float x) {
@@ -193,6 +193,8 @@ struct Wyrm : Module {
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;
 	int rockCount = 0;
+	int rockMouseMode = ROCK_MOUSE_DRAGS;
+	int liftedRock = -1;
 	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
 
 	Wyrm() {
@@ -228,7 +230,14 @@ struct Wyrm : Module {
 	}
 
 	void setRockCount(int count) {
+		const int oldCount = rockCount;
 		rockCount = clamp(count, 0, kWyrmMaxRocks);
+		if (liftedRock >= rockCount) {
+			liftedRock = -1;
+		}
+		for (int i = oldCount; i < rockCount; ++i) {
+			pushWavePointsOutsideRock(i);
+		}
 	}
 
 	void setWavePoint(int index, float value) {
@@ -313,25 +322,113 @@ struct Wyrm : Module {
 		return std::fma((wavetable[i1] - wavetable[i0]), t, wavetable[i0]);
 	}
 
+	float rockDx(float ph, const WyrmRock& rock) const {
+		float dx = wrap01(ph) - wrap01(rock.phase);
+		if (dx > 0.5f) {
+			dx -= 1.f;
+		}
+		else if (dx < -0.5f) {
+			dx += 1.f;
+		}
+		return dx;
+	}
+
+	float rockEdgeY(const WyrmRock& rock, float dx) const {
+		if (std::fabs(dx) >= rock.radiusPhase) {
+			return 0.f;
+		}
+		const float nx = dx / std::max(rock.radiusPhase, 1e-4f);
+		return rock.radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+	}
+
+	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const {
+		const float edgeY = rockEdgeY(rock, rockDx(ph, rock));
+		if (edgeY <= 0.f) {
+			return false;
+		}
+		if (lower) *lower = rock.value - edgeY - kWyrmRockClearance;
+		if (upper) *upper = rock.value + edgeY + kWyrmRockClearance;
+		return true;
+	}
+
+	bool pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide) {
+		if (pointIndex < 0 || pointIndex >= pointCount) return false;
+		const float ph = (float(pointIndex) + 0.5f) / float(pointCount);
+		float lower = rock.value - rock.radiusValue - kWyrmRockClearance;
+		float upper = rock.value + rock.radiusValue + kWyrmRockClearance;
+		rockBoundsAtPhase(rock, ph, &lower, &upper);
+		const float base = wavePoints[pointIndex].load(std::memory_order_relaxed);
+		if (!forceSide && (base <= lower || base >= upper)) {
+			return false;
+		}
+		float pushed = 0.f;
+		if (forceSide) {
+			pushed = preferUpper ? upper : lower;
+			if ((preferUpper && base >= pushed) || (!preferUpper && base <= pushed)) {
+				return false;
+			}
+		}
+		else {
+			pushed = (std::fabs(base - lower) < std::fabs(upper - base)) ? lower : upper;
+		}
+		wavePoints[pointIndex].store(clamp(pushed, -1.f, 1.f), std::memory_order_relaxed);
+		return true;
+	}
+
+	void pushWavePointsOutsideRock(int rockIndex) {
+		if (rockIndex < 0 || rockIndex >= rockCount) return;
+		const WyrmRock& rock = rocks[rockIndex];
+		bool changed = false;
+		for (int i = 0; i < pointCount; ++i) {
+			changed = pushPointOutsideRock(i, rock, false, false) || changed;
+		}
+		for (int i = 0; i < pointCount - 1; ++i) {
+			const float ph0 = (float(i) + 0.5f) / float(pointCount);
+			const float ph1 = (float(i + 1) + 0.5f) / float(pointCount);
+			const float y0 = wavePoints[i].load(std::memory_order_relaxed);
+			const float y1 = wavePoints[i + 1].load(std::memory_order_relaxed);
+			for (int sample = 1; sample <= 4; ++sample) {
+				const float t = float(sample) / 5.f;
+				const float ph = ph0 + (ph1 - ph0) * t;
+				float lower = 0.f;
+				float upper = 0.f;
+				if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
+					continue;
+				}
+				const float y = y0 + (y1 - y0) * t;
+				if (y <= lower || y >= upper) {
+					continue;
+				}
+				const bool preferUpper = (std::fabs(y - upper) < std::fabs(y - lower)) ? true : (y >= rock.value);
+				changed = pushPointOutsideRock(i, rock, preferUpper, true) || changed;
+				changed = pushPointOutsideRock(i + 1, rock, preferUpper, true) || changed;
+				break;
+			}
+		}
+		if (changed) {
+			waveVersion.fetch_add(1u, std::memory_order_release);
+		}
+	}
+
 	float applyRockClamp(float base, float ph, float offset) const {
 		if (rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
 			return offset;
 		}
 		float clampedOffset = offset;
 		for (int i = 0; i < rockCount; ++i) {
+			if (i == liftedRock) continue;
 			const WyrmRock& rock = rocks[i];
-			const float xDistance = phaseDistance(ph, rock.phase);
-			if (xDistance >= rock.radiusPhase) {
-				continue;
-			}
-			const float influence = smoother01(1.f - xDistance / rock.radiusPhase);
-			const float limit = rock.value - base;
-			if (limit > 0.f && clampedOffset > 0.f) {
-				const float blocked = std::max(0.f, limit - rock.radiusValue - kWyrmRockClearance);
+			const float dx = rockDx(ph, rock);
+			const float dyCenter = rock.value - base;
+			const float edgeY = rockEdgeY(rock, dx);
+			if (edgeY <= 0.f) continue;
+			const float influence = smoother01(1.f - std::fabs(dx) / rock.radiusPhase);
+			if (dyCenter > 0.f && clampedOffset > 0.f) {
+				const float blocked = std::max(0.f, dyCenter - edgeY - kWyrmRockClearance);
 				clampedOffset = clampedOffset + influence * (std::min(clampedOffset, blocked) - clampedOffset);
 			}
-			else if (limit < 0.f && clampedOffset < 0.f) {
-				const float blocked = std::min(0.f, limit + rock.radiusValue + kWyrmRockClearance);
+			else if (dyCenter < 0.f && clampedOffset < 0.f) {
+				const float blocked = std::min(0.f, dyCenter + edgeY + kWyrmRockClearance);
 				clampedOffset = clampedOffset + influence * (std::max(clampedOffset, blocked) - clampedOffset);
 			}
 		}
@@ -345,6 +442,7 @@ struct Wyrm : Module {
 		json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 		json_object_set_new(root, "pointCount", json_integer(pointCount));
 		json_object_set_new(root, "rockCount", json_integer(rockCount));
+		json_object_set_new(root, "rockMouseMode", json_integer(rockMouseMode));
 		json_t* pts = json_array();
 		for (int i = 0; i < pointCount; ++i) {
 			json_array_append_new(pts, json_real(getWavePoint(i)));
@@ -380,6 +478,8 @@ struct Wyrm : Module {
 		}
 		json_t* rockCountJ = json_object_get(root, "rockCount");
 		if (rockCountJ) setRockCount(int(json_integer_value(rockCountJ)));
+		json_t* rockMouseModeJ = json_object_get(root, "rockMouseMode");
+		if (rockMouseModeJ) rockMouseMode = clamp(int(json_integer_value(rockMouseModeJ)), ROCK_MOUSE_DRAGS, ROCK_MOUSE_LIFTS);
 		json_t* pts = json_object_get(root, "wavePoints");
 		if (pts && json_is_array(pts)) {
 			const size_t n = json_array_size(pts);
@@ -492,7 +592,6 @@ struct WyrmWaveEditor : TransparentWidget {
 	int draggingRock = -1;
 	float visualSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
-	double rockHoldStartSec = 0.0;
 	Vec rockDragOffset;
 
 	explicit WyrmWaveEditor(Wyrm* m) {
@@ -578,6 +677,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		WyrmRock& rock = module->rocks[rockIndex];
 		rock.phase = phaseFromX(adjusted.x);
 		rock.value = valueFromY(adjusted.y);
+		if (module->rockMouseMode == ROCK_MOUSE_DRAGS) {
+			module->pushWavePointsOutsideRock(rockIndex);
+		}
 	}
 
 	Vec currentLocalMousePos() const {
@@ -621,7 +723,9 @@ struct WyrmWaveEditor : TransparentWidget {
 			if (rockIndex >= 0) {
 				draggingRock = rockIndex;
 				hoveredRock = rockIndex;
-				rockHoldStartSec = system::getTime();
+				if (module->rockMouseMode == ROCK_MOUSE_LIFTS) {
+					module->liftedRock = rockIndex;
+				}
 				rockDragOffset = e.pos.minus(rockCenter(module->rocks[rockIndex]));
 				e.consume(this);
 				return;
@@ -632,6 +736,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		if (e.action == GLFW_RELEASE) {
 			lastIndex = -1;
+			if (module->liftedRock == draggingRock) {
+				module->liftedRock = -1;
+			}
 			draggingRock = -1;
 			e.consume(this);
 			return;
@@ -834,21 +941,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			const Vec center = rockCenter(rock);
 			const Vec radius = rockPixelRadius(rock);
 			const bool hot = (i == hoveredRock || i == draggingRock);
-			const int sides = 11;
 			nvgBeginPath(args.vg);
-			for (int j = 0; j < sides; ++j) {
-				const float a = 2.f * float(M_PI) * float(j) / float(sides);
-				const float rough = 0.88f + 0.18f * hashUnit(rock.seed + uint32_t(j) * 0x45d9f3bu);
-				const float px = center.x + std::cos(a) * radius.x * rough;
-				const float py = center.y + std::sin(a) * radius.y * rough;
-				if (j == 0) {
-					nvgMoveTo(args.vg, px, py);
-				}
-				else {
-					nvgLineTo(args.vg, px, py);
-				}
-			}
-			nvgClosePath(args.vg);
+			nvgEllipse(args.vg, center.x, center.y, radius.x, radius.y);
 			const int shade = 102 + int(44.f * hashUnit(rock.seed ^ 0x7a13u));
 			nvgFillColor(args.vg, nvgRGBA(shade, shade, shade + 4, hot ? 245 : 215));
 			nvgFill(args.vg);
@@ -862,7 +956,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFill(args.vg);
 		}
 
-		if (draggingRock >= 0 && draggingRock < module->rockCount && system::getTime() - rockHoldStartSec > 0.35) {
+		if (draggingRock >= 0 && draggingRock < module->rockCount) {
 			const Vec center = rockCenter(module->rocks[draggingRock]);
 			const Vec radius = rockPixelRadius(module->rocks[draggingRock]);
 			auto drawArrow = [&](Vec dir, Vec normal) {
@@ -926,44 +1020,6 @@ struct WyrmPointCountMenuItem : MenuItem {
 	void step() override {
 		rightText = (module && module->pointCount == count) ? "✓" : "";
 		MenuItem::step();
-	}
-};
-
-struct WyrmRocksQuantity final : Quantity {
-	Wyrm* module = nullptr;
-
-	explicit WyrmRocksQuantity(Wyrm* module) {
-		this->module = module;
-	}
-
-	void setValue(float value) override {
-		if (module) {
-			module->setRockCount(int(std::round(value)));
-		}
-	}
-
-	float getValue() override {
-		return module ? float(module->rockCount) : 0.f;
-	}
-
-	float getMinValue() override {
-		return 0.f;
-	}
-
-	float getMaxValue() override {
-		return float(kWyrmMaxRocks);
-	}
-
-	float getDefaultValue() override {
-		return 0.f;
-	}
-
-	std::string getLabel() override {
-		return "Rocks";
-	}
-
-	int getDisplayPrecision() override {
-		return 0;
 	}
 };
 
@@ -1041,10 +1097,36 @@ struct WyrmWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("LFO Mode", "", &module->lfoMode));
 		menu->addChild(createBoolPtrMenuItem("Lock Wave Editor", "", &module->editorLocked));
-		auto* rocksSlider = new ui::Slider();
-		rocksSlider->box.size = Vec(180.f, 24.f);
-		rocksSlider->quantity = new WyrmRocksQuantity(module);
-		menu->addChild(rocksSlider);
+		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
+			submenu->addChild(createCheckMenuItem(
+				"Mouse Drags Rocks", "",
+				[=]() {
+					return module->rockMouseMode == ROCK_MOUSE_DRAGS;
+				},
+				[=]() {
+					module->rockMouseMode = ROCK_MOUSE_DRAGS;
+					module->liftedRock = -1;
+				}));
+			submenu->addChild(createCheckMenuItem(
+				"Mouse Lifts Rocks", "",
+				[=]() {
+					return module->rockMouseMode == ROCK_MOUSE_LIFTS;
+				},
+				[=]() {
+					module->rockMouseMode = ROCK_MOUSE_LIFTS;
+				}));
+			submenu->addChild(new MenuSeparator());
+			for (int count = 0; count <= kWyrmMaxRocks; ++count) {
+				submenu->addChild(createCheckMenuItem(
+					string::f("%d", count), "",
+					[=]() {
+						return module->rockCount == count;
+					},
+					[=]() {
+						module->setRockCount(count);
+					}));
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Point Count"));
 		for (int count : {32, 48, 64, 128}) {
