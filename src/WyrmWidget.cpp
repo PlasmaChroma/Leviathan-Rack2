@@ -296,7 +296,7 @@ struct WyrmWidget : ModuleWidget {
 		}));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Point Count"));
-		for (int count : {32, 48, 64, 128}) {
+		for (int count : {32, 48, 64, 128, 256}) {
 			auto* item = new WyrmPointCountMenuItem();
 			item->text = string::f("%d", count);
 			item->module = module;
@@ -316,4 +316,3 @@ struct WyrmWidget : ModuleWidget {
 };
 
 Model* modelWyrm = createModel<Wyrm, WyrmWidget>("Wyrm");
-

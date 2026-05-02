@@ -90,7 +90,7 @@ void Wyrm::setFactoryShape(int shapeId) {
 
 void Wyrm::setPointCount(int newPointCount) {
 	newPointCount = clamp(newPointCount, 32, kWyrmPointCountMax);
-	if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64 && newPointCount != 128) {
+	if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64 && newPointCount != 128 && newPointCount != 256) {
 		newPointCount = kWyrmPointCountDefault;
 	}
 	if (newPointCount == pointCount) {
@@ -311,7 +311,7 @@ void Wyrm::dataFromJson(json_t* root) {
 	json_t* pointCountJ = json_object_get(root, "pointCount");
 	if (pointCountJ) {
 		int loadedPointCount = int(json_integer_value(pointCountJ));
-		if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64 || loadedPointCount == 128) {
+		if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64 || loadedPointCount == 128 || loadedPointCount == 256) {
 			pointCount = loadedPointCount;
 		}
 	}

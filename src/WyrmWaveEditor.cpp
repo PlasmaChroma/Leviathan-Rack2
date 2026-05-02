@@ -205,14 +205,14 @@ struct WyrmWaveEditor : TransparentWidget {
 
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x0, 0.f, x1 - x0, box.size.y);
-			nvgFillColor(args.vg, nvgRGBA(255, 230, 120, 28));
+			nvgFillColor(args.vg, nvgRGBA(255, 240, 150, 86));
 			nvgFill(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, 0.f, guideY);
 			nvgLineTo(args.vg, box.size.x, guideY);
 			nvgStrokeWidth(args.vg, 1.4f);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 232, 140, 180));
+			nvgStrokeColor(args.vg, nvgRGBA(186, 154, 92, 96));
 			nvgStroke(args.vg);
 		}
 
@@ -389,4 +389,3 @@ struct WyrmWaveEditor : TransparentWidget {
 TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
 	return new WyrmWaveEditor(module);
 }
-

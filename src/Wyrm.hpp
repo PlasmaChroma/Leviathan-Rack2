@@ -7,7 +7,7 @@
 #include <cmath>
 
 constexpr int kWyrmPointCountDefault = 32;
-constexpr int kWyrmPointCountMax = 128;
+constexpr int kWyrmPointCountMax = 256;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
 constexpr int kWyrmMaxRocks = 6;
