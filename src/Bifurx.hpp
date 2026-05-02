@@ -112,7 +112,7 @@ float levelInputGain(float knob);
 float levelDriveAmount(float knob);
 float levelOutputClipWet(float knob);
 float applyLevelInputStage(float in, float levelKnob);
-float applyLevelOutputStage(float modeOut, float levelKnob);
+float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
 
 inline float fastTanh(float x) {
 	const float x2 = x * x;
@@ -312,6 +312,7 @@ struct BifurxPreviewModel {
 struct BifurxAnalysisFrame {
 	alignas(16) float rawInput[kFftSize];
 	alignas(16) float output[kFftSize];
+	alignas(16) float responseOutput[kFftSize];
 };
 
 struct BifurxSpectrumState {
@@ -377,6 +378,7 @@ struct BifurxSpectrumBase {
 	alignas(16) float fftOutputTime[kFftSize];
 	alignas(16) float fftInputFreq[2 * kFftSize];
 	alignas(16) float fftOutputFreq[2 * kFftSize];
+	alignas(16) float fftResponseOutputFreq[2 * kFftSize];
 	alignas(16) float fftRawInputFreq[2 * kFftSize];
 
 	uint32_t lastModelUpdateSeq = 0;
@@ -590,6 +592,7 @@ struct Bifurx : Module {
 	SvfCoeffs cachedCoeffsB;
 	float analysisRawInputHistory[kFftSize] = {};
 	float analysisOutputHistory[kFftSize] = {};
+	float analysisResponseOutputHistory[kFftSize] = {};
 	float llTelemetryExcitationSq = 0.f;
 	float llTelemetryStageALpSq = 0.f;
 	float llTelemetryStageBLpSq = 0.f;
@@ -607,6 +610,7 @@ struct Bifurx : Module {
 	bool showModuleResponseOverlay = false;
 	bool useGlShaderRenderer = true;
 	bool highResonanceSelfOscEnabled = false;
+	bool softLimitingEnabled = true;
 	int controlUpdateMode = CONTROL_UPDATE_TIERED;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;
@@ -632,7 +636,7 @@ struct Bifurx : Module {
 	void publishPreviewState(const BifurxPreviewState& state);
 	void publishLlTelemetryState(const BifurxLlTelemetryState& state);
 	void publishAnalysisFrame();
-	void pushAnalysisSample(float rawInputSample, float outputSample);
+	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
 	void process(const ProcessArgs& args) override;
 };

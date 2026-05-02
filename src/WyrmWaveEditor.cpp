@@ -5,6 +5,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastIndex = -1;
 	int hoveredRock = -1;
 	int draggingRock = -1;
+	int dragRockMouseMode = -1;
 	int rockDragSide = 0;
 	float visualSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
@@ -54,7 +55,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	float constrainedRockValueForDrag(const WyrmRock& rock, float phase, float value) const {
-		if (!module || module->rockMouseMode != ROCK_MOUSE_DRAGS || rockDragSide == 0) {
+		if (!module || dragRockMouseMode != ROCK_MOUSE_DRAGS || rockDragSide == 0) {
 			return value;
 		}
 		if (rockDragSide > 0) {
@@ -114,7 +115,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float value = valueFromY(adjusted.y);
 		rock.phase = phase;
 		rock.value = constrainedRockValueForDrag(rock, phase, value);
-		if (module->rockMouseMode == ROCK_MOUSE_DRAGS) {
+		if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
 			module->pushWavePointsOutsideRock(rockIndex);
 		}
 	}
@@ -160,8 +161,12 @@ struct WyrmWaveEditor : TransparentWidget {
 				draggingRock = rockIndex;
 				hoveredRock = rockIndex;
 				const WyrmRock& rock = module->rocks[rockIndex];
+				dragRockMouseMode = module->rockMouseMode;
+				if ((e.mods & GLFW_MOD_SHIFT) != 0) {
+					dragRockMouseMode = (dragRockMouseMode == ROCK_MOUSE_DRAGS) ? ROCK_MOUSE_LIFTS : ROCK_MOUSE_DRAGS;
+				}
 				rockDragSide = (rock.value >= baseWaveAtPhase(rock.phase)) ? 1 : -1;
-				if (module->rockMouseMode == ROCK_MOUSE_LIFTS) {
+				if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 					module->liftedRock = rockIndex;
 				}
 				rockDragOffset = e.pos.minus(rockCenter(module->rocks[rockIndex]));
@@ -178,6 +183,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				module->liftedRock = -1;
 			}
 			draggingRock = -1;
+			dragRockMouseMode = -1;
 			rockDragSide = 0;
 			e.consume(this);
 			return;
@@ -379,6 +385,10 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (draggingRock >= 0 && draggingRock < module->rockCount) {
 			const Vec center = rockCenter(module->rocks[draggingRock]);
 			const Vec radius = rockPixelRadius(module->rocks[draggingRock]);
+			const NVGcolor arrowColor =
+				(dragRockMouseMode == ROCK_MOUSE_LIFTS)
+					? nvgRGBA(110, 228, 255, 235)
+					: nvgRGBA(236, 226, 190, 225);
 			auto drawArrow = [&](Vec dir, Vec normal) {
 				const Vec start = center.plus(Vec(dir.x * (radius.x + 3.f), dir.y * (radius.y + 3.f)));
 				const Vec end = center.plus(Vec(dir.x * (radius.x + 18.f), dir.y * (radius.y + 18.f)));
@@ -386,7 +396,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgMoveTo(args.vg, start.x, start.y);
 				nvgLineTo(args.vg, end.x, end.y);
 				nvgStrokeWidth(args.vg, 1.5f);
-				nvgStrokeColor(args.vg, nvgRGBA(236, 226, 190, 225));
+				nvgStrokeColor(args.vg, arrowColor);
 				nvgStroke(args.vg);
 
 				const Vec headA = end.minus(Vec(dir.x * 5.f, dir.y * 5.f)).plus(normal.mult(3.5f));
@@ -397,7 +407,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgMoveTo(args.vg, end.x, end.y);
 				nvgLineTo(args.vg, headB.x, headB.y);
 				nvgStrokeWidth(args.vg, 1.5f);
-				nvgStrokeColor(args.vg, nvgRGBA(236, 226, 190, 225));
+				nvgStrokeColor(args.vg, arrowColor);
 				nvgStroke(args.vg);
 			};
 			drawArrow(Vec(1.f, 0.f), Vec(0.f, 1.f));

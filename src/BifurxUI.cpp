@@ -792,6 +792,7 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
 			}));
 			menu->addChild(createBoolPtrMenuItem("High Resonance Self-Osc", "", &bifurx->highResonanceSelfOscEnabled));
+			menu->addChild(createBoolPtrMenuItem("Soft Limiting", "", &bifurx->softLimitingEnabled));
 			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
 		if (isDragonKingDebugEnabled()) {
