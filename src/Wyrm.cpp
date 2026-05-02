@@ -9,6 +9,7 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 };
 
 Wyrm::Wyrm() {
+	createdUnixTimeSec = system::getUnixTime();
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.45f, "Frequency");
 	configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
@@ -301,6 +302,7 @@ json_t* Wyrm::dataToJson() {
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
 	json_object_set_new(root, "rockCount", json_integer(rockCount));
 	json_object_set_new(root, "rockMouseMode", json_integer(rockMouseMode));
+	json_object_set_new(root, "createdUnixTimeSec", json_real(createdUnixTimeSec));
 	json_t* pts = json_array();
 	for (int i = 0; i < pointCount; ++i) {
 		json_array_append_new(pts, json_real(getWavePoint(i)));
@@ -338,6 +340,13 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (rockCountJ) setRockCount(int(json_integer_value(rockCountJ)));
 	json_t* rockMouseModeJ = json_object_get(root, "rockMouseMode");
 	if (rockMouseModeJ) rockMouseMode = clamp(int(json_integer_value(rockMouseModeJ)), ROCK_MOUSE_DRAGS, ROCK_MOUSE_LIFTS);
+	json_t* createdUnixTimeSecJ = json_object_get(root, "createdUnixTimeSec");
+	if (createdUnixTimeSecJ && json_is_number(createdUnixTimeSecJ)) {
+		const double loadedCreatedUnixTimeSec = json_number_value(createdUnixTimeSecJ);
+		if (std::isfinite(loadedCreatedUnixTimeSec) && loadedCreatedUnixTimeSec > 0.0) {
+			createdUnixTimeSec = loadedCreatedUnixTimeSec;
+		}
+	}
 	json_t* pts = json_object_get(root, "wavePoints");
 	if (pts && json_is_array(pts)) {
 		const size_t n = json_array_size(pts);

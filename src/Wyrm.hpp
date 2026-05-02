@@ -187,6 +187,7 @@ struct Wyrm : Module {
 	int rockMouseMode = ROCK_MOUSE_DRAGS;
 	int liftedRock = -1;
 	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
+	double createdUnixTimeSec = 0.0;
 
 	Wyrm();
 

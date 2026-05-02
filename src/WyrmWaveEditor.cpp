@@ -216,6 +216,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgStroke(args.vg);
 
 		if (!module) return;
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
@@ -264,9 +266,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFillColor(args.vg, nvgRGBA(235, 204, 128, 245));
 			nvgFill(args.vg);
 		}
-
-		nvgSave(args.vg);
-		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		auto emitRoundedBodyPath = [&]() {
 			const float roundCosThreshold = -0.25f;

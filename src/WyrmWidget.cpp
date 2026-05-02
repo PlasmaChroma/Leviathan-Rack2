@@ -178,10 +178,20 @@ struct WyrmEditorIconButton : TransparentWidget {
 };
 
 struct WyrmWidget : ModuleWidget {
+	std::shared_ptr<window::Svg> ageSigilSvg;
+	bool ageSigilUnlocked = false;
+
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.svg");
 		setPanel(createPanel(panelPath));
+		try {
+			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/Vahdrim'Keth.svg"));
+		}
+		catch (const std::exception& e) {
+			WARN("Wyrm: failed to load age sigil SVG: %s", e.what());
+			ageSigilSvg.reset();
+		}
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -254,6 +264,43 @@ struct WyrmWidget : ModuleWidget {
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+	}
+
+	void step() override {
+		ModuleWidget::step();
+		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
+		if (!wyrm || ageSigilUnlocked) return;
+		const double createdUnixTimeSec = wyrm->createdUnixTimeSec;
+		if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
+			ageSigilUnlocked = (system::getUnixTime() - createdUnixTimeSec) >= 666.0;
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		ModuleWidget::draw(args);
+		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
+		if (!wyrm || !ageSigilSvg || !ageSigilUnlocked) {
+			return;
+		}
+		const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
+		const Vec rightSigilCenter = mm2px(Vec(54.8f, 4.47f));
+		const Vec leftSigilCenter(box.size.x - rightSigilCenter.x, rightSigilCenter.y);
+		const Vec svgSize = ageSigilSvg->getSize();
+		if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
+			return;
+		}
+		const float scaleX = sigilSize.x / svgSize.x;
+		const float scaleY = sigilSize.y / svgSize.y;
+		auto drawSigilAt = [&](const Vec& center) {
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, center.x, center.y);
+			nvgScale(args.vg, scaleX, scaleY);
+			nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+			ageSigilSvg->draw(args.vg);
+			nvgRestore(args.vg);
+		};
+		drawSigilAt(leftSigilCenter);
+		drawSigilAt(rightSigilCenter);
 	}
 
 	void appendContextMenu(Menu* menu) override {
