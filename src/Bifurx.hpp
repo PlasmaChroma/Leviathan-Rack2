@@ -606,7 +606,7 @@ struct Bifurx : Module {
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
 	bool useGlShaderRenderer = true;
-	bool highResonanceSelfOscEnabled = true;
+	bool highResonanceSelfOscEnabled = false;
 	int controlUpdateMode = CONTROL_UPDATE_TIERED;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;

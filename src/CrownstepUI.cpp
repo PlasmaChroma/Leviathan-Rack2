@@ -1326,7 +1326,15 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								float valueVolts = module->pitchPreviewForBoardIndex(boardIndex);
 								char valueText[24];
-								std::snprintf(valueText, sizeof(valueText), "%.2f", valueVolts);
+								if (module->quantizationEnabled) {
+									const int semitone = int(std::round(valueVolts * 12.f));
+									const int noteIndex = crownstep::wrapSemitone12(semitone);
+									const int octave = int(std::floor(float(semitone) / 12.f)) + 4;
+									std::snprintf(valueText, sizeof(valueText), "%s%d", KEY_NAMES[size_t(noteIndex)], octave);
+								}
+								else {
+									std::snprintf(valueText, sizeof(valueText), "%.2f", valueVolts);
+								}
 								float textX = col * cellWidth + 1.6f;
 								float textY = row * cellHeight + 1.8f;
 								bool darkSquare = othelloBoard || (((row + col) & 1) == 1);

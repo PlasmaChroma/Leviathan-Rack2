@@ -848,12 +848,16 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 
 float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing) {
 	if (quantizationEnabled) {
+		const int transposeSemitones = int(std::lround(transposeVolts() * 12.f));
+		const int rootedSemitoneLinear = rootSemitone() + transposeSemitones;
+		const int rootedSemitoneWrapped = crownstep::wrapSemitone12(rootedSemitoneLinear);
+		const float rootedOctaveVolts = float(rootedSemitoneLinear - rootedSemitoneWrapped) / 12.f;
 		return clamp(crownstep::mapPitchFromIndex(
 			boardValueIndex,
 			isKing,
 			currentScaleIndex(),
-			0,
-			transposeVolts()
+			rootedSemitoneWrapped,
+			rootedOctaveVolts
 		), -10.f, 10.f);
 	}
 	return clamp(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
