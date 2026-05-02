@@ -35,6 +35,7 @@ constexpr float kWyrmLfoMaxHz = 100.f;
 constexpr float kWyrmFoldMakeupGain = 1.0f / std::tanh(1.f);
 constexpr float kWyrmSlitherMaxOffset = 0.42f;
 constexpr float kWyrmRockClearance = 0.055f;
+constexpr float kWyrmRockValueScale = 0.5f;
 
 inline float clamp01(float x) {
 	return clamp(x, 0.f, 1.f);
@@ -204,6 +205,7 @@ struct Wyrm : Module {
 	bool pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide);
 	bool segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const;
 	void pushWavePointsOutsideRock(int rockIndex);
+	float applyRockPush(float base, float ph) const;
 	float applyRockClamp(float base, float ph, float offset) const;
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;

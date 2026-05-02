@@ -145,12 +145,12 @@ float Wyrm::rockDx(float ph, const WyrmRock& rock) const {
 }
 
 float Wyrm::rockClearancePhase(const WyrmRock& rock) const {
-	return kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
+	return kWyrmRockClearance * rock.radiusPhase / std::max(kWyrmRockValueScale * rock.radiusValue, 1e-4f);
 }
 
 float Wyrm::rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue) const {
 	const float radiusPhase = rock.radiusPhase + ((clearanceValue > 0.f) ? rockClearancePhase(rock) : 0.f);
-	const float radiusValue = rock.radiusValue + clearanceValue;
+	const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
 	if (std::fabs(dx) >= radiusPhase) {
 		return 0.f;
 	}
@@ -196,7 +196,7 @@ bool Wyrm::pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool prefe
 
 bool Wyrm::segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const {
 	const float rx = rock.radiusPhase + rockClearancePhase(rock);
-	const float ry = rock.radiusValue + kWyrmRockClearance;
+	const float ry = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
 	float x0 = rockDx(ph0, rock);
 	float x1 = rockDx(ph1, rock);
 	if (x1 - x0 > 0.5f) {
@@ -247,6 +247,25 @@ void Wyrm::pushWavePointsOutsideRock(int rockIndex) {
 	if (changed) {
 		waveVersion.fetch_add(1u, std::memory_order_release);
 	}
+}
+
+float Wyrm::applyRockPush(float base, float ph) const {
+	if (rockCount <= 0) {
+		return base;
+	}
+	float pushed = base;
+	for (int i = 0; i < rockCount; ++i) {
+		if (i == liftedRock) continue;
+		float lower = 0.f;
+		float upper = 0.f;
+		if (!rockBoundsAtPhase(rocks[i], ph, &lower, &upper)) {
+			continue;
+		}
+		if (pushed > lower && pushed < upper) {
+			pushed = (std::fabs(pushed - lower) < std::fabs(upper - pushed)) ? lower : upper;
+		}
+	}
+	return clamp(pushed, -1.f, 1.f);
 }
 
 float Wyrm::applyRockClamp(float base, float ph, float offset) const {
