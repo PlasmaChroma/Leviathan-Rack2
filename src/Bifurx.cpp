@@ -12,7 +12,8 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"High + Low",
 	"High + Notch",
 	"Band + High",
-	"High + High"
+	"High + High",
+	"Resample"
 };
 
 std::string bifurxUserRootPath() {
@@ -171,6 +172,45 @@ float highHighSpanCompGain(float wideMorph) {
 	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
+float resampleFirstNotchHz(float freqAHz, float freqBHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	return clamp(std::min(freqAHz, freqBHz), 4.f, 0.42f * sr);
+}
+
+float resampleEndHz(float freqAHz, float freqBHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float first = resampleFirstNotchHz(freqAHz, freqBHz, sr);
+	const float rawEnd = clamp(std::max(freqAHz, freqBHz), first * 1.12f, 0.46f * sr);
+	return std::max(rawEnd, first * 1.12f);
+}
+
+float resamplingSecondNotchHz(float firstNotchHz, float endHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float first = clamp(firstNotchHz, 4.f, 0.42f * sr);
+	const float end = clamp(endHz, first * 1.08f, 0.46f * sr);
+	return std::exp(mixf(std::log(first), std::log(end), 0.43f));
+}
+
+float resamplingTailNotchHz(float firstNotchHz, float endHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float first = clamp(firstNotchHz, 4.f, 0.42f * sr);
+	const float end = clamp(endHz, first * 1.08f, 0.46f * sr);
+	return std::exp(mixf(std::log(first), std::log(end), 0.74f));
+}
+
+float resamplingRolloffHz(float firstNotchHz, float endHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float first = clamp(firstNotchHz, 4.f, 0.42f * sr);
+	const float end = clamp(endHz, first * 1.08f, 0.46f * sr);
+	return clamp(0.9f * end, 4.f, 0.46f * sr);
+}
+
+float resamplingDisplayDroop(float hz, float rolloffHz) {
+	const float safeRolloffHz = std::max(rolloffHz, 1.f);
+	const float x = std::max(hz, 0.f) / safeRolloffHz;
+	return 1.f / std::sqrt(1.f + 1.45f * x * x + 1.15f * x * x * x * x);
+}
+
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	const float clampedT = bifurx::clamp01(t);
 	NVGcolor out;
@@ -272,6 +312,19 @@ void sanitizeCoreState(TptSvf& core) {
 	}
 	core.ic1eq = clamp(core.ic1eq, -20.f, 20.f);
 	core.ic2eq = clamp(core.ic2eq, -20.f, 20.f);
+}
+
+float processResampleLowpass(TptSvf& core, float input, float sampleRate, float cutoff) {
+	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, 0.72f);
+	return core.processWithCoeffs(input, coeffs).lp;
+}
+
+float processResampleContour(TptSvf& tailNotchCore, TptSvf& lowpassCore, float input, float sampleRate, float firstNotchHz, float endHz, float tailDamping) {
+	const SvfCoeffs tailNotchCoeffs = makeSvfCoeffs(sampleRate, resamplingTailNotchHz(firstNotchHz, endHz, sampleRate), clamp(tailDamping, 0.02f, 2.2f));
+	const float tailNotched = tailNotchCore.processWithCoeffs(input, tailNotchCoeffs).notch;
+	const float rolled = processResampleLowpass(lowpassCore, tailNotched, sampleRate, resamplingRolloffHz(firstNotchHz, endHz, sampleRate));
+	const float contourTilt = 1.f / (1.f + 0.32f * std::max(firstNotchHz, 1.f) / std::max(endHz, 1.f));
+	return contourTilt * rolled;
 }
 
 SvfOutputs processCharacterStage(
@@ -405,6 +458,8 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.markerFreqA = freqA;
 	model.markerFreqB = freqB;
 	model.sampleRate = state.sampleRate;
+	model.qA = qA;
+	model.qB = qB;
 	model.mode = state.mode;
 
 	const float lowW = signedWeight(state.balance, false);
@@ -428,6 +483,14 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	std::complex<float> bpB = model.bandB.response(z1, z2);
 	std::complex<float> hpB = model.highB.response(z1, z2);
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeNotchToLow = lpB * ntA, cascadeHpToLp = lpB * hpA, cascadeHighToNotch = ntB * hpA, cascadeHpToHp = hpB * hpA;
+	if (model.mode == 10) {
+		const float firstNotchHz = resampleFirstNotchHz(model.markerFreqA, model.markerFreqB, model.sampleRate);
+		const float endHz = resampleEndHz(model.markerFreqA, model.markerFreqB, model.sampleRate);
+		const DisplayBiquad notch2 = makeDisplayBiquad(model.sampleRate, resamplingSecondNotchHz(firstNotchHz, endHz, model.sampleRate), model.qB, 3);
+		const DisplayBiquad tailNotch = makeDisplayBiquad(model.sampleRate, resamplingTailNotchHz(firstNotchHz, endHz, model.sampleRate), model.qB, 3);
+		return std::complex<float>(1.03f * resamplingDisplayDroop(hz, resamplingRolloffHz(firstNotchHz, endHz, model.sampleRate)), 0.f)
+			* (ntA * notch2.response(z1, z2) * tailNotch.response(z1, z2));
+	}
 	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB, model.wideMorph);
 }
 
@@ -466,8 +529,14 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
 			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, wideMorph); break;
 			case 7: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, wideMorph); break;
-			case 9:
-			default: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
+			case 9: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
+			default: {
+				const float firstNotchHz = resampleFirstNotchHz(freqA, freqB, sampleRate);
+				const float endHz = resampleEndHz(freqA, freqB, sampleRate);
+				const float secondNotchHz = resamplingSecondNotchHz(firstNotchHz, endHz, sampleRate);
+				b = processProbeStage(engine, 1, a.notch, sampleRate, secondNotchHz, dampingB, drive, state.resoNorm, true);
+				modeOut = processResampleContour(engine.resampleTailNotch, engine.resampleLowpass, combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph), sampleRate, firstNotchHz, endHz, dampingB);
+			} break;
 		}
 		inputBuffer[i] = excitation; outputBuffer[i] = applyLevelOutputStage(modeOut, kPreviewProbeLevelKnob);
 	}
@@ -479,14 +548,26 @@ Bifurx::Bifurx() {
 	debugInstanceId = gBifurxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	createdUnixTimeSec = system::getUnixTime();
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-	configSwitch(MODE_PARAM, 0.f, 9.f, 0.f, "Mode", {kBifurxModeLabels[0], kBifurxModeLabels[1], kBifurxModeLabels[2], kBifurxModeLabels[3], kBifurxModeLabels[4], kBifurxModeLabels[5], kBifurxModeLabels[6], kBifurxModeLabels[7], kBifurxModeLabels[8], kBifurxModeLabels[9]});
+	configSwitch(MODE_PARAM, 0.f, float(kBifurxModeCount - 1), 0.f, "Mode", {
+		kBifurxModeLabels[0],
+		kBifurxModeLabels[1],
+		kBifurxModeLabels[2],
+		kBifurxModeLabels[3],
+		kBifurxModeLabels[4],
+		kBifurxModeLabels[5],
+		kBifurxModeLabels[6],
+		kBifurxModeLabels[7],
+		kBifurxModeLabels[8],
+		kBifurxModeLabels[9],
+		kBifurxModeLabels[10]
+	});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.5f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
 	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(16); perfMeasureDivider.setDivision(64);
 }
 
-void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
+void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; resampleTailNotchCore.ic1eq = 0.f; resampleTailNotchCore.ic2eq = 0.f; resampleLowpassCore.ic1eq = 0.f; resampleLowpassCore.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
@@ -601,13 +682,13 @@ void Bifurx::process(const ProcessArgs& args) {
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfCoreStart, perfPreviewStart, perfAnalysisStart;
 
-	sanitizeCoreState(coreA); sanitizeCoreState(coreB);
+	sanitizeCoreState(coreA); sanitizeCoreState(coreB); sanitizeCoreState(resampleTailNotchCore); sanitizeCoreState(resampleLowpassCore);
 
-	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9); params[MODE_PARAM].setValue(float((currentMode + 9) % 10)); }
-	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, 9); params[MODE_PARAM].setValue(float((currentMode + 1) % 10)); }
+	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxModeCount - 1) % kBifurxModeCount)); }
+	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxModeCount)); }
 
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
-	const int mode = int(std::round(params[MODE_PARAM].getValue()));
+	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1);
 	const float tito = clamp(params[TITO_PARAM].getValue(), -1.f, 1.f);
 	const float titoAbs = std::fabs(tito);
 	const bool titoNeutral = titoAbs < 0.02f;
@@ -687,7 +768,25 @@ void Bifurx::process(const ProcessArgs& args) {
 		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, spanWideMorph); } break;
 		case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, spanWideMorph); } break;
 		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		default: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
+		case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
+		default: {
+			const SvfOutputs a = pA(excitation);
+			const float firstNotchHz = resampleFirstNotchHz(freqA0, freqB0, args.sampleRate);
+			const float endHz = resampleEndHz(freqA0, freqB0, args.sampleRate);
+			const float secondNotchHz = resamplingSecondNotchHz(firstNotchHz, endHz, args.sampleRate);
+			const SvfOutputs b = processCharacterStage(
+				coreB, 1, a.notch, args.sampleRate, secondNotchHz, dampingB, drive, resoNorm, highResonanceSelfOscEnabled, nullptr
+			);
+			modeOut = processResampleContour(
+				resampleTailNotchCore,
+				resampleLowpassCore,
+				combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph),
+				args.sampleRate,
+				firstNotchHz,
+				endHz,
+				dampingB
+			);
+		} break;
 	}
 
 	const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabled);
@@ -1103,6 +1202,28 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 
 	addRefinement(0, model.markerFreqA);
 	addRefinement(1, model.markerFreqB);
+	float resampleSecondNotchX01 = -1.f;
+	float resampleTailNotchX01 = -1.f;
+	if (state.previewState.mode == 10) {
+		const float firstNotchHz = resampleFirstNotchHz(model.markerFreqA, model.markerFreqB, state.previewState.sampleRate);
+		const float endHz = resampleEndHz(model.markerFreqA, model.markerFreqB, state.previewState.sampleRate);
+		const float secondNotchHz = resamplingSecondNotchHz(firstNotchHz, endHz, state.previewState.sampleRate);
+		if (secondNotchHz >= minHz && secondNotchHz <= maxHz) {
+			resampleSecondNotchX01 = logPosition(secondNotchHz, minHz, maxHz);
+			const float dx = 0.35f / float(kCurvePointCount - 1);
+			points->push_back({clamp(resampleSecondNotchX01 - dx, 0.f, 1.f), 0.f, 1});
+			points->push_back({clamp(resampleSecondNotchX01, 0.f, 1.f), 0.f, 2});
+			points->push_back({clamp(resampleSecondNotchX01 + dx, 0.f, 1.f), 0.f, 1});
+		}
+		const float tailNotchHz = resamplingTailNotchHz(firstNotchHz, endHz, state.previewState.sampleRate);
+		if (tailNotchHz >= minHz && tailNotchHz <= maxHz) {
+			resampleTailNotchX01 = logPosition(tailNotchHz, minHz, maxHz);
+			const float dx = 0.35f / float(kCurvePointCount - 1);
+			points->push_back({clamp(resampleTailNotchX01 - dx, 0.f, 1.f), 0.f, 1});
+			points->push_back({clamp(resampleTailNotchX01, 0.f, 1.f), 0.f, 2});
+			points->push_back({clamp(resampleTailNotchX01 + dx, 0.f, 1.f), 0.f, 1});
+		}
+	}
 
 	std::sort(points->begin(), points->end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
 		if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
@@ -1121,6 +1242,20 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 		const auto anchor = displayAnchorForMarker(markerIndex, markerIndex == 0 ? model.markerFreqA : model.markerFreqB, minHz, maxHz);
 		for (auto& p : *points) {
 			if (p.priority == 2 && std::fabs(p.x01 - anchor.x01) < 1e-7f) {
+				p.y = markerBottomLaneY;
+			}
+		}
+	}
+	if (resampleTailNotchX01 >= 0.f) {
+		for (auto& p : *points) {
+			if (p.priority == 2 && std::fabs(p.x01 - resampleTailNotchX01) < 1e-7f) {
+				p.y = markerBottomLaneY;
+			}
+		}
+	}
+	if (resampleSecondNotchX01 >= 0.f) {
+		for (auto& p : *points) {
+			if (p.priority == 2 && std::fabs(p.x01 - resampleSecondNotchX01) < 1e-7f) {
 				p.y = markerBottomLaneY;
 			}
 		}

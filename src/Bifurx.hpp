@@ -47,7 +47,7 @@ constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
-constexpr int kBifurxModeCount = 10;
+constexpr int kBifurxModeCount = 11;
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
 
@@ -224,6 +224,10 @@ struct DisplayBiquad {
 };
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type);
+float resamplingSecondNotchHz(float firstNotchHz, float endHz, float sampleRate);
+float resamplingTailNotchHz(float firstNotchHz, float endHz, float sampleRate);
+float resamplingRolloffHz(float firstNotchHz, float endHz, float sampleRate);
+float resamplingDisplayDroop(float hz, float rolloffHz);
 
 template <typename T>
 T combineModeResponse(
@@ -258,6 +262,7 @@ T combineModeResponse(
 		case 7: return T(1.04f) * cascadeHighToNotch;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
 		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
+		case 10: return T(1.03f) * cascadeNotch;
 		default: return T(1.f);
 	}
 }
@@ -303,6 +308,8 @@ struct BifurxPreviewModel {
 	float markerFreqA = 440.f;
 	float markerFreqB = 440.f;
 	float sampleRate = 44100.f;
+	float qA = 1.f;
+	float qB = 1.f;
 	float wA = 1.f;
 	float wB = 1.f;
 	float wideMorph = 0.f;
@@ -416,6 +423,7 @@ struct BifurxSpectrumBase {
 			case 2: return (markerIndex == 0) ? -1 : 1;
 			case 3: return -1;
 			case 7: return (markerIndex == 1) ? -1 : 1;
+			case 10: return (markerIndex == 0) ? -1 : 1;
 			default: return 0;
 		}
 	}
@@ -425,6 +433,7 @@ struct BifurxSpectrumBase {
 			case 2: return markerIndex == 0; // Notch + Low
 			case 3: return true;            // Notch + Notch
 			case 7: return markerIndex == 1; // High + Notch
+			case 10: return markerIndex == 0; // Resample: first marker is notch, second is lobe-end peak
 			default: return false;
 		}
 	}
@@ -477,6 +486,8 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 struct BifurxProbeEngineState {
 	TptSvf svfA;
 	TptSvf svfB;
+	TptSvf resampleTailNotch;
+	TptSvf resampleLowpass;
 };
 
 SvfOutputs processProbeStage(
@@ -547,6 +558,8 @@ struct Bifurx : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
+	TptSvf resampleTailNotchCore;
+	TptSvf resampleLowpassCore;
 	RenderMode renderMode = RENDER_OPENGL;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
