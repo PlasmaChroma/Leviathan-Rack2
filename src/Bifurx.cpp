@@ -871,7 +871,7 @@ void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 
 void Bifurx::process(const ProcessArgs& args) {
 	using PerfClock = std::chrono::steady_clock;
-	const bool measurePerf = perfDebugLogging && perfMeasureDivider.process();
+	const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfCoreStart, perfPreviewStart, perfAnalysisStart;
 

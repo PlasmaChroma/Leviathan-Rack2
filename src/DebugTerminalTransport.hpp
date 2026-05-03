@@ -24,9 +24,7 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float uiMs,
                            int filterMode,
                            bool renderOpengl,
-                           uint32_t previewSeq,
-                           uint32_t analysisSeq,
-                           uint64_t drawVertexCount,
+                           float audioUs,
                            float curvePrepUs,
                            float overlayPrepUs);
 
