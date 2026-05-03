@@ -21,8 +21,8 @@ Wyrm::Wyrm() {
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
 	configInput(FOLD_CV_INPUT, "Fold CV");
-	configOutput(OUT_OUTPUT, "Out");
-	configOutput(RAW_OUTPUT, "Raw");
+	configOutput(OUT_OUTPUT, "Fold");
+	configOutput(RAW_OUTPUT, "Signal");
 
 	setFactoryShape(SHAPE_SINE);
 	for (int i = 0; i < kWyrmMaxRocks; ++i) {

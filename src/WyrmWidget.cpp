@@ -1,6 +1,12 @@
 #include "Wyrm.hpp"
 #include "PanelSvgUtils.hpp"
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
+
 struct WyrmShapeMenuItem : MenuItem {
 	Wyrm* module = nullptr;
 	int shape = SHAPE_SINE;
@@ -262,8 +268,8 @@ struct WyrmWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
 	}
 
 	void step() override {
