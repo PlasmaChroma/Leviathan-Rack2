@@ -6,8 +6,8 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Saw Up",
 	"Saw Down",
 	"Square",
-	"Supersaw Up",
-	"Supersaw Down"
+	"S.Saw Up",
+	"S.Saw Down"
 };
 
 Wyrm::Wyrm() {

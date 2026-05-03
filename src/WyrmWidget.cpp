@@ -7,6 +7,62 @@ struct BananutBlack : app::SvgPort {
 	}
 };
 
+void drawWyrmStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool pointRight) {
+	const float cx = 0.5f * size.x;
+	const float cy = 0.5f * size.y;
+	const float halfW = 2.8f;
+	const float halfH = 3.3f;
+	const float offset = pointRight ? (halfW / 3.f) : (-halfW / 3.f);
+	nvgBeginPath(args.vg);
+	if (pointRight) {
+		nvgMoveTo(args.vg, cx - halfW + offset, cy - halfH);
+		nvgLineTo(args.vg, cx + halfW + offset, cy);
+		nvgLineTo(args.vg, cx - halfW + offset, cy + halfH);
+	}
+	else {
+		nvgMoveTo(args.vg, cx + halfW + offset, cy - halfH);
+		nvgLineTo(args.vg, cx - halfW + offset, cy);
+		nvgLineTo(args.vg, cx + halfW + offset, cy + halfH);
+	}
+	nvgClosePath(args.vg);
+	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
+	nvgFill(args.vg);
+}
+
+struct WyrmWaveLeftButton final : TL1105 {
+	Wyrm* module = nullptr;
+	void onButton(const event::Button& e) override {
+		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+			const int next = (current + SHAPE_COUNT - 1) % SHAPE_COUNT;
+			module->setFactoryShape(next);
+			e.consume(this);
+		}
+		TL1105::onButton(e);
+	}
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		drawWyrmStepTriangle(args, box.size, false);
+	}
+};
+
+struct WyrmWaveRightButton final : TL1105 {
+	Wyrm* module = nullptr;
+	void onButton(const event::Button& e) override {
+		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+			const int next = (current + 1) % SHAPE_COUNT;
+			module->setFactoryShape(next);
+			e.consume(this);
+		}
+		TL1105::onButton(e);
+	}
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		drawWyrmStepTriangle(args, box.size, true);
+	}
+};
+
 struct WyrmShapeMenuItem : MenuItem {
 	Wyrm* module = nullptr;
 	int shape = SHAPE_SINE;
@@ -214,13 +270,14 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+		const std::string freqText = formatFrequencyText(displayHz);
 		std::string readoutText;
 		if (module->waveCustomized) {
-			readoutText = string::f("Custom %s", formatFrequencyText(displayHz).c_str());
+			readoutText = string::f("Custom: %s", freqText.c_str());
 		}
 		else {
 			const int shapeIndex = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
-			readoutText = string::f("%s", kWyrmShapeLabels[shapeIndex]);
+			readoutText = string::f("%s: %s", kWyrmShapeLabels[shapeIndex], freqText.c_str());
 		}
 		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, readoutText.c_str(), nullptr);
 	}
@@ -258,6 +315,7 @@ struct WyrmWidget : ModuleWidget {
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRm_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
+		Vec waveformSelectPos(35.56f, 75.2f);
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
@@ -272,6 +330,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec rawOutPos(24.0f, 122.0f);
 		Vec outPos(47.0f, 122.0f);
 		applyPt("WYRM_FREQ_PARAM", &freqPos);
+		applyPt("WYRM_WAVEFORM_SELECT", &waveformSelectPos);
 		applyPt("WYRM_FINE_PARAM", &finePos);
 		applyPt("WYRM_FM_ATTEN_PARAM", &fmAttenPos);
 		applyPt("WYRM_FOLD_PARAM", &foldPos);
@@ -304,6 +363,12 @@ struct WyrmWidget : ModuleWidget {
 		};
 		addEditorIconButton(WyrmEditorIconButton::LOCK, lockPos);
 		addEditorIconButton(WyrmEditorIconButton::RESET, resetPos);
+		auto* waveLeft = createWidgetCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))));
+		waveLeft->module = module;
+		addChild(waveLeft);
+		auto* waveRight = createWidgetCentered<WyrmWaveRightButton>(mm2px(waveformSelectPos.plus(Vec(2.5f, 0.f))));
+		waveRight->module = module;
+		addChild(waveRight);
 
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
