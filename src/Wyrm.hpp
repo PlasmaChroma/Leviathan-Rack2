@@ -19,6 +19,7 @@ enum WyrmShapeId {
 	SHAPE_REV_SAW,
 	SHAPE_SQUARE,
 	SHAPE_SUPERSAW,
+	SHAPE_SUPERSAW_DOWN,
 	SHAPE_COUNT
 };
 
@@ -183,6 +184,7 @@ struct Wyrm : Module {
 
 	bool lfoMode = false;
 	bool editorLocked = false;
+	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;
 	int rockCount = 0;

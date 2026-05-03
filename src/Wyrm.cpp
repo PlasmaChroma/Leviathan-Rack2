@@ -3,10 +3,11 @@
 const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Sine",
 	"Triangle",
-	"Saw",
-	"Reverse Saw",
+	"Saw Up",
+	"Saw Down",
 	"Square",
-	"Supersaw"
+	"Supersaw Up",
+	"Supersaw Down"
 };
 
 Wyrm::Wyrm() {
@@ -59,6 +60,7 @@ void Wyrm::setWavePoint(int index, float value) {
 		return;
 	}
 	wavePoints[index].store(clamp(value, -1.f, 1.f), std::memory_order_relaxed);
+	waveCustomized = true;
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
 
@@ -98,10 +100,25 @@ void Wyrm::setFactoryShape(int shapeId) {
 				v = base + 0.22f * inner1 + 0.11f * inner2;
 				v = clamp(v * 1.05f, -1.f, 1.f);
 			} break;
+			case SHAPE_SUPERSAW_DOWN: {
+				// Downward counterpart of supersaw: reverse all saw slopes.
+				static constexpr float phaseOffsets[] = {-0.032f, -0.016f, 0.f, 0.016f, 0.032f};
+				float baseSum = 0.f;
+				for (float offset : phaseOffsets) {
+					const float ph = wrap01(p + offset);
+					baseSum += 1.f - 2.f * ph;
+				}
+				const float base = baseSum / float(sizeof(phaseOffsets) / sizeof(phaseOffsets[0]));
+				const float inner1 = 1.f - 2.f * wrap01(p * 2.f + 0.13f);
+				const float inner2 = 1.f - 2.f * wrap01(p * 3.f - 0.21f);
+				v = base + 0.22f * inner1 + 0.11f * inner2;
+				v = clamp(v * 1.05f, -1.f, 1.f);
+			} break;
 			default: break;
 		}
 		wavePoints[i].store(clamp(v, -1.f, 1.f), std::memory_order_relaxed);
 	}
+	waveCustomized = false;
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
 
@@ -262,6 +279,7 @@ void Wyrm::pushWavePointsOutsideRock(int rockIndex) {
 		}
 	}
 	if (changed) {
+		waveCustomized = true;
 		waveVersion.fetch_add(1u, std::memory_order_release);
 	}
 }
@@ -314,6 +332,7 @@ json_t* Wyrm::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "lfoMode", json_boolean(lfoMode));
 	json_object_set_new(root, "editorLocked", json_boolean(editorLocked));
+	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
 	json_object_set_new(root, "rockCount", json_integer(rockCount));
@@ -343,6 +362,8 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (lfoJ) lfoMode = json_is_true(lfoJ);
 	json_t* lockJ = json_object_get(root, "editorLocked");
 	if (lockJ) editorLocked = json_is_true(lockJ);
+	json_t* customizedJ = json_object_get(root, "waveCustomized");
+	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* shapeJ = json_object_get(root, "selectedShape");
 	if (shapeJ) selectedShape = clamp(int(json_integer_value(shapeJ)), 0, SHAPE_COUNT - 1);
 	json_t* pointCountJ = json_object_get(root, "pointCount");
@@ -371,6 +392,9 @@ void Wyrm::dataFromJson(json_t* root) {
 			if (v) {
 				wavePoints[i].store(clamp(float(json_number_value(v)), -1.f, 1.f), std::memory_order_relaxed);
 			}
+		}
+		if (!customizedJ && n > 0) {
+			waveCustomized = true;
 		}
 		waveVersion.fetch_add(1u, std::memory_order_release);
 	}

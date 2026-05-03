@@ -214,8 +214,15 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
-		const std::string freqText = formatFrequencyText(displayHz);
-		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, freqText.c_str(), nullptr);
+		std::string readoutText;
+		if (module->waveCustomized) {
+			readoutText = string::f("Custom %s", formatFrequencyText(displayHz).c_str());
+		}
+		else {
+			const int shapeIndex = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+			readoutText = string::f("%s", kWyrmShapeLabels[shapeIndex]);
+		}
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, readoutText.c_str(), nullptr);
 	}
 };
 
