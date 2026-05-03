@@ -20,6 +20,8 @@ Wyrm::Wyrm() {
 	configParam(FOLD_PARAM, 0.f, 1.f, 0.f, "Fold amount");
 	configParam(SLITHER_PARAM, 0.f, 1.f, 0.f, "Slither", "%", 0.f, 100.f);
 	configParam(SLITHER_SPEED_PARAM, 0.f, 1.f, 0.5f, "Slither speed");
+	configButton(WAVE_LEFT_PARAM, "Waveform previous");
+	configButton(WAVE_RIGHT_PARAM, "Waveform next");
 	configInput(VOCT_INPUT, "V/Oct");
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");

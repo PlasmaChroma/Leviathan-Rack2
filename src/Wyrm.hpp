@@ -6,7 +6,7 @@
 #include <atomic>
 #include <cmath>
 
-constexpr int kWyrmPointCountDefault = 32;
+constexpr int kWyrmPointCountDefault = 64;
 constexpr int kWyrmPointCountMax = 256;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
@@ -155,6 +155,8 @@ struct Wyrm : Module {
 		FOLD_PARAM,
 		SLITHER_PARAM,
 		SLITHER_SPEED_PARAM,
+		WAVE_LEFT_PARAM,
+		WAVE_RIGHT_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {

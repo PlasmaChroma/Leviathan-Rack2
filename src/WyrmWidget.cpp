@@ -361,12 +361,12 @@ struct WyrmWidget : ModuleWidget {
 		};
 		addEditorIconButton(WyrmEditorIconButton::LOCK, lockPos);
 		addEditorIconButton(WyrmEditorIconButton::RESET, resetPos);
-		auto* waveLeft = createWidgetCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))));
+		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))), module, Wyrm::WAVE_LEFT_PARAM);
 		waveLeft->module = module;
-		addChild(waveLeft);
-		auto* waveRight = createWidgetCentered<WyrmWaveRightButton>(mm2px(waveformSelectPos.plus(Vec(2.5f, 0.f))));
+		addParam(waveLeft);
+		auto* waveRight = createParamCentered<WyrmWaveRightButton>(mm2px(waveformSelectPos.plus(Vec(2.5f, 0.f))), module, Wyrm::WAVE_RIGHT_PARAM);
 		waveRight->module = module;
-		addChild(waveRight);
+		addParam(waveRight);
 
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
