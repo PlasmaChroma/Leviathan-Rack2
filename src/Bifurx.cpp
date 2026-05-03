@@ -2,6 +2,8 @@
 
 namespace bifurx {
 
+static_assert((kFftSize & (kFftSize - 1)) == 0, "kFftSize must be a power of two for bitmask ring indexing.");
+
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Low + Low",
 	"Low + Band",
@@ -342,6 +344,31 @@ SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dam
 	coeffs.k = k;
 	coeffs.a1 = a1;
 	return coeffs;
+}
+
+bool shouldRefreshTitoCoeffs(float cutoff, float cachedCutoff, float damping, float cachedDamping, float sampleRate, float cachedSampleRate) {
+	if (cachedCutoff <= 0.f || std::fabs(sampleRate - cachedSampleRate) > 0.5f || std::fabs(damping - cachedDamping) > 1e-5f) {
+		return true;
+	}
+	const float thresholdHz = std::max(kTitoCoeffAbsoluteUpdateThresholdHz, std::fabs(cachedCutoff) * kTitoCoeffRelativeUpdateThreshold);
+	return std::fabs(cutoff - cachedCutoff) > thresholdHz;
+}
+
+void updateTitoCoeffs(
+	SvfCoeffs& coeffs,
+	float& cachedCutoff,
+	float& cachedDamping,
+	float& cachedSampleRate,
+	float cutoff,
+	float damping,
+	float sampleRate
+) {
+	if (shouldRefreshTitoCoeffs(cutoff, cachedCutoff, damping, cachedDamping, sampleRate, cachedSampleRate)) {
+		coeffs = makeSvfCoeffs(sampleRate, cutoff, damping);
+		cachedCutoff = cutoff;
+		cachedDamping = damping;
+		cachedSampleRate = sampleRate;
+	}
 }
 
 SvfOutputs TptSvf::processWithCoeffs(float input, const SvfCoeffs& coeffs) {
@@ -832,7 +859,7 @@ void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
 void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
 void Bifurx::publishAnalysisFrame() { const int writeIndex = 1 - analysisPublishedIndex.load(std::memory_order_relaxed), start = analysisWritePos, firstCount = kFftSize - start, secondCount = start; std::memcpy(analysisFrames[writeIndex].rawInput, analysisRawInputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].rawInput + firstCount, analysisRawInputHistory, size_t(secondCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].output, analysisOutputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].output + firstCount, analysisOutputHistory, size_t(secondCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].responseOutput, analysisResponseOutputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].responseOutput + firstCount, analysisResponseOutputHistory, size_t(secondCount) * sizeof(float)); analysisPublishedIndex.store(writeIndex, std::memory_order_release); analysisPublishSeq.fetch_add(1, std::memory_order_release); }
-void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) % kFftSize; if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; publishAnalysisFrame(); analysisPublishedOnce = true; } } }
+void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1); if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; publishAnalysisFrame(); analysisPublishedOnce = true; } } }
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
 	voctCvFilterInitialized = false;
@@ -872,7 +899,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool spanCvConnected = inputs[SPAN_CV_INPUT].isConnected();
 	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt, resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f, resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f), balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f, balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f), spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f), spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f), spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f, spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f), spanOct = 8.f * bifurx::shapedSpan(spanNorm), spanWideMorph = cascadeWideMorph(spanNorm);
 	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
-	const bool audioRateControlsActive = !titoNeutral || voctConnected || fmConnected;
+	const bool audioRateControlsActive = voctConnected || fmConnected;
 	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
 	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 	const bool controlDividerTick = controlUpdateDivider.process();
@@ -888,7 +915,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
 	if (updateFastControls) {
 		balance = balanceNorm; const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm), sr = std::max(args.sampleRate, 1.f);
-		auto computeFreqs = [&](float* fAOut, float* fBOut) { const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, std::log2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, std::log2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
+		auto computeFreqs = [&](float* fAOut, float* fBOut) { const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, fastLog2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, fastLog2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
 		computeFreqs(&freqA0, &freqB0); const float baseDamping = resoToDamping(resoNorm);
 		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
@@ -903,25 +930,29 @@ void Bifurx::process(const ProcessArgs& args) {
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
 	const float excitation = drivenIn + selfOscSeed;
 	float cutoffA = freqA0, cutoffB = freqB0;
+	const SvfCoeffs* coeffsAForSample = &cachedCoeffsA;
+	const SvfCoeffs* coeffsBForSample = &cachedCoeffsB;
 	if (!titoNeutral) {
 		const float depthScaled = couplingDepth * 0.2f;
 		float modA = 0.f, modB = 0.f;
 		if (tito < 0.f) { modA = depthScaled * coreA.ic1eq; modB = depthScaled * coreB.ic1eq; }
 		else { modA = depthScaled * coreB.ic1eq; modB = depthScaled * coreA.ic1eq; }
 		cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
+		updateTitoCoeffs(titoCoeffsA, titoCoeffFreqA, titoCoeffDampingA, titoCoeffSampleRateA, cutoffA, dampingA, args.sampleRate);
+		updateTitoCoeffs(titoCoeffsB, titoCoeffFreqB, titoCoeffDampingB, titoCoeffSampleRateB, cutoffB, dampingB, args.sampleRate);
+		coeffsAForSample = &titoCoeffsA;
+		coeffsBForSample = &titoCoeffsB;
 	}
 	if (measurePerf) perfCoreStart = PerfClock::now();
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
-		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffA == freqA0)) ? &cachedCoeffsA : nullptr;
 		return processCharacterStage(
-			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabled, coeffs
+			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabled, coeffsAForSample
 		);
 	};
 	auto pB = [&](float s) {
-		const SvfCoeffs* coeffs = (fastPathEligible || (cutoffB == freqB0)) ? &cachedCoeffsB : nullptr;
 		return processCharacterStage(
-			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabled, coeffs
+			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabled, coeffsBForSample
 		);
 	};
 

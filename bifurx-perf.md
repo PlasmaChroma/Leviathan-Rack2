@@ -181,6 +181,34 @@ Risk:
 
 This changes response behavior for CV modulation and should not be the first optimization unless needed.
 
+## SM/XM driven-mode coefficient cost
+
+When TITO is outside the neutral deadband, SM/XM audio-rate cutoff coupling is active:
+
+```cpp
+cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f));
+cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
+```
+
+This makes each stage use dynamic cutoff coefficients instead of the stable `cachedCoeffsA` / `cachedCoeffsB` path. The first optimization for this path is now implemented:
+
+- cache SM/XM dynamic coefficients per stage
+- refresh only when cutoff movement exceeds a very small threshold
+- force refresh on sample-rate or damping changes
+- keep SM/XM coupling audio-rate, but do not force the full base-control update block to run every sample solely because TITO is active
+- use `fastLog2()` for the remaining span boundary calculation
+
+Current tuning constants:
+
+- `kTitoCoeffRelativeUpdateThreshold = 2.5e-4f`
+- `kTitoCoeffAbsoluteUpdateThresholdHz = 0.002f`
+
+If SM/XM still costs too much after testing, the next options are higher risk:
+
+- add a quality option for exact per-sample SM/XM coefficients versus cached/quantized SM/XM coefficients
+- smooth or band-limit the coupling signal before cutoff modulation
+- approximate coefficient updates by modulating an already-computed `g` value instead of rebuilding full SVF coefficients
+
 ## Mode-specific cost
 
 Most modes process two SVF stages. Mode 10 uses the resample filter chain:
