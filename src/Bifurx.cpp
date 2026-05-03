@@ -741,7 +741,7 @@ Bifurx::Bifurx() {
 	debugInstanceId = gBifurxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	createdUnixTimeSec = system::getUnixTime();
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-	configSwitch(MODE_PARAM, 0.f, float(kBifurxModeCount - 1), 0.f, "Mode", {
+	configSwitch(MODE_PARAM, 0.f, float(kBifurxUiModeCount - 1), 0.f, "Mode", {
 		kBifurxModeLabels[0],
 		kBifurxModeLabels[1],
 		kBifurxModeLabels[2],
@@ -751,8 +751,7 @@ Bifurx::Bifurx() {
 		kBifurxModeLabels[6],
 		kBifurxModeLabels[7],
 		kBifurxModeLabels[8],
-		kBifurxModeLabels[9],
-		kBifurxModeLabels[10]
+		kBifurxModeLabels[9]
 	});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
@@ -878,11 +877,14 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	sanitizeCoreState(coreA); sanitizeCoreState(coreB);
 
-	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxModeCount - 1) % kBifurxModeCount)); }
-	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxModeCount)); }
+	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxUiModeCount - 1) % kBifurxUiModeCount)); }
+	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxUiModeCount)); }
+	if (params[MODE_PARAM].getValue() > float(kBifurxUiModeCount - 1)) {
+		params[MODE_PARAM].setValue(float(kBifurxUiModeCount - 1));
+	}
 
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
-	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxModeCount - 1);
+	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1);
 	const float tito = clamp(params[TITO_PARAM].getValue(), -1.f, 1.f);
 	const float titoAbs = std::fabs(tito);
 	const bool titoNeutral = titoAbs < 0.02f;

@@ -623,7 +623,7 @@ struct BifurxModeReadoutWidget final : Widget {
 	Module* module = nullptr;
 	void draw(const DrawArgs& args) override {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
-		int m = module ? clamp(int(std::round(module->params[Bifurx::MODE_PARAM].getValue())), 0, kBifurxModeCount - 1) : 0;
+		int m = module ? clamp(int(std::round(module->params[Bifurx::MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1) : 0;
 		char label[24]; std::snprintf(label, sizeof(label), "Mode (%d): %s", m + 1, kBifurxModeLabels[m]);
 		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f)); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255)); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE); nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, label, nullptr);
 	}
@@ -766,7 +766,7 @@ struct BifurxWidget final : ModuleWidget {
 		};
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Filter Mode", "", [=](Menu* submenu) {
-			for (int mode = 0; mode < kBifurxModeCount; ++mode) {
+			for (int mode = 0; mode < kBifurxUiModeCount; ++mode) {
 				submenu->addChild(createCheckMenuItem(
 					kBifurxModeLabels[mode], "",
 					[=]() {
