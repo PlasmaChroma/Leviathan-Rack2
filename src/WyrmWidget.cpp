@@ -183,6 +183,42 @@ struct WyrmEditorIconButton : TransparentWidget {
 	}
 };
 
+struct WyrmFrequencyReadoutWidget final : Widget {
+	Wyrm* module = nullptr;
+
+	static std::string formatFrequencyText(float hz) {
+		if (!std::isfinite(hz) || hz < 0.f) {
+			hz = 0.f;
+		}
+		if (hz < 1.f) {
+			return string::f("%.1f mHz", hz * 1000.f);
+		}
+		if (hz >= 1000.f) {
+			return string::f("%.2f kHz", hz / 1000.f);
+		}
+		if (hz < 10.f) {
+			return string::f("%.2f Hz", hz);
+		}
+		if (hz < 100.f) {
+			return string::f("%.1f Hz", hz);
+		}
+		return string::f("%.0f Hz", hz);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+		const std::string freqText = formatFrequencyText(displayHz);
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, freqText.c_str(), nullptr);
+	}
+};
+
 struct WyrmWidget : ModuleWidget {
 	std::shared_ptr<window::Svg> ageSigilSvg;
 	bool ageSigilUnlocked = false;
@@ -213,6 +249,7 @@ struct WyrmWidget : ModuleWidget {
 
 		math::Rect editorRectMm(Vec(6.0f, 16.0f), Vec(59.12f, 52.0f));
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRm_WAVE_EDITOR", &editorRectMm);
+		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
@@ -246,6 +283,11 @@ struct WyrmWidget : ModuleWidget {
 		editor->box.pos = mm2px(editorRectMm.pos);
 		editor->box.size = mm2px(editorRectMm.size);
 		addChild(editor);
+		auto* freqReadout = new WyrmFrequencyReadoutWidget();
+		freqReadout->module = module;
+		freqReadout->box.pos = mm2px(freqReadoutRectMm.pos);
+		freqReadout->box.size = mm2px(freqReadoutRectMm.size);
+		addChild(freqReadout);
 
 		auto addEditorIconButton = [&](WyrmEditorIconButton::Kind kind, Vec posMm) {
 			auto* button = new WyrmEditorIconButton(module, kind);

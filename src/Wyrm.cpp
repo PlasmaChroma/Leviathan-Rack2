@@ -5,13 +5,15 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Triangle",
 	"Saw",
 	"Reverse Saw",
-	"Square"
+	"Square",
+	"Supersaw"
 };
 
 Wyrm::Wyrm() {
 	createdUnixTimeSec = system::getUnixTime();
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-	configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.45f, "Frequency");
+	const float defaultFreqKnob = wyrmKnobValueForFrequency(261.63f, false);
+	configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, defaultFreqKnob, "Frequency");
 	configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
 	configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuator");
 	configParam(FOLD_PARAM, 0.f, 1.f, 0.f, "Fold amount");
@@ -82,6 +84,20 @@ void Wyrm::setFactoryShape(int shapeId) {
 			case SHAPE_SAW: v = 2.f * p - 1.f; break;
 			case SHAPE_REV_SAW: v = 1.f - 2.f * p; break;
 			case SHAPE_SQUARE: v = (p < 0.5f) ? 1.f : -1.f; break;
+			case SHAPE_SUPERSAW: {
+				// Static unison-like supersaw with nested smaller saw layers for richer shape detail.
+				static constexpr float phaseOffsets[] = {-0.032f, -0.016f, 0.f, 0.016f, 0.032f};
+				float baseSum = 0.f;
+				for (float offset : phaseOffsets) {
+					const float ph = wrap01(p + offset);
+					baseSum += 2.f * ph - 1.f;
+				}
+				const float base = baseSum / float(sizeof(phaseOffsets) / sizeof(phaseOffsets[0]));
+				const float inner1 = 2.f * wrap01(p * 2.f + 0.13f) - 1.f;
+				const float inner2 = 2.f * wrap01(p * 3.f - 0.21f) - 1.f;
+				v = base + 0.22f * inner1 + 0.11f * inner2;
+				v = clamp(v * 1.05f, -1.f, 1.f);
+			} break;
 			default: break;
 		}
 		wavePoints[i].store(clamp(v, -1.f, 1.f), std::memory_order_relaxed);
@@ -409,6 +425,9 @@ void Wyrm::process(const ProcessArgs& args) {
 		const float fm = inputs[FM_INPUT].isConnected() ? inputs[FM_INPUT].getPolyVoltage(c) * fmAtten : 0.f;
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
+		if (c == 0) {
+			displayFrequencyHz.store(hz, std::memory_order_relaxed);
+		}
 		phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
 		const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);

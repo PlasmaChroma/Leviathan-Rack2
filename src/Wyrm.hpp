@@ -18,6 +18,7 @@ enum WyrmShapeId {
 	SHAPE_SAW,
 	SHAPE_REV_SAW,
 	SHAPE_SQUARE,
+	SHAPE_SUPERSAW,
 	SHAPE_COUNT
 };
 
@@ -28,8 +29,8 @@ enum WyrmRockMouseMode {
 
 extern const char* const kWyrmShapeLabels[SHAPE_COUNT];
 
-constexpr float kWyrmAudioMinHz = 20.f;
-constexpr float kWyrmAudioMaxHz = 20000.f;
+constexpr float kWyrmAudioMinHz = 9.99f;
+constexpr float kWyrmAudioMaxHz = 9999.f;
 constexpr float kWyrmLfoMinHz = 0.01f;
 constexpr float kWyrmLfoMaxHz = 100.f;
 constexpr float kWyrmFoldMakeupGain = 1.0f / std::tanh(1.f);
@@ -175,6 +176,7 @@ struct Wyrm : Module {
 	std::array<float, kWyrmTableSize> wavetable {};
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
+	std::atomic<float> displayFrequencyHz {0.f};
 	std::array<float, kWyrmMaxChannels> phase {};
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
