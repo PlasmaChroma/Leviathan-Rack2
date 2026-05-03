@@ -241,10 +241,15 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!module) return;
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		const int count = module->pointCount;
+		const float dx = pointStep(count);
+		const float graphColumnWidth = std::min(2.0f, dx);
 
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoveredColumn = mouseInside ? indexFromX(mouseLocal.x) : -1;
+		float hoveredColumnCenterX = 0.f;
+		bool hoveredColumnCenterValid = false;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
 		if (mouseInside) {
 			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
@@ -259,13 +264,13 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 72));
 			nvgFill(args.vg);
 
+			const float guideX = 0.5f * (x0 + x1);
+			hoveredColumnCenterX = guideX;
+			hoveredColumnCenterValid = true;
 			nvgBeginPath(args.vg);
-			const float guideX = pointX(hoverIdx, count);
-			nvgMoveTo(args.vg, guideX, 0.f);
-			nvgLineTo(args.vg, guideX, box.size.y);
-			nvgStrokeWidth(args.vg, 2.3f);
-			nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 238));
-			nvgStroke(args.vg);
+			nvgRect(args.vg, guideX - 0.5f * graphColumnWidth, 0.f, graphColumnWidth, box.size.y);
+			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
+			nvgFill(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, 0.f, guideY);
@@ -276,21 +281,22 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const float midY = 0.5f * box.size.y;
-		const int count = module->pointCount;
-		const float dx = pointStep(count);
 		auto xAt = [&](int i) {
 			return pointX(i, count);
 		};
 		for (int i = 0; i < count; ++i) {
-			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * displayWavePoint(i)) * box.size.y;
 			const bool hotColumn = (i == hoveredColumn);
+			float x = xAt(i);
+			if (hotColumn && hoveredColumnCenterValid) {
+				x = hoveredColumnCenterX;
+			}
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, x, midY);
-			nvgLineTo(args.vg, x, y);
-			nvgStrokeWidth(args.vg, 2.f);
-			nvgStrokeColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(122, 92, 255, 196));
-			nvgStroke(args.vg);
+			const float yTop = std::min(midY, y);
+			const float yBottom = std::max(midY, y);
+			nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
+			nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(122, 92, 255, 196));
+			nvgFill(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, 2.1f);
