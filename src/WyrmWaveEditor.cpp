@@ -295,7 +295,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			const float yTop = std::min(midY, y);
 			const float yBottom = std::max(midY, y);
 			nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-			nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(122, 92, 255, 196));
+			nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(34, 27, 70, 196));
 			nvgFill(args.vg);
 
 			nvgBeginPath(args.vg);
