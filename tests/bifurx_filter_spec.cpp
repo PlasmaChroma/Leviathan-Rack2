@@ -16,6 +16,7 @@ using bifurx_test_model::clamp01;
 using bifurx_test_model::makePreviewModel;
 using bifurx_test_model::makeLlRuntimeSweep;
 using bifurx_test_model::responseDb;
+using bifurx_test_model::resampleFirstNotchHz;
 using bifurx_test_model::LlRuntimeSweepPoint;
 using bifurx_test_model::simulateHhRuntimeGainDb;
 using bifurx_test_model::simulateLlRuntimeGainDb;
@@ -762,6 +763,58 @@ TestResult testBandBandHasTwoLocalPeaksNearMarkers() {
   };
 }
 
+TestResult testResamplePreviewPlacesDeepFirstNull() {
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.mode = 10;
+  s.freqA = 950.f;
+  s.freqB = 4200.f;
+  s.qA = 1.f;
+  s.qB = 1.f;
+  s.resoNorm = 0.78f;
+  const PreviewModel m = makePreviewModel(s);
+
+  const float firstNullHz = resampleFirstNotchHz(s.freqA, s.freqB, s.sampleRate);
+  const float dbPre = responseDb(m, 0.45f * firstNullHz);
+  const float dbNull = responseDb(m, firstNullHz);
+  const float dbPost = responseDb(m, 1.55f * firstNullHz);
+  const bool pass = (dbPre > -6.f) && (dbNull < -36.f) && (dbPost > dbNull + 12.f);
+  return {
+    "Resample preview places a deep first null",
+    pass,
+    "firstNullHz=" + std::to_string(firstNullHz) +
+      " dbPre=" + std::to_string(dbPre) +
+      " dbNull=" + std::to_string(dbNull) +
+      " dbPost=" + std::to_string(dbPost)
+  };
+}
+
+TestResult testResamplePreviewLobesDecayAfterFirstNull() {
+  PreviewState s;
+  s.sampleRate = 48000.f;
+  s.mode = 10;
+  s.freqA = 1100.f;
+  s.freqB = 5200.f;
+  s.qA = 1.f;
+  s.qB = 1.f;
+  s.resoNorm = 0.25f;
+  const PreviewModel m = makePreviewModel(s);
+
+  const float firstNullHz = resampleFirstNotchHz(s.freqA, s.freqB, s.sampleRate);
+  const float dbLobe1 = responseDb(m, 1.45f * firstNullHz);
+  const float dbLobe2 = responseDb(m, 2.45f * firstNullHz);
+  const float dbLobe3 = responseDb(m, 3.45f * firstNullHz);
+  const bool pass = (dbLobe1 > dbLobe2 + 1.5f) && (dbLobe2 > dbLobe3 + 1.f);
+  return {
+    "Resample preview lobes decay after the first null",
+    pass,
+    "firstNullHz=" + std::to_string(firstNullHz) +
+      " l1=" + std::to_string(dbLobe1) +
+      " l2=" + std::to_string(dbLobe2) +
+      " l3=" + std::to_string(dbLobe3)
+  };
+}
+
 TestResult testModesRemainDistinctAtReferenceState() {
   PreviewState base;
   base.sampleRate = 48000.f;
@@ -1185,6 +1238,8 @@ int main() {
     testLowLowAndHighHighPreviewMirrorHighSpan(),
     testLowLowAndHighHighRuntimeMirrorAcrossSpans(),
     testBandBandHasTwoLocalPeaksNearMarkers(),
+    testResamplePreviewPlacesDeepFirstNull(),
+    testResamplePreviewLobesDecayAfterFirstNull(),
     testModesRemainDistinctAtReferenceState(),
     testAllModesMeetSvfTuningQualifier(),
   };

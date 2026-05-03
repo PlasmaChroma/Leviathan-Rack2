@@ -192,6 +192,7 @@ ZeroInputCapture captureZeroInputOutput(
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(level);
   module.params[Bifurx::TITO_PARAM].setValue(0.f);
+  module.highResonanceSelfOscEnabled = true;
   clearCvInputs(module);
 
   Module::ProcessArgs args;
@@ -619,6 +620,66 @@ TestResult testRuntimeSelfOscHighResBounded() {
   };
 }
 
+TestResult testRuntimeResamplePreviewAgreementAtKeyFrequencies() {
+  BifurxPreviewState state;
+  const float centerHz = 1800.f;
+  const float spanNorm = 0.62f;
+  const float reso = 0.78f;
+  const bool ok = capturePreviewState(10, centerHz, spanNorm, reso, 0.f, &state);
+  if (!ok) {
+    return {"Runtime Resample preview agreement at key frequencies", false, "preview publish failed"};
+  }
+
+  const BifurxPreviewModel model = makePreviewModel(state);
+  const float freqNorm = freqNormForCenterHz(centerHz);
+  const float firstNotchHz = resampleFirstNotchHz(state.freqA, state.freqB, state.sampleRate);
+  const std::vector<float> probesHz = {
+    std::max(20.f, 0.18f * firstNotchHz),
+    std::max(30.f, 0.52f * firstNotchHz),
+    1.45f * firstNotchHz,
+    2.35f * firstNotchHz
+  };
+
+  float worstDeltaDb = 0.f;
+  std::string detail;
+  bool pass = true;
+  for (float hz : probesHz) {
+    const float previewDb = previewModelResponseDb(model, hz);
+    const float runtimeDb = measureRuntimeGainDb(10, hz, 0.05f, freqNorm, spanNorm, reso, 0.f);
+    const float deltaDb = std::fabs(previewDb - runtimeDb);
+    worstDeltaDb = std::max(worstDeltaDb, deltaDb);
+    if (deltaDb > 4.5f) {
+      pass = false;
+    }
+    if (!detail.empty()) {
+      detail += " ";
+    }
+    detail += "@" + std::to_string(hz) +
+      "(p=" + std::to_string(previewDb) +
+      ",r=" + std::to_string(runtimeDb) +
+      ",d=" + std::to_string(deltaDb) + ")";
+  }
+
+  return {
+    "Runtime Resample preview agreement at key frequencies",
+    pass,
+    "firstNullHz=" + std::to_string(firstNotchHz) +
+      " worstDelta=" + std::to_string(worstDeltaDb) + " " + detail
+  };
+}
+
+TestResult testRuntimeResampleHighResStaysPassive() {
+  const ZeroInputCapture hot = captureZeroInputOutput(10, 1800.f, 0.62f, 1.00f, 0.f, 0.5f, 12000, 48000);
+  const bool pass = hot.finite && hot.rms < 1e-4f && hot.peakAbs < 1e-3f;
+  return {
+    "Runtime Resample stays passive at high RESO",
+    pass,
+    "finite=" + std::to_string(int(hot.finite)) +
+      " rms=" + std::to_string(hot.rms) +
+      " peakAbs=" + std::to_string(hot.peakAbs)
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -633,6 +694,8 @@ int main() {
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
+    testRuntimeResamplePreviewAgreementAtKeyFrequencies(),
+    testRuntimeResampleHighResStaysPassive(),
   };
 
   int fails = 0;

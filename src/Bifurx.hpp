@@ -228,6 +228,41 @@ float resamplingSecondNotchHz(float firstNotchHz, float endHz, float sampleRate)
 float resamplingTailNotchHz(float firstNotchHz, float endHz, float sampleRate);
 float resamplingRolloffHz(float firstNotchHz, float endHz, float sampleRate);
 float resamplingDisplayDroop(float hz, float rolloffHz);
+constexpr int kResampleCicStages = 2;
+int resampleCicLengthForFirstNull(float firstNotchHz, float sampleRate);
+std::complex<float> resampleCicResponse(float hz, float sampleRate, int n, int stages = 1);
+float resampleCicMagnitude(float hz, float sampleRate, int n, int stages = 1);
+float resampleOnePoleAlpha(float sampleRate, float cutoff);
+std::complex<float> resampleOnePoleLowpassResponse(float hz, float sampleRate, float cutoff);
+float resampleStage1Mix(float resoNorm);
+
+struct MovingAverageFilter {
+	std::vector<float> delayLine;
+	size_t writeIndex = 0;
+	int windowLength = 1;
+	float sum = 0.f;
+
+	void reset();
+	float process(float input, int newWindowLength);
+};
+
+struct OnePoleLowpass {
+	float state = 0.f;
+	float alpha = 1.f;
+	float cachedSampleRate = 0.f;
+	float cachedCutoff = 0.f;
+
+	void reset();
+	float process(float input, float sampleRate, float cutoff);
+};
+
+struct ResampleFilterChain {
+	MovingAverageFilter cic[kResampleCicStages];
+	OnePoleLowpass postLowpass;
+
+	void reset();
+	float process(float input, float sampleRate, float firstNotchHz, float rolloffHz, float resoNorm);
+};
 
 template <typename T>
 T combineModeResponse(
@@ -262,7 +297,7 @@ T combineModeResponse(
 		case 7: return T(1.04f) * cascadeHighToNotch;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
 		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
-		case 10: return T(1.03f) * cascadeNotch;
+		case 10: return T(1.f);
 		default: return T(1.f);
 	}
 }
@@ -310,6 +345,7 @@ struct BifurxPreviewModel {
 	float sampleRate = 44100.f;
 	float qA = 1.f;
 	float qB = 1.f;
+	float resoNorm = 0.f;
 	float wA = 1.f;
 	float wB = 1.f;
 	float wideMorph = 0.f;
@@ -433,7 +469,7 @@ struct BifurxSpectrumBase {
 			case 2: return markerIndex == 0; // Notch + Low
 			case 3: return true;            // Notch + Notch
 			case 7: return markerIndex == 1; // High + Notch
-			case 10: return markerIndex == 0; // Resample: first marker is notch, second is lobe-end peak
+			case 10: return markerIndex == 0; // Resample: first marker is the first null
 			default: return false;
 		}
 	}
@@ -486,8 +522,7 @@ float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleInde
 struct BifurxProbeEngineState {
 	TptSvf svfA;
 	TptSvf svfB;
-	TptSvf resampleTailNotch;
-	TptSvf resampleLowpass;
+	ResampleFilterChain resampleChain;
 };
 
 SvfOutputs processProbeStage(
@@ -498,7 +533,8 @@ SvfOutputs processProbeStage(
 	float cutoff,
 	float damping,
 	float drive,
-	float resoNorm
+	float resoNorm,
+	bool highResonanceSelfOscEnabled
 );
 
 void simulatePreviewProbeImpulseResponse(
@@ -558,8 +594,7 @@ struct Bifurx : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
-	TptSvf resampleTailNotchCore;
-	TptSvf resampleLowpassCore;
+	ResampleFilterChain resampleFilterCore;
 	RenderMode renderMode = RENDER_OPENGL;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;

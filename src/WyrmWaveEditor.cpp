@@ -227,10 +227,11 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
+		const int hoveredColumn = mouseInside ? indexFromX(mouseLocal.x) : -1;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
 		if (mouseInside) {
 			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
-			const int hoverIdx = indexFromX(mouseLocal.x);
+			const int hoverIdx = hoveredColumn;
 			const int count = module->pointCount;
 			const float dxHover = box.size.x / float(count);
 			const float x0 = hoverIdx * dxHover;
@@ -260,11 +261,12 @@ struct WyrmWaveEditor : TransparentWidget {
 		for (int i = 0; i < count; ++i) {
 			const float x = xAt(i);
 			const float y = (0.5f - 0.5f * displayWavePoint(i)) * box.size.y;
+			const bool hotColumn = (i == hoveredColumn);
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, x, midY);
 			nvgLineTo(args.vg, x, y);
 			nvgStrokeWidth(args.vg, 2.f);
-			nvgStrokeColor(args.vg, nvgRGBA(158, 132, 78, 170));
+			nvgStrokeColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(122, 92, 255, 196));
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
