@@ -32,13 +32,12 @@ void drawWyrmStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool po
 struct WyrmWaveLeftButton final : TL1105 {
 	Wyrm* module = nullptr;
 	void onButton(const event::Button& e) override {
+		TL1105::onButton(e);
 		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
 			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
 			const int next = (current + SHAPE_COUNT - 1) % SHAPE_COUNT;
 			module->setFactoryShape(next);
-			e.consume(this);
 		}
-		TL1105::onButton(e);
 	}
 	void draw(const DrawArgs& args) override {
 		TL1105::draw(args);
@@ -49,13 +48,12 @@ struct WyrmWaveLeftButton final : TL1105 {
 struct WyrmWaveRightButton final : TL1105 {
 	Wyrm* module = nullptr;
 	void onButton(const event::Button& e) override {
+		TL1105::onButton(e);
 		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
 			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
 			const int next = (current + 1) % SHAPE_COUNT;
 			module->setFactoryShape(next);
-			e.consume(this);
 		}
-		TL1105::onButton(e);
 	}
 	void draw(const DrawArgs& args) override {
 		TL1105::draw(args);
@@ -462,14 +460,15 @@ struct WyrmWidget : ModuleWidget {
 			}
 		}));
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createMenuLabel("Point Count"));
-		for (int count : {32, 48, 64, 128, 256}) {
-			auto* item = new WyrmPointCountMenuItem();
-			item->text = string::f("%d", count);
-			item->module = module;
-			item->count = count;
-			menu->addChild(item);
-		}
+		menu->addChild(createSubmenuItem("Point Count", string::f("%d", module->pointCount), [=](Menu* submenu) {
+			for (int count : {32, 48, 64, 128, 256}) {
+				auto* item = new WyrmPointCountMenuItem();
+				item->text = string::f("%d", count);
+				item->module = module;
+				item->count = count;
+				submenu->addChild(item);
+			}
+		}));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createMenuLabel("Factory Shape"));
 		for (int i = 0; i < SHAPE_COUNT; ++i) {

@@ -518,7 +518,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	for (int i = 0; i < 2; i++) {
 		if (!layout.markers[i].visible) continue;
 		nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-		nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 150)); nvgStrokeWidth(args.vg, 1.05f * 1.45f); nvgStroke(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 150)); nvgStrokeWidth(args.vg, 1.75f); nvgStroke(args.vg);
 	};
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
@@ -543,14 +543,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	nvgBeginPath(args.vg);
 	for (int i = 0; i < (int)refinedPoints.size(); ++i) { if (i == 0) nvgMoveTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y); else nvgLineTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y); }
-	nvgStrokeColor(args.vg, nvgRGBA(255, 248, 208, 244)); nvgLineJoin(args.vg, NVG_ROUND); nvgLineCap(args.vg, NVG_ROUND); nvgStrokeWidth(args.vg, 1.35f); nvgStroke(args.vg);
+	nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244)); nvgLineJoin(args.vg, NVG_ROUND); nvgLineCap(args.vg, NVG_ROUND); nvgStrokeWidth(args.vg, 1.7f); nvgStroke(args.vg);
 	lastDrawVertexCount = uint64_t(refinedPoints.size());
 	recordDrawSection(uiDrawCurveCount, uiDrawCurveNs);
 	nvgRestore(args.vg);
 
 	for (int i = 0; i < 2; ++i) {
 		if (!layout.markers[i].visible) continue;
-		nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 170)); nvgStrokeWidth(args.vg, 1.1f); nvgStroke(args.vg);
+		nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 170)); nvgStrokeWidth(args.vg, 1.35f); nvgStroke(args.vg);
 		nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
 		nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
 	}

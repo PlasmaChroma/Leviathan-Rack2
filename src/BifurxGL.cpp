@@ -24,6 +24,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	// Persistent buffers to avoid per-frame allocations
 	std::vector<GlVertex> fillVertices;
 	std::vector<GlVertex> fillSoftCapVertices;
+	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
 	std::vector<GlVertex> curveVertices;
 	std::vector<GlVertex> curveHaloVertices;
 	std::vector<GlVertex> cyanVertices;
@@ -67,6 +68,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const size_t refinedPointReserve = size_t(kCurvePointCount) + 8;
 		fillVertices.reserve(overlaySegmentCount * 6);
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
+		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
 		curveVertices.reserve(refinedPointReserve);
 		curveHaloVertices.reserve(refinedPointReserve);
 		cyanVertices.reserve(size_t(kCurvePointCount));
@@ -476,6 +478,29 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 	}
 
+	void appendStrokeSegment(const GlVertex& a, const GlVertex& b, float radius, std::vector<GlStrokeQuadVertex>* out) {
+		if (!out) return;
+		const float dx = b.x - a.x;
+		const float dy = b.y - a.y;
+		const float lenSq = dx * dx + dy * dy;
+		if (lenSq <= 1e-10f) return;
+		const float invLen = 1.f / std::sqrt(lenSq);
+		const float nx = -dy * invLen;
+		const float ny = dx * invLen;
+		const float pad = std::max(radius * 3.f, 0.75f);
+
+		const GlStrokeQuadVertex aLeft {a.x - nx * pad, a.y - ny * pad, a.r, a.g, a.b, a.a, -pad, radius};
+		const GlStrokeQuadVertex aRight {a.x + nx * pad, a.y + ny * pad, a.r, a.g, a.b, a.a, pad, radius};
+		const GlStrokeQuadVertex bLeft {b.x - nx * pad, b.y - ny * pad, b.r, b.g, b.b, b.a, -pad, radius};
+		const GlStrokeQuadVertex bRight {b.x + nx * pad, b.y + ny * pad, b.r, b.g, b.b, b.a, pad, radius};
+		out->push_back(aLeft);
+		out->push_back(aRight);
+		out->push_back(bRight);
+		out->push_back(aLeft);
+		out->push_back(bRight);
+		out->push_back(bLeft);
+	}
+
 	void drawStrokeQuadsShader(const std::vector<GlStrokeQuadVertex>& verts, float w, float h) {
 		if (!strokeShaderReady || verts.empty()) return;
 		glUseProgram(strokeShaderProgram);
@@ -654,6 +679,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
 		fillVertices.clear();
 		fillSoftCapVertices.clear();
+		fillCrestStrokeVertices.clear();
 		curveVertices.clear();
 		curveHaloVertices.clear();
 		cyanVertices.clear();
@@ -708,6 +734,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
 				fillSoftCapVertices.push_back({x1, y1 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
 				fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+
+				const float crestAlpha = clamp(0.16f + 0.18f * energy, 0.f, 0.34f);
+				const float crestRadius = 1.05f + 0.45f * energy;
+				const NVGcolor crest = mixColor(fill, nvgRGB(236, 244, 250), 0.18f);
+				appendStrokeSegment(
+					{x0, y0, crest.r, crest.g, crest.b, crestAlpha},
+					{x1, y1, crest.r, crest.g, crest.b, crestAlpha},
+					crestRadius,
+					&fillCrestStrokeVertices
+				);
 			}
 		}
 
@@ -730,7 +766,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		// 3. Main Yellow Filter Curve (with shared refinements)
 		calculateRefinedCurvePoints(&refinedPoints, w, h);
-		NVGcolor curveColor = nvgRGBA(255, 250, 216, 250);
+		NVGcolor curveColor = nvgRGBA(235, 204, 128, 250);
 		NVGcolor curveHaloColor = curveColor;
 		curveHaloColor.a = 0.28f;
 		for (const auto& p : refinedPoints) {
@@ -766,7 +802,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_VERTEX_ARRAY);
 		}
-		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + curveVertices.size() + cyanVertices.size());
+		if (ensureStrokeShaderReady()) {
+			drawStrokeQuadsShader(fillCrestStrokeVertices, w, h);
+		}
+		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestStrokeVertices.size() + curveVertices.size() + cyanVertices.size());
 
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		{
@@ -824,8 +863,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		nvgLineJoin(args.vg, NVG_ROUND);
 		nvgLineCap(args.vg, NVG_ROUND);
-		nvgStrokeWidth(args.vg, 1.35f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 248, 208, 244));
+		nvgStrokeWidth(args.vg, 1.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
 		nvgStroke(args.vg);
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
@@ -836,8 +875,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
 			nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 122));
-			nvgStrokeWidth(args.vg, 1.28f);
+			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 122));
+			nvgStrokeWidth(args.vg, 1.75f);
 			nvgStroke(args.vg);
 		}
 
@@ -847,8 +886,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
 			nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-			nvgStrokeColor(args.vg, nvgRGBA(252, 236, 176, 138));
-			nvgStrokeWidth(args.vg, 1.0f);
+			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 138));
+			nvgStrokeWidth(args.vg, 1.35f);
 			nvgStroke(args.vg);
 			
 			nvgBeginPath(args.vg);

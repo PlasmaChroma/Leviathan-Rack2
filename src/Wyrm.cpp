@@ -447,10 +447,11 @@ void Wyrm::process(const ProcessArgs& args) {
 		}
 		const float voct = inputs[VOCT_INPUT].isConnected() ? inputs[VOCT_INPUT].getPolyVoltage(c) : 0.f;
 		const float fm = inputs[FM_INPUT].isConnected() ? inputs[FM_INPUT].getPolyVoltage(c) * fmAtten : 0.f;
+		const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
-			displayFrequencyHz.store(hz, std::memory_order_relaxed);
+			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
 		}
 		phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
 		const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
