@@ -634,6 +634,7 @@ struct Bifurx : Module {
 	float previewPrevTargetFreqB = 440.f;
 	bool previewTargetMotionInitialized = false;
 	int previewTargetStillSamples = 0;
+	int previewSampleAccum = 0;
 	int previewAdaptiveCooldown = 0;
 	bool controlFastCacheValid = false;
 	float cachedDampingA = 0.7f;

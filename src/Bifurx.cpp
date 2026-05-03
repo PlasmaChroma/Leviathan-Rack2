@@ -837,6 +837,7 @@ void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
 	voctCvFilterInitialized = false;
 	previewFilterInitialized = false;
+	previewSampleAccum = 0;
 	const float sampleRate = std::max(e.sampleRate, 1.f);
 	llTelemetryAlpha = onePoleAlpha(1.f / sampleRate, kLlTelemetryTauSeconds);
 	llTelemetryAlphaSampleRate = sampleRate;
@@ -951,28 +952,36 @@ void Bifurx::process(const ProcessArgs& args) {
 	else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
 	if (measurePerf) perfPreviewStart = PerfClock::now();
 
-	const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
-	const bool pPitchCvConn = voctConnected || inputs[FM_INPUT].isConnected();
+	const bool pPitchCvConn = voctConnected || fmConnected;
 	perfPreviewPitchCvConnected.store(pPitchCvConn, std::memory_order_relaxed);
-	const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
-	if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
-	const float tMAOct = std::fabs(std::log2(std::max(pTFqA, 1.f) / std::max(previewPrevTargetFreqA, 1.f))), tMBOct = std::fabs(std::log2(std::max(pTFqB, 1.f) / std::max(previewPrevTargetFreqB, 1.f))), tMOct = std::max(tMAOct, tMBOct);
-	if (tMOct <= kPreviewInstantSettleMotionOctThreshold) previewTargetStillSamples++; else previewTargetStillSamples = 0;
-	const bool pInstSettle = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
-	previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB;
-	if (!previewFilterInitialized || pInstSettle) { previewFreqAFiltered = pTFqA; previewFreqBFiltered = pTFqB; previewQAFiltered = pTQA; previewQBFiltered = pTQB; previewBalanceFiltered = pTBal; previewFilterInitialized = true; }
-	else { const float a = pSmAlpha; previewFreqAFiltered += a * (pTFqA - previewFreqAFiltered); previewFreqBFiltered += a * (pTFqB - previewFreqBFiltered); previewQAFiltered += a * (pTQA - previewQAFiltered); previewQBFiltered += a * (pTQB - previewQBFiltered); previewBalanceFiltered += a * (pTBal - previewBalanceFiltered); }
-
-	BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
 	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
 	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
-	bool adpTick = false;
-	if (hasLastPreviewState && previewAdaptiveCooldown <= 0 && perTick) {
-		const float fMA = std::fabs(fastLog2(std::max(pS.freqA, 1.f)) - fastLog2(std::max(lastPreviewState.freqA, 1.f))), fMB = std::fabs(fastLog2(std::max(pS.freqB, 1.f)) - fastLog2(std::max(lastPreviewState.freqB, 1.f))), sMO = std::fabs(pS.spanOct - lastPreviewState.spanOct), qMA = std::fabs(pS.qA - lastPreviewState.qA), qMB = std::fabs(pS.qB - lastPreviewState.qB), bM = std::fabs(pS.balance - lastPreviewState.balance);
-		if (fMA > kPreviewAdaptiveOctaveThreshold || fMB > kPreviewAdaptiveOctaveThreshold || sMO > kPreviewAdaptiveSpanOctThreshold || qMA > kPreviewAdaptiveQThreshold || qMB > kPreviewAdaptiveQThreshold || bM > kPreviewAdaptiveBalanceThreshold) { adpTick = true; previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples; }
+	previewSampleAccum++;
+	const bool shouldUpdatePreviewState = perTick || !hasLastPreviewState;
+	if (shouldUpdatePreviewState) {
+		const int elapsedSamples = std::max(previewSampleAccum, 1);
+		previewSampleAccum = 0;
+		const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
+		const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
+		const float oneMinusAlpha = clamp(1.f - pSmAlpha, 0.f, 1.f);
+		const float effectiveAlpha = 1.f - std::pow(oneMinusAlpha, float(elapsedSamples));
+		if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
+		const float tMAOct = std::fabs(std::log2(std::max(pTFqA, 1.f) / std::max(previewPrevTargetFreqA, 1.f))), tMBOct = std::fabs(std::log2(std::max(pTFqB, 1.f) / std::max(previewPrevTargetFreqB, 1.f))), tMOct = std::max(tMAOct, tMBOct);
+		if (tMOct <= kPreviewInstantSettleMotionOctThreshold) previewTargetStillSamples += elapsedSamples; else previewTargetStillSamples = 0;
+		const bool pInstSettle = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
+		previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB;
+		if (!previewFilterInitialized || pInstSettle) { previewFreqAFiltered = pTFqA; previewFreqBFiltered = pTFqB; previewQAFiltered = pTQA; previewQBFiltered = pTQB; previewBalanceFiltered = pTBal; previewFilterInitialized = true; }
+		else { const float a = effectiveAlpha; previewFreqAFiltered += a * (pTFqA - previewFreqAFiltered); previewFreqBFiltered += a * (pTFqB - previewFreqBFiltered); previewQAFiltered += a * (pTQA - previewQAFiltered); previewQBFiltered += a * (pTQB - previewQBFiltered); previewBalanceFiltered += a * (pTBal - previewBalanceFiltered); }
+
+		BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
+		bool adpTick = false;
+		if (hasLastPreviewState && previewAdaptiveCooldown <= 0 && perTick) {
+			const float fMA = std::fabs(fastLog2(std::max(pS.freqA, 1.f)) - fastLog2(std::max(lastPreviewState.freqA, 1.f))), fMB = std::fabs(fastLog2(std::max(pS.freqB, 1.f)) - fastLog2(std::max(lastPreviewState.freqB, 1.f))), sMO = std::fabs(pS.spanOct - lastPreviewState.spanOct), qMA = std::fabs(pS.qA - lastPreviewState.qA), qMB = std::fabs(pS.qB - lastPreviewState.qB), bM = std::fabs(pS.balance - lastPreviewState.balance);
+			if (fMA > kPreviewAdaptiveOctaveThreshold || fMB > kPreviewAdaptiveOctaveThreshold || sMO > kPreviewAdaptiveSpanOctThreshold || qMA > kPreviewAdaptiveQThreshold || qMB > kPreviewAdaptiveQThreshold || bM > kPreviewAdaptiveBalanceThreshold) { adpTick = true; previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples; }
+		}
+		if (!hasLastPreviewState || ((perTick || adpTick) && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
+		if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
 	}
-	if (!hasLastPreviewState || ((perTick || adpTick) && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
-	if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
 	if (measurePerf) perfAnalysisStart = PerfClock::now();
 	pushAnalysisSample(in, out, modeOut);
 
