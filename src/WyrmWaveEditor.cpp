@@ -238,12 +238,19 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 120));
 		nvgStroke(args.vg);
 
-		if (!module) return;
+		const bool hasModule = (module != nullptr);
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		const int count = module->pointCount;
+		const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
 		const float dx = pointStep(count);
 		const float graphColumnWidth = std::min(2.0f, dx);
+		auto waveValueAt = [&](int i) {
+			if (hasModule) {
+				return displayWavePoint(i);
+			}
+			const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
+			return std::sin(2.f * float(M_PI) * phase);
+		};
 
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
@@ -251,10 +258,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		float hoveredColumnCenterX = 0.f;
 		bool hoveredColumnCenterValid = false;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		if (mouseInside) {
+		if (hasModule && mouseInside) {
 			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
 			const int hoverIdx = hoveredColumn;
-			const int count = module->pointCount;
 			const float dxHover = pointStep(count);
 			const float x0 = pointEdgeInset() + float(hoverIdx) * dxHover;
 			const float x1 = x0 + dxHover;
@@ -285,7 +291,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			return pointX(i, count);
 		};
 		for (int i = 0; i < count; ++i) {
-			const float y = (0.5f - 0.5f * displayWavePoint(i)) * box.size.y;
+			const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
 			const bool hotColumn = (i == hoveredColumn);
 			float x = xAt(i);
 			if (hotColumn && hoveredColumnCenterValid) {
@@ -311,13 +317,13 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 			if (count == 1) {
 				const float x = xAt(0);
-				const float y = (0.5f - 0.5f * displayWavePoint(0)) * box.size.y;
+				const float y = (0.5f - 0.5f * waveValueAt(0)) * box.size.y;
 				nvgMoveTo(args.vg, x, y);
 				return;
 			}
 
 			auto pointAt = [&](int i) {
-				return Vec(xAt(i), (0.5f - 0.5f * displayWavePoint(i)) * box.size.y);
+				return Vec(xAt(i), (0.5f - 0.5f * waveValueAt(i)) * box.size.y);
 			};
 
 			const Vec pStart = pointAt(0);
@@ -377,7 +383,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		for (int i = 0; i < count; ++i) {
 			const float x = xAt(i);
-			const float y = (0.5f - 0.5f * displayWavePoint(i)) * box.size.y;
+			const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
 			const float plateW = clamp(0.31f * dx, 1.0f, 3.4f);
 			const float plateH = 0.95f + 0.35f * std::sin(0.33f * float(i));
 			for (int lane = 0; lane < 2; ++lane) {
@@ -393,7 +399,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 		}
 
-		for (int i = 0; i < module->rockCount; ++i) {
+		for (int i = 0; hasModule && i < module->rockCount; ++i) {
 			const WyrmRock& rock = module->rocks[i];
 			const Vec center = rockCenter(rock);
 			const Vec radius = rockPixelRadius(rock);
@@ -413,7 +419,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFill(args.vg);
 		}
 
-		if (draggingRock >= 0 && draggingRock < module->rockCount) {
+		if (hasModule && draggingRock >= 0 && draggingRock < module->rockCount) {
 			const Vec center = rockCenter(module->rocks[draggingRock]);
 			const Vec radius = rockPixelRadius(module->rocks[draggingRock]);
 			const NVGcolor arrowColor =

@@ -168,3 +168,78 @@ Start by landing the smallest viable version:
 5. Add context-menu toggles only after the visual is stable.
 
 Prefer readable helpers over cleverness. The feature is a visual spell, not a DSP primitive: it should be beautiful, deterministic, cheap, and impossible to destabilize the oscillator.
+
+
+Yes — **it would change the implementation path**, but not the core suggestion.
+
+The original advice still holds conceptually: treat the sand as a **persistent memory field** disturbed by the animated Wyrm trace. But with OpenGL shaders, I would stop thinking “CPU grid drawn with NanoVG” and instead think:
+
+> **GPU sand texture + ping-pong feedback pass + shader compositing.**
+
+Your current editor is a `TransparentWidget` using NanoVG drawing, with UI-only animation state like `visualSlitherPhase`, `advanceVisualSlitherPhase()`, `slitherOffsetForIndex()`, and `displayWavePoint()` already separated from the audio DSP path. That’s a good seam: the shader version should still live in the visual/widget layer, not in `process()`. 
+
+The shader version I’d spec as:
+
+1. **Keep Wyrm/slither logic CPU-side**
+   Use the existing phase/value mapping, rocks, `slitherOffset()`, `slitherSpeedFactor()`, and `applyRockClamp()` as the authoritative visual path generator. The oscillator already has `wavePoints`, `pointCount`, rocks, and slither state available in the module model. 
+
+2. **Upload a small curve representation to GPU**
+   Either upload the displayed Wyrm body as:
+
+   * a 1D texture of sampled points, maybe 128–256 samples, or
+   * a uniform array if small enough, or
+   * a dynamic VBO polyline if drawing geometry.
+
+3. **Use a persistent sand field texture**
+   Instead of storing `sandHeight[]` or `sandEnergy[]` on CPU, create two low-res textures:
+
+   * `sandA`
+   * `sandB`
+
+   Each frame:
+
+   * read `sandA`
+   * apply decay/diffusion/settling
+   * inject disturbance along the current Wyrm trace
+   * write into `sandB`
+   * swap.
+
+4. **Composite visually in a final shader**
+   Final shader shades sand using:
+
+   * base tan/noise grain
+   * height/depression from the sand texture
+   * ridge highlights
+   * subtle sparkling/iridescent grains
+   * darker trough where the Wyrm recently passed
+
+5. **Leave interaction overlays in NanoVG**
+   I would not immediately move everything to GL. Keep these as current NanoVG overlays:
+
+   * editable points
+   * hover column
+   * rocks
+   * drag arrows
+   * waveform body stroke, unless you later want it shader-rendered too.
+
+The big architectural change is this:
+
+```md
+NanoVG version:
+CPU updates sand grid → NanoVG draws sand cells/noise → NanoVG draws Wyrm/rocks
+
+OpenGL version:
+CPU computes Wyrm path → GPU feedback shader updates sand texture → GPU composites sand → NanoVG overlays editor controls
+```
+
+For Rack specifically, I would still be cautious. A shader path is more powerful, but more fragile than a simple CPU/NanoVG layer. Given your recent OpenGLWidget scaling/freezing adventures, I’d only go GL here if you want the sand to look genuinely alive: smooth trails, normal-map-like ridges, shimmering grains, continuous erosion, soft diffusion. If the target is “nice atmospheric background that implies hysteresis,” CPU grid is safer. If the target is “tiny desert organism memory field,” shader path is the dragon gate.
+
+My revised recommendation would be:
+
+**Phase 1:** CPU/NanoVG sand field, prove the look and behavior.
+
+**Phase 2:** Replace only the sand layer with an OpenGL ping-pong texture.
+
+**Phase 3:** Optionally shader-render the Wyrm body itself, but keep rocks/edit handles in NanoVG for stability.
+
+So: yes, OpenGL changes the mechanics substantially — especially persistence, decay, blur, and texture-based memory — but the spec’s central model remains correct: **the Wyrm disturbs a persistent sand memory layer; the sand slowly forgets.**
