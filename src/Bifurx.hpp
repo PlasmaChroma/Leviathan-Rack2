@@ -235,6 +235,14 @@ float resampleCicMagnitude(float hz, float sampleRate, int n, int stages = 1);
 float resampleOnePoleAlpha(float sampleRate, float cutoff);
 std::complex<float> resampleOnePoleLowpassResponse(float hz, float sampleRate, float cutoff);
 float resampleStage1Mix(float resoNorm);
+float resampleLobeShapeMix(float spanNorm, float resoNorm);
+constexpr float kResamplePeak1NullRatio = 1.4303f;
+constexpr float kResamplePeak2NullRatio = 2.4590f;
+float resamplePeak1HzFromFirstNull(float firstNullHz);
+float resamplePeak2HzFromFirstNull(float firstNullHz);
+float resampleFirstNullHzFromPeak2(float peak2Hz, float sampleRate);
+float resamplePeak2HzFromFreqPair(float freqAHz, float freqBHz, float sampleRate);
+float resampleRolloffHzFromPeakStandins(float peak1Hz, float peak2StandinHz, float sampleRate, float spanNorm);
 
 struct MovingAverageFilter {
 	std::vector<float> delayLine;
@@ -261,7 +269,7 @@ struct ResampleFilterChain {
 	OnePoleLowpass postLowpass;
 
 	void reset();
-	float process(float input, float sampleRate, float firstNotchHz, float rolloffHz, float resoNorm);
+	float process(float input, float sampleRate, float firstNotchHz, float rolloffHz, float spanNorm, float resoNorm);
 };
 
 template <typename T>
@@ -459,7 +467,7 @@ struct BifurxSpectrumBase {
 			case 2: return (markerIndex == 0) ? -1 : 1;
 			case 3: return -1;
 			case 7: return (markerIndex == 1) ? -1 : 1;
-			case 10: return (markerIndex == 0) ? -1 : 1;
+			case 10: return 0;
 			default: return 0;
 		}
 	}
@@ -469,7 +477,6 @@ struct BifurxSpectrumBase {
 			case 2: return markerIndex == 0; // Notch + Low
 			case 3: return true;            // Notch + Notch
 			case 7: return markerIndex == 1; // High + Notch
-			case 10: return markerIndex == 0; // Resample: first marker is the first null
 			default: return false;
 		}
 	}

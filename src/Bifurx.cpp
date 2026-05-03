@@ -265,6 +265,41 @@ float resampleStage1Mix(float resoNorm) {
 	return std::pow(clamp01(resoNorm), 0.72f);
 }
 
+float resampleLobeShapeMix(float spanNorm, float resoNorm) {
+	const float spanShape = clamp01(spanNorm);
+	const float resoShape = resampleStage1Mix(resoNorm);
+	return clamp(0.06f + 0.74f * spanShape + 0.20f * resoShape, 0.f, 0.96f);
+}
+
+float resamplePeak1HzFromFirstNull(float firstNullHz) {
+	return std::max(firstNullHz, 0.f) * kResamplePeak1NullRatio;
+}
+
+float resamplePeak2HzFromFirstNull(float firstNullHz) {
+	return std::max(firstNullHz, 0.f) * kResamplePeak2NullRatio;
+}
+
+float resampleFirstNullHzFromPeak2(float peak2Hz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float safePeak2Hz = clamp(peak2Hz, kFreqMinHz, 0.46f * sr);
+	return clamp(safePeak2Hz / kResamplePeak2NullRatio, kFreqMinHz, 0.42f * sr);
+}
+
+float resamplePeak2HzFromFreqPair(float freqAHz, float freqBHz, float sampleRate) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float safeA = clamp(freqAHz, kFreqMinHz, 0.46f * sr);
+	const float safeB = clamp(freqBHz, kFreqMinHz, 0.46f * sr);
+	return clamp(std::sqrt(safeA * safeB), kFreqMinHz, 0.46f * sr);
+}
+
+float resampleRolloffHzFromPeakStandins(float peak1Hz, float peak2StandinHz, float sampleRate, float spanNorm) {
+	const float sr = std::max(sampleRate, 1.f);
+	const float safePeak1Hz = clamp(peak1Hz, kFreqMinHz, 0.46f * sr);
+	const float safePeak2Hz = clamp(peak2StandinHz, safePeak1Hz * 1.08f, 0.46f * sr);
+	const float spanShape = clamp01(spanNorm);
+	return clamp(mixf(0.70f, 1.18f, spanShape) * safePeak2Hz, safePeak1Hz * 1.04f, 0.46f * sr);
+}
+
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	const float clampedT = bifurx::clamp01(t);
 	NVGcolor out;
@@ -438,11 +473,11 @@ void ResampleFilterChain::reset() {
 	postLowpass.reset();
 }
 
-float ResampleFilterChain::process(float input, float sampleRate, float firstNotchHz, float rolloffHz, float resoNorm) {
+float ResampleFilterChain::process(float input, float sampleRate, float firstNotchHz, float rolloffHz, float spanNorm, float resoNorm) {
 	const int cicLength = resampleCicLengthForFirstNull(firstNotchHz, sampleRate);
 	const float stage1 = cic[0].process(input, cicLength);
 	const float stage2 = cic[1].process(stage1, cicLength);
-	const float cicMixed = mixf(stage2, stage1, resampleStage1Mix(resoNorm));
+	const float cicMixed = mixf(stage2, stage1, resampleLobeShapeMix(spanNorm, resoNorm));
 	return postLowpass.process(cicMixed, sampleRate, rolloffHz);
 }
 
@@ -581,6 +616,13 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.qB = qB;
 	model.resoNorm = state.resoNorm;
 	model.mode = state.mode;
+	if (model.mode == 10) {
+		const float peak2Hz = resamplePeak2HzFromFreqPair(freqA, freqB, state.sampleRate);
+		const float firstNullHz = resampleFirstNullHzFromPeak2(peak2Hz, state.sampleRate);
+		const float maxHz = 0.46f * std::max(state.sampleRate, 1.f);
+		model.markerFreqA = clamp(resamplePeak1HzFromFirstNull(firstNullHz), kFreqMinHz, maxHz);
+		model.markerFreqB = clamp(resamplePeak2HzFromFirstNull(firstNullHz), kFreqMinHz, maxHz);
+	}
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -604,13 +646,14 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	std::complex<float> hpB = model.highB.response(z1, z2);
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeNotchToLow = lpB * ntA, cascadeHpToLp = lpB * hpA, cascadeHighToNotch = ntB * hpA, cascadeHpToHp = hpB * hpA;
 	if (model.mode == 10) {
-		const float firstNotchHz = resampleFirstNotchHz(model.markerFreqA, model.markerFreqB, model.sampleRate);
-		const float endHz = resampleEndHz(model.markerFreqA, model.markerFreqB, model.sampleRate);
-		const float rolloffHz = resamplingRolloffHz(firstNotchHz, endHz, model.sampleRate);
+		const float peak2Hz = std::max(model.markerFreqA, model.markerFreqB);
+		const float firstNotchHz = resampleFirstNullHzFromPeak2(peak2Hz, model.sampleRate);
+		const float peak1Hz = resamplePeak1HzFromFirstNull(firstNotchHz);
+		const float rolloffHz = resampleRolloffHzFromPeakStandins(peak1Hz, resamplePeak2HzFromFirstNull(firstNotchHz), model.sampleRate, model.wideMorph);
 		const int cicLength = resampleCicLengthForFirstNull(firstNotchHz, model.sampleRate);
 		const std::complex<float> cicStage1 = resampleCicResponse(hz, model.sampleRate, cicLength, 1);
 		const std::complex<float> cicStage2 = resampleCicResponse(hz, model.sampleRate, cicLength, 2);
-		const float stage1Mix = resampleStage1Mix(model.resoNorm);
+		const float stage1Mix = resampleLobeShapeMix(model.wideMorph, model.resoNorm);
 		const std::complex<float> cicResponse = cicStage2 + (cicStage1 - cicStage2) * stage1Mix;
 		return cicResponse * resampleOnePoleLowpassResponse(hz, model.sampleRate, rolloffHz);
 	}
@@ -654,9 +697,11 @@ void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float*
 			case 7: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, wideMorph); break;
 			case 9: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
 			default: {
-				const float firstNotchHz = resampleFirstNotchHz(freqA, freqB, sampleRate);
-				const float rolloffHz = resamplingRolloffHz(firstNotchHz, resampleEndHz(freqA, freqB, sampleRate), sampleRate);
-				modeOut = engine.resampleChain.process(excitation, sampleRate, firstNotchHz, rolloffHz, state.resoNorm);
+				const float peak2Hz = resamplePeak2HzFromFreqPair(freqA, freqB, sampleRate);
+				const float firstNotchHz = resampleFirstNullHzFromPeak2(peak2Hz, sampleRate);
+				const float peak1Hz = resamplePeak1HzFromFirstNull(firstNotchHz);
+				const float rolloffHz = resampleRolloffHzFromPeakStandins(peak1Hz, resamplePeak2HzFromFirstNull(firstNotchHz), sampleRate, wideMorph);
+				modeOut = engine.resampleChain.process(excitation, sampleRate, firstNotchHz, rolloffHz, wideMorph, state.resoNorm);
 			} break;
 		}
 		inputBuffer[i] = excitation; outputBuffer[i] = applyLevelOutputStage(modeOut, kPreviewProbeLevelKnob);
@@ -891,9 +936,11 @@ void Bifurx::process(const ProcessArgs& args) {
 		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
 		case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
 		default: {
-			const float firstNotchHz = resampleFirstNotchHz(freqA0, freqB0, args.sampleRate);
-			const float rolloffHz = resamplingRolloffHz(firstNotchHz, resampleEndHz(freqA0, freqB0, args.sampleRate), args.sampleRate);
-			modeOut = resampleFilterCore.process(excitation, args.sampleRate, firstNotchHz, rolloffHz, resoNorm);
+			const float peak2Hz = resamplePeak2HzFromFreqPair(freqA0, freqB0, args.sampleRate);
+			const float firstNotchHz = resampleFirstNullHzFromPeak2(peak2Hz, args.sampleRate);
+			const float peak1Hz = resamplePeak1HzFromFirstNull(firstNotchHz);
+			const float rolloffHz = resampleRolloffHzFromPeakStandins(peak1Hz, resamplePeak2HzFromFirstNull(firstNotchHz), args.sampleRate, spanWideMorph);
+			modeOut = resampleFilterCore.process(excitation, args.sampleRate, firstNotchHz, rolloffHz, spanWideMorph, resoNorm);
 		} break;
 	}
 
@@ -1311,8 +1358,17 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	addRefinement(0, model.markerFreqA);
 	addRefinement(1, model.markerFreqB);
 	if (state.previewState.mode == 10) {
-		const float firstNotchHz = resampleFirstNotchHz(model.markerFreqA, model.markerFreqB, state.previewState.sampleRate);
-		const float rolloffHz = resamplingRolloffHz(firstNotchHz, resampleEndHz(model.markerFreqA, model.markerFreqB, state.previewState.sampleRate), state.previewState.sampleRate);
+		const float peak2Hz = std::max(model.markerFreqA, model.markerFreqB);
+		const float firstNotchHz = resampleFirstNullHzFromPeak2(peak2Hz, state.previewState.sampleRate);
+		const float peak1Hz = resamplePeak1HzFromFirstNull(firstNotchHz);
+		const float rolloffHz = resampleRolloffHzFromPeakStandins(peak1Hz, resamplePeak2HzFromFirstNull(firstNotchHz), state.previewState.sampleRate, cascadeWideMorph(state.previewState.spanNorm));
+		if (firstNotchHz >= minHz && firstNotchHz <= maxHz) {
+			const float firstNullX01 = logPosition(firstNotchHz, minHz, maxHz);
+			const float dx = 0.35f / float(kCurvePointCount - 1);
+			points->push_back({clamp(firstNullX01 - dx, 0.f, 1.f), 0.f, 1});
+			points->push_back({clamp(firstNullX01, 0.f, 1.f), 0.f, 2});
+			points->push_back({clamp(firstNullX01 + dx, 0.f, 1.f), 0.f, 1});
+		}
 		if (rolloffHz >= minHz && rolloffHz <= maxHz) {
 			const float rolloffX01 = logPosition(rolloffHz, minHz, maxHz);
 			const float dx = 0.35f / float(kCurvePointCount - 1);

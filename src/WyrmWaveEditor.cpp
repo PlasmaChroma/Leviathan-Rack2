@@ -15,11 +15,28 @@ struct WyrmWaveEditor : TransparentWidget {
 		module = m;
 	}
 
+	float pointEdgeInset() const {
+		return 2.2f;
+	}
+
+	float pointDrawWidth() const {
+		return std::max(1.f, box.size.x - 2.f * pointEdgeInset());
+	}
+
+	float pointStep(int count) const {
+		return pointDrawWidth() / float(std::max(count, 1));
+	}
+
+	float pointX(int index, int count) const {
+		return pointEdgeInset() + (float(index) + 0.5f) * pointStep(count);
+	}
+
 	int indexFromX(float x) const {
 		if (box.size.x <= 1.f) return 0;
-		const float n = clamp(x / box.size.x, 0.f, 1.f);
 		const int count = module ? module->pointCount : kWyrmPointCountDefault;
-		return clamp(int(std::floor(n * float(count))), 0, count - 1);
+		const float dx = pointStep(count);
+		const float column = (x - pointEdgeInset()) / std::max(dx, 1e-6f);
+		return clamp(int(std::floor(column)), 0, count - 1);
 	}
 
 	float valueFromY(float y) const {
@@ -233,14 +250,22 @@ struct WyrmWaveEditor : TransparentWidget {
 			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
 			const int hoverIdx = hoveredColumn;
 			const int count = module->pointCount;
-			const float dxHover = box.size.x / float(count);
-			const float x0 = hoverIdx * dxHover;
+			const float dxHover = pointStep(count);
+			const float x0 = pointEdgeInset() + float(hoverIdx) * dxHover;
 			const float x1 = x0 + dxHover;
 
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x0, 0.f, x1 - x0, box.size.y);
-			nvgFillColor(args.vg, nvgRGBA(255, 240, 150, 86));
+			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 72));
 			nvgFill(args.vg);
+
+			nvgBeginPath(args.vg);
+			const float guideX = pointX(hoverIdx, count);
+			nvgMoveTo(args.vg, guideX, 0.f);
+			nvgLineTo(args.vg, guideX, box.size.y);
+			nvgStrokeWidth(args.vg, 2.3f);
+			nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 238));
+			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, 0.f, guideY);
@@ -252,11 +277,9 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		const float midY = 0.5f * box.size.y;
 		const int count = module->pointCount;
-		const float edgeInset = 2.2f;
-		const float drawWidth = std::max(1.f, box.size.x - 2.f * edgeInset);
-		const float dx = drawWidth / float(count);
+		const float dx = pointStep(count);
 		auto xAt = [&](int i) {
-			return edgeInset + (float(i) + 0.5f) * dx;
+			return pointX(i, count);
 		};
 		for (int i = 0; i < count; ++i) {
 			const float x = xAt(i);

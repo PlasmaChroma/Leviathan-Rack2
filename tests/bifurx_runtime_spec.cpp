@@ -632,7 +632,7 @@ TestResult testRuntimeResamplePreviewAgreementAtKeyFrequencies() {
 
   const BifurxPreviewModel model = makePreviewModel(state);
   const float freqNorm = freqNormForCenterHz(centerHz);
-  const float firstNotchHz = resampleFirstNotchHz(state.freqA, state.freqB, state.sampleRate);
+  const float firstNotchHz = resampleFirstNullHzFromPeak2(resamplePeak2HzFromFreqPair(state.freqA, state.freqB, state.sampleRate), state.sampleRate);
   const std::vector<float> probesHz = {
     std::max(20.f, 0.18f * firstNotchHz),
     std::max(30.f, 0.52f * firstNotchHz),
