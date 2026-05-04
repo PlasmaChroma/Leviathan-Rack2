@@ -1,337 +1,133 @@
 # Bifurx Performance Notes
 
-## Status
+## Current Status
 
-- Optimization #1 is now implemented in `src/Bifurx.cpp` and `src/Bifurx.hpp`.
-- Preview bookkeeping (including target-motion `std::log2` work and preview-state construction) now runs only on preview publish ticks (or first publish), instead of every audio sample.
-- Settle-hold timing is preserved in sample units via an accumulated sample counter (`previewSampleAccum`), so the instant-settle behavior remains consistent with the prior sample-based thresholds.
-- `previewPitchCvConnected` still updates per sample for telemetry, and adaptive cooldown decrement remains sample-based.
+Bifurx now has a useful split between audio-thread cost, display preparation cost, and UI/GL draw cost. Rack's built-in module CPU meter should still be treated as the primary audio-thread reference, but the debug terminal now has enough audio timing detail to correlate settings changes with Rack's meter.
 
-## Current read
+Current important behavior:
 
-Rack's built-in module CPU meter is expected to reflect `Bifurx::process()` on the audio thread, not the OpenGL/NanoVG display path. A reading around 3.3% should therefore be treated first as an audio-thread cost problem.
+- `Modulation Quality` is exposed in the context menu and defaults to `Balanced`.
+- The old `Control Update` state is still loaded for legacy patches and maps to the new quality states.
+- Resampling mode is hidden from the UI because it does not fit the current model well enough.
+- Preview/display bookkeeping no longer runs at full audio rate when it only needs to feed the display.
+- Analysis frame publishing no longer copies full FFT buffers on the audio thread; the audio thread publishes the current write position and the UI assembles frames from the ring buffers.
+- The debug terminal `Audio us` metric now resets on each submitted interval, so it behaves like a rolling measurement instead of a lifetime average.
+- Audio timing is sampled using `kPerfMeasureDivision = 17`, intentionally avoiding phase lock with the 8/16 sample modulation dividers.
 
-Recent GL display work may affect UI/GPU smoothness, but it is unlikely to be the main source of Rack's CPU percentage unless Rack is specifically measuring UI separately.
+## Implemented Optimizations
 
-Primary hot path:
+Audio-thread housekeeping:
 
-- `src/Bifurx.cpp`
-- `Bifurx::process(const ProcessArgs& args)`
+- Preview state smoothing and target-motion checks are gated by preview publish ticks.
+- Preview settle timing is preserved with accumulated sample counts instead of assuming per-sample preview work.
+- Analysis ring wrap uses a power-of-two mask instead of modulo.
+- Analysis publishing uses `analysisPublishedWritePos` and `analysisPublishSeq` instead of audio-thread frame copies.
+- Debug timing avoids measuring every sample and only runs when Dragon King debug is enabled.
 
-## Main low-risk opportunity: move preview bookkeeping off the per-sample path
+Control and coefficient work:
 
-The filter core already has a fast path for stable controls:
+- Slow controls are cached behind the modulation-quality update gate.
+- `SPAN`, `BALANCE`, and `RESO` CV shaping no longer runs every sample in `Balanced`/`High` unless the quality setting requires it.
+- SM/XM driven-mode coefficient prep uses thresholded coefficient caching.
+- TITO no longer forces the full base-control recompute path every sample solely because SM/XM coupling is active.
+- `fastLog2()` is used for the remaining span boundary calculation where the approximation is acceptable.
 
-- `fastPathEligible`
-- `controlUpdateDivider`
-- cached SVF coefficients
+Debug terminal cleanup:
 
-However, even when audio processing is fast-path eligible, `process()` still performs preview/display bookkeeping every sample. This includes:
+- Removed low-value terminal fields such as `P-Seq`, `A-Seq`, and `Verts`.
+- Added `Audio us` as the primary audio-thread timing field.
+- Kept UI/display timing fields separate from audio timing.
 
-- preview target smoothing
-- preview target motion detection
-- adaptive publish checks
-- preview state construction
-- some atomics
-- `std::log2()` calls for display-target motion detection
+## Modulation Quality
 
-The clearest expensive display-only section is around:
-
-- `Bifurx.cpp`: `pTFqA`, `pTFqB`, `pTQA`, `pTQB`, `pTBal`
-- `tMAOct`, `tMBOct`, `tMOct`
-- `previewFreqAFiltered`, `previewFreqBFiltered`, `previewQAFiltered`, `previewQBFiltered`, `previewBalanceFiltered`
-- `publishPreviewState(pS)`
-
-Important observation:
-
-This work feeds the spectrum/filter preview display. It does not directly affect audio output.
-
-## Recommended first optimization
-
-Move most preview smoothing and adaptive checks behind the existing preview dividers:
-
-- `previewPublishDivider`
-- `previewPublishSlowDivider`
-
-Current divider constants:
-
-- `kPreviewPublishFastDivision = 128`
-- `kPreviewPublishSlowDivision = 256`
-
-Current code computes `perTick` late:
-
-```cpp
-const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
-```
-
-But the preview smoothing and motion detection happen before that. The change should be:
-
-1. Compute `pPitchCvConn` and `perTick` before preview smoothing.
-2. Only run preview smoothing, target-motion detection, adaptive checks, and state publishing when:
-   - preview is uninitialized, or
-   - `perTick` is true, or
-   - a forced/adaptive immediate update is needed.
-3. Use an effective smoothing alpha for skipped samples so visual timing stays similar.
-
-For example:
-
-```cpp
-const int previewDivision = pPitchCvConn ? kPreviewPublishSlowDivision : kPreviewPublishFastDivision;
-const float perSampleAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
-const float effectiveAlpha = 1.f - std::pow(1.f - perSampleAlpha, float(previewDivision));
-```
-
-Then use `effectiveAlpha` when updating the preview filtered values on divider ticks.
-
-Potential issue:
-
-`std::pow()` should not run every sample. Either compute it only on divider ticks, or derive/update cached effective alphas when sample rate changes. Since the preview alpha is only recalculated when sample rate changes, effective alpha can be cached as well.
-
-Expected benefit:
-
-- Removes per-sample preview `std::log2()` calls.
-- Reduces display-only math on the audio thread.
-- Reduces preview-state construction frequency.
-- Does not change the audio signal path.
-
-## Specific code area to refactor
-
-Current section starts after audio output is written:
-
-```cpp
-const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabled);
-outputs[OUT_OUTPUT].setChannels(1);
-outputs[OUT_OUTPUT].setVoltage(out);
-```
-
-The preview block begins around:
-
-```cpp
-const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate);
-const float pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate);
-```
-
-The expensive display-only target-motion lines are:
-
-```cpp
-const float tMAOct = std::fabs(std::log2(std::max(pTFqA, 1.f) / std::max(previewPrevTargetFreqA, 1.f)));
-const float tMBOct = std::fabs(std::log2(std::max(pTFqB, 1.f) / std::max(previewPrevTargetFreqB, 1.f)));
-```
-
-These should not be paid every sample if the preview is only published every 128 or 256 samples.
-
-## Secondary opportunity: cheaper analysis history writes
-
-`pushAnalysisSample(in, out, modeOut)` runs every sample.
-
-The analysis history length is `kFftSize = 4096`, which is a power of two. Current write position update:
-
-```cpp
-analysisWritePos = (analysisWritePos + 1) % kFftSize;
-```
-
-This can become:
-
-```cpp
-analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1);
-```
-
-This is small but safe.
-
-Larger question:
-
-Should analysis history be collected when the spectrum overlay is hidden or unavailable? If not, the module can skip some analysis work. This needs a UI/feature decision because disabling collection may make the display take one FFT window to refill when re-enabled.
-
-## Secondary opportunity: analysis publishing cost
-
-`publishAnalysisFrame()` copies three 4096-sample buffers into the double-buffered analysis frame:
-
-- raw input
-- output
-- response output
-
-This happens after the analysis ring fills and then every hop:
-
-- `kFftHopSize = kFftSize / 2`
-- currently every 2048 samples
-
-This is not likely the main 3.3% cost, but it can create periodic spikes. If spikes show in debug telemetry, options are:
-
-- increase hop size for lower update rate
-- use one contiguous rolling frame copy strategy
-- only publish when the display is visible
-- lower `kFftSize` if visual resolution can tolerate it
-
-## Secondary opportunity: fast-path eligibility
-
-Current fast path:
-
-```cpp
-const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
-```
-
-This is conservative and correct for audio-rate modulation. But it means simply connecting VOCT/FM disables the fast path even if the CV source is slow.
-
-Potential future option:
-
-- Add a user-facing or internal tier where slow CV is smoothed and coefficients update at control rate.
-- Keep true audio-rate behavior available.
-
-Risk:
-
-This changes response behavior for CV modulation and should not be the first optimization unless needed.
-
-## SM/XM driven-mode coefficient cost
-
-When TITO is outside the neutral deadband, SM/XM audio-rate cutoff coupling is active:
-
-```cpp
-cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f));
-cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
-```
-
-This makes each stage use dynamic cutoff coefficients instead of the stable `cachedCoeffsA` / `cachedCoeffsB` path. The first optimization for this path is now implemented:
-
-- cache SM/XM dynamic coefficients per stage
-- refresh only when cutoff movement exceeds a very small threshold
-- force refresh on sample-rate or damping changes
-- keep SM/XM coupling audio-rate, but do not force the full base-control update block to run every sample solely because TITO is active
-- use `fastLog2()` for the remaining span boundary calculation
-
-Current tuning constants:
-
-- `kTitoCoeffRelativeUpdateThreshold = 2.5e-4f`
-- `kTitoCoeffAbsoluteUpdateThresholdHz = 0.002f`
-
-If SM/XM still costs too much after testing, the next options are higher risk:
-
-- add a quality option for exact per-sample SM/XM coefficients versus cached/quantized SM/XM coefficients
-- smooth or band-limit the coupling signal before cutoff modulation
-- approximate coefficient updates by modulating an already-computed `g` value instead of rebuilding full SVF coefficients
-
-## Proposed modulation quality menu
-
-The current context menu item is:
-
-- `Control Update`
-  - `Tiered`
-  - `Audio-rate`
-
-This should be replaced or evolved into a clearer user-facing choice:
+The current menu is:
 
 - `Modulation Quality`
-  - `Balanced`
-  - `High`
-  - `Exact`
+- `Balanced`
+- `High`
+- `Exact`
 
-Rationale:
+The purpose of this menu is to make the tradeoff user-facing: higher modulation tracking quality costs more CPU.
 
-The user is not choosing an implementation detail. They are choosing how much CPU to spend on modulation tracking. The menu should make it clear that higher quality gives tighter modulation response and costs more CPU.
-
-Recommended behavior:
+Current behavior:
 
 - `Balanced`
-  - Default mode.
-  - Optimized tiered control updates.
-  - Good tracking for normal envelopes, LFOs, and manual moves.
-  - Keep `V/OCT` and `FM` audio-rate when connected.
-  - Keep SM/XM coupling audio-rate, but avoid full base-control recompute every sample solely because TITO is active.
-  - Use conservative SM/XM coefficient caching thresholds.
+  - Default.
+  - Slow-control divider: 16 samples.
+  - Normal SM/XM coefficient refresh thresholds.
+  - Intended for normal envelopes, LFOs, manual movement, and most patches.
 
 - `High`
-  - Tighter modulation tracking without going fully exact.
-  - Use faster tiered updates for `SPAN`, `BALANCE`, and `RESO` CV, such as an 8-sample divider instead of 16.
-  - Use stricter SM/XM coefficient refresh thresholds than `Balanced`.
-  - Good choice for patches where modulation feel matters but full audio-rate control math is too expensive.
+  - Slow-control divider: 8 samples when slow CV is connected.
+  - SM/XM coefficient refresh thresholds are stricter than `Balanced`.
+  - Intended for patches where modulation feel matters but exact audio-rate control math is not necessary.
 
 - `Exact`
-  - Maximum tracking.
-  - Equivalent to the current explicit `Audio-rate` intent.
-  - Recompute base controls/coefficient prep at audio rate where applicable.
-  - Highest CPU cost.
+  - Slow-control divider: 1 sample.
+  - SM/XM coefficient refresh thresholds are effectively zero.
+  - Intended for maximum tracking at the highest CPU cost.
 
-Implementation notes:
+Current important limitation:
 
-- Keep the existing Rack parameter IDs unchanged.
-- This does not need to be a Rack param; it can remain JSON/state data like the current `controlUpdateMode`.
-- Rename `ControlUpdateMode` internally only if the cleanup is low-risk; otherwise keep the enum and map new menu labels onto it.
-- A three-state enum is enough:
-  - `MOD_QUALITY_BALANCED`
-  - `MOD_QUALITY_HIGH`
-  - `MOD_QUALITY_EXACT`
-- Preserve old JSON values:
-  - old `CONTROL_UPDATE_TIERED` should load as `Balanced`
-  - old `CONTROL_UPDATE_AUDIO_RATE` should load as `Exact`
+- `V/OCT` and `FM` are still treated as audio-rate inputs when connected.
+- The quality setting mainly affects slower control paths such as `SPAN`, `BALANCE`, `RESO`, and SM/XM coefficient refresh policy.
 
-Likely internal mapping:
+## Measurement Notes
 
-- `Balanced`
-  - slow CV divider: 16 samples
-  - SM/XM coefficient thresholds: current values
+Useful confirmed reference measurement:
 
-- `High`
-  - slow CV divider: 8 samples
-  - SM/XM coefficient thresholds: roughly half current values
+- SPAN CV patched only:
+- `Balanced`: about `0.28 us`
+- `High`: about `0.31 us`
+- `Exact`: about `0.63 us`
 
-- `Exact`
-  - slow CV divider: 1 sample when slow CV is connected or modulation quality requires exact tracking
-  - SM/XM coefficient refresh: every sample or threshold effectively zero
+This now correlates with Rack's built-in module CPU meter after the debug metric reset/sampling fix.
 
-Quality/performance note:
+Interpretation:
 
-This is a better public control than exposing separate `SM/XM Quality`, `Control Update`, and `CV Quality` switches. Those all describe parts of the same decision: how much CPU to spend tracking modulation.
+- If only `IN` and `OUT` are patched, modulation quality should not move `Audio us` much because the expensive modulated control paths are not active.
+- To see the setting matter in Rack, patch a modulation source into `SPAN`, `BALANCE`, or `RESO`.
+- `FM` and `V/OCT` are not the main expected proof case for this setting because those are currently treated as audio-rate by design.
+- UI/GL work should be judged with the UI timing fields, not Rack's module CPU meter.
 
-## Mode-specific cost
+## Next Steps If Needed
 
-Most modes process two SVF stages. Mode 10 uses the resample filter chain:
+1. Validate remaining expensive cases with repeatable Rack patches.
+   Use at least three fixtures: plain `IN -> OUT`, `SPAN` CV modulation, and worst-case `SPAN + FM` modulation. Compare Rack CPU and debug `Audio us` for each quality setting.
 
-```cpp
-resampleFilterCore.process(...)
-```
+2. If `Balanced` and `High` are still too close in real patches, make `High` more explicitly expensive.
+   The current `High` behavior only drops to an 8-sample divider when slow CV is connected. If that is too subtle, make `High` always use the 8-sample divider and consider stricter SM/XM thresholds.
 
-If Rack's CPU meter reads high mainly in mode 10, profile that separately. It may require a different optimization plan than the standard dual-SVF modes.
+3. If heavy `FM` or `V/OCT` patches remain the dominant cost, consider a separate audio-rate input policy.
+   This is higher risk than the current quality menu because users may expect pitch inputs to track at audio rate. A safe option would need to preserve exact tracking as an available mode.
 
-## GL/UI display cost
+4. If SM/XM modes are still too expensive, tune the coefficient refresh policy before changing the filter algorithm.
+   First adjust the relative/absolute thresholds by quality mode. Only after that consider coupling smoothing or approximating coefficient updates, because those are more likely to affect sound.
 
-The GL display has its own performance concerns, but it should be treated separately from Rack's audio CPU percentage.
+5. If baseline cost remains high with no modulation patched, focus on core filter algorithm work.
+   Most low-risk housekeeping has already been moved out of the per-sample path. Further wins in the plain path are likely to come from algorithmic changes, not more display-prep cleanup.
 
-Recent GL work added:
+6. If visual performance becomes the issue, keep it separate from audio optimization.
+   Use `lastDrawMsEma`, `lastCurvePrepUs`, and `lastOverlayPrepUs` rather than `Audio us`. Rack's module CPU meter should not be used as the main GL/UI metric.
 
-- FFT fill soft caps
-- a crest smoothing stroke pass
-- thicker gold filter curve/peak traces
+## Recommended Priority
 
-These may affect UI/GPU time but should not materially affect `Bifurx::process()`.
+The next best optimization depends on the failing case:
 
-If UI performance becomes the issue, use Bifurx's existing debug/perf telemetry rather than Rack's module CPU percentage.
+- Plain mode too high: inspect the core dual-SVF path and output stage.
+- `SPAN`/`BALANCE`/`RESO` CV too high: tune `Modulation Quality` divider behavior and thresholds.
+- SM/XM too high: tune dynamic coefficient refresh thresholds by quality mode.
+- `FM`/`V/OCT` too high: decide whether an optional non-exact pitch-input policy is acceptable.
+- UI feels heavy but Rack CPU is fine: optimize GL/FFT drawing, not `Bifurx::process()`.
 
-Relevant fields:
+Default recommendation:
 
-- `lastDrawMsEma`
-- `lastDrawVertexCount`
-- `lastCurvePrepUs`
-- `lastOverlayPrepUs`
-
-## Suggested first patch
-
-Make one small audio-thread-only change:
-
-1. Add cached effective preview alphas:
-   - `previewFilterAlphaEffective`
-   - `previewFilterAlphaSlowEffective`
-2. Recompute them when `previewFilterAlpha` changes due to sample-rate change.
-3. Move preview target smoothing, target-motion detection, adaptive checks, and `BifurxPreviewState` construction behind `perTick || !previewFilterInitialized`.
-4. Keep `publishPreviewState()` behavior semantically equivalent from the UI perspective.
-5. Compile and compare Rack CPU meter before/after with the same patch, mode, sample rate, and cables.
-
-Expected result:
-
-The display may update at the same publish cadence, but the audio thread should spend less time preparing display state between publishes.
+Keep `Balanced` as the default because it now gives a measurable CPU win on modulated slow-control patches while preserving normal modulation feel. Use `Exact` as the escape hatch for users who prefer maximum tracking over CPU.
 
 ## Guardrails
 
-- Do not change audio output behavior in the first pass.
-- Do not change filter coefficient math except where it is clearly display-only.
-- Do not move work from audio thread to UI thread if it requires locks.
-- Avoid heap allocation in `process()`.
-- Keep existing debug telemetry intact so before/after measurements remain comparable.
+- Do not remove the exact path; quality must remain user-selectable.
+- Do not add locks, allocations, or UI ownership dependencies to `process()`.
+- Do not change Rack parameter/input/output enum ordering for released modules.
+- Keep legacy JSON compatibility for the old `controlUpdateMode` state.
+- Treat WSL plugin link failures as non-authoritative; validate with focused compiles/tests here and final plugin linking in the Windows/MSYS2 toolchain.
