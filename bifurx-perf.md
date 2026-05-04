@@ -209,6 +209,78 @@ If SM/XM still costs too much after testing, the next options are higher risk:
 - smooth or band-limit the coupling signal before cutoff modulation
 - approximate coefficient updates by modulating an already-computed `g` value instead of rebuilding full SVF coefficients
 
+## Proposed modulation quality menu
+
+The current context menu item is:
+
+- `Control Update`
+  - `Tiered`
+  - `Audio-rate`
+
+This should be replaced or evolved into a clearer user-facing choice:
+
+- `Modulation Quality`
+  - `Balanced`
+  - `High`
+  - `Exact`
+
+Rationale:
+
+The user is not choosing an implementation detail. They are choosing how much CPU to spend on modulation tracking. The menu should make it clear that higher quality gives tighter modulation response and costs more CPU.
+
+Recommended behavior:
+
+- `Balanced`
+  - Default mode.
+  - Optimized tiered control updates.
+  - Good tracking for normal envelopes, LFOs, and manual moves.
+  - Keep `V/OCT` and `FM` audio-rate when connected.
+  - Keep SM/XM coupling audio-rate, but avoid full base-control recompute every sample solely because TITO is active.
+  - Use conservative SM/XM coefficient caching thresholds.
+
+- `High`
+  - Tighter modulation tracking without going fully exact.
+  - Use faster tiered updates for `SPAN`, `BALANCE`, and `RESO` CV, such as an 8-sample divider instead of 16.
+  - Use stricter SM/XM coefficient refresh thresholds than `Balanced`.
+  - Good choice for patches where modulation feel matters but full audio-rate control math is too expensive.
+
+- `Exact`
+  - Maximum tracking.
+  - Equivalent to the current explicit `Audio-rate` intent.
+  - Recompute base controls/coefficient prep at audio rate where applicable.
+  - Highest CPU cost.
+
+Implementation notes:
+
+- Keep the existing Rack parameter IDs unchanged.
+- This does not need to be a Rack param; it can remain JSON/state data like the current `controlUpdateMode`.
+- Rename `ControlUpdateMode` internally only if the cleanup is low-risk; otherwise keep the enum and map new menu labels onto it.
+- A three-state enum is enough:
+  - `MOD_QUALITY_BALANCED`
+  - `MOD_QUALITY_HIGH`
+  - `MOD_QUALITY_EXACT`
+- Preserve old JSON values:
+  - old `CONTROL_UPDATE_TIERED` should load as `Balanced`
+  - old `CONTROL_UPDATE_AUDIO_RATE` should load as `Exact`
+
+Likely internal mapping:
+
+- `Balanced`
+  - slow CV divider: 16 samples
+  - SM/XM coefficient thresholds: current values
+
+- `High`
+  - slow CV divider: 8 samples
+  - SM/XM coefficient thresholds: roughly half current values
+
+- `Exact`
+  - slow CV divider: 1 sample when slow CV is connected or modulation quality requires exact tracking
+  - SM/XM coefficient refresh: every sample or threshold effectively zero
+
+Quality/performance note:
+
+This is a better public control than exposing separate `SM/XM Quality`, `Control Update`, and `CV Quality` switches. Those all describe parts of the same decision: how much CPU to spend tracking modulation.
+
 ## Mode-specific cost
 
 Most modes process two SVF stages. Mode 10 uses the resample filter chain:

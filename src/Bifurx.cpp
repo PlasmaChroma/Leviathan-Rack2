@@ -346,11 +346,11 @@ SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dam
 	return coeffs;
 }
 
-bool shouldRefreshTitoCoeffs(float cutoff, float cachedCutoff, float damping, float cachedDamping, float sampleRate, float cachedSampleRate) {
+bool shouldRefreshTitoCoeffs(float cutoff, float cachedCutoff, float damping, float cachedDamping, float sampleRate, float cachedSampleRate, float relativeThreshold, float absoluteThresholdHz) {
 	if (cachedCutoff <= 0.f || std::fabs(sampleRate - cachedSampleRate) > 0.5f || std::fabs(damping - cachedDamping) > 1e-5f) {
 		return true;
 	}
-	const float thresholdHz = std::max(kTitoCoeffAbsoluteUpdateThresholdHz, std::fabs(cachedCutoff) * kTitoCoeffRelativeUpdateThreshold);
+	const float thresholdHz = std::max(absoluteThresholdHz, std::fabs(cachedCutoff) * relativeThreshold);
 	return std::fabs(cutoff - cachedCutoff) > thresholdHz;
 }
 
@@ -361,9 +361,11 @@ void updateTitoCoeffs(
 	float& cachedSampleRate,
 	float cutoff,
 	float damping,
-	float sampleRate
+	float sampleRate,
+	float relativeThreshold,
+	float absoluteThresholdHz
 ) {
-	if (shouldRefreshTitoCoeffs(cutoff, cachedCutoff, damping, cachedDamping, sampleRate, cachedSampleRate)) {
+	if (shouldRefreshTitoCoeffs(cutoff, cachedCutoff, damping, cachedDamping, sampleRate, cachedSampleRate, relativeThreshold, absoluteThresholdHz)) {
 		coeffs = makeSvfCoeffs(sampleRate, cutoff, damping);
 		cachedCutoff = cutoff;
 		cachedDamping = damping;
@@ -756,7 +758,7 @@ Bifurx::Bifurx() {
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
-	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(16); perfMeasureDivider.setDivision(64);
+	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(controlUpdateDivision); perfMeasureDivider.setDivision(kPerfMeasureDivision);
 }
 
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; resampleFilterCore.reset(); llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
@@ -765,7 +767,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay));
 	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer));
-	json_object_set_new(root, "controlUpdateMode", json_integer(controlUpdateMode));
+	json_object_set_new(root, "modulationQualityMode", json_integer(modulationQualityMode));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
 	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled));
@@ -792,10 +794,19 @@ void Bifurx::dataFromJson(json_t* root) {
 	if (useGlShaderRendererJ) {
 		useGlShaderRenderer = json_is_true(useGlShaderRendererJ);
 	}
-	json_t* controlUpdateModeJ = json_object_get(root, "controlUpdateMode");
-	if (controlUpdateModeJ) {
-		controlUpdateMode = clamp(int(json_integer_value(controlUpdateModeJ)), CONTROL_UPDATE_TIERED, CONTROL_UPDATE_COUNT - 1);
+	json_t* modulationQualityModeJ = json_object_get(root, "modulationQualityMode");
+	if (modulationQualityModeJ) {
+		modulationQualityMode = clamp(int(json_integer_value(modulationQualityModeJ)), MOD_QUALITY_BALANCED, MOD_QUALITY_COUNT - 1);
 		controlFastCacheValid = false;
+	}
+	else {
+		// Backward compatibility with old two-state control update mode.
+		json_t* controlUpdateModeJ = json_object_get(root, "controlUpdateMode");
+		if (controlUpdateModeJ) {
+			const int legacyMode = int(json_integer_value(controlUpdateModeJ));
+			modulationQualityMode = (legacyMode <= 0) ? MOD_QUALITY_BALANCED : MOD_QUALITY_EXACT;
+			controlFastCacheValid = false;
+		}
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
 	if (curveDebugLoggingJ) {
@@ -857,8 +868,7 @@ void Bifurx::dataFromJson(json_t* root) {
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
 void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
-void Bifurx::publishAnalysisFrame() { const int writeIndex = 1 - analysisPublishedIndex.load(std::memory_order_relaxed), start = analysisWritePos, firstCount = kFftSize - start, secondCount = start; std::memcpy(analysisFrames[writeIndex].rawInput, analysisRawInputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].rawInput + firstCount, analysisRawInputHistory, size_t(secondCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].output, analysisOutputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].output + firstCount, analysisOutputHistory, size_t(secondCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].responseOutput, analysisResponseOutputHistory + start, size_t(firstCount) * sizeof(float)); std::memcpy(analysisFrames[writeIndex].responseOutput + firstCount, analysisResponseOutputHistory, size_t(secondCount) * sizeof(float)); analysisPublishedIndex.store(writeIndex, std::memory_order_release); analysisPublishSeq.fetch_add(1, std::memory_order_release); }
-void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1); if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; publishAnalysisFrame(); analysisPublishedOnce = true; } } }
+void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1); if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; analysisPublishedWritePos.store(analysisWritePos, std::memory_order_release); analysisPublishSeq.fetch_add(1, std::memory_order_release); analysisPublishedOnce = true; } } }
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
 	voctCvFilterInitialized = false;
@@ -899,13 +909,36 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool resoCvConnected = inputs[RESO_CV_INPUT].isConnected();
 	const bool balanceCvConnected = inputs[BALANCE_CV_INPUT].isConnected();
 	const bool spanCvConnected = inputs[SPAN_CV_INPUT].isConnected();
-	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt, resoCvNorm = clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f, resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f), balanceCvNorm = clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f, balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f), spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f), spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f), spanCvNorm = clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f, spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f), spanOct = 8.f * bifurx::shapedSpan(spanNorm), spanWideMorph = cascadeWideMorph(spanNorm);
+	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt;
 	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
 	const bool audioRateControlsActive = voctConnected || fmConnected;
 	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
 	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
+	int targetControlDivision = 16;
+	float titoCoeffRelativeThreshold = kTitoCoeffRelativeUpdateThreshold;
+	float titoCoeffAbsoluteThresholdHz = kTitoCoeffAbsoluteUpdateThresholdHz;
+	switch (modulationQualityMode) {
+		case MOD_QUALITY_HIGH:
+			targetControlDivision = slowCvConnected ? 8 : 16;
+			titoCoeffRelativeThreshold = 0.5f * kTitoCoeffRelativeUpdateThreshold;
+			titoCoeffAbsoluteThresholdHz = 0.5f * kTitoCoeffAbsoluteUpdateThresholdHz;
+			break;
+		case MOD_QUALITY_EXACT:
+			targetControlDivision = 1;
+			titoCoeffRelativeThreshold = 0.f;
+			titoCoeffAbsoluteThresholdHz = 0.f;
+			break;
+		case MOD_QUALITY_BALANCED:
+		default:
+			targetControlDivision = slowCvConnected ? 16 : 16;
+			break;
+	}
+	if (targetControlDivision != controlUpdateDivision) {
+		controlUpdateDivision = targetControlDivision;
+		controlUpdateDivider.setDivision(controlUpdateDivision);
+	}
 	const bool controlDividerTick = controlUpdateDivider.process();
-	const bool forceAudioRateControls = controlUpdateMode == CONTROL_UPDATE_AUDIO_RATE;
+	const bool forceAudioRateControls = modulationQualityMode == MOD_QUALITY_EXACT;
 	const bool updateFastControls =
 		!controlFastCacheValid || audioRateControlsActive || (forceAudioRateControls && slowCvConnected) || controlDividerTick;
 	if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) { previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f); previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f); previewFilterAlphaSampleRate = args.sampleRate; }
@@ -915,13 +948,24 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
+	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct, spanWideMorph = cachedSpanWideMorph;
 	if (updateFastControls) {
+		const float resoCvNorm = resoCvConnected ? clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f : 0.f;
+		resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
+		const float balanceCvNorm = balanceCvConnected ? clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f : 0.f;
+		balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
+		spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
+		spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
+		spanCvNorm = spanCvConnected ? clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f : 0.f;
+		spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
+		spanOct = 8.f * bifurx::shapedSpan(spanNorm);
+		spanWideMorph = cascadeWideMorph(spanNorm);
 		balance = balanceNorm; const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm), sr = std::max(args.sampleRate, 1.f);
 		auto computeFreqs = [&](float* fAOut, float* fBOut) { const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, fastLog2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, fastLog2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
 		computeFreqs(&freqA0, &freqB0); const float baseDamping = resoToDamping(resoNorm);
 		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
-		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedFreqA0 = freqA0; cachedFreqB0 = freqB0; cachedBalance = balance; cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA); cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB); controlFastCacheValid = true;
+		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedFreqA0 = freqA0; cachedFreqB0 = freqB0; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct; cachedSpanWideMorph = spanWideMorph; cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA); cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB); controlFastCacheValid = true;
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
@@ -940,8 +984,8 @@ void Bifurx::process(const ProcessArgs& args) {
 		if (tito < 0.f) { modA = depthScaled * coreA.ic1eq; modB = depthScaled * coreB.ic1eq; }
 		else { modA = depthScaled * coreB.ic1eq; modB = depthScaled * coreA.ic1eq; }
 		cutoffA = freqA0 * fastExp2(clamp(modA, -2.5f, 2.5f)); cutoffB = freqB0 * fastExp2(clamp(modB, -2.5f, 2.5f));
-		updateTitoCoeffs(titoCoeffsA, titoCoeffFreqA, titoCoeffDampingA, titoCoeffSampleRateA, cutoffA, dampingA, args.sampleRate);
-		updateTitoCoeffs(titoCoeffsB, titoCoeffFreqB, titoCoeffDampingB, titoCoeffSampleRateB, cutoffB, dampingB, args.sampleRate);
+		updateTitoCoeffs(titoCoeffsA, titoCoeffFreqA, titoCoeffDampingA, titoCoeffSampleRateA, cutoffA, dampingA, args.sampleRate, titoCoeffRelativeThreshold, titoCoeffAbsoluteThresholdHz);
+		updateTitoCoeffs(titoCoeffsB, titoCoeffFreqB, titoCoeffDampingB, titoCoeffSampleRateB, cutoffB, dampingB, args.sampleRate, titoCoeffRelativeThreshold, titoCoeffAbsoluteThresholdHz);
 		coeffsAForSample = &titoCoeffsA;
 		coeffsBForSample = &titoCoeffsB;
 	}
@@ -1163,9 +1207,9 @@ void BifurxSpectrumBase::syncBase() {
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != state.lastAnalysisSeq) {
-		const int index = module->analysisPublishedIndex.load(std::memory_order_acquire);
+		const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
 		const auto overlayPrepStart = std::chrono::steady_clock::now();
-		updateOverlayCache(module->analysisFrames[index]);
+		updateOverlayCache(writePos);
 		lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
 			std::chrono::steady_clock::now() - overlayPrepStart).count());
 		state.hasOverlay = true;
@@ -1205,14 +1249,25 @@ const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
 	return cachedModel;
 }
 
-void BifurxSpectrumBase::updateOverlayCache(const BifurxAnalysisFrame& frame) {
+void BifurxSpectrumBase::updateOverlayCache(int writePos) {
 	if (!state.hasPreview) return;
+	if (!module) return;
 	updateAxisCache();
-	for (int i = 0; i < kFftSize; i++) fftOutputTime[i] = frame.output[i] * window[i];
+	const int start = clamp(writePos, 0, kFftSize - 1);
+	for (int i = 0; i < kFftSize; i++) {
+		const int index = (start + i) & (kFftSize - 1);
+		fftOutputTime[i] = module->analysisOutputHistory[index] * window[i];
+	}
 	fft.rfft(fftOutputTime, fftOutputFreq);
-	for (int i = 0; i < kFftSize; i++) fftOutputTime[i] = frame.responseOutput[i] * window[i];
+	for (int i = 0; i < kFftSize; i++) {
+		const int index = (start + i) & (kFftSize - 1);
+		fftOutputTime[i] = module->analysisResponseOutputHistory[index] * window[i];
+	}
 	fft.rfft(fftOutputTime, fftResponseOutputFreq);
-	for (int i = 0; i < kFftSize; i++) fftInputTime[i] = frame.rawInput[i] * window[i];
+	for (int i = 0; i < kFftSize; i++) {
+		const int index = (start + i) & (kFftSize - 1);
+		fftInputTime[i] = module->analysisRawInputHistory[index] * window[i];
+	}
 	fft.rfft(fftInputTime, fftRawInputFreq);
 	const bool fftScaleDynamic = module ? module->fftScaleDynamic : true;
 	prepareOverlayTargetsFromSpectra(

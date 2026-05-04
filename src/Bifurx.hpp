@@ -39,6 +39,7 @@ constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
+constexpr int kPerfMeasureDivision = 17;
 constexpr int kPreviewAdaptiveCooldownSamples = 64;
 constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
 constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
@@ -460,7 +461,7 @@ struct BifurxSpectrumBase {
 	void updateAxisCache();
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;
-	void updateOverlayCache(const BifurxAnalysisFrame& frame);
+	void updateOverlayCache(int writePos);
 	bool updateAnimation(float dt);
 	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
@@ -596,10 +597,11 @@ struct Bifurx : Module {
 		RENDER_NANOVG,
 		RENDER_OPENGL
 	};
-	enum ControlUpdateMode {
-		CONTROL_UPDATE_TIERED = 0,
-		CONTROL_UPDATE_AUDIO_RATE,
-		CONTROL_UPDATE_COUNT
+	enum ModulationQualityMode {
+		MOD_QUALITY_BALANCED = 0,
+		MOD_QUALITY_HIGH,
+		MOD_QUALITY_EXACT,
+		MOD_QUALITY_COUNT
 	};
 
 	TptSvf coreA;
@@ -647,6 +649,14 @@ struct Bifurx : Module {
 	float cachedFreqA0 = 440.f;
 	float cachedFreqB0 = 440.f;
 	float cachedBalance = 0.f;
+	float cachedResoNorm = 0.35f;
+	float cachedBalanceNorm = 0.f;
+	float cachedSpanParamNorm = 0.33f;
+	float cachedSpanCvNorm = 0.f;
+	float cachedSpanAtten = 0.f;
+	float cachedSpanNorm = 0.33f;
+	float cachedSpanOct = 0.f;
+	float cachedSpanWideMorph = 0.f;
 	SvfCoeffs cachedCoeffsA;
 	SvfCoeffs cachedCoeffsB;
 	SvfCoeffs titoCoeffsA;
@@ -670,15 +680,15 @@ struct Bifurx : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	BifurxAnalysisFrame analysisFrames[2];
-	std::atomic<int> analysisPublishedIndex{0};
+	std::atomic<int> analysisPublishedWritePos{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
 	bool useGlShaderRenderer = true;
 	bool highResonanceSelfOscEnabled = false;
 	bool softLimitingEnabled = true;
-	int controlUpdateMode = CONTROL_UPDATE_TIERED;
+	int modulationQualityMode = MOD_QUALITY_BALANCED;
+	int controlUpdateDivision = 16;
 	bool curveDebugLogging = false;
 	bool perfDebugLogging = false;
 	std::atomic<uint64_t> perfAudioSampledCount{0};
@@ -702,7 +712,6 @@ struct Bifurx : Module {
 	void resetPerfStats();
 	void publishPreviewState(const BifurxPreviewState& state);
 	void publishLlTelemetryState(const BifurxLlTelemetryState& state);
-	void publishAnalysisFrame();
 	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
 	void process(const ProcessArgs& args) override;

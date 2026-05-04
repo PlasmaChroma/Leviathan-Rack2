@@ -438,8 +438,13 @@ void BifurxSpectrumWidget::step() {
 		double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
 		if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
 			const int filterMode = clamp(int(state.previewState.mode), 0, kBifurxModeCount - 1);
-			const uint64_t audioSampledCount = module->perfAudioSampledCount.load(std::memory_order_acquire);
-			const uint64_t audioProcessNs = module->perfAudioProcessNs.load(std::memory_order_acquire);
+			const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+			const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+			module->perfAudioControlsNs.store(0, std::memory_order_release);
+			module->perfAudioCoreNs.store(0, std::memory_order_release);
+			module->perfAudioPreviewNs.store(0, std::memory_order_release);
+			module->perfAudioAnalysisNs.store(0, std::memory_order_release);
+			module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
 			const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
@@ -796,23 +801,30 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createBoolPtrMenuItem("Soft Limiting", "", &bifurx->softLimitingEnabled));
 			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
 			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
-		if (isDragonKingDebugEnabled()) {
-			menu->addChild(createSubmenuItem("Control Update", "", [=](Menu* submenu) {
+			menu->addChild(createSubmenuItem("Modulation Quality", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(
-					"Tiered", "",
-					[=]() { return bifurx->controlUpdateMode == Bifurx::CONTROL_UPDATE_TIERED; },
+					"Balanced", "",
+					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_BALANCED; },
 					[=]() {
-						bifurx->controlUpdateMode = Bifurx::CONTROL_UPDATE_TIERED;
+						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_BALANCED;
 						bifurx->controlFastCacheValid = false;
 					}));
 				submenu->addChild(createCheckMenuItem(
-					"Audio-rate", "",
-					[=]() { return bifurx->controlUpdateMode == Bifurx::CONTROL_UPDATE_AUDIO_RATE; },
+					"High", "",
+					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_HIGH; },
 					[=]() {
-						bifurx->controlUpdateMode = Bifurx::CONTROL_UPDATE_AUDIO_RATE;
+						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_HIGH;
+						bifurx->controlFastCacheValid = false;
+					}));
+				submenu->addChild(createCheckMenuItem(
+					"Exact", "",
+					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_EXACT; },
+					[=]() {
+						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_EXACT;
 						bifurx->controlFastCacheValid = false;
 					}));
 			}));
+		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
 		}
