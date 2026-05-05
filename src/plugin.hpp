@@ -27,6 +27,7 @@ extern Model* modelTDScope;
 extern Model* modelCrownstep;
 extern Model* modelBifurx;
 extern Model* modelWyrm;
+extern Model* modelSil;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.

@@ -85,6 +85,17 @@
         "LFO"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Sil",
+      "name": "Sil",
+      "description": "Automatic mastering module.",
+      "tags": [
+        "Dynamics",
+        "Distortion",
+        "EQ"
+      ],
+      "hidden": false
     }
   ]
 }
