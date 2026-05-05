@@ -21,6 +21,16 @@ struct Sil : Module {
 		LIGHTS_LEN
 	};
 
+	enum ColorScheme {
+		SCHEME_DEFAULT,
+		SCHEME_CLASSIC,
+		SCHEME_MONOCHROME,
+		SCHEME_FIRE,
+		SCHEME_LEN
+	};
+
+	ColorScheme colorScheme = SCHEME_DEFAULT;
+
 	static constexpr int HISTOGRAM_BINS = 1000;
 	static constexpr float HISTOGRAM_DURATION = 10.f;
 
@@ -77,7 +87,7 @@ struct Sil : Module {
 			spec.window[i] = 0.5f - 0.5f * std::cos(2.f * M_PI * i / (FFT_SIZE - 1));
 		}
 
-		specDivider.setDivision(2048); // Update spectrum roughly 20-30 times per second
+		specDivider.setDivision(2048);
 	}
 
 	~Sil() {
@@ -111,15 +121,12 @@ struct Sil : Module {
 			hist.maxR[hist.writePtr] = hist.currentMaxR;
 			hist.writePtr = (hist.writePtr + 1) % HISTOGRAM_BINS;
 
-			// Update smoothed peak for histogram (dynamic zoom)
 			float instantPeak = std::max({std::abs(hist.currentMinL), std::abs(hist.currentMaxL), std::abs(hist.currentMinR), std::abs(hist.currentMaxR)});
-			// Slow decay, fast attack
 			if (instantPeak > hist.smoothedPeak) 
 				hist.smoothedPeak = hist.smoothedPeak * 0.9f + instantPeak * 0.1f;
 			else
 				hist.smoothedPeak = hist.smoothedPeak * 0.999f + instantPeak * 0.001f;
 			
-			// Keep within reasonable bounds
 			hist.smoothedPeak = clamp(hist.smoothedPeak, 0.5f, 12.f);
 
 			hist.currentMinL = 1e10f; hist.currentMaxL = -1e10f;
@@ -133,7 +140,6 @@ struct Sil : Module {
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
-			// Perform FFT (Throttled)
 			for (int i = 0; i < FFT_SIZE; i++) {
 				int idx = (spec.writePtr + i) % FFT_SIZE;
 				spec.fftInL[i] = spec.bufferL[idx] * spec.window[i];
@@ -151,7 +157,6 @@ struct Sil : Module {
 				return std::sqrt(re * re + im * im);
 			};
 
-			// Logarithmic mapping: 20Hz to 20kHz
 			float sampleRate = args.sampleRate;
 			float maxMag = 0.f;
 			for (int i = 0; i < SPEC_FREQ_BINS; i++) {
@@ -170,11 +175,9 @@ struct Sil : Module {
 					magR = getMagnitude(spec.fftOutR, FFT_SIZE / 2);
 				}
 
-				// Normalize magnitudes: 0dB = 10V sine peak (10 * 1024)
 				magL /= 10240.f;
 				magR /= 10240.f;
 
-				// Faster smoothing for individual bins
 				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + magL * 0.7f;
 				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + magR * 0.7f;
 				maxMag = std::max({maxMag, spec.magnitudesL[i], spec.magnitudesR[i]});
@@ -182,11 +185,43 @@ struct Sil : Module {
 
 			float instantPeakDb = 20.f * std::log10(maxMag + 1e-6f);
 			if (instantPeakDb > spec.smoothedPeakDb)
-				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f; // Fast attack
+				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f;
 			else
-				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f; // Slow decay
+				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f;
 			
 			spec.smoothedPeakDb = clamp(spec.smoothedPeakDb, -100.f, 20.f);
+		}
+	}
+
+	json_t* dataToJson() override {
+		json_t* rootJ = json_object();
+		json_object_set_new(rootJ, "colorScheme", json_integer(colorScheme));
+		return rootJ;
+	}
+
+	void dataFromJson(json_t* rootJ) override {
+		json_t* colorSchemeJ = json_object_get(rootJ, "colorScheme");
+		if (colorSchemeJ) colorScheme = (ColorScheme)json_integer_value(colorSchemeJ);
+	}
+};
+
+struct SilColors {
+	NVGcolor low;
+	NVGcolor high;
+	NVGcolor bg;
+	NVGcolor divider;
+
+	static SilColors get(Sil::ColorScheme scheme) {
+		switch (scheme) {
+			case Sil::SCHEME_CLASSIC:
+				return {nvgRGBA(0x00, 0xff, 0x00, 0xff), nvgRGBA(0xff, 0x00, 0x00, 0xff), nvgRGBA(0, 0, 0, 255), nvgRGBA(0x00, 0xff, 0x00, 0x40)};
+			case Sil::SCHEME_MONOCHROME:
+				return {nvgRGBA(0x40, 0x40, 0x40, 0xff), nvgRGBA(0xff, 0xff, 0xff, 0xff), nvgRGBA(0, 0, 0, 255), nvgRGBA(0xff, 0xff, 0xff, 0x40)};
+			case Sil::SCHEME_FIRE:
+				return {nvgRGBA(0x80, 0x00, 0x00, 0xff), nvgRGBA(0xff, 0xff, 0x00, 0xff), nvgRGBA(0, 0, 0, 255), nvgRGBA(0xff, 0x80, 0x00, 0x40)};
+			case Sil::SCHEME_DEFAULT:
+			default:
+				return {nvgRGBA(0x7a, 0x5c, 0xff, 0xff), nvgRGBA(0x1c, 0xcc, 0xd9, 0xff), nvgRGBA(0, 0, 0, 255), nvgRGBA(0x1c, 0xca, 0xd8, 0x40)};
 		}
 	}
 };
@@ -196,29 +231,26 @@ struct HistogramWidget : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!module) return;
+		SilColors colors = SilColors::get(module->colorScheme);
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+		nvgFillColor(args.vg, colors.bg);
 		nvgFill(args.vg);
 
 		float midY = box.size.y / 2.f;
 		float halfH = box.size.y / 4.f;
 
-		NVGcolor cyanColor = nvgRGBA(0x1c, 0xcc, 0xd9, 0xff);
-		NVGcolor purpleColor = nvgRGBA(0x7a, 0x5c, 0xff, 0xff);
-
 		auto drawChannel = [&](const float* minBuf, const float* maxBuf, float centerY) {
 			for (int i = 0; i < Sil::HISTOGRAM_BINS; i++) {
 				int idx = (module->hist.writePtr + i) % Sil::HISTOGRAM_BINS;
 				float x = (float)i / (Sil::HISTOGRAM_BINS - 1) * box.size.x;
-				// Fixed +/- 10V scale
 				float valMin = clamp(minBuf[idx] / 10.f, -1.f, 1.f);
 				float valMax = clamp(maxBuf[idx] / 10.f, -1.f, 1.f);
 				float yMin = centerY - valMin * halfH;
 				float yMax = centerY - valMax * halfH;
 				float amp = std::max(std::abs(valMin), std::abs(valMax));
-				NVGcolor color = nvgLerpRGBA(purpleColor, cyanColor, amp);
+				NVGcolor color = nvgLerpRGBA(colors.low, colors.high, amp);
 
 				nvgBeginPath(args.vg);
 				nvgMoveTo(args.vg, x, yMin);
@@ -235,7 +267,7 @@ struct HistogramWidget : TransparentWidget {
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, 0, midY);
 		nvgLineTo(args.vg, box.size.x, midY);
-		nvgStrokeColor(args.vg, nvgRGBA(0x1c, 0xca, 0xd8, 0x40));
+		nvgStrokeColor(args.vg, colors.divider);
 		nvgStrokeWidth(args.vg, 0.5f);
 		nvgStroke(args.vg);
 	}
@@ -247,33 +279,28 @@ struct SpectrumWidget : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!module) return;
+		SilColors colors = SilColors::get(module->colorScheme);
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+		nvgFillColor(args.vg, colors.bg);
 		nvgFill(args.vg);
-
-		NVGcolor cyanColor = nvgRGBA(0x1c, 0xcc, 0xd9, 0xff);
-		NVGcolor purpleColor = nvgRGBA(0x7a, 0x5c, 0xff, 0xff);
 
 		const float* magnitudes = isRightChannel ? module->spec.magnitudesR : module->spec.magnitudesL;
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
-		float ceilingDb = module->spec.smoothedPeakDb + 6.f; // 6dB headroom
-		float floorDb = ceilingDb - 70.f; // 70dB range
+		float ceilingDb = module->spec.smoothedPeakDb + 6.f;
+		float floorDb = ceilingDb - 70.f;
 
 		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
 			float mag = magnitudes[i];
-			// Convert to dB-like scale for better visualization: log10(mag)
 			float db = 20.f * std::log10(mag + 1e-6f);
-			// Map floor..ceiling to 0..1
 			float norm = clamp((db - floorDb) / (ceilingDb - floorDb), 0.f, 1.f);
-			
 			if (norm <= 0.01f) continue;
 
 			float barH = norm * box.size.y;
 			float x = (float)i * barW;
-			NVGcolor color = nvgLerpRGBA(purpleColor, cyanColor, norm);
+			NVGcolor color = nvgLerpRGBA(colors.low, colors.high, norm);
 
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x, box.size.y - barH, barW - 0.5f, barH);
@@ -345,6 +372,28 @@ struct SilWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		Sil* sil = dynamic_cast<Sil*>(module);
+		if (!sil) return;
+
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel("Visuals"));
+		menu->addChild(createSubmenuItem("Color Scheme", "",
+			[=](Menu* submenu) {
+				auto addSchemeItem = [=](Sil::ColorScheme scheme, std::string label) {
+					submenu->addChild(createCheckMenuItem(label, "",
+						[=]() { return sil->colorScheme == scheme; },
+						[=]() { sil->colorScheme = scheme; }
+					));
+				};
+				addSchemeItem(Sil::SCHEME_DEFAULT, "Default (Cyan/Purple)");
+				addSchemeItem(Sil::SCHEME_CLASSIC, "Classic (Green/Red)");
+				addSchemeItem(Sil::SCHEME_MONOCHROME, "Monochrome (White/Gray)");
+				addSchemeItem(Sil::SCHEME_FIRE, "Fire (Yellow/Red)");
+			}
+		));
 	}
 };
 
