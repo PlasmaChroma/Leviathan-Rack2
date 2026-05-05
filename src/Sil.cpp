@@ -286,11 +286,52 @@ struct SpectrumWidget : TransparentWidget {
 		nvgFillColor(args.vg, colors.bg);
 		nvgFill(args.vg);
 
-		const float* magnitudes = isRightChannel ? module->spec.magnitudesR : module->spec.magnitudesL;
-		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
-
+		// Draw background grid
 		float ceilingDb = module->spec.smoothedPeakDb + 6.f;
 		float floorDb = ceilingDb - 70.f;
+
+		auto getX = [&](float hz) {
+			float f01 = std::log10(hz / 20.f) / 3.f; // log10(20000/20) = 3
+			return f01 * box.size.x;
+		};
+
+		// Vertical frequency lines: 10 per decade
+		for (float decade = 10.f; decade <= 10000.f; decade *= 10.f) {
+			for (int i = 1; i <= 9; i++) {
+				float f = decade * i;
+				if (f < 20.f) continue;
+				if (f > 20000.f) break;
+				
+				float x = getX(f);
+				if (x < 0 || x > box.size.x) continue;
+				
+				bool isDecade = (i == 1);
+				float alpha = isDecade ? 0.3f : 0.1f;
+				float gray = isDecade ? 0.6f : 0.4f;
+
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, x, 0);
+				nvgLineTo(args.vg, x, box.size.y);
+				nvgStrokeColor(args.vg, nvgRGBAf(gray, gray, gray, alpha));
+				nvgStrokeWidth(args.vg, isDecade ? 0.8f : 0.5f);
+				nvgStroke(args.vg);
+			}
+		}
+		// 20kHz line
+		{
+			float x = getX(20000.f);
+			if (x >= 0 && x <= box.size.x) {
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, x, 0);
+				nvgLineTo(args.vg, x, box.size.y);
+				nvgStrokeColor(args.vg, nvgRGBAf(0.4f, 0.4f, 0.4f, 0.1f));
+				nvgStrokeWidth(args.vg, 0.5f);
+				nvgStroke(args.vg);
+			}
+		}
+
+		const float* magnitudes = isRightChannel ? module->spec.magnitudesR : module->spec.magnitudesL;
+		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
 		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
 			float mag = magnitudes[i];
