@@ -78,6 +78,11 @@ struct Sil : Module {
 	float limiterPrevL = 0.f;
 	float limiterPrevR = 0.f;
 	bool limiterPrevValid = false;
+	std::vector<float> rollingBufferL;
+	std::vector<float> rollingBufferR;
+	int rollingWriteIndex = 0;
+	int rollingBufferLength = 0;
+	int rollingFilled = 0;
 	dsp::RCFilter lowpassL1;
 	dsp::RCFilter lowpassL2;
 	dsp::RCFilter lowpassR1;
@@ -93,6 +98,34 @@ struct Sil : Module {
 	static constexpr float kLowBandSideReleaseSec = 0.250f;
 	static constexpr int kLimiterOversampleFactor = 4;
 	static constexpr float kAudioFullScaleV = 5.f;
+	static constexpr float kRollingBufferSeconds = 10.f;
+
+	void configureRollingBuffer(float sampleRate) {
+		const int requestedLength = std::max(1, int(std::round(sampleRate * kRollingBufferSeconds)));
+		if (requestedLength == rollingBufferLength) {
+			return;
+		}
+		rollingBufferLength = requestedLength;
+		rollingBufferL.assign(size_t(rollingBufferLength), 0.f);
+		rollingBufferR.assign(size_t(rollingBufferLength), 0.f);
+		rollingWriteIndex = 0;
+		rollingFilled = 0;
+	}
+
+	void pushRollingSample(float sampleL, float sampleR) {
+		if (rollingBufferLength <= 0) {
+			return;
+		}
+		rollingBufferL[size_t(rollingWriteIndex)] = sampleL;
+		rollingBufferR[size_t(rollingWriteIndex)] = sampleR;
+		rollingWriteIndex++;
+		if (rollingWriteIndex >= rollingBufferLength) {
+			rollingWriteIndex = 0;
+		}
+		if (rollingFilled < rollingBufferLength) {
+			rollingFilled++;
+		}
+	}
 
 	void updateLowBandCutoff(float sampleRate) {
 		const float cutoffNorm = clamp(kLowBandCutoffHz / sampleRate, 1e-5f, 0.49f);
@@ -118,6 +151,7 @@ struct Sil : Module {
 
 		specDivider.setDivision(2048);
 		updateLowBandCutoff(APP->engine->getSampleRate());
+		configureRollingBuffer(APP->engine->getSampleRate());
 	}
 
 	~Sil() {
@@ -128,6 +162,7 @@ struct Sil : Module {
 		hist.samplesPerBin = (int)(e.sampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		updateLowBandCutoff(e.sampleRate);
+		configureRollingBuffer(e.sampleRate);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -201,6 +236,7 @@ struct Sil : Module {
 		const float limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
 		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(lowRecoveryAmount, args.sampleTime);
+		pushRollingSample(outL, outR);
 
 		// Update histogram (Waveform)
 		hist.currentMinL = std::min(hist.currentMinL, outL);
