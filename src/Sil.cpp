@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <condition_variable>
 #include <mutex>
@@ -82,6 +83,7 @@ struct Sil : Module {
 		LOW_RECOVERY_LIGHT,
 		REMOVE_MUD_LIGHT,
 		GLUE_COMP_LIGHT,
+		SATURATOR_LIGHT,
 		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
 		REPAIR_ENABLED_LIGHT,
@@ -203,6 +205,40 @@ struct Sil : Module {
 			ledAmount = 0.f;
 		}
 	} glue;
+	struct SaturatorState {
+		static constexpr int HISTORY_BINS = 1000;
+		static constexpr int PERCENTILE_BINS = 96;
+		float peakBins[HISTORY_BINS] = {};
+		uint16_t percentileHist[PERCENTILE_BINS] = {};
+		uint8_t binToHist[HISTORY_BINS] = {};
+		int writeBin = 0;
+		int samplesInBin = 0;
+		int samplesPerBin = 441;
+		float currentBinPeak = 0.f;
+		float drive = 1.f;
+		float makeupDb = 0.f;
+		float makeupLinear = 1.f;
+		float driveNormInv = 1.f;
+		float ledAmount = 0.f;
+		dsp::ClockDivider updateDivider;
+
+		void reset(float sampleRate) {
+			samplesPerBin = std::max(1, int(std::round(sampleRate * 10.f / HISTORY_BINS)));
+			std::fill(std::begin(peakBins), std::end(peakBins), 0.f);
+			std::fill(std::begin(percentileHist), std::end(percentileHist), uint16_t(0));
+			std::fill(std::begin(binToHist), std::end(binToHist), uint8_t(0));
+			percentileHist[0] = HISTORY_BINS;
+			writeBin = 0;
+			samplesInBin = 0;
+			currentBinPeak = 0.f;
+			drive = 1.f;
+			makeupDb = 0.f;
+			makeupLinear = 1.f;
+			driveNormInv = 1.f;
+			ledAmount = 0.f;
+			updateDivider.setDivision(512);
+		}
+	} saturator;
 
 	static constexpr float kLowBandCutoffHz = 120.f;
 	static constexpr float kLowBandCorrTauSec = 0.100f;
@@ -250,6 +286,17 @@ struct Sil : Module {
 	static constexpr float kGlueMaxMakeupDb = 1.25f;
 	static constexpr float kGlueMakeupFraction = 0.50f;
 	static constexpr float kGlueSidechainHpHz = 90.f;
+	static constexpr float kLimiterCeilingDb = -1.0f;
+	static constexpr float kSaturatorTargetPreLimiterDb = -0.75f;
+	static constexpr float kSatMaxMakeupDb = 2.0f;
+	static constexpr float kSatMaxDrive = 1.35f;
+	static constexpr float kSatMinDrive = 1.0f;
+	static constexpr float kSatMakeupAttackSec = 1.50f;
+	static constexpr float kSatMakeupReleaseSec = 4.00f;
+	static constexpr float kSatDriveAttackSec = 2.00f;
+	static constexpr float kSatDriveReleaseSec = 5.00f;
+	static constexpr float kSatHistoryPercentile = 0.995f;
+	static constexpr int kSatUpdateDivision = 512;
 
 	static float toDbSafe(float v) {
 		return 20.f * std::log10(std::max(v, 1e-7f));
@@ -530,7 +577,50 @@ struct Sil : Module {
 		glueReleaseCoeff = std::exp(-1.f / (kGlueReleaseSec * sr));
 		limiterAttackCoeff = std::exp(-1.f / (0.0005f * sr));
 		limiterReleaseCoeff = std::exp(-1.f / (0.080f * sr));
-		limiterCeiling = kAudioFullScaleV * 0.89125093813f; // -1.0 dBFS
+		limiterCeiling = kAudioFullScaleV * std::pow(10.f, kLimiterCeilingDb / 20.f);
+	}
+
+	int saturatorPeakToHistIndex(float peak) const {
+		const float normalized = clamp(peak / kAudioFullScaleV, 0.f, 2.f);
+		const float scaled = normalized * float(SaturatorState::PERCENTILE_BINS - 1);
+		return clamp(int(std::round(scaled)), 0, SaturatorState::PERCENTILE_BINS - 1);
+	}
+
+	float saturatorHistIndexToPeak(int idx) const {
+		const float n = float(clamp(idx, 0, SaturatorState::PERCENTILE_BINS - 1)) /
+			float(SaturatorState::PERCENTILE_BINS - 1);
+		return n * 2.f * kAudioFullScaleV;
+	}
+
+	void saturatorPushPeakBin(float peak) {
+		const int oldHist = int(saturator.binToHist[saturator.writeBin]);
+		if (oldHist >= 0 && oldHist < SaturatorState::PERCENTILE_BINS && saturator.percentileHist[oldHist] > 0) {
+			saturator.percentileHist[oldHist]--;
+		}
+		const int newHist = saturatorPeakToHistIndex(peak);
+		saturator.percentileHist[newHist]++;
+		saturator.binToHist[saturator.writeBin] = uint8_t(newHist);
+		saturator.peakBins[saturator.writeBin] = peak;
+		saturator.writeBin++;
+		if (saturator.writeBin >= SaturatorState::HISTORY_BINS) {
+			saturator.writeBin = 0;
+		}
+	}
+
+	float saturatorEstimateRecentPeakPercentile() const {
+		const int targetRank = clamp(
+			int(std::round(kSatHistoryPercentile * float(SaturatorState::HISTORY_BINS - 1))),
+			0,
+			SaturatorState::HISTORY_BINS - 1
+		);
+		int accum = 0;
+		for (int i = 0; i < SaturatorState::PERCENTILE_BINS; ++i) {
+			accum += int(saturator.percentileHist[i]);
+			if (accum > targetRank) {
+				return saturatorHistIndexToPeak(i);
+			}
+		}
+		return saturatorHistIndexToPeak(SaturatorState::PERCENTILE_BINS - 1);
 	}
 
 	void updateRemoveMudCutoffs(float sampleRate) {
@@ -579,11 +669,13 @@ struct Sil : Module {
 
 		specDivider.setDivision(2048);
 		removeMud.coeffDivider.setDivision(32);
+		saturator.updateDivider.setDivision(kSatUpdateDivision);
 		updateLowBandCutoff(APP->engine->getSampleRate());
 		updateRemoveMudCutoffs(APP->engine->getSampleRate());
 		updateGlueCutoff(APP->engine->getSampleRate());
 		updateDynamicsCoefficients(APP->engine->getSampleRate());
 		configureRollingBuffer(APP->engine->getSampleRate());
+		saturator.reset(APP->engine->getSampleRate());
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		startMicropeakWorker();
@@ -605,6 +697,7 @@ struct Sil : Module {
 		micropeakCleanupFilter.reset();
 		resetRemoveMudState();
 		glue.reset();
+		saturator.reset(e.sampleRate);
 		micropeak.weakStreak = 0;
 		micropeak.lastSeverityEma.store(0.f, std::memory_order_relaxed);
 		micropeak.detectionConfidence.store(0.f, std::memory_order_relaxed);
@@ -758,36 +851,95 @@ struct Sil : Module {
 		else {
 			glue.reset();
 		}
+		float saturatedL = gluedL;
+		float saturatedR = gluedR;
+		float saturatorLed = 0.f;
+		if (masteringEnabled) {
+			const float preSatPeak = std::max(std::fabs(gluedL), std::fabs(gluedR));
+			saturator.currentBinPeak = std::max(saturator.currentBinPeak, preSatPeak);
+			saturator.samplesInBin++;
+			if (saturator.samplesInBin >= saturator.samplesPerBin) {
+				saturatorPushPeakBin(saturator.currentBinPeak);
+				saturator.samplesInBin = 0;
+				saturator.currentBinPeak = 0.f;
+			}
 
-		float outL = gluedL;
-		float outR = gluedR;
+			if (saturator.updateDivider.process()) {
+				const float recentLoudPeak = std::max(saturatorEstimateRecentPeakPercentile(), 1e-6f);
+				const float recentPeakNorm = clamp(recentLoudPeak / kAudioFullScaleV, 1e-6f, 4.f);
+				const float recentPeakDb = 20.f * std::log10(recentPeakNorm);
+				const float desiredMakeupDb = clamp(
+					kSaturatorTargetPreLimiterDb - recentPeakDb,
+					0.f,
+					kSatMaxMakeupDb
+				);
+				const float desiredDrive = clamp(
+					1.f + desiredMakeupDb * 0.22f,
+					kSatMinDrive,
+					kSatMaxDrive
+				);
+				const float updateSeconds = float(kSatUpdateDivision) / std::max(args.sampleRate, 1.f);
+				const float makeupTau = (desiredMakeupDb > saturator.makeupDb) ? kSatMakeupAttackSec : kSatMakeupReleaseSec;
+				const float makeupCoeff = std::exp(-updateSeconds / std::max(1e-3f, makeupTau));
+				saturator.makeupDb = desiredMakeupDb + makeupCoeff * (saturator.makeupDb - desiredMakeupDb);
+				const float driveTau = (desiredDrive > saturator.drive) ? kSatDriveAttackSec : kSatDriveReleaseSec;
+				const float driveCoeff = std::exp(-updateSeconds / std::max(1e-3f, driveTau));
+				saturator.drive = desiredDrive + driveCoeff * (saturator.drive - desiredDrive);
+				saturator.makeupLinear = std::pow(10.f, saturator.makeupDb / 20.f);
+				saturator.driveNormInv = 1.f / std::max(std::atan(clamp(saturator.drive, kSatMinDrive, kSatMaxDrive)), 1e-6f);
+			}
+
+			const float makeup = saturator.makeupLinear;
+			const float drive = clamp(saturator.drive, kSatMinDrive, kSatMaxDrive);
+			const float driveNormInv = saturator.driveNormInv;
+			auto shape = [&](float x) {
+				const float xNorm = clamp((x * makeup) / kAudioFullScaleV, -3.f, 3.f);
+				const float shapedNorm = std::atan(drive * xNorm) * driveNormInv;
+				return shapedNorm * kAudioFullScaleV;
+			};
+			saturatedL = shape(gluedL);
+			saturatedR = shape(gluedR);
+			const float makeupActivity = clamp(saturator.makeupDb / kSatMaxMakeupDb, 0.f, 1.f);
+			const float driveActivity = clamp(
+				(drive - kSatMinDrive) / std::max(kSatMaxDrive - kSatMinDrive, 1e-6f),
+				0.f,
+				1.f
+			);
+			const float rawLed = 0.55f * makeupActivity + 0.45f * driveActivity;
+			saturator.ledAmount = clamp(rawLed * 1.45f, 0.f, 1.f);
+			saturatorLed = saturator.ledAmount;
+		}
+		else {
+			saturator.makeupDb = 0.f;
+			saturator.makeupLinear = 1.f;
+			saturator.drive = 1.f;
+			saturator.driveNormInv = 1.f;
+			saturator.ledAmount = 0.f;
+		}
+
+		float outL = saturatedL;
+		float outR = saturatedR;
 		float limiterLed = 0.f;
 		if (masteringEnabled) {
 			// One-sample lookahead "true-peak as much as possible":
 			// cleanup emits the delayed center sample, so the current pre-master
 			// sample is available as the next point for limiter detection.
-			float peak = std::max(std::fabs(gluedL), std::fabs(gluedR));
+			float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
 			if (limiterPrevValid) {
 				for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
 					const float a = float(i) / float(kLimiterOversampleFactor);
-					const float interpL = limiterPrevL + (gluedL - limiterPrevL) * a;
-					const float interpR = limiterPrevR + (gluedR - limiterPrevR) * a;
+					const float interpL = limiterPrevL + (saturatedL - limiterPrevL) * a;
+					const float interpR = limiterPrevR + (saturatedR - limiterPrevR) * a;
 					peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 				}
-			}
-			for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
-				const float a = float(i) / float(kLimiterOversampleFactor);
-				const float interpL = gluedL + (preMasterL - gluedL) * a;
-				const float interpR = gluedR + (preMasterR - gluedR) * a;
-				peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 			}
 			const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
 			const float coeff = (desiredGain < limiterGain) ? limiterAttackCoeff : limiterReleaseCoeff;
 			limiterGain = desiredGain + coeff * (limiterGain - desiredGain);
-			outL = gluedL * limiterGain;
-			outR = gluedR * limiterGain;
-			limiterPrevL = gluedL;
-			limiterPrevR = gluedR;
+			outL = saturatedL * limiterGain;
+			outR = saturatedR * limiterGain;
+			limiterPrevL = saturatedL;
+			limiterPrevR = saturatedR;
 			limiterPrevValid = true;
 			const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
 			limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
@@ -805,6 +957,7 @@ struct Sil : Module {
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
 		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
+		lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, args.sampleTime);
 		if (repairEnabled) {
 			pushMicropeakSample(preMasterL, preMasterR, args.sampleRate);
 		}
@@ -1149,6 +1302,7 @@ struct SilWidget : ModuleWidget {
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec removeMudLightPos(48.f, 47.6f);
 		Vec glueCompLightPos(48.f, 48.4f);
+		Vec saturatorLightPos(48.f, 50.4f);
 		Vec micropeakLightPos(48.f, 49.1f);
 		Vec masteringButtonPos(48.f, 53.f);
 		Vec repairButtonPos(48.f, 56.f);
@@ -1168,6 +1322,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
+		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
 		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 		applyPointOverride("REPAIR_ENABLED_PARAM", &repairButtonPos);
@@ -1186,6 +1341,7 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
 
 		MicropeakDebugReadoutWidget* micropeakReadout =
