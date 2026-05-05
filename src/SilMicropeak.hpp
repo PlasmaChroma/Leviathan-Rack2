@@ -20,9 +20,11 @@ struct StereoResult {
 struct Profile {
 	float minPeakFullScale;
 	float minNeighborDropFullScale;
+	float minPeakNeighborRatio;
 	float minIsolationRatio;
 	float minLocalMaxRatio;
 	float minSeverityForSingleEvent;
+	float minAverageSeverityForMultiEvent;
 	int minEvents;
 	int localRadius;
 	int exclusionRadius;
@@ -32,9 +34,11 @@ struct Profile {
 	Profile()
 		: minPeakFullScale(0.30f),
 		  minNeighborDropFullScale(0.045f),
+		  minPeakNeighborRatio(1.40f),
 		  minIsolationRatio(3.25f),
 		  minLocalMaxRatio(1.28f),
 		  minSeverityForSingleEvent(0.55f),
+		  minAverageSeverityForMultiEvent(0.12f),
 		  minEvents(2),
 		  localRadius(24),
 		  exclusionRadius(2),
@@ -47,9 +51,11 @@ inline Profile makeDebugProfile() {
 	Profile profile;
 	profile.minPeakFullScale = 0.18f;
 	profile.minNeighborDropFullScale = 0.025f;
+	profile.minPeakNeighborRatio = 1.20f;
 	profile.minIsolationRatio = 2.75f;
 	profile.minLocalMaxRatio = 1.20f;
 	profile.minSeverityForSingleEvent = 0.35f;
+	profile.minAverageSeverityForMultiEvent = 0.08f;
 	profile.minEvents = 1;
 	return profile;
 }
@@ -86,7 +92,9 @@ inline Result analyzeChunkMono(
 
 	const float minPeak = std::max(0.f, profile.minPeakFullScale) * fullScaleVolts;
 	const float minNeighborDrop = std::max(0.f, profile.minNeighborDropFullScale) * fullScaleVolts;
+	const float minPeakNeighborRatio = std::max(1.f, profile.minPeakNeighborRatio);
 	int refractory = 0;
+	float severitySum = 0.f;
 
 	for (size_t i = size_t(localRadius); i + size_t(localRadius) < count; ++i) {
 		if (refractory > 0) {
@@ -105,6 +113,9 @@ inline Result analyzeChunkMono(
 		if (peak - neighborMax < minNeighborDrop) {
 			continue;
 		}
+		if (peak < neighborMax * minPeakNeighborRatio) {
+			continue;
+		}
 
 		float localSum = 0.f;
 		float localMax = 0.f;
@@ -114,14 +125,15 @@ inline Result analyzeChunkMono(
 				continue;
 			}
 			const size_t index = size_t(int(i) + o);
-				const float v = std::fabs(channel[index]);
+			const float v = std::fabs(channel[index]);
 			localSum += v;
 			localMax = std::max(localMax, v);
 			localCount++;
 		}
 		const float localMean = localSum / std::max(localCount, 1);
 		const float isolationRatio = peak / std::max(localMean, 1e-4f);
-		const bool isoPass = isolationRatio >= profile.minIsolationRatio && peak >= localMax * profile.minLocalMaxRatio;
+		const bool envelopeOutlier = peak >= localMax * profile.minLocalMaxRatio;
+		const bool isoPass = isolationRatio >= profile.minIsolationRatio;
 
 		float d2Sum = 0.f;
 		for (int o = -3; o <= 3; ++o) {
@@ -132,8 +144,7 @@ inline Result analyzeChunkMono(
 			d2Sum += std::fabs(a - 2.f * b + c);
 		}
 		const float roughness = d2Sum / std::max(localMean, 1e-4f);
-		const bool roughPass = roughness >= profile.minRoughness;
-		if (!(isoPass || roughPass)) {
+		if (!envelopeOutlier || !isoPass) {
 			continue;
 		}
 
@@ -152,11 +163,17 @@ inline Result analyzeChunkMono(
 			(peak / fullScaleVolts) * std::min((0.85f * isolationRatio + 0.15f * roughness) / 12.f, 2.f);
 		result.eventCount++;
 		result.strongestSeverity = std::max(result.strongestSeverity, severity);
+		severitySum += severity;
 		refractory = localRadius;
 	}
 
-	result.detected = result.eventCount >= std::max(1, profile.minEvents) ||
-		result.strongestSeverity >= profile.minSeverityForSingleEvent;
+	const float avgSeverity = (result.eventCount > 0) ? (severitySum / float(result.eventCount)) : 0.f;
+	const bool multiEventDetected =
+		result.eventCount >= std::max(1, profile.minEvents) &&
+		avgSeverity >= std::max(0.f, profile.minAverageSeverityForMultiEvent);
+	const bool singleStrongDetected =
+		result.strongestSeverity >= std::max(0.f, profile.minSeverityForSingleEvent);
+	result.detected = multiEventDetected || singleStrongDetected;
 	return result;
 }
 

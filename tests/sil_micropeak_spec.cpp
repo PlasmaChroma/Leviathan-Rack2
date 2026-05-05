@@ -27,6 +27,29 @@ TestResult expectCleanSineNotDetected() {
 	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
 }
 
+std::vector<float> makeLogSineSweep(int n, float sampleRate, float startHz, float endHz, float amplitude) {
+	std::vector<float> x(size_t(n), 0.f);
+	const double pi = 3.14159265358979323846;
+	double phase = 0.0;
+	for (int i = 0; i < n; ++i) {
+		const float t = float(i) / float(std::max(1, n - 1));
+		const float freq = startHz * std::pow(endHz / startHz, t);
+		phase += 2.0 * pi * double(freq) / double(sampleRate);
+		x[size_t(i)] = amplitude * std::sin(float(phase));
+	}
+	return x;
+}
+
+TestResult expectHighFrequencySweepNotDetected() {
+	const int n = 8192;
+	const float sampleRate = 48000.f;
+	std::vector<float> l = makeLogSineSweep(n, sampleRate, 8000.f, 21000.f, 3.5f);
+	std::vector<float> r = l;
+	sil_micropeak::Result result = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f);
+	return {"High-frequency sine sweep is not flagged", !result.detected,
+	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
+}
+
 TestResult expectIsolatedSpikesDetected() {
 	const int n = 4096;
 	std::vector<float> l(size_t(n), 0.08f);
@@ -185,6 +208,7 @@ TestResult expectStatefulCleanupOnlyActsWhenActive() {
 int main() {
 	TestResult results[] = {
 		expectCleanSineNotDetected(),
+		expectHighFrequencySweepNotDetected(),
 		expectIsolatedSpikesDetected(),
 		expectLowerLevelRepeatedMicropeaksDetected(),
 		expectBroadTransientNotDetected(),

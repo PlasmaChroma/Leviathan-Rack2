@@ -5,11 +5,63 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdio>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 
 struct Sil : Module {
+	struct Biquad {
+		float b0 = 1.f;
+		float b1 = 0.f;
+		float b2 = 0.f;
+		float a1 = 0.f;
+		float a2 = 0.f;
+		float z1 = 0.f;
+		float z2 = 0.f;
+
+		float process(float x) {
+			const float y = b0 * x + z1;
+			z1 = b1 * x - a1 * y + z2;
+			z2 = b2 * x - a2 * y;
+			return y;
+		}
+
+		void reset() {
+			z1 = 0.f;
+			z2 = 0.f;
+		}
+
+		void setPeaking(float sampleRate, float centerHz, float q, float gainDb) {
+			if (sampleRate <= 1.f || centerHz <= 1.f || q <= 1e-4f) {
+				b0 = 1.f;
+				b1 = b2 = a1 = a2 = 0.f;
+				return;
+			}
+			const float nyquistGuard = 0.48f * sampleRate;
+			const float fc = clamp(centerHz, 10.f, nyquistGuard);
+			const float A = std::pow(10.f, gainDb / 40.f);
+			const float w0 = 2.f * M_PI * fc / sampleRate;
+			const float c = std::cos(w0);
+			const float s = std::sin(w0);
+			const float alpha = s / (2.f * q);
+
+			const float rawB0 = 1.f + alpha * A;
+			const float rawB1 = -2.f * c;
+			const float rawB2 = 1.f - alpha * A;
+			const float rawA0 = 1.f + alpha / A;
+			const float rawA1 = -2.f * c;
+			const float rawA2 = 1.f - alpha / A;
+			const float invA0 = (std::fabs(rawA0) > 1e-9f) ? (1.f / rawA0) : 1.f;
+
+			b0 = rawB0 * invA0;
+			b1 = rawB1 * invA0;
+			b2 = rawB2 * invA0;
+			a1 = rawA1 * invA0;
+			a2 = rawA2 * invA0;
+		}
+	};
+
 	enum ParamId {
 		MASTERING_ENABLED_PARAM,
 		PARAMS_LEN
@@ -27,6 +79,7 @@ struct Sil : Module {
 	enum LightId {
 		LIMITER_ACTIVE_LIGHT,
 		LOW_RECOVERY_LIGHT,
+		REMOVE_MUD_LIGHT,
 		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
 		LIGHTS_LEN
@@ -102,6 +155,23 @@ struct Sil : Module {
 	float lowBandCorrRR = 1e-6f;
 	float lowBandCorrLR = 0.f;
 	float lowBandSideGain = 1.f;
+	struct RemoveMudState {
+		dsp::RCFilter mudHp;
+		dsp::RCFilter mudLp;
+		dsp::RCFilter bassHp;
+		dsp::RCFilter bassLp;
+		dsp::RCFilter presenceHp;
+		dsp::RCFilter presenceLp;
+		float mudEnv = 1e-6f;
+		float bassEnv = 1e-6f;
+		float presenceEnv = 1e-6f;
+		float targetCutDb = 0.f;
+		float smoothedCutDb = 0.f;
+		float ledAmount = 0.f;
+		dsp::ClockDivider coeffDivider;
+		Biquad peakingL;
+		Biquad peakingR;
+	} removeMud;
 
 	static constexpr float kLowBandCutoffHz = 120.f;
 	static constexpr float kLowBandCorrTauSec = 0.100f;
@@ -110,11 +180,11 @@ struct Sil : Module {
 	static constexpr int kLimiterOversampleFactor = 4;
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
-	static constexpr float kMicropeakHoldSeconds = 1.f;
-	static constexpr float kMicropeakStrongTopUpSeconds = 0.45f;
-	static constexpr float kMicropeakWeakTopUpSeconds = 0.20f;
-	static constexpr float kMicropeakOnHoldFloorSeconds = 0.75f;
-	static constexpr float kMicropeakKeepHoldFloorSeconds = 0.30f;
+	static constexpr float kMicropeakHoldSeconds = 2.f;
+	static constexpr float kMicropeakStrongTopUpSeconds = 0.70f;
+	static constexpr float kMicropeakWeakTopUpSeconds = 0.35f;
+	static constexpr float kMicropeakOnHoldFloorSeconds = 1.10f;
+	static constexpr float kMicropeakKeepHoldFloorSeconds = 0.55f;
 	static constexpr float kMicropeakOnSeverity = 0.55f;
 	static constexpr float kMicropeakKeepSeverity = 0.35f;
 	static constexpr float kMicropeakPromoteSeverityEma = 0.36f;
@@ -126,6 +196,36 @@ struct Sil : Module {
 	static constexpr int kMicropeakOnEvents = 2;
 	static constexpr int kMicropeakKeepEvents = 1;
 	static constexpr int kMicropeakChunkSize = 2048;
+	static constexpr float kMicropeakConfidenceAttackSeconds = 0.20f;
+	static constexpr float kMicropeakConfidenceReleaseSeconds = 2.40f;
+	static constexpr float kMudLowHz = 180.f;
+	static constexpr float kMudHighHz = 520.f;
+	static constexpr float kMudCenterHz = 315.f;
+	static constexpr float kMudQ = 0.75f;
+	static constexpr float kMudAllowedWarmthDb = 1.5f;
+	static constexpr float kMudThresholdDb = 2.0f;
+	static constexpr float kMudKneeDb = 4.0f;
+	static constexpr float kMudMaxCutDb = 2.5f;
+	static constexpr float kMudAttackSec = 0.120f;
+	static constexpr float kMudReleaseSec = 0.850f;
+	static constexpr float kMudEnvAttackSec = 0.030f;
+	static constexpr float kMudEnvReleaseSec = 0.220f;
+
+	static float toDbSafe(float v) {
+		return 20.f * std::log10(std::max(v, 1e-7f));
+	}
+
+	static float softKnee01(float xDb, float thresholdDb, float kneeDb) {
+		const float halfKnee = 0.5f * std::max(0.f, kneeDb);
+		if (xDb <= thresholdDb - halfKnee) {
+			return 0.f;
+		}
+		if (xDb >= thresholdDb + halfKnee) {
+			return 1.f;
+		}
+		const float t = (xDb - (thresholdDb - halfKnee)) / std::max(kneeDb, 1e-6f);
+		return t * t * (3.f - 2.f * t);
+	}
 
 	struct MicropeakWorkerState {
 		std::array<float, kMicropeakChunkSize> fillL {};
@@ -144,6 +244,7 @@ struct Sil : Module {
 		std::atomic<int> lastEventCount {0};
 		std::atomic<float> lastSeverity {0.f};
 		std::atomic<float> lastSeverityEma {0.f};
+		std::atomic<float> detectionConfidence {0.f};
 		int weakStreak = 0;
 		std::atomic<bool> latchedActive {false};
 	} micropeak;
@@ -262,13 +363,27 @@ struct Sil : Module {
 					if (scoreWrite >= scoreWindowSize) {
 						scoreWrite = 0;
 					}
-					const bool windowOnHit = scoreSum >= kMicropeakScoreOnThreshold;
-					const bool windowKeepHit = scoreSum >= kMicropeakScoreKeepThreshold;
-					micropeak.weakStreak = keepHit ? (micropeak.weakStreak + 1) : 0;
-					const bool promotedOnHit = micropeak.weakStreak >= kMicropeakPromoteWeakStreak &&
-						severityEma >= kMicropeakPromoteSeverityEma;
-					const bool onHit = directOnHit || promotedOnHit || windowOnHit;
-					const bool keepHitEma = keepHit || severityEma >= kMicropeakKeepSeverityEma || windowKeepHit;
+				const bool windowOnHit = scoreSum >= kMicropeakScoreOnThreshold;
+				const bool windowKeepHit = scoreSum >= kMicropeakScoreKeepThreshold;
+				if (keepHit) {
+					micropeak.weakStreak = micropeak.weakStreak + 1;
+				}
+				else {
+					micropeak.weakStreak = std::max(0, micropeak.weakStreak - 1);
+				}
+				const bool promotedOnHit = micropeak.weakStreak >= kMicropeakPromoteWeakStreak &&
+					severityEma >= kMicropeakPromoteSeverityEma;
+				const bool onHit = directOnHit || promotedOnHit || windowOnHit;
+				const bool keepHitEma = keepHit || severityEma >= kMicropeakKeepSeverityEma || windowKeepHit;
+				const float directProgress = std::max(
+					clamp(float(std::max(leftResult.eventCount, rightResult.eventCount)) / float(kMicropeakOnEvents), 0.f, 1.f),
+					clamp(strongestSeverity / kMicropeakOnSeverity, 0.f, 1.f)
+				);
+				const float promotedProgress = std::min(
+					clamp(float(micropeak.weakStreak) / float(std::max(1, kMicropeakPromoteWeakStreak)), 0.f, 1.f),
+					clamp(severityEma / kMicropeakPromoteSeverityEma, 0.f, 1.f)
+				);
+				const float windowProgress = clamp(float(scoreSum) / float(std::max(1, kMicropeakScoreOnThreshold)), 0.f, 1.f);
 				bool latched = micropeak.latchedActive.load(std::memory_order_relaxed);
 				const int maxHold = std::max(1, int(std::round(sampleRate * kMicropeakHoldSeconds)));
 				int hold = std::max(0, micropeak.holdSamples.load(std::memory_order_relaxed));
@@ -294,6 +409,14 @@ struct Sil : Module {
 				}
 
 				micropeak.latchedActive.store(latched, std::memory_order_relaxed);
+				const float targetConfidence = latched ? 1.f : std::max(directProgress, std::max(promotedProgress, windowProgress));
+				const float previousConfidence = micropeak.detectionConfidence.load(std::memory_order_relaxed);
+				const float chunkSeconds = float(kMicropeakChunkSize) / std::max(sampleRate, 1.f);
+				const float attackCoeff = std::exp(-chunkSeconds / std::max(1e-3f, kMicropeakConfidenceAttackSeconds));
+				const float releaseCoeff = std::exp(-chunkSeconds / std::max(1e-3f, kMicropeakConfidenceReleaseSeconds));
+				const float coeff = (targetConfidence >= previousConfidence) ? attackCoeff : releaseCoeff;
+				const float confidence = targetConfidence + coeff * (previousConfidence - targetConfidence);
+				micropeak.detectionConfidence.store(clamp(confidence, 0.f, 1.f), std::memory_order_relaxed);
 			}
 		});
 	}
@@ -353,9 +476,32 @@ struct Sil : Module {
 		lowpassR2.setCutoff(cutoffNorm);
 	}
 
+	void updateRemoveMudCutoffs(float sampleRate) {
+		const auto norm = [&](float hz) {
+			return clamp(hz / std::max(sampleRate, 1.f), 1e-5f, 0.49f);
+		};
+		removeMud.mudHp.setCutoff(norm(kMudLowHz));
+		removeMud.mudLp.setCutoff(norm(kMudHighHz));
+		removeMud.bassHp.setCutoff(norm(80.f));
+		removeMud.bassLp.setCutoff(norm(160.f));
+		removeMud.presenceHp.setCutoff(norm(700.f));
+		removeMud.presenceLp.setCutoff(norm(3000.f));
+	}
+
+	void resetRemoveMudState() {
+		removeMud.mudEnv = 1e-6f;
+		removeMud.bassEnv = 1e-6f;
+		removeMud.presenceEnv = 1e-6f;
+		removeMud.targetCutDb = 0.f;
+		removeMud.smoothedCutDb = 0.f;
+		removeMud.ledAmount = 0.f;
+		removeMud.peakingL.reset();
+		removeMud.peakingR.reset();
+	}
+
 	Sil() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering enabled", {"Disabled", "Enabled"});
+		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
 		configInput(INPUT_L_INPUT, "Left");
 		configInput(INPUT_R_INPUT, "Right");
 		configOutput(OUTPUT_L_OUTPUT, "Left");
@@ -369,8 +515,12 @@ struct Sil : Module {
 		}
 
 		specDivider.setDivision(2048);
+		removeMud.coeffDivider.setDivision(32);
 		updateLowBandCutoff(APP->engine->getSampleRate());
+		updateRemoveMudCutoffs(APP->engine->getSampleRate());
 		configureRollingBuffer(APP->engine->getSampleRate());
+		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
+		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		startMicropeakWorker();
 	}
 
@@ -383,10 +533,13 @@ struct Sil : Module {
 		hist.samplesPerBin = (int)(e.sampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		updateLowBandCutoff(e.sampleRate);
+		updateRemoveMudCutoffs(e.sampleRate);
 		configureRollingBuffer(e.sampleRate);
 		micropeakCleanupFilter.reset();
+		resetRemoveMudState();
 		micropeak.weakStreak = 0;
 		micropeak.lastSeverityEma.store(0.f, std::memory_order_relaxed);
+		micropeak.detectionConfidence.store(0.f, std::memory_order_relaxed);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -430,8 +583,62 @@ struct Sil : Module {
 		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
 		const float recoveredL = highL + recoveredLowL;
 		const float recoveredR = highR + recoveredLowR;
-		const float preMasterL = masteringEnabled ? recoveredL : inL;
-		const float preMasterR = masteringEnabled ? recoveredR : inR;
+		float removeMudLed = 0.f;
+		float mudCleanL = recoveredL;
+		float mudCleanR = recoveredR;
+		if (masteringEnabled) {
+			const float mono = 0.5f * (recoveredL + recoveredR);
+			removeMud.mudHp.process(mono);
+			const float mudHigh = removeMud.mudHp.highpass();
+			removeMud.mudLp.process(mudHigh);
+			const float mudBand = removeMud.mudLp.lowpass();
+			removeMud.bassHp.process(mono);
+			const float bassHigh = removeMud.bassHp.highpass();
+			removeMud.bassLp.process(bassHigh);
+			const float bassBand = removeMud.bassLp.lowpass();
+			removeMud.presenceHp.process(mono);
+			const float presenceHigh = removeMud.presenceHp.highpass();
+			removeMud.presenceLp.process(presenceHigh);
+			const float presenceBand = removeMud.presenceLp.lowpass();
+
+			const float envAttack = std::exp(-1.f / (kMudEnvAttackSec * args.sampleRate));
+			const float envRelease = std::exp(-1.f / (kMudEnvReleaseSec * args.sampleRate));
+			auto updateEnv = [&](float& env, float x) {
+				const float absX = std::fabs(x);
+				const float c = (absX > env) ? envAttack : envRelease;
+				env = absX + c * (env - absX);
+			};
+			updateEnv(removeMud.mudEnv, mudBand);
+			updateEnv(removeMud.bassEnv, bassBand);
+			updateEnv(removeMud.presenceEnv, presenceBand);
+
+			const float refEnv = 0.5f * removeMud.bassEnv + 0.5f * removeMud.presenceEnv;
+			const float mudDeltaDb = toDbSafe(removeMud.mudEnv) - toDbSafe(refEnv) - kMudAllowedWarmthDb;
+			const float activation = softKnee01(mudDeltaDb, kMudThresholdDb, kMudKneeDb);
+			removeMud.targetCutDb = -kMudMaxCutDb * activation;
+
+			const float attackCoeff = std::exp(-1.f / (kMudAttackSec * args.sampleRate));
+			const float releaseCoeff = std::exp(-1.f / (kMudReleaseSec * args.sampleRate));
+			const float coeff = (removeMud.targetCutDb < removeMud.smoothedCutDb) ? attackCoeff : releaseCoeff;
+			removeMud.smoothedCutDb = removeMud.targetCutDb + coeff * (removeMud.smoothedCutDb - removeMud.targetCutDb);
+			removeMud.ledAmount = clamp((-removeMud.smoothedCutDb) / kMudMaxCutDb, 0.f, 1.f);
+
+			if (removeMud.coeffDivider.process()) {
+				removeMud.peakingL.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
+				removeMud.peakingR.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
+			}
+			mudCleanL = removeMud.peakingL.process(recoveredL);
+			mudCleanR = removeMud.peakingR.process(recoveredR);
+			removeMudLed = removeMud.ledAmount;
+		}
+		else {
+			removeMud.targetCutDb = 0.f;
+			removeMud.smoothedCutDb = 0.f;
+			removeMud.ledAmount = 0.f;
+		}
+
+		const float preMasterL = masteringEnabled ? mudCleanL : inL;
+		const float preMasterR = masteringEnabled ? mudCleanR : inR;
 		const bool micropeakActive = consumeMicropeakHoldSample();
 		const sil_micropeak::StereoSample cleaned = micropeakCleanupFilter.process(
 			sil_micropeak::StereoSample(preMasterL, preMasterR),
@@ -486,6 +693,7 @@ struct Sil : Module {
 		outputs[OUTPUT_R_OUTPUT].setVoltage(outR);
 		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
+		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
 		pushMicropeakSample(preMasterL, preMasterR, args.sampleRate);
 		pushRollingSample(outL, outR);
 		const float candidateSeverity = micropeak.lastSeverity.load(std::memory_order_relaxed);
@@ -743,6 +951,28 @@ struct SpectrumWidget : TransparentWidget {
 	}
 };
 
+struct MicropeakDebugReadoutWidget : TransparentWidget {
+	Sil* module = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		const float confidence = clamp(module->micropeak.detectionConfidence.load(std::memory_order_relaxed), 0.f, 1.f);
+		const int percent = int(std::round(confidence * 100.f));
+		char label[64];
+		std::snprintf(label, sizeof(label), "Micropeak Repair: %d%%", percent);
+
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.0f);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
+		nvgText(args.vg, 0.45f, box.size.y * 0.5f + 0.45f, label, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(240, 240, 240, 255));
+		nvgText(args.vg, 0.f, box.size.y * 0.5f, label, nullptr);
+	}
+};
+
 struct BananutBlack : app::SvgPort {
 	BananutBlack() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
@@ -794,6 +1024,7 @@ struct SilWidget : ModuleWidget {
 		Vec outputRPos(74.f, 118.f);
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
+		Vec removeMudLightPos(48.f, 47.6f);
 		Vec micropeakLightPos(48.f, 49.1f);
 		Vec masteringButtonPos(48.f, 53.f);
 
@@ -810,6 +1041,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
+		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
 		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 
@@ -822,7 +1054,14 @@ struct SilWidget : ModuleWidget {
 		));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
+
+		MicropeakDebugReadoutWidget* micropeakReadout =
+			createWidget<MicropeakDebugReadoutWidget>(mm2px(micropeakLightPos.plus(Vec(2.8f, 0.f))));
+		micropeakReadout->box.size = mm2px(Vec(28.f, 3.8f));
+		micropeakReadout->module = module;
+		addChild(micropeakReadout);
 	}
 
 	void appendContextMenu(Menu* menu) override {
