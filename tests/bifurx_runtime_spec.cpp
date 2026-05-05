@@ -9,6 +9,16 @@
 // Provide the plugin global expected by module source.
 Plugin* pluginInstance = nullptr;
 
+// Bifurx includes the shared DragonKing debug setting from plugin.cpp in the
+// plugin build. The runtime spec includes Bifurx.cpp directly, so keep this
+// test self-contained instead of linking the full plugin translation unit.
+bool isDragonKingDebugEnabled() {
+	return false;
+}
+
+void refreshDragonKingDebugEnabled() {
+}
+
 #include "../src/Bifurx.cpp"
 
 using namespace bifurx;

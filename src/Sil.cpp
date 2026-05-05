@@ -1,7 +1,13 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
+#include "SilMicropeak.hpp"
 #include <vector>
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
 struct Sil : Module {
 	enum ParamId {
@@ -20,6 +26,7 @@ struct Sil : Module {
 	enum LightId {
 		LIMITER_ACTIVE_LIGHT,
 		LOW_RECOVERY_LIGHT,
+		MICROPEAK_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -78,6 +85,7 @@ struct Sil : Module {
 	float limiterPrevL = 0.f;
 	float limiterPrevR = 0.f;
 	bool limiterPrevValid = false;
+	sil_micropeak::CleanupFilter micropeakCleanupFilter;
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -99,6 +107,25 @@ struct Sil : Module {
 	static constexpr int kLimiterOversampleFactor = 4;
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
+	static constexpr int kMicropeakChunkSize = 2048;
+
+	struct MicropeakWorkerState {
+		std::array<float, kMicropeakChunkSize> fillL {};
+		std::array<float, kMicropeakChunkSize> fillR {};
+		int fillPos = 0;
+		std::array<float, kMicropeakChunkSize> pendingL {};
+		std::array<float, kMicropeakChunkSize> pendingR {};
+		float pendingFullScaleVolts = kAudioFullScaleV;
+		float pendingSampleRate = 44100.f;
+		bool pending = false;
+		bool stop = false;
+		std::mutex mutex;
+		std::condition_variable cv;
+		std::thread thread;
+		std::atomic<int> holdSamples {0};
+		std::atomic<int> lastEventCount {0};
+		std::atomic<float> lastSeverity {0.f};
+	} micropeak;
 
 	void configureRollingBuffer(float sampleRate) {
 		const int requestedLength = std::max(1, int(std::round(sampleRate * kRollingBufferSeconds)));
@@ -127,6 +154,90 @@ struct Sil : Module {
 		}
 	}
 
+	void startMicropeakWorker() {
+		if (micropeak.thread.joinable()) {
+			return;
+		}
+		micropeak.stop = false;
+		micropeak.thread = std::thread([this]() {
+			std::array<float, kMicropeakChunkSize> localL;
+			std::array<float, kMicropeakChunkSize> localR;
+			while (true) {
+				float fullScale = kAudioFullScaleV;
+				float sampleRate = 44100.f;
+				{
+					std::unique_lock<std::mutex> lock(micropeak.mutex);
+					micropeak.cv.wait(lock, [this]() {
+						return micropeak.stop || micropeak.pending;
+					});
+					if (micropeak.stop) {
+						return;
+					}
+					localL = micropeak.pendingL;
+					localR = micropeak.pendingR;
+					fullScale = micropeak.pendingFullScaleVolts;
+					sampleRate = micropeak.pendingSampleRate;
+					micropeak.pending = false;
+				}
+
+				const sil_micropeak::Result result =
+					sil_micropeak::analyzeChunk(localL.data(), localR.data(), localL.size(), fullScale);
+				micropeak.lastEventCount.store(result.eventCount, std::memory_order_relaxed);
+				micropeak.lastSeverity.store(result.strongestSeverity, std::memory_order_relaxed);
+				if (result.detected) {
+					micropeak.holdSamples.store(std::max(1, int(std::round(sampleRate * kRollingBufferSeconds))),
+					                            std::memory_order_relaxed);
+				}
+			}
+		});
+	}
+
+	void stopMicropeakWorker() {
+		{
+			std::lock_guard<std::mutex> lock(micropeak.mutex);
+			micropeak.stop = true;
+			micropeak.pending = false;
+		}
+		micropeak.cv.notify_all();
+		if (micropeak.thread.joinable()) {
+			micropeak.thread.join();
+		}
+	}
+
+	void pushMicropeakSample(float sampleL, float sampleR, float sampleRate) {
+		micropeak.fillL[size_t(micropeak.fillPos)] = sampleL;
+		micropeak.fillR[size_t(micropeak.fillPos)] = sampleR;
+		micropeak.fillPos++;
+		if (micropeak.fillPos < kMicropeakChunkSize) {
+			return;
+		}
+		micropeak.fillPos = 0;
+		{
+			std::unique_lock<std::mutex> lock(micropeak.mutex, std::try_to_lock);
+			if (!lock.owns_lock()) {
+				return;
+			}
+			if (!micropeak.pending) {
+				micropeak.pendingL = micropeak.fillL;
+				micropeak.pendingR = micropeak.fillR;
+				micropeak.pendingFullScaleVolts = kAudioFullScaleV;
+				micropeak.pendingSampleRate = std::max(sampleRate, 1.f);
+				micropeak.pending = true;
+			}
+		}
+		micropeak.cv.notify_one();
+	}
+
+	bool consumeMicropeakHoldSample() {
+		int remaining = micropeak.holdSamples.load(std::memory_order_relaxed);
+		while (remaining > 0) {
+			if (micropeak.holdSamples.compare_exchange_weak(remaining, remaining - 1, std::memory_order_relaxed)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void updateLowBandCutoff(float sampleRate) {
 		const float cutoffNorm = clamp(kLowBandCutoffHz / sampleRate, 1e-5f, 0.49f);
 		lowpassL1.setCutoff(cutoffNorm);
@@ -152,9 +263,11 @@ struct Sil : Module {
 		specDivider.setDivision(2048);
 		updateLowBandCutoff(APP->engine->getSampleRate());
 		configureRollingBuffer(APP->engine->getSampleRate());
+		startMicropeakWorker();
 	}
 
 	~Sil() {
+		stopMicropeakWorker();
 		delete spec.fft;
 	}
 
@@ -163,6 +276,7 @@ struct Sil : Module {
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		updateLowBandCutoff(e.sampleRate);
 		configureRollingBuffer(e.sampleRate);
+		micropeakCleanupFilter.reset();
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -204,28 +318,41 @@ struct Sil : Module {
 		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
 		const float recoveredL = highL + recoveredLowL;
 		const float recoveredR = highR + recoveredLowR;
+		const bool micropeakActive = consumeMicropeakHoldSample();
+		const sil_micropeak::StereoSample cleaned = micropeakCleanupFilter.process(
+			sil_micropeak::StereoSample(recoveredL, recoveredR),
+			micropeakActive,
+			kAudioFullScaleV
+		);
 
 		const float limiterCeiling = kAudioFullScaleV * std::pow(10.f, -1.f / 20.f);
-		// Zero-latency "true-peak as much as possible":
-		// oversample detector path by linear interpolation between samples.
-		float peak = std::max(std::fabs(recoveredL), std::fabs(recoveredR));
+		// One-sample lookahead "true-peak as much as possible":
+		// cleanup emits the delayed center sample, so the current recovered
+		// sample is available as the next point for limiter detection.
+		float peak = std::max(std::fabs(cleaned.l), std::fabs(cleaned.r));
 		if (limiterPrevValid) {
 			for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
 				const float a = float(i) / float(kLimiterOversampleFactor);
-				const float interpL = limiterPrevL + (recoveredL - limiterPrevL) * a;
-				const float interpR = limiterPrevR + (recoveredR - limiterPrevR) * a;
+				const float interpL = limiterPrevL + (cleaned.l - limiterPrevL) * a;
+				const float interpR = limiterPrevR + (cleaned.r - limiterPrevR) * a;
 				peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 			}
+		}
+		for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
+			const float a = float(i) / float(kLimiterOversampleFactor);
+			const float interpL = cleaned.l + (recoveredL - cleaned.l) * a;
+			const float interpR = cleaned.r + (recoveredR - cleaned.r) * a;
+			peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 		}
 		const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
 		const float attackCoeff = std::exp(-1.f / (0.0005f * args.sampleRate));
 		const float releaseCoeff = std::exp(-1.f / (0.080f * args.sampleRate));
 		const float coeff = (desiredGain < limiterGain) ? attackCoeff : releaseCoeff;
 		limiterGain = desiredGain + coeff * (limiterGain - desiredGain);
-		const float outL = recoveredL * limiterGain;
-		const float outR = recoveredR * limiterGain;
-		limiterPrevL = recoveredL;
-		limiterPrevR = recoveredR;
+		const float outL = cleaned.l * limiterGain;
+		const float outR = cleaned.r * limiterGain;
+		limiterPrevL = cleaned.l;
+		limiterPrevR = cleaned.r;
 		limiterPrevValid = true;
 
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
@@ -237,6 +364,8 @@ struct Sil : Module {
 		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(lowRecoveryAmount, args.sampleTime);
 		pushRollingSample(outL, outR);
+		pushMicropeakSample(outL, outR, args.sampleRate);
+		lights[MICROPEAK_LIGHT].setSmoothBrightness(micropeakActive ? 1.f : 0.f, args.sampleTime);
 
 		// Update histogram (Waveform)
 		hist.currentMinL = std::min(hist.currentMinL, outL);
@@ -332,7 +461,7 @@ struct Sil : Module {
 
 	void dataFromJson(json_t* rootJ) override {
 		json_t* colorSchemeJ = json_object_get(rootJ, "colorScheme");
-		if (colorSchemeJ) colorScheme = (ColorScheme)json_integer_value(colorSchemeJ);
+		if (colorSchemeJ) colorScheme = (ColorScheme)clamp(int(json_integer_value(colorSchemeJ)), 0, SCHEME_LEN - 1);
 	}
 };
 
@@ -531,6 +660,7 @@ struct SilWidget : ModuleWidget {
 		Vec outputRPos(74.f, 118.f);
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
+		Vec micropeakLightPos(48.f, 49.1f);
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
 			Vec pointMm;
@@ -545,6 +675,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
+		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
@@ -552,6 +683,7 @@ struct SilWidget : ModuleWidget {
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

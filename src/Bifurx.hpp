@@ -49,7 +49,7 @@ constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
 constexpr int kBifurxModeCount = 11;
-constexpr int kBifurxUiModeCount = 10;
+constexpr int kBifurxUiModeCount = kBifurxModeCount;
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
 
