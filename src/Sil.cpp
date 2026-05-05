@@ -18,6 +18,8 @@ struct Sil : Module {
 		OUTPUTS_LEN
 	};
 	enum LightId {
+		LIMITER_ACTIVE_LIGHT,
+		LOW_RECOVERY_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -72,6 +74,33 @@ struct Sil : Module {
 	} spec;
 
 	dsp::ClockDivider specDivider;
+	float limiterGain = 1.f;
+	float limiterPrevL = 0.f;
+	float limiterPrevR = 0.f;
+	bool limiterPrevValid = false;
+	dsp::RCFilter lowpassL1;
+	dsp::RCFilter lowpassL2;
+	dsp::RCFilter lowpassR1;
+	dsp::RCFilter lowpassR2;
+	float lowBandCorrLL = 1e-6f;
+	float lowBandCorrRR = 1e-6f;
+	float lowBandCorrLR = 0.f;
+	float lowBandSideGain = 1.f;
+
+	static constexpr float kLowBandCutoffHz = 120.f;
+	static constexpr float kLowBandCorrTauSec = 0.100f;
+	static constexpr float kLowBandSideAttackSec = 0.050f;
+	static constexpr float kLowBandSideReleaseSec = 0.250f;
+	static constexpr int kLimiterOversampleFactor = 4;
+	static constexpr float kAudioFullScaleV = 5.f;
+
+	void updateLowBandCutoff(float sampleRate) {
+		const float cutoffNorm = clamp(kLowBandCutoffHz / sampleRate, 1e-5f, 0.49f);
+		lowpassL1.setCutoff(cutoffNorm);
+		lowpassL2.setCutoff(cutoffNorm);
+		lowpassR1.setCutoff(cutoffNorm);
+		lowpassR2.setCutoff(cutoffNorm);
+	}
 
 	Sil() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -88,6 +117,7 @@ struct Sil : Module {
 		}
 
 		specDivider.setDivision(2048);
+		updateLowBandCutoff(APP->engine->getSampleRate());
 	}
 
 	~Sil() {
@@ -97,21 +127,86 @@ struct Sil : Module {
 	void onSampleRateChange(const SampleRateChangeEvent& e) override {
 		hist.samplesPerBin = (int)(e.sampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
+		updateLowBandCutoff(e.sampleRate);
 	}
 
 	void process(const ProcessArgs& args) override {
 		const float inL = inputs[INPUT_L_INPUT].getVoltage();
 		const float inR = inputs[INPUT_R_INPUT].getVoltage();
+
+		// Low-band mono recovery below 120 Hz:
+		// preserve coherent bass stereo, progressively collapse risky low side content.
+		lowpassL1.process(inL);
+		float lowL = lowpassL1.lowpass();
+		lowpassL2.process(lowL);
+		lowL = lowpassL2.lowpass();
+
+		lowpassR1.process(inR);
+		float lowR = lowpassR1.lowpass();
+		lowpassR2.process(lowR);
+		lowR = lowpassR2.lowpass();
+
+		const float highL = inL - lowL;
+		const float highR = inR - lowR;
+		const float lowMid = 0.5f * (lowL + lowR);
+		const float lowSide = 0.5f * (lowL - lowR);
+
+		const float corrCoeff = std::exp(-1.f / (kLowBandCorrTauSec * args.sampleRate));
+		const float corrMix = 1.f - corrCoeff;
+		lowBandCorrLL = corrCoeff * lowBandCorrLL + corrMix * (lowL * lowL);
+		lowBandCorrRR = corrCoeff * lowBandCorrRR + corrMix * (lowR * lowR);
+		lowBandCorrLR = corrCoeff * lowBandCorrLR + corrMix * (lowL * lowR);
+		const float denom = std::sqrt(std::max(lowBandCorrLL * lowBandCorrRR, 1e-12f));
+		const float lowCorr = clamp(lowBandCorrLR / denom, -1.f, 1.f);
+		const float targetLowSideGain = (lowCorr >= 0.70f) ? 1.f : ((lowCorr <= 0.f) ? 0.f : (lowCorr / 0.70f));
+		const float sideAttackCoeff = std::exp(-1.f / (kLowBandSideAttackSec * args.sampleRate));
+		const float sideReleaseCoeff = std::exp(-1.f / (kLowBandSideReleaseSec * args.sampleRate));
+		const float sideCoeff = (targetLowSideGain < lowBandSideGain) ? sideAttackCoeff : sideReleaseCoeff;
+		lowBandSideGain = targetLowSideGain + sideCoeff * (lowBandSideGain - targetLowSideGain);
+		const float lowRecoveryAmount = clamp(1.f - lowBandSideGain, 0.f, 1.f);
+
+		const float recoveredLowL = lowMid + lowSide * lowBandSideGain;
+		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
+		const float recoveredL = highL + recoveredLowL;
+		const float recoveredR = highR + recoveredLowR;
+
+		const float limiterCeiling = kAudioFullScaleV * std::pow(10.f, -1.f / 20.f);
+		// Zero-latency "true-peak as much as possible":
+		// oversample detector path by linear interpolation between samples.
+		float peak = std::max(std::fabs(recoveredL), std::fabs(recoveredR));
+		if (limiterPrevValid) {
+			for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
+				const float a = float(i) / float(kLimiterOversampleFactor);
+				const float interpL = limiterPrevL + (recoveredL - limiterPrevL) * a;
+				const float interpR = limiterPrevR + (recoveredR - limiterPrevR) * a;
+				peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
+			}
+		}
+		const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
+		const float attackCoeff = std::exp(-1.f / (0.0005f * args.sampleRate));
+		const float releaseCoeff = std::exp(-1.f / (0.080f * args.sampleRate));
+		const float coeff = (desiredGain < limiterGain) ? attackCoeff : releaseCoeff;
+		limiterGain = desiredGain + coeff * (limiterGain - desiredGain);
+		const float outL = recoveredL * limiterGain;
+		const float outR = recoveredR * limiterGain;
+		limiterPrevL = recoveredL;
+		limiterPrevR = recoveredR;
+		limiterPrevValid = true;
+
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
-		outputs[OUTPUT_L_OUTPUT].setVoltage(inL);
-		outputs[OUTPUT_R_OUTPUT].setVoltage(inR);
+		outputs[OUTPUT_L_OUTPUT].setVoltage(outL);
+		outputs[OUTPUT_R_OUTPUT].setVoltage(outR);
+		const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
+		const float limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
+		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
+		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(lowRecoveryAmount, args.sampleTime);
 
 		// Update histogram (Waveform)
-		hist.currentMinL = std::min(hist.currentMinL, inL);
-		hist.currentMaxL = std::max(hist.currentMaxL, inL);
-		hist.currentMinR = std::min(hist.currentMinR, inR);
-		hist.currentMaxR = std::max(hist.currentMaxR, inR);
+		hist.currentMinL = std::min(hist.currentMinL, outL);
+		hist.currentMaxL = std::max(hist.currentMaxL, outL);
+		hist.currentMinR = std::min(hist.currentMinR, outR);
+		hist.currentMaxR = std::max(hist.currentMaxR, outR);
 		hist.samplesInCurrentBin++;
 
 		if (hist.samplesInCurrentBin >= hist.samplesPerBin) {
@@ -135,8 +230,8 @@ struct Sil : Module {
 		}
 
 		// Update Spectrum Ring Buffer
-		spec.bufferL[spec.writePtr] = inL;
-		spec.bufferR[spec.writePtr] = inR;
+		spec.bufferL[spec.writePtr] = outL;
+		spec.bufferR[spec.writePtr] = outR;
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
@@ -245,8 +340,8 @@ struct HistogramWidget : TransparentWidget {
 			for (int i = 0; i < Sil::HISTOGRAM_BINS; i++) {
 				int idx = (module->hist.writePtr + i) % Sil::HISTOGRAM_BINS;
 				float x = (float)i / (Sil::HISTOGRAM_BINS - 1) * box.size.x;
-				float valMin = clamp(minBuf[idx] / 10.f, -1.f, 1.f);
-				float valMax = clamp(maxBuf[idx] / 10.f, -1.f, 1.f);
+				float valMin = clamp(minBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
+				float valMax = clamp(maxBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
 				float yMin = centerY - valMin * halfH;
 				float yMax = centerY - valMax * halfH;
 				float amp = std::max(std::abs(valMin), std::abs(valMax));
@@ -306,14 +401,12 @@ struct SpectrumWidget : TransparentWidget {
 				if (x < 0 || x > box.size.x) continue;
 				
 				bool isDecade = (i == 1);
-				float alpha = isDecade ? 0.3f : 0.1f;
-				float gray = isDecade ? 0.6f : 0.4f;
 
 				nvgBeginPath(args.vg);
 				nvgMoveTo(args.vg, x, 0);
 				nvgLineTo(args.vg, x, box.size.y);
-				nvgStrokeColor(args.vg, nvgRGBAf(gray, gray, gray, alpha));
-				nvgStrokeWidth(args.vg, isDecade ? 0.8f : 0.5f);
+				nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, isDecade ? 34 : 16));
+				nvgStrokeWidth(args.vg, isDecade ? 1.0f : 0.7f);
 				nvgStroke(args.vg);
 			}
 		}
@@ -324,8 +417,8 @@ struct SpectrumWidget : TransparentWidget {
 				nvgBeginPath(args.vg);
 				nvgMoveTo(args.vg, x, 0);
 				nvgLineTo(args.vg, x, box.size.y);
-				nvgStrokeColor(args.vg, nvgRGBAf(0.4f, 0.4f, 0.4f, 0.1f));
-				nvgStrokeWidth(args.vg, 0.5f);
+				nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 16));
+				nvgStrokeWidth(args.vg, 0.7f);
 				nvgStroke(args.vg);
 			}
 		}
@@ -362,6 +455,10 @@ struct SilWidget : ModuleWidget {
 		setModule(module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/sil.svg")));
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		math::Rect histRect;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "HISTOGRAM", &histRect)) {
@@ -396,6 +493,8 @@ struct SilWidget : ModuleWidget {
 		Vec inputRPos(42.f, 118.f);
 		Vec outputLPos(58.f, 118.f);
 		Vec outputRPos(74.f, 118.f);
+		Vec limiterLightPos(48.f, 42.f);
+		Vec lowRecoveryLightPos(48.f, 46.f);
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
 			Vec pointMm;
@@ -408,11 +507,15 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("INPUT_R_INPUT", &inputRPos);
 		applyPointOverride("OUTPUT_L_OUTPUT", &outputLPos);
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
+		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
+		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
