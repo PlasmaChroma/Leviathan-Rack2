@@ -255,7 +255,7 @@
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g9"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -426,22 +426,22 @@
    transform="translate(0,-149.99988)"><circle
      id="INPUT_L_INPUT"
      cx="2600"
-     cy="11590"
+     cy="11390"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="INPUT_R_INPUT"
      cx="4200"
-     cy="11590"
+     cy="11390"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_L_OUTPUT"
      cx="5800"
-     cy="11590"
+     cy="11390"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /><circle
      id="OUTPUT_R_OUTPUT"
      cx="7400"
-     cy="11590"
+     cy="11390"
      r="140"
      style="fill:#44ff00;fill-opacity:1" /></g>
 <rect
