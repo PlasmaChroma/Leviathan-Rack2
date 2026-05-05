@@ -35,6 +35,8 @@ struct Sil : Module {
 		float currentMinR = 1e10f, currentMaxR = -1e10f;
 		int samplesInCurrentBin = 0;
 		int samplesPerBin = 441;
+
+		float smoothedPeak = 5.f;
 	} hist;
 
 	static constexpr int SPEC_FREQ_BINS = 128;
@@ -55,6 +57,8 @@ struct Sil : Module {
 		alignas(16) float fftOutR[FFT_SIZE];
 
 		dsp::RealFFT* fft = nullptr;
+
+		float smoothedPeakDb = 0.f;
 	} spec;
 
 	dsp::ClockDivider specDivider;
@@ -107,6 +111,17 @@ struct Sil : Module {
 			hist.maxR[hist.writePtr] = hist.currentMaxR;
 			hist.writePtr = (hist.writePtr + 1) % HISTOGRAM_BINS;
 
+			// Update smoothed peak for histogram (dynamic zoom)
+			float instantPeak = std::max({std::abs(hist.currentMinL), std::abs(hist.currentMaxL), std::abs(hist.currentMinR), std::abs(hist.currentMaxR)});
+			// Slow decay, fast attack
+			if (instantPeak > hist.smoothedPeak) 
+				hist.smoothedPeak = hist.smoothedPeak * 0.9f + instantPeak * 0.1f;
+			else
+				hist.smoothedPeak = hist.smoothedPeak * 0.999f + instantPeak * 0.001f;
+			
+			// Keep within reasonable bounds
+			hist.smoothedPeak = clamp(hist.smoothedPeak, 0.5f, 12.f);
+
 			hist.currentMinL = 1e10f; hist.currentMaxL = -1e10f;
 			hist.currentMinR = 1e10f; hist.currentMaxR = -1e10f;
 			hist.samplesInCurrentBin = 0;
@@ -138,6 +153,7 @@ struct Sil : Module {
 
 			// Logarithmic mapping: 20Hz to 20kHz
 			float sampleRate = args.sampleRate;
+			float maxMag = 0.f;
 			for (int i = 0; i < SPEC_FREQ_BINS; i++) {
 				float f01 = (float)i / (SPEC_FREQ_BINS - 1);
 				float hz = 20.f * std::pow(1000.f, f01);
@@ -154,10 +170,23 @@ struct Sil : Module {
 					magR = getMagnitude(spec.fftOutR, FFT_SIZE / 2);
 				}
 
-				// Basic smoothing/peak-hold for magnitudes
-				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.5f + magL * 0.5f;
-				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.5f + magR * 0.5f;
+				// Normalize magnitudes: 0dB = 10V sine peak (10 * 1024)
+				magL /= 10240.f;
+				magR /= 10240.f;
+
+				// Faster smoothing for individual bins
+				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + magL * 0.7f;
+				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + magR * 0.7f;
+				maxMag = std::max({maxMag, spec.magnitudesL[i], spec.magnitudesR[i]});
 			}
+
+			float instantPeakDb = 20.f * std::log10(maxMag + 1e-6f);
+			if (instantPeakDb > spec.smoothedPeakDb)
+				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f; // Fast attack
+			else
+				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f; // Slow decay
+			
+			spec.smoothedPeakDb = clamp(spec.smoothedPeakDb, -100.f, 20.f);
 		}
 	}
 };
@@ -183,8 +212,9 @@ struct HistogramWidget : TransparentWidget {
 			for (int i = 0; i < Sil::HISTOGRAM_BINS; i++) {
 				int idx = (module->hist.writePtr + i) % Sil::HISTOGRAM_BINS;
 				float x = (float)i / (Sil::HISTOGRAM_BINS - 1) * box.size.x;
-				float valMin = clamp(minBuf[idx] / 5.f, -1.f, 1.f);
-				float valMax = clamp(maxBuf[idx] / 5.f, -1.f, 1.f);
+				// Fixed +/- 10V scale
+				float valMin = clamp(minBuf[idx] / 10.f, -1.f, 1.f);
+				float valMax = clamp(maxBuf[idx] / 10.f, -1.f, 1.f);
 				float yMin = centerY - valMin * halfH;
 				float yMax = centerY - valMax * halfH;
 				float amp = std::max(std::abs(valMin), std::abs(valMax));
@@ -229,12 +259,15 @@ struct SpectrumWidget : TransparentWidget {
 		const float* magnitudes = isRightChannel ? module->spec.magnitudesR : module->spec.magnitudesL;
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
+		float ceilingDb = module->spec.smoothedPeakDb + 6.f; // 6dB headroom
+		float floorDb = ceilingDb - 70.f; // 70dB range
+
 		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
 			float mag = magnitudes[i];
 			// Convert to dB-like scale for better visualization: log10(mag)
 			float db = 20.f * std::log10(mag + 1e-6f);
-			// Map -60dB..0dB to 0..1
-			float norm = clamp((db + 60.f) / 60.f, 0.f, 1.f);
+			// Map floor..ceiling to 0..1
+			float norm = clamp((db - floorDb) / (ceilingDb - floorDb), 0.f, 1.f);
 			
 			if (norm <= 0.01f) continue;
 
