@@ -41,6 +41,20 @@ TestResult expectIsolatedSpikesDetected() {
 	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
 }
 
+TestResult expectLowerLevelRepeatedMicropeaksDetected() {
+	const int n = 4096;
+	std::vector<float> l(size_t(n), 0.2f);
+	std::vector<float> r(size_t(n), 0.2f);
+	const int positions[] = {640, 1700, 3000};
+	for (int pos : positions) {
+		l[size_t(pos)] = 1.85f;
+		r[size_t(pos)] = -1.80f;
+	}
+	sil_micropeak::Result result = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f);
+	return {"Lower-level repeated micropeaks are detected", result.detected,
+	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
+}
+
 TestResult expectBroadTransientNotDetected() {
 	const int n = 4096;
 	std::vector<float> l(size_t(n), 0.f);
@@ -53,6 +67,74 @@ TestResult expectBroadTransientNotDetected() {
 	sil_micropeak::Result result = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f);
 	return {"Broad transient is not treated as a micropeak", !result.detected,
 	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
+}
+
+TestResult expectSingleStrongMicropeakDetectedBySeverity() {
+	const int n = 4096;
+	std::vector<float> l(size_t(n), 0.03f);
+	std::vector<float> r(size_t(n), 0.03f);
+	l[size_t(2100)] = 4.7f;
+	r[size_t(2100)] = -4.65f;
+	sil_micropeak::Result result = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f);
+	return {"Single strong micropeak is detected by severity", result.detected,
+	        "events=" + std::to_string(result.eventCount) + " severity=" + std::to_string(result.strongestSeverity)};
+}
+
+TestResult expectDebugProfileSeesWeakSpikes() {
+	const int n = 4096;
+	std::vector<float> l(size_t(n), 0.08f);
+	std::vector<float> r(size_t(n), 0.08f);
+	l[size_t(1024)] = 1.05f;
+	r[size_t(1024)] = -1.00f;
+	l[size_t(2048)] = 1.12f;
+	r[size_t(2048)] = -1.08f;
+	const sil_micropeak::Profile debugProfile = sil_micropeak::makeDebugProfile();
+	const sil_micropeak::Result defaultResult = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f);
+	const sil_micropeak::Result debugResult = sil_micropeak::analyzeChunk(l.data(), r.data(), l.size(), 5.f, debugProfile);
+	const bool passed = !defaultResult.detected && debugResult.detected;
+	return {"Debug profile detects weak spikes more aggressively", passed,
+	        "default(events=" + std::to_string(defaultResult.eventCount) + ",det=" + std::to_string(int(defaultResult.detected)) +
+	            ") debug(events=" + std::to_string(debugResult.eventCount) + ",det=" + std::to_string(int(debugResult.detected)) + ")"};
+}
+
+TestResult expectPreLimiterHasHigherDetectionThanPostLimiter() {
+	const int n = 4096;
+	std::vector<float> preL(size_t(n), 0.04f);
+	std::vector<float> preR(size_t(n), 0.04f);
+	std::vector<float> postL(size_t(n), 0.04f);
+	std::vector<float> postR(size_t(n), 0.04f);
+	const int positions[] = {850, 1900, 3220};
+	for (int pos : positions) {
+		preL[size_t(pos)] = 1.95f;
+		preR[size_t(pos)] = -1.90f;
+		postL[size_t(pos)] = 0.45f;
+		postR[size_t(pos)] = -0.40f;
+	}
+	const sil_micropeak::Result pre = sil_micropeak::analyzeChunk(preL.data(), preR.data(), preL.size(), 5.f);
+	const sil_micropeak::Result post = sil_micropeak::analyzeChunk(postL.data(), postR.data(), postL.size(), 5.f);
+	const bool passed =
+		(pre.detected || pre.eventCount > post.eventCount || pre.strongestSeverity > post.strongestSeverity) &&
+		pre.strongestSeverity > post.strongestSeverity;
+	return {"Pre-limiter view preserves more micropeak evidence", passed,
+	        "pre(events=" + std::to_string(pre.eventCount) + ",sev=" + std::to_string(pre.strongestSeverity) +
+	            ") post(events=" + std::to_string(post.eventCount) + ",sev=" + std::to_string(post.strongestSeverity) + ")"};
+}
+
+TestResult expectStereoPerChannelAnalysisIndependent() {
+	const int n = 4096;
+	std::vector<float> l(size_t(n), 0.05f);
+	std::vector<float> r(size_t(n), 0.05f);
+	const int leftPositions[] = {900, 2200};
+	for (int pos : leftPositions) {
+		l[size_t(pos)] = 2.2f;
+	}
+	const sil_micropeak::StereoResult stereo =
+		sil_micropeak::analyzeChunkStereo(l.data(), r.data(), l.size(), 5.f);
+	const bool passed = stereo.left.detected && !stereo.right.detected && stereo.left.eventCount >= 2;
+	return {"Stereo analysis isolates per-channel hits", passed,
+	        "L(events=" + std::to_string(stereo.left.eventCount) + ",det=" + std::to_string(int(stereo.left.detected)) +
+	            ") R(events=" + std::to_string(stereo.right.eventCount) + ",det=" +
+	            std::to_string(int(stereo.right.detected)) + ")"};
 }
 
 TestResult expectCleanupRepairsIsolatedSpikeWhenActive() {
@@ -104,7 +186,12 @@ int main() {
 	TestResult results[] = {
 		expectCleanSineNotDetected(),
 		expectIsolatedSpikesDetected(),
+		expectLowerLevelRepeatedMicropeaksDetected(),
 		expectBroadTransientNotDetected(),
+		expectSingleStrongMicropeakDetectedBySeverity(),
+		expectDebugProfileSeesWeakSpikes(),
+		expectPreLimiterHasHigherDetectionThanPostLimiter(),
+		expectStereoPerChannelAnalysisIndependent(),
 		expectCleanupRepairsIsolatedSpikeWhenActive(),
 		expectCleanupLeavesBroadTransient(),
 		expectStatefulCleanupOnlyActsWhenActive(),
