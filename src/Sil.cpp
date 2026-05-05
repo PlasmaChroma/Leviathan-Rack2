@@ -80,6 +80,7 @@ struct Sil : Module {
 		LIMITER_ACTIVE_LIGHT,
 		LOW_RECOVERY_LIGHT,
 		REMOVE_MUD_LIGHT,
+		GLUE_COMP_LIGHT,
 		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
 		LIGHTS_LEN
@@ -172,6 +173,20 @@ struct Sil : Module {
 		Biquad peakingL;
 		Biquad peakingR;
 	} removeMud;
+	struct GlueCompressorState {
+		dsp::RCFilter sidechainHp;
+		float rmsEnv = 1e-8f;
+		float gainReductionDb = 0.f;
+		float makeupDb = 0.f;
+		float ledAmount = 0.f;
+
+		void reset() {
+			rmsEnv = 1e-8f;
+			gainReductionDb = 0.f;
+			makeupDb = 0.f;
+			ledAmount = 0.f;
+		}
+	} glue;
 
 	static constexpr float kLowBandCutoffHz = 120.f;
 	static constexpr float kLowBandCorrTauSec = 0.100f;
@@ -210,6 +225,15 @@ struct Sil : Module {
 	static constexpr float kMudReleaseSec = 0.850f;
 	static constexpr float kMudEnvAttackSec = 0.030f;
 	static constexpr float kMudEnvReleaseSec = 0.220f;
+	static constexpr float kGlueRatio = 1.5f;
+	static constexpr float kGlueAttackSec = 0.030f;
+	static constexpr float kGlueReleaseSec = 0.250f;
+	static constexpr float kGlueKneeDb = 8.f;
+	static constexpr float kGlueThresholdDb = -14.f;
+	static constexpr float kGlueMaxGainReductionDb = 3.f;
+	static constexpr float kGlueMaxMakeupDb = 1.25f;
+	static constexpr float kGlueMakeupFraction = 0.50f;
+	static constexpr float kGlueSidechainHpHz = 90.f;
 
 	static float toDbSafe(float v) {
 		return 20.f * std::log10(std::max(v, 1e-7f));
@@ -488,6 +512,11 @@ struct Sil : Module {
 		removeMud.presenceLp.setCutoff(norm(3000.f));
 	}
 
+	void updateGlueCutoff(float sampleRate) {
+		const float norm = clamp(kGlueSidechainHpHz / std::max(sampleRate, 1.f), 1e-5f, 0.49f);
+		glue.sidechainHp.setCutoff(norm);
+	}
+
 	void resetRemoveMudState() {
 		removeMud.mudEnv = 1e-6f;
 		removeMud.bassEnv = 1e-6f;
@@ -518,6 +547,7 @@ struct Sil : Module {
 		removeMud.coeffDivider.setDivision(32);
 		updateLowBandCutoff(APP->engine->getSampleRate());
 		updateRemoveMudCutoffs(APP->engine->getSampleRate());
+		updateGlueCutoff(APP->engine->getSampleRate());
 		configureRollingBuffer(APP->engine->getSampleRate());
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
@@ -534,9 +564,11 @@ struct Sil : Module {
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		updateLowBandCutoff(e.sampleRate);
 		updateRemoveMudCutoffs(e.sampleRate);
+		updateGlueCutoff(e.sampleRate);
 		configureRollingBuffer(e.sampleRate);
 		micropeakCleanupFilter.reset();
 		resetRemoveMudState();
+		glue.reset();
 		micropeak.weakStreak = 0;
 		micropeak.lastSeverityEma.store(0.f, std::memory_order_relaxed);
 		micropeak.detectionConfidence.store(0.f, std::memory_order_relaxed);
@@ -645,28 +677,69 @@ struct Sil : Module {
 			micropeakActive,
 			kAudioFullScaleV
 		);
+		float gluedL = cleaned.l;
+		float gluedR = cleaned.r;
+		float glueLed = 0.f;
+		if (masteringEnabled) {
+			const float mono = 0.5f * (cleaned.l + cleaned.r);
+			glue.sidechainHp.process(mono);
+			const float sidechain = glue.sidechainHp.highpass();
+			const float rmsTarget = sidechain * sidechain;
+			const float rmsCoeff = std::exp(-1.f / (0.050f * args.sampleRate));
+			glue.rmsEnv = rmsCoeff * glue.rmsEnv + (1.f - rmsCoeff) * rmsTarget;
+			const float levelDb = 20.f * std::log10(std::sqrt(std::max(glue.rmsEnv, 1e-12f)) / kAudioFullScaleV + 1e-9f);
+			const float overDb = levelDb - kGlueThresholdDb;
+			const float halfKnee = 0.5f * kGlueKneeDb;
+			float targetGrDb = 0.f;
+			if (overDb > -halfKnee) {
+				const float hardGr = std::max(0.f, overDb - overDb / kGlueRatio);
+				if (overDb >= halfKnee) {
+					targetGrDb = hardGr;
+				}
+				else {
+					const float t = clamp((overDb + halfKnee) / std::max(kGlueKneeDb, 1e-6f), 0.f, 1.f);
+					const float s = t * t * (3.f - 2.f * t);
+					targetGrDb = hardGr * s;
+				}
+			}
+			targetGrDb = clamp(targetGrDb, 0.f, kGlueMaxGainReductionDb);
+			const float attackCoeff = std::exp(-1.f / (kGlueAttackSec * args.sampleRate));
+			const float releaseCoeff = std::exp(-1.f / (kGlueReleaseSec * args.sampleRate));
+			const float grCoeff = (targetGrDb > glue.gainReductionDb) ? attackCoeff : releaseCoeff;
+			glue.gainReductionDb = targetGrDb + grCoeff * (glue.gainReductionDb - targetGrDb);
+			glue.makeupDb = clamp(glue.gainReductionDb * kGlueMakeupFraction, 0.f, kGlueMaxMakeupDb);
+			const float totalGainDb = -glue.gainReductionDb + glue.makeupDb;
+			const float gain = std::pow(10.f, totalGainDb / 20.f);
+			gluedL = cleaned.l * gain;
+			gluedR = cleaned.r * gain;
+			glue.ledAmount = clamp(glue.gainReductionDb / kGlueMaxGainReductionDb, 0.f, 1.f);
+			glueLed = glue.ledAmount;
+		}
+		else {
+			glue.reset();
+		}
 
-		float outL = cleaned.l;
-		float outR = cleaned.r;
+		float outL = gluedL;
+		float outR = gluedR;
 		float limiterLed = 0.f;
 		if (masteringEnabled) {
 			const float limiterCeiling = kAudioFullScaleV * std::pow(10.f, -1.f / 20.f);
 			// One-sample lookahead "true-peak as much as possible":
 			// cleanup emits the delayed center sample, so the current pre-master
 			// sample is available as the next point for limiter detection.
-			float peak = std::max(std::fabs(cleaned.l), std::fabs(cleaned.r));
+			float peak = std::max(std::fabs(gluedL), std::fabs(gluedR));
 			if (limiterPrevValid) {
 				for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
 					const float a = float(i) / float(kLimiterOversampleFactor);
-					const float interpL = limiterPrevL + (cleaned.l - limiterPrevL) * a;
-					const float interpR = limiterPrevR + (cleaned.r - limiterPrevR) * a;
+					const float interpL = limiterPrevL + (gluedL - limiterPrevL) * a;
+					const float interpR = limiterPrevR + (gluedR - limiterPrevR) * a;
 					peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 				}
 			}
 			for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
 				const float a = float(i) / float(kLimiterOversampleFactor);
-				const float interpL = cleaned.l + (preMasterL - cleaned.l) * a;
-				const float interpR = cleaned.r + (preMasterR - cleaned.r) * a;
+				const float interpL = gluedL + (preMasterL - gluedL) * a;
+				const float interpR = gluedR + (preMasterR - gluedR) * a;
 				peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
 			}
 			const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
@@ -674,10 +747,10 @@ struct Sil : Module {
 			const float releaseCoeff = std::exp(-1.f / (0.080f * args.sampleRate));
 			const float coeff = (desiredGain < limiterGain) ? attackCoeff : releaseCoeff;
 			limiterGain = desiredGain + coeff * (limiterGain - desiredGain);
-			outL = cleaned.l * limiterGain;
-			outR = cleaned.r * limiterGain;
-			limiterPrevL = cleaned.l;
-			limiterPrevR = cleaned.r;
+			outL = gluedL * limiterGain;
+			outR = gluedR * limiterGain;
+			limiterPrevL = gluedL;
+			limiterPrevR = gluedR;
 			limiterPrevValid = true;
 			const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
 			limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
@@ -694,6 +767,7 @@ struct Sil : Module {
 		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
 		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
+		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
 		pushMicropeakSample(preMasterL, preMasterR, args.sampleRate);
 		pushRollingSample(outL, outR);
 		const float candidateSeverity = micropeak.lastSeverity.load(std::memory_order_relaxed);
@@ -1025,6 +1099,7 @@ struct SilWidget : ModuleWidget {
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec removeMudLightPos(48.f, 47.6f);
+		Vec glueCompLightPos(48.f, 48.4f);
 		Vec micropeakLightPos(48.f, 49.1f);
 		Vec masteringButtonPos(48.f, 53.f);
 
@@ -1042,6 +1117,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
+		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 
@@ -1055,6 +1131,7 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
 
 		MicropeakDebugReadoutWidget* micropeakReadout =

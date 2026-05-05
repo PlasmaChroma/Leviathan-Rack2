@@ -578,6 +578,11 @@
      cy="5565"
      r="70"
      style="fill:#44ff00;fill-opacity:1" /><circle
+     id="GLUE_COMP_LIGHT"
+     cx="310"
+     cy="5903.7002"
+     r="70"
+     style="fill:#44ff00;fill-opacity:1" /><circle
      id="MICROPEAK_LIGHT"
      cx="5256.6147"
      cy="4880"
