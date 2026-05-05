@@ -84,6 +84,7 @@ struct Sil : Module {
 		REMOVE_MUD_LIGHT,
 		GLUE_COMP_LIGHT,
 		SATURATOR_LIGHT,
+		STEREO_ENHANCE_LIGHT,
 		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
 		REPAIR_ENABLED_LIGHT,
@@ -171,6 +172,12 @@ struct Sil : Module {
 	float glueRmsCoeff = 0.f;
 	float glueAttackCoeff = 0.f;
 	float glueReleaseCoeff = 0.f;
+	float stereoEnvAttackCoeff = 0.f;
+	float stereoEnvReleaseCoeff = 0.f;
+	float stereoMidGainAttackCoeff = 0.f;
+	float stereoMidGainReleaseCoeff = 0.f;
+	float stereoSideGainAttackCoeff = 0.f;
+	float stereoSideGainReleaseCoeff = 0.f;
 	float limiterAttackCoeff = 0.f;
 	float limiterReleaseCoeff = 0.f;
 	float limiterCeiling = 0.f;
@@ -205,6 +212,31 @@ struct Sil : Module {
 			ledAmount = 0.f;
 		}
 	} glue;
+	struct StereoEnhanceState {
+		dsp::RCFilter mid350Hp;
+		dsp::RCFilter mid350Lp;
+		dsp::RCFilter midBroadHp;
+		dsp::RCFilter midBroadLp;
+		dsp::RCFilter side6kHp;
+		dsp::RCFilter side6kLp;
+		dsp::RCFilter sideBroadHp;
+		dsp::RCFilter sideBroadLp;
+		float mid350Env = 1e-6f;
+		float midBroadEnv = 1e-6f;
+		float side6kEnv = 1e-6f;
+		float sideBroadEnv = 1e-6f;
+		float targetMidCutDb = 0.f;
+		float smoothedMidCutDb = 0.f;
+		float targetSideLiftDb = 0.f;
+		float smoothedSideLiftDb = 0.f;
+		float midActivation = 0.f;
+		float sideActivation = 0.f;
+		float ledAmount = 0.f;
+		dsp::ClockDivider coeffDivider;
+		Biquad midEq;
+		Biquad sideEq;
+		bool coeffsNeutral = true;
+	} stereoEnhance;
 	struct SaturatorState {
 		static constexpr int HISTORY_BINS = 1000;
 		static constexpr int PERCENTILE_BINS = 96;
@@ -286,6 +318,37 @@ struct Sil : Module {
 	static constexpr float kGlueMaxMakeupDb = 1.25f;
 	static constexpr float kGlueMakeupFraction = 0.50f;
 	static constexpr float kGlueSidechainHpHz = 90.f;
+	static constexpr float kStereoMidCenterHz = 350.f;
+	static constexpr float kStereoMidQ = 7.3f;
+	static constexpr float kStereoMidMaxCutDb = 2.0f;
+	static constexpr float kStereoSideCenterHz = 6000.f;
+	static constexpr float kStereoSideQ = 0.71f;
+	static constexpr float kStereoSideMaxLiftDb = 2.0f;
+	static constexpr float kStereoMid350LowHz = 270.f;
+	static constexpr float kStereoMid350HighHz = 470.f;
+	static constexpr float kStereoMidBroadLowHz = 120.f;
+	static constexpr float kStereoMidBroadHighHz = 1400.f;
+	static constexpr float kStereoSide6kLowHz = 4200.f;
+	static constexpr float kStereoSide6kHighHz = 9500.f;
+	static constexpr float kStereoSideBroadLowHz = 1000.f;
+	static constexpr float kStereoSideBroadHighHz = 12000.f;
+	static constexpr float kStereoMidBandNormDb = 7.5f;
+	static constexpr float kStereoSideBandNormDb = 3.0f;
+	static constexpr float kStereoMidGateDbFs = -42.f;
+	static constexpr float kStereoMidGateKneeDb = 10.f;
+	static constexpr float kStereoMidExcessThresholdDb = 1.0f;
+	static constexpr float kStereoMidExcessKneeDb = 5.0f;
+	static constexpr float kStereoSideGateDbFs = -56.f;
+	static constexpr float kStereoSideGateKneeDb = 10.f;
+	static constexpr float kStereoSideAlreadyBrightDb = 1.5f;
+	static constexpr float kStereoSideBrightKneeDb = 4.0f;
+	static constexpr float kStereoEnvAttackSec = 0.040f;
+	static constexpr float kStereoEnvReleaseSec = 0.300f;
+	static constexpr float kStereoMidGainAttackSec = 0.180f;
+	static constexpr float kStereoMidGainReleaseSec = 0.900f;
+	static constexpr float kStereoSideGainAttackSec = 0.250f;
+	static constexpr float kStereoSideGainReleaseSec = 1.200f;
+	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
 	static constexpr float kSaturatorTargetPreLimiterDb = -0.75f;
 	static constexpr float kSatMaxMakeupDb = 2.0f;
@@ -301,6 +364,9 @@ struct Sil : Module {
 	static float toDbSafe(float v) {
 		return 20.f * std::log10(std::max(v, 1e-7f));
 	}
+	static float toDbFsSafe(float volts) {
+		return 20.f * std::log10(std::max(volts, 1e-7f) / kAudioFullScaleV);
+	}
 
 	static float softKnee01(float xDb, float thresholdDb, float kneeDb) {
 		const float halfKnee = 0.5f * std::max(0.f, kneeDb);
@@ -312,6 +378,9 @@ struct Sil : Module {
 		}
 		const float t = (xDb - (thresholdDb - halfKnee)) / std::max(kneeDb, 1e-6f);
 		return t * t * (3.f - 2.f * t);
+	}
+	static float inverseSoftKnee01(float xDb, float thresholdDb, float kneeDb) {
+		return 1.f - softKnee01(xDb, thresholdDb, kneeDb);
 	}
 
 	struct MicropeakWorkerState {
@@ -575,6 +644,12 @@ struct Sil : Module {
 		glueRmsCoeff = std::exp(-1.f / (0.050f * sr));
 		glueAttackCoeff = std::exp(-1.f / (kGlueAttackSec * sr));
 		glueReleaseCoeff = std::exp(-1.f / (kGlueReleaseSec * sr));
+		stereoEnvAttackCoeff = std::exp(-1.f / (kStereoEnvAttackSec * sr));
+		stereoEnvReleaseCoeff = std::exp(-1.f / (kStereoEnvReleaseSec * sr));
+		stereoMidGainAttackCoeff = std::exp(-1.f / (kStereoMidGainAttackSec * sr));
+		stereoMidGainReleaseCoeff = std::exp(-1.f / (kStereoMidGainReleaseSec * sr));
+		stereoSideGainAttackCoeff = std::exp(-1.f / (kStereoSideGainAttackSec * sr));
+		stereoSideGainReleaseCoeff = std::exp(-1.f / (kStereoSideGainReleaseSec * sr));
 		limiterAttackCoeff = std::exp(-1.f / (0.0005f * sr));
 		limiterReleaseCoeff = std::exp(-1.f / (0.080f * sr));
 		limiterCeiling = kAudioFullScaleV * std::pow(10.f, kLimiterCeilingDb / 20.f);
@@ -639,6 +714,19 @@ struct Sil : Module {
 		const float norm = clamp(kGlueSidechainHpHz / std::max(sampleRate, 1.f), 1e-5f, 0.49f);
 		glue.sidechainHp.setCutoff(norm);
 	}
+	void updateStereoEnhanceCutoffs(float sampleRate) {
+		const auto norm = [&](float hz) {
+			return clamp(hz / std::max(sampleRate, 1.f), 1e-5f, 0.49f);
+		};
+		stereoEnhance.mid350Hp.setCutoff(norm(kStereoMid350LowHz));
+		stereoEnhance.mid350Lp.setCutoff(norm(kStereoMid350HighHz));
+		stereoEnhance.midBroadHp.setCutoff(norm(kStereoMidBroadLowHz));
+		stereoEnhance.midBroadLp.setCutoff(norm(kStereoMidBroadHighHz));
+		stereoEnhance.side6kHp.setCutoff(norm(kStereoSide6kLowHz));
+		stereoEnhance.side6kLp.setCutoff(norm(kStereoSide6kHighHz));
+		stereoEnhance.sideBroadHp.setCutoff(norm(kStereoSideBroadLowHz));
+		stereoEnhance.sideBroadLp.setCutoff(norm(kStereoSideBroadHighHz));
+	}
 
 	void resetRemoveMudState() {
 		removeMud.mudEnv = 1e-6f;
@@ -649,6 +737,30 @@ struct Sil : Module {
 		removeMud.ledAmount = 0.f;
 		removeMud.peakingL.reset();
 		removeMud.peakingR.reset();
+	}
+	void resetStereoEnhanceState() {
+		stereoEnhance.mid350Env = 1e-6f;
+		stereoEnhance.midBroadEnv = 1e-6f;
+		stereoEnhance.side6kEnv = 1e-6f;
+		stereoEnhance.sideBroadEnv = 1e-6f;
+		stereoEnhance.targetMidCutDb = 0.f;
+		stereoEnhance.smoothedMidCutDb = 0.f;
+		stereoEnhance.targetSideLiftDb = 0.f;
+		stereoEnhance.smoothedSideLiftDb = 0.f;
+		stereoEnhance.midActivation = 0.f;
+		stereoEnhance.sideActivation = 0.f;
+		stereoEnhance.ledAmount = 0.f;
+		stereoEnhance.coeffsNeutral = true;
+		stereoEnhance.mid350Hp.reset();
+		stereoEnhance.mid350Lp.reset();
+		stereoEnhance.midBroadHp.reset();
+		stereoEnhance.midBroadLp.reset();
+		stereoEnhance.side6kHp.reset();
+		stereoEnhance.side6kLp.reset();
+		stereoEnhance.sideBroadHp.reset();
+		stereoEnhance.sideBroadLp.reset();
+		stereoEnhance.midEq.reset();
+		stereoEnhance.sideEq.reset();
 	}
 
 	Sil() {
@@ -669,15 +781,19 @@ struct Sil : Module {
 
 		specDivider.setDivision(2048);
 		removeMud.coeffDivider.setDivision(32);
+		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
 		saturator.updateDivider.setDivision(kSatUpdateDivision);
 		updateLowBandCutoff(APP->engine->getSampleRate());
 		updateRemoveMudCutoffs(APP->engine->getSampleRate());
 		updateGlueCutoff(APP->engine->getSampleRate());
+		updateStereoEnhanceCutoffs(APP->engine->getSampleRate());
 		updateDynamicsCoefficients(APP->engine->getSampleRate());
 		configureRollingBuffer(APP->engine->getSampleRate());
 		saturator.reset(APP->engine->getSampleRate());
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
+		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
+		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
 		startMicropeakWorker();
 	}
 
@@ -692,10 +808,14 @@ struct Sil : Module {
 		updateLowBandCutoff(e.sampleRate);
 		updateRemoveMudCutoffs(e.sampleRate);
 		updateGlueCutoff(e.sampleRate);
+		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
 		configureRollingBuffer(e.sampleRate);
 		micropeakCleanupFilter.reset();
 		resetRemoveMudState();
+		resetStereoEnhanceState();
+		stereoEnhance.midEq.setPeaking(e.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
+		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
 		saturator.reset(e.sampleRate);
 		micropeak.weakStreak = 0;
@@ -851,11 +971,153 @@ struct Sil : Module {
 		else {
 			glue.reset();
 		}
-		float saturatedL = gluedL;
-		float saturatedR = gluedR;
+		float enhancedL = gluedL;
+		float enhancedR = gluedR;
+		float stereoEnhanceLed = 0.f;
+		if (masteringEnabled) {
+			const float mid = 0.5f * (gluedL + gluedR);
+			const float side = 0.5f * (gluedL - gluedR);
+
+			stereoEnhance.mid350Hp.process(mid);
+			const float mid350High = stereoEnhance.mid350Hp.highpass();
+			stereoEnhance.mid350Lp.process(mid350High);
+			const float mid350Band = stereoEnhance.mid350Lp.lowpass();
+			stereoEnhance.midBroadHp.process(mid);
+			const float midBroadHigh = stereoEnhance.midBroadHp.highpass();
+			stereoEnhance.midBroadLp.process(midBroadHigh);
+			const float midBroadBand = stereoEnhance.midBroadLp.lowpass();
+			stereoEnhance.side6kHp.process(side);
+			const float side6kHigh = stereoEnhance.side6kHp.highpass();
+			stereoEnhance.side6kLp.process(side6kHigh);
+			const float side6kBand = stereoEnhance.side6kLp.lowpass();
+			stereoEnhance.sideBroadHp.process(side);
+			const float sideBroadHigh = stereoEnhance.sideBroadHp.highpass();
+			stereoEnhance.sideBroadLp.process(sideBroadHigh);
+			const float sideBroadBand = stereoEnhance.sideBroadLp.lowpass();
+
+			auto updateStereoEnv = [&](float& env, float x) {
+				const float absX = std::fabs(x);
+				const float c = (absX > env) ? stereoEnvAttackCoeff : stereoEnvReleaseCoeff;
+				env = absX + c * (env - absX);
+			};
+			updateStereoEnv(stereoEnhance.mid350Env, mid350Band);
+			updateStereoEnv(stereoEnhance.midBroadEnv, midBroadBand);
+			updateStereoEnv(stereoEnhance.side6kEnv, side6kBand);
+			updateStereoEnv(stereoEnhance.sideBroadEnv, sideBroadBand);
+
+			const float mid350DbFs = toDbFsSafe(stereoEnhance.mid350Env);
+			const float midBroadDbFs = toDbFsSafe(stereoEnhance.midBroadEnv);
+			const float midPresenceGate = softKnee01(mid350DbFs, kStereoMidGateDbFs, kStereoMidGateKneeDb);
+			const float midExcessDb = (mid350DbFs - midBroadDbFs) + kStereoMidBandNormDb;
+			const float midExcess = softKnee01(midExcessDb, kStereoMidExcessThresholdDb, kStereoMidExcessKneeDb);
+			const float targetMidActivation = clamp(midPresenceGate * midExcess, 0.f, 1.f);
+			stereoEnhance.targetMidCutDb = -kStereoMidMaxCutDb * targetMidActivation;
+
+			const float side6kDbFs = toDbFsSafe(stereoEnhance.side6kEnv);
+			const float sideBroadDbFs = toDbFsSafe(stereoEnhance.sideBroadEnv);
+			const float sideContentGate = softKnee01(
+				std::max(side6kDbFs, sideBroadDbFs),
+				kStereoSideGateDbFs,
+				kStereoSideGateKneeDb
+			);
+			const float sideBrightnessDb = (side6kDbFs - sideBroadDbFs) + kStereoSideBandNormDb;
+			const float sideNotAlreadyBright = inverseSoftKnee01(
+				sideBrightnessDb,
+				kStereoSideAlreadyBrightDb,
+				kStereoSideBrightKneeDb
+			);
+			const float targetSideActivation = clamp(sideContentGate * sideNotAlreadyBright, 0.f, 1.f);
+			stereoEnhance.targetSideLiftDb = kStereoSideMaxLiftDb * targetSideActivation;
+
+			const float midCoeff =
+				(stereoEnhance.targetMidCutDb < stereoEnhance.smoothedMidCutDb)
+					? stereoMidGainAttackCoeff
+					: stereoMidGainReleaseCoeff;
+			stereoEnhance.smoothedMidCutDb =
+				stereoEnhance.targetMidCutDb + midCoeff * (stereoEnhance.smoothedMidCutDb - stereoEnhance.targetMidCutDb);
+
+			const float sideCoeff =
+				(stereoEnhance.targetSideLiftDb > stereoEnhance.smoothedSideLiftDb)
+					? stereoSideGainAttackCoeff
+					: stereoSideGainReleaseCoeff;
+			stereoEnhance.smoothedSideLiftDb =
+				stereoEnhance.targetSideLiftDb + sideCoeff * (stereoEnhance.smoothedSideLiftDb - stereoEnhance.targetSideLiftDb);
+
+			stereoEnhance.midActivation = clamp(
+				-stereoEnhance.smoothedMidCutDb / std::max(kStereoMidMaxCutDb, 1e-6f),
+				0.f,
+				1.f
+			);
+			stereoEnhance.sideActivation = clamp(
+				stereoEnhance.smoothedSideLiftDb / std::max(kStereoSideMaxLiftDb, 1e-6f),
+				0.f,
+				1.f
+			);
+
+			if (stereoEnhance.coeffDivider.process()) {
+				stereoEnhance.midEq.setPeaking(
+					args.sampleRate,
+					kStereoMidCenterHz,
+					kStereoMidQ,
+					stereoEnhance.smoothedMidCutDb
+				);
+				stereoEnhance.sideEq.setPeaking(
+					args.sampleRate,
+					kStereoSideCenterHz,
+					kStereoSideQ,
+					stereoEnhance.smoothedSideLiftDb
+				);
+				stereoEnhance.coeffsNeutral =
+					std::fabs(stereoEnhance.smoothedMidCutDb) < 1e-5f &&
+					std::fabs(stereoEnhance.smoothedSideLiftDb) < 1e-5f;
+			}
+
+			const float enhancedMid = stereoEnhance.midEq.process(mid);
+			const float enhancedSide = stereoEnhance.sideEq.process(side);
+			enhancedL = enhancedMid + enhancedSide;
+			enhancedR = enhancedMid - enhancedSide;
+
+			// Meter the equivalent per-channel change rather than raw M/S leg movement,
+			// so one-sided or near-mono material does not read artificially hot.
+			const float leftDeltaDb = std::fabs(
+				0.5f * stereoEnhance.smoothedMidCutDb +
+				0.5f * stereoEnhance.smoothedSideLiftDb
+			);
+			const float rightDeltaDb = std::fabs(
+				0.5f * stereoEnhance.smoothedMidCutDb -
+				0.5f * stereoEnhance.smoothedSideLiftDb
+			);
+			const float ledDeadbandDb = 0.5f;
+			const auto deadbandNorm = [&](float deltaDb) {
+				const float activeDb = std::max(0.f, deltaDb - ledDeadbandDb);
+				const float spanDb = std::max(kStereoMidMaxCutDb - ledDeadbandDb, 1e-6f);
+				return clamp(activeDb / spanDb, 0.f, 1.f);
+			};
+			const float leftDeltaNorm = deadbandNorm(leftDeltaDb);
+			const float rightDeltaNorm = deadbandNorm(rightDeltaDb);
+			stereoEnhance.ledAmount = clamp(0.5f * leftDeltaNorm + 0.5f * rightDeltaNorm, 0.f, 1.f);
+			stereoEnhanceLed = stereoEnhance.ledAmount;
+		}
+		else {
+			stereoEnhance.targetMidCutDb = 0.f;
+			stereoEnhance.smoothedMidCutDb = 0.f;
+			stereoEnhance.targetSideLiftDb = 0.f;
+			stereoEnhance.smoothedSideLiftDb = 0.f;
+			stereoEnhance.midActivation = 0.f;
+			stereoEnhance.sideActivation = 0.f;
+			stereoEnhance.ledAmount = 0.f;
+			if (!stereoEnhance.coeffsNeutral) {
+				stereoEnhance.midEq.setPeaking(args.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
+				stereoEnhance.sideEq.setPeaking(args.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
+				stereoEnhance.coeffsNeutral = true;
+			}
+		}
+
+		float saturatedL = enhancedL;
+		float saturatedR = enhancedR;
 		float saturatorLed = 0.f;
 		if (masteringEnabled) {
-			const float preSatPeak = std::max(std::fabs(gluedL), std::fabs(gluedR));
+			const float preSatPeak = std::max(std::fabs(enhancedL), std::fabs(enhancedR));
 			saturator.currentBinPeak = std::max(saturator.currentBinPeak, preSatPeak);
 			saturator.samplesInBin++;
 			if (saturator.samplesInBin >= saturator.samplesPerBin) {
@@ -897,8 +1159,8 @@ struct Sil : Module {
 				const float shapedNorm = std::atan(drive * xNorm) * driveNormInv;
 				return shapedNorm * kAudioFullScaleV;
 			};
-			saturatedL = shape(gluedL);
-			saturatedR = shape(gluedR);
+			saturatedL = shape(enhancedL);
+			saturatedR = shape(enhancedR);
 			const float makeupActivity = clamp(saturator.makeupDb / kSatMaxMakeupDb, 0.f, 1.f);
 			const float driveActivity = clamp(
 				(drive - kSatMinDrive) / std::max(kSatMaxDrive - kSatMinDrive, 1e-6f),
@@ -957,6 +1219,7 @@ struct Sil : Module {
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
 		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
+		lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, args.sampleTime);
 		lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, args.sampleTime);
 		if (repairEnabled) {
 			pushMicropeakSample(preMasterL, preMasterR, args.sampleRate);
@@ -1302,6 +1565,7 @@ struct SilWidget : ModuleWidget {
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec removeMudLightPos(48.f, 47.6f);
 		Vec glueCompLightPos(48.f, 48.4f);
+		Vec stereoEnhanceLightPos(48.f, 49.6f);
 		Vec saturatorLightPos(48.f, 50.4f);
 		Vec micropeakLightPos(48.f, 49.1f);
 		Vec masteringButtonPos(48.f, 53.f);
@@ -1322,6 +1586,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
+		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
 		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
 		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
@@ -1341,6 +1606,7 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
 
