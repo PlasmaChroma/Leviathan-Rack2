@@ -1377,13 +1377,19 @@ struct Sil : Module {
 			limiterPrevL = saturatedL;
 			limiterPrevR = saturatedR;
 			limiterPrevValid = true;
-			const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
-			const float triggeredNow = (grDb >= kLimiterTriggerDb) ? 1.f : 0.f;
+			const float detectorPeakDbTp = toDbFsSafe(peak);
+			const float limiterDemandDb = std::max(0.f, detectorPeakDbTp - kLimiterCeilingDb);
+			const float triggeredNow = (limiterDemandDb >= kLimiterTriggerDb) ? 1.f : 0.f;
 			const float trigCoeff =
 				(triggeredNow > limiterTriggerEma) ? limiterMetricAttackCoeff : limiterMetricReleaseCoeff;
 			limiterTriggerEma = triggeredNow + trigCoeff * (limiterTriggerEma - triggeredNow);
-			limiterRecentGrDb = grDb + limiterMetricGrCoeff * (limiterRecentGrDb - grDb);
-			limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
+			limiterRecentGrDb = limiterDemandDb + limiterMetricGrCoeff * (limiterRecentGrDb - limiterDemandDb);
+
+			// Hybrid indicator for the -1.0 dBTP safety stage:
+			// subtle glow near ceiling, strong brightness when limiting demand is real.
+			const float ceilingProximity = softKnee01(detectorPeakDbTp, kLimiterCeilingDb - 3.f, 6.f);
+			const float limitingActivity = std::sqrt(clamp(limiterDemandDb / 1.5f, 0.f, 1.f));
+			limiterLed = clamp(std::max(0.25f * ceilingProximity, limitingActivity), 0.f, 1.f);
 		}
 		const float audibleL = masteringEnabled ? outL : inL;
 		const float audibleR = masteringEnabled ? outR : inR;
@@ -1733,6 +1739,7 @@ struct SpectrumWidget : TransparentWidget {
 struct ChainLedDebugReadoutWidget : TransparentWidget {
 	Sil* module = nullptr;
 	static constexpr int kCount = 7;
+	static constexpr int kHistBins = 128;
 	std::array<int, kCount> lightIds = {
 		Sil::LIMITER_ACTIVE_LIGHT,
 		Sil::LOW_RECOVERY_LIGHT,
@@ -1743,6 +1750,9 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 		Sil::SATURATOR_LIGHT
 	};
 	std::array<Vec, kCount> textPositions;
+	std::array<std::array<float, kHistBins>, kCount> histories {};
+	int writeIndex = 0;
+	float histogramStartX = 0.f;
 
 	void draw(const DrawArgs& args) override {
 		if (!module || !isDragonKingDebugEnabled() || !APP || !APP->window || !APP->window->uiFont) {
@@ -1753,9 +1763,11 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 		nvgFontSize(args.vg, 9.0f);
 		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 
+		std::array<float, kCount> current {};
 		char label[16];
 		for (int i = 0; i < kCount; ++i) {
 			const float b = clamp(module->lights[lightIds[i]].getBrightness(), 0.f, 1.f);
+			current[i] = b;
 			const int pct = int(std::round(b * 100.f));
 			std::snprintf(label, sizeof(label), "%3d%%", pct);
 
@@ -1764,6 +1776,41 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 			nvgText(args.vg, p.x + 0.45f, p.y + 0.45f, label, nullptr);
 			nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
 			nvgText(args.vg, p.x, p.y, label, nullptr);
+		}
+
+		for (int i = 0; i < kCount; ++i) {
+			histories[i][size_t(writeIndex)] = current[i];
+		}
+		writeIndex = (writeIndex + 1) % kHistBins;
+
+		const float x0 = (histogramStartX > 0.f) ? histogramStartX : 0.50f * box.size.x;
+		const float rightPad = 6.f;
+		const float histW = std::max(24.f, box.size.x - x0 - rightPad);
+		const float histH = 8.f;
+		const float barW = histW / float(kHistBins);
+
+		for (int i = 0; i < kCount; ++i) {
+			const float centerY = textPositions[i].y;
+			const float top = centerY - 0.5f * histH;
+
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x0, top, histW, histH);
+			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 80));
+			nvgFill(args.vg);
+
+			for (int j = 0; j < kHistBins; ++j) {
+				const int idx = (writeIndex + j) % kHistBins;
+				const float v = clamp(histories[i][size_t(idx)], 0.f, 1.f);
+				if (v <= 0.01f) {
+					continue;
+				}
+				const float x = x0 + j * barW;
+				const float h = v * histH;
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, top + (histH - h), std::max(0.8f, barW - 0.25f), h);
+				nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 210));
+				nvgFill(args.vg);
+			}
 		}
 	}
 };
@@ -1804,8 +1851,10 @@ struct SilWidget : ModuleWidget {
 		}
 
 		math::Rect specRRect;
+		float sideSpecLeftX = mm2px(Vec(51.f, 0.f)).x;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "SPECTROGRAM_RIGHT", &specRRect)) {
 			specRRect = specRRect.grow(Vec(-0.2f, -0.2f));
+			sideSpecLeftX = mm2px(specRRect.pos).x;
 			SpectrumWidget* sw = createWidget<SpectrumWidget>(mm2px(specRRect.pos));
 			sw->box.size = mm2px(specRRect.size);
 			sw->module = module;
@@ -1869,6 +1918,7 @@ struct SilWidget : ModuleWidget {
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
 		chainLedReadout->box.size = box.size;
 		chainLedReadout->module = module;
+		chainLedReadout->histogramStartX = sideSpecLeftX;
 		const float textOffsetMm = 2.4f;
 		chainLedReadout->textPositions = {
 			mm2px(Vec(limiterLightPos.x - textOffsetMm, limiterLightPos.y)),
