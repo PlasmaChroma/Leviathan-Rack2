@@ -392,8 +392,8 @@ struct Sil : Module {
 	static constexpr float kGlueAdaptiveMaxThresholdDb = -8.f;
 	static constexpr int kGlueThresholdUpdateDivision = 1024;
 	static constexpr float kGlueMaxGainReductionDb = 3.f;
-	static constexpr float kGlueMaxMakeupDb = 1.25f;
-	static constexpr float kGlueMakeupFraction = 0.50f;
+	static constexpr float kGlueMaxMakeupDb = 2.0f;
+	static constexpr float kGlueMakeupFraction = 0.75f;
 	static constexpr float kGlueSidechainHpHz = 90.f;
 	static constexpr float kStereoMidCenterHz = 350.f;
 	static constexpr float kStereoMidQ = 7.3f;
@@ -431,10 +431,15 @@ struct Sil : Module {
 	static constexpr float kLimiterMetricReleaseSec = 0.750f;
 	static constexpr float kLimiterMetricGrSec = 0.120f;
 	static constexpr float kLimiterTriggerDb = 0.10f;
-	static constexpr float kSaturatorTargetPreLimiterDb = -0.75f;
-	static constexpr float kSatMaxMakeupDb = 2.0f;
-	static constexpr float kSatMaxDrive = 1.45f;
+	static constexpr float kSaturatorTargetPreLimiterDb = -0.50f;
+	static constexpr float kSatMaxMakeupDb = 3.25f;
+	static constexpr float kSatMaxDrive = 1.60f;
 	static constexpr float kSatMinDrive = 1.0f;
+	static constexpr float kSatLimiterSeekBoostDb = 0.75f;
+	static constexpr float kSatLimiterTargetEngagement = 0.25f;
+	static constexpr float kSatLimiterGrBackoffStartDb = 1.25f;
+	static constexpr float kSatLimiterGrBackoffKneeDb = 1.5f;
+	static constexpr float kSatLimiterGrBackoffDb = 1.5f;
 	static constexpr float kSatMakeupAttackSec = 0.90f;
 	static constexpr float kSatMakeupReleaseSec = 2.80f;
 	static constexpr float kSatDriveAttackSec = 1.20f;
@@ -1091,6 +1096,7 @@ struct Sil : Module {
 		const float preMasterL = mudCleanL;
 		const float preMasterR = mudCleanR;
 		const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
+		pushRollingSample(cleaned.l, cleaned.r);
 		float gluedL = cleaned.l;
 		float gluedR = cleaned.r;
 		float glueLed = 0.f;
@@ -1277,13 +1283,30 @@ struct Sil : Module {
 				const float recentLoudPeak = std::max(saturatorEstimateRecentPeakPercentile(), 1e-6f);
 				const float recentPeakNorm = clamp(recentLoudPeak / kAudioFullScaleV, 1e-6f, 4.f);
 				const float recentPeakDb = 20.f * std::log10(recentPeakNorm);
-				const float desiredMakeupDb = clamp(
+				float desiredMakeupDb = clamp(
 					kSaturatorTargetPreLimiterDb - recentPeakDb,
 					0.f,
 					kSatMaxMakeupDb
 					);
+				const float limiterUnderEngaged = 1.f - clamp(
+					saturator.limiterEngagement / std::max(kSatLimiterTargetEngagement, 1e-6f),
+					0.f,
+					1.f
+				);
+				const float limiterOverworked = softKnee01(
+					saturator.limiterRecentGrDb,
+					kSatLimiterGrBackoffStartDb,
+					kSatLimiterGrBackoffKneeDb
+				);
+				desiredMakeupDb = clamp(
+					desiredMakeupDb +
+						kSatLimiterSeekBoostDb * limiterUnderEngaged -
+						kSatLimiterGrBackoffDb * limiterOverworked,
+					0.f,
+					kSatMaxMakeupDb
+				);
 				const float desiredDrive = clamp(
-					1.f + desiredMakeupDb * 0.28f,
+					1.f + desiredMakeupDb * 0.18f,
 					kSatMinDrive,
 					kSatMaxDrive
 				);
@@ -1343,8 +1366,12 @@ struct Sil : Module {
 				}
 			}
 			const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
-			const float coeff = (desiredGain < limiterGain) ? limiterAttackCoeff : limiterReleaseCoeff;
-			limiterGain = desiredGain + coeff * (limiterGain - desiredGain);
+			if (desiredGain < limiterGain) {
+				limiterGain = desiredGain;
+			}
+			else {
+				limiterGain = desiredGain + limiterReleaseCoeff * (limiterGain - desiredGain);
+			}
 			outL = saturatedL * limiterGain;
 			outR = saturatedR * limiterGain;
 			limiterPrevL = saturatedL;
@@ -1372,7 +1399,6 @@ struct Sil : Module {
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
 		lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, args.sampleTime);
 		lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, args.sampleTime);
-		pushRollingSample(outL, outR);
 		lights[MICROPEAK_LIGHT].setSmoothBrightness(0.f, args.sampleTime);
 		lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, args.sampleTime);
 		lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, args.sampleTime);
