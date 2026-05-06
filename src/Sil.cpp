@@ -175,8 +175,14 @@ struct Sil : Module {
 
 		float smoothedPeakDb = 0.f;
 	} spec;
+	struct SpectrumBinMapEntry {
+		int idx = 0;
+		float frac = 0.f;
+	};
+	SpectrumBinMapEntry specBinMap[SPEC_FREQ_BINS];
 
 	dsp::ClockDivider specDivider;
+	dsp::ClockDivider lightDivider;
 	float limiterGain = 1.f;
 	float limiterPrevL = 0.f;
 	float limiterPrevR = 0.f;
@@ -187,6 +193,7 @@ struct Sil : Module {
 	int rollingWriteIndex = 0;
 	int rollingBufferLength = 0;
 	int rollingFilled = 0;
+	double rollingMonoSqSum = 0.0;
 	dsp::RCFilter lowpassL1;
 	dsp::RCFilter lowpassL2;
 	dsp::RCFilter lowpassR1;
@@ -336,7 +343,6 @@ struct Sil : Module {
 	static constexpr float kLowBandCorrTauSec = 0.100f;
 	static constexpr float kLowBandSideAttackSec = 0.050f;
 	static constexpr float kLowBandSideReleaseSec = 0.250f;
-	static constexpr int kLimiterOversampleFactor = 4;
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
 	static constexpr float kMicropeakHoldSeconds = 2.f;
@@ -447,6 +453,7 @@ struct Sil : Module {
 	static constexpr float kSatHistoryPercentile = 0.990f;
 	static constexpr float kSatHistorySeconds = 8.f;
 	static constexpr int kSatUpdateDivision = 512;
+	static constexpr int kLightDivision = 32;
 
 	static float toDbSafe(float v) {
 		return 20.f * std::log10(std::max(v, 1e-7f));
@@ -516,14 +523,26 @@ struct Sil : Module {
 		rollingBufferR.assign(size_t(rollingBufferLength), 0.f);
 		rollingWriteIndex = 0;
 		rollingFilled = 0;
+		rollingMonoSqSum = 0.0;
 	}
 
 	void pushRollingSample(float sampleL, float sampleR) {
 		if (rollingBufferLength <= 0) {
 			return;
 		}
-		rollingBufferL[size_t(rollingWriteIndex)] = sampleL;
-		rollingBufferR[size_t(rollingWriteIndex)] = sampleR;
+		const int idx = rollingWriteIndex;
+
+		if (rollingFilled >= rollingBufferLength) {
+			const float oldMono = 0.5f * (rollingBufferL[size_t(idx)] + rollingBufferR[size_t(idx)]);
+			rollingMonoSqSum -= double(oldMono) * double(oldMono);
+		}
+
+		rollingBufferL[size_t(idx)] = sampleL;
+		rollingBufferR[size_t(idx)] = sampleR;
+
+		const float newMono = 0.5f * (sampleL + sampleR);
+		rollingMonoSqSum += double(newMono) * double(newMono);
+
 		rollingWriteIndex++;
 		if (rollingWriteIndex >= rollingBufferLength) {
 			rollingWriteIndex = 0;
@@ -537,23 +556,22 @@ struct Sil : Module {
 		if (rollingFilled <= 0 || rollingBufferLength <= 0) {
 			return -100.f;
 		}
-		const int maxSamples = 2048;
-		const int stride = std::max(1, rollingFilled / maxSamples);
-		double sumSq = 0.0;
-		int count = 0;
-		for (int i = 0; i < rollingFilled; i += stride) {
-			const int idx = (rollingWriteIndex - 1 - i + rollingBufferLength) % rollingBufferLength;
-			const float l = rollingBufferL[size_t(idx)];
-			const float r = rollingBufferR[size_t(idx)];
-			const float mono = 0.5f * (l + r);
-			sumSq += double(mono) * double(mono);
-			count++;
-		}
-		if (count <= 0) {
-			return -100.f;
-		}
-		const float rmsVolts = std::sqrt(float(sumSq / double(count)));
+		const double meanSq = std::max(0.0, rollingMonoSqSum) / double(rollingFilled);
+		const float rmsVolts = std::sqrt(float(meanSq));
 		return toDbFsSafe(rmsVolts);
+	}
+
+	void updateSpectrumBinMap(float sampleRate) {
+		const float sr = std::max(sampleRate, 1.f);
+		const float binHz = sr / float(FFT_SIZE);
+		for (int i = 0; i < SPEC_FREQ_BINS; ++i) {
+			const float f01 = float(i) / float(SPEC_FREQ_BINS - 1);
+			const float hz = 20.f * std::pow(1000.f, f01);
+			const float bin = hz / binHz;
+			const int idx = clamp(int(bin), 0, FFT_SIZE / 2);
+			specBinMap[i].idx = idx;
+			specBinMap[i].frac = clamp(bin - float(idx), 0.f, 1.f);
+		}
 	}
 
 	void startMicropeakWorker() {
@@ -923,6 +941,7 @@ struct Sil : Module {
 
 		// Keep spectrum visually responsive; this is UI-only work.
 		specDivider.setDivision(2048);
+		lightDivider.setDivision(kLightDivision);
 		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
 		impactAir.coeffDivider.setDivision(kImpactAirCoeffDivision);
 		removeMud.coeffDivider.setDivision(32);
@@ -933,6 +952,7 @@ struct Sil : Module {
 		updateGlueCutoff(APP->engine->getSampleRate());
 		updateStereoEnhanceCutoffs(APP->engine->getSampleRate());
 		updateDynamicsCoefficients(APP->engine->getSampleRate());
+		updateSpectrumBinMap(APP->engine->getSampleRate());
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(APP->engine->getSampleRate());
 		saturator.reset(APP->engine->getSampleRate());
@@ -945,6 +965,7 @@ struct Sil : Module {
 	}
 
 	~Sil() {
+		stopMicropeakWorker();
 		delete spec.fft;
 	}
 
@@ -956,6 +977,7 @@ struct Sil : Module {
 		updateGlueCutoff(e.sampleRate);
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
+		updateSpectrumBinMap(e.sampleRate);
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(e.sampleRate);
 		resetRemoveMudState();
@@ -1357,14 +1379,6 @@ struct Sil : Module {
 			// cleanup emits the delayed center sample, so the current pre-master
 			// sample is available as the next point for limiter detection.
 			float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
-			if (limiterPrevValid) {
-				for (int i = 1; i <= kLimiterOversampleFactor; ++i) {
-					const float a = float(i) / float(kLimiterOversampleFactor);
-					const float interpL = limiterPrevL + (saturatedL - limiterPrevL) * a;
-					const float interpR = limiterPrevR + (saturatedR - limiterPrevR) * a;
-					peak = std::max(peak, std::max(std::fabs(interpL), std::fabs(interpR)));
-				}
-			}
 			const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
 			if (desiredGain < limiterGain) {
 				limiterGain = desiredGain;
@@ -1398,16 +1412,19 @@ struct Sil : Module {
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
 		outputs[OUTPUT_L_OUTPUT].setVoltage(audibleL);
 		outputs[OUTPUT_R_OUTPUT].setVoltage(audibleR);
-		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(masteringEnabled ? limiterLed : 0.f, args.sampleTime);
-		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
-		lights[IMPACT_AIR_LIGHT].setSmoothBrightness(masteringEnabled ? impactAirLed : 0.f, args.sampleTime);
-		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
-		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
-		lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, args.sampleTime);
-		lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, args.sampleTime);
-		lights[MICROPEAK_LIGHT].setSmoothBrightness(0.f, args.sampleTime);
-		lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, args.sampleTime);
-		lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, args.sampleTime);
+		if (lightDivider.process()) {
+			const float lightDt = args.sampleTime * float(kLightDivision);
+			lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(masteringEnabled ? limiterLed : 0.f, lightDt);
+			lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, lightDt);
+			lights[IMPACT_AIR_LIGHT].setSmoothBrightness(masteringEnabled ? impactAirLed : 0.f, lightDt);
+			lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, lightDt);
+			lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, lightDt);
+			lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, lightDt);
+			lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, lightDt);
+			lights[MICROPEAK_LIGHT].setSmoothBrightness(0.f, lightDt);
+			lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, lightDt);
+			lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, lightDt);
+		}
 
 		// Update histogram (Waveform)
 		hist.currentMinL = std::min(hist.currentMinL, audibleL);
@@ -1423,7 +1440,10 @@ struct Sil : Module {
 			hist.maxR[hist.writePtr] = hist.currentMaxR;
 			hist.writePtr = (hist.writePtr + 1) % HISTOGRAM_BINS;
 
-			float instantPeak = std::max({std::abs(hist.currentMinL), std::abs(hist.currentMaxL), std::abs(hist.currentMinR), std::abs(hist.currentMaxR)});
+			const float instantPeak = std::max(
+				std::max(std::fabs(hist.currentMinL), std::fabs(hist.currentMaxL)),
+				std::max(std::fabs(hist.currentMinR), std::fabs(hist.currentMaxR))
+			);
 			if (instantPeak > hist.smoothedPeak) 
 				hist.smoothedPeak = hist.smoothedPeak * 0.9f + instantPeak * 0.1f;
 			else
@@ -1443,10 +1463,14 @@ struct Sil : Module {
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
-			for (int i = 0; i < FFT_SIZE; i++) {
-				int idx = (spec.writePtr + i) % FFT_SIZE;
-				spec.fftInL[i] = spec.bufferL[idx] * spec.window[i];
-				spec.fftInR[i] = spec.bufferR[idx] * spec.window[i];
+			int outIdx = 0;
+			for (int idx = spec.writePtr; idx < FFT_SIZE; ++idx, ++outIdx) {
+				spec.fftInL[outIdx] = spec.bufferL[idx] * spec.window[outIdx];
+				spec.fftInR[outIdx] = spec.bufferR[idx] * spec.window[outIdx];
+			}
+			for (int idx = 0; idx < spec.writePtr; ++idx, ++outIdx) {
+				spec.fftInL[outIdx] = spec.bufferL[idx] * spec.window[outIdx];
+				spec.fftInR[outIdx] = spec.bufferR[idx] * spec.window[outIdx];
 			}
 
 			spec.fft->rfft(spec.fftInL, spec.fftOutL);
@@ -1460,18 +1484,13 @@ struct Sil : Module {
 				return re * re + im * im;
 			};
 
-			float sampleRate = args.sampleRate;
 			float maxPow = 0.f;
 			static constexpr float kSpecNormPowInv = 1.f / (10240.f * 10240.f);
 			for (int i = 0; i < SPEC_FREQ_BINS; i++) {
-				float f01 = (float)i / (SPEC_FREQ_BINS - 1);
-				float hz = 20.f * std::pow(1000.f, f01);
-				float bin = hz / (sampleRate / FFT_SIZE);
-				
-				int binIdx = (int)bin;
+				const int binIdx = specBinMap[i].idx;
+				const float frac = specBinMap[i].frac;
 				float powL, powR;
-				if (binIdx < FFT_SIZE / 2 - 1) {
-					float frac = bin - binIdx;
+				if (binIdx < FFT_SIZE / 2) {
 					powL = (1.f - frac) * getMagnitudePow(spec.fftOutL, binIdx) + frac * getMagnitudePow(spec.fftOutL, binIdx + 1);
 					powR = (1.f - frac) * getMagnitudePow(spec.fftOutR, binIdx) + frac * getMagnitudePow(spec.fftOutR, binIdx + 1);
 				} else {
@@ -1484,7 +1503,7 @@ struct Sil : Module {
 
 				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + powL * 0.7f;
 				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + powR * 0.7f;
-				maxPow = std::max({maxPow, spec.magnitudesL[i], spec.magnitudesR[i]});
+				maxPow = std::max(maxPow, std::max(spec.magnitudesL[i], spec.magnitudesR[i]));
 			}
 
 			float instantPeakDb = 10.f * std::log10(maxPow + 1e-12f);
