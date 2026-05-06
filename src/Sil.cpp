@@ -193,6 +193,7 @@ struct Sil : Module {
 	int rollingWriteIndex = 0;
 	int rollingBufferLength = 0;
 	int rollingFilled = 0;
+	int rollingAudibleCount = 0;
 	double rollingMonoSqSum = 0.0;
 	dsp::RCFilter lowpassL1;
 	dsp::RCFilter lowpassL2;
@@ -306,7 +307,9 @@ struct Sil : Module {
 		float peakBins[HISTORY_BINS] = {};
 		uint16_t percentileHist[PERCENTILE_BINS] = {};
 		uint8_t binToHist[HISTORY_BINS] = {};
+		uint8_t binValid[HISTORY_BINS] = {};
 		int writeBin = 0;
+		int validBinCount = 0;
 		int samplesInBin = 0;
 		int samplesPerBin = 441;
 		float currentBinPeak = 0.f;
@@ -325,8 +328,9 @@ struct Sil : Module {
 			std::fill(std::begin(peakBins), std::end(peakBins), 0.f);
 			std::fill(std::begin(percentileHist), std::end(percentileHist), uint16_t(0));
 			std::fill(std::begin(binToHist), std::end(binToHist), uint8_t(0));
-			percentileHist[0] = HISTORY_BINS;
+			std::fill(std::begin(binValid), std::end(binValid), uint8_t(0));
 			writeBin = 0;
+			validBinCount = 0;
 			samplesInBin = 0;
 			currentBinPeak = 0.f;
 			drive = 1.f;
@@ -347,6 +351,7 @@ struct Sil : Module {
 	static constexpr float kLowBandSideReleaseSec = 0.250f;
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
+	static constexpr float kAdaptiveSilenceVolts = 0.0012559432f;
 	static constexpr float kMicropeakHoldSeconds = 2.f;
 	static constexpr float kMicropeakStrongTopUpSeconds = 0.70f;
 	static constexpr float kMicropeakWeakTopUpSeconds = 0.35f;
@@ -527,6 +532,7 @@ struct Sil : Module {
 		rollingBufferR.assign(size_t(rollingBufferLength), 0.f);
 		rollingWriteIndex = 0;
 		rollingFilled = 0;
+		rollingAudibleCount = 0;
 		rollingMonoSqSum = 0.0;
 	}
 
@@ -536,16 +542,24 @@ struct Sil : Module {
 		}
 		const int idx = rollingWriteIndex;
 
+		const float oldMono = 0.5f * (rollingBufferL[size_t(idx)] + rollingBufferR[size_t(idx)]);
+		const bool oldAudible = std::fabs(oldMono) > kAdaptiveSilenceVolts;
 		if (rollingFilled >= rollingBufferLength) {
-			const float oldMono = 0.5f * (rollingBufferL[size_t(idx)] + rollingBufferR[size_t(idx)]);
-			rollingMonoSqSum -= double(oldMono) * double(oldMono);
+			if (oldAudible) {
+				rollingMonoSqSum -= double(oldMono) * double(oldMono);
+				rollingAudibleCount = std::max(0, rollingAudibleCount - 1);
+			}
 		}
 
 		rollingBufferL[size_t(idx)] = sampleL;
 		rollingBufferR[size_t(idx)] = sampleR;
 
 		const float newMono = 0.5f * (sampleL + sampleR);
-		rollingMonoSqSum += double(newMono) * double(newMono);
+		const bool newAudible = std::fabs(newMono) > kAdaptiveSilenceVolts;
+		if (newAudible) {
+			rollingMonoSqSum += double(newMono) * double(newMono);
+			rollingAudibleCount++;
+		}
 
 		rollingWriteIndex++;
 		if (rollingWriteIndex >= rollingBufferLength) {
@@ -557,10 +571,10 @@ struct Sil : Module {
 	}
 
 	float estimateRollingProgramDbFs() const {
-		if (rollingFilled <= 0 || rollingBufferLength <= 0) {
+		if (rollingFilled <= 0 || rollingBufferLength <= 0 || rollingAudibleCount <= 0) {
 			return -100.f;
 		}
-		const double meanSq = std::max(0.0, rollingMonoSqSum) / double(rollingFilled);
+		const double meanSq = std::max(0.0, rollingMonoSqSum) / double(rollingAudibleCount);
 		const float rmsVolts = std::sqrt(float(meanSq));
 		return toDbFsSafe(rmsVolts);
 	}
@@ -823,12 +837,24 @@ struct Sil : Module {
 	}
 
 	void saturatorPushPeakBin(float peak) {
+		const bool newValid = peak > kAdaptiveSilenceVolts;
+		const bool oldValid = saturator.binValid[saturator.writeBin] != 0;
 		const int oldHist = int(saturator.binToHist[saturator.writeBin]);
-		if (oldHist >= 0 && oldHist < SaturatorState::PERCENTILE_BINS && saturator.percentileHist[oldHist] > 0) {
+		if (oldValid && oldHist >= 0 && oldHist < SaturatorState::PERCENTILE_BINS && saturator.percentileHist[oldHist] > 0) {
 			saturator.percentileHist[oldHist]--;
 		}
-		const int newHist = saturatorPeakToHistIndex(peak);
-		saturator.percentileHist[newHist]++;
+		if (oldValid && !newValid) {
+			saturator.validBinCount = std::max(0, saturator.validBinCount - 1);
+		}
+		int newHist = 0;
+		if (newValid) {
+			newHist = saturatorPeakToHistIndex(peak);
+			saturator.percentileHist[newHist]++;
+			if (!oldValid) {
+				saturator.validBinCount = std::min(SaturatorState::HISTORY_BINS, saturator.validBinCount + 1);
+			}
+		}
+		saturator.binValid[saturator.writeBin] = newValid ? uint8_t(1) : uint8_t(0);
 		saturator.binToHist[saturator.writeBin] = uint8_t(newHist);
 		saturator.peakBins[saturator.writeBin] = peak;
 		saturator.writeBin++;
@@ -838,10 +864,13 @@ struct Sil : Module {
 	}
 
 	float saturatorEstimateRecentPeakPercentile() const {
+		if (saturator.validBinCount <= 0) {
+			return 1e-6f;
+		}
 		const int targetRank = clamp(
-			int(std::round(kSatHistoryPercentile * float(SaturatorState::HISTORY_BINS - 1))),
+			int(std::round(kSatHistoryPercentile * float(saturator.validBinCount - 1))),
 			0,
-			SaturatorState::HISTORY_BINS - 1
+			saturator.validBinCount - 1
 		);
 		int accum = 0;
 		for (int i = 0; i < SaturatorState::PERCENTILE_BINS; ++i) {
