@@ -1512,6 +1512,43 @@ struct MicropeakDebugReadoutWidget : TransparentWidget {
 	}
 };
 
+struct ChainLedDebugReadoutWidget : TransparentWidget {
+	Sil* module = nullptr;
+	static constexpr int kCount = 6;
+	std::array<int, kCount> lightIds = {
+		Sil::LIMITER_ACTIVE_LIGHT,
+		Sil::LOW_RECOVERY_LIGHT,
+		Sil::REMOVE_MUD_LIGHT,
+		Sil::GLUE_COMP_LIGHT,
+		Sil::STEREO_ENHANCE_LIGHT,
+		Sil::SATURATOR_LIGHT
+	};
+	std::array<Vec, kCount> textPositions;
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !isDragonKingDebugEnabled() || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 9.0f);
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+
+		char label[16];
+		for (int i = 0; i < kCount; ++i) {
+			const float b = clamp(module->lights[lightIds[i]].getBrightness(), 0.f, 1.f);
+			const int pct = int(std::round(b * 100.f));
+			std::snprintf(label, sizeof(label), "%3d%%", pct);
+
+			const Vec p = textPositions[i];
+			nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
+			nvgText(args.vg, p.x + 0.45f, p.y + 0.45f, label, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
+			nvgText(args.vg, p.x, p.y, label, nullptr);
+		}
+	}
+};
+
 struct BananutBlack : app::SvgPort {
 	BananutBlack() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
@@ -1609,6 +1646,20 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
 		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
+
+		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
+		chainLedReadout->box.size = box.size;
+		chainLedReadout->module = module;
+		const float textOffsetMm = 2.4f;
+		chainLedReadout->textPositions = {
+			mm2px(Vec(limiterLightPos.x - textOffsetMm, limiterLightPos.y)),
+			mm2px(Vec(lowRecoveryLightPos.x - textOffsetMm, lowRecoveryLightPos.y)),
+			mm2px(Vec(removeMudLightPos.x - textOffsetMm, removeMudLightPos.y)),
+			mm2px(Vec(glueCompLightPos.x - textOffsetMm, glueCompLightPos.y)),
+			mm2px(Vec(stereoEnhanceLightPos.x - textOffsetMm, stereoEnhanceLightPos.y)),
+			mm2px(Vec(saturatorLightPos.x - textOffsetMm, saturatorLightPos.y))
+		};
+		addChild(chainLedReadout);
 
 		MicropeakDebugReadoutWidget* micropeakReadout =
 			createWidget<MicropeakDebugReadoutWidget>(mm2px(micropeakLightPos.plus(Vec(2.8f, 0.f))));
