@@ -314,6 +314,7 @@ struct Sil : Module {
 		float makeupDb = 0.f;
 		float makeupLinear = 1.f;
 		float driveNormInv = 1.f;
+		float tubeBiasOffset = 0.f;
 		float ledAmount = 0.f;
 		float limiterEngagement = 0.f;
 		float limiterRecentGrDb = 0.f;
@@ -332,6 +333,7 @@ struct Sil : Module {
 			makeupDb = 0.f;
 			makeupLinear = 1.f;
 			driveNormInv = 1.f;
+			tubeBiasOffset = 0.f;
 			ledAmount = 0.f;
 			limiterEngagement = 0.f;
 			limiterRecentGrDb = 0.f;
@@ -453,6 +455,8 @@ struct Sil : Module {
 	static constexpr float kSatHistoryPercentile = 0.990f;
 	static constexpr float kSatHistorySeconds = 8.f;
 	static constexpr int kSatUpdateDivision = 512;
+	static constexpr float kSatTubeBias = 0.055f;
+	static constexpr float kSatTubeWet = 0.72f;
 	static constexpr int kLightDivision = 32;
 
 	static float toDbSafe(float v) {
@@ -1340,7 +1344,9 @@ struct Sil : Module {
 				const float driveCoeff = std::exp(-updateSeconds / std::max(1e-3f, driveTau));
 				saturator.drive = desiredDrive + driveCoeff * (saturator.drive - desiredDrive);
 				saturator.makeupLinear = std::pow(10.f, saturator.makeupDb / 20.f);
-				saturator.driveNormInv = 1.f / std::max(fastAtanApprox(clamp(saturator.drive, kSatMinDrive, kSatMaxDrive)), 1e-6f);
+				const float clampedDrive = clamp(saturator.drive, kSatMinDrive, kSatMaxDrive);
+				saturator.driveNormInv = 1.f / std::max(fastAtanApprox(clampedDrive), 1e-6f);
+				saturator.tubeBiasOffset = fastAtanApprox(clampedDrive * kSatTubeBias);
 			}
 
 			const float makeup = saturator.makeupLinear;
@@ -1354,8 +1360,10 @@ struct Sil : Module {
 			else {
 				auto shape = [&](float x) {
 					const float xNorm = clamp((x * makeup) / kAudioFullScaleV, -3.f, 3.f);
-					const float shapedNorm = fastAtanApprox(drive * xNorm) * driveNormInv;
-					return shapedNorm * kAudioFullScaleV;
+					const float biased = xNorm + kSatTubeBias;
+					const float shapedNorm = (fastAtanApprox(drive * biased) - saturator.tubeBiasOffset) * driveNormInv;
+					const float y = shapedNorm * kAudioFullScaleV;
+					return x + kSatTubeWet * (y - x);
 				};
 				saturatedL = shape(enhancedL);
 				saturatedR = shape(enhancedR);
