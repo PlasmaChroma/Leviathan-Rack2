@@ -127,6 +127,8 @@ struct Sil : Module {
 	struct SpectrumData {
 		float magnitudesL[SPEC_FREQ_BINS] = {};
 		float magnitudesR[SPEC_FREQ_BINS] = {};
+		float displayNormL[SPEC_FREQ_BINS] = {};
+		float displayNormR[SPEC_FREQ_BINS] = {};
 		
 		float bufferL[FFT_SIZE] = {};
 		float bufferR[FFT_SIZE] = {};
@@ -172,6 +174,8 @@ struct Sil : Module {
 	float glueRmsCoeff = 0.f;
 	float glueAttackCoeff = 0.f;
 	float glueReleaseCoeff = 0.f;
+	float glueAdaptiveThresholdDb = -14.f;
+	dsp::ClockDivider glueThresholdUpdateDivider;
 	float stereoEnvAttackCoeff = 0.f;
 	float stereoEnvReleaseCoeff = 0.f;
 	float stereoMidGainAttackCoeff = 0.f;
@@ -255,7 +259,7 @@ struct Sil : Module {
 		dsp::ClockDivider updateDivider;
 
 		void reset(float sampleRate) {
-			samplesPerBin = std::max(1, int(std::round(sampleRate * 10.f / HISTORY_BINS)));
+			samplesPerBin = std::max(1, int(std::round(sampleRate * kSatHistorySeconds / HISTORY_BINS)));
 			std::fill(std::begin(peakBins), std::end(peakBins), 0.f);
 			std::fill(std::begin(percentileHist), std::end(percentileHist), uint16_t(0));
 			std::fill(std::begin(binToHist), std::end(binToHist), uint8_t(0));
@@ -314,6 +318,10 @@ struct Sil : Module {
 	static constexpr float kGlueReleaseSec = 0.250f;
 	static constexpr float kGlueKneeDb = 8.f;
 	static constexpr float kGlueThresholdDb = -14.f;
+	static constexpr float kGlueAdaptiveOffsetDb = 6.f;
+	static constexpr float kGlueAdaptiveMinThresholdDb = -24.f;
+	static constexpr float kGlueAdaptiveMaxThresholdDb = -8.f;
+	static constexpr int kGlueThresholdUpdateDivision = 1024;
 	static constexpr float kGlueMaxGainReductionDb = 3.f;
 	static constexpr float kGlueMaxMakeupDb = 1.25f;
 	static constexpr float kGlueMakeupFraction = 0.50f;
@@ -352,13 +360,14 @@ struct Sil : Module {
 	static constexpr float kLimiterCeilingDb = -1.0f;
 	static constexpr float kSaturatorTargetPreLimiterDb = -0.75f;
 	static constexpr float kSatMaxMakeupDb = 2.0f;
-	static constexpr float kSatMaxDrive = 1.35f;
+	static constexpr float kSatMaxDrive = 1.45f;
 	static constexpr float kSatMinDrive = 1.0f;
-	static constexpr float kSatMakeupAttackSec = 1.50f;
-	static constexpr float kSatMakeupReleaseSec = 4.00f;
-	static constexpr float kSatDriveAttackSec = 2.00f;
-	static constexpr float kSatDriveReleaseSec = 5.00f;
-	static constexpr float kSatHistoryPercentile = 0.995f;
+	static constexpr float kSatMakeupAttackSec = 0.90f;
+	static constexpr float kSatMakeupReleaseSec = 2.80f;
+	static constexpr float kSatDriveAttackSec = 1.20f;
+	static constexpr float kSatDriveReleaseSec = 3.50f;
+	static constexpr float kSatHistoryPercentile = 0.990f;
+	static constexpr float kSatHistorySeconds = 8.f;
 	static constexpr int kSatUpdateDivision = 512;
 
 	static float toDbSafe(float v) {
@@ -381,6 +390,20 @@ struct Sil : Module {
 	}
 	static float inverseSoftKnee01(float xDb, float thresholdDb, float kneeDb) {
 		return 1.f - softKnee01(xDb, thresholdDb, kneeDb);
+	}
+
+	// Fast atan approximation with small error; used in hot audio path.
+	// Reference form:
+	// atan(x) ~= x * (pi/4 + 0.273 * (1 - |x|)) for |x| <= 1,
+	// and range-reduced for |x| > 1.
+	static float fastAtanApprox(float x) {
+		const float ax = std::fabs(x);
+		if (ax <= 1.f) {
+			return x * (0.78539816339f + 0.273f * (1.f - ax));
+		}
+		const float inv = 1.f / ax;
+		const float t = inv * (0.78539816339f + 0.273f * (1.f - inv));
+		return (x >= 0.f) ? (1.57079632679f - t) : (-1.57079632679f + t);
 	}
 
 	struct MicropeakWorkerState {
@@ -430,6 +453,29 @@ struct Sil : Module {
 		if (rollingFilled < rollingBufferLength) {
 			rollingFilled++;
 		}
+	}
+
+	float estimateRollingProgramDbFs() const {
+		if (rollingFilled <= 0 || rollingBufferLength <= 0) {
+			return -100.f;
+		}
+		const int maxSamples = 2048;
+		const int stride = std::max(1, rollingFilled / maxSamples);
+		double sumSq = 0.0;
+		int count = 0;
+		for (int i = 0; i < rollingFilled; i += stride) {
+			const int idx = (rollingWriteIndex - 1 - i + rollingBufferLength) % rollingBufferLength;
+			const float l = rollingBufferL[size_t(idx)];
+			const float r = rollingBufferR[size_t(idx)];
+			const float mono = 0.5f * (l + r);
+			sumSq += double(mono) * double(mono);
+			count++;
+		}
+		if (count <= 0) {
+			return -100.f;
+		}
+		const float rmsVolts = std::sqrt(float(sumSq / double(count)));
+		return toDbFsSafe(rmsVolts);
 	}
 
 	void startMicropeakWorker() {
@@ -779,7 +825,9 @@ struct Sil : Module {
 			spec.window[i] = 0.5f - 0.5f * std::cos(2.f * M_PI * i / (FFT_SIZE - 1));
 		}
 
+		// Keep spectrum visually responsive; this is UI-only work.
 		specDivider.setDivision(2048);
+		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
 		removeMud.coeffDivider.setDivision(32);
 		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
 		saturator.updateDivider.setDivision(kSatUpdateDivision);
@@ -788,6 +836,7 @@ struct Sil : Module {
 		updateGlueCutoff(APP->engine->getSampleRate());
 		updateStereoEnhanceCutoffs(APP->engine->getSampleRate());
 		updateDynamicsCoefficients(APP->engine->getSampleRate());
+		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(APP->engine->getSampleRate());
 		saturator.reset(APP->engine->getSampleRate());
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
@@ -808,6 +857,7 @@ struct Sil : Module {
 		updateGlueCutoff(e.sampleRate);
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
+		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(e.sampleRate);
 		resetRemoveMudState();
 		resetStereoEnhanceState();
@@ -860,98 +910,95 @@ struct Sil : Module {
 		float removeMudLed = 0.f;
 		float mudCleanL = recoveredL;
 		float mudCleanR = recoveredR;
-		if (masteringEnabled) {
-			const float mono = 0.5f * (recoveredL + recoveredR);
-			removeMud.mudHp.process(mono);
-			const float mudHigh = removeMud.mudHp.highpass();
-			removeMud.mudLp.process(mudHigh);
-			const float mudBand = removeMud.mudLp.lowpass();
-			removeMud.bassHp.process(mono);
-			const float bassHigh = removeMud.bassHp.highpass();
-			removeMud.bassLp.process(bassHigh);
-			const float bassBand = removeMud.bassLp.lowpass();
-			removeMud.presenceHp.process(mono);
-			const float presenceHigh = removeMud.presenceHp.highpass();
-			removeMud.presenceLp.process(presenceHigh);
-			const float presenceBand = removeMud.presenceLp.lowpass();
+		const float mono = 0.5f * (recoveredL + recoveredR);
+		removeMud.mudHp.process(mono);
+		const float mudHigh = removeMud.mudHp.highpass();
+		removeMud.mudLp.process(mudHigh);
+		const float mudBand = removeMud.mudLp.lowpass();
+		removeMud.bassHp.process(mono);
+		const float bassHigh = removeMud.bassHp.highpass();
+		removeMud.bassLp.process(bassHigh);
+		const float bassBand = removeMud.bassLp.lowpass();
+		removeMud.presenceHp.process(mono);
+		const float presenceHigh = removeMud.presenceHp.highpass();
+		removeMud.presenceLp.process(presenceHigh);
+		const float presenceBand = removeMud.presenceLp.lowpass();
 
-			auto updateEnv = [&](float& env, float x) {
-				const float absX = std::fabs(x);
-				const float c = (absX > env) ? mudEnvAttackCoeff : mudEnvReleaseCoeff;
-				env = absX + c * (env - absX);
-			};
-			updateEnv(removeMud.mudEnv, mudBand);
-			updateEnv(removeMud.bassEnv, bassBand);
-			updateEnv(removeMud.presenceEnv, presenceBand);
+		auto updateEnv = [&](float& env, float x) {
+			const float absX = std::fabs(x);
+			const float c = (absX > env) ? mudEnvAttackCoeff : mudEnvReleaseCoeff;
+			env = absX + c * (env - absX);
+		};
+		updateEnv(removeMud.mudEnv, mudBand);
+		updateEnv(removeMud.bassEnv, bassBand);
+		updateEnv(removeMud.presenceEnv, presenceBand);
 
-			const float refEnv = 0.5f * removeMud.bassEnv + 0.5f * removeMud.presenceEnv;
-			const float mudDeltaDb = toDbSafe(removeMud.mudEnv) - toDbSafe(refEnv) - kMudAllowedWarmthDb;
-			const float activation = softKnee01(mudDeltaDb, kMudThresholdDb, kMudKneeDb);
-			removeMud.targetCutDb = -kMudMaxCutDb * activation;
+		const float refEnv = 0.5f * removeMud.bassEnv + 0.5f * removeMud.presenceEnv;
+		const float mudDeltaDb = toDbSafe(removeMud.mudEnv) - toDbSafe(refEnv) - kMudAllowedWarmthDb;
+		const float activation = softKnee01(mudDeltaDb, kMudThresholdDb, kMudKneeDb);
+		removeMud.targetCutDb = -kMudMaxCutDb * activation;
 
-			const float coeff = (removeMud.targetCutDb < removeMud.smoothedCutDb) ? mudAttackCoeff : mudReleaseCoeff;
-			removeMud.smoothedCutDb = removeMud.targetCutDb + coeff * (removeMud.smoothedCutDb - removeMud.targetCutDb);
-			removeMud.ledAmount = clamp((-removeMud.smoothedCutDb) / kMudMaxCutDb, 0.f, 1.f);
+		const float coeff = (removeMud.targetCutDb < removeMud.smoothedCutDb) ? mudAttackCoeff : mudReleaseCoeff;
+		removeMud.smoothedCutDb = removeMud.targetCutDb + coeff * (removeMud.smoothedCutDb - removeMud.targetCutDb);
+		removeMud.ledAmount = clamp((-removeMud.smoothedCutDb) / kMudMaxCutDb, 0.f, 1.f);
 
-			if (removeMud.coeffDivider.process()) {
-				removeMud.peakingL.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
-				removeMud.peakingR.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
-			}
-			mudCleanL = removeMud.peakingL.process(recoveredL);
-			mudCleanR = removeMud.peakingR.process(recoveredR);
-			removeMudLed = removeMud.ledAmount;
+		if (removeMud.coeffDivider.process()) {
+			removeMud.peakingL.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
+			removeMud.peakingR.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
 		}
-		else {
-			removeMud.targetCutDb = 0.f;
-			removeMud.smoothedCutDb = 0.f;
-			removeMud.ledAmount = 0.f;
-		}
+		mudCleanL = removeMud.peakingL.process(recoveredL);
+		mudCleanR = removeMud.peakingR.process(recoveredR);
+		removeMudLed = removeMud.ledAmount;
 
-		const float preMasterL = masteringEnabled ? mudCleanL : inL;
-		const float preMasterR = masteringEnabled ? mudCleanR : inR;
+		const float preMasterL = mudCleanL;
+		const float preMasterR = mudCleanR;
 		const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
 		float gluedL = cleaned.l;
 		float gluedR = cleaned.r;
 		float glueLed = 0.f;
-		if (masteringEnabled) {
-			const float mono = 0.5f * (cleaned.l + cleaned.r);
-			glue.sidechainHp.process(mono);
-			const float sidechain = glue.sidechainHp.highpass();
-			const float rmsTarget = sidechain * sidechain;
-			glue.rmsEnv = glueRmsCoeff * glue.rmsEnv + (1.f - glueRmsCoeff) * rmsTarget;
-			const float levelDb = 20.f * std::log10(std::sqrt(std::max(glue.rmsEnv, 1e-12f)) / kAudioFullScaleV + 1e-9f);
-			const float overDb = levelDb - kGlueThresholdDb;
-			const float halfKnee = 0.5f * kGlueKneeDb;
-			float targetGrDb = 0.f;
-			if (overDb > -halfKnee) {
-				const float hardGr = std::max(0.f, overDb - overDb / kGlueRatio);
-				if (overDb >= halfKnee) {
-					targetGrDb = hardGr;
-				}
-				else {
-					const float t = clamp((overDb + halfKnee) / std::max(kGlueKneeDb, 1e-6f), 0.f, 1.f);
-					const float s = t * t * (3.f - 2.f * t);
-					targetGrDb = hardGr * s;
-				}
+		if (glueThresholdUpdateDivider.process()) {
+			const float programDbFs = estimateRollingProgramDbFs();
+			const float targetThresholdDb = clamp(
+				programDbFs - kGlueAdaptiveOffsetDb,
+				kGlueAdaptiveMinThresholdDb,
+				kGlueAdaptiveMaxThresholdDb
+			);
+			glueAdaptiveThresholdDb = targetThresholdDb;
+		}
+		const float glueMono = 0.5f * (cleaned.l + cleaned.r);
+		glue.sidechainHp.process(glueMono);
+		const float sidechain = glue.sidechainHp.highpass();
+		const float rmsTarget = sidechain * sidechain;
+		glue.rmsEnv = glueRmsCoeff * glue.rmsEnv + (1.f - glueRmsCoeff) * rmsTarget;
+		const float levelDb = 20.f * std::log10(std::sqrt(std::max(glue.rmsEnv, 1e-12f)) / kAudioFullScaleV + 1e-9f);
+		const float overDb = levelDb - glueAdaptiveThresholdDb;
+		const float halfKnee = 0.5f * kGlueKneeDb;
+		float targetGrDb = 0.f;
+		if (overDb > -halfKnee) {
+			const float hardGr = std::max(0.f, overDb - overDb / kGlueRatio);
+			if (overDb >= halfKnee) {
+				targetGrDb = hardGr;
 			}
-			targetGrDb = clamp(targetGrDb, 0.f, kGlueMaxGainReductionDb);
-			const float grCoeff = (targetGrDb > glue.gainReductionDb) ? glueAttackCoeff : glueReleaseCoeff;
-			glue.gainReductionDb = targetGrDb + grCoeff * (glue.gainReductionDb - targetGrDb);
-			glue.makeupDb = clamp(glue.gainReductionDb * kGlueMakeupFraction, 0.f, kGlueMaxMakeupDb);
-			const float totalGainDb = -glue.gainReductionDb + glue.makeupDb;
-			const float gain = std::pow(10.f, totalGainDb / 20.f);
-			gluedL = cleaned.l * gain;
-			gluedR = cleaned.r * gain;
-			glue.ledAmount = clamp(glue.gainReductionDb / kGlueMaxGainReductionDb, 0.f, 1.f);
-			glueLed = glue.ledAmount;
+			else {
+				const float t = clamp((overDb + halfKnee) / std::max(kGlueKneeDb, 1e-6f), 0.f, 1.f);
+				const float s = t * t * (3.f - 2.f * t);
+				targetGrDb = hardGr * s;
+			}
 		}
-		else {
-			glue.reset();
-		}
+		targetGrDb = clamp(targetGrDb, 0.f, kGlueMaxGainReductionDb);
+		const float grCoeff = (targetGrDb > glue.gainReductionDb) ? glueAttackCoeff : glueReleaseCoeff;
+		glue.gainReductionDb = targetGrDb + grCoeff * (glue.gainReductionDb - targetGrDb);
+		glue.makeupDb = clamp(glue.gainReductionDb * kGlueMakeupFraction, 0.f, kGlueMaxMakeupDb);
+		const float totalGainDb = -glue.gainReductionDb + glue.makeupDb;
+		const float gain = std::pow(10.f, totalGainDb / 20.f);
+		gluedL = cleaned.l * gain;
+		gluedR = cleaned.r * gain;
+		glue.ledAmount = clamp(glue.gainReductionDb / kGlueMaxGainReductionDb, 0.f, 1.f);
+		glueLed = glue.ledAmount;
 		float enhancedL = gluedL;
 		float enhancedR = gluedR;
 		float stereoEnhanceLed = 0.f;
-		if (masteringEnabled) {
+		{
 			const float mid = 0.5f * (gluedL + gluedR);
 			const float side = 0.5f * (gluedL - gluedR);
 
@@ -983,9 +1030,8 @@ struct Sil : Module {
 			updateStereoEnv(stereoEnhance.sideBroadEnv, sideBroadBand);
 
 			const float mid350DbFs = toDbFsSafe(stereoEnhance.mid350Env);
-			const float midBroadDbFs = toDbFsSafe(stereoEnhance.midBroadEnv);
 			const float midPresenceGate = softKnee01(mid350DbFs, kStereoMidGateDbFs, kStereoMidGateKneeDb);
-			const float midExcessDb = (mid350DbFs - midBroadDbFs) + kStereoMidBandNormDb;
+			const float midExcessDb = toDbSafe(stereoEnhance.mid350Env / std::max(stereoEnhance.midBroadEnv, 1e-7f)) + kStereoMidBandNormDb;
 			const float midExcess = softKnee01(midExcessDb, kStereoMidExcessThresholdDb, kStereoMidExcessKneeDb);
 			const float targetMidActivation = clamp(midPresenceGate * midExcess, 0.f, 1.f);
 			stereoEnhance.targetMidCutDb = -kStereoMidMaxCutDb * targetMidActivation;
@@ -997,7 +1043,7 @@ struct Sil : Module {
 				kStereoSideGateDbFs,
 				kStereoSideGateKneeDb
 			);
-			const float sideBrightnessDb = (side6kDbFs - sideBroadDbFs) + kStereoSideBandNormDb;
+			const float sideBrightnessDb = toDbSafe(stereoEnhance.side6kEnv / std::max(stereoEnhance.sideBroadEnv, 1e-7f)) + kStereoSideBandNormDb;
 			const float sideNotAlreadyBright = inverseSoftKnee01(
 				sideBrightnessDb,
 				kStereoSideAlreadyBrightDb,
@@ -1071,25 +1117,11 @@ struct Sil : Module {
 			stereoEnhance.ledAmount = clamp(0.5f * leftDeltaNorm + 0.5f * rightDeltaNorm, 0.f, 1.f);
 			stereoEnhanceLed = stereoEnhance.ledAmount;
 		}
-		else {
-			stereoEnhance.targetMidCutDb = 0.f;
-			stereoEnhance.smoothedMidCutDb = 0.f;
-			stereoEnhance.targetSideLiftDb = 0.f;
-			stereoEnhance.smoothedSideLiftDb = 0.f;
-			stereoEnhance.midActivation = 0.f;
-			stereoEnhance.sideActivation = 0.f;
-			stereoEnhance.ledAmount = 0.f;
-			if (!stereoEnhance.coeffsNeutral) {
-				stereoEnhance.midEq.setPeaking(args.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
-				stereoEnhance.sideEq.setPeaking(args.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
-				stereoEnhance.coeffsNeutral = true;
-			}
-		}
 
 		float saturatedL = enhancedL;
 		float saturatedR = enhancedR;
 		float saturatorLed = 0.f;
-		if (masteringEnabled) {
+		{
 			const float preSatPeak = std::max(std::fabs(enhancedL), std::fabs(enhancedR));
 			saturator.currentBinPeak = std::max(saturator.currentBinPeak, preSatPeak);
 			saturator.samplesInBin++;
@@ -1107,9 +1139,9 @@ struct Sil : Module {
 					kSaturatorTargetPreLimiterDb - recentPeakDb,
 					0.f,
 					kSatMaxMakeupDb
-				);
+					);
 				const float desiredDrive = clamp(
-					1.f + desiredMakeupDb * 0.22f,
+					1.f + desiredMakeupDb * 0.28f,
 					kSatMinDrive,
 					kSatMaxDrive
 				);
@@ -1121,19 +1153,26 @@ struct Sil : Module {
 				const float driveCoeff = std::exp(-updateSeconds / std::max(1e-3f, driveTau));
 				saturator.drive = desiredDrive + driveCoeff * (saturator.drive - desiredDrive);
 				saturator.makeupLinear = std::pow(10.f, saturator.makeupDb / 20.f);
-				saturator.driveNormInv = 1.f / std::max(std::atan(clamp(saturator.drive, kSatMinDrive, kSatMaxDrive)), 1e-6f);
+				saturator.driveNormInv = 1.f / std::max(fastAtanApprox(clamp(saturator.drive, kSatMinDrive, kSatMaxDrive)), 1e-6f);
 			}
 
 			const float makeup = saturator.makeupLinear;
 			const float drive = clamp(saturator.drive, kSatMinDrive, kSatMaxDrive);
 			const float driveNormInv = saturator.driveNormInv;
-			auto shape = [&](float x) {
-				const float xNorm = clamp((x * makeup) / kAudioFullScaleV, -3.f, 3.f);
-				const float shapedNorm = std::atan(drive * xNorm) * driveNormInv;
-				return shapedNorm * kAudioFullScaleV;
-			};
-			saturatedL = shape(enhancedL);
-			saturatedR = shape(enhancedR);
+			const bool nearNeutralSat = (drive <= 1.01f && makeup <= 1.01f);
+			if (nearNeutralSat) {
+				saturatedL = enhancedL;
+				saturatedR = enhancedR;
+			}
+			else {
+				auto shape = [&](float x) {
+					const float xNorm = clamp((x * makeup) / kAudioFullScaleV, -3.f, 3.f);
+					const float shapedNorm = fastAtanApprox(drive * xNorm) * driveNormInv;
+					return shapedNorm * kAudioFullScaleV;
+				};
+				saturatedL = shape(enhancedL);
+				saturatedR = shape(enhancedR);
+			}
 			const float makeupActivity = clamp(saturator.makeupDb / kSatMaxMakeupDb, 0.f, 1.f);
 			const float driveActivity = clamp(
 				(drive - kSatMinDrive) / std::max(kSatMaxDrive - kSatMinDrive, 1e-6f),
@@ -1144,18 +1183,11 @@ struct Sil : Module {
 			saturator.ledAmount = clamp(rawLed * 1.45f, 0.f, 1.f);
 			saturatorLed = saturator.ledAmount;
 		}
-		else {
-			saturator.makeupDb = 0.f;
-			saturator.makeupLinear = 1.f;
-			saturator.drive = 1.f;
-			saturator.driveNormInv = 1.f;
-			saturator.ledAmount = 0.f;
-		}
 
 		float outL = saturatedL;
 		float outR = saturatedR;
 		float limiterLed = 0.f;
-		if (masteringEnabled) {
+		{
 			// One-sample lookahead "true-peak as much as possible":
 			// cleanup emits the delayed center sample, so the current pre-master
 			// sample is available as the next point for limiter detection.
@@ -1179,16 +1211,14 @@ struct Sil : Module {
 			const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
 			limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
 		}
-		else {
-			limiterGain = 1.f;
-			limiterPrevValid = false;
-		}
+		const float audibleL = masteringEnabled ? outL : inL;
+		const float audibleR = masteringEnabled ? outR : inR;
 
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
-		outputs[OUTPUT_L_OUTPUT].setVoltage(outL);
-		outputs[OUTPUT_R_OUTPUT].setVoltage(outR);
-		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(limiterLed, args.sampleTime);
+		outputs[OUTPUT_L_OUTPUT].setVoltage(audibleL);
+		outputs[OUTPUT_R_OUTPUT].setVoltage(audibleR);
+		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(masteringEnabled ? limiterLed : 0.f, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
 		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
@@ -1200,10 +1230,10 @@ struct Sil : Module {
 		lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, args.sampleTime);
 
 		// Update histogram (Waveform)
-		hist.currentMinL = std::min(hist.currentMinL, outL);
-		hist.currentMaxL = std::max(hist.currentMaxL, outL);
-		hist.currentMinR = std::min(hist.currentMinR, outR);
-		hist.currentMaxR = std::max(hist.currentMaxR, outR);
+		hist.currentMinL = std::min(hist.currentMinL, audibleL);
+		hist.currentMaxL = std::max(hist.currentMaxL, audibleL);
+		hist.currentMinR = std::min(hist.currentMinR, audibleR);
+		hist.currentMaxR = std::max(hist.currentMaxR, audibleR);
 		hist.samplesInCurrentBin++;
 
 		if (hist.samplesInCurrentBin >= hist.samplesPerBin) {
@@ -1227,8 +1257,9 @@ struct Sil : Module {
 		}
 
 		// Update Spectrum Ring Buffer
-		spec.bufferL[spec.writePtr] = outL;
-		spec.bufferR[spec.writePtr] = outR;
+		// Spectrogram view is Mid (left panel) / Side (right panel), not raw L/R.
+		spec.bufferL[spec.writePtr] = 0.5f * (audibleL + audibleR);
+		spec.bufferR[spec.writePtr] = 0.5f * (audibleL - audibleR);
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
@@ -1241,47 +1272,57 @@ struct Sil : Module {
 			spec.fft->rfft(spec.fftInL, spec.fftOutL);
 			spec.fft->rfft(spec.fftInR, spec.fftOutR);
 
-			auto getMagnitude = [&](float* fftOut, int bin) {
-				if (bin <= 0) return std::abs(fftOut[0]);
-				if (bin >= FFT_SIZE / 2) return std::abs(fftOut[1]);
+			auto getMagnitudePow = [&](float* fftOut, int bin) {
+				if (bin <= 0) return fftOut[0] * fftOut[0];
+				if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
 				float re = fftOut[2 * bin];
 				float im = fftOut[2 * bin + 1];
-				return std::sqrt(re * re + im * im);
+				return re * re + im * im;
 			};
 
 			float sampleRate = args.sampleRate;
-			float maxMag = 0.f;
+			float maxPow = 0.f;
+			static constexpr float kSpecNormPowInv = 1.f / (10240.f * 10240.f);
 			for (int i = 0; i < SPEC_FREQ_BINS; i++) {
 				float f01 = (float)i / (SPEC_FREQ_BINS - 1);
 				float hz = 20.f * std::pow(1000.f, f01);
 				float bin = hz / (sampleRate / FFT_SIZE);
 				
 				int binIdx = (int)bin;
-				float magL, magR;
+				float powL, powR;
 				if (binIdx < FFT_SIZE / 2 - 1) {
 					float frac = bin - binIdx;
-					magL = (1.f - frac) * getMagnitude(spec.fftOutL, binIdx) + frac * getMagnitude(spec.fftOutL, binIdx + 1);
-					magR = (1.f - frac) * getMagnitude(spec.fftOutR, binIdx) + frac * getMagnitude(spec.fftOutR, binIdx + 1);
+					powL = (1.f - frac) * getMagnitudePow(spec.fftOutL, binIdx) + frac * getMagnitudePow(spec.fftOutL, binIdx + 1);
+					powR = (1.f - frac) * getMagnitudePow(spec.fftOutR, binIdx) + frac * getMagnitudePow(spec.fftOutR, binIdx + 1);
 				} else {
-					magL = getMagnitude(spec.fftOutL, FFT_SIZE / 2);
-					magR = getMagnitude(spec.fftOutR, FFT_SIZE / 2);
+					powL = getMagnitudePow(spec.fftOutL, FFT_SIZE / 2);
+					powR = getMagnitudePow(spec.fftOutR, FFT_SIZE / 2);
 				}
 
-				magL /= 10240.f;
-				magR /= 10240.f;
+				powL *= kSpecNormPowInv;
+				powR *= kSpecNormPowInv;
 
-				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + magL * 0.7f;
-				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + magR * 0.7f;
-				maxMag = std::max({maxMag, spec.magnitudesL[i], spec.magnitudesR[i]});
+				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + powL * 0.7f;
+				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + powR * 0.7f;
+				maxPow = std::max({maxPow, spec.magnitudesL[i], spec.magnitudesR[i]});
 			}
 
-			float instantPeakDb = 20.f * std::log10(maxMag + 1e-6f);
+			float instantPeakDb = 10.f * std::log10(maxPow + 1e-12f);
 			if (instantPeakDb > spec.smoothedPeakDb)
 				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f;
 			else
 				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f;
 			
 			spec.smoothedPeakDb = clamp(spec.smoothedPeakDb, -100.f, 20.f);
+			const float ceilingDb = spec.smoothedPeakDb + 6.f;
+			const float floorDb = ceilingDb - 70.f;
+			const float dbSpanInv = 1.f / std::max(ceilingDb - floorDb, 1e-6f);
+			for (int i = 0; i < SPEC_FREQ_BINS; ++i) {
+				const float dbL = 10.f * std::log10(spec.magnitudesL[i] + 1e-12f);
+				const float dbR = 10.f * std::log10(spec.magnitudesR[i] + 1e-12f);
+				spec.displayNormL[i] = clamp((dbL - floorDb) * dbSpanInv, 0.f, 1.f);
+				spec.displayNormR[i] = clamp((dbR - floorDb) * dbSpanInv, 0.f, 1.f);
+			}
 		}
 	}
 
@@ -1384,6 +1425,72 @@ struct SpectrumWidget : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		if (!module) return;
 		SilColors colors = SilColors::get(module->colorScheme);
+		auto rgbToHsv = [](const NVGcolor& c, float& h, float& s, float& v) {
+			const float r = clamp(c.r, 0.f, 1.f);
+			const float g = clamp(c.g, 0.f, 1.f);
+			const float b = clamp(c.b, 0.f, 1.f);
+			const float mx = std::max(r, std::max(g, b));
+			const float mn = std::min(r, std::min(g, b));
+			const float d = mx - mn;
+			v = mx;
+			s = (mx <= 1e-6f) ? 0.f : (d / mx);
+			if (d <= 1e-6f) {
+				h = 0.f;
+				return;
+			}
+			if (mx == r) {
+				h = std::fmod(((g - b) / d), 6.f);
+			}
+			else if (mx == g) {
+				h = ((b - r) / d) + 2.f;
+			}
+			else {
+				h = ((r - g) / d) + 4.f;
+			}
+			h *= 60.f;
+			if (h < 0.f) h += 360.f;
+		};
+		auto hsvToRgb = [](float h, float s, float v, float a) {
+			h = std::fmod(h, 360.f);
+			if (h < 0.f) h += 360.f;
+			s = clamp(s, 0.f, 1.f);
+			v = clamp(v, 0.f, 1.f);
+			const float c = v * s;
+			const float x = c * (1.f - std::fabs(std::fmod(h / 60.f, 2.f) - 1.f));
+			const float m = v - c;
+			float rp = 0.f, gp = 0.f, bp = 0.f;
+			if (h < 60.f) {
+				rp = c; gp = x; bp = 0.f;
+			}
+			else if (h < 120.f) {
+				rp = x; gp = c; bp = 0.f;
+			}
+			else if (h < 180.f) {
+				rp = 0.f; gp = c; bp = x;
+			}
+			else if (h < 240.f) {
+				rp = 0.f; gp = x; bp = c;
+			}
+			else if (h < 300.f) {
+				rp = x; gp = 0.f; bp = c;
+			}
+			else {
+				rp = c; gp = 0.f; bp = x;
+			}
+			return nvgRGBAf(rp + m, gp + m, bp + m, clamp(a, 0.f, 1.f));
+		};
+		auto shiftForSide = [&](const NVGcolor& base) {
+			float h = 0.f, s = 0.f, v = 0.f;
+			rgbToHsv(base, h, s, v);
+			const float shiftedHue = h + 42.f;
+			const float shiftedSat = clamp(s * 0.92f + 0.08f, 0.f, 1.f);
+			const float shiftedVal = clamp(v * 0.92f + 0.05f, 0.f, 1.f);
+			return hsvToRgb(shiftedHue, shiftedSat, shiftedVal, base.a);
+		};
+		const NVGcolor sideLow = shiftForSide(colors.low);
+		const NVGcolor sideHigh = shiftForSide(colors.high);
+		const NVGcolor channelLow = isRightChannel ? sideLow : colors.low;
+		const NVGcolor channelHigh = isRightChannel ? sideHigh : colors.high;
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
@@ -1391,9 +1498,6 @@ struct SpectrumWidget : TransparentWidget {
 		nvgFill(args.vg);
 
 		// Draw background grid
-		float ceilingDb = module->spec.smoothedPeakDb + 6.f;
-		float floorDb = ceilingDb - 70.f;
-
 		auto getX = [&](float hz) {
 			float f01 = std::log10(hz / 20.f) / 3.f; // log10(20000/20) = 3
 			return f01 * box.size.x;
@@ -1432,24 +1536,23 @@ struct SpectrumWidget : TransparentWidget {
 			}
 		}
 
-		const float* magnitudes = isRightChannel ? module->spec.magnitudesR : module->spec.magnitudesL;
+		const float* norms = isRightChannel ? module->spec.displayNormR : module->spec.displayNormL;
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
 		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
-			float mag = magnitudes[i];
-			float db = 20.f * std::log10(mag + 1e-6f);
-			float norm = clamp((db - floorDb) / (ceilingDb - floorDb), 0.f, 1.f);
+			const float norm = norms[i];
 			if (norm <= 0.01f) continue;
 
 			float barH = norm * box.size.y;
 			float x = (float)i * barW;
-			NVGcolor color = nvgLerpRGBA(colors.low, colors.high, norm);
+			NVGcolor color = nvgLerpRGBA(channelLow, channelHigh, norm);
 
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x, box.size.y - barH, barW - 0.5f, barH);
 			nvgFillColor(args.vg, color);
 			nvgFill(args.vg);
 		}
+
 	}
 };
 
