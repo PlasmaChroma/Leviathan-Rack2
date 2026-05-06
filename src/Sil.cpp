@@ -61,6 +61,36 @@ struct Sil : Module {
 			a1 = rawA1 * invA0;
 			a2 = rawA2 * invA0;
 		}
+
+		void setHighShelf(float sampleRate, float cutoffHz, float q, float gainDb) {
+			if (sampleRate <= 1.f || cutoffHz <= 1.f || q <= 1e-4f) {
+				b0 = 1.f;
+				b1 = b2 = a1 = a2 = 0.f;
+				return;
+			}
+			const float nyquistGuard = 0.48f * sampleRate;
+			const float fc = clamp(cutoffHz, 10.f, nyquistGuard);
+			const float A = std::pow(10.f, gainDb / 40.f);
+			const float w0 = 2.f * M_PI * fc / sampleRate;
+			const float c = std::cos(w0);
+			const float s = std::sin(w0);
+			const float alpha = s / (2.f * q);
+			const float twoSqrtAAlpha = 2.f * std::sqrt(A) * alpha;
+
+			const float rawB0 = A * ((A + 1.f) + (A - 1.f) * c + twoSqrtAAlpha);
+			const float rawB1 = -2.f * A * ((A - 1.f) + (A + 1.f) * c);
+			const float rawB2 = A * ((A + 1.f) + (A - 1.f) * c - twoSqrtAAlpha);
+			const float rawA0 = (A + 1.f) - (A - 1.f) * c + twoSqrtAAlpha;
+			const float rawA1 = 2.f * ((A - 1.f) - (A + 1.f) * c);
+			const float rawA2 = (A + 1.f) - (A - 1.f) * c - twoSqrtAAlpha;
+			const float invA0 = (std::fabs(rawA0) > 1e-9f) ? (1.f / rawA0) : 1.f;
+
+			b0 = rawB0 * invA0;
+			b1 = rawB1 * invA0;
+			b2 = rawB2 * invA0;
+			a1 = rawA1 * invA0;
+			a2 = rawA2 * invA0;
+		}
 	};
 
 	enum ParamId {
@@ -81,6 +111,7 @@ struct Sil : Module {
 	enum LightId {
 		LIMITER_ACTIVE_LIGHT,
 		LOW_RECOVERY_LIGHT,
+		IMPACT_AIR_LIGHT,
 		REMOVE_MUD_LIGHT,
 		GLUE_COMP_LIGHT,
 		SATURATOR_LIGHT,
@@ -167,6 +198,12 @@ struct Sil : Module {
 	float lowBandCorrCoeff = 0.f;
 	float lowBandSideAttackCoeff = 0.f;
 	float lowBandSideReleaseCoeff = 0.f;
+	float impactAirEnvAttackCoeff = 0.f;
+	float impactAirEnvReleaseCoeff = 0.f;
+	float impactAirSlowAttackCoeff = 0.f;
+	float impactAirSlowReleaseCoeff = 0.f;
+	float impactAirGainAttackCoeff = 0.f;
+	float impactAirGainReleaseCoeff = 0.f;
 	float mudEnvAttackCoeff = 0.f;
 	float mudEnvReleaseCoeff = 0.f;
 	float mudAttackCoeff = 0.f;
@@ -185,6 +222,11 @@ struct Sil : Module {
 	float limiterAttackCoeff = 0.f;
 	float limiterReleaseCoeff = 0.f;
 	float limiterCeiling = 0.f;
+	float limiterMetricAttackCoeff = 0.f;
+	float limiterMetricReleaseCoeff = 0.f;
+	float limiterMetricGrCoeff = 0.f;
+	float limiterTriggerEma = 0.f;
+	float limiterRecentGrDb = 0.f;
 	struct RemoveMudState {
 		dsp::RCFilter mudHp;
 		dsp::RCFilter mudLp;
@@ -202,6 +244,16 @@ struct Sil : Module {
 		Biquad peakingL;
 		Biquad peakingR;
 	} removeMud;
+	struct ImpactAirState {
+		float env = 1e-6f;
+		float slowEnv = 1e-6f;
+		float targetLiftDb = 0.f;
+		float smoothedLiftDb = 0.f;
+		float ledAmount = 0.f;
+		dsp::ClockDivider coeffDivider;
+		Biquad shelfL;
+		Biquad shelfR;
+	} impactAir;
 	struct GlueCompressorState {
 		dsp::RCFilter sidechainHp;
 		float rmsEnv = 1e-8f;
@@ -256,6 +308,8 @@ struct Sil : Module {
 		float makeupLinear = 1.f;
 		float driveNormInv = 1.f;
 		float ledAmount = 0.f;
+		float limiterEngagement = 0.f;
+		float limiterRecentGrDb = 0.f;
 		dsp::ClockDivider updateDivider;
 
 		void reset(float sampleRate) {
@@ -272,6 +326,8 @@ struct Sil : Module {
 			makeupLinear = 1.f;
 			driveNormInv = 1.f;
 			ledAmount = 0.f;
+			limiterEngagement = 0.f;
+			limiterRecentGrDb = 0.f;
 			updateDivider.setDivision(512);
 		}
 	} saturator;
@@ -313,6 +369,19 @@ struct Sil : Module {
 	static constexpr float kMudReleaseSec = 0.850f;
 	static constexpr float kMudEnvAttackSec = 0.030f;
 	static constexpr float kMudEnvReleaseSec = 0.220f;
+	static constexpr float kImpactAirMaxLiftDb = 0.75f;
+	static constexpr float kImpactAirShelfHz = 1000.f;
+	static constexpr float kImpactAirShelfQ = 0.707f;
+	static constexpr float kImpactAirEnvAttackSec = 0.004f;
+	static constexpr float kImpactAirEnvReleaseSec = 0.070f;
+	static constexpr float kImpactAirSlowAttackSec = 0.120f;
+	static constexpr float kImpactAirSlowReleaseSec = 0.450f;
+	static constexpr float kImpactAirGainAttackSec = 0.010f;
+	static constexpr float kImpactAirGainReleaseSec = 0.090f;
+	static constexpr float kImpactAirSlowFloorVolts = 0.015f;
+	static constexpr float kImpactAirTransientThresholdDb = 3.5f;
+	static constexpr float kImpactAirTransientKneeDb = 3.0f;
+	static constexpr int kImpactAirCoeffDivision = 32;
 	static constexpr float kGlueRatio = 1.5f;
 	static constexpr float kGlueAttackSec = 0.030f;
 	static constexpr float kGlueReleaseSec = 0.250f;
@@ -358,6 +427,10 @@ struct Sil : Module {
 	static constexpr float kStereoSideGainReleaseSec = 1.200f;
 	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
+	static constexpr float kLimiterMetricAttackSec = 0.020f;
+	static constexpr float kLimiterMetricReleaseSec = 0.750f;
+	static constexpr float kLimiterMetricGrSec = 0.120f;
+	static constexpr float kLimiterTriggerDb = 0.10f;
 	static constexpr float kSaturatorTargetPreLimiterDb = -0.75f;
 	static constexpr float kSatMaxMakeupDb = 2.0f;
 	static constexpr float kSatMaxDrive = 1.45f;
@@ -683,6 +756,12 @@ struct Sil : Module {
 		lowBandCorrCoeff = std::exp(-1.f / (kLowBandCorrTauSec * sr));
 		lowBandSideAttackCoeff = std::exp(-1.f / (kLowBandSideAttackSec * sr));
 		lowBandSideReleaseCoeff = std::exp(-1.f / (kLowBandSideReleaseSec * sr));
+		impactAirEnvAttackCoeff = std::exp(-1.f / (kImpactAirEnvAttackSec * sr));
+		impactAirEnvReleaseCoeff = std::exp(-1.f / (kImpactAirEnvReleaseSec * sr));
+		impactAirSlowAttackCoeff = std::exp(-1.f / (kImpactAirSlowAttackSec * sr));
+		impactAirSlowReleaseCoeff = std::exp(-1.f / (kImpactAirSlowReleaseSec * sr));
+		impactAirGainAttackCoeff = std::exp(-1.f / (kImpactAirGainAttackSec * sr));
+		impactAirGainReleaseCoeff = std::exp(-1.f / (kImpactAirGainReleaseSec * sr));
 		mudEnvAttackCoeff = std::exp(-1.f / (kMudEnvAttackSec * sr));
 		mudEnvReleaseCoeff = std::exp(-1.f / (kMudEnvReleaseSec * sr));
 		mudAttackCoeff = std::exp(-1.f / (kMudAttackSec * sr));
@@ -699,6 +778,9 @@ struct Sil : Module {
 		limiterAttackCoeff = std::exp(-1.f / (0.0005f * sr));
 		limiterReleaseCoeff = std::exp(-1.f / (0.080f * sr));
 		limiterCeiling = kAudioFullScaleV * std::pow(10.f, kLimiterCeilingDb / 20.f);
+		limiterMetricAttackCoeff = std::exp(-1.f / (kLimiterMetricAttackSec * sr));
+		limiterMetricReleaseCoeff = std::exp(-1.f / (kLimiterMetricReleaseSec * sr));
+		limiterMetricGrCoeff = std::exp(-1.f / (kLimiterMetricGrSec * sr));
 	}
 
 	int saturatorPeakToHistIndex(float peak) const {
@@ -784,6 +866,15 @@ struct Sil : Module {
 		removeMud.peakingL.reset();
 		removeMud.peakingR.reset();
 	}
+	void resetImpactAirState() {
+		impactAir.env = 1e-6f;
+		impactAir.slowEnv = 1e-6f;
+		impactAir.targetLiftDb = 0.f;
+		impactAir.smoothedLiftDb = 0.f;
+		impactAir.ledAmount = 0.f;
+		impactAir.shelfL.reset();
+		impactAir.shelfR.reset();
+	}
 	void resetStereoEnhanceState() {
 		stereoEnhance.mid350Env = 1e-6f;
 		stereoEnhance.midBroadEnv = 1e-6f;
@@ -828,6 +919,7 @@ struct Sil : Module {
 		// Keep spectrum visually responsive; this is UI-only work.
 		specDivider.setDivision(2048);
 		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
+		impactAir.coeffDivider.setDivision(kImpactAirCoeffDivision);
 		removeMud.coeffDivider.setDivision(32);
 		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
 		saturator.updateDivider.setDivision(kSatUpdateDivision);
@@ -839,6 +931,8 @@ struct Sil : Module {
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(APP->engine->getSampleRate());
 		saturator.reset(APP->engine->getSampleRate());
+		impactAir.shelfL.setHighShelf(APP->engine->getSampleRate(), kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
+		impactAir.shelfR.setHighShelf(APP->engine->getSampleRate(), kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
@@ -860,7 +954,10 @@ struct Sil : Module {
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(e.sampleRate);
 		resetRemoveMudState();
+		resetImpactAirState();
 		resetStereoEnhanceState();
+		impactAir.shelfL.setHighShelf(e.sampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
+		impactAir.shelfR.setHighShelf(e.sampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
 		stereoEnhance.midEq.setPeaking(e.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
@@ -907,10 +1004,51 @@ struct Sil : Module {
 		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
 		const float recoveredL = highL + recoveredLowL;
 		const float recoveredR = highR + recoveredLowR;
+		float impactAirL = recoveredL;
+		float impactAirR = recoveredR;
+		float impactAirLed = 0.f;
+		{
+			const float detector = std::fabs(lowMid);
+			const float envCoeff = (detector > impactAir.env) ? impactAirEnvAttackCoeff : impactAirEnvReleaseCoeff;
+			impactAir.env = detector + envCoeff * (impactAir.env - detector);
+			const float slowCoeff =
+				(detector > impactAir.slowEnv) ? impactAirSlowAttackCoeff : impactAirSlowReleaseCoeff;
+			impactAir.slowEnv = detector + slowCoeff * (impactAir.slowEnv - detector);
+
+			const float transientDeltaDb = toDbSafe(impactAir.env / std::max(impactAir.slowEnv, kImpactAirSlowFloorVolts));
+			const float transientGate = softKnee01(
+				transientDeltaDb,
+				kImpactAirTransientThresholdDb,
+				kImpactAirTransientKneeDb
+			);
+			impactAir.targetLiftDb = kImpactAirMaxLiftDb * transientGate;
+			const float gainCoeff =
+				(impactAir.targetLiftDb > impactAir.smoothedLiftDb) ? impactAirGainAttackCoeff : impactAirGainReleaseCoeff;
+			impactAir.smoothedLiftDb =
+				impactAir.targetLiftDb + gainCoeff * (impactAir.smoothedLiftDb - impactAir.targetLiftDb);
+			impactAir.ledAmount = clamp(impactAir.smoothedLiftDb / std::max(kImpactAirMaxLiftDb, 1e-6f), 0.f, 1.f);
+			if (impactAir.coeffDivider.process()) {
+				impactAir.shelfL.setHighShelf(
+					args.sampleRate,
+					kImpactAirShelfHz,
+					kImpactAirShelfQ,
+					impactAir.smoothedLiftDb
+				);
+				impactAir.shelfR.setHighShelf(
+					args.sampleRate,
+					kImpactAirShelfHz,
+					kImpactAirShelfQ,
+					impactAir.smoothedLiftDb
+				);
+			}
+			impactAirL = impactAir.shelfL.process(recoveredL);
+			impactAirR = impactAir.shelfR.process(recoveredR);
+			impactAirLed = impactAir.ledAmount;
+		}
 		float removeMudLed = 0.f;
-		float mudCleanL = recoveredL;
-		float mudCleanR = recoveredR;
-		const float mono = 0.5f * (recoveredL + recoveredR);
+		float mudCleanL = impactAirL;
+		float mudCleanR = impactAirR;
+		const float mono = 0.5f * (impactAirL + impactAirR);
 		removeMud.mudHp.process(mono);
 		const float mudHigh = removeMud.mudHp.highpass();
 		removeMud.mudLp.process(mudHigh);
@@ -946,8 +1084,8 @@ struct Sil : Module {
 			removeMud.peakingL.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
 			removeMud.peakingR.setPeaking(args.sampleRate, kMudCenterHz, kMudQ, removeMud.smoothedCutDb);
 		}
-		mudCleanL = removeMud.peakingL.process(recoveredL);
-		mudCleanR = removeMud.peakingR.process(recoveredR);
+		mudCleanL = removeMud.peakingL.process(impactAirL);
+		mudCleanR = removeMud.peakingR.process(impactAirR);
 		removeMudLed = removeMud.ledAmount;
 
 		const float preMasterL = mudCleanL;
@@ -1122,6 +1260,10 @@ struct Sil : Module {
 		float saturatedR = enhancedR;
 		float saturatorLed = 0.f;
 		{
+			// Expose recent limiter behavior to saturator adaptation.
+			saturator.limiterEngagement = limiterTriggerEma;
+			saturator.limiterRecentGrDb = limiterRecentGrDb;
+
 			const float preSatPeak = std::max(std::fabs(enhancedL), std::fabs(enhancedR));
 			saturator.currentBinPeak = std::max(saturator.currentBinPeak, preSatPeak);
 			saturator.samplesInBin++;
@@ -1209,6 +1351,11 @@ struct Sil : Module {
 			limiterPrevR = saturatedR;
 			limiterPrevValid = true;
 			const float grDb = -20.f * std::log10(std::max(limiterGain, 1e-6f));
+			const float triggeredNow = (grDb >= kLimiterTriggerDb) ? 1.f : 0.f;
+			const float trigCoeff =
+				(triggeredNow > limiterTriggerEma) ? limiterMetricAttackCoeff : limiterMetricReleaseCoeff;
+			limiterTriggerEma = triggeredNow + trigCoeff * (limiterTriggerEma - triggeredNow);
+			limiterRecentGrDb = grDb + limiterMetricGrCoeff * (limiterRecentGrDb - grDb);
 			limiterLed = clamp(grDb / 6.f, 0.f, 1.f);
 		}
 		const float audibleL = masteringEnabled ? outL : inL;
@@ -1220,6 +1367,7 @@ struct Sil : Module {
 		outputs[OUTPUT_R_OUTPUT].setVoltage(audibleR);
 		lights[LIMITER_ACTIVE_LIGHT].setSmoothBrightness(masteringEnabled ? limiterLed : 0.f, args.sampleTime);
 		lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, args.sampleTime);
+		lights[IMPACT_AIR_LIGHT].setSmoothBrightness(masteringEnabled ? impactAirLed : 0.f, args.sampleTime);
 		lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, args.sampleTime);
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
 		lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, args.sampleTime);
@@ -1558,10 +1706,11 @@ struct SpectrumWidget : TransparentWidget {
 
 struct ChainLedDebugReadoutWidget : TransparentWidget {
 	Sil* module = nullptr;
-	static constexpr int kCount = 6;
+	static constexpr int kCount = 7;
 	std::array<int, kCount> lightIds = {
 		Sil::LIMITER_ACTIVE_LIGHT,
 		Sil::LOW_RECOVERY_LIGHT,
+		Sil::IMPACT_AIR_LIGHT,
 		Sil::REMOVE_MUD_LIGHT,
 		Sil::GLUE_COMP_LIGHT,
 		Sil::STEREO_ENHANCE_LIGHT,
@@ -1644,6 +1793,7 @@ struct SilWidget : ModuleWidget {
 		Vec outputRPos(74.f, 118.f);
 		Vec limiterLightPos(48.f, 42.f);
 		Vec lowRecoveryLightPos(48.f, 46.f);
+		Vec impactAirLightPos(48.f, 46.8f);
 		Vec removeMudLightPos(48.f, 47.6f);
 		Vec glueCompLightPos(48.f, 48.4f);
 		Vec stereoEnhanceLightPos(48.f, 49.6f);
@@ -1664,6 +1814,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("OUTPUT_R_OUTPUT", &outputRPos);
 		applyPointOverride("LIMITER_ACTIVE_LIGHT", &limiterLightPos);
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
+		applyPointOverride("IMPACT_AIR_LIGHT", &impactAirLightPos);
 		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
@@ -1683,6 +1834,7 @@ struct SilWidget : ModuleWidget {
 		));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
@@ -1695,6 +1847,7 @@ struct SilWidget : ModuleWidget {
 		chainLedReadout->textPositions = {
 			mm2px(Vec(limiterLightPos.x - textOffsetMm, limiterLightPos.y)),
 			mm2px(Vec(lowRecoveryLightPos.x - textOffsetMm, lowRecoveryLightPos.y)),
+			mm2px(Vec(impactAirLightPos.x - textOffsetMm, impactAirLightPos.y)),
 			mm2px(Vec(removeMudLightPos.x - textOffsetMm, removeMudLightPos.y)),
 			mm2px(Vec(glueCompLightPos.x - textOffsetMm, glueCompLightPos.y)),
 			mm2px(Vec(stereoEnhanceLightPos.x - textOffsetMm, stereoEnhanceLightPos.y)),
