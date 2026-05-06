@@ -794,11 +794,9 @@ struct Sil : Module {
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
-		startMicropeakWorker();
 	}
 
 	~Sil() {
-		stopMicropeakWorker();
 		delete spec.fft;
 	}
 
@@ -811,16 +809,12 @@ struct Sil : Module {
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
 		configureRollingBuffer(e.sampleRate);
-		micropeakCleanupFilter.reset();
 		resetRemoveMudState();
 		resetStereoEnhanceState();
 		stereoEnhance.midEq.setPeaking(e.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
 		saturator.reset(e.sampleRate);
-		micropeak.weakStreak = 0;
-		micropeak.lastSeverityEma.store(0.f, std::memory_order_relaxed);
-		micropeak.detectionConfidence.store(0.f, std::memory_order_relaxed);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -915,24 +909,7 @@ struct Sil : Module {
 
 		const float preMasterL = masteringEnabled ? mudCleanL : inL;
 		const float preMasterR = masteringEnabled ? mudCleanR : inR;
-		if (!repairEnabled) {
-			micropeak.holdSamples.store(0, std::memory_order_relaxed);
-			micropeak.latchedActive.store(false, std::memory_order_relaxed);
-			micropeak.lastEventCount.store(0, std::memory_order_relaxed);
-			micropeak.lastSeverity.store(0.f, std::memory_order_relaxed);
-			micropeak.lastSeverityEma.store(0.f, std::memory_order_relaxed);
-			micropeak.detectionConfidence.store(0.f, std::memory_order_relaxed);
-			micropeak.weakStreak = 0;
-			micropeakCleanupFilter.reset();
-		}
-		const bool micropeakActive = repairEnabled ? consumeMicropeakHoldSample() : false;
-		const sil_micropeak::StereoSample cleaned = repairEnabled
-			? micropeakCleanupFilter.process(
-				  sil_micropeak::StereoSample(preMasterL, preMasterR),
-				  micropeakActive,
-				  kAudioFullScaleV
-			  )
-			: sil_micropeak::StereoSample(preMasterL, preMasterR);
+		const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
 		float gluedL = cleaned.l;
 		float gluedR = cleaned.r;
 		float glueLed = 0.f;
@@ -1077,16 +1054,12 @@ struct Sil : Module {
 			enhancedL = enhancedMid + enhancedSide;
 			enhancedR = enhancedMid - enhancedSide;
 
-			// Meter the equivalent per-channel change rather than raw M/S leg movement,
-			// so one-sided or near-mono material does not read artificially hot.
-			const float leftDeltaDb = std::fabs(
-				0.5f * stereoEnhance.smoothedMidCutDb +
-				0.5f * stereoEnhance.smoothedSideLiftDb
-			);
-			const float rightDeltaDb = std::fabs(
-				0.5f * stereoEnhance.smoothedMidCutDb -
-				0.5f * stereoEnhance.smoothedSideLiftDb
-			);
+			// Diagnostic-style meter: take absolute movement per M/S leg first,
+			// then combine contributions so M/S sign opposition cannot cancel the readout.
+			const float midAbsDb = std::fabs(stereoEnhance.smoothedMidCutDb);
+			const float sideAbsDb = std::fabs(stereoEnhance.smoothedSideLiftDb);
+			const float leftDeltaDb = 0.5f * midAbsDb + 0.5f * sideAbsDb;
+			const float rightDeltaDb = 0.5f * midAbsDb + 0.5f * sideAbsDb;
 			const float ledDeadbandDb = 0.5f;
 			const auto deadbandNorm = [&](float deltaDb) {
 				const float activeDb = std::max(0.f, deltaDb - ledDeadbandDb);
@@ -1221,15 +1194,8 @@ struct Sil : Module {
 		lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, args.sampleTime);
 		lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, args.sampleTime);
 		lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, args.sampleTime);
-		if (repairEnabled) {
-			pushMicropeakSample(preMasterL, preMasterR, args.sampleRate);
-		}
 		pushRollingSample(outL, outR);
-		const float candidateSeverity = micropeak.lastSeverity.load(std::memory_order_relaxed);
-		const int candidateEvents = micropeak.lastEventCount.load(std::memory_order_relaxed);
-		const float candidateLed = clamp(candidateSeverity * 0.6f + float(candidateEvents) * 0.08f, 0.f, 0.35f);
-		const float micropeakLed = repairEnabled ? (micropeakActive ? 1.f : candidateLed) : 0.f;
-		lights[MICROPEAK_LIGHT].setSmoothBrightness(micropeakLed, args.sampleTime);
+		lights[MICROPEAK_LIGHT].setSmoothBrightness(0.f, args.sampleTime);
 		lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, args.sampleTime);
 		lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, args.sampleTime);
 
@@ -1487,31 +1453,6 @@ struct SpectrumWidget : TransparentWidget {
 	}
 };
 
-struct MicropeakDebugReadoutWidget : TransparentWidget {
-	Sil* module = nullptr;
-
-	void draw(const DrawArgs& args) override {
-		if (!module || !APP || !APP->window || !APP->window->uiFont) {
-			return;
-		}
-		if (!module->repairEnabled) {
-			return;
-		}
-		const float confidence = clamp(module->micropeak.detectionConfidence.load(std::memory_order_relaxed), 0.f, 1.f);
-		const int percent = int(std::round(confidence * 100.f));
-		char label[64];
-		std::snprintf(label, sizeof(label), "Micropeak Repair: %d%%", percent);
-
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, 10.0f);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
-		nvgText(args.vg, 0.45f, box.size.y * 0.5f + 0.45f, label, nullptr);
-		nvgFillColor(args.vg, nvgRGBA(240, 240, 240, 255));
-		nvgText(args.vg, 0.f, box.size.y * 0.5f, label, nullptr);
-	}
-};
-
 struct ChainLedDebugReadoutWidget : TransparentWidget {
 	Sil* module = nullptr;
 	static constexpr int kCount = 6;
@@ -1604,7 +1545,6 @@ struct SilWidget : ModuleWidget {
 		Vec glueCompLightPos(48.f, 48.4f);
 		Vec stereoEnhanceLightPos(48.f, 49.6f);
 		Vec saturatorLightPos(48.f, 50.4f);
-		Vec micropeakLightPos(48.f, 49.1f);
 		Vec masteringButtonPos(48.f, 53.f);
 		Vec repairButtonPos(48.f, 56.f);
 
@@ -1625,7 +1565,6 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
 		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
-		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 		applyPointOverride("REPAIR_ENABLED_PARAM", &repairButtonPos);
 
@@ -1645,7 +1584,6 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
-		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
 
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
 		chainLedReadout->box.size = box.size;
@@ -1661,11 +1599,6 @@ struct SilWidget : ModuleWidget {
 		};
 		addChild(chainLedReadout);
 
-		MicropeakDebugReadoutWidget* micropeakReadout =
-			createWidget<MicropeakDebugReadoutWidget>(mm2px(micropeakLightPos.plus(Vec(2.8f, 0.f))));
-		micropeakReadout->box.size = mm2px(Vec(28.f, 3.8f));
-		micropeakReadout->module = module;
-		addChild(micropeakReadout);
 	}
 
 	void appendContextMenu(Menu* menu) override {
