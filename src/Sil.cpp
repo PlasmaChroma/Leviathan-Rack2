@@ -192,6 +192,9 @@ struct Sil : Module {
 	int limiterLatencySamples = 1;
 	std::deque<std::pair<int, float>> limiterLookaheadMaxQ;
 	int limiterLookaheadSampleIndex = 0;
+	std::vector<float> bypassDelayL;
+	std::vector<float> bypassDelayR;
+	int bypassDelayWrite = 0;
 	sil_micropeak::CleanupFilter micropeakCleanupFilter;
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
@@ -907,6 +910,9 @@ struct Sil : Module {
 		limiterDelayWrite = 0;
 		limiterLookaheadMaxQ.clear();
 		limiterLookaheadSampleIndex = 0;
+		bypassDelayL.assign(size_t(requestedBufferLength), 0.f);
+		bypassDelayR.assign(size_t(requestedBufferLength), 0.f);
+		bypassDelayWrite = 0;
 		limiterGain = 1.f;
 	}
 
@@ -1155,6 +1161,13 @@ struct Sil : Module {
 		const float inL = inputs[INPUT_L_INPUT].getVoltage();
 		const float inR = inputs[INPUT_R_INPUT].getVoltage();
 		configureLimiterLookahead(args.sampleRate, repairEnabled);
+		const int bypassDelayLen = std::max(1, int(bypassDelayL.size()));
+		const int bypassReadIdx = (bypassDelayWrite + 1) % bypassDelayLen;
+		const float delayedInL = bypassDelayL[size_t(bypassReadIdx)];
+		const float delayedInR = bypassDelayR[size_t(bypassReadIdx)];
+		bypassDelayL[size_t(bypassDelayWrite)] = inL;
+		bypassDelayR[size_t(bypassDelayWrite)] = inR;
+		bypassDelayWrite = bypassReadIdx;
 
 		// Low-band mono recovery below 120 Hz:
 		// preserve coherent bass stereo, progressively collapse risky low side content.
@@ -1668,8 +1681,10 @@ struct Sil : Module {
 			const float limitingActivity = std::sqrt(clamp(limiterDemandDb / 1.5f, 0.f, 1.f));
 			limiterLed = clamp(std::max(0.25f * ceilingProximity, limitingActivity), 0.f, 1.f);
 		}
-		const float audibleL = masteringEnabled ? outL : inL;
-		const float audibleR = masteringEnabled ? outR : inR;
+		const float bypassL = repairEnabled ? delayedInL : inL;
+		const float bypassR = repairEnabled ? delayedInR : inR;
+		const float audibleL = masteringEnabled ? outL : bypassL;
+		const float audibleR = masteringEnabled ? outR : bypassR;
 
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
