@@ -454,6 +454,70 @@ form a wider raised shape rather than an isolated needle.
 
 Practical implementation: reject if either neighbor is still above roughly `50-65%` of center, or if the half-peak width exceeds a tiny sample span. Also reject if both channels show a coherent broadband rise that lasts more than a few samples.
 
+## V1 Micropeak Tuning Pass
+
+The first live buffered detector has proven useful as a correctness baseline, but it is likely too strict for real material. After the ring-buffer chronology fix, earlier visible detections disappeared, which strongly suggests those detections were buffer artifacts rather than real repairs. The next tuning pass should therefore improve sensitivity deliberately, without weakening the broad-transient and clean-HF vetoes.
+
+Current live defaults in `RepairKernel.hpp`:
+
+```text
+min peak              -> 0.52 full-scale
+min neighbor drop     -> 0.10 full-scale
+min peak/neighbor     -> 1.55
+max neighbor share    -> 0.65
+min isolation ratio   -> 3.0
+repair action         -> interpolate center only
+```
+
+Recommended v1 tuning target:
+
+```text
+min peak              -> 0.35 to 0.42 full-scale
+min neighbor drop     -> 0.045 to 0.070 full-scale
+min peak/neighbor     -> 1.30 to 1.40
+max neighbor share    -> 0.68 to 0.72
+min isolation ratio   -> 2.4 to 2.8
+repair action         -> interpolate center only
+```
+
+The safest first profile to try:
+
+```text
+min peak              -> 0.40 full-scale
+min neighbor drop     -> 0.060 full-scale
+min peak/neighbor     -> 1.35
+max neighbor share    -> 0.70
+min isolation ratio   -> 2.6
+```
+
+Rationale:
+
+- Lowering `min peak` matters most because real decoder or generated-audio ticks may be audible well below `0.52 full-scale`.
+- Lowering `min neighbor drop` should make the detector see smaller single-sample discontinuities, especially on already-mastered sources.
+- Lowering `min peak/neighbor` and `min isolation ratio` increases sensitivity, but those should move less aggressively because they protect transients.
+- Raising `max neighbor share` slightly allows more real waveform slope around the defect, but it must stay low enough that wide attacks do not qualify.
+
+Do not add panel controls for these thresholds in v1. Use constants or `CandidateConfig` defaults and tune against the synthetic harness plus real patches.
+
+Test expectations for tuning:
+
+- Invariant tests should remain stable: buffer chronology, per-channel independence, broad-transient veto, and clean HF no-hit behavior.
+- Threshold-edge tests may move with the profile: below-min-peak veto, neighbor-ratio veto, and exact single-spike sensitivity.
+- Add at least one lower-amplitude synthetic spike case before lowering thresholds so the new sensitivity has a visible target.
+- Add at least one sloped-neighbor spike case before raising `max neighbor share`, so increased sensitivity is not only tested on zero-neighbor impulses.
+
+Tuning procedure:
+
+```text
+1. Add or update synthetic tests for the intended new hit class.
+2. Lower one threshold group at a time.
+3. Run sil_repair_spec and test-fast.
+4. Listen with Repair enabled on clean transients and bright HF sweeps.
+5. Keep the profile only if the counter rises on plausible defects without rising on clean material.
+```
+
+For v1, the detector should still prefer missed repairs over false repairs. More sensitivity is useful only if the event shape still looks like a tiny local defect from the real delayed window.
+
 Suggested repair decision:
 
 ```text

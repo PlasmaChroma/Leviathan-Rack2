@@ -7,11 +7,11 @@ namespace sil {
 namespace repair {
 
 struct CandidateConfig {
-	float minPeakFullScale = 0.52f;
-	float minNeighborDropFullScale = 0.10f;
-	float minNeighborRatio = 1.55f;
-	float maxNeighborShare = 0.65f;
-	float minIsolationRatio = 3.0f;
+	float minPeakFullScale = 0.40f;
+	float minNeighborDropFullScale = 0.060f;
+	float minNeighborRatio = 1.35f;
+	float maxNeighborShare = 0.70f;
+	float minIsolationRatio = 2.6f;
 };
 
 struct Window5 {
