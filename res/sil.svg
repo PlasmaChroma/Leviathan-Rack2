@@ -681,6 +681,11 @@
      cy="7632.1143"
      r="70"
      style="fill:#44ff00;fill-opacity:1" /><circle
+     id="MICROPEAK_LIGHT"
+     cx="1170"
+     cy="8507.8857"
+     r="70"
+     style="fill:#44ff00;fill-opacity:1" /><circle
      id="MASTERING_ENABLED_PARAM"
      cx="1740"
      cy="4390.0083"

@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <deque>
 #include <cstdint>
 #include <cstdio>
@@ -195,6 +196,7 @@ struct Sil : Module {
 	float micropeakActivity = 0.f;
 	float micropeakActivityAttackCoeff = 0.f;
 	float micropeakActivityReleaseCoeff = 0.f;
+	std::atomic<uint32_t> micropeakRepairCount {0};
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -1014,6 +1016,7 @@ struct Sil : Module {
 			const bool candidateR = detectCandidate(prev2R, prevR, centerR, nextR, next2R);
 			const bool repairHit = candidateL || candidateR;
 			if (repairHit) {
+				micropeakRepairCount.fetch_add(1u, std::memory_order_relaxed);
 				const float repairedL = 0.5f * (prevL + nextL);
 				const float repairedR = 0.5f * (prevR + nextR);
 				const float depthL = std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f);
@@ -1973,6 +1976,28 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 	}
 };
 
+struct MicropeakRepairCountWidget : TransparentWidget {
+	Sil* module = nullptr;
+	Vec textPosPx;
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 9.0f);
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+
+		const uint32_t count = module->micropeakRepairCount.load(std::memory_order_relaxed);
+		char label[24];
+		std::snprintf(label, sizeof(label), "%u", count);
+		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
+		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
+		nvgText(args.vg, textPosPx.x, textPosPx.y, label, nullptr);
+	}
+};
+
 struct BananutBlack : app::SvgPort {
 	BananutBlack() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
@@ -2032,6 +2057,7 @@ struct SilWidget : ModuleWidget {
 		Vec glueCompLightPos(48.f, 49.2f);
 		Vec stereoEnhanceLightPos(48.f, 50.0f);
 		Vec saturatorLightPos(48.f, 50.8f);
+		Vec micropeakLightPos(48.f, 51.6f);
 		Vec masteringButtonPos(48.f, 53.f);
 		Vec repairButtonPos(48.f, 56.f);
 
@@ -2054,6 +2080,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
 		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
+		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 		applyPointOverride("REPAIR_ENABLED_PARAM", &repairButtonPos);
 
@@ -2075,6 +2102,13 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
+		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
+
+		MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
+		micropeakCount->box.size = box.size;
+		micropeakCount->module = module;
+		micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x - 2.8f, micropeakLightPos.y));
+		addChild(micropeakCount);
 
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
 		chainLedReadout->box.size = box.size;
