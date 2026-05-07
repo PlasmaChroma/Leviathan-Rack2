@@ -1,16 +1,11 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
-#include "SilMicropeak.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <deque>
 #include <cstdint>
 #include <cstdio>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
 
 struct Sil : Module {
 	struct Biquad {
@@ -190,12 +185,16 @@ struct Sil : Module {
 	std::vector<float> limiterDelayR;
 	int limiterDelayWrite = 0;
 	int limiterLatencySamples = 1;
-	std::deque<std::pair<int, float>> limiterLookaheadMaxQ;
-	int limiterLookaheadSampleIndex = 0;
 	std::vector<float> bypassDelayL;
 	std::vector<float> bypassDelayR;
 	int bypassDelayWrite = 0;
-	sil_micropeak::CleanupFilter micropeakCleanupFilter;
+	std::vector<float> repairDelayL;
+	std::vector<float> repairDelayR;
+	int repairDelayWrite = 0;
+	int repairLookaheadSamples = 1;
+	float micropeakActivity = 0.f;
+	float micropeakActivityAttackCoeff = 0.f;
+	float micropeakActivityReleaseCoeff = 0.f;
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -384,24 +383,13 @@ struct Sil : Module {
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
 	static constexpr float kAdaptiveSilenceVolts = 0.0012559432f;
-	static constexpr float kMicropeakHoldSeconds = 2.f;
-	static constexpr float kMicropeakStrongTopUpSeconds = 0.70f;
-	static constexpr float kMicropeakWeakTopUpSeconds = 0.35f;
-	static constexpr float kMicropeakOnHoldFloorSeconds = 1.10f;
-	static constexpr float kMicropeakKeepHoldFloorSeconds = 0.55f;
-	static constexpr float kMicropeakOnSeverity = 0.55f;
-	static constexpr float kMicropeakKeepSeverity = 0.35f;
-	static constexpr float kMicropeakPromoteSeverityEma = 0.36f;
-	static constexpr float kMicropeakKeepSeverityEma = 0.28f;
-	static constexpr int kMicropeakPromoteWeakStreak = 3;
-	static constexpr float kMicropeakScoreWindowSeconds = 1.0f;
-	static constexpr int kMicropeakScoreOnThreshold = 7;
-	static constexpr int kMicropeakScoreKeepThreshold = 4;
-	static constexpr int kMicropeakOnEvents = 2;
-	static constexpr int kMicropeakKeepEvents = 1;
-	static constexpr int kMicropeakChunkSize = 2048;
-	static constexpr float kMicropeakConfidenceAttackSeconds = 0.20f;
-	static constexpr float kMicropeakConfidenceReleaseSeconds = 2.40f;
+	static constexpr float kMicropeakMinPeakFullScale = 0.52f;
+	static constexpr float kMicropeakMinNeighborDropFullScale = 0.10f;
+	static constexpr float kMicropeakMinNeighborRatio = 1.55f;
+	static constexpr float kMicropeakMaxNeighborShare = 0.65f;
+	static constexpr float kMicropeakMinIsolationRatio = 3.0f;
+	static constexpr float kMicropeakActivityAttackSec = 0.015f;
+	static constexpr float kMicropeakActivityReleaseSec = 0.120f;
 	static constexpr float kMudLowHz = 180.f;
 	static constexpr float kMudHighHz = 520.f;
 	static constexpr float kMudCenterHz = 315.f;
@@ -562,28 +550,6 @@ struct Sil : Module {
 		return (x >= 0.f) ? (1.57079632679f - t) : (-1.57079632679f + t);
 	}
 
-	struct MicropeakWorkerState {
-		std::array<float, kMicropeakChunkSize> fillL {};
-		std::array<float, kMicropeakChunkSize> fillR {};
-		int fillPos = 0;
-		std::array<float, kMicropeakChunkSize> pendingL {};
-		std::array<float, kMicropeakChunkSize> pendingR {};
-		float pendingFullScaleVolts = kAudioFullScaleV;
-		float pendingSampleRate = 44100.f;
-		bool pending = false;
-		bool stop = false;
-		std::mutex mutex;
-		std::condition_variable cv;
-		std::thread thread;
-		std::atomic<int> holdSamples {0};
-		std::atomic<int> lastEventCount {0};
-		std::atomic<float> lastSeverity {0.f};
-		std::atomic<float> lastSeverityEma {0.f};
-		std::atomic<float> detectionConfidence {0.f};
-		int weakStreak = 0;
-		std::atomic<bool> latchedActive {false};
-	} micropeak;
-
 	void configureRollingBuffer(float sampleRate) {
 		const int requestedLength = std::max(1, int(std::round(sampleRate * kRollingBufferSeconds)));
 		if (requestedLength == rollingBufferLength) {
@@ -654,196 +620,13 @@ struct Sil : Module {
 		}
 	}
 
-	void startMicropeakWorker() {
-		if (micropeak.thread.joinable()) {
-			return;
+	float wrapRead(const std::vector<float>& buf, int idx) const {
+		if (buf.empty()) {
+			return 0.f;
 		}
-		micropeak.stop = false;
-		micropeak.thread = std::thread([this]() {
-			std::array<float, kMicropeakChunkSize> localL;
-			std::array<float, kMicropeakChunkSize> localR;
-			std::array<int, 128> scoreHistory {};
-			int scoreWrite = 0;
-			int scoreCount = 0;
-			int scoreSum = 0;
-			int scoreWindowSize = 1;
-			while (true) {
-				float fullScale = kAudioFullScaleV;
-				float sampleRate = 44100.f;
-				{
-					std::unique_lock<std::mutex> lock(micropeak.mutex);
-					micropeak.cv.wait(lock, [this]() {
-						return micropeak.stop || micropeak.pending;
-					});
-					if (micropeak.stop) {
-						return;
-					}
-					localL = micropeak.pendingL;
-					localR = micropeak.pendingR;
-					fullScale = micropeak.pendingFullScaleVolts;
-					sampleRate = micropeak.pendingSampleRate;
-					micropeak.pending = false;
-				}
-
-				const sil_micropeak::StereoResult stereoResult =
-					sil_micropeak::analyzeChunkStereo(localL.data(), localR.data(), localL.size(), fullScale);
-				const sil_micropeak::Result& leftResult = stereoResult.left;
-				const sil_micropeak::Result& rightResult = stereoResult.right;
-				micropeak.lastEventCount.store(leftResult.eventCount + rightResult.eventCount, std::memory_order_relaxed);
-				const float prevEma = micropeak.lastSeverityEma.load(std::memory_order_relaxed);
-				const float strongestSeverity = std::max(leftResult.strongestSeverity, rightResult.strongestSeverity);
-				const float severityEma = 0.85f * prevEma + 0.15f * strongestSeverity;
-				micropeak.lastSeverity.store(strongestSeverity, std::memory_order_relaxed);
-				micropeak.lastSeverityEma.store(severityEma, std::memory_order_relaxed);
-				const bool leftDirectOn =
-					leftResult.eventCount >= kMicropeakOnEvents || leftResult.strongestSeverity >= kMicropeakOnSeverity;
-				const bool rightDirectOn =
-					rightResult.eventCount >= kMicropeakOnEvents || rightResult.strongestSeverity >= kMicropeakOnSeverity;
-				const bool directOnHit = leftDirectOn || rightDirectOn;
-					const bool leftKeep =
-						leftResult.eventCount >= kMicropeakKeepEvents || leftResult.strongestSeverity >= kMicropeakKeepSeverity;
-					const bool rightKeep =
-						rightResult.eventCount >= kMicropeakKeepEvents || rightResult.strongestSeverity >= kMicropeakKeepSeverity;
-					const bool keepHit = leftKeep || rightKeep;
-					const int requestedWindow = std::max(
-						1,
-						std::min(
-							int(scoreHistory.size()),
-							int(std::round((kMicropeakScoreWindowSeconds * sampleRate) / float(kMicropeakChunkSize)))
-						)
-					);
-					if (requestedWindow != scoreWindowSize) {
-						scoreWindowSize = requestedWindow;
-						scoreWrite = 0;
-						scoreCount = 0;
-						scoreSum = 0;
-						scoreHistory.fill(0);
-					}
-					int chunkScore = 0;
-					if (directOnHit) {
-						chunkScore += 2;
-					}
-					else if (keepHit) {
-						chunkScore += 1;
-					}
-					if (strongestSeverity >= kMicropeakOnSeverity) {
-						chunkScore += 1;
-					}
-					if (scoreCount == scoreWindowSize) {
-						scoreSum -= scoreHistory[size_t(scoreWrite)];
-					}
-					else {
-						scoreCount++;
-					}
-					scoreHistory[size_t(scoreWrite)] = chunkScore;
-					scoreSum += chunkScore;
-					scoreWrite++;
-					if (scoreWrite >= scoreWindowSize) {
-						scoreWrite = 0;
-					}
-				const bool windowOnHit = scoreSum >= kMicropeakScoreOnThreshold;
-				const bool windowKeepHit = scoreSum >= kMicropeakScoreKeepThreshold;
-				if (keepHit) {
-					micropeak.weakStreak = micropeak.weakStreak + 1;
-				}
-				else {
-					micropeak.weakStreak = std::max(0, micropeak.weakStreak - 1);
-				}
-				const bool promotedOnHit = micropeak.weakStreak >= kMicropeakPromoteWeakStreak &&
-					severityEma >= kMicropeakPromoteSeverityEma;
-				const bool onHit = directOnHit || promotedOnHit || windowOnHit;
-				const bool keepHitEma = keepHit || severityEma >= kMicropeakKeepSeverityEma || windowKeepHit;
-				const float directProgress = std::max(
-					clamp(float(std::max(leftResult.eventCount, rightResult.eventCount)) / float(kMicropeakOnEvents), 0.f, 1.f),
-					clamp(strongestSeverity / kMicropeakOnSeverity, 0.f, 1.f)
-				);
-				const float promotedProgress = std::min(
-					clamp(float(micropeak.weakStreak) / float(std::max(1, kMicropeakPromoteWeakStreak)), 0.f, 1.f),
-					clamp(severityEma / kMicropeakPromoteSeverityEma, 0.f, 1.f)
-				);
-				const float windowProgress = clamp(float(scoreSum) / float(std::max(1, kMicropeakScoreOnThreshold)), 0.f, 1.f);
-				bool latched = micropeak.latchedActive.load(std::memory_order_relaxed);
-				const int maxHold = std::max(1, int(std::round(sampleRate * kMicropeakHoldSeconds)));
-				int hold = std::max(0, micropeak.holdSamples.load(std::memory_order_relaxed));
-
-				if (onHit) {
-					latched = true;
-					const float strongTopUp = directOnHit ? kMicropeakStrongTopUpSeconds : 0.30f;
-					const int add = std::max(1, int(std::round(sampleRate * strongTopUp)));
-					const int holdFloor = std::max(1, int(std::round(sampleRate * kMicropeakOnHoldFloorSeconds)));
-					hold = std::max(hold, holdFloor);
-					hold = std::min(maxHold, hold + add);
-					micropeak.holdSamples.store(hold, std::memory_order_relaxed);
-				}
-				else if (latched && keepHitEma) {
-					const int add = std::max(1, int(std::round(sampleRate * kMicropeakWeakTopUpSeconds)));
-					const int holdFloor = std::max(1, int(std::round(sampleRate * kMicropeakKeepHoldFloorSeconds)));
-					hold = std::max(hold, holdFloor);
-					hold = std::min(maxHold, hold + add);
-					micropeak.holdSamples.store(hold, std::memory_order_relaxed);
-				}
-				else if (latched && !keepHitEma && hold <= 0) {
-					latched = false;
-				}
-
-				micropeak.latchedActive.store(latched, std::memory_order_relaxed);
-				const float targetConfidence = latched ? 1.f : std::max(directProgress, std::max(promotedProgress, windowProgress));
-				const float previousConfidence = micropeak.detectionConfidence.load(std::memory_order_relaxed);
-				const float chunkSeconds = float(kMicropeakChunkSize) / std::max(sampleRate, 1.f);
-				const float attackCoeff = std::exp(-chunkSeconds / std::max(1e-3f, kMicropeakConfidenceAttackSeconds));
-				const float releaseCoeff = std::exp(-chunkSeconds / std::max(1e-3f, kMicropeakConfidenceReleaseSeconds));
-				const float coeff = (targetConfidence >= previousConfidence) ? attackCoeff : releaseCoeff;
-				const float confidence = targetConfidence + coeff * (previousConfidence - targetConfidence);
-				micropeak.detectionConfidence.store(clamp(confidence, 0.f, 1.f), std::memory_order_relaxed);
-			}
-		});
-	}
-
-	void stopMicropeakWorker() {
-		{
-			std::lock_guard<std::mutex> lock(micropeak.mutex);
-			micropeak.stop = true;
-			micropeak.pending = false;
-			micropeak.weakStreak = 0;
-		}
-		micropeak.cv.notify_all();
-		if (micropeak.thread.joinable()) {
-			micropeak.thread.join();
-		}
-	}
-
-	void pushMicropeakSample(float sampleL, float sampleR, float sampleRate) {
-		micropeak.fillL[size_t(micropeak.fillPos)] = sampleL;
-		micropeak.fillR[size_t(micropeak.fillPos)] = sampleR;
-		micropeak.fillPos++;
-		if (micropeak.fillPos < kMicropeakChunkSize) {
-			return;
-		}
-		micropeak.fillPos = 0;
-		{
-			std::unique_lock<std::mutex> lock(micropeak.mutex, std::try_to_lock);
-			if (!lock.owns_lock()) {
-				return;
-			}
-			if (!micropeak.pending) {
-				micropeak.pendingL = micropeak.fillL;
-				micropeak.pendingR = micropeak.fillR;
-				micropeak.pendingFullScaleVolts = kAudioFullScaleV;
-				micropeak.pendingSampleRate = std::max(sampleRate, 1.f);
-				micropeak.pending = true;
-			}
-		}
-		micropeak.cv.notify_one();
-	}
-
-	bool consumeMicropeakHoldSample() {
-		int remaining = micropeak.holdSamples.load(std::memory_order_relaxed);
-		while (remaining > 0) {
-			if (micropeak.holdSamples.compare_exchange_weak(remaining, remaining - 1, std::memory_order_relaxed)) {
-				return true;
-			}
-		}
-		return false;
+		const int len = int(buf.size());
+		const int wrapped = (idx % len + len) % len;
+		return buf[size_t(wrapped)];
 	}
 
 	void updateLowBandCutoff(float sampleRate) {
@@ -890,29 +673,48 @@ struct Sil : Module {
 		limiterMetricAttackCoeff = std::exp(-1.f / (kLimiterMetricAttackSec * sr));
 		limiterMetricReleaseCoeff = std::exp(-1.f / (kLimiterMetricReleaseSec * sr));
 		limiterMetricGrCoeff = std::exp(-1.f / (kLimiterMetricGrSec * sr));
+		micropeakActivityAttackCoeff = std::exp(-1.f / (kMicropeakActivityAttackSec * sr));
+		micropeakActivityReleaseCoeff = std::exp(-1.f / (kMicropeakActivityReleaseSec * sr));
 	}
 
-	void configureLimiterLookahead(float sampleRate, bool repairMode) {
-		int requestedLatency = 1;
+	void configureRepairLatency(float sampleRate, bool repairMode) {
+		int requestedLatency = 0;
 		if (repairMode) {
 			requestedLatency = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
+			requestedLatency = clamp(requestedLatency, 1, kMaxLimiterLookaheadSamples);
 		}
-		requestedLatency = clamp(requestedLatency, 1, kMaxLimiterLookaheadSamples);
-		const int requestedBufferLength = requestedLatency + 1;
-		if (limiterLatencySamples == requestedLatency &&
-		    int(limiterDelayL.size()) == requestedBufferLength &&
-		    int(limiterDelayR.size()) == requestedBufferLength) {
+		const int repairBufferLength = requestedLatency + 1;
+		const int bypassLatency = requestedLatency + 1;
+		const int bypassBufferLength = bypassLatency + 1;
+		if (repairLookaheadSamples == requestedLatency &&
+		    int(repairDelayL.size()) == repairBufferLength &&
+		    int(repairDelayR.size()) == repairBufferLength &&
+		    int(bypassDelayL.size()) == bypassBufferLength &&
+		    int(bypassDelayR.size()) == bypassBufferLength) {
 			return;
 		}
-		limiterLatencySamples = requestedLatency;
-		limiterDelayL.assign(size_t(requestedBufferLength), 0.f);
-		limiterDelayR.assign(size_t(requestedBufferLength), 0.f);
-		limiterDelayWrite = 0;
-		limiterLookaheadMaxQ.clear();
-		limiterLookaheadSampleIndex = 0;
-		bypassDelayL.assign(size_t(requestedBufferLength), 0.f);
-		bypassDelayR.assign(size_t(requestedBufferLength), 0.f);
+		repairLookaheadSamples = requestedLatency;
+		repairDelayL.assign(size_t(repairBufferLength), 0.f);
+		repairDelayR.assign(size_t(repairBufferLength), 0.f);
+		repairDelayWrite = 0;
+		bypassDelayL.assign(size_t(bypassBufferLength), 0.f);
+		bypassDelayR.assign(size_t(bypassBufferLength), 0.f);
 		bypassDelayWrite = 0;
+		micropeakActivity = 0.f;
+	}
+
+	void configureLimiterFastPath() {
+		const int fastLatency = 1;
+		const int delayBufferLength = fastLatency + 1;
+		if (limiterLatencySamples == fastLatency &&
+		    int(limiterDelayL.size()) == delayBufferLength &&
+		    int(limiterDelayR.size()) == delayBufferLength) {
+			return;
+		}
+		limiterLatencySamples = fastLatency;
+		limiterDelayL.assign(size_t(delayBufferLength), 0.f);
+		limiterDelayR.assign(size_t(delayBufferLength), 0.f);
+		limiterDelayWrite = 0;
 		limiterGain = 1.f;
 	}
 
@@ -1119,11 +921,11 @@ struct Sil : Module {
 		midEnhance.liftR.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
-		configureLimiterLookahead(APP->engine->getSampleRate(), repairEnabled);
+		configureLimiterFastPath();
+		configureRepairLatency(APP->engine->getSampleRate(), repairEnabled);
 	}
 
 	~Sil() {
-		stopMicropeakWorker();
 		delete spec.fft;
 	}
 
@@ -1151,7 +953,8 @@ struct Sil : Module {
 		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
 		saturator.reset(e.sampleRate);
-		configureLimiterLookahead(e.sampleRate, repairEnabled);
+		configureLimiterFastPath();
+		configureRepairLatency(e.sampleRate, repairEnabled);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1160,7 +963,74 @@ struct Sil : Module {
 
 		const float inL = inputs[INPUT_L_INPUT].getVoltage();
 		const float inR = inputs[INPUT_R_INPUT].getVoltage();
-		configureLimiterLookahead(args.sampleRate, repairEnabled);
+		configureLimiterFastPath();
+		configureRepairLatency(args.sampleRate, repairEnabled);
+
+		float repairInputL = inL;
+		float repairInputR = inR;
+		float repairLedTarget = 0.f;
+		if (repairEnabled) {
+			const int repairLen = std::max(1, int(repairDelayL.size()));
+			const int centerIdx = (repairDelayWrite + 1) % repairLen;
+			repairDelayL[size_t(repairDelayWrite)] = inL;
+			repairDelayR[size_t(repairDelayWrite)] = inR;
+			repairDelayWrite = centerIdx;
+
+			const float prevL = wrapRead(repairDelayL, centerIdx - 1);
+			const float centerL = wrapRead(repairDelayL, centerIdx);
+			const float nextL = wrapRead(repairDelayL, centerIdx + 1);
+			const float prev2L = wrapRead(repairDelayL, centerIdx - 2);
+			const float next2L = wrapRead(repairDelayL, centerIdx + 2);
+			const float prevR = wrapRead(repairDelayR, centerIdx - 1);
+			const float centerR = wrapRead(repairDelayR, centerIdx);
+			const float nextR = wrapRead(repairDelayR, centerIdx + 1);
+			const float prev2R = wrapRead(repairDelayR, centerIdx - 2);
+			const float next2R = wrapRead(repairDelayR, centerIdx + 2);
+
+			auto detectCandidate = [&](float p2, float p1, float c, float n1, float n2) {
+				const float peak = std::fabs(c);
+				const float near = std::max(std::fabs(p1), std::fabs(n1));
+				const float guard = std::max(std::fabs(p2), std::fabs(n2));
+				const float localMean = 0.25f * (std::fabs(p2) + std::fabs(p1) + std::fabs(n1) + std::fabs(n2));
+				const float minPeak = kMicropeakMinPeakFullScale * kAudioFullScaleV;
+				const float minDrop = kMicropeakMinNeighborDropFullScale * kAudioFullScaleV;
+				if (peak < minPeak) {
+					return false;
+				}
+				if ((peak - near) < minDrop) {
+					return false;
+				}
+				if (peak < near * kMicropeakMinNeighborRatio) {
+					return false;
+				}
+				if (near > peak * kMicropeakMaxNeighborShare || guard > peak * kMicropeakMaxNeighborShare) {
+					return false;
+				}
+				const float isolation = peak / std::max(localMean, 1e-4f);
+				return isolation >= kMicropeakMinIsolationRatio;
+			};
+
+			const bool candidateL = detectCandidate(prev2L, prevL, centerL, nextL, next2L);
+			const bool candidateR = detectCandidate(prev2R, prevR, centerR, nextR, next2R);
+			const bool repairHit = candidateL || candidateR;
+			if (repairHit) {
+				const float repairedL = 0.5f * (prevL + nextL);
+				const float repairedR = 0.5f * (prevR + nextR);
+				const float depthL = std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f);
+				const float depthR = std::fabs(centerR - repairedR) / std::max(std::fabs(centerR), 1e-4f);
+				repairLedTarget = clamp(std::max(depthL, depthR), 0.f, 1.f);
+				repairInputL = repairedL;
+				repairInputR = repairedR;
+			}
+			else {
+				repairInputL = centerL;
+				repairInputR = centerR;
+			}
+		}
+		const float micropeakCoeff =
+			(repairLedTarget > micropeakActivity) ? micropeakActivityAttackCoeff : micropeakActivityReleaseCoeff;
+		micropeakActivity = repairLedTarget + micropeakCoeff * (micropeakActivity - repairLedTarget);
+
 		const int bypassDelayLen = std::max(1, int(bypassDelayL.size()));
 		const int bypassReadIdx = (bypassDelayWrite + 1) % bypassDelayLen;
 		const float delayedInL = bypassDelayL[size_t(bypassReadIdx)];
@@ -1171,18 +1041,18 @@ struct Sil : Module {
 
 		// Low-band mono recovery below 120 Hz:
 		// preserve coherent bass stereo, progressively collapse risky low side content.
-		lowpassL1.process(inL);
+		lowpassL1.process(repairInputL);
 		float lowL = lowpassL1.lowpass();
 		lowpassL2.process(lowL);
 		lowL = lowpassL2.lowpass();
 
-		lowpassR1.process(inR);
+		lowpassR1.process(repairInputR);
 		float lowR = lowpassR1.lowpass();
 		lowpassR2.process(lowR);
 		lowR = lowpassR2.lowpass();
 
-		const float highL = inL - lowL;
-		const float highR = inR - lowR;
+		const float highL = repairInputL - lowL;
+		const float highR = repairInputR - lowR;
 		const float lowMid = 0.5f * (lowL + lowR);
 		const float lowSide = 0.5f * (lowL - lowR);
 
@@ -1353,12 +1223,11 @@ struct Sil : Module {
 			midEnhanceLed = midEnhance.ledAmount;
 		}
 
-		const float preMasterL = midEnhancedL;
-		const float preMasterR = midEnhancedR;
-		const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
-		pushRollingSample(cleaned.l, cleaned.r);
-		float gluedL = cleaned.l;
-		float gluedR = cleaned.r;
+		const float cleanedL = midEnhancedL;
+		const float cleanedR = midEnhancedR;
+		pushRollingSample(cleanedL, cleanedR);
+		float gluedL = cleanedL;
+		float gluedR = cleanedR;
 		float glueLed = 0.f;
 		if (glueThresholdUpdateDivider.process()) {
 			const float programDbFs = estimateRollingProgramDbFs();
@@ -1369,7 +1238,7 @@ struct Sil : Module {
 			);
 			glueAdaptiveThresholdDb = targetThresholdDb;
 		}
-		const float glueMono = 0.5f * (cleaned.l + cleaned.r);
+		const float glueMono = 0.5f * (cleanedL + cleanedR);
 		glue.sidechainHp.process(glueMono);
 		const float sidechain = glue.sidechainHp.highpass();
 		const float rmsTarget = sidechain * sidechain;
@@ -1395,8 +1264,8 @@ struct Sil : Module {
 		glue.makeupDb = clamp(glue.gainReductionDb * kGlueMakeupFraction, 0.f, kGlueMaxMakeupDb);
 		const float totalGainDb = -glue.gainReductionDb + glue.makeupDb;
 		const float gain = std::pow(10.f, totalGainDb / 20.f);
-		gluedL = cleaned.l * gain;
-		gluedR = cleaned.r * gain;
+		gluedL = cleanedL * gain;
+		gluedR = cleanedR * gain;
 		glue.ledAmount = clamp(glue.gainReductionDb / kGlueMaxGainReductionDb, 0.f, 1.f);
 		glueLed = glue.ledAmount;
 		float enhancedL = gluedL;
@@ -1618,17 +1487,7 @@ struct Sil : Module {
 		float limiterLed = 0.f;
 		{
 			const float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
-			const int sampleIdx = limiterLookaheadSampleIndex++;
-			while (!limiterLookaheadMaxQ.empty() && limiterLookaheadMaxQ.back().second <= peak) {
-				limiterLookaheadMaxQ.pop_back();
-			}
-			limiterLookaheadMaxQ.emplace_back(sampleIdx, peak);
-			const int lookaheadWindow = limiterLatencySamples + 1;
-			while (!limiterLookaheadMaxQ.empty() &&
-			       (sampleIdx - limiterLookaheadMaxQ.front().first) >= lookaheadWindow) {
-				limiterLookaheadMaxQ.pop_front();
-			}
-			const float detectorPeak = limiterLookaheadMaxQ.empty() ? peak : limiterLookaheadMaxQ.front().second;
+			const float detectorPeak = peak;
 
 			const int delayLen = std::max(1, int(limiterDelayL.size()));
 			const int readIdx = (limiterDelayWrite + 1) % delayLen;
@@ -1700,7 +1559,7 @@ struct Sil : Module {
 			lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, lightDt);
 			lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, lightDt);
 			lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, lightDt);
-			lights[MICROPEAK_LIGHT].setSmoothBrightness(0.f, lightDt);
+			lights[MICROPEAK_LIGHT].setSmoothBrightness(repairEnabled ? micropeakActivity : 0.f, lightDt);
 			lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, lightDt);
 			lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, lightDt);
 		}
