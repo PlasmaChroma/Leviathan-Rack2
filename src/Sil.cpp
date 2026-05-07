@@ -113,9 +113,10 @@ struct Sil : Module {
 		LOW_RECOVERY_LIGHT,
 		IMPACT_AIR_LIGHT,
 		REMOVE_MUD_LIGHT,
+		MID_ENHANCE_LIGHT,
 		GLUE_COMP_LIGHT,
-		SATURATOR_LIGHT,
 		STEREO_ENHANCE_LIGHT,
+		SATURATOR_LIGHT,
 		MICROPEAK_LIGHT,
 		MASTERING_ENABLED_LIGHT,
 		REPAIR_ENABLED_LIGHT,
@@ -221,6 +222,10 @@ struct Sil : Module {
 	float glueReleaseCoeff = 0.f;
 	float glueAdaptiveThresholdDb = -14.f;
 	dsp::ClockDivider glueThresholdUpdateDivider;
+	float midEnhanceEnvAttackCoeff = 0.f;
+	float midEnhanceEnvReleaseCoeff = 0.f;
+	float midEnhanceGainAttackCoeff = 0.f;
+	float midEnhanceGainReleaseCoeff = 0.f;
 	float stereoEnvAttackCoeff = 0.f;
 	float stereoEnvReleaseCoeff = 0.f;
 	float stereoMidGainAttackCoeff = 0.f;
@@ -276,6 +281,24 @@ struct Sil : Module {
 			ledAmount = 0.f;
 		}
 	} glue;
+	struct MidrangeEnhanceState {
+		dsp::RCFilter lowRefHp;
+		dsp::RCFilter lowRefLp;
+		dsp::RCFilter coreHp;
+		dsp::RCFilter coreLp;
+		dsp::RCFilter presenceHp;
+		dsp::RCFilter presenceLp;
+		float lowRefEnv = 1e-6f;
+		float coreEnv = 1e-6f;
+		float presenceEnv = 1e-6f;
+		float targetLiftDb = 0.f;
+		float smoothedLiftDb = 0.f;
+		float activation = 0.f;
+		float ledAmount = 0.f;
+		dsp::ClockDivider coeffDivider;
+		Biquad liftL;
+		Biquad liftR;
+	} midEnhance;
 	struct StereoEnhanceState {
 		dsp::RCFilter mid350Hp;
 		dsp::RCFilter mid350Lp;
@@ -408,6 +431,32 @@ struct Sil : Module {
 	static constexpr float kGlueMaxMakeupDb = 2.0f;
 	static constexpr float kGlueMakeupFraction = 0.75f;
 	static constexpr float kGlueSidechainHpHz = 90.f;
+	static constexpr float kMidEnhanceLowRefLowHz = 140.f;
+	static constexpr float kMidEnhanceLowRefHighHz = 560.f;
+	static constexpr float kMidEnhanceCoreLowHz = 700.f;
+	static constexpr float kMidEnhanceCoreHighHz = 2400.f;
+	static constexpr float kMidEnhancePresenceLowHz = 2600.f;
+	static constexpr float kMidEnhancePresenceHighHz = 6500.f;
+	static constexpr float kMidEnhanceCenterHz = 1450.f;
+	static constexpr float kMidEnhanceQ = 0.72f;
+	static constexpr float kMidEnhanceMaxLiftDb = 0.85f;
+	static constexpr float kMidEnhanceGateDbFs = -50.f;
+	static constexpr float kMidEnhanceGateKneeDb = 12.f;
+	static constexpr float kMidEnhanceDeficitThresholdDb = 1.15f;
+	static constexpr float kMidEnhanceDeficitKneeDb = 4.50f;
+	static constexpr float kMidEnhanceRefBiasDb = 0.75f;
+	static constexpr float kMidEnhanceRemoveMudAssistDb = 0.35f;
+	static constexpr float kMidEnhancePresenceNormDb = 1.75f;
+	static constexpr float kMidEnhancePresenceGuardThresholdDb = 2.50f;
+	static constexpr float kMidEnhancePresenceGuardKneeDb = 5.00f;
+	static constexpr float kMidEnhanceLimiterBackoffStartDb = 0.75f;
+	static constexpr float kMidEnhanceLimiterBackoffKneeDb = 1.25f;
+	static constexpr float kMidEnhanceEnvAttackSec = 0.050f;
+	static constexpr float kMidEnhanceEnvReleaseSec = 0.420f;
+	static constexpr float kMidEnhanceGainAttackSec = 0.350f;
+	static constexpr float kMidEnhanceGainReleaseSec = 1.250f;
+	static constexpr int kMidEnhanceCoeffDivision = 64;
+	static constexpr float kMidEnhanceLedDeadbandDb = 0.08f;
 	static constexpr float kStereoMidCenterHz = 350.f;
 	static constexpr float kStereoMidQ = 7.3f;
 	static constexpr float kStereoMidMaxCutDb = 2.0f;
@@ -810,6 +859,10 @@ struct Sil : Module {
 		glueRmsCoeff = std::exp(-1.f / (0.050f * sr));
 		glueAttackCoeff = std::exp(-1.f / (kGlueAttackSec * sr));
 		glueReleaseCoeff = std::exp(-1.f / (kGlueReleaseSec * sr));
+		midEnhanceEnvAttackCoeff = std::exp(-1.f / (kMidEnhanceEnvAttackSec * sr));
+		midEnhanceEnvReleaseCoeff = std::exp(-1.f / (kMidEnhanceEnvReleaseSec * sr));
+		midEnhanceGainAttackCoeff = std::exp(-1.f / (kMidEnhanceGainAttackSec * sr));
+		midEnhanceGainReleaseCoeff = std::exp(-1.f / (kMidEnhanceGainReleaseSec * sr));
 		stereoEnvAttackCoeff = std::exp(-1.f / (kStereoEnvAttackSec * sr));
 		stereoEnvReleaseCoeff = std::exp(-1.f / (kStereoEnvReleaseSec * sr));
 		stereoMidGainAttackCoeff = std::exp(-1.f / (kStereoMidGainAttackSec * sr));
@@ -911,6 +964,17 @@ struct Sil : Module {
 		stereoEnhance.sideBroadHp.setCutoff(norm(kStereoSideBroadLowHz));
 		stereoEnhance.sideBroadLp.setCutoff(norm(kStereoSideBroadHighHz));
 	}
+	void updateMidEnhanceCutoffs(float sampleRate) {
+		const auto norm = [&](float hz) {
+			return clamp(hz / std::max(sampleRate, 1.f), 1e-5f, 0.49f);
+		};
+		midEnhance.lowRefHp.setCutoff(norm(kMidEnhanceLowRefLowHz));
+		midEnhance.lowRefLp.setCutoff(norm(kMidEnhanceLowRefHighHz));
+		midEnhance.coreHp.setCutoff(norm(kMidEnhanceCoreLowHz));
+		midEnhance.coreLp.setCutoff(norm(kMidEnhanceCoreHighHz));
+		midEnhance.presenceHp.setCutoff(norm(kMidEnhancePresenceLowHz));
+		midEnhance.presenceLp.setCutoff(norm(kMidEnhancePresenceHighHz));
+	}
 
 	void resetRemoveMudState() {
 		removeMud.mudEnv = 1e-6f;
@@ -955,6 +1019,23 @@ struct Sil : Module {
 		stereoEnhance.midEq.reset();
 		stereoEnhance.sideEq.reset();
 	}
+	void resetMidEnhanceState() {
+		midEnhance.lowRefEnv = 1e-6f;
+		midEnhance.coreEnv = 1e-6f;
+		midEnhance.presenceEnv = 1e-6f;
+		midEnhance.targetLiftDb = 0.f;
+		midEnhance.smoothedLiftDb = 0.f;
+		midEnhance.activation = 0.f;
+		midEnhance.ledAmount = 0.f;
+		midEnhance.lowRefHp.reset();
+		midEnhance.lowRefLp.reset();
+		midEnhance.coreHp.reset();
+		midEnhance.coreLp.reset();
+		midEnhance.presenceHp.reset();
+		midEnhance.presenceLp.reset();
+		midEnhance.liftL.reset();
+		midEnhance.liftR.reset();
+	}
 
 	Sil() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -978,11 +1059,13 @@ struct Sil : Module {
 		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
 		impactAir.coeffDivider.setDivision(kImpactAirCoeffDivision);
 		removeMud.coeffDivider.setDivision(32);
+		midEnhance.coeffDivider.setDivision(kMidEnhanceCoeffDivision);
 		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
 		saturator.updateDivider.setDivision(kSatUpdateDivision);
 		updateLowBandCutoff(APP->engine->getSampleRate());
 		updateRemoveMudCutoffs(APP->engine->getSampleRate());
 		updateGlueCutoff(APP->engine->getSampleRate());
+		updateMidEnhanceCutoffs(APP->engine->getSampleRate());
 		updateStereoEnhanceCutoffs(APP->engine->getSampleRate());
 		updateDynamicsCoefficients(APP->engine->getSampleRate());
 		updateSpectrumBinMap(APP->engine->getSampleRate());
@@ -993,6 +1076,8 @@ struct Sil : Module {
 		impactAir.shelfR.setHighShelf(APP->engine->getSampleRate(), kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
 		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
 		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
+		midEnhance.liftL.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
+		midEnhance.liftR.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
 	}
@@ -1008,6 +1093,7 @@ struct Sil : Module {
 		updateLowBandCutoff(e.sampleRate);
 		updateRemoveMudCutoffs(e.sampleRate);
 		updateGlueCutoff(e.sampleRate);
+		updateMidEnhanceCutoffs(e.sampleRate);
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
 		updateSpectrumBinMap(e.sampleRate);
@@ -1015,9 +1101,12 @@ struct Sil : Module {
 		configureRollingBuffer(e.sampleRate);
 		resetRemoveMudState();
 		resetImpactAirState();
+		resetMidEnhanceState();
 		resetStereoEnhanceState();
 		impactAir.shelfL.setHighShelf(e.sampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
 		impactAir.shelfR.setHighShelf(e.sampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
+		midEnhance.liftL.setPeaking(e.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
+		midEnhance.liftR.setPeaking(e.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 		stereoEnhance.midEq.setPeaking(e.sampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
@@ -1148,8 +1237,75 @@ struct Sil : Module {
 		mudCleanR = removeMud.peakingR.process(impactAirR);
 		removeMudLed = removeMud.ledAmount;
 
-		const float preMasterL = mudCleanL;
-		const float preMasterR = mudCleanR;
+		float midEnhancedL = mudCleanL;
+		float midEnhancedR = mudCleanR;
+		float midEnhanceLed = 0.f;
+		{
+			const float monoPostMud = 0.5f * (mudCleanL + mudCleanR);
+			midEnhance.lowRefHp.process(monoPostMud);
+			const float lowRefHigh = midEnhance.lowRefHp.highpass();
+			midEnhance.lowRefLp.process(lowRefHigh);
+			const float lowRefBand = midEnhance.lowRefLp.lowpass();
+			midEnhance.coreHp.process(monoPostMud);
+			const float coreHigh = midEnhance.coreHp.highpass();
+			midEnhance.coreLp.process(coreHigh);
+			const float coreBand = midEnhance.coreLp.lowpass();
+			midEnhance.presenceHp.process(monoPostMud);
+			const float presenceHighBand = midEnhance.presenceHp.highpass();
+			midEnhance.presenceLp.process(presenceHighBand);
+			const float presenceBandMid = midEnhance.presenceLp.lowpass();
+			auto updateMidEnhanceEnv = [&](float& env, float x) {
+				const float absX = std::fabs(x);
+				const float c = (absX > env) ? midEnhanceEnvAttackCoeff : midEnhanceEnvReleaseCoeff;
+				env = absX + c * (env - absX);
+			};
+			updateMidEnhanceEnv(midEnhance.lowRefEnv, lowRefBand);
+			updateMidEnhanceEnv(midEnhance.coreEnv, coreBand);
+			updateMidEnhanceEnv(midEnhance.presenceEnv, presenceBandMid);
+			const float refEnvMid = 0.68f * midEnhance.lowRefEnv + 0.32f * midEnhance.presenceEnv;
+			const float activityEnv = std::max(midEnhance.coreEnv, refEnvMid);
+			const float levelGate = softKnee01(toDbFsSafe(activityEnv), kMidEnhanceGateDbFs, kMidEnhanceGateKneeDb);
+			const float thresholdDb = kMidEnhanceDeficitThresholdDb
+				- kMidEnhanceRemoveMudAssistDb * clamp(removeMud.ledAmount, 0.f, 1.f);
+			const float deficitDb = toDbSafe(refEnvMid / std::max(midEnhance.coreEnv, 1e-7f)) - kMidEnhanceRefBiasDb;
+			const float deficit = softKnee01(deficitDb, thresholdDb, kMidEnhanceDeficitKneeDb);
+			const float presenceRatioDb = toDbSafe(midEnhance.presenceEnv / std::max(midEnhance.coreEnv, 1e-7f))
+				+ kMidEnhancePresenceNormDb;
+			const float presenceGuard = inverseSoftKnee01(
+				presenceRatioDb,
+				kMidEnhancePresenceGuardThresholdDb,
+				kMidEnhancePresenceGuardKneeDb
+			);
+			const float limiterBackoff = inverseSoftKnee01(
+				limiterRecentGrDb,
+				kMidEnhanceLimiterBackoffStartDb,
+				kMidEnhanceLimiterBackoffKneeDb
+			);
+			midEnhance.activation = clamp(levelGate * deficit * presenceGuard * limiterBackoff, 0.f, 1.f);
+			midEnhance.targetLiftDb = kMidEnhanceMaxLiftDb * midEnhance.activation;
+			const float liftCoeff = (midEnhance.targetLiftDb > midEnhance.smoothedLiftDb)
+				? midEnhanceGainAttackCoeff
+				: midEnhanceGainReleaseCoeff;
+			midEnhance.smoothedLiftDb =
+				midEnhance.targetLiftDb + liftCoeff * (midEnhance.smoothedLiftDb - midEnhance.targetLiftDb);
+			if (midEnhance.coeffDivider.process()) {
+				midEnhance.liftL.setPeaking(args.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, midEnhance.smoothedLiftDb);
+				midEnhance.liftR.setPeaking(args.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, midEnhance.smoothedLiftDb);
+			}
+			midEnhancedL = midEnhance.liftL.process(mudCleanL);
+			midEnhancedR = midEnhance.liftR.process(mudCleanR);
+			const float activeDb = std::max(0.f, midEnhance.smoothedLiftDb - kMidEnhanceLedDeadbandDb);
+			const float ledNorm = clamp(
+				activeDb / std::max(kMidEnhanceMaxLiftDb - kMidEnhanceLedDeadbandDb, 1e-6f),
+				0.f,
+				1.f
+			);
+			midEnhance.ledAmount = std::sqrt(ledNorm);
+			midEnhanceLed = midEnhance.ledAmount;
+		}
+
+		const float preMasterL = midEnhancedL;
+		const float preMasterR = midEnhancedR;
 		const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
 		pushRollingSample(cleaned.l, cleaned.r);
 		float gluedL = cleaned.l;
@@ -1455,6 +1611,7 @@ struct Sil : Module {
 			lights[LOW_RECOVERY_LIGHT].setSmoothBrightness(masteringEnabled ? lowRecoveryAmount : 0.f, lightDt);
 			lights[IMPACT_AIR_LIGHT].setSmoothBrightness(masteringEnabled ? impactAirLed : 0.f, lightDt);
 			lights[REMOVE_MUD_LIGHT].setSmoothBrightness(masteringEnabled ? removeMudLed : 0.f, lightDt);
+			lights[MID_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? midEnhanceLed : 0.f, lightDt);
 			lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, lightDt);
 			lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, lightDt);
 			lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, lightDt);
@@ -1794,13 +1951,14 @@ struct SpectrumWidget : TransparentWidget {
 
 struct ChainLedDebugReadoutWidget : TransparentWidget {
 	Sil* module = nullptr;
-	static constexpr int kCount = 7;
+	static constexpr int kCount = 8;
 	static constexpr int kHistBins = 128;
 	std::array<int, kCount> lightIds = {
 		Sil::LIMITER_ACTIVE_LIGHT,
 		Sil::LOW_RECOVERY_LIGHT,
 		Sil::IMPACT_AIR_LIGHT,
 		Sil::REMOVE_MUD_LIGHT,
+		Sil::MID_ENHANCE_LIGHT,
 		Sil::GLUE_COMP_LIGHT,
 		Sil::STEREO_ENHANCE_LIGHT,
 		Sil::SATURATOR_LIGHT
@@ -1926,9 +2084,10 @@ struct SilWidget : ModuleWidget {
 		Vec lowRecoveryLightPos(48.f, 46.f);
 		Vec impactAirLightPos(48.f, 46.8f);
 		Vec removeMudLightPos(48.f, 47.6f);
-		Vec glueCompLightPos(48.f, 48.4f);
-		Vec stereoEnhanceLightPos(48.f, 49.6f);
-		Vec saturatorLightPos(48.f, 50.4f);
+		Vec midEnhanceLightPos(48.f, 48.4f);
+		Vec glueCompLightPos(48.f, 49.2f);
+		Vec stereoEnhanceLightPos(48.f, 50.0f);
+		Vec saturatorLightPos(48.f, 50.8f);
 		Vec masteringButtonPos(48.f, 53.f);
 		Vec repairButtonPos(48.f, 56.f);
 
@@ -1947,6 +2106,7 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("LOW_RECOVERY_LIGHT", &lowRecoveryLightPos);
 		applyPointOverride("IMPACT_AIR_LIGHT", &impactAirLightPos);
 		applyPointOverride("REMOVE_MUD_LIGHT", &removeMudLightPos);
+		applyPointOverride("MID_ENHANCE_LIGHT", &midEnhanceLightPos);
 		applyPointOverride("GLUE_COMP_LIGHT", &glueCompLightPos);
 		applyPointOverride("STEREO_ENHANCE_LIGHT", &stereoEnhanceLightPos);
 		applyPointOverride("SATURATOR_LIGHT", &saturatorLightPos);
@@ -1967,6 +2127,7 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(removeMudLightPos), module, Sil::REMOVE_MUD_LIGHT));
+		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(midEnhanceLightPos), module, Sil::MID_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
@@ -1978,12 +2139,13 @@ struct SilWidget : ModuleWidget {
 		const float textOffsetMm = 2.4f;
 		chainLedReadout->textPositions = {
 			mm2px(Vec(limiterLightPos.x - textOffsetMm, limiterLightPos.y)),
-			mm2px(Vec(lowRecoveryLightPos.x - textOffsetMm, lowRecoveryLightPos.y)),
-			mm2px(Vec(impactAirLightPos.x - textOffsetMm, impactAirLightPos.y)),
-			mm2px(Vec(removeMudLightPos.x - textOffsetMm, removeMudLightPos.y)),
-			mm2px(Vec(glueCompLightPos.x - textOffsetMm, glueCompLightPos.y)),
-			mm2px(Vec(stereoEnhanceLightPos.x - textOffsetMm, stereoEnhanceLightPos.y)),
-			mm2px(Vec(saturatorLightPos.x - textOffsetMm, saturatorLightPos.y))
+				mm2px(Vec(lowRecoveryLightPos.x - textOffsetMm, lowRecoveryLightPos.y)),
+				mm2px(Vec(impactAirLightPos.x - textOffsetMm, impactAirLightPos.y)),
+				mm2px(Vec(removeMudLightPos.x - textOffsetMm, removeMudLightPos.y)),
+				mm2px(Vec(midEnhanceLightPos.x - textOffsetMm, midEnhanceLightPos.y)),
+				mm2px(Vec(glueCompLightPos.x - textOffsetMm, glueCompLightPos.y)),
+				mm2px(Vec(stereoEnhanceLightPos.x - textOffsetMm, stereoEnhanceLightPos.y)),
+				mm2px(Vec(saturatorLightPos.x - textOffsetMm, saturatorLightPos.y))
 		};
 		addChild(chainLedReadout);
 

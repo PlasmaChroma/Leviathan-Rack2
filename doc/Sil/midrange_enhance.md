@@ -1,7 +1,6 @@
 # Sil Midrange Enhancer Implementation Spec
 
-Target: `5.3-codex`  
-Source file: `Sil.cpp` latest uploaded stage  
+Target source: `src/Sil.cpp` current repo state  
 Feature name: **Midrange Enhance** / **MID_ENHANCE_LIGHT**
 
 ## Intent
@@ -32,6 +31,17 @@ Rationale:
 - Remove Mud may carve 180–520 Hz congestion. The midrange enhancer should evaluate the cleaned signal, then restore perceptual center/body only if the post-mud tone has become too recessed.
 - Placing it before Glue lets the glue compressor integrate the restored midrange rather than allowing the enhancer to poke out as a separate EQ move.
 - Placing it before Stereo Enhance prevents confusion with M/S spectral widening and keeps this feature mono-compatible.
+
+## Warm A/B bypass policy
+
+Sil's adaptive mastering stages should keep their detector and adaptive state warm while Mastering is disabled. This gives users a fair A/B comparison: when they turn Mastering back on, they hear what the mastering chain would be doing at that moment, not the startup transient of cold envelopes, empty rolling stats, or neutral adaptive EQ.
+
+For Midrange Enhance:
+
+- Run the detector bands, envelope followers, activation math, gain smoothing, coefficient updates, and L/R peaking biquads regardless of `masteringEnabled`.
+- Keep final audible output dry while `masteringEnabled` is false, using the module's existing final output selection pattern.
+- Gate `MID_ENHANCE_LIGHT` off while `masteringEnabled` is false, matching the other mastering-stage lights.
+- Do not add a parameter, input, output, or serialized state for this stage. The feature only adds internal DSP state and one light.
 
 ## DSP model
 
@@ -116,7 +126,6 @@ struct MidrangeEnhanceState {
     dsp::ClockDivider coeffDivider;
     Biquad liftL;
     Biquad liftR;
-    bool coeffsNeutral = true;
 } midEnhance;
 ```
 
@@ -164,6 +173,8 @@ Tuning notes:
 - `kMidEnhanceRefBiasDb` prevents the stage from treating ordinary spectral slope as a deficit.
 - `kMidEnhanceRemoveMudAssistDb` makes the enhancer slightly more willing to act when Remove Mud is active, without hard-coupling the two stages.
 - `kMidEnhanceLimiterBackoffStartDb` prevents the enhancer from adding energy when the final limiter has recently been working hard.
+- The `refEnv` blend intentionally includes a small presence contribution. If presence-heavy material still triggers lift in practice, reduce or remove the presence contribution from `refEnv` before increasing the presence guard strength.
+- Keep envelope floors at `1e-6f` and avoid allowing detector envelopes to decay to exact zero. This matches the existing denormal-safe style used by Remove Mud and Stereo Enhance.
 
 ## Coefficient/update functions
 
@@ -203,7 +214,6 @@ void resetMidEnhanceState() {
     midEnhance.smoothedLiftDb = 0.f;
     midEnhance.activation = 0.f;
     midEnhance.ledAmount = 0.f;
-    midEnhance.coeffsNeutral = true;
     midEnhance.lowRefHp.reset();
     midEnhance.lowRefLp.reset();
     midEnhance.coreHp.reset();
@@ -232,6 +242,8 @@ resetMidEnhanceState();
 midEnhance.liftL.setPeaking(e.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 midEnhance.liftR.setPeaking(e.sampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 ```
+
+`midEnhance.coeffDivider` only needs to be configured in the constructor. Sample-rate changes should update detector cutoffs, reset state, then initialize `liftL` / `liftR` to 0 dB as shown above.
 
 ## Process block insertion
 
@@ -329,13 +341,12 @@ float midEnhanceLed = 0.f;
             kMidEnhanceQ,
             midEnhance.smoothedLiftDb
         );
-        midEnhance.coeffsNeutral = std::fabs(midEnhance.smoothedLiftDb) < 1e-5f;
     }
 
-    if (!midEnhance.coeffsNeutral) {
-        midEnhancedL = midEnhance.liftL.process(mudCleanL);
-        midEnhancedR = midEnhance.liftR.process(mudCleanR);
-    }
+    // Always process the peaking biquads so their internal state stays coherent
+    // through neutral periods and does not re-enter stale when activation returns.
+    midEnhancedL = midEnhance.liftL.process(mudCleanL);
+    midEnhancedR = midEnhance.liftR.process(mudCleanR);
 
     const float activeDb = std::max(0.f, midEnhance.smoothedLiftDb - kMidEnhanceLedDeadbandDb);
     const float ledNorm = clamp(
@@ -353,6 +364,8 @@ const sil_micropeak::StereoSample cleaned(preMasterL, preMasterR);
 pushRollingSample(cleaned.l, cleaned.r);
 ```
 
+Process note: this block should run even when `masteringEnabled` is false so A/B state remains warm. The final output selection later in `process()` should continue to decide whether the user hears the mastered signal or dry input.
+
 ## Light state and UI wiring
 
 Add a new light ID after Remove Mud and before Glue:
@@ -365,8 +378,8 @@ enum LightId {
     REMOVE_MUD_LIGHT,
     MID_ENHANCE_LIGHT,
     GLUE_COMP_LIGHT,
-    SATURATOR_LIGHT,
     STEREO_ENHANCE_LIGHT,
+    SATURATOR_LIGHT,
     MICROPEAK_LIGHT,
     MASTERING_ENABLED_LIGHT,
     REPAIR_ENABLED_LIGHT,
@@ -379,6 +392,8 @@ Update the light smoothing block:
 ```cpp
 lights[MID_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? midEnhanceLed : 0.f, lightDt);
 ```
+
+`midEnhanceLed` should be initialized before the Midrange Enhance block and remain in scope for the existing `lightDivider` block.
 
 Update `ChainLedDebugReadoutWidget`:
 
@@ -419,6 +434,8 @@ addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(midEnhanceLightPos),
 
 And include it in debug text positions between Remove Mud and Glue.
 
+Fallback spacing note: keep the visible order as Remove Mud -> MID+ -> Glue -> Stereo Enhance -> Saturator. If the current panel art has enough vertical room, prefer preserving the existing light spacing and shifting the lower chain lights down rather than crowding four lights into the old lower stack. The SVG component point should be treated as authoritative once added.
+
 Panel note: add a `MID_ENHANCE_LIGHT` point to `res/sil.svg` in the same components-layer convention as the other chain lights. If the SVG is not updated immediately, the fallback above will still render the light.
 
 ## Efficiency constraints
@@ -428,7 +445,7 @@ The stage should add only:
 - 6 one-pole RC filter processes on mono audio.
 - 3 envelope followers.
 - A small amount of scalar math.
-- 2 peaking biquads only when non-neutral.
+- 2 peaking biquads on L/R every sample, including neutral periods, to keep filter state continuous.
 - Coefficient recomputation once per `64` samples.
 
 Do **not** add an FFT, lookahead buffer, crossover split, extra worker thread, or per-sample coefficient recomputation.
@@ -471,10 +488,10 @@ If profiling still flags the stage, the first optimization is to raise `kMidEnha
 ## Acceptance tests
 
 1. **Mastering off A/B behavior**  
-   With Mastering disabled, the stage should continue updating internal state for coherent A/B recall, but output should remain dry input and the MID_ENHANCE light should be gated off like the other mastering lights.
+   With Mastering disabled, the stage should continue updating detector state, smoothed lift, coefficients, and biquad state for coherent A/B recall. Output should remain dry input and `MID_ENHANCE_LIGHT` should be gated off like the other mastering lights.
 
 2. **No click on activation**  
-   Feed pink noise or a looped mix and ensure the dynamic lift ramps smoothly. No zippering should be audible when coefficients update every 64 samples.
+   Feed pink noise or a looped mix and ensure the dynamic lift ramps smoothly. No zippering should be audible when coefficients update every 64 samples. The peaking biquads should continue processing while neutral so stale filter state cannot reappear on reactivation.
 
 3. **Subtle max effect**  
    Force activation with a synthetic recessed-mid test signal. Verify `smoothedLiftDb <= kMidEnhanceMaxLiftDb` and output does not sound like an obvious EQ preset.
@@ -485,7 +502,13 @@ If profiling still flags the stage, the first optimization is to raise `kMidEnha
 5. **Remove Mud interaction**  
    On mud-heavy content, Remove Mud should activate first. Midrange Enhance may follow gently, but should not simply mirror Remove Mud 1:1.
 
-6. **Debug readout**  
+6. **Source-level detector checks**  
+   Add focused coverage or a debug-only harness for: silence produces no NaNs and no lift; a recessed-core synthetic signal drives `smoothedLiftDb > 0`; a 3–6 kHz dominated signal keeps activation near zero through the presence guard.
+
+7. **Compatibility guard**  
+   Confirm no params, inputs, outputs, or serialized JSON fields are added or reordered. The implementation should add only internal state and `MID_ENHANCE_LIGHT`.
+
+8. **Debug readout**  
    DragonKing debug readout should show 8 chain lights in order and include the new MID_ENHANCE value between REMOVE_MUD and GLUE_COMP.
 
 ## Naming recommendation
