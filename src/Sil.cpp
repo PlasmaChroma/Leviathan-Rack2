@@ -196,6 +196,8 @@ struct Sil : Module {
 	float micropeakActivity = 0.f;
 	float micropeakActivityAttackCoeff = 0.f;
 	float micropeakActivityReleaseCoeff = 0.f;
+	int micropeakActivityHoldSamples = 0;
+	float micropeakActivityHoldLevel = 0.f;
 	std::atomic<uint32_t> micropeakRepairCount {0};
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
@@ -392,6 +394,9 @@ struct Sil : Module {
 	static constexpr float kMicropeakMinIsolationRatio = 3.0f;
 	static constexpr float kMicropeakActivityAttackSec = 0.015f;
 	static constexpr float kMicropeakActivityReleaseSec = 0.120f;
+	static constexpr float kMicropeakActivityHoldSec = 0.120f;
+	static constexpr float kMicropeakActivityHoldBrightness = 0.60f;
+	static constexpr float kMicropeakActivityRepeatBoost = 0.20f;
 	static constexpr float kMudLowHz = 180.f;
 	static constexpr float kMudHighHz = 520.f;
 	static constexpr float kMudCenterHz = 315.f;
@@ -703,6 +708,8 @@ struct Sil : Module {
 		bypassDelayR.assign(size_t(bypassBufferLength), 0.f);
 		bypassDelayWrite = 0;
 		micropeakActivity = 0.f;
+		micropeakActivityHoldSamples = 0;
+		micropeakActivityHoldLevel = 0.f;
 	}
 
 	void configureLimiterFastPath() {
@@ -1017,11 +1024,17 @@ struct Sil : Module {
 			const bool repairHit = candidateL || candidateR;
 			if (repairHit) {
 				micropeakRepairCount.fetch_add(1u, std::memory_order_relaxed);
+				const bool repeatedDuringHold = micropeakActivityHoldSamples > 0;
+				micropeakActivityHoldSamples = std::max(1, int(std::round(args.sampleRate * kMicropeakActivityHoldSec)));
 				const float repairedL = 0.5f * (prevL + nextL);
 				const float repairedR = 0.5f * (prevR + nextR);
 				const float depthL = std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f);
 				const float depthR = std::fabs(centerR - repairedR) / std::max(std::fabs(centerR), 1e-4f);
-				repairLedTarget = clamp(std::max(depthL, depthR), 0.f, 1.f);
+				const float eventLevel = clamp(std::max(std::max(depthL, depthR), kMicropeakActivityHoldBrightness), 0.f, 1.f);
+				micropeakActivityHoldLevel = repeatedDuringHold
+					? clamp(std::max(micropeakActivityHoldLevel, eventLevel) + kMicropeakActivityRepeatBoost, 0.f, 1.f)
+					: eventLevel;
+				repairLedTarget = micropeakActivityHoldLevel;
 				repairInputL = repairedL;
 				repairInputR = repairedR;
 			}
@@ -1029,6 +1042,13 @@ struct Sil : Module {
 				repairInputL = centerL;
 				repairInputR = centerR;
 			}
+		}
+		if (micropeakActivityHoldSamples > 0) {
+			micropeakActivityHoldSamples--;
+			repairLedTarget = std::max(repairLedTarget, micropeakActivityHoldLevel);
+		}
+		else {
+			micropeakActivityHoldLevel = 0.f;
 		}
 		const float micropeakCoeff =
 			(repairLedTarget > micropeakActivity) ? micropeakActivityAttackCoeff : micropeakActivityReleaseCoeff;
