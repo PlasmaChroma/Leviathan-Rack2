@@ -1952,7 +1952,7 @@ struct SpectrumWidget : TransparentWidget {
 struct ChainLedDebugReadoutWidget : TransparentWidget {
 	Sil* module = nullptr;
 	static constexpr int kCount = 8;
-	static constexpr int kHistBins = 128;
+	static constexpr int kHistBins = 160;
 	std::array<int, kCount> lightIds = {
 		Sil::LIMITER_ACTIVE_LIGHT,
 		Sil::LOW_RECOVERY_LIGHT,
@@ -2135,7 +2135,8 @@ struct SilWidget : ModuleWidget {
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
 		chainLedReadout->box.size = box.size;
 		chainLedReadout->module = module;
-		chainLedReadout->histogramStartX = sideSpecLeftX;
+		const float histLeftExtension = 0.125f * box.size.x;
+		chainLedReadout->histogramStartX = std::max(0.f, sideSpecLeftX - histLeftExtension);
 		const float textOffsetMm = 2.4f;
 		chainLedReadout->textPositions = {
 			mm2px(Vec(limiterLightPos.x - textOffsetMm, limiterLightPos.y)),
