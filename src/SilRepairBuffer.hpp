@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RepairKernel.hpp"
+#include "SilRepairKernel.hpp"
 
 #include <algorithm>
 #include <vector>

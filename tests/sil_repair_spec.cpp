@@ -1,5 +1,5 @@
-#include "../src/RepairBuffer.hpp"
-#include "../src/RepairKernel.hpp"
+#include "../src/SilRepairBuffer.hpp"
+#include "../src/SilRepairKernel.hpp"
 
 #include <cmath>
 #include <cstdint>

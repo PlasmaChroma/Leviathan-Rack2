@@ -1,7 +1,7 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
-#include "RepairBuffer.hpp"
-#include "RepairKernel.hpp"
+#include "SilRepairBuffer.hpp"
+#include "SilRepairKernel.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
