@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <deque>
 #include <cstdint>
 #include <cstdio>
 #include <condition_variable>
@@ -185,9 +186,12 @@ struct Sil : Module {
 	dsp::ClockDivider specDivider;
 	dsp::ClockDivider lightDivider;
 	float limiterGain = 1.f;
-	float limiterPrevL = 0.f;
-	float limiterPrevR = 0.f;
-	bool limiterPrevValid = false;
+	std::vector<float> limiterDelayL;
+	std::vector<float> limiterDelayR;
+	int limiterDelayWrite = 0;
+	int limiterLatencySamples = 1;
+	std::deque<std::pair<int, float>> limiterLookaheadMaxQ;
+	int limiterLookaheadSampleIndex = 0;
 	sil_micropeak::CleanupFilter micropeakCleanupFilter;
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
@@ -234,6 +238,8 @@ struct Sil : Module {
 	float stereoSideGainReleaseCoeff = 0.f;
 	float limiterAttackCoeff = 0.f;
 	float limiterReleaseCoeff = 0.f;
+	float limiterRepairAttackCoeff = 0.f;
+	float limiterRepairReleaseCoeff = 0.f;
 	float limiterCeiling = 0.f;
 	float limiterMetricAttackCoeff = 0.f;
 	float limiterMetricReleaseCoeff = 0.f;
@@ -489,6 +495,10 @@ struct Sil : Module {
 	static constexpr float kStereoSideGainReleaseSec = 1.200f;
 	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
+	static constexpr float kRepairLookaheadSeconds = 0.001f;
+	static constexpr int kMaxLimiterLookaheadSamples = 512;
+	static constexpr float kLimiterRepairKneeLeadDb = 0.75f;
+	static constexpr float kLimiterRepairKneeDepthDb = 0.20f;
 	static constexpr float kLimiterMetricAttackSec = 0.020f;
 	static constexpr float kLimiterMetricReleaseSec = 0.750f;
 	static constexpr float kLimiterMetricGrSec = 0.120f;
@@ -871,10 +881,33 @@ struct Sil : Module {
 		stereoSideGainReleaseCoeff = std::exp(-1.f / (kStereoSideGainReleaseSec * sr));
 		limiterAttackCoeff = std::exp(-1.f / (0.0005f * sr));
 		limiterReleaseCoeff = std::exp(-1.f / (0.080f * sr));
+		limiterRepairAttackCoeff = std::exp(-1.f / (0.00015f * sr));
+		limiterRepairReleaseCoeff = std::exp(-1.f / (0.120f * sr));
 		limiterCeiling = kAudioFullScaleV * std::pow(10.f, kLimiterCeilingDb / 20.f);
 		limiterMetricAttackCoeff = std::exp(-1.f / (kLimiterMetricAttackSec * sr));
 		limiterMetricReleaseCoeff = std::exp(-1.f / (kLimiterMetricReleaseSec * sr));
 		limiterMetricGrCoeff = std::exp(-1.f / (kLimiterMetricGrSec * sr));
+	}
+
+	void configureLimiterLookahead(float sampleRate, bool repairMode) {
+		int requestedLatency = 1;
+		if (repairMode) {
+			requestedLatency = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
+		}
+		requestedLatency = clamp(requestedLatency, 1, kMaxLimiterLookaheadSamples);
+		const int requestedBufferLength = requestedLatency + 1;
+		if (limiterLatencySamples == requestedLatency &&
+		    int(limiterDelayL.size()) == requestedBufferLength &&
+		    int(limiterDelayR.size()) == requestedBufferLength) {
+			return;
+		}
+		limiterLatencySamples = requestedLatency;
+		limiterDelayL.assign(size_t(requestedBufferLength), 0.f);
+		limiterDelayR.assign(size_t(requestedBufferLength), 0.f);
+		limiterDelayWrite = 0;
+		limiterLookaheadMaxQ.clear();
+		limiterLookaheadSampleIndex = 0;
+		limiterGain = 1.f;
 	}
 
 	int saturatorPeakToHistIndex(float peak) const {
@@ -1080,6 +1113,7 @@ struct Sil : Module {
 		midEnhance.liftR.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
 		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
 		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
+		configureLimiterLookahead(APP->engine->getSampleRate(), repairEnabled);
 	}
 
 	~Sil() {
@@ -1111,6 +1145,7 @@ struct Sil : Module {
 		stereoEnhance.sideEq.setPeaking(e.sampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		glue.reset();
 		saturator.reset(e.sampleRate);
+		configureLimiterLookahead(e.sampleRate, repairEnabled);
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1119,6 +1154,7 @@ struct Sil : Module {
 
 		const float inL = inputs[INPUT_L_INPUT].getVoltage();
 		const float inR = inputs[INPUT_R_INPUT].getVoltage();
+		configureLimiterLookahead(args.sampleRate, repairEnabled);
 
 		// Low-band mono recovery below 120 Hz:
 		// preserve coherent bass stereo, progressively collapse risky low side content.
@@ -1568,23 +1604,57 @@ struct Sil : Module {
 		float outR = saturatedR;
 		float limiterLed = 0.f;
 		{
-			// One-sample lookahead "true-peak as much as possible":
-			// cleanup emits the delayed center sample, so the current pre-master
-			// sample is available as the next point for limiter detection.
-			float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
-			const float desiredGain = (peak > limiterCeiling && peak > 1e-9f) ? (limiterCeiling / peak) : 1.f;
-			if (desiredGain < limiterGain) {
-				limiterGain = desiredGain;
+			const float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
+			const int sampleIdx = limiterLookaheadSampleIndex++;
+			while (!limiterLookaheadMaxQ.empty() && limiterLookaheadMaxQ.back().second <= peak) {
+				limiterLookaheadMaxQ.pop_back();
+			}
+			limiterLookaheadMaxQ.emplace_back(sampleIdx, peak);
+			const int lookaheadWindow = limiterLatencySamples + 1;
+			while (!limiterLookaheadMaxQ.empty() &&
+			       (sampleIdx - limiterLookaheadMaxQ.front().first) >= lookaheadWindow) {
+				limiterLookaheadMaxQ.pop_front();
+			}
+			const float detectorPeak = limiterLookaheadMaxQ.empty() ? peak : limiterLookaheadMaxQ.front().second;
+
+			const int delayLen = std::max(1, int(limiterDelayL.size()));
+			const int readIdx = (limiterDelayWrite + 1) % delayLen;
+			const float delayedL = limiterDelayL[size_t(readIdx)];
+			const float delayedR = limiterDelayR[size_t(readIdx)];
+			limiterDelayL[size_t(limiterDelayWrite)] = saturatedL;
+			limiterDelayR[size_t(limiterDelayWrite)] = saturatedR;
+			limiterDelayWrite = readIdx;
+
+			float desiredGain = 1.f;
+			if (repairEnabled) {
+				const float kneeStart = limiterCeiling * std::pow(10.f, -kLimiterRepairKneeLeadDb / 20.f);
+				if (detectorPeak > limiterCeiling && detectorPeak > 1e-9f) {
+					desiredGain = limiterCeiling / detectorPeak;
+				}
+				else if (detectorPeak > kneeStart) {
+					const float t = clamp(
+						(detectorPeak - kneeStart) / std::max(limiterCeiling - kneeStart, 1e-9f),
+						0.f,
+						1.f
+					);
+					const float kneeDb = -kLimiterRepairKneeDepthDb * (t * t);
+					desiredGain = std::pow(10.f, kneeDb / 20.f);
+				}
 			}
 			else {
-				limiterGain = desiredGain + limiterReleaseCoeff * (limiterGain - desiredGain);
+				desiredGain = (detectorPeak > limiterCeiling && detectorPeak > 1e-9f) ? (limiterCeiling / detectorPeak) : 1.f;
 			}
-			outL = saturatedL * limiterGain;
-			outR = saturatedR * limiterGain;
-			limiterPrevL = saturatedL;
-			limiterPrevR = saturatedR;
-			limiterPrevValid = true;
-			const float detectorPeakDbTp = toDbFsSafe(peak);
+			if (desiredGain < limiterGain) {
+				const float attackCoeff = repairEnabled ? limiterRepairAttackCoeff : limiterAttackCoeff;
+				limiterGain = desiredGain + attackCoeff * (limiterGain - desiredGain);
+			}
+			else {
+				const float releaseCoeff = repairEnabled ? limiterRepairReleaseCoeff : limiterReleaseCoeff;
+				limiterGain = desiredGain + releaseCoeff * (limiterGain - desiredGain);
+			}
+			outL = delayedL * limiterGain;
+			outR = delayedR * limiterGain;
+			const float detectorPeakDbTp = toDbFsSafe(detectorPeak);
 			const float limiterDemandDb = std::max(0.f, detectorPeakDbTp - kLimiterCeilingDb);
 			const float triggeredNow = (limiterDemandDb >= kLimiterTriggerDb) ? 1.f : 0.f;
 			const float trigCoeff =
