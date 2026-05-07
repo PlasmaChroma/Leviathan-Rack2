@@ -198,7 +198,8 @@ struct Sil : Module {
 	float micropeakActivityReleaseCoeff = 0.f;
 	int micropeakActivityHoldSamples = 0;
 	float micropeakActivityHoldLevel = 0.f;
-	std::atomic<uint32_t> micropeakRepairCount {0};
+	std::atomic<uint32_t> micropeakRepairCountL {0};
+	std::atomic<uint32_t> micropeakRepairCountR {0};
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -397,6 +398,7 @@ struct Sil : Module {
 	static constexpr float kMicropeakActivityHoldSec = 0.120f;
 	static constexpr float kMicropeakActivityHoldBrightness = 0.60f;
 	static constexpr float kMicropeakActivityRepeatBoost = 0.20f;
+	static constexpr int kMicropeakHistorySamples = 2;
 	static constexpr float kMudLowHz = 180.f;
 	static constexpr float kMudHighHz = 520.f;
 	static constexpr float kMudCenterHz = 315.f;
@@ -690,7 +692,8 @@ struct Sil : Module {
 			requestedLatency = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
 			requestedLatency = clamp(requestedLatency, 1, kMaxLimiterLookaheadSamples);
 		}
-		const int repairBufferLength = requestedLatency + 1;
+		const int repairHistorySamples = std::max(requestedLatency, kMicropeakHistorySamples);
+		const int repairBufferLength = requestedLatency + repairHistorySamples + 1;
 		const int bypassLatency = requestedLatency + 1;
 		const int bypassBufferLength = bypassLatency + 1;
 		if (repairLookaheadSamples == requestedLatency &&
@@ -980,10 +983,11 @@ struct Sil : Module {
 		float repairLedTarget = 0.f;
 		if (repairEnabled) {
 			const int repairLen = std::max(1, int(repairDelayL.size()));
-			const int centerIdx = (repairDelayWrite + 1) % repairLen;
 			repairDelayL[size_t(repairDelayWrite)] = inL;
 			repairDelayR[size_t(repairDelayWrite)] = inR;
-			repairDelayWrite = centerIdx;
+
+			const int centerIdx = repairDelayWrite - repairLookaheadSamples;
+			repairDelayWrite = (repairDelayWrite + 1) % repairLen;
 
 			const float prevL = wrapRead(repairDelayL, centerIdx - 1);
 			const float centerL = wrapRead(repairDelayL, centerIdx);
@@ -1023,20 +1027,25 @@ struct Sil : Module {
 			const bool candidateR = detectCandidate(prev2R, prevR, centerR, nextR, next2R);
 			const bool repairHit = candidateL || candidateR;
 			if (repairHit) {
-				micropeakRepairCount.fetch_add(1u, std::memory_order_relaxed);
+				if (candidateL) {
+					micropeakRepairCountL.fetch_add(1u, std::memory_order_relaxed);
+				}
+				if (candidateR) {
+					micropeakRepairCountR.fetch_add(1u, std::memory_order_relaxed);
+				}
 				const bool repeatedDuringHold = micropeakActivityHoldSamples > 0;
 				micropeakActivityHoldSamples = std::max(1, int(std::round(args.sampleRate * kMicropeakActivityHoldSec)));
 				const float repairedL = 0.5f * (prevL + nextL);
 				const float repairedR = 0.5f * (prevR + nextR);
-				const float depthL = std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f);
-				const float depthR = std::fabs(centerR - repairedR) / std::max(std::fabs(centerR), 1e-4f);
+				const float depthL = candidateL ? (std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f)) : 0.f;
+				const float depthR = candidateR ? (std::fabs(centerR - repairedR) / std::max(std::fabs(centerR), 1e-4f)) : 0.f;
 				const float eventLevel = clamp(std::max(std::max(depthL, depthR), kMicropeakActivityHoldBrightness), 0.f, 1.f);
 				micropeakActivityHoldLevel = repeatedDuringHold
 					? clamp(std::max(micropeakActivityHoldLevel, eventLevel) + kMicropeakActivityRepeatBoost, 0.f, 1.f)
 					: eventLevel;
 				repairLedTarget = micropeakActivityHoldLevel;
-				repairInputL = repairedL;
-				repairInputR = repairedR;
+				repairInputL = candidateL ? repairedL : centerL;
+				repairInputR = candidateR ? repairedR : centerR;
 			}
 			else {
 				repairInputL = centerL;
@@ -2006,11 +2015,12 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 		}
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFontSize(args.vg, 9.0f);
-		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
-		const uint32_t count = module->micropeakRepairCount.load(std::memory_order_relaxed);
 		char label[24];
-		std::snprintf(label, sizeof(label), "%u", count);
+		const uint32_t countL = module->micropeakRepairCountL.load(std::memory_order_relaxed);
+		const uint32_t countR = module->micropeakRepairCountR.load(std::memory_order_relaxed);
+		std::snprintf(label, sizeof(label), "L: %u R: %u", countL, countR);
 		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
 		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
@@ -2127,7 +2137,7 @@ struct SilWidget : ModuleWidget {
 		MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
 		micropeakCount->box.size = box.size;
 		micropeakCount->module = module;
-		micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x - 2.8f, micropeakLightPos.y));
+		micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 4.4f, micropeakLightPos.y));
 		addChild(micropeakCount);
 
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
