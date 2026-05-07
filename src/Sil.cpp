@@ -1,5 +1,7 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
+#include "RepairBuffer.hpp"
+#include "RepairKernel.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
@@ -189,9 +191,8 @@ struct Sil : Module {
 	std::vector<float> bypassDelayL;
 	std::vector<float> bypassDelayR;
 	int bypassDelayWrite = 0;
-	std::vector<float> repairDelayL;
-	std::vector<float> repairDelayR;
-	int repairDelayWrite = 0;
+	sil::repair::RepairBuffer repairBuffer;
+	sil::repair::CandidateConfig repairCandidateConfig;
 	int repairLookaheadSamples = 1;
 	float micropeakActivity = 0.f;
 	float micropeakActivityAttackCoeff = 0.f;
@@ -388,11 +389,6 @@ struct Sil : Module {
 	static constexpr float kAudioFullScaleV = 5.f;
 	static constexpr float kRollingBufferSeconds = 10.f;
 	static constexpr float kAdaptiveSilenceVolts = 0.0012559432f;
-	static constexpr float kMicropeakMinPeakFullScale = 0.52f;
-	static constexpr float kMicropeakMinNeighborDropFullScale = 0.10f;
-	static constexpr float kMicropeakMinNeighborRatio = 1.55f;
-	static constexpr float kMicropeakMaxNeighborShare = 0.65f;
-	static constexpr float kMicropeakMinIsolationRatio = 3.0f;
 	static constexpr float kMicropeakActivityAttackSec = 0.015f;
 	static constexpr float kMicropeakActivityReleaseSec = 0.120f;
 	static constexpr float kMicropeakActivityHoldSec = 0.120f;
@@ -629,15 +625,6 @@ struct Sil : Module {
 		}
 	}
 
-	float wrapRead(const std::vector<float>& buf, int idx) const {
-		if (buf.empty()) {
-			return 0.f;
-		}
-		const int len = int(buf.size());
-		const int wrapped = (idx % len + len) % len;
-		return buf[size_t(wrapped)];
-	}
-
 	void updateLowBandCutoff(float sampleRate) {
 		const float cutoffNorm = clamp(kLowBandCutoffHz / sampleRate, 1e-5f, 0.49f);
 		lowpassL1.setCutoff(cutoffNorm);
@@ -692,21 +679,15 @@ struct Sil : Module {
 			requestedLatency = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
 			requestedLatency = clamp(requestedLatency, 1, kMaxLimiterLookaheadSamples);
 		}
-		const int repairHistorySamples = std::max(requestedLatency, kMicropeakHistorySamples);
-		const int repairBufferLength = requestedLatency + repairHistorySamples + 1;
 		const int bypassLatency = requestedLatency + 1;
 		const int bypassBufferLength = bypassLatency + 1;
 		if (repairLookaheadSamples == requestedLatency &&
-		    int(repairDelayL.size()) == repairBufferLength &&
-		    int(repairDelayR.size()) == repairBufferLength &&
 		    int(bypassDelayL.size()) == bypassBufferLength &&
 		    int(bypassDelayR.size()) == bypassBufferLength) {
 			return;
 		}
 		repairLookaheadSamples = requestedLatency;
-		repairDelayL.assign(size_t(repairBufferLength), 0.f);
-		repairDelayR.assign(size_t(repairBufferLength), 0.f);
-		repairDelayWrite = 0;
+		repairBuffer.configure(repairLookaheadSamples, kMicropeakHistorySamples);
 		bypassDelayL.assign(size_t(bypassBufferLength), 0.f);
 		bypassDelayR.assign(size_t(bypassBufferLength), 0.f);
 		bypassDelayWrite = 0;
@@ -982,49 +963,12 @@ struct Sil : Module {
 		float repairInputR = inR;
 		float repairLedTarget = 0.f;
 		if (repairEnabled) {
-			const int repairLen = std::max(1, int(repairDelayL.size()));
-			repairDelayL[size_t(repairDelayWrite)] = inL;
-			repairDelayR[size_t(repairDelayWrite)] = inR;
-
-			const int centerIdx = repairDelayWrite - repairLookaheadSamples;
-			repairDelayWrite = (repairDelayWrite + 1) % repairLen;
-
-			const float prevL = wrapRead(repairDelayL, centerIdx - 1);
-			const float centerL = wrapRead(repairDelayL, centerIdx);
-			const float nextL = wrapRead(repairDelayL, centerIdx + 1);
-			const float prev2L = wrapRead(repairDelayL, centerIdx - 2);
-			const float next2L = wrapRead(repairDelayL, centerIdx + 2);
-			const float prevR = wrapRead(repairDelayR, centerIdx - 1);
-			const float centerR = wrapRead(repairDelayR, centerIdx);
-			const float nextR = wrapRead(repairDelayR, centerIdx + 1);
-			const float prev2R = wrapRead(repairDelayR, centerIdx - 2);
-			const float next2R = wrapRead(repairDelayR, centerIdx + 2);
-
-			auto detectCandidate = [&](float p2, float p1, float c, float n1, float n2) {
-				const float peak = std::fabs(c);
-				const float near = std::max(std::fabs(p1), std::fabs(n1));
-				const float guard = std::max(std::fabs(p2), std::fabs(n2));
-				const float localMean = 0.25f * (std::fabs(p2) + std::fabs(p1) + std::fabs(n1) + std::fabs(n2));
-				const float minPeak = kMicropeakMinPeakFullScale * kAudioFullScaleV;
-				const float minDrop = kMicropeakMinNeighborDropFullScale * kAudioFullScaleV;
-				if (peak < minPeak) {
-					return false;
-				}
-				if ((peak - near) < minDrop) {
-					return false;
-				}
-				if (peak < near * kMicropeakMinNeighborRatio) {
-					return false;
-				}
-				if (near > peak * kMicropeakMaxNeighborShare || guard > peak * kMicropeakMaxNeighborShare) {
-					return false;
-				}
-				const float isolation = peak / std::max(localMean, 1e-4f);
-				return isolation >= kMicropeakMinIsolationRatio;
-			};
-
-			const bool candidateL = detectCandidate(prev2L, prevL, centerL, nextL, next2L);
-			const bool candidateR = detectCandidate(prev2R, prevR, centerR, nextR, next2R);
+			repairBuffer.push(inL, inR);
+			const sil::repair::StereoWindows windows = repairBuffer.readCurrentWindows();
+			const bool candidateL = sil::repair::detectCandidate(windows.left, repairCandidateConfig, kAudioFullScaleV);
+			const bool candidateR = sil::repair::detectCandidate(windows.right, repairCandidateConfig, kAudioFullScaleV);
+			const sil::repair::RepairDecision repairL = sil::repair::repairCenterLinear(windows.left, candidateL);
+			const sil::repair::RepairDecision repairR = sil::repair::repairCenterLinear(windows.right, candidateR);
 			const bool repairHit = candidateL || candidateR;
 			if (repairHit) {
 				if (candidateL) {
@@ -1035,21 +979,19 @@ struct Sil : Module {
 				}
 				const bool repeatedDuringHold = micropeakActivityHoldSamples > 0;
 				micropeakActivityHoldSamples = std::max(1, int(std::round(args.sampleRate * kMicropeakActivityHoldSec)));
-				const float repairedL = 0.5f * (prevL + nextL);
-				const float repairedR = 0.5f * (prevR + nextR);
-				const float depthL = candidateL ? (std::fabs(centerL - repairedL) / std::max(std::fabs(centerL), 1e-4f)) : 0.f;
-				const float depthR = candidateR ? (std::fabs(centerR - repairedR) / std::max(std::fabs(centerR), 1e-4f)) : 0.f;
+				const float depthL = repairL.depth;
+				const float depthR = repairR.depth;
 				const float eventLevel = clamp(std::max(std::max(depthL, depthR), kMicropeakActivityHoldBrightness), 0.f, 1.f);
 				micropeakActivityHoldLevel = repeatedDuringHold
 					? clamp(std::max(micropeakActivityHoldLevel, eventLevel) + kMicropeakActivityRepeatBoost, 0.f, 1.f)
 					: eventLevel;
 				repairLedTarget = micropeakActivityHoldLevel;
-				repairInputL = candidateL ? repairedL : centerL;
-				repairInputR = candidateR ? repairedR : centerR;
+				repairInputL = repairL.repaired;
+				repairInputR = repairR.repaired;
 			}
 			else {
-				repairInputL = centerL;
-				repairInputR = centerR;
+				repairInputL = windows.left.center;
+				repairInputR = windows.right.center;
 			}
 		}
 		if (micropeakActivityHoldSamples > 0) {
