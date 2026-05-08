@@ -783,24 +783,6 @@ struct BifurxWidget final : ModuleWidget {
 					}));
 			}
 		}));
-			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
-			submenu->addChild(createCheckMenuItem(
-				"NanoVG", "",
-				[=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; },
-				[=]() { setRenderStateWithHistory(Bifurx::RENDER_NANOVG, false); }));
-			submenu->addChild(createCheckMenuItem(
-				"OpenGL", "",
-				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && !bifurx->useGlShaderRenderer; },
-				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, false); }));
-			submenu->addChild(createCheckMenuItem(
-				"OpenGL SHDR", "",
-				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer; },
-				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
-			}));
-			menu->addChild(createBoolPtrMenuItem("High Resonance Self-Osc", "", &bifurx->highResonanceSelfOscEnabled));
-			menu->addChild(createBoolPtrMenuItem("Soft Limiting", "", &bifurx->softLimitingEnabled));
-			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
-			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
 			menu->addChild(createSubmenuItem("Modulation Quality", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(
 					"Balanced", "",
@@ -824,6 +806,24 @@ struct BifurxWidget final : ModuleWidget {
 						bifurx->controlFastCacheValid = false;
 					}));
 			}));
+			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
+			submenu->addChild(createCheckMenuItem(
+				"NanoVG", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_NANOVG, false); }));
+			submenu->addChild(createCheckMenuItem(
+				"OpenGL", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && !bifurx->useGlShaderRenderer; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, false); }));
+			submenu->addChild(createCheckMenuItem(
+				"OpenGL SHDR", "",
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer; },
+				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
+			}));
+			menu->addChild(createBoolPtrMenuItem("High Resonance Self-Osc", "", &bifurx->highResonanceSelfOscEnabled));
+			menu->addChild(createBoolPtrMenuItem("Soft Limiting", "", &bifurx->softLimitingEnabled));
+			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
+			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
 			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));

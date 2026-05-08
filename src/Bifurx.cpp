@@ -940,8 +940,10 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 	const bool controlDividerTick = controlUpdateDivider.process();
 	const bool forceAudioRateControls = modulationQualityMode == MOD_QUALITY_EXACT;
-	const bool updateFastControls =
-		!controlFastCacheValid || audioRateControlsActive || (forceAudioRateControls && slowCvConnected) || controlDividerTick;
+	const bool updateSlowControls =
+		!controlFastCacheValid || controlDividerTick || (forceAudioRateControls && slowCvConnected);
+	const bool updatePitchControls =
+		!controlFastCacheValid || audioRateControlsActive || updateSlowControls;
 	if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) { previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f); previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f); previewFilterAlphaSampleRate = args.sampleRate; }
 	if (std::fabs(llTelemetryAlphaSampleRate - args.sampleRate) > 0.5f) {
 		llTelemetryAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kLlTelemetryTauSeconds);
@@ -950,7 +952,8 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
 	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct, spanWideMorph = cachedSpanWideMorph;
-	if (updateFastControls) {
+	float spanFreqMulA = cachedSpanFreqMulA, spanFreqMulB = cachedSpanFreqMulB;
+	if (updateSlowControls) {
 		const float resoCvNorm = resoCvConnected ? clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f : 0.f;
 		resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
 		const float balanceCvNorm = balanceCvConnected ? clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f : 0.f;
@@ -961,12 +964,36 @@ void Bifurx::process(const ProcessArgs& args) {
 		spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		spanOct = 8.f * bifurx::shapedSpan(spanNorm);
 		spanWideMorph = cascadeWideMorph(spanNorm);
-		balance = balanceNorm; const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm) * fastExp2(voctCv + fm), sr = std::max(args.sampleRate, 1.f);
-		auto computeFreqs = [&](float* fAOut, float* fBOut) { const float safeCenterHz = clamp(centerHz, kFreqMinHz, 0.46f * sr), maxShiftUp = std::max(0.f, fastLog2((0.46f * sr) / safeCenterHz)), maxShiftDown = std::max(0.f, fastLog2(safeCenterHz / kFreqMinHz)), maxSymShift = std::min(maxShiftUp, maxShiftDown), halfSpanOct = std::min(0.5f * spanOct, maxSymShift); if (fAOut) *fAOut = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, 0.46f * sr); if (fBOut) *fBOut = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, 0.46f * sr); };
-		computeFreqs(&freqA0, &freqB0); const float baseDamping = resoToDamping(resoNorm);
+		spanFreqMulA = fastExp2(-0.5f * spanOct);
+		spanFreqMulB = fastExp2(0.5f * spanOct);
+		balance = balanceNorm;
+		const float baseDamping = resoToDamping(resoNorm);
 		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
-		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedFreqA0 = freqA0; cachedFreqB0 = freqB0; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct; cachedSpanWideMorph = spanWideMorph; cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA); cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB); controlFastCacheValid = true;
+		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct; cachedSpanWideMorph = spanWideMorph; cachedSpanFreqMulA = spanFreqMulA; cachedSpanFreqMulB = spanFreqMulB;
+	}
+	if (updatePitchControls) {
+		const float sr = std::max(args.sampleRate, 1.f);
+		const float maxHz = 0.46f * sr;
+		const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm + voctCv + fm);
+		const float safeCenterHz = clamp(centerHz, kFreqMinHz, maxHz);
+		const float freqAUnclamped = safeCenterHz * spanFreqMulA;
+		const float freqBUnclamped = safeCenterHz * spanFreqMulB;
+		if (freqAUnclamped >= kFreqMinHz && freqBUnclamped <= maxHz) {
+			freqA0 = freqAUnclamped;
+			freqB0 = freqBUnclamped;
+		}
+		else {
+			const float maxShiftUp = std::max(0.f, fastLog2(maxHz / safeCenterHz));
+			const float maxShiftDown = std::max(0.f, fastLog2(safeCenterHz / kFreqMinHz));
+			const float halfSpanOct = std::min(0.5f * spanOct, std::min(maxShiftUp, maxShiftDown));
+			freqA0 = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, maxHz);
+			freqB0 = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, maxHz);
+		}
+		cachedFreqA0 = freqA0; cachedFreqB0 = freqB0;
+		cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA);
+		cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB);
+		controlFastCacheValid = true;
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);

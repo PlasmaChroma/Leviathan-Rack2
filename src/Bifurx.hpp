@@ -657,6 +657,8 @@ struct Bifurx : Module {
 	float cachedSpanNorm = 0.33f;
 	float cachedSpanOct = 0.f;
 	float cachedSpanWideMorph = 0.f;
+	float cachedSpanFreqMulA = 1.f;
+	float cachedSpanFreqMulB = 1.f;
 	SvfCoeffs cachedCoeffsA;
 	SvfCoeffs cachedCoeffsB;
 	SvfCoeffs titoCoeffsA;
