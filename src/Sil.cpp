@@ -969,6 +969,9 @@ struct Sil : Module {
 	}
 
 	void startMicropeakDebugCapture() {
+		if (!isDragonKingDebugEnabled()) {
+			return;
+		}
 		std::lock_guard<std::mutex> lock(micropeakDebugMutex);
 		if (micropeakDebugActive.load(std::memory_order_relaxed)) {
 			return;
@@ -1014,6 +1017,10 @@ struct Sil : Module {
 	}
 
 	void toggleMicropeakDebugCapture() {
+		if (!isDragonKingDebugEnabled()) {
+			stopMicropeakDebugCapture();
+			return;
+		}
 		if (isMicropeakDebugCaptureActive()) {
 			stopMicropeakDebugCapture();
 		}
@@ -1074,6 +1081,9 @@ struct Sil : Module {
 		const MicropeakDebugFeatures& featureL,
 		const MicropeakDebugFeatures& featureR
 	) {
+		if (!isDragonKingDebugEnabled()) {
+			return;
+		}
 		if (!micropeakDebugActive.load(std::memory_order_relaxed)) {
 			return;
 		}
@@ -1185,7 +1195,8 @@ struct Sil : Module {
 			const bool candidateR = sil::repair::detectCandidate(windows.right, repairCandidateConfig, kAudioFullScaleV);
 			const sil::repair::RepairDecision repairL = sil::repair::repairCenterLinear(windows.left, candidateL);
 			const sil::repair::RepairDecision repairR = sil::repair::repairCenterLinear(windows.right, candidateR);
-			const bool debugCaptureActive = micropeakDebugActive.load(std::memory_order_relaxed);
+			const bool debugCaptureActive = isDragonKingDebugEnabled()
+				&& micropeakDebugActive.load(std::memory_order_relaxed);
 			MicropeakDebugFeatures debugFeatureL;
 			MicropeakDebugFeatures debugFeatureR;
 			if (debugCaptureActive) {
