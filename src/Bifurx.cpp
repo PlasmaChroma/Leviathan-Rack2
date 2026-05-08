@@ -758,6 +758,7 @@ Bifurx::Bifurx() {
 	});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
+	outputs[OUT_OUTPUT].setChannels(1);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
 	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(controlUpdateDivision); perfMeasureDivider.setDivision(kPerfMeasureDivision);
 }
@@ -886,16 +887,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfCoreStart, perfPreviewStart, perfAnalysisStart;
 
-	sanitizeCoreState(coreA); sanitizeCoreState(coreB);
-
-	if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxUiModeCount - 1) % kBifurxUiModeCount)); }
-	if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxUiModeCount)); }
-	if (params[MODE_PARAM].getValue() > float(kBifurxUiModeCount - 1)) {
-		params[MODE_PARAM].setValue(float(kBifurxUiModeCount - 1));
-	}
-
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
-	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1);
 	const float tito = clamp(params[TITO_PARAM].getValue(), -1.f, 1.f);
 	const float titoAbs = std::fabs(tito);
 	const bool titoNeutral = titoAbs < 0.02f;
@@ -914,7 +906,6 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
 	const bool audioRateControlsActive = voctConnected || fmConnected;
 	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
-	perfSampleRate.store(args.sampleRate, std::memory_order_relaxed); perfMode.store(mode, std::memory_order_relaxed); perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 	int targetControlDivision = 16;
 	float titoCoeffRelativeThreshold = kTitoCoeffRelativeUpdateThreshold;
 	float titoCoeffAbsoluteThresholdHz = kTitoCoeffAbsoluteUpdateThresholdHz;
@@ -939,6 +930,19 @@ void Bifurx::process(const ProcessArgs& args) {
 		controlUpdateDivider.setDivision(controlUpdateDivision);
 	}
 	const bool controlDividerTick = controlUpdateDivider.process();
+	if (controlDividerTick) {
+		if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxUiModeCount - 1) % kBifurxUiModeCount)); }
+		if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxUiModeCount)); }
+	}
+	if (params[MODE_PARAM].getValue() > float(kBifurxUiModeCount - 1)) {
+		params[MODE_PARAM].setValue(float(kBifurxUiModeCount - 1));
+	}
+	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1);
+	if (controlDividerTick) {
+		perfSampleRate.store(args.sampleRate, std::memory_order_relaxed);
+		perfMode.store(mode, std::memory_order_relaxed);
+		perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
+	}
 	const bool forceAudioRateControls = modulationQualityMode == MOD_QUALITY_EXACT;
 	const bool updateSlowControls =
 		!controlFastCacheValid || controlDividerTick || (forceAudioRateControls && slowCvConnected);
@@ -1003,6 +1007,10 @@ void Bifurx::process(const ProcessArgs& args) {
 		: 0.f;
 	const bool characterModeSupportsSelfOsc = mode < 10;
 	const float selfOscSeed = (oscNorm > 0.f && characterModeSupportsSelfOsc) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
+	if ((highResonanceSelfOscEnabled && oscNorm > 0.f) || controlDividerTick) {
+		sanitizeCoreState(coreA);
+		sanitizeCoreState(coreB);
+	}
 	const float excitation = drivenIn + selfOscSeed;
 	float cutoffA = freqA0, cutoffB = freqB0;
 	const SvfCoeffs* coeffsAForSample = &cachedCoeffsA;
@@ -1052,7 +1060,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabled);
-	outputs[OUT_OUTPUT].setChannels(1); outputs[OUT_OUTPUT].setVoltage(out);
+	outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;
 	if (mode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
 	else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
@@ -1072,7 +1080,9 @@ void Bifurx::process(const ProcessArgs& args) {
 		const float oneMinusAlpha = clamp(1.f - pSmAlpha, 0.f, 1.f);
 		const float effectiveAlpha = 1.f - std::pow(oneMinusAlpha, float(elapsedSamples));
 		if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
-		const float tMAOct = std::fabs(std::log2(std::max(pTFqA, 1.f) / std::max(previewPrevTargetFreqA, 1.f))), tMBOct = std::fabs(std::log2(std::max(pTFqB, 1.f) / std::max(previewPrevTargetFreqB, 1.f))), tMOct = std::max(tMAOct, tMBOct);
+		const float tMAOct = std::fabs(fastLog2(std::max(pTFqA, 1.f)) - fastLog2(std::max(previewPrevTargetFreqA, 1.f)));
+		const float tMBOct = std::fabs(fastLog2(std::max(pTFqB, 1.f)) - fastLog2(std::max(previewPrevTargetFreqB, 1.f)));
+		const float tMOct = std::max(tMAOct, tMBOct);
 		if (tMOct <= kPreviewInstantSettleMotionOctThreshold) previewTargetStillSamples += elapsedSamples; else previewTargetStillSamples = 0;
 		const bool pInstSettle = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
 		previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB;
@@ -1091,10 +1101,12 @@ void Bifurx::process(const ProcessArgs& args) {
 	if (measurePerf) perfAnalysisStart = PerfClock::now();
 	pushAnalysisSample(in, out, modeOut);
 
-	lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f)); lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
-	lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f)); lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
-	lights[TITO_SM_LIGHT].setBrightness(std::max(-tito, 0.f));
-	lights[TITO_XM_LIGHT].setBrightness(std::max(tito, 0.f));
+	if (controlDividerTick) {
+		lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f)); lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
+		lights[SPAN_CV_ATTEN_POS_LIGHT].setBrightness(std::max(spanAtten, 0.f)); lights[SPAN_CV_ATTEN_NEG_LIGHT].setBrightness(std::max(-spanAtten, 0.f));
+		lights[TITO_SM_LIGHT].setBrightness(std::max(-tito, 0.f));
+		lights[TITO_XM_LIGHT].setBrightness(std::max(tito, 0.f));
+	}
 
 	if (measurePerf) {
 		const PerfClock::time_point pE = PerfClock::now();
