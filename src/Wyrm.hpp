@@ -34,7 +34,8 @@ constexpr float kWyrmAudioMinHz = 9.99f;
 constexpr float kWyrmAudioMaxHz = 9999.f;
 constexpr float kWyrmLfoMinHz = 0.01f;
 constexpr float kWyrmLfoMaxHz = 100.f;
-constexpr float kWyrmFoldMakeupGain = 1.0f / std::tanh(1.f);
+// Precomputed 1 / tanh(1) so this remains a valid C++11 constant on libc++.
+constexpr float kWyrmFoldMakeupGain = 1.3130352f;
 constexpr float kWyrmSlitherMaxOffset = 0.42f;
 constexpr float kWyrmRockClearance = 0.055f;
 constexpr float kWyrmRockValueScale = 0.5f;
