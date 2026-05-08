@@ -9,6 +9,11 @@
 #include <deque>
 #include <cstdint>
 #include <cstdio>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <mutex>
+#include <string>
 
 struct Sil : Module {
 	struct Biquad {
@@ -201,6 +206,13 @@ struct Sil : Module {
 	float micropeakActivityHoldLevel = 0.f;
 	std::atomic<uint32_t> micropeakRepairCountL {0};
 	std::atomic<uint32_t> micropeakRepairCountR {0};
+	std::atomic<uint32_t> micropeakNearMissCount {0};
+	mutable std::mutex micropeakDebugMutex;
+	std::ofstream micropeakDebugFile;
+	std::string micropeakDebugPath;
+	uint64_t micropeakDebugSequence = 0;
+	double micropeakDebugStartSec = 0.0;
+	std::atomic<bool> micropeakDebugActive {false};
 	std::vector<float> rollingBufferL;
 	std::vector<float> rollingBufferR;
 	int rollingWriteIndex = 0;
@@ -382,6 +394,23 @@ struct Sil : Module {
 		}
 	} saturator;
 
+	struct MicropeakDebugFeatures {
+		float peak = 0.f;
+		float near = 0.f;
+		float guard = 0.f;
+		float localMean = 0.f;
+		float neighborDrop = 0.f;
+		float isolation = 0.f;
+		float neighborRatio = 0.f;
+		float neighborShare = 0.f;
+		bool passPeak = false;
+		bool passDrop = false;
+		bool passRatio = false;
+		bool passShare = false;
+		bool passIsolation = false;
+		bool localProminent = false;
+	};
+
 	static constexpr float kLowBandCutoffHz = 120.f;
 	static constexpr float kLowBandCorrTauSec = 0.100f;
 	static constexpr float kLowBandSideAttackSec = 0.050f;
@@ -394,6 +423,9 @@ struct Sil : Module {
 	static constexpr float kMicropeakActivityHoldSec = 0.120f;
 	static constexpr float kMicropeakActivityHoldBrightness = 0.60f;
 	static constexpr float kMicropeakActivityRepeatBoost = 0.20f;
+	static constexpr float kMicropeakDebugNearPeakVolts = 1.0f;
+	static constexpr float kMicropeakDebugNearDropVolts = 0.20f;
+	static constexpr float kMicropeakDebugNearIsolationRatio = 1.8f;
 	static constexpr int kMicropeakHistorySamples = 2;
 	static constexpr float kMudLowHz = 180.f;
 	static constexpr float kMudHighHz = 520.f;
@@ -919,7 +951,191 @@ struct Sil : Module {
 	}
 
 	~Sil() {
+		stopMicropeakDebugCapture();
 		delete spec.fft;
+	}
+
+	static std::string userDebugRootPath() {
+		return system::join(asset::user(), "Leviathan/Sil");
+	}
+
+	bool isMicropeakDebugCaptureActive() const {
+		return micropeakDebugActive.load(std::memory_order_relaxed);
+	}
+
+	std::string getMicropeakDebugPath() const {
+		std::lock_guard<std::mutex> lock(micropeakDebugMutex);
+		return micropeakDebugPath;
+	}
+
+	void startMicropeakDebugCapture() {
+		std::lock_guard<std::mutex> lock(micropeakDebugMutex);
+		if (micropeakDebugActive.load(std::memory_order_relaxed)) {
+			return;
+		}
+
+		system::createDirectories(userDebugRootPath());
+		micropeakDebugPath = system::join(userDebugRootPath(), "micropeak_debug_" + std::to_string(std::time(nullptr)) + ".csv");
+		micropeakDebugFile.open(micropeakDebugPath);
+		if (!micropeakDebugFile.is_open()) {
+			WARN("Sil failed to open micropeak debug CSV: %s", micropeakDebugPath.c_str());
+			micropeakDebugPath.clear();
+			return;
+		}
+
+		micropeakDebugFile << std::setprecision(9);
+		micropeakDebugFile
+			<< "sequence,time_sec,event_type,sample_rate,repair_enabled,mastering_enabled,lookahead_samples,"
+			<< "candidate_l,candidate_r,depth_l,depth_r,repaired_l,repaired_r,"
+			<< "l_prev2,l_prev1,l_center,l_next1,l_next2,"
+			<< "r_prev2,r_prev1,r_center,r_next1,r_next2,"
+			<< "l_peak,l_near,l_guard,l_local_mean,l_neighbor_drop,l_isolation,l_neighbor_ratio,l_neighbor_share,"
+			<< "l_pass_peak,l_pass_drop,l_pass_ratio,l_pass_share,l_pass_isolation,l_local_prominent,"
+			<< "r_peak,r_near,r_guard,r_local_mean,r_neighbor_drop,r_isolation,r_neighbor_ratio,r_neighbor_share,"
+			<< "r_pass_peak,r_pass_drop,r_pass_ratio,r_pass_share,r_pass_isolation,r_local_prominent\n";
+		micropeakDebugStartSec = system::getTime();
+		micropeakDebugSequence = 0;
+		micropeakRepairCountL.store(0u, std::memory_order_relaxed);
+		micropeakRepairCountR.store(0u, std::memory_order_relaxed);
+		micropeakNearMissCount.store(0u, std::memory_order_relaxed);
+		micropeakDebugActive.store(true, std::memory_order_relaxed);
+		DEBUG("Sil started micropeak debug CSV: %s", micropeakDebugPath.c_str());
+	}
+
+	void stopMicropeakDebugCapture() {
+		std::lock_guard<std::mutex> lock(micropeakDebugMutex);
+		if (micropeakDebugFile.is_open()) {
+			micropeakDebugFile.close();
+		}
+		if (micropeakDebugActive.load(std::memory_order_relaxed)) {
+			DEBUG("Sil stopped micropeak debug CSV: %s", micropeakDebugPath.c_str());
+		}
+		micropeakDebugActive.store(false, std::memory_order_relaxed);
+	}
+
+	void toggleMicropeakDebugCapture() {
+		if (isMicropeakDebugCaptureActive()) {
+			stopMicropeakDebugCapture();
+		}
+		else {
+			startMicropeakDebugCapture();
+		}
+	}
+
+	MicropeakDebugFeatures measureMicropeakDebugFeatures(const sil::repair::Window5& w) const {
+		MicropeakDebugFeatures f;
+		const float absPrev2 = std::fabs(w.prev2);
+		const float absPrev1 = std::fabs(w.prev1);
+		const float absCenter = std::fabs(w.center);
+		const float absNext1 = std::fabs(w.next1);
+		const float absNext2 = std::fabs(w.next2);
+		const float maxNeighbor = std::max(absPrev1, absNext1);
+		const float maxSurround = std::max(maxNeighbor, std::max(absPrev2, absNext2));
+		const float minPeak = repairCandidateConfig.minPeakFullScale * kAudioFullScaleV;
+		const float minDrop = repairCandidateConfig.minNeighborDropFullScale * kAudioFullScaleV;
+
+		f.peak = absCenter;
+		f.near = maxNeighbor;
+		f.guard = std::max(absPrev2, absNext2);
+		f.localMean = 0.25f * (absPrev2 + absPrev1 + absNext1 + absNext2);
+		f.neighborDrop = absCenter - maxNeighbor;
+		f.isolation = absCenter / std::max(f.localMean, 1e-6f);
+		f.neighborRatio = absCenter / std::max(maxNeighbor, 1e-6f);
+		f.neighborShare = maxSurround / std::max(absCenter, 1e-6f);
+		f.passPeak = f.peak >= minPeak;
+		f.passDrop = f.neighborDrop >= minDrop;
+		f.passRatio = f.peak >= f.near * repairCandidateConfig.minNeighborRatio;
+		f.passShare = f.near <= f.peak * repairCandidateConfig.maxNeighborShare
+			&& f.guard <= f.peak * repairCandidateConfig.maxNeighborShare;
+		f.passIsolation = f.isolation >= repairCandidateConfig.minIsolationRatio;
+		f.localProminent = f.peak > f.near;
+		return f;
+	}
+
+	bool shouldLogMicropeakNearMiss(const MicropeakDebugFeatures& f, bool candidate) const {
+		if (candidate) {
+			return false;
+		}
+		if (!f.localProminent || f.peak < kMicropeakDebugNearPeakVolts) {
+			return false;
+		}
+		return f.neighborDrop >= kMicropeakDebugNearDropVolts
+			|| f.isolation >= kMicropeakDebugNearIsolationRatio;
+	}
+
+	void logMicropeakDebugEvent(
+		const ProcessArgs& args,
+		const char* eventType,
+		const sil::repair::StereoWindows& windows,
+		const sil::repair::RepairDecision& repairL,
+		const sil::repair::RepairDecision& repairR,
+		bool candidateL,
+		bool candidateR,
+		const MicropeakDebugFeatures& featureL,
+		const MicropeakDebugFeatures& featureR
+	) {
+		if (!micropeakDebugActive.load(std::memory_order_relaxed)) {
+			return;
+		}
+
+		std::lock_guard<std::mutex> lock(micropeakDebugMutex);
+		if (!micropeakDebugActive.load(std::memory_order_relaxed) || !micropeakDebugFile.is_open()) {
+			return;
+		}
+
+		const double timeSec = system::getTime() - micropeakDebugStartSec;
+		micropeakDebugFile
+			<< micropeakDebugSequence++ << ','
+			<< timeSec << ','
+			<< eventType << ','
+			<< args.sampleRate << ','
+			<< (repairEnabled ? 1 : 0) << ','
+			<< (masteringEnabled ? 1 : 0) << ','
+			<< repairLookaheadSamples << ','
+			<< (candidateL ? 1 : 0) << ','
+			<< (candidateR ? 1 : 0) << ','
+			<< repairL.depth << ','
+			<< repairR.depth << ','
+			<< repairL.repaired << ','
+			<< repairR.repaired << ','
+			<< windows.left.prev2 << ','
+			<< windows.left.prev1 << ','
+			<< windows.left.center << ','
+			<< windows.left.next1 << ','
+			<< windows.left.next2 << ','
+			<< windows.right.prev2 << ','
+			<< windows.right.prev1 << ','
+			<< windows.right.center << ','
+			<< windows.right.next1 << ','
+			<< windows.right.next2 << ','
+			<< featureL.peak << ','
+			<< featureL.near << ','
+			<< featureL.guard << ','
+			<< featureL.localMean << ','
+			<< featureL.neighborDrop << ','
+			<< featureL.isolation << ','
+			<< featureL.neighborRatio << ','
+			<< featureL.neighborShare << ','
+			<< (featureL.passPeak ? 1 : 0) << ','
+			<< (featureL.passDrop ? 1 : 0) << ','
+			<< (featureL.passRatio ? 1 : 0) << ','
+			<< (featureL.passShare ? 1 : 0) << ','
+			<< (featureL.passIsolation ? 1 : 0) << ','
+			<< (featureL.localProminent ? 1 : 0) << ','
+			<< featureR.peak << ','
+			<< featureR.near << ','
+			<< featureR.guard << ','
+			<< featureR.localMean << ','
+			<< featureR.neighborDrop << ','
+			<< featureR.isolation << ','
+			<< featureR.neighborRatio << ','
+			<< featureR.neighborShare << ','
+			<< (featureR.passPeak ? 1 : 0) << ','
+			<< (featureR.passDrop ? 1 : 0) << ','
+			<< (featureR.passRatio ? 1 : 0) << ','
+			<< (featureR.passShare ? 1 : 0) << ','
+			<< (featureR.passIsolation ? 1 : 0) << ','
+			<< (featureR.localProminent ? 1 : 0) << '\n';
 	}
 
 	void onSampleRateChange(const SampleRateChangeEvent& e) override {
@@ -969,8 +1185,18 @@ struct Sil : Module {
 			const bool candidateR = sil::repair::detectCandidate(windows.right, repairCandidateConfig, kAudioFullScaleV);
 			const sil::repair::RepairDecision repairL = sil::repair::repairCenterLinear(windows.left, candidateL);
 			const sil::repair::RepairDecision repairR = sil::repair::repairCenterLinear(windows.right, candidateR);
+			const bool debugCaptureActive = micropeakDebugActive.load(std::memory_order_relaxed);
+			MicropeakDebugFeatures debugFeatureL;
+			MicropeakDebugFeatures debugFeatureR;
+			if (debugCaptureActive) {
+				debugFeatureL = measureMicropeakDebugFeatures(windows.left);
+				debugFeatureR = measureMicropeakDebugFeatures(windows.right);
+			}
 			const bool repairHit = candidateL || candidateR;
 			if (repairHit) {
+				if (debugCaptureActive) {
+					logMicropeakDebugEvent(args, "repair", windows, repairL, repairR, candidateL, candidateR, debugFeatureL, debugFeatureR);
+				}
 				if (candidateL) {
 					micropeakRepairCountL.fetch_add(1u, std::memory_order_relaxed);
 				}
@@ -990,6 +1216,13 @@ struct Sil : Module {
 				repairInputR = repairR.repaired;
 			}
 			else {
+				const bool logNearMiss = debugCaptureActive
+					&& (shouldLogMicropeakNearMiss(debugFeatureL, candidateL)
+						|| shouldLogMicropeakNearMiss(debugFeatureR, candidateR));
+				if (logNearMiss) {
+					micropeakNearMissCount.fetch_add(1u, std::memory_order_relaxed);
+					logMicropeakDebugEvent(args, "near_miss", windows, repairL, repairR, candidateL, candidateR, debugFeatureL, debugFeatureR);
+				}
 				repairInputL = windows.left.center;
 				repairInputR = windows.right.center;
 			}
@@ -1959,10 +2192,11 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 		nvgFontSize(args.vg, 9.0f);
 		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
-		char label[24];
+		char label[40];
 		const uint32_t countL = module->micropeakRepairCountL.load(std::memory_order_relaxed);
 		const uint32_t countR = module->micropeakRepairCountR.load(std::memory_order_relaxed);
-		std::snprintf(label, sizeof(label), "L: %u R: %u", countL, countR);
+		const uint32_t nearMissCount = module->micropeakNearMissCount.load(std::memory_order_relaxed);
+		std::snprintf(label, sizeof(label), "L: %u R: %u NM: %u", countL, countR, nearMissCount);
 		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
 		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
@@ -2122,6 +2356,21 @@ struct SilWidget : ModuleWidget {
 				addSchemeItem(Sil::SCHEME_FIRE, "Fire (Yellow/Red)");
 			}
 		));
+		if (isDragonKingDebugEnabled()) {
+			const bool debugActive = sil->isMicropeakDebugCaptureActive();
+			menu->addChild(new MenuSeparator());
+			menu->addChild(createMenuLabel("Debug"));
+			menu->addChild(createMenuItem(
+				debugActive ? "Close Sil micropeak CSV" : "Begin Sil micropeak CSV",
+				debugActive ? "Active" : "",
+				[=]() {
+					sil->toggleMicropeakDebugCapture();
+				}
+			));
+			if (debugActive) {
+				menu->addChild(createMenuLabel(sil->getMicropeakDebugPath()));
+			}
+		}
 	}
 };
 
