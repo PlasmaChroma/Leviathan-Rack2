@@ -13,9 +13,6 @@ constexpr float kFreqMinHz = 4.f;
 constexpr float kFreqMaxHz = 28000.f;
 constexpr float kSvfDampingMin = 0.02f;
 constexpr float kSvfDampingMax = 2.2f;
-constexpr int kResampleCicStages = 2;
-constexpr float kResamplePeak1NullRatio = 1.4303f;
-constexpr float kResamplePeak2NullRatio = 2.4590f;
 
 inline float clampf(float x, float lo, float hi) {
   return std::max(lo, std::min(hi, x));
@@ -48,110 +45,6 @@ inline float cascadeWideMorph(float spanNorm) {
 inline float highHighSpanCompGain(float wideMorph) {
   const float x = clamp01((wideMorph - 0.75f) / 0.25f);
   return 1.f + 0.685f * std::pow(x, 1.1f);
-}
-
-inline float resampleFirstNotchHz(float freqAHz, float freqBHz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  return clampf(std::min(freqAHz, freqBHz), 4.f, 0.42f * sr);
-}
-
-inline float resampleEndHz(float freqAHz, float freqBHz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float first = resampleFirstNotchHz(freqAHz, freqBHz, sr);
-  const float rawEnd = clampf(std::max(freqAHz, freqBHz), first * 1.12f, 0.46f * sr);
-  return std::max(rawEnd, first * 1.12f);
-}
-
-inline float resamplingRolloffHz(float firstNotchHz, float endHz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float first = clampf(firstNotchHz, 4.f, 0.42f * sr);
-  const float end = clampf(endHz, first * 1.08f, 0.46f * sr);
-  return clampf(0.9f * end, 4.f, 0.46f * sr);
-}
-
-inline float resamplePeak1HzFromFirstNull(float firstNullHz) {
-  return std::max(firstNullHz, 0.f) * kResamplePeak1NullRatio;
-}
-
-inline float resamplePeak2HzFromFirstNull(float firstNullHz) {
-  return std::max(firstNullHz, 0.f) * kResamplePeak2NullRatio;
-}
-
-inline float resampleFirstNullHzFromPeak2(float peak2Hz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float safePeak2Hz = clampf(peak2Hz, kFreqMinHz, 0.46f * sr);
-  return clampf(safePeak2Hz / kResamplePeak2NullRatio, kFreqMinHz, 0.42f * sr);
-}
-
-inline float resampleRolloffHzFromPeakStandins(float peak1Hz, float peak2StandinHz, float sampleRate, float spanNorm) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float safePeak1Hz = clampf(peak1Hz, kFreqMinHz, 0.46f * sr);
-  const float safePeak2Hz = clampf(peak2StandinHz, safePeak1Hz * 1.08f, 0.46f * sr);
-  const float spanShape = clamp01(spanNorm);
-  return clampf((0.70f + (1.18f - 0.70f) * spanShape) * safePeak2Hz, safePeak1Hz * 1.04f, 0.46f * sr);
-}
-
-inline int resampleCicLengthForFirstNull(float firstNotchHz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float safeFirstNotchHz = clampf(firstNotchHz, kFreqMinHz, 0.46f * sr);
-  return std::max(1, int(std::round(sr / safeFirstNotchHz)));
-}
-
-inline std::complex<float> resampleCicResponse(float hz, float sampleRate, int n, int stages = 1) {
-  const float sr = std::max(sampleRate, 1.f);
-  const int taps = std::max(n, 1);
-  const int stageCount = std::max(stages, 1);
-  const float clampedHz = clampf(hz, 0.f, 0.49f * sr);
-  const float omega = 2.f * kPi * clampedHz / sr;
-  const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
-  std::complex<float> zN(1.f, 0.f);
-  for (int i = 0; i < taps; ++i) {
-    zN *= z1;
-  }
-  const std::complex<float> numerator = 1.f - zN;
-  const std::complex<float> denominator = float(taps) * (1.f - z1);
-
-  std::complex<float> base(1.f, 0.f);
-  if (std::abs(denominator) > 1e-7f) {
-    base = numerator / denominator;
-  }
-
-  std::complex<float> response(1.f, 0.f);
-  for (int i = 0; i < stageCount; ++i) {
-    response *= base;
-  }
-  return response;
-}
-
-inline float resampleOnePoleAlpha(float sampleRate, float cutoff) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float clampedCutoff = clampf(cutoff, kFreqMinHz, 0.46f * sr);
-  return 1.f - std::exp(-2.f * kPi * clampedCutoff / sr);
-}
-
-inline std::complex<float> resampleOnePoleLowpassResponse(float hz, float sampleRate, float cutoff) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float clampedHz = clampf(hz, 0.f, 0.49f * sr);
-  const float alpha = resampleOnePoleAlpha(sr, cutoff);
-  const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -2.f * kPi * clampedHz / sr));
-  return std::complex<float>(alpha, 0.f) / (std::complex<float>(1.f, 0.f) - std::complex<float>(1.f - alpha, 0.f) * z1);
-}
-
-inline float resampleStage1Mix(float resoNorm) {
-  return std::pow(clamp01(resoNorm), 0.72f);
-}
-
-inline float resampleLobeShapeMix(float spanNorm, float resoNorm) {
-  const float spanShape = clamp01(spanNorm);
-  const float resoShape = resampleStage1Mix(resoNorm);
-  return clampf(0.06f + 0.74f * spanShape + 0.20f * resoShape, 0.f, 0.96f);
-}
-
-inline float resamplePeak2HzFromFreqPair(float freqAHz, float freqBHz, float sampleRate) {
-  const float sr = std::max(sampleRate, 1.f);
-  const float safeA = clampf(freqAHz, kFreqMinHz, 0.46f * sr);
-  const float safeB = clampf(freqBHz, kFreqMinHz, 0.46f * sr);
-  return clampf(std::sqrt(safeA * safeB), kFreqMinHz, 0.46f * sr);
 }
 
 struct SvfOutputs {
@@ -323,13 +216,6 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   model.sampleRate = state.sampleRate;
   model.resoNorm = state.resoNorm;
   model.mode = state.mode;
-  if (model.mode == 10) {
-    const float peak2Hz = resamplePeak2HzFromFreqPair(freqA, freqB, state.sampleRate);
-    const float firstNullHz = resampleFirstNullHzFromPeak2(peak2Hz, state.sampleRate);
-    const float maxHz = 0.46f * std::max(state.sampleRate, 1.f);
-    model.markerFreqA = clampf(resamplePeak1HzFromFirstNull(firstNullHz), kFreqMinHz, maxHz);
-    model.markerFreqB = clampf(resamplePeak2HzFromFirstNull(firstNullHz), kFreqMinHz, maxHz);
-  }
 
   const float lowW = signedWeight(state.balance, false);
   const float highW = signedWeight(state.balance, true);
@@ -356,25 +242,6 @@ inline std::complex<float> response(const PreviewModel& model, float hz) {
   const std::complex<float> cascadeHpToLp = lpB * hpA;
   const std::complex<float> cascadeHighToNotch = ntB * hpA;
   const std::complex<float> cascadeHpToHp = hpB * hpA;
-
-  if (model.mode == 10) {
-    const float peak2Hz = std::max(model.markerFreqA, model.markerFreqB);
-    const float firstNotchHz = resampleFirstNullHzFromPeak2(peak2Hz, model.sampleRate);
-    const float peak1Hz = resamplePeak1HzFromFirstNull(firstNotchHz);
-    const float rolloffHz = resampleRolloffHzFromPeakStandins(
-      peak1Hz,
-      resamplePeak2HzFromFirstNull(firstNotchHz),
-      model.sampleRate,
-      model.wideMorph
-    );
-    const int cicLength = resampleCicLengthForFirstNull(firstNotchHz, model.sampleRate);
-    const std::complex<float> cicStage1 = resampleCicResponse(hz, model.sampleRate, cicLength, 1);
-    const std::complex<float> cicStage2 = resampleCicResponse(hz, model.sampleRate, cicLength, 2);
-    const float stage1Mix = resampleLobeShapeMix(model.wideMorph, model.resoNorm);
-    const std::complex<float> cicResponse =
-      cicStage2 + (cicStage1 - cicStage2) * stage1Mix;
-    return cicResponse * resampleOnePoleLowpassResponse(hz, model.sampleRate, rolloffHz);
-  }
 
   return combineModeResponse<std::complex<float>>(
     model.mode,
