@@ -82,8 +82,16 @@ void Wyrm::setFactoryShape(int shapeId) {
 		switch (shapeId) {
 			case SHAPE_SINE: v = std::sin(2.f * float(M_PI) * p); break;
 			case SHAPE_TRIANGLE: {
-				const float x = 2.f * std::fabs(2.f * p - 1.f) - 1.f;
-				v = -x;
+				// Phase-align triangle with sine: zero crossings at p=0.0 and p=0.5.
+				if (p < 0.25f) {
+					v = 4.f * p;
+				}
+				else if (p < 0.75f) {
+					v = 2.f - 4.f * p;
+				}
+				else {
+					v = -4.f + 4.f * p;
+				}
 			} break;
 			case SHAPE_SAW: v = 2.f * p - 1.f; break;
 			case SHAPE_REV_SAW: v = 1.f - 2.f * p; break;
