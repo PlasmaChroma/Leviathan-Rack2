@@ -107,6 +107,24 @@ float logFrequencyAt(float x01, float minHz, float maxHz) {
 	return minHz * std::pow(maxHz / minHz, bifurx::clamp01(x01));
 }
 
+float bifurxFrequencyHzFromParam(float paramValue) {
+	return kFreqMinHz * fastExp2(kFreqLog2Span * clamp(paramValue, 0.f, 1.f));
+}
+
+float bifurxParamFromFrequencyHz(float hz) {
+	const float safeHz = clamp(hz, kFreqMinHz, kFreqMaxHz);
+	return clamp(fastLog2(safeHz / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
+}
+
+float bifurxSpanSemitonesFromParam(float paramValue) {
+	return 96.f * bifurx::shapedSpan(clamp(paramValue, 0.f, 1.f));
+}
+
+float bifurxParamFromSpanSemitones(float spanSemitones) {
+	const float safeSpan = clamp(spanSemitones, 0.f, 96.f);
+	return clamp(std::pow(safeSpan / 96.f, 1.f / 1.45f), 0.f, 1.f);
+}
+
 float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, float topY) {
 	const float clampedDb = clamp(db, minDb, maxDb);
 	const float midY = 0.5f * (bottomY + topY);
@@ -523,7 +541,7 @@ Bifurx::Bifurx() {
 		kBifurxModeLabels[8],
 		kBifurxModeLabels[9]
 	});
-	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
+	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam<BifurxFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam<BifurxSpanQuantity>(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
 	outputs[OUT_OUTPUT].setChannels(1);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
@@ -646,6 +664,37 @@ void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	const float sampleRate = std::max(e.sampleRate, 1.f);
 	llTelemetryAlpha = onePoleAlpha(1.f / sampleRate, kLlTelemetryTauSeconds);
 	llTelemetryAlphaSampleRate = sampleRate;
+}
+
+float BifurxFreqQuantity::getDisplayValue() {
+	return bifurxFrequencyHzFromParam(getValue());
+}
+
+void BifurxFreqQuantity::setDisplayValue(float displayValue) {
+	setImmediateValue(bifurxParamFromFrequencyHz(displayValue));
+}
+
+std::string BifurxFreqQuantity::getDisplayValueString() {
+	const float hz = getDisplayValue();
+	if (hz >= 1000.f) {
+		return string::f("%.2f kHz", hz / 1000.f);
+	}
+	if (hz < 10.f) {
+		return string::f("%.2f Hz", hz);
+	}
+	return string::f("%.1f Hz", hz);
+}
+
+float BifurxSpanQuantity::getDisplayValue() {
+	return bifurxSpanSemitonesFromParam(getValue());
+}
+
+void BifurxSpanQuantity::setDisplayValue(float displayValue) {
+	setImmediateValue(bifurxParamFromSpanSemitones(displayValue));
+}
+
+std::string BifurxSpanQuantity::getDisplayValueString() {
+	return string::f("%.1f st", getDisplayValue());
 }
 
 void Bifurx::process(const ProcessArgs& args) {

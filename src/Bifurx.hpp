@@ -20,6 +20,16 @@ namespace bifurx {
 // Forward declarations
 struct Bifurx;
 struct BifurxSpectrumGLWidget;
+struct BifurxFreqQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
+struct BifurxSpanQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
 
 Widget* createGlSpectrumDisplay(Bifurx* module, math::Rect rectMm);
 
