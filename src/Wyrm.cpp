@@ -333,11 +333,15 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 	std::array<int, kWyrmPointCountMax> sideVote {};
 	std::array<float, kWyrmPointCountMax> local {};
 	std::array<bool, kWyrmPointCountMax> touched {};
+	std::array<bool, kWyrmPointCountMax> rockSegmentHit {};
 	for (int i = 0; i < pointCount; ++i) {
 		local[i] = wavePoints[i].load(std::memory_order_relaxed);
 	}
+	const float pointSpacing = 1.f / float(std::max(pointCount, 1));
+	const float rx = rock.radiusPhase + rockClearancePhase(rock);
+	const float sculptWindow = rx + 2.f * pointSpacing;
 
-	auto addSegmentVote = [&](const WyrmRock& testRock, int i0, int i1) {
+	auto addSegmentVote = [&](const WyrmRock& testRock, int i0, int i1, bool trackCurrentRock) {
 		const float ph0 = (float(i0) + 0.5f) / float(pointCount);
 		const float ph1 = (float(i1) + 0.5f) / float(pointCount);
 		bool preferUpper = false;
@@ -345,25 +349,27 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 			const int vote = preferUpper ? 1 : -1;
 			sideVote[i0] += vote;
 			sideVote[i1] += vote;
+			if (trackCurrentRock) {
+				rockSegmentHit[i0] = true;
+			}
 		}
 	};
 
 	for (int i = 0; i < pointCount; ++i) {
-		addSegmentVote(rock, i, (i + 1) % pointCount);
+		addSegmentVote(rock, i, (i + 1) % pointCount, true);
 	}
 	if (previousRock) {
 		for (int i = 0; i < pointCount; ++i) {
-			addSegmentVote(*previousRock, i, (i + 1) % pointCount);
+			addSegmentVote(*previousRock, i, (i + 1) % pointCount, false);
 		}
 	}
 
 	bool changed = false;
-	const float pointSpacing = 1.f / float(std::max(pointCount, 1));
-	const float rx = rock.radiusPhase + rockClearancePhase(rock);
 	for (int i = 0; i < pointCount; ++i) {
 		const float ph = (float(i) + 0.5f) / float(pointCount);
 		const float dx = std::fabs(rockDx(ph, rock));
-		if (dx > rx + pointSpacing) {
+		const bool nearRock = (dx <= sculptWindow);
+		if (!nearRock && sideVote[i] == 0) {
 			continue;
 		}
 
@@ -381,7 +387,7 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 
 		const float y = local[i];
 		const bool inside = (y > lower && y < upper);
-		if (!inside && sideVote[i] == 0) {
+		if (!inside && sideVote[i] == 0 && !nearRock) {
 			continue;
 		}
 
@@ -396,6 +402,45 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 			touched[i] = true;
 			changed = true;
 		}
+	}
+
+	// Enforce that intersecting segments cannot remain crossing between points.
+	for (int pass = 0; pass < 2; ++pass) {
+		bool passChanged = false;
+		for (int i = 0; i < pointCount; ++i) {
+			if (!rockSegmentHit[i]) {
+				continue;
+			}
+			const int j = (i + 1) % pointCount;
+			const float ph0 = (float(i) + 0.5f) / float(pointCount);
+			const float ph1 = (float(j) + 0.5f) / float(pointCount);
+			bool preferUpper = false;
+			if (!segmentIntersectsRockBounds(rock, ph0, local[i], ph1, local[j], &preferUpper)) {
+				continue;
+			}
+
+			auto projectEndpoint = [&](int idx, float ph, bool preferUp) {
+				float lower = 0.f;
+				float upper = 0.f;
+				if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
+					return;
+				}
+				const float y = local[idx];
+				const float projected = clamp(preferUp ? upper : lower, -1.f, 1.f);
+				if ((preferUp && y < projected) || (!preferUp && y > projected)) {
+					local[idx] = projected;
+					touched[idx] = true;
+					passChanged = true;
+				}
+			};
+
+			projectEndpoint(i, ph0, preferUpper);
+			projectEndpoint(j, ph1, preferUpper);
+		}
+		if (!passChanged) {
+			break;
+		}
+		changed = true;
 	}
 
 	if (changed) {
@@ -461,18 +506,40 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 	if (rockCount <= 0) {
 		return clamp(desiredY, -1.f, 1.f);
 	}
+	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
 	float y = clamp(desiredY, -1.f, 1.f);
 	for (int pass = 0; pass < 3; ++pass) {
 		bool changed = false;
 		for (int i = 0; i < rockCount; ++i) {
 			if (i == liftedRock) continue;
+			const WyrmRock& rock = rocks[i];
+			const float effectiveClearancePhase = (clearancePhase >= 0.f)
+				? clearancePhase
+				: ((clearanceValue > 0.f) ? rockClearancePhase(rock, clearanceValue) : 0.f);
+			const float rx = rock.radiusPhase + std::max(0.f, effectiveClearancePhase);
+			const float dx = rockDx(ph, rock);
+			// Fast phase-window reject before any bounds interpolation/projection work.
+			if (std::fabs(dx) >= rx) {
+				continue;
+			}
+
 			float lower = 0.f;
 			float upper = 0.f;
-			const float effectiveClearancePhase = (clearancePhase >= 0.f) ? clearancePhase : ((clearanceValue > 0.f) ? rockClearancePhase(rocks[i], clearanceValue) : 0.f);
-			const bool hasBounds =
-				(clearanceValue == kWyrmRockClearance && clearancePhase < 0.f)
-					? cachedRockBoundsAtPhase(i, ph, &lower, &upper)
-					: rockBoundsAtPhase(rocks[i], ph, clearanceValue, effectiveClearancePhase, &lower, &upper);
+			bool hasBounds = false;
+			if (useCachedDefault) {
+				hasBounds = cachedRockBoundsAtPhase(i, ph, &lower, &upper);
+			}
+			else {
+				const float invRx = 1.f / std::max(rx, 1e-4f);
+				const float nx = dx * invRx;
+				const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
+				const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+				if (edgeY > 0.f) {
+					lower = rock.value - edgeY;
+					upper = rock.value + edgeY;
+					hasBounds = true;
+				}
+			}
 			if (!hasBounds) continue;
 			const bool anchorInside = (anchorY > lower && anchorY < upper);
 			const bool yInside = (y > lower && y < upper);
