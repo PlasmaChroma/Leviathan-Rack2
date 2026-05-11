@@ -487,8 +487,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (hasModule && draggingRock >= 0 && draggingRock < module->rockCount) {
 			const Vec center = rockCenter(module->rocks[draggingRock]);
 			const Vec radius = rockPixelRadius(module->rocks[draggingRock]);
+			const bool liftMode = (dragRockMouseMode == ROCK_MOUSE_LIFTS);
 			const NVGcolor arrowColor =
-				(dragRockMouseMode == ROCK_MOUSE_LIFTS)
+				liftMode
 					? nvgRGBA(110, 228, 255, 235)
 					: nvgRGBA(236, 226, 190, 225);
 			auto drawArrow = [&](Vec dir, Vec normal) {
@@ -516,6 +517,17 @@ struct WyrmWaveEditor : TransparentWidget {
 			drawArrow(Vec(-1.f, 0.f), Vec(0.f, 1.f));
 			drawArrow(Vec(0.f, 1.f), Vec(1.f, 0.f));
 			drawArrow(Vec(0.f, -1.f), Vec(1.f, 0.f));
+
+			if (APP && APP->window && APP->window->uiFont) {
+				const char* modeText = liftMode ? "LIFT" : "DRAG";
+				const float labelX = center.x - radius.x - 16.f;
+				const float labelY = center.y - radius.y + 1.f;
+				nvgFontSize(args.vg, 8.0f);
+				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+				nvgFillColor(args.vg, arrowColor);
+				nvgText(args.vg, labelX, labelY, modeText, nullptr);
+			}
 		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
