@@ -300,7 +300,7 @@ bool Wyrm::pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool prefe
 		if (std::fabs(rockDx(ph, rock)) > rx + pointSpacing) {
 			return false;
 		}
-		const float guard = rock.radiusValue + kWyrmRockClearance;
+		const float guard = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
 		lower = rock.value - guard;
 		upper = rock.value + guard;
 	}
@@ -415,14 +415,17 @@ float Wyrm::applyRockClamp(float base, float ph, float offset) const {
 	if (rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
 		return offset;
 	}
-	float clampedOffset = offset;
+	float target = clamp(base + offset, -1.f, 1.f);
 	for (int i = 0; i < rockCount; ++i) {
 		if (i == liftedRock) continue;
 		float lower = 0.f;
 		float upper = 0.f;
 		if (!cachedRockBoundsAtPhase(i, ph, &lower, &upper)) continue;
-		float target = base + clampedOffset;
-		if (target > lower && target < upper) {
+		const bool baseInside = (base > lower && base < upper);
+		const bool targetInside = (target > lower && target < upper);
+		const bool crossesUp = (base <= lower && target >= lower);
+		const bool crossesDown = (base >= upper && target <= upper);
+		if (baseInside || targetInside || crossesUp || crossesDown) {
 			if (base <= lower) {
 				target = lower;
 			}
@@ -432,10 +435,9 @@ float Wyrm::applyRockClamp(float base, float ph, float offset) const {
 			else {
 				target = (std::fabs(target - lower) < std::fabs(upper - target)) ? lower : upper;
 			}
-			clampedOffset = target - base;
 		}
 	}
-	return clampedOffset;
+	return clamp(target, -1.f, 1.f) - base;
 }
 
 json_t* Wyrm::dataToJson() {

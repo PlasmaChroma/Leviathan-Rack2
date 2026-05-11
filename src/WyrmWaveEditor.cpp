@@ -62,6 +62,76 @@ struct WyrmWaveEditor : TransparentWidget {
 		return Vec(std::max(5.f, rock.radiusPhase * pointDrawWidth()), std::max(5.f, kWyrmRockValueScale * rock.radiusValue * box.size.y));
 	}
 
+	float visualRockClearance() const {
+		if (box.size.y <= 1.f) {
+			return kWyrmRockClearance;
+		}
+		const float maxBodyStrokePx = 4.f;
+		const float maxRockStrokePx = 2.2f;
+		const float pixelClearance = 0.5f * maxBodyStrokePx + 0.5f * maxRockStrokePx + 0.75f;
+		const float valueClearance = 2.f * pixelClearance / box.size.y;
+		return std::max(kWyrmRockClearance, valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
+	}
+
+	bool visualRockBoundsAtPhase(const WyrmRock& rock, float phase, float* lower, float* upper) const {
+		if (!module) {
+			return false;
+		}
+		const float edgeY = module->rockEdgeY(rock, module->rockDx(phase, rock), visualRockClearance());
+		if (edgeY <= 0.f) {
+			return false;
+		}
+		if (lower) *lower = rock.value - edgeY;
+		if (upper) *upper = rock.value + edgeY;
+		return true;
+	}
+
+	float applyVisualRockPush(float base, float phase) const {
+		if (!module || module->rockCount <= 0) {
+			return base;
+		}
+		float pushed = base;
+		for (int i = 0; i < module->rockCount; ++i) {
+			if (i == module->liftedRock) continue;
+			float lower = 0.f;
+			float upper = 0.f;
+			if (!visualRockBoundsAtPhase(module->rocks[i], phase, &lower, &upper)) continue;
+			if (pushed > lower && pushed < upper) {
+				pushed = (std::fabs(pushed - lower) < std::fabs(upper - pushed)) ? lower : upper;
+			}
+		}
+		return clamp(pushed, -1.f, 1.f);
+	}
+
+	float applyVisualRockClamp(float base, float phase, float offset) const {
+		if (!module || module->rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
+			return offset;
+		}
+		float target = clamp(base + offset, -1.f, 1.f);
+		for (int i = 0; i < module->rockCount; ++i) {
+			if (i == module->liftedRock) continue;
+			float lower = 0.f;
+			float upper = 0.f;
+			if (!visualRockBoundsAtPhase(module->rocks[i], phase, &lower, &upper)) continue;
+			const bool baseInside = (base > lower && base < upper);
+			const bool targetInside = (target > lower && target < upper);
+			const bool crossesUp = (base <= lower && target >= lower);
+			const bool crossesDown = (base >= upper && target <= upper);
+			if (baseInside || targetInside || crossesUp || crossesDown) {
+				if (base <= lower) {
+					target = lower;
+				}
+				else if (base >= upper) {
+					target = upper;
+				}
+				else {
+					target = (std::fabs(target - lower) < std::fabs(upper - target)) ? lower : upper;
+				}
+			}
+		}
+		return clamp(target, -1.f, 1.f) - base;
+	}
+
 	float baseWaveAtPhase(float phase) const {
 		if (!module || module->pointCount <= 0) return 0.f;
 		std::array<float, kWyrmPointCountMax> local {};
@@ -112,8 +182,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	float displayWavePoint(int index) const {
 		if (!module) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
-		const float base = module->applyRockPush(module->getWavePoint(index), phase);
-		const float slither = module->applyRockClamp(base, phase, slitherOffsetForIndex(index));
+		const float base = applyVisualRockPush(module->getWavePoint(index), phase);
+		const float slither = applyVisualRockClamp(base, phase, slitherOffsetForIndex(index));
 		return clamp(base + slither, -1.f, 1.f);
 	}
 
@@ -272,11 +342,25 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		auto bodyWaveValueAtPhase = [&](float phase) {
 			if (hasModule) {
-				const float base = module->applyRockPush(catmullPeriodic(bodyPoints, module->pointCount, phase), phase);
-				const float slither = module->applyRockClamp(base, phase, slitherOffsetForPhase(phase));
+				const float base = applyVisualRockPush(catmullPeriodic(bodyPoints, module->pointCount, phase), phase);
+				const float slither = applyVisualRockClamp(base, phase, slitherOffsetForPhase(phase));
 				return clamp(base + slither, -1.f, 1.f);
 			}
 			return std::sin(2.f * float(M_PI) * phase);
+		};
+		auto phaseNearAnyRock = [&](float phase, float margin) {
+			if (!hasModule) {
+				return false;
+			}
+			for (int i = 0; i < module->rockCount; ++i) {
+				const WyrmRock& rock = module->rocks[i];
+				const float clearance = visualRockClearance();
+				const float rx = rock.radiusPhase + clearance * rock.radiusPhase / std::max(kWyrmRockValueScale * rock.radiusValue, 1e-4f) + margin;
+				if (std::fabs(module->rockDx(phase, rock)) <= rx) {
+					return true;
+				}
+			}
+			return false;
 		};
 
 		Vec mouseLocal = currentLocalMousePos();
@@ -370,7 +454,11 @@ struct WyrmWaveEditor : TransparentWidget {
 				vIn = vIn.div(inLen);
 				vOut = vOut.div(outLen);
 				const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
-				if (cornerCos >= roundCosThreshold) {
+				const float phase = (float(i) + 0.5f) / float(bodySampleCount);
+				if (phaseNearAnyRock(phase, 1.5f / float(bodySampleCount))) {
+					nvgLineTo(args.vg, p1.x, p1.y);
+				}
+				else if (cornerCos >= roundCosThreshold) {
 					const Vec midOut = p1.plus(p2).mult(0.5f);
 					nvgQuadTo(args.vg, p1.x, p1.y, midOut.x, midOut.y);
 				}
