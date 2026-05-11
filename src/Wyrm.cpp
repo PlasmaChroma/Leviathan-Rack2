@@ -445,6 +445,55 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 		changed = true;
 	}
 
+	// The drawn body is sampled between stored points. When a rock sits between
+	// points, visual collision resolution can bend the curve without any point
+	// center entering the rock. Imprint those between-point bends back into the
+	// adjacent points so dragging a rock leaves the expected deformation behind.
+	for (int i = 0; i < pointCount; ++i) {
+		const int j = (i + 1) % pointCount;
+		for (float t : {0.25f, 0.5f, 0.75f}) {
+			const float ph = wrap01((float(i) + 0.5f + t) / float(pointCount));
+			if (std::fabs(rockDx(ph, rock)) > rx + pointSpacing) {
+				continue;
+			}
+
+			float lower = 0.f;
+			float upper = 0.f;
+			if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
+				continue;
+			}
+
+			const float y = catmullPeriodic(local, pointCount, ph);
+			if (y <= lower || y >= upper) {
+				continue;
+			}
+
+			bool preferUpper = y >= rock.value;
+			const int segmentVote = sideVote[i] + sideVote[j];
+			if (segmentVote != 0) {
+				preferUpper = segmentVote > 0;
+			}
+
+			const float projected = clamp(preferUpper ? upper : lower, -1.f, 1.f);
+			const float correction = projected - y;
+			if (std::fabs(correction) <= 1e-6f) {
+				continue;
+			}
+
+			auto moveEndpoint = [&](int idx) {
+				const float nextValue = clamp(local[idx] + correction, -1.f, 1.f);
+				if (std::fabs(nextValue - local[idx]) > 1e-6f) {
+					local[idx] = nextValue;
+					wavePoints[idx].store(nextValue, std::memory_order_relaxed);
+					touched[idx] = true;
+					changed = true;
+				}
+			};
+			moveEndpoint(i);
+			moveEndpoint(j);
+		}
+	}
+
 	if (changed) {
 		for (int pass = 0; pass < 2; ++pass) {
 			std::array<float, kWyrmPointCountMax> smoothed = local;
