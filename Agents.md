@@ -38,6 +38,7 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - In WSL context: prefer validating behavior with focused tests (e.g. `build/tests/crownstep_spec`) and source-level checks.
 - In real Linux context: include full plugin build verification.
+- Do not stage or commit files to github -- all staging and committing of code is left as an exercise for the user.
 
 # Release Compatibility Note
 

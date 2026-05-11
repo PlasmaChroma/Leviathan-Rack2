@@ -77,59 +77,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!module) {
 			return false;
 		}
-		const float edgeY = module->rockEdgeY(rock, module->rockDx(phase, rock), visualRockClearance());
-		if (edgeY <= 0.f) {
-			return false;
-		}
-		if (lower) *lower = rock.value - edgeY;
-		if (upper) *upper = rock.value + edgeY;
-		return true;
-	}
-
-	float applyVisualRockPush(float base, float phase) const {
-		if (!module || module->rockCount <= 0) {
-			return base;
-		}
-		float pushed = base;
-		for (int i = 0; i < module->rockCount; ++i) {
-			if (i == module->liftedRock) continue;
-			float lower = 0.f;
-			float upper = 0.f;
-			if (!visualRockBoundsAtPhase(module->rocks[i], phase, &lower, &upper)) continue;
-			if (pushed > lower && pushed < upper) {
-				pushed = (std::fabs(pushed - lower) < std::fabs(upper - pushed)) ? lower : upper;
-			}
-		}
-		return clamp(pushed, -1.f, 1.f);
-	}
-
-	float applyVisualRockClamp(float base, float phase, float offset) const {
-		if (!module || module->rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
-			return offset;
-		}
-		float target = clamp(base + offset, -1.f, 1.f);
-		for (int i = 0; i < module->rockCount; ++i) {
-			if (i == module->liftedRock) continue;
-			float lower = 0.f;
-			float upper = 0.f;
-			if (!visualRockBoundsAtPhase(module->rocks[i], phase, &lower, &upper)) continue;
-			const bool baseInside = (base > lower && base < upper);
-			const bool targetInside = (target > lower && target < upper);
-			const bool crossesUp = (base <= lower && target >= lower);
-			const bool crossesDown = (base >= upper && target <= upper);
-			if (baseInside || targetInside || crossesUp || crossesDown) {
-				if (base <= lower) {
-					target = lower;
-				}
-				else if (base >= upper) {
-					target = upper;
-				}
-				else {
-					target = (std::fabs(target - lower) < std::fabs(upper - target)) ? lower : upper;
-				}
-			}
-		}
-		return clamp(target, -1.f, 1.f) - base;
+		return module->rockBoundsAtPhase(rock, phase, visualRockClearance(), lower, upper);
 	}
 
 	float baseWaveAtPhase(float phase) const {
@@ -182,9 +130,9 @@ struct WyrmWaveEditor : TransparentWidget {
 	float displayWavePoint(int index) const {
 		if (!module) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
-		const float base = applyVisualRockPush(module->getWavePoint(index), phase);
-		const float slither = applyVisualRockClamp(base, phase, slitherOffsetForIndex(index));
-		return clamp(base + slither, -1.f, 1.f);
+		const float clearance = visualRockClearance();
+		const float base = module->resolveAgainstRocks(module->getWavePoint(index), module->getWavePoint(index), phase, clearance);
+		return module->resolveAgainstRocks(base, base + slitherOffsetForIndex(index), phase, clearance);
 	}
 
 	int rockIndexAt(Vec pos) const {
@@ -342,9 +290,10 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		auto bodyWaveValueAtPhase = [&](float phase) {
 			if (hasModule) {
-				const float base = applyVisualRockPush(catmullPeriodic(bodyPoints, module->pointCount, phase), phase);
-				const float slither = applyVisualRockClamp(base, phase, slitherOffsetForPhase(phase));
-				return clamp(base + slither, -1.f, 1.f);
+				const float clearance = visualRockClearance();
+				const float raw = catmullPeriodic(bodyPoints, module->pointCount, phase);
+				const float base = module->resolveAgainstRocks(raw, raw, phase, clearance);
+				return module->resolveAgainstRocks(base, base + slitherOffsetForPhase(phase), phase, clearance);
 			}
 			return std::sin(2.f * float(M_PI) * phase);
 		};
@@ -355,7 +304,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			for (int i = 0; i < module->rockCount; ++i) {
 				const WyrmRock& rock = module->rocks[i];
 				const float clearance = visualRockClearance();
-				const float rx = rock.radiusPhase + clearance * rock.radiusPhase / std::max(kWyrmRockValueScale * rock.radiusValue, 1e-4f) + margin;
+				const float rx = rock.radiusPhase + module->rockClearancePhase(rock, clearance) + margin;
 				if (std::fabs(module->rockDx(phase, rock)) <= rx) {
 					return true;
 				}

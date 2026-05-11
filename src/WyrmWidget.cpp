@@ -102,10 +102,16 @@ struct WyrmEditorIconButton : TransparentWidget {
 	Wyrm* module = nullptr;
 	Kind kind = LOCK;
 	bool hovered = false;
+	std::shared_ptr<window::Svg> resetNormalSvg;
+	std::shared_ptr<window::Svg> resetHighlightedSvg;
 
 	WyrmEditorIconButton(Wyrm* module, Kind kind) {
 		this->module = module;
 		this->kind = kind;
+		if (kind == RESET) {
+			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/reset-normal.svg"));
+			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/reset-highlighted.svg"));
+		}
 	}
 
 	void step() override {
@@ -192,37 +198,23 @@ struct WyrmEditorIconButton : TransparentWidget {
 		nvgFill(args.vg);
 	}
 
-	void drawResetIcon(const DrawArgs& args, NVGcolor color) {
-		const float w = box.size.x;
-		const float h = box.size.y;
-		const float cx = 0.56f * w;
-		const float cy = 0.56f * h;
-		const float r = 0.27f * std::min(w, h);
-		const float shaftAngle = 0.90f * float(M_PI);
-		const float endAngle = -0.30f * float(M_PI);
-		const Vec shaftBottom(cx + std::cos(shaftAngle) * r, cy + std::sin(shaftAngle) * r);
-		const Vec shaftTop(shaftBottom.x, cy - 0.98f * r);
-		const float tipX = shaftTop.x - 0.20f * w;
-		const float baseX = shaftTop.x + 0.01f * w;
-		const float halfH = 0.105f * h;
-
-		nvgStrokeWidth(args.vg, 1.95f);
-		nvgStrokeColor(args.vg, color);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, cx, cy, r, shaftAngle, endAngle, NVG_CCW);
-		nvgMoveTo(args.vg, shaftBottom.x, shaftBottom.y);
-		nvgLineTo(args.vg, shaftTop.x, shaftTop.y);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, tipX, shaftTop.y);
-		nvgLineTo(args.vg, baseX, shaftTop.y - halfH);
-		nvgLineTo(args.vg, baseX, shaftTop.y + halfH);
-		nvgClosePath(args.vg);
-		nvgFillColor(args.vg, color);
-		nvgFill(args.vg);
+	void drawResetIcon(const DrawArgs& args) {
+		std::shared_ptr<window::Svg> svg = hovered ? resetHighlightedSvg : resetNormalSvg;
+		if (!svg) {
+			return;
+		}
+		const Vec svgSize = svg->getSize();
+		if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
+			return;
+		}
+		const float targetSize = 0.72f * std::min(box.size.x, box.size.y);
+		const float scale = targetSize / std::max(svgSize.x, svgSize.y);
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
+		nvgScale(args.vg, scale, scale);
+		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+		svg->draw(args.vg);
+		nvgRestore(args.vg);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -232,7 +224,7 @@ struct WyrmEditorIconButton : TransparentWidget {
 			drawLockIcon(args, color);
 		}
 		else {
-			drawResetIcon(args, color);
+			drawResetIcon(args);
 		}
 	}
 };

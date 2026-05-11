@@ -200,11 +200,15 @@ float Wyrm::rockDx(float ph, const WyrmRock& rock) const {
 }
 
 float Wyrm::rockClearancePhase(const WyrmRock& rock) const {
-	return kWyrmRockClearance * rock.radiusPhase / std::max(kWyrmRockValueScale * rock.radiusValue, 1e-4f);
+	return rockClearancePhase(rock, kWyrmRockClearance);
+}
+
+float Wyrm::rockClearancePhase(const WyrmRock& rock, float clearanceValue) const {
+	return clearanceValue * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
 }
 
 float Wyrm::rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue) const {
-	const float radiusPhase = rock.radiusPhase + ((clearanceValue > 0.f) ? rockClearancePhase(rock) : 0.f);
+	const float radiusPhase = rock.radiusPhase + ((clearanceValue > 0.f) ? rockClearancePhase(rock, clearanceValue) : 0.f);
 	const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
 	if (std::fabs(dx) >= radiusPhase) {
 		return 0.f;
@@ -277,7 +281,11 @@ bool Wyrm::cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float*
 }
 
 bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const {
-	const float edgeY = rockEdgeY(rock, rockDx(ph, rock), kWyrmRockClearance);
+	return rockBoundsAtPhase(rock, ph, kWyrmRockClearance, lower, upper);
+}
+
+bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float* lower, float* upper) const {
+	const float edgeY = rockEdgeY(rock, rockDx(ph, rock), clearanceValue);
 	if (edgeY <= 0.f) {
 		return false;
 	}
@@ -393,51 +401,59 @@ void Wyrm::pushWavePointsOutsideRock(int rockIndex) {
 }
 
 float Wyrm::applyRockPush(float base, float ph) const {
-	if (rockCount <= 0) {
-		return base;
-	}
-	float pushed = base;
-	for (int i = 0; i < rockCount; ++i) {
-		if (i == liftedRock) continue;
-		float lower = 0.f;
-		float upper = 0.f;
-		if (!cachedRockBoundsAtPhase(i, ph, &lower, &upper)) {
-			continue;
-		}
-		if (pushed > lower && pushed < upper) {
-			pushed = (std::fabs(pushed - lower) < std::fabs(upper - pushed)) ? lower : upper;
-		}
-	}
-	return clamp(pushed, -1.f, 1.f);
+	return resolveAgainstRocks(base, base, ph);
 }
 
 float Wyrm::applyRockClamp(float base, float ph, float offset) const {
 	if (rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
 		return offset;
 	}
-	float target = clamp(base + offset, -1.f, 1.f);
-	for (int i = 0; i < rockCount; ++i) {
-		if (i == liftedRock) continue;
-		float lower = 0.f;
-		float upper = 0.f;
-		if (!cachedRockBoundsAtPhase(i, ph, &lower, &upper)) continue;
-		const bool baseInside = (base > lower && base < upper);
-		const bool targetInside = (target > lower && target < upper);
-		const bool crossesUp = (base <= lower && target >= lower);
-		const bool crossesDown = (base >= upper && target <= upper);
-		if (baseInside || targetInside || crossesUp || crossesDown) {
-			if (base <= lower) {
-				target = lower;
-			}
-			else if (base >= upper) {
-				target = upper;
-			}
-			else {
-				target = (std::fabs(target - lower) < std::fabs(upper - target)) ? lower : upper;
+	return resolveAgainstRocks(base, base + offset, ph) - base;
+}
+
+float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue) const {
+	if (rockCount <= 0) {
+		return clamp(desiredY, -1.f, 1.f);
+	}
+	float y = clamp(desiredY, -1.f, 1.f);
+	for (int pass = 0; pass < 3; ++pass) {
+		bool changed = false;
+		for (int i = 0; i < rockCount; ++i) {
+			if (i == liftedRock) continue;
+			float lower = 0.f;
+			float upper = 0.f;
+			const bool hasBounds =
+				(clearanceValue == kWyrmRockClearance)
+					? cachedRockBoundsAtPhase(i, ph, &lower, &upper)
+					: rockBoundsAtPhase(rocks[i], ph, clearanceValue, &lower, &upper);
+			if (!hasBounds) continue;
+			const bool anchorInside = (anchorY > lower && anchorY < upper);
+			const bool yInside = (y > lower && y < upper);
+			const bool crossesUp = (anchorY <= lower && y >= lower);
+			const bool crossesDown = (anchorY >= upper && y <= upper);
+			if (anchorInside || yInside || crossesUp || crossesDown) {
+				float projected = y;
+				if (anchorY <= lower) {
+					projected = lower;
+				}
+				else if (anchorY >= upper) {
+					projected = upper;
+				}
+				else {
+					projected = (std::fabs(y - lower) < std::fabs(upper - y)) ? lower : upper;
+				}
+				projected = clamp(projected, -1.f, 1.f);
+				if (std::fabs(projected - y) > 1e-6f) {
+					y = projected;
+					changed = true;
+				}
 			}
 		}
+		if (!changed) {
+			break;
+		}
 	}
-	return clamp(target, -1.f, 1.f) - base;
+	return clamp(y, -1.f, 1.f);
 }
 
 json_t* Wyrm::dataToJson() {
