@@ -6,10 +6,10 @@ struct WyrmWaveEditor : TransparentWidget {
 	int hoveredRock = -1;
 	int draggingRock = -1;
 	int dragRockMouseMode = -1;
-	int rockDragSide = 0;
 	float visualSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
 	Vec rockDragOffset;
+	WyrmRock previousDragRock {};
 
 	explicit WyrmWaveEditor(Wyrm* m) {
 		module = m;
@@ -80,23 +80,30 @@ struct WyrmWaveEditor : TransparentWidget {
 		return module->rockBoundsAtPhase(rock, phase, visualRockClearance(), lower, upper);
 	}
 
-	float baseWaveAtPhase(float phase) const {
-		if (!module || module->pointCount <= 0) return 0.f;
-		std::array<float, kWyrmPointCountMax> local {};
-		for (int i = 0; i < module->pointCount; ++i) {
-			local[i] = module->getWavePoint(i);
+	int rockDragModeForMods(int mods) const {
+		int mode = module ? module->rockMouseMode : ROCK_MOUSE_DRAGS;
+		if ((mods & GLFW_MOD_SHIFT) != 0) {
+			mode = (mode == ROCK_MOUSE_DRAGS) ? ROCK_MOUSE_LIFTS : ROCK_MOUSE_DRAGS;
 		}
-		return clamp(catmullPeriodic(local, module->pointCount, phase), -1.f, 1.f);
+		return mode;
 	}
 
-	float constrainedRockValueForDrag(const WyrmRock& rock, float phase, float value) const {
-		if (!module || dragRockMouseMode != ROCK_MOUSE_DRAGS || rockDragSide == 0) {
-			return value;
+	void updateActiveRockDragMode(int mods) {
+		if (!module || draggingRock < 0) {
+			return;
 		}
-		if (rockDragSide > 0) {
-			return clamp(std::max(value, baseWaveAtPhase(phase)), -1.f, 1.f);
+		const int nextMode = rockDragModeForMods(mods);
+		if (nextMode == dragRockMouseMode) {
+			return;
 		}
-		return clamp(std::min(value, baseWaveAtPhase(phase)), -1.f, 1.f);
+		if (module->liftedRock == draggingRock) {
+			module->liftedRock = -1;
+		}
+		dragRockMouseMode = nextMode;
+		if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
+			module->liftedRock = draggingRock;
+		}
+		previousDragRock = module->rocks[draggingRock];
 	}
 
 	void advanceVisualSlitherPhase(double nowSec) {
@@ -153,14 +160,16 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!module || rockIndex < 0 || rockIndex >= module->rockCount) return;
 		const Vec adjusted = pos.minus(rockDragOffset);
 		WyrmRock& rock = module->rocks[rockIndex];
+		const WyrmRock previousRock = rock;
 		const float phase = phaseFromX(adjusted.x);
 		const float value = valueFromY(adjusted.y);
 		rock.phase = phase;
-		rock.value = constrainedRockValueForDrag(rock, phase, value);
+		rock.value = value;
 		module->rebuildRockBoundaryCache(rockIndex);
 		if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
-			module->pushWavePointsOutsideRock(rockIndex);
+			module->sculptWaveAroundRock(rockIndex, &previousRock);
 		}
+		previousDragRock = rock;
 	}
 
 	Vec currentLocalMousePos() const {
@@ -203,15 +212,11 @@ struct WyrmWaveEditor : TransparentWidget {
 			if (rockIndex >= 0) {
 				draggingRock = rockIndex;
 				hoveredRock = rockIndex;
-				const WyrmRock& rock = module->rocks[rockIndex];
-				dragRockMouseMode = module->rockMouseMode;
-				if ((e.mods & GLFW_MOD_SHIFT) != 0) {
-					dragRockMouseMode = (dragRockMouseMode == ROCK_MOUSE_DRAGS) ? ROCK_MOUSE_LIFTS : ROCK_MOUSE_DRAGS;
-				}
-				rockDragSide = (rock.value >= baseWaveAtPhase(rock.phase)) ? 1 : -1;
+				dragRockMouseMode = rockDragModeForMods(e.mods);
 				if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 					module->liftedRock = rockIndex;
 				}
+				previousDragRock = module->rocks[rockIndex];
 				rockDragOffset = e.pos.minus(rockCenter(module->rocks[rockIndex]));
 				e.consume(this);
 				return;
@@ -223,16 +228,18 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (e.action == GLFW_RELEASE) {
 			lastIndex = -1;
 			const int releasedRock = draggingRock;
+			updateActiveRockDragMode(e.mods);
 			if (module->liftedRock == draggingRock) {
 				module->liftedRock = -1;
 			}
 			if (releasedRock >= 0) {
 				module->rebuildRockBoundaryCache(releasedRock);
-				module->pushWavePointsOutsideRock(releasedRock);
+				if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
+					module->sculptWaveAroundRock(releasedRock, &previousDragRock);
+				}
 			}
 			draggingRock = -1;
 			dragRockMouseMode = -1;
-			rockDragSide = 0;
 			e.consume(this);
 			return;
 		}
@@ -241,6 +248,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void onDragMove(const event::DragMove& e) override {
 		if (module && draggingRock >= 0 && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			const int mods = (APP && APP->window) ? APP->window->getMods() : 0;
+			updateActiveRockDragMode(mods);
 			moveRockFromMouse(draggingRock, currentLocalMousePos());
 			e.consume(this);
 			return;

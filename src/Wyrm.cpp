@@ -55,7 +55,6 @@ void Wyrm::setRockCount(int count) {
 	}
 	for (int i = oldCount; i < rockCount; ++i) {
 		rebuildRockBoundaryCache(i);
-		pushWavePointsOutsideRock(i);
 	}
 	for (int i = rockCount; i < kWyrmMaxRocks; ++i) {
 		rockBoundaryCaches[i].valid = false;
@@ -67,12 +66,6 @@ void Wyrm::setWavePoint(int index, float value) {
 		return;
 	}
 	wavePoints[index].store(clamp(value, -1.f, 1.f), std::memory_order_relaxed);
-	for (int i = 0; i < rockCount; ++i) {
-		if (i == liftedRock) {
-			continue;
-		}
-		pushWavePointsOutsideRock(i);
-	}
 	waveCustomized = true;
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
@@ -294,42 +287,6 @@ bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValu
 	return true;
 }
 
-bool Wyrm::pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide) {
-	if (pointIndex < 0 || pointIndex >= pointCount) return false;
-	const float ph = (float(pointIndex) + 0.5f) / float(pointCount);
-	float lower = 0.f;
-	float upper = 0.f;
-	if (!rockBoundsAtPhase(rock, ph, &lower, &upper)) {
-		if (!forceSide) {
-			return false;
-		}
-		const float pointSpacing = 1.f / float(std::max(pointCount, 1));
-		const float rx = rock.radiusPhase + rockClearancePhase(rock);
-		if (std::fabs(rockDx(ph, rock)) > rx + pointSpacing) {
-			return false;
-		}
-		const float guard = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
-		lower = rock.value - guard;
-		upper = rock.value + guard;
-	}
-	const float base = wavePoints[pointIndex].load(std::memory_order_relaxed);
-	if (!forceSide && (base <= lower || base >= upper)) {
-		return false;
-	}
-	float pushed = 0.f;
-	if (forceSide) {
-		pushed = preferUpper ? upper : lower;
-		if ((preferUpper && base >= pushed) || (!preferUpper && base <= pushed)) {
-			return false;
-		}
-	}
-	else {
-		pushed = (std::fabs(base - lower) < std::fabs(upper - base)) ? lower : upper;
-	}
-	wavePoints[pointIndex].store(clamp(pushed, -1.f, 1.f), std::memory_order_relaxed);
-	return true;
-}
-
 bool Wyrm::segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const {
 	const float rx = rock.radiusPhase + rockClearancePhase(rock);
 	const float ry = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
@@ -362,38 +319,115 @@ bool Wyrm::segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0
 	return true;
 }
 
-void Wyrm::pushWavePointsOutsideRock(int rockIndex) {
-	if (rockIndex < 0 || rockIndex >= rockCount) return;
+void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
+	if (rockIndex < 0 || rockIndex >= rockCount || pointCount <= 0) return;
 	const WyrmRock& rock = rocks[rockIndex];
-	bool changed = false;
+	std::array<int, kWyrmPointCountMax> sideVote {};
+	std::array<float, kWyrmPointCountMax> local {};
+	std::array<bool, kWyrmPointCountMax> touched {};
 	for (int i = 0; i < pointCount; ++i) {
-		changed = pushPointOutsideRock(i, rock, false, false) || changed;
+		local[i] = wavePoints[i].load(std::memory_order_relaxed);
 	}
-	bool forceSpan = false;
-	bool spanPreferUpper = false;
-	for (int i = 0; i < pointCount - 1; ++i) {
-		const float ph0 = (float(i) + 0.5f) / float(pointCount);
-		const float ph1 = (float(i + 1) + 0.5f) / float(pointCount);
-		const float y0 = wavePoints[i].load(std::memory_order_relaxed);
-		const float y1 = wavePoints[i + 1].load(std::memory_order_relaxed);
+
+	auto addSegmentVote = [&](const WyrmRock& testRock, int i0, int i1) {
+		const float ph0 = (float(i0) + 0.5f) / float(pointCount);
+		const float ph1 = (float(i1) + 0.5f) / float(pointCount);
 		bool preferUpper = false;
-		if (segmentIntersectsRockBounds(rock, ph0, y0, ph1, y1, &preferUpper)) {
-			forceSpan = true;
-			spanPreferUpper = preferUpper;
-			changed = pushPointOutsideRock(i, rock, preferUpper, true) || changed;
-			changed = pushPointOutsideRock(i + 1, rock, preferUpper, true) || changed;
+		if (segmentIntersectsRockBounds(testRock, ph0, local[i0], ph1, local[i1], &preferUpper)) {
+			const int vote = preferUpper ? 1 : -1;
+			sideVote[i0] += vote;
+			sideVote[i1] += vote;
+		}
+	};
+
+	for (int i = 0; i < pointCount; ++i) {
+		addSegmentVote(rock, i, (i + 1) % pointCount);
+	}
+	if (previousRock) {
+		for (int i = 0; i < pointCount; ++i) {
+			addSegmentVote(*previousRock, i, (i + 1) % pointCount);
 		}
 	}
-	if (forceSpan) {
-		const float pointSpacing = 1.f / float(std::max(pointCount, 1));
-		const float rx = rock.radiusPhase + rockClearancePhase(rock);
-		for (int i = 0; i < pointCount; ++i) {
-			const float ph = (float(i) + 0.5f) / float(pointCount);
-			if (std::fabs(rockDx(ph, rock)) <= rx + pointSpacing) {
-				changed = pushPointOutsideRock(i, rock, spanPreferUpper, true) || changed;
+
+	bool changed = false;
+	const float pointSpacing = 1.f / float(std::max(pointCount, 1));
+	const float rx = rock.radiusPhase + rockClearancePhase(rock);
+	for (int i = 0; i < pointCount; ++i) {
+		const float ph = (float(i) + 0.5f) / float(pointCount);
+		const float dx = std::fabs(rockDx(ph, rock));
+		if (dx > rx + pointSpacing) {
+			continue;
+		}
+
+		float lower = 0.f;
+		float upper = 0.f;
+		const bool hasBounds = rockBoundsAtPhase(rock, ph, &lower, &upper);
+		if (!hasBounds && sideVote[i] == 0) {
+			continue;
+		}
+		if (!hasBounds) {
+			const float guard = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
+			lower = rock.value - guard;
+			upper = rock.value + guard;
+		}
+
+		const float y = local[i];
+		const bool inside = (y > lower && y < upper);
+		if (!inside && sideVote[i] == 0) {
+			continue;
+		}
+
+		bool preferUpper = sideVote[i] > 0;
+		if (sideVote[i] == 0) {
+			preferUpper = y >= rock.value;
+		}
+		const float sculpted = clamp(preferUpper ? upper : lower, -1.f, 1.f);
+		if ((preferUpper && y < sculpted) || (!preferUpper && y > sculpted)) {
+			wavePoints[i].store(sculpted, std::memory_order_relaxed);
+			local[i] = sculpted;
+			touched[i] = true;
+			changed = true;
+		}
+	}
+
+	if (changed) {
+		for (int pass = 0; pass < 2; ++pass) {
+			std::array<float, kWyrmPointCountMax> smoothed = local;
+			for (int i = 0; i < pointCount; ++i) {
+				const int prev = (i + pointCount - 1) % pointCount;
+				const int next = (i + 1) % pointCount;
+				if (!touched[i] && !touched[prev] && !touched[next]) {
+					continue;
+				}
+
+				const float ph = (float(i) + 0.5f) / float(pointCount);
+				if (std::fabs(rockDx(ph, rock)) > rx + pointSpacing) {
+					continue;
+				}
+
+				const float relaxed = 0.5f * local[i] + 0.25f * (local[prev] + local[next]);
+				float candidate = clamp(0.65f * local[i] + 0.35f * relaxed, -1.f, 1.f);
+
+				float lower = 0.f;
+				float upper = 0.f;
+				if (rockBoundsAtPhase(rock, ph, &lower, &upper)) {
+					const bool preferUpper = (sideVote[i] > 0) || (sideVote[i] == 0 && local[i] >= rock.value);
+					if (candidate > lower && candidate < upper) {
+						candidate = preferUpper ? upper : lower;
+					}
+				}
+
+				smoothed[i] = candidate;
+			}
+			for (int i = 0; i < pointCount; ++i) {
+				if (std::fabs(smoothed[i] - local[i]) > 1e-6f) {
+					local[i] = smoothed[i];
+					wavePoints[i].store(local[i], std::memory_order_relaxed);
+				}
 			}
 		}
 	}
+
 	if (changed) {
 		waveCustomized = true;
 		waveVersion.fetch_add(1u, std::memory_order_release);

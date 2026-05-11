@@ -227,9 +227,8 @@ struct Wyrm : Module {
 	bool cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float* lower, float* upper) const;
-	bool pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide);
 	bool segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const;
-	void pushWavePointsOutsideRock(int rockIndex);
+	void sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock = nullptr);
 	float resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue = kWyrmRockClearance) const;
 	float applyRockPush(float base, float ph) const;
 	float applyRockClamp(float base, float ph, float offset) const;
