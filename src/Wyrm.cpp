@@ -713,6 +713,9 @@ void Wyrm::process(const ProcessArgs& args) {
 		const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 		slitherPhase[c] = wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
+		if (c == 0) {
+			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
+		}
 		const float base = applyRockPush(lookupWave(phase[c]), phase[c]);
 		const float slither = applyRockClamp(base, phase[c], slitherOffset(phase[c], slitherPhase[c], slitherAmount));
 		const float raw = clamp(base + slither, -1.f, 1.f);

@@ -6,7 +6,10 @@ struct WyrmWaveEditor : TransparentWidget {
 	int hoveredRock = -1;
 	int draggingRock = -1;
 	int dragRockMouseMode = -1;
+	bool pointEditActive = false;
+	float pointEditSlitherPhase = 0.f;
 	float visualSlitherPhase = 0.f;
+	float renderedSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
@@ -130,11 +133,15 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	float slitherOffsetForIndex(int index) const {
+		return slitherOffsetForIndex(index, visualSlitherPhase);
+	}
+
+	float slitherOffsetForIndex(int index, float travelPhase) const {
 		if (!module || module->pointCount <= 0) return 0.f;
 		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
 		if (amount <= 1e-5f) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
-		return slitherOffset(phase, visualSlitherPhase, amount);
+		return slitherOffset(phase, travelPhase, amount);
 	}
 
 	float slitherOffsetForPhase(float phase) const {
@@ -194,10 +201,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!module || module->editorLocked) return;
 		const int idx = indexFromX(pos.x);
 		const float targetDisplayValue = valueFromY(pos.y);
-		const double nowSec = system::getTime();
-		advanceVisualSlitherPhase(nowSec);
+		const float writeSlitherPhase = pointEditActive ? pointEditSlitherPhase : visualSlitherPhase;
 		auto writeDisplayValue = [&](int pointIndex) {
-			module->setWavePoint(pointIndex, targetDisplayValue - slitherOffsetForIndex(pointIndex));
+			module->setWavePoint(pointIndex, targetDisplayValue - slitherOffsetForIndex(pointIndex, writeSlitherPhase));
 		};
 		if (lastIndex >= 0 && lastIndex != idx) {
 			const int lo = std::min(lastIndex, idx);
@@ -221,6 +227,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			lastIndex = -1;
 			const int rockIndex = rockIndexAt(e.pos);
 			if (rockIndex >= 0) {
+				pointEditActive = false;
 				draggingRock = rockIndex;
 				hoveredRock = rockIndex;
 				dragRockMouseMode = rockDragModeForMods(e.mods);
@@ -232,12 +239,15 @@ struct WyrmWaveEditor : TransparentWidget {
 				e.consume(this);
 				return;
 			}
+			pointEditActive = true;
+			pointEditSlitherPhase = renderedSlitherPhase;
 			applyPointFromPos(e.pos);
 			e.consume(this);
 			return;
 		}
 		if (e.action == GLFW_RELEASE) {
 			lastIndex = -1;
+			pointEditActive = false;
 			const int releasedRock = draggingRock;
 			updateActiveRockDragMode(e.mods);
 			if (module->liftedRock == draggingRock) {
@@ -276,6 +286,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		if (!args.vg) return;
 		advanceVisualSlitherPhase(system::getTime());
+		renderedSlitherPhase = visualSlitherPhase;
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);

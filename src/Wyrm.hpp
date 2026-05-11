@@ -121,7 +121,19 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 	const float p3 = points[i3];
 	const float t2 = t * t;
 	const float t3 = t2 * t;
-	return 0.5f * ((2.f * p1) + (-p0 + p2) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 + (-p0 + 3.f * p1 - 3.f * p2 + p3) * t3);
+	const float cubic = 0.5f * ((2.f * p1) + (-p0 + p2) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 + (-p0 + 3.f * p1 - 3.f * p2 + p3) * t3);
+
+	// Catmull-Rom can ring/overshoot on steep adjacent steps, creating a
+	// pre-spike in the opposite direction. Clamp risky segments to the local
+	// endpoint range so jumps stay clean while keeping cubic shape elsewhere.
+	const float d01 = p1 - p0;
+	const float d12 = p2 - p1;
+	const float d23 = p3 - p2;
+	const bool hasTurnOrStep = (d01 * d12 <= 0.f) || (d12 * d23 <= 0.f);
+	if (hasTurnOrStep) {
+		return clamp(cubic, std::min(p1, p2), std::max(p1, p2));
+	}
+	return cubic;
 }
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {
@@ -194,6 +206,7 @@ struct Wyrm : Module {
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
+	std::atomic<float> displaySlitherPhase {0.f};
 	std::array<float, kWyrmMaxChannels> phase {};
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
