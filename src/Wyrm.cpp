@@ -26,6 +26,8 @@ Wyrm::Wyrm() {
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
 	configInput(FOLD_CV_INPUT, "Fold CV");
+	configInput(SLITHER_CV_INPUT, "Slither CV");
+	configInput(SLITHER_SPEED_CV_INPUT, "Slither speed CV");
 	configOutput(OUT_OUTPUT, "Fold");
 	configOutput(RAW_OUTPUT, "Signal");
 
@@ -668,7 +670,14 @@ void Wyrm::process(const ProcessArgs& args) {
 		appliedWaveVersion = v;
 	}
 
-	const int channels = std::max(1, std::max({inputs[VOCT_INPUT].getChannels(), inputs[FM_INPUT].getChannels(), inputs[SYNC_INPUT].getChannels(), inputs[FOLD_CV_INPUT].getChannels()}));
+	const int channels = std::max(1, std::max({
+		inputs[VOCT_INPUT].getChannels(),
+		inputs[FM_INPUT].getChannels(),
+		inputs[SYNC_INPUT].getChannels(),
+		inputs[FOLD_CV_INPUT].getChannels(),
+		inputs[SLITHER_CV_INPUT].getChannels(),
+		inputs[SLITHER_SPEED_CV_INPUT].getChannels()
+	}));
 	outputs[OUT_OUTPUT].setChannels(channels);
 	outputs[RAW_OUTPUT].setChannels(channels);
 
@@ -677,8 +686,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float fmAtten = params[FM_ATTEN_PARAM].getValue();
 	const float fine = params[FINE_PARAM].getValue() / 1200.f;
 	const float foldBase = params[FOLD_PARAM].getValue();
-	const float slitherAmount = clamp01(params[SLITHER_PARAM].getValue());
-	const float slitherSpeed = slitherSpeedFactor(params[SLITHER_SPEED_PARAM].getValue());
+	const float slitherAmountKnob = clamp01(params[SLITHER_PARAM].getValue());
+	const float slitherSpeedKnob = clamp01(params[SLITHER_SPEED_PARAM].getValue());
 
 	for (int c = 0; c < channels; ++c) {
 		if (inputs[SYNC_INPUT].isConnected()) {
@@ -690,6 +699,10 @@ void Wyrm::process(const ProcessArgs& args) {
 		}
 		const float voct = inputs[VOCT_INPUT].isConnected() ? inputs[VOCT_INPUT].getPolyVoltage(c) : 0.f;
 		const float fm = inputs[FM_INPUT].isConnected() ? inputs[FM_INPUT].getPolyVoltage(c) * fmAtten : 0.f;
+		const float slitherAmountCv = inputs[SLITHER_CV_INPUT].isConnected() ? clamp(inputs[SLITHER_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
+		const float slitherSpeedCv = inputs[SLITHER_SPEED_CV_INPUT].isConnected() ? clamp(inputs[SLITHER_SPEED_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
+		const float slitherAmount = clamp(slitherAmountKnob + slitherAmountCv, 0.f, 1.f);
+		const float slitherSpeed = slitherSpeedFactor(clamp(slitherSpeedKnob + slitherSpeedCv, 0.f, 1.f));
 		const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);

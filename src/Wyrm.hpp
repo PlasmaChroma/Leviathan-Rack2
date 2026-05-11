@@ -176,6 +176,8 @@ struct Wyrm : Module {
 		FM_INPUT,
 		SYNC_INPUT,
 		FOLD_CV_INPUT,
+		SLITHER_CV_INPUT,
+		SLITHER_SPEED_CV_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {

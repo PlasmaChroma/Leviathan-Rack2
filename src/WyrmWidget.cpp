@@ -313,6 +313,8 @@ struct WyrmWidget : ModuleWidget {
 		Vec resetPos(17.25f, 75.50f);
 		Vec slitherPos(17.50f, 112.80f);
 		Vec slitherSpeedPos(26.50f, 112.80f);
+		Vec slitherCvPos = slitherPos.plus(Vec(6.8f, 0.f));
+		Vec slitherSpeedCvPos = slitherSpeedPos.plus(Vec(6.8f, 0.f));
 		Vec voctPos(14.0f, 111.0f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
@@ -328,6 +330,8 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_RESET_BUTTON", &resetPos);
 		applyPt("WYRM_SLITHER_PARAM", &slitherPos);
 		applyPt("WYRM_SLITHER_SPEED_PARAM", &slitherSpeedPos);
+		applyPt("WYRM_SLITHER_CV_INPUT", &slitherCvPos);
+		applyPt("WYRM_SLITHER_SPEED_CV_INPUT", &slitherSpeedCvPos);
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
@@ -371,6 +375,8 @@ struct WyrmWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
