@@ -73,11 +73,21 @@ struct WyrmWaveEditor : TransparentWidget {
 		return std::max(kWyrmRockClearance, valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
 	}
 
+	float visualRockPhaseClearance() const {
+		if (pointDrawWidth() <= 1.f) {
+			return 0.f;
+		}
+		const float maxBodyStrokePx = 4.f;
+		const float maxRockStrokePx = 2.2f;
+		const float pixelClearance = 0.5f * maxBodyStrokePx + 0.5f * maxRockStrokePx + 0.75f;
+		return pixelClearance / pointDrawWidth();
+	}
+
 	bool visualRockBoundsAtPhase(const WyrmRock& rock, float phase, float* lower, float* upper) const {
 		if (!module) {
 			return false;
 		}
-		return module->rockBoundsAtPhase(rock, phase, visualRockClearance(), lower, upper);
+		return module->rockBoundsAtPhase(rock, phase, visualRockClearance(), visualRockPhaseClearance(), lower, upper);
 	}
 
 	int rockDragModeForMods(int mods) const {
@@ -138,8 +148,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!module) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
 		const float clearance = visualRockClearance();
-		const float base = module->resolveAgainstRocks(module->getWavePoint(index), module->getWavePoint(index), phase, clearance);
-		return module->resolveAgainstRocks(base, base + slitherOffsetForIndex(index), phase, clearance);
+		const float phaseClearance = visualRockPhaseClearance();
+		const float base = module->resolveAgainstRocks(module->getWavePoint(index), module->getWavePoint(index), phase, clearance, phaseClearance);
+		return module->resolveAgainstRocks(base, base + slitherOffsetForIndex(index), phase, clearance, phaseClearance);
 	}
 
 	int rockIndexAt(Vec pos) const {
@@ -300,9 +311,10 @@ struct WyrmWaveEditor : TransparentWidget {
 		auto bodyWaveValueAtPhase = [&](float phase) {
 			if (hasModule) {
 				const float clearance = visualRockClearance();
+				const float phaseClearance = visualRockPhaseClearance();
 				const float raw = catmullPeriodic(bodyPoints, module->pointCount, phase);
-				const float base = module->resolveAgainstRocks(raw, raw, phase, clearance);
-				return module->resolveAgainstRocks(base, base + slitherOffsetForPhase(phase), phase, clearance);
+				const float base = module->resolveAgainstRocks(raw, raw, phase, clearance, phaseClearance);
+				return module->resolveAgainstRocks(base, base + slitherOffsetForPhase(phase), phase, clearance, phaseClearance);
 			}
 			return std::sin(2.f * float(M_PI) * phase);
 		};
@@ -312,8 +324,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 			for (int i = 0; i < module->rockCount; ++i) {
 				const WyrmRock& rock = module->rocks[i];
-				const float clearance = visualRockClearance();
-				const float rx = rock.radiusPhase + module->rockClearancePhase(rock, clearance) + margin;
+				const float rx = rock.radiusPhase + visualRockPhaseClearance() + margin;
 				if (std::fabs(module->rockDx(phase, rock)) <= rx) {
 					return true;
 				}

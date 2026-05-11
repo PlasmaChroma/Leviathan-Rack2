@@ -222,14 +222,17 @@ struct Wyrm : Module {
 	float rockClearancePhase(const WyrmRock& rock) const;
 	float rockClearancePhase(const WyrmRock& rock, float clearanceValue) const;
 	float rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue = 0.f) const;
+	float rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue, float clearancePhase) const;
 	void rebuildRockBoundaryCache(int rockIndex);
 	void rebuildAllRockBoundaryCaches();
 	bool cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float* lower, float* upper) const;
+	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float clearancePhase, float* lower, float* upper) const;
 	bool segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const;
 	void sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock = nullptr);
 	float resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue = kWyrmRockClearance) const;
+	float resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) const;
 	float applyRockPush(float base, float ph) const;
 	float applyRockClamp(float base, float ph, float offset) const;
 	json_t* dataToJson() override;

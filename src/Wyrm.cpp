@@ -201,7 +201,11 @@ float Wyrm::rockClearancePhase(const WyrmRock& rock, float clearanceValue) const
 }
 
 float Wyrm::rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue) const {
-	const float radiusPhase = rock.radiusPhase + ((clearanceValue > 0.f) ? rockClearancePhase(rock, clearanceValue) : 0.f);
+	return rockEdgeY(rock, dx, clearanceValue, (clearanceValue > 0.f) ? rockClearancePhase(rock, clearanceValue) : 0.f);
+}
+
+float Wyrm::rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue, float clearancePhase) const {
+	const float radiusPhase = rock.radiusPhase + std::max(0.f, clearancePhase);
 	const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
 	if (std::fabs(dx) >= radiusPhase) {
 		return 0.f;
@@ -278,7 +282,11 @@ bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float
 }
 
 bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float* lower, float* upper) const {
-	const float edgeY = rockEdgeY(rock, rockDx(ph, rock), clearanceValue);
+	return rockBoundsAtPhase(rock, ph, clearanceValue, (clearanceValue > 0.f) ? rockClearancePhase(rock, clearanceValue) : 0.f, lower, upper);
+}
+
+bool Wyrm::rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float clearancePhase, float* lower, float* upper) const {
+	const float edgeY = rockEdgeY(rock, rockDx(ph, rock), clearanceValue, clearancePhase);
 	if (edgeY <= 0.f) {
 		return false;
 	}
@@ -446,6 +454,10 @@ float Wyrm::applyRockClamp(float base, float ph, float offset) const {
 }
 
 float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue) const {
+	return resolveAgainstRocks(anchorY, desiredY, ph, clearanceValue, -1.f);
+}
+
+float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) const {
 	if (rockCount <= 0) {
 		return clamp(desiredY, -1.f, 1.f);
 	}
@@ -456,10 +468,11 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 			if (i == liftedRock) continue;
 			float lower = 0.f;
 			float upper = 0.f;
+			const float effectiveClearancePhase = (clearancePhase >= 0.f) ? clearancePhase : ((clearanceValue > 0.f) ? rockClearancePhase(rocks[i], clearanceValue) : 0.f);
 			const bool hasBounds =
-				(clearanceValue == kWyrmRockClearance)
+				(clearanceValue == kWyrmRockClearance && clearancePhase < 0.f)
 					? cachedRockBoundsAtPhase(i, ph, &lower, &upper)
-					: rockBoundsAtPhase(rocks[i], ph, clearanceValue, &lower, &upper);
+					: rockBoundsAtPhase(rocks[i], ph, clearanceValue, effectiveClearancePhase, &lower, &upper);
 			if (!hasBounds) continue;
 			const bool anchorInside = (anchorY > lower && anchorY < upper);
 			const bool yInside = (y > lower && y < upper);
