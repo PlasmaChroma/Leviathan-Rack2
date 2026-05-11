@@ -47,7 +47,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	float phaseFromX(float x) const {
 		if (box.size.x <= 1.f) return 0.f;
-		return wrap01(clamp(x / box.size.x, 0.f, 0.9999f));
+		return wrap01(clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 0.9999f));
 	}
 
 	float yFromValue(float value) const {
@@ -55,11 +55,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	Vec rockCenter(const WyrmRock& rock) const {
-		return Vec(rock.phase * box.size.x, yFromValue(rock.value));
+		return Vec(pointEdgeInset() + rock.phase * pointDrawWidth(), yFromValue(rock.value));
 	}
 
 	Vec rockPixelRadius(const WyrmRock& rock) const {
-		return Vec(std::max(5.f, rock.radiusPhase * box.size.x), std::max(5.f, kWyrmRockValueScale * rock.radiusValue * box.size.y));
+		return Vec(std::max(5.f, rock.radiusPhase * pointDrawWidth()), std::max(5.f, kWyrmRockValueScale * rock.radiusValue * box.size.y));
 	}
 
 	float baseWaveAtPhase(float phase) const {
@@ -102,10 +102,17 @@ struct WyrmWaveEditor : TransparentWidget {
 		return slitherOffset(phase, visualSlitherPhase, amount);
 	}
 
+	float slitherOffsetForPhase(float phase) const {
+		if (!module) return 0.f;
+		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
+		if (amount <= 1e-5f) return 0.f;
+		return slitherOffset(phase, visualSlitherPhase, amount);
+	}
+
 	float displayWavePoint(int index) const {
 		if (!module) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
-		const float base = module->getWavePoint(index);
+		const float base = module->applyRockPush(module->getWavePoint(index), phase);
 		const float slither = module->applyRockClamp(base, phase, slitherOffsetForIndex(index));
 		return clamp(base + slither, -1.f, 1.f);
 	}
@@ -132,6 +139,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float value = valueFromY(adjusted.y);
 		rock.phase = phase;
 		rock.value = constrainedRockValueForDrag(rock, phase, value);
+		module->rebuildRockBoundaryCache(rockIndex);
 		if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
 			module->pushWavePointsOutsideRock(rockIndex);
 		}
@@ -196,8 +204,13 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		if (e.action == GLFW_RELEASE) {
 			lastIndex = -1;
+			const int releasedRock = draggingRock;
 			if (module->liftedRock == draggingRock) {
 				module->liftedRock = -1;
+			}
+			if (releasedRock >= 0) {
+				module->rebuildRockBoundaryCache(releasedRock);
+				module->pushWavePointsOutsideRock(releasedRock);
 			}
 			draggingRock = -1;
 			dragRockMouseMode = -1;
@@ -249,6 +262,20 @@ struct WyrmWaveEditor : TransparentWidget {
 				return displayWavePoint(i);
 			}
 			const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
+			return std::sin(2.f * float(M_PI) * phase);
+		};
+		std::array<float, kWyrmPointCountMax> bodyPoints {};
+		if (hasModule) {
+			for (int i = 0; i < module->pointCount; ++i) {
+				bodyPoints[i] = module->getWavePoint(i);
+			}
+		}
+		auto bodyWaveValueAtPhase = [&](float phase) {
+			if (hasModule) {
+				const float base = module->applyRockPush(catmullPeriodic(bodyPoints, module->pointCount, phase), phase);
+				const float slither = module->applyRockClamp(base, phase, slitherOffsetForPhase(phase));
+				return clamp(base + slither, -1.f, 1.f);
+			}
 			return std::sin(2.f * float(M_PI) * phase);
 		};
 
@@ -304,32 +331,31 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(34, 27, 70, 196));
 			nvgFill(args.vg);
 
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, 2.1f);
-			nvgFillColor(args.vg, nvgRGBA(235, 204, 128, 245));
-			nvgFill(args.vg);
 		}
 
 		auto emitRoundedBodyPath = [&]() {
 			const float roundCosThreshold = -0.25f;
-			if (count <= 0) {
+			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
+			if (bodySampleCount <= 0) {
 				return;
 			}
-			if (count == 1) {
-				const float x = xAt(0);
-				const float y = (0.5f - 0.5f * waveValueAt(0)) * box.size.y;
+			if (bodySampleCount == 1) {
+				const float phase = 0.5f;
+				const float x = pointEdgeInset() + phase * pointDrawWidth();
+				const float y = (0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y;
 				nvgMoveTo(args.vg, x, y);
 				return;
 			}
 
 			auto pointAt = [&](int i) {
-				return Vec(xAt(i), (0.5f - 0.5f * waveValueAt(i)) * box.size.y);
+				const float phase = (float(i) + 0.5f) / float(bodySampleCount);
+				return Vec(pointEdgeInset() + phase * pointDrawWidth(), (0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y);
 			};
 
 			const Vec pStart = pointAt(0);
 			nvgMoveTo(args.vg, pStart.x, pStart.y);
 
-			for (int i = 1; i < count - 1; ++i) {
+			for (int i = 1; i < bodySampleCount - 1; ++i) {
 				const Vec p0 = pointAt(i - 1);
 				const Vec p1 = pointAt(i);
 				const Vec p2 = pointAt(i + 1);
@@ -353,7 +379,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				}
 			}
 
-			const Vec pEnd = pointAt(count - 1);
+			const Vec pEnd = pointAt(bodySampleCount - 1);
 			nvgLineTo(args.vg, pEnd.x, pEnd.y);
 		};
 
@@ -380,24 +406,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgStrokeWidth(args.vg, 1.15f);
 		nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
 		nvgStroke(args.vg);
-
-		for (int i = 0; i < count; ++i) {
-			const float x = xAt(i);
-			const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
-			const float plateW = clamp(0.31f * dx, 1.0f, 3.4f);
-			const float plateH = 0.95f + 0.35f * std::sin(0.33f * float(i));
-			for (int lane = 0; lane < 2; ++lane) {
-				const float laneOffset = (lane == 0) ? -1.1f : 1.1f;
-				const float laneShift = (lane == 0) ? -0.18f * dx : 0.18f * dx;
-				nvgBeginPath(args.vg);
-				nvgEllipse(args.vg, x + laneShift, y + laneOffset, plateW, plateH);
-				nvgFillColor(args.vg,
-					((i + lane) % 3) == 0
-						? nvgRGBA(202, 168, 102, 185)
-						: nvgRGBA(150, 110, 56, 150));
-				nvgFill(args.vg);
-			}
-		}
 
 		for (int i = 0; hasModule && i < module->rockCount; ++i) {
 			const WyrmRock& rock = module->rocks[i];

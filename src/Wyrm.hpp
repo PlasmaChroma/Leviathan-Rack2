@@ -11,6 +11,7 @@ constexpr int kWyrmPointCountMax = 256;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
 constexpr int kWyrmMaxRocks = 6;
+constexpr int kWyrmRockBoundarySamples = 64;
 
 enum WyrmShapeId {
 	SHAPE_SINE = 0,
@@ -37,7 +38,7 @@ constexpr float kWyrmLfoMaxHz = 100.f;
 // Precomputed 1 / tanh(1) so this remains a valid C++11 constant on libc++.
 constexpr float kWyrmFoldMakeupGain = 1.3130352f;
 constexpr float kWyrmSlitherMaxOffset = 0.42f;
-constexpr float kWyrmRockClearance = 0.055f;
+constexpr float kWyrmRockClearance = 0.012f;
 constexpr float kWyrmRockValueScale = 0.5f;
 
 inline float clamp01(float x) {
@@ -148,6 +149,16 @@ struct WyrmRock {
 	uint32_t seed = 1u;
 };
 
+struct WyrmRockBoundaryCache {
+	bool valid = false;
+	float phase = 0.f;
+	float value = 0.f;
+	float radiusPhase = 0.f;
+	float radiusValue = 0.f;
+	std::array<float, kWyrmRockBoundarySamples> lower {};
+	std::array<float, kWyrmRockBoundarySamples> upper {};
+};
+
 struct Wyrm : Module {
 	enum ParamId {
 		FREQ_PARAM,
@@ -194,6 +205,7 @@ struct Wyrm : Module {
 	int rockMouseMode = ROCK_MOUSE_DRAGS;
 	int liftedRock = -1;
 	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
+	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
 	double createdUnixTimeSec = 0.0;
 
 	Wyrm();
@@ -209,6 +221,9 @@ struct Wyrm : Module {
 	float rockDx(float ph, const WyrmRock& rock) const;
 	float rockClearancePhase(const WyrmRock& rock) const;
 	float rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue = 0.f) const;
+	void rebuildRockBoundaryCache(int rockIndex);
+	void rebuildAllRockBoundaryCaches();
+	bool cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const;
 	bool pushPointOutsideRock(int pointIndex, const WyrmRock& rock, bool preferUpper, bool forceSide);
 	bool segmentIntersectsRockBounds(const WyrmRock& rock, float ph0, float y0, float ph1, float y1, bool* preferUpper) const;
