@@ -34,6 +34,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
   source.pitchInterpretationMode = 2;
   source.boardValueLayoutMode = 1;
   source.pitchDividerMode = 3;
+  source.params[Crownstep::RANGE_PARAM].setValue(0.75f);
   source.boardTextureMode = Crownstep::BOARD_TEXTURE_MARBLE;
   source.playhead = 7;
   source.gameOver = false;
@@ -96,6 +97,9 @@ TestResult testCrownstepStateJsonRoundTrip() {
   bool pitchInterpretationOk = loaded.pitchInterpretationMode == source.pitchInterpretationMode;
   bool boardValueLayoutOk = loaded.boardValueLayoutMode == source.boardValueLayoutMode;
   bool pitchDividerOk = loaded.pitchDividerMode == source.pitchDividerMode;
+  bool pitchRangeOk = nearlyEqual(
+    loaded.params[Crownstep::RANGE_PARAM].getValue(),
+    source.params[Crownstep::RANGE_PARAM].getValue());
   bool boardTextureOk = loaded.boardTextureMode == source.boardTextureMode;
   bool playheadOk = loaded.playhead == source.playhead;
   bool gameOverOk = loaded.gameOver == source.gameOver;
@@ -112,6 +116,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
     pitchInterpretationOk &&
     boardValueLayoutOk &&
     pitchDividerOk &&
+    pitchRangeOk &&
     boardTextureOk &&
     playheadOk &&
     gameOverOk &&
@@ -163,6 +168,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " pitchInterpretationOk=" + std::to_string(pitchInterpretationOk ? 1 : 0) +
             " boardValueLayoutOk=" + std::to_string(boardValueLayoutOk ? 1 : 0) +
             " pitchDividerOk=" + std::to_string(pitchDividerOk ? 1 : 0) +
+            " pitchRangeOk=" + std::to_string(pitchRangeOk ? 1 : 0) +
             " boardTextureOk=" + std::to_string(boardTextureOk ? 1 : 0) +
             " playheadOk=" + std::to_string(playheadOk ? 1 : 0) +
             " gameOverOk=" + std::to_string(gameOverOk ? 1 : 0) +

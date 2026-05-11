@@ -15,3 +15,21 @@ std::string CrownstepSeqLengthQuantity::getDisplayValueString() {
 	}
 	return std::to_string(requested);
 }
+
+float CrownstepRangeQuantity::getDisplayValue() {
+	const Crownstep* crownstepModule = dynamic_cast<const Crownstep*>(module);
+	const int cellCount = crownstepModule ? crownstepModule->boardCellCount() : crownstep::BOARD_SIZE;
+	return crownstep::pitchRangeSemitoneSpan(getValue(), cellCount);
+}
+
+void CrownstepRangeQuantity::setDisplayValue(float displayValue) {
+	const Crownstep* crownstepModule = dynamic_cast<const Crownstep*>(module);
+	const int cellCount = crownstepModule ? crownstepModule->boardCellCount() : crownstep::BOARD_SIZE;
+	const float denominator = std::max(1.f, float(std::max(0, cellCount - 1)));
+	const float multiplier = displayValue / denominator;
+	setImmediateValue(crownstep::pitchRangeParamFromMultiplier(multiplier));
+}
+
+std::string CrownstepRangeQuantity::getDisplayValueString() {
+	return string::f("%.1f st", getDisplayValue());
+}

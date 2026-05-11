@@ -228,6 +228,8 @@ Crownstep::Crownstep() {
 	// RUN_PARAM intentionally left unconfigured; reserved for compatibility.
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
 	configParam(DEBUG_ADD_MOVES_PARAM, 0.f, 1.f, 0.f, "Add 10 random moves");
+	configParam<CrownstepRangeQuantity>(
+		RANGE_PARAM, 0.f, 1.f, crownstep::PITCH_RANGE_PARAM_DEFAULT, "Range");
 
 	paramQuantities[SEQ_LENGTH_PARAM]->snapEnabled = true;
 	paramQuantities[ROOT_PARAM]->snapEnabled = true;
@@ -836,29 +838,22 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 	if (boardValueLayoutInverted) {
 		boardValueIndex = float(boardCellCount() - 1) - boardValueIndex;
 	}
-	// Bias acts as a raw index-domain offset on the board-derived value.
-	boardValueIndex += float(rootSemitoneLinear());
-	boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
+	boardValueIndex *= crownstep::pitchRangeMultiplierFromParam(params[RANGE_PARAM].getValue());
 	if (pitchBipolarEnabled) {
-		float center = crownstep::pitchBipolarCenterOffset(pitchDividerMode, boardCellCount());
+		float center = 0.5f * crownstep::pitchRangeSemitoneSpan(params[RANGE_PARAM].getValue(), boardCellCount());
 		boardValueIndex -= center;
 	}
+	// Bias acts in semitone space after Range, so the displayed span remains literal.
+	boardValueIndex += float(rootSemitoneLinear());
 	return boardValueIndex;
 }
 
 float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing) {
 	if (quantizationEnabled) {
 		const int transposeSemitones = int(std::lround(transposeVolts() * 12.f));
-		const int rootedSemitoneLinear = rootSemitone() + transposeSemitones;
-		const int rootedSemitoneWrapped = crownstep::wrapSemitone12(rootedSemitoneLinear);
-		const float rootedOctaveVolts = float(rootedSemitoneLinear - rootedSemitoneWrapped) / 12.f;
-		return clamp(crownstep::mapPitchFromIndex(
-			boardValueIndex,
-			isKing,
-			currentScaleIndex(),
-			rootedSemitoneWrapped,
-			rootedOctaveVolts
-		), -10.f, 10.f);
+		float semitone = boardValueIndex + (isKing ? 12.f : 0.f);
+		int quantizedSemitone = crownstep::quantizeSemitoneToScale(semitone, currentScaleIndex(), rootSemitone());
+		return clamp((float(quantizedSemitone + transposeSemitones) / 12.f), -10.f, 10.f);
 	}
 	return clamp(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
 }

@@ -63,6 +63,12 @@ struct CrownstepRootQuantity final : ParamQuantity {
 	}
 };
 
+struct CrownstepRangeQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
+
 struct Crownstep : Module {
 	enum ParamId {
 		SEQ_LENGTH_PARAM,
@@ -72,6 +78,7 @@ struct Crownstep : Module {
 		RUN_PARAM,
 		NEW_GAME_PARAM,
 		DEBUG_ADD_MOVES_PARAM,
+		RANGE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -176,6 +183,7 @@ struct Crownstep : Module {
 	uint32_t boardValueRandomSeed = 1u;
 	bool boardValueLayoutInverted = false;
 	int pitchDividerMode = 0;
+	float cachedPitchRangeParam = crownstep::PITCH_RANGE_PARAM_DEFAULT;
 	bool showCellPitchOverlay = false;
 	int boardTextureMode = BOARD_TEXTURE_MARBLE;
 	int gameMode = GAME_MODE_CHECKERS;

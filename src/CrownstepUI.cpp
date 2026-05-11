@@ -39,6 +39,61 @@ constexpr HighlightPalette HIGHLIGHT_PALETTES[HIGHLIGHT_COLOR_COUNT] = {
 	{40u, 168u, 104u, 98u, 235u, 154u, 88u, 240u, 154u},
 };
 
+struct CrownstepRangeMenuQuantity final : Quantity {
+	Crownstep* module = nullptr;
+
+	explicit CrownstepRangeMenuQuantity(Crownstep* module) : module(module) {}
+
+	void setValue(float value) override {
+		if (!module) {
+			return;
+		}
+		module->params[Crownstep::RANGE_PARAM].setValue(clamp(value, 0.f, 1.f));
+		module->refreshHeldPitchForCurrentStep();
+	}
+
+	float getValue() override {
+		return module ? module->params[Crownstep::RANGE_PARAM].getValue() : crownstep::PITCH_RANGE_PARAM_DEFAULT;
+	}
+
+	float getDefaultValue() override {
+		return crownstep::PITCH_RANGE_PARAM_DEFAULT;
+	}
+
+	float getMinValue() override {
+		return 0.f;
+	}
+
+	float getMaxValue() override {
+		return 1.f;
+	}
+
+	std::string getLabel() override {
+		return "Range";
+	}
+
+	std::string getUnit() override {
+		return "st";
+	}
+
+	float getDisplayValue() override {
+		const int cellCount = module ? module->boardCellCount() : crownstep::BOARD_SIZE;
+		return crownstep::pitchRangeSemitoneSpan(getValue(), cellCount);
+	}
+
+	void setDisplayValue(float displayValue) override {
+		if (!module) {
+			return;
+		}
+		const float denominator = std::max(1.f, float(std::max(0, module->boardCellCount() - 1)));
+		setValue(crownstep::pitchRangeParamFromMultiplier(displayValue / denominator));
+	}
+
+	std::string getDisplayValueString() override {
+		return string::f("%.1f", getDisplayValue());
+	}
+};
+
 inline int highlightPaletteIndexForMode(int highlightMode) {
 	switch (highlightMode) {
 	case Crownstep::HIGHLIGHT_PURPLE:
@@ -3725,6 +3780,10 @@ struct CrownstepWidget final : ModuleWidget {
 		MenuLabel* pitchLabel = new MenuLabel();
 		pitchLabel->text = "Pitch";
 		menu->addChild(pitchLabel);
+		auto* rangeSlider = new ui::Slider();
+		rangeSlider->box.size = Vec(180.f, 24.f);
+		rangeSlider->quantity = new CrownstepRangeMenuQuantity(module);
+		menu->addChild(rangeSlider);
 		menu->addChild(createCheckMenuItem(
 			"Show Cell Pitch Values",
 			"",
@@ -3856,53 +3915,6 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->pitchInterpretationMode = i;
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("Scalar", "", [=](Menu* dividerMenu) {
-			dividerMenu->addChild(createCheckMenuItem(
-				crownstep::PITCH_DIVIDER_NAMES[size_t(0)],
-				"",
-				[=]() {
-					return module && module->pitchDividerMode == 0;
-				},
-				[=]() {
-					if (module) {
-						module->pitchDividerMode = 0;
-						module->refreshHeldPitchForCurrentStep();
-					}
-				}
-			));
-			dividerMenu->addChild(new MenuSeparator());
-			for (int mode = 1; mode < 4; ++mode) {
-				dividerMenu->addChild(createCheckMenuItem(
-					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
-					"",
-					[=]() {
-						return module && module->pitchDividerMode == mode;
-					},
-					[=]() {
-						if (module) {
-							module->pitchDividerMode = mode;
-							module->refreshHeldPitchForCurrentStep();
-						}
-					}
-				));
-			}
-			dividerMenu->addChild(new MenuSeparator());
-			for (int mode = 4; mode < int(crownstep::PITCH_DIVIDER_NAMES.size()); ++mode) {
-				dividerMenu->addChild(createCheckMenuItem(
-					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
-					"",
-					[=]() {
-						return module && module->pitchDividerMode == mode;
-					},
-					[=]() {
-						if (module) {
-							module->pitchDividerMode = mode;
-							module->refreshHeldPitchForCurrentStep();
 						}
 					}
 				));

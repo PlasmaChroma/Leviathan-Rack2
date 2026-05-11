@@ -14,6 +14,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "boardValueRandomSeed", json_integer(json_int_t(boardValueRandomSeed)));
 	json_object_set_new(rootJ, "boardValueLayoutInverted", json_boolean(boardValueLayoutInverted));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
+	json_object_set_new(rootJ, "pitchRangeParam", json_real(params[RANGE_PARAM].getValue()));
 	json_object_set_new(rootJ, "showCellPitchOverlay", json_boolean(showCellPitchOverlay));
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 	json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
@@ -138,6 +139,16 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			clamp(int(json_integer_value(pitchDividerModeJ)), 0, int(crownstep::PITCH_DIVIDER_NAMES.size()) - 1);
 		loadedPitchDividerMode = true;
 	}
+	bool loadedPitchRangeParam = false;
+	json_t* pitchRangeParamJ = json_object_get(rootJ, "pitchRangeParam");
+	if (pitchRangeParamJ && json_is_number(pitchRangeParamJ)) {
+		params[RANGE_PARAM].setValue(clamp(float(json_number_value(pitchRangeParamJ)), 0.f, 1.f));
+		loadedPitchRangeParam = true;
+	}
+	else if (loadedPitchDividerMode) {
+		params[RANGE_PARAM].setValue(crownstep::pitchRangeParamFromMultiplier(
+			crownstep::pitchDividerForMode(pitchDividerMode)));
+	}
 	json_t* showCellPitchOverlayJ = json_object_get(rootJ, "showCellPitchOverlay");
 	if (showCellPitchOverlayJ) {
 		showCellPitchOverlay = json_is_true(showCellPitchOverlayJ);
@@ -152,6 +163,10 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			storedLayoutMode < crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT * 2) {
 			boardValueLayoutMode = storedLayoutMode - crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT;
 			pitchDividerMode = 1;
+			if (!loadedPitchRangeParam) {
+				params[RANGE_PARAM].setValue(crownstep::pitchRangeParamFromMultiplier(
+					crownstep::pitchDividerForMode(pitchDividerMode)));
+			}
 		}
 		else {
 			boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);

@@ -170,6 +170,21 @@ TestResult testPitchDividerModesScaleBoardValuesAndCenterOffset() {
           "modes full/half/third/quarter"};
 }
 
+TestResult testPitchRangeParamMapsLegacyScalarAnchors() {
+  const float quarterParam = crownstep::pitchRangeParamFromMultiplier(0.25f);
+  const float fullParam = crownstep::pitchRangeParamFromMultiplier(1.f);
+  const float tripleParam = crownstep::pitchRangeParamFromMultiplier(3.f);
+  const float fullSpan = crownstep::pitchRangeSemitoneSpan(fullParam, crownstep::BOARD_SIZE);
+  bool pass =
+    std::fabs(quarterParam - 0.f) < 1e-6f &&
+    std::fabs(fullParam - 0.5f) < 1e-6f &&
+    std::fabs(tripleParam - 1.f) < 1e-6f &&
+    std::fabs(fullSpan - 31.f) < 1e-6f;
+  return {"Pitch range param maps legacy scalar anchors", pass,
+          "quarter=" + std::to_string(quarterParam) + " full=" + std::to_string(fullParam) +
+            " triple=" + std::to_string(tripleParam) + " span=" + std::to_string(fullSpan)};
+}
+
 TestResult testCheckersRulesAdapterMatchesCoreFunctions() {
   const crownstep::IGameRules& rules = crownstep::checkersRules();
   crownstep::BoardState board = rules.makeInitialBoard();
@@ -511,6 +526,7 @@ int main() {
   tests.push_back(testSequenceWindowUsesRecentHistorySlice());
   tests.push_back(testAiChoosesAvailableCapture());
   tests.push_back(testPitchDividerModesScaleBoardValuesAndCenterOffset());
+  tests.push_back(testPitchRangeParamMapsLegacyScalarAnchors());
   tests.push_back(testCheckersRulesAdapterMatchesCoreFunctions());
   tests.push_back(testChessInitialBoardAndMoveCount());
   tests.push_back(testChessPinnedPieceCannotExposeKing());

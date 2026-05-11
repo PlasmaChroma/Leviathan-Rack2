@@ -84,6 +84,10 @@ static constexpr std::array<const char*, 7> PITCH_DIVIDER_NAMES = {
 static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
 	{1.f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.f, 3.f}
 };
+static constexpr float PITCH_RANGE_PARAM_MIN_MULTIPLIER = 0.25f;
+static constexpr float PITCH_RANGE_PARAM_FULL_MULTIPLIER = 1.f;
+static constexpr float PITCH_RANGE_PARAM_MAX_MULTIPLIER = 3.f;
+static constexpr float PITCH_RANGE_PARAM_DEFAULT = 0.5f;
 
 struct Move {
 	int originIndex = -1;
@@ -1581,6 +1585,30 @@ inline float pitchDividerForMode(int dividerMode) {
 	return PITCH_DIVIDER_VALUES[size_t(mode)];
 }
 
+inline float pitchRangeParamFromMultiplier(float multiplier) {
+	float m = std::max(PITCH_RANGE_PARAM_MIN_MULTIPLIER, std::min(multiplier, PITCH_RANGE_PARAM_MAX_MULTIPLIER));
+	if (m <= PITCH_RANGE_PARAM_FULL_MULTIPLIER) {
+		return 0.5f * (m - PITCH_RANGE_PARAM_MIN_MULTIPLIER) /
+			(PITCH_RANGE_PARAM_FULL_MULTIPLIER - PITCH_RANGE_PARAM_MIN_MULTIPLIER);
+	}
+	return 0.5f + 0.5f * (m - PITCH_RANGE_PARAM_FULL_MULTIPLIER) /
+		(PITCH_RANGE_PARAM_MAX_MULTIPLIER - PITCH_RANGE_PARAM_FULL_MULTIPLIER);
+}
+
+inline float pitchRangeMultiplierFromParam(float rangeParam) {
+	float x = std::max(0.f, std::min(rangeParam, 1.f));
+	if (x <= 0.5f) {
+		return PITCH_RANGE_PARAM_MIN_MULTIPLIER +
+			(PITCH_RANGE_PARAM_FULL_MULTIPLIER - PITCH_RANGE_PARAM_MIN_MULTIPLIER) * (x / 0.5f);
+	}
+	return PITCH_RANGE_PARAM_FULL_MULTIPLIER +
+		(PITCH_RANGE_PARAM_MAX_MULTIPLIER - PITCH_RANGE_PARAM_FULL_MULTIPLIER) * ((x - 0.5f) / 0.5f);
+}
+
+inline float pitchRangeSemitoneSpan(float rangeParam, int boardCellCount) {
+	return float(std::max(0, boardCellCount - 1)) * pitchRangeMultiplierFromParam(rangeParam);
+}
+
 inline float applyPitchDividerToBoardValue(float boardValueIndex, int dividerMode) {
 	return boardValueIndex * pitchDividerForMode(dividerMode);
 }
@@ -1600,6 +1628,26 @@ inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int roo
 		semitone += 12;
 	}
 	return float(semitone) / 12.f + transposeVolts;
+}
+
+inline int quantizeSemitoneToScale(float semitone, int scaleIndex, int rootSemitone) {
+	const Scale& scale = SCALES[size_t(std::max(0, std::min(scaleIndex, int(SCALES.size()) - 1)))];
+	const int scaleLen = std::max(scale.length, 1);
+	const int root = wrapSemitone12(rootSemitone);
+	const int centerOctave = int(std::floor((semitone - float(root)) / 12.f));
+	int bestSemitone = root;
+	float bestDistance = std::numeric_limits<float>::infinity();
+	for (int octave = centerOctave - 1; octave <= centerOctave + 1; ++octave) {
+		for (int degree = 0; degree < scaleLen; ++degree) {
+			const int candidate = scale.semitones[size_t(degree)] + octave * 12 + root;
+			const float distance = std::fabs(semitone - float(candidate));
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				bestSemitone = candidate;
+			}
+		}
+	}
+	return bestSemitone;
 }
 
 inline float mapRawPitchFromIndex(float index, bool isKing, float transposeVolts) {

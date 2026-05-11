@@ -117,17 +117,21 @@ void Crownstep::process(const ProcessArgs& args) {
 
 	int effectiveRootWrapped = rootSemitone();
 	int effectiveRootLinear = rootSemitoneLinear();
+	float effectivePitchRangeParam = params[RANGE_PARAM].getValue();
 	if (!cachedRootSemitoneValid) {
 		cachedRootSemitoneWrapped = effectiveRootWrapped;
 		cachedRootSemitoneLinear = effectiveRootLinear;
+		cachedPitchRangeParam = effectivePitchRangeParam;
 		cachedRootSemitoneValid = true;
 	}
 	else if (
 		effectiveRootWrapped != cachedRootSemitoneWrapped
 		|| effectiveRootLinear != cachedRootSemitoneLinear
+		|| std::fabs(effectivePitchRangeParam - cachedPitchRangeParam) > 1e-6f
 	) {
 		cachedRootSemitoneWrapped = effectiveRootWrapped;
 		cachedRootSemitoneLinear = effectiveRootLinear;
+		cachedPitchRangeParam = effectivePitchRangeParam;
 		refreshHeldPitchForCurrentStep();
 	}
 
