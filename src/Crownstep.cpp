@@ -9,6 +9,7 @@ std::string CrownstepSeqLengthQuantity::getDisplayValueString() {
 	if (!crownstepModule) {
 		return std::to_string(requested);
 	}
+	std::lock_guard<std::recursive_mutex> lock(crownstepModule->sequenceMutex);
 	int available = int(crownstepModule->history.size());
 	if (available > 0 && requested >= available) {
 		return "Full";

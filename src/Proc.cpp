@@ -150,11 +150,11 @@ struct Proc : Module {
 	};
 	PreviewSharedState previewState;
 	PreviewUpdateState previewUpdate;
-	bool bandlimitedGateOutputs = false;
-	bool bandlimitedSignalOutputs = true;
+	std::atomic<bool> bandlimitedGateOutputs {false};
+	std::atomic<bool> bandlimitedSignalOutputs {true};
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
-	bool timingInterpolate = true;
+	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
@@ -854,10 +854,10 @@ struct Proc : Module {
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "cycleLatched", json_boolean(channel.cycleLatched));
-		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
-		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
+		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
-		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
+		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -873,12 +873,12 @@ struct Proc : Module {
 
 		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
 		if (blepGatesJ) {
-			bandlimitedGateOutputs = json_boolean_value(blepGatesJ);
+			bandlimitedGateOutputs.store(json_boolean_value(blepGatesJ), std::memory_order_relaxed);
 		}
 
 		json_t* blepSignalJ = json_object_get(rootJ, "bandlimitedSignalOutputs");
 		if (blepSignalJ) {
-			bandlimitedSignalOutputs = json_boolean_value(blepSignalJ);
+			bandlimitedSignalOutputs.store(json_boolean_value(blepSignalJ), std::memory_order_relaxed);
 		}
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
@@ -888,7 +888,7 @@ struct Proc : Module {
 
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
 		if (timingInterpJ) {
-			timingInterpolate = json_boolean_value(timingInterpJ);
+			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
 		}
 	}
 
@@ -1324,10 +1324,19 @@ struct ProcWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (proc) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &proc->bandlimitedGateOutputs));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited Signal Outputs", "", &proc->bandlimitedSignalOutputs));
+			menu->addChild(createCheckMenuItem("Bandlimited EOR/EOC", "",
+				[=]() { return proc->bandlimitedGateOutputs.load(std::memory_order_relaxed); },
+				[=]() { proc->bandlimitedGateOutputs.store(!proc->bandlimitedGateOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createCheckMenuItem("Bandlimited Signal Outputs", "",
+				[=]() { return proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
+				[=]() { proc->bandlimitedSignalOutputs.store(!proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createMenuLabel("Rate Control"));
-			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &proc->timingInterpolate));
+			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
+				[=]() { return proc->timingInterpolate.load(std::memory_order_relaxed); },
+				[=]() { proc->timingInterpolate.store(!proc->timingInterpolate.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
 				[=](Menu* submenu) {
 					auto addDivItem = [=](int div, std::string label) {

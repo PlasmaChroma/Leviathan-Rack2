@@ -173,11 +173,11 @@ struct IntegralFlux : Module {
 	PreviewSharedState previewCh4;
 	PreviewUpdateState previewUpdateCh1;
 	PreviewUpdateState previewUpdateCh4;
-	bool bandlimitedGateOutputs = false;
-	bool bandlimitedSignalOutputs = true;
+	std::atomic<bool> bandlimitedGateOutputs {false};
+	std::atomic<bool> bandlimitedSignalOutputs {true};
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
-	bool timingInterpolate = true;
+	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
@@ -899,10 +899,10 @@ struct IntegralFlux : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
 		json_object_set_new(rootJ, "ch4CycleLatched", json_boolean(ch4.cycleLatched));
-		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
-		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
+		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
-		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
+		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -919,12 +919,12 @@ struct IntegralFlux : Module {
 
 		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
 		if (blepGatesJ) {
-			bandlimitedGateOutputs = json_boolean_value(blepGatesJ);
+			bandlimitedGateOutputs.store(json_boolean_value(blepGatesJ), std::memory_order_relaxed);
 		}
 
 		json_t* blepSignalJ = json_object_get(rootJ, "bandlimitedSignalOutputs");
 		if (blepSignalJ) {
-			bandlimitedSignalOutputs = json_boolean_value(blepSignalJ);
+			bandlimitedSignalOutputs.store(json_boolean_value(blepSignalJ), std::memory_order_relaxed);
 		}
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
@@ -934,7 +934,7 @@ struct IntegralFlux : Module {
 
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
 		if (timingInterpJ) {
-			timingInterpolate = json_boolean_value(timingInterpJ);
+			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
 		}
 	}
 
@@ -1454,10 +1454,19 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (maths) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &maths->bandlimitedGateOutputs));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited CH1/CH4 Signal Outputs", "", &maths->bandlimitedSignalOutputs));
+			menu->addChild(createCheckMenuItem("Bandlimited EOR/EOC", "",
+				[=]() { return maths->bandlimitedGateOutputs.load(std::memory_order_relaxed); },
+				[=]() { maths->bandlimitedGateOutputs.store(!maths->bandlimitedGateOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createCheckMenuItem("Bandlimited CH1/CH4 Signal Outputs", "",
+				[=]() { return maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
+				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createMenuLabel("Rate Control"));
-			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &maths->timingInterpolate));
+			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
+				[=]() { return maths->timingInterpolate.load(std::memory_order_relaxed); },
+				[=]() { maths->timingInterpolate.store(!maths->timingInterpolate.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
 				[=](Menu* submenu) {
 					auto addDivItem = [=](int div, std::string label) {

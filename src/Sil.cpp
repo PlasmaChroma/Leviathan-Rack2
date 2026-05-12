@@ -912,7 +912,9 @@ struct Sil : Module {
 		configOutput(OUTPUT_L_OUTPUT, "Left");
 		configOutput(OUTPUT_R_OUTPUT, "Right");
 
-		hist.samplesPerBin = (int)(APP->engine->getSampleRate() * HISTOGRAM_DURATION / HISTOGRAM_BINS);
+		const float initialSampleRate = (APP && APP->engine) ? APP->engine->getSampleRate() : 44100.f;
+		hist.samplesPerBin = (int)(initialSampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
+		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
 		
 		spec.fft = new dsp::RealFFT(FFT_SIZE);
 		for (int i = 0; i < FFT_SIZE; i++) {
@@ -928,26 +930,26 @@ struct Sil : Module {
 		midEnhance.coeffDivider.setDivision(kMidEnhanceCoeffDivision);
 		stereoEnhance.coeffDivider.setDivision(kStereoEnhanceCoeffDivision);
 		saturator.updateDivider.setDivision(kSatUpdateDivision);
-		updateLowBandCutoff(APP->engine->getSampleRate());
-		updateRemoveMudCutoffs(APP->engine->getSampleRate());
-		updateGlueCutoff(APP->engine->getSampleRate());
-		updateMidEnhanceCutoffs(APP->engine->getSampleRate());
-		updateStereoEnhanceCutoffs(APP->engine->getSampleRate());
-		updateDynamicsCoefficients(APP->engine->getSampleRate());
-		updateSpectrumBinMap(APP->engine->getSampleRate());
+		updateLowBandCutoff(initialSampleRate);
+		updateRemoveMudCutoffs(initialSampleRate);
+		updateGlueCutoff(initialSampleRate);
+		updateMidEnhanceCutoffs(initialSampleRate);
+		updateStereoEnhanceCutoffs(initialSampleRate);
+		updateDynamicsCoefficients(initialSampleRate);
+		updateSpectrumBinMap(initialSampleRate);
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
-		configureRollingBuffer(APP->engine->getSampleRate());
-		saturator.reset(APP->engine->getSampleRate());
-		impactAir.shelfL.setHighShelf(APP->engine->getSampleRate(), kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
-		impactAir.shelfR.setHighShelf(APP->engine->getSampleRate(), kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
-		removeMud.peakingL.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
-		removeMud.peakingR.setPeaking(APP->engine->getSampleRate(), kMudCenterHz, kMudQ, 0.f);
-		midEnhance.liftL.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
-		midEnhance.liftR.setPeaking(APP->engine->getSampleRate(), kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
-		stereoEnhance.midEq.setPeaking(APP->engine->getSampleRate(), kStereoMidCenterHz, kStereoMidQ, 0.f);
-		stereoEnhance.sideEq.setPeaking(APP->engine->getSampleRate(), kStereoSideCenterHz, kStereoSideQ, 0.f);
+		configureRollingBuffer(initialSampleRate);
+		saturator.reset(initialSampleRate);
+		impactAir.shelfL.setHighShelf(initialSampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
+		impactAir.shelfR.setHighShelf(initialSampleRate, kImpactAirShelfHz, kImpactAirShelfQ, 0.f);
+		removeMud.peakingL.setPeaking(initialSampleRate, kMudCenterHz, kMudQ, 0.f);
+		removeMud.peakingR.setPeaking(initialSampleRate, kMudCenterHz, kMudQ, 0.f);
+		midEnhance.liftL.setPeaking(initialSampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
+		midEnhance.liftR.setPeaking(initialSampleRate, kMidEnhanceCenterHz, kMidEnhanceQ, 0.f);
+		stereoEnhance.midEq.setPeaking(initialSampleRate, kStereoMidCenterHz, kStereoMidQ, 0.f);
+		stereoEnhance.sideEq.setPeaking(initialSampleRate, kStereoSideCenterHz, kStereoSideQ, 0.f);
 		configureLimiterFastPath();
-		configureRepairLatency(APP->engine->getSampleRate(), repairEnabled);
+		configureRepairLatency(initialSampleRate, repairEnabled);
 	}
 
 	~Sil() {

@@ -139,7 +139,7 @@ struct WyrmEditorIconButton : TransparentWidget {
 			return;
 		}
 		if (kind == LOCK) {
-			module->editorLocked = !module->editorLocked;
+			module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
 		}
 		else {
 			module->setFactoryShape(module->selectedShape);
@@ -159,7 +159,7 @@ struct WyrmEditorIconButton : TransparentWidget {
 		const float shackleW = 0.34f * w;
 		const float shackleTop = 0.19f * h;
 		const float shackleY = bodyY + 0.03f * h;
-		const bool locked = module && module->editorLocked;
+		const bool locked = module && module->editorLocked.load(std::memory_order_relaxed);
 
 		nvgStrokeWidth(args.vg, 2.3f);
 		nvgStrokeColor(args.vg, color);
@@ -425,9 +425,18 @@ struct WyrmWidget : ModuleWidget {
 		if (!module) return;
 
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createBoolPtrMenuItem("LFO Mode", "", &module->lfoMode));
-		menu->addChild(createBoolPtrMenuItem("Lock Wave Editor", "", &module->editorLocked));
-		menu->addChild(createBoolPtrMenuItem("Sand View", "", &module->sandViewEnabled));
+		menu->addChild(createCheckMenuItem("LFO Mode", "",
+			[=]() { return module->lfoMode.load(std::memory_order_relaxed); },
+			[=]() { module->lfoMode.store(!module->lfoMode.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+		));
+		menu->addChild(createCheckMenuItem("Lock Wave Editor", "",
+			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
+			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+		));
+		menu->addChild(createCheckMenuItem("Sand View", "",
+			[=]() { return module->sandViewEnabled.load(std::memory_order_relaxed); },
+			[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+		));
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"Mouse Drags Rocks", "",

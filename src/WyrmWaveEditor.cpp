@@ -30,7 +30,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	bool sandEnabled() const {
-		return module && module->sandViewEnabled;
+		return module && module->sandViewEnabled.load(std::memory_order_relaxed);
 	}
 
 	void resetSandHistory() {
@@ -446,7 +446,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	void applyPointFromPos(Vec pos) {
-		if (!module || module->editorLocked) return;
+		if (!module || module->editorLocked.load(std::memory_order_relaxed)) return;
 		const int idx = indexFromX(pos.x);
 		const float targetDisplayValue = valueFromY(pos.y);
 		const float writeSlitherPhase = pointEditActive ? pointEditSlitherPhase : visualSlitherPhase;
@@ -529,7 +529,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			e.consume(this);
 			return;
 		}
-		if (!module || module->editorLocked || e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		if (!module || module->editorLocked.load(std::memory_order_relaxed) || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 			Widget::onDragMove(e);
 			return;
 		}

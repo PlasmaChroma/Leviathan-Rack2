@@ -629,9 +629,9 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 
 json_t* Wyrm::dataToJson() {
 	json_t* root = json_object();
-	json_object_set_new(root, "lfoMode", json_boolean(lfoMode));
-	json_object_set_new(root, "editorLocked", json_boolean(editorLocked));
-	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled));
+	json_object_set_new(root, "lfoMode", json_boolean(lfoMode.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "editorLocked", json_boolean(editorLocked.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
@@ -659,11 +659,11 @@ json_t* Wyrm::dataToJson() {
 
 void Wyrm::dataFromJson(json_t* root) {
 	json_t* lfoJ = json_object_get(root, "lfoMode");
-	if (lfoJ) lfoMode = json_is_true(lfoJ);
+	if (lfoJ) lfoMode.store(json_is_true(lfoJ), std::memory_order_relaxed);
 	json_t* lockJ = json_object_get(root, "editorLocked");
-	if (lockJ) editorLocked = json_is_true(lockJ);
+	if (lockJ) editorLocked.store(json_is_true(lockJ), std::memory_order_relaxed);
 	json_t* sandViewJ = json_object_get(root, "sandViewEnabled");
-	if (sandViewJ) sandViewEnabled = json_is_true(sandViewJ);
+	if (sandViewJ) sandViewEnabled.store(json_is_true(sandViewJ), std::memory_order_relaxed);
 	json_t* customizedJ = json_object_get(root, "waveCustomized");
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* shapeJ = json_object_get(root, "selectedShape");
@@ -740,7 +740,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	outputs[RAW_OUTPUT].setChannels(channels);
 
 	const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
-	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoMode);
+	const bool lfoModeNow = lfoMode.load(std::memory_order_relaxed);
+	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoModeNow);
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
@@ -815,7 +816,7 @@ void Wyrm::process(const ProcessArgs& args) {
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
 		}
 		phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
-		const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
+		const float slitherBaseHz = lfoModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 		slitherPhase[c] = wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
 		if (c == 0) {
@@ -841,12 +842,12 @@ void Wyrm::process(const ProcessArgs& args) {
 
 float WyrmFreqQuantity::getDisplayValue() {
 	const auto* wyrm = static_cast<const Wyrm*>(module);
-	return wyrmBaseFrequencyFromKnob(getValue(), wyrm ? wyrm->lfoMode : false);
+	return wyrmBaseFrequencyFromKnob(getValue(), wyrm ? wyrm->lfoMode.load(std::memory_order_relaxed) : false);
 }
 
 void WyrmFreqQuantity::setDisplayValue(float displayValue) {
 	const auto* wyrm = static_cast<const Wyrm*>(module);
-	setImmediateValue(wyrmKnobValueForFrequency(displayValue, wyrm ? wyrm->lfoMode : false));
+	setImmediateValue(wyrmKnobValueForFrequency(displayValue, wyrm ? wyrm->lfoMode.load(std::memory_order_relaxed) : false));
 }
 
 std::string WyrmFreqQuantity::getDisplayValueString() {

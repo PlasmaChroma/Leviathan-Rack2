@@ -213,9 +213,9 @@ struct Wyrm : Module {
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
 
-	bool lfoMode = false;
-	bool editorLocked = false;
-	bool sandViewEnabled = true;
+	std::atomic<bool> lfoMode {false};
+	std::atomic<bool> editorLocked {false};
+	std::atomic<bool> sandViewEnabled {true};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;

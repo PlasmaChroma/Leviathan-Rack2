@@ -230,8 +230,8 @@ struct TDScopeWidget : ModuleWidget {
       "Stereo (side-by-side)", "",
       [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
       [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
-    menu->addChild(createCheckMenuItem(
-      "Inverted Verical", "", [=]() { return scopeModule->scopeVerticalInverted; },
+	menu->addChild(createCheckMenuItem(
+      "Inverted Vertical", "", [=]() { return scopeModule->scopeVerticalInverted; },
       [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
     menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
