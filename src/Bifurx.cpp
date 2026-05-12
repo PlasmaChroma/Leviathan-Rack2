@@ -551,14 +551,14 @@ Bifurx::Bifurx() {
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
-	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic));
-	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay));
-	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer));
-	json_object_set_new(root, "modulationQualityMode", json_integer(modulationQualityMode));
-	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging));
-	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging));
-	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled));
-	json_object_set_new(root, "softLimitingEnabled", json_boolean(softLimitingEnabled));
+	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "modulationQualityMode", json_integer(modulationQualityMode.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "softLimitingEnabled", json_boolean(softLimitingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
 	json_object_set_new(root, "createdUnixTimeSec", json_real(createdUnixTimeSec));
 	return root;
@@ -571,19 +571,19 @@ void Bifurx::dataFromJson(json_t* root) {
 	Module::dataFromJson(root);
 	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 	if (fftScaleDynamicJ) {
-		fftScaleDynamic = json_is_true(fftScaleDynamicJ);
+		fftScaleDynamic.store(json_is_true(fftScaleDynamicJ), std::memory_order_relaxed);
 	}
 	json_t* showModuleResponseOverlayJ = json_object_get(root, "showModuleResponseOverlay");
 	if (showModuleResponseOverlayJ) {
-		showModuleResponseOverlay = json_is_true(showModuleResponseOverlayJ);
+		showModuleResponseOverlay.store(json_is_true(showModuleResponseOverlayJ), std::memory_order_relaxed);
 	}
 	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
 	if (useGlShaderRendererJ) {
-		useGlShaderRenderer = json_is_true(useGlShaderRendererJ);
+		useGlShaderRenderer.store(json_is_true(useGlShaderRendererJ), std::memory_order_relaxed);
 	}
 	json_t* modulationQualityModeJ = json_object_get(root, "modulationQualityMode");
 	if (modulationQualityModeJ) {
-		modulationQualityMode = clamp(int(json_integer_value(modulationQualityModeJ)), MOD_QUALITY_BALANCED, MOD_QUALITY_COUNT - 1);
+		modulationQualityMode.store(clamp(int(json_integer_value(modulationQualityModeJ)), MOD_QUALITY_BALANCED, MOD_QUALITY_COUNT - 1), std::memory_order_relaxed);
 		controlFastCacheValid = false;
 	}
 	else {
@@ -591,25 +591,25 @@ void Bifurx::dataFromJson(json_t* root) {
 		json_t* controlUpdateModeJ = json_object_get(root, "controlUpdateMode");
 		if (controlUpdateModeJ) {
 			const int legacyMode = int(json_integer_value(controlUpdateModeJ));
-			modulationQualityMode = (legacyMode <= 0) ? MOD_QUALITY_BALANCED : MOD_QUALITY_EXACT;
+			modulationQualityMode.store((legacyMode <= 0) ? MOD_QUALITY_BALANCED : MOD_QUALITY_EXACT, std::memory_order_relaxed);
 			controlFastCacheValid = false;
 		}
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
 	if (curveDebugLoggingJ) {
-		curveDebugLogging = json_is_true(curveDebugLoggingJ);
+		curveDebugLogging.store(json_is_true(curveDebugLoggingJ), std::memory_order_relaxed);
 	}
 	json_t* perfDebugLoggingJ = json_object_get(root, "perfDebugLogging");
 	if (perfDebugLoggingJ) {
-		perfDebugLogging = json_is_true(perfDebugLoggingJ);
+		perfDebugLogging.store(json_is_true(perfDebugLoggingJ), std::memory_order_relaxed);
 	}
 	json_t* highResonanceSelfOscEnabledJ = json_object_get(root, "highResonanceSelfOscEnabled");
 	if (highResonanceSelfOscEnabledJ) {
-		highResonanceSelfOscEnabled = json_is_true(highResonanceSelfOscEnabledJ);
+		highResonanceSelfOscEnabled.store(json_is_true(highResonanceSelfOscEnabledJ), std::memory_order_relaxed);
 	}
 	json_t* softLimitingEnabledJ = json_object_get(root, "softLimitingEnabled");
 	if (softLimitingEnabledJ) {
-		softLimitingEnabled = json_is_true(softLimitingEnabledJ);
+		softLimitingEnabled.store(json_is_true(softLimitingEnabledJ), std::memory_order_relaxed);
 	}
 	json_t* createdUnixTimeSecJ = json_object_get(root, "createdUnixTimeSec");
 	if (createdUnixTimeSecJ && json_is_number(createdUnixTimeSecJ)) {
@@ -725,7 +725,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	int targetControlDivision = 16;
 	float titoCoeffRelativeThreshold = kTitoCoeffRelativeUpdateThreshold;
 	float titoCoeffAbsoluteThresholdHz = kTitoCoeffAbsoluteUpdateThresholdHz;
-	switch (modulationQualityMode) {
+	const int modulationQualityModeNow = modulationQualityMode.load(std::memory_order_relaxed);
+	switch (modulationQualityModeNow) {
 		case MOD_QUALITY_HIGH:
 			targetControlDivision = slowCvConnected ? 8 : 16;
 			titoCoeffRelativeThreshold = 0.5f * kTitoCoeffRelativeUpdateThreshold;
@@ -759,7 +760,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		perfMode.store(mode, std::memory_order_relaxed);
 		perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 	}
-	const bool forceAudioRateControls = modulationQualityMode == MOD_QUALITY_EXACT;
+	const bool forceAudioRateControls = modulationQualityModeNow == MOD_QUALITY_EXACT;
 	const bool updateSlowControls =
 		!controlFastCacheValid || controlDividerTick || (forceAudioRateControls && slowCvConnected);
 	const bool updatePitchControls =
@@ -818,11 +819,12 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = applyLevelInputStage(in, level);
-	const float oscNorm = highResonanceSelfOscEnabled
+	const bool highResonanceSelfOscEnabledNow = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
+	const float oscNorm = highResonanceSelfOscEnabledNow
 		? smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart))
 		: 0.f;
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
-	if ((highResonanceSelfOscEnabled && oscNorm > 0.f) || controlDividerTick) {
+	if ((highResonanceSelfOscEnabledNow && oscNorm > 0.f) || controlDividerTick) {
 		sanitizeCoreState(coreA);
 		sanitizeCoreState(coreB);
 	}
@@ -845,12 +847,12 @@ void Bifurx::process(const ProcessArgs& args) {
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
 		return processCharacterStage(
-			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabled, coeffsAForSample
+			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabledNow, coeffsAForSample
 		);
 	};
 	auto pB = [&](float s) {
 		return processCharacterStage(
-			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabled, coeffsBForSample
+			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabledNow, coeffsBForSample
 		);
 	};
 
@@ -868,7 +870,8 @@ void Bifurx::process(const ProcessArgs& args) {
 		default: { const SvfOutputs a = pA(excitation), b = pB(a.lp); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
 	}
 
-	const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabled);
+	const bool softLimitingEnabledNow = softLimitingEnabled.load(std::memory_order_relaxed);
+	const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabledNow);
 	outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;
 	if (mode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
@@ -1119,7 +1122,7 @@ void BifurxSpectrumBase::updateOverlayCache(int writePos) {
 		fftInputTime[i] = module->analysisRawInputHistory[index] * window[i];
 	}
 	fft.rfft(fftInputTime, fftRawInputFreq);
-	const bool fftScaleDynamic = module ? module->fftScaleDynamic : true;
+	const bool fftScaleDynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
 	prepareOverlayTargetsFromSpectra(
 		state.previewState.sampleRate,
 		state.curveBinPos,
@@ -1183,7 +1186,7 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 
 		const float prevTop = state.displayTopDbfs;
 		float topSmoothing = (state.displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
-		if (module && module->fftScaleDynamic && state.displayTopTargetDbfs > prevTop) {
+		if (module && module->fftScaleDynamic.load(std::memory_order_relaxed) && state.displayTopTargetDbfs > prevTop) {
 			topSmoothing = 0.70f;
 		}
 		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, topSmoothing);

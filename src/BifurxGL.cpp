@@ -606,8 +606,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (tick.overlayPrepUs > 0.f) {
 			lastOverlayPrepUs = tick.overlayPrepUs;
 		}
-		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
-		const bool useGlShaderRendererNow = module->useGlShaderRenderer;
+		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
 		if (tick.previewUpdated || tick.analysisUpdated || tick.animationActive) {
@@ -690,7 +690,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		curveHaloVertices.clear();
 		cyanVertices.clear();
 		cyanHaloVertices.clear();
-		const bool showModuleResponse = module && module->showModuleResponseOverlay;
+		const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 
 		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
@@ -783,9 +783,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		const bool useShaderRenderer = module->useGlShaderRenderer && ensureShaderReady();
+		const bool useShaderRenderer = module->useGlShaderRenderer.load(std::memory_order_relaxed) && ensureShaderReady();
 		shaderRendererActiveLastFrame = useShaderRenderer;
-		shaderRendererFallbackLastFrame = module->useGlShaderRenderer && !useShaderRenderer;
+		shaderRendererFallbackLastFrame = module->useGlShaderRenderer.load(std::memory_order_relaxed) && !useShaderRenderer;
 		if (useShaderRenderer) {
 			drawVertsShader(fillVertices, GL_TRIANGLES, 1.f, w, h);
 			drawVertsShader(fillSoftCapVertices, GL_TRIANGLES, 1.f, w, h);
@@ -843,7 +843,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, std::max(1.f, w), std::max(1.f, spectrumBottomY + 1.f));
 
-		if (state.hasOverlay && module->showModuleResponseOverlay) {
+		if (state.hasOverlay && module->showModuleResponseOverlay.load(std::memory_order_relaxed)) {
 			NVGcolor ml = mixColor(nvgRGB(206, 210, 216), nvgRGB(28, 204, 217), 0.35f);
 			ml.a = 0.95f;
 			nvgBeginPath(args.vg);

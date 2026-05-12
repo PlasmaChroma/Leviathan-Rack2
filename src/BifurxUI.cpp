@@ -116,10 +116,10 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 			}
 			return;
 		}
-		if (module->curveDebugLogging && !curveDebugRecorder.active) {
+		if (module->curveDebugLogging.load(std::memory_order_relaxed) && !curveDebugRecorder.active) {
 			startCurveDebugCapture();
 		}
-		else if (!module->curveDebugLogging && curveDebugRecorder.active) {
+		else if (!module->curveDebugLogging.load(std::memory_order_relaxed) && curveDebugRecorder.active) {
 			stopCurveDebugCapture();
 		}
 	}
@@ -132,10 +132,10 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 			}
 			return;
 		}
-		if (module->perfDebugLogging && !perfDebugRecorder.active) {
+		if (module->perfDebugLogging.load(std::memory_order_relaxed) && !perfDebugRecorder.active) {
 			startPerfDebugCapture();
 		}
-		else if (!module->perfDebugLogging && perfDebugRecorder.active) {
+		else if (!module->perfDebugLogging.load(std::memory_order_relaxed) && perfDebugRecorder.active) {
 			stopPerfDebugCapture();
 		}
 	}
@@ -317,7 +317,7 @@ float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float
 
 void BifurxSpectrumWidget::step() {
 	using PerfClock = std::chrono::steady_clock;
-	const bool perfLoggingActive = module && module->perfDebugLogging;
+	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
 	const PerfClock::time_point perfStepStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
 	Widget::step();
 	syncCurveDebugCaptureState();
@@ -329,7 +329,7 @@ void BifurxSpectrumWidget::step() {
 	bool previewUpdated = false;
 	bool analysisUpdated = false;
 
-	const bool fftScaleDynamicNow = module->fftScaleDynamic;
+	const bool fftScaleDynamicNow = module->fftScaleDynamic.load(std::memory_order_relaxed);
 	if (fftScaleDynamicNow != lastFftScaleDynamic) {
 		lastFftScaleDynamic = fftScaleDynamicNow;
 		if (!fftScaleDynamicNow) {
@@ -338,7 +338,7 @@ void BifurxSpectrumWidget::step() {
 		}
 		dirty = true;
 	}
-	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay;
+	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 	if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
 		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
 		dirty = true;
@@ -373,7 +373,7 @@ void BifurxSpectrumWidget::step() {
 		lastLlTelemetrySeq = llTelemetrySeq;
 	}
 
-	if (isDragonKingDebugEnabled() && module->curveDebugLogging && state.hasPreview) {
+	if (isDragonKingDebugEnabled() && module->curveDebugLogging.load(std::memory_order_relaxed) && state.hasPreview) {
 		const double nowSec = system::getTime();
 		const double minIntervalSec = 1.0 / 60.0;
 		if (lastCurveDebugLogTimeSec < 0.0 || (nowSec - lastCurveDebugLogTimeSec) >= minIntervalSec) {
@@ -470,7 +470,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float w = box.size.x, h = box.size.y;
 	if (!(w > 0.f && h > 0.f)) return;
 	using PerfClock = std::chrono::steady_clock;
-	const bool perfLoggingActive = module && module->perfDebugLogging;
+	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
 	const PerfClock::time_point perfDrawStart = PerfClock::now();
 	PerfClock::time_point perfSectionStart = perfDrawStart;
 	auto recordDrawSection = [&](uint64_t& count, uint64_t& totalNs) {
@@ -529,7 +529,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 	if (state.hasOverlay) {
-		const bool showModuleResponse = module && module->showModuleResponseOverlay;
+		const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
 			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
@@ -754,20 +754,20 @@ struct BifurxWidget final : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu); Bifurx* bifurx = dynamic_cast<Bifurx*>(module); if (!bifurx) return;
 		auto setRenderStateWithHistory = [=](Bifurx::RenderMode newMode, bool newUseShaderRenderer) {
-			if (!bifurx || (bifurx->renderMode == newMode && bifurx->useGlShaderRenderer == newUseShaderRenderer)) return;
+			if (!bifurx || (bifurx->renderMode == newMode && bifurx->useGlShaderRenderer.load(std::memory_order_relaxed) == newUseShaderRenderer)) return;
 			if (APP && APP->history) {
 				history::ModuleChange* h = new history::ModuleChange();
 				h->name = "change render engine";
 				h->moduleId = bifurx->id;
 				h->oldModuleJ = bifurx->toJson();
 				bifurx->renderMode = newMode;
-				bifurx->useGlShaderRenderer = newUseShaderRenderer;
+				bifurx->useGlShaderRenderer.store(newUseShaderRenderer, std::memory_order_relaxed);
 				h->newModuleJ = bifurx->toJson();
 				APP->history->push(h);
 			}
 			else {
 				bifurx->renderMode = newMode;
-				bifurx->useGlShaderRenderer = newUseShaderRenderer;
+				bifurx->useGlShaderRenderer.store(newUseShaderRenderer, std::memory_order_relaxed);
 			}
 		};
 		menu->addChild(new MenuSeparator());
@@ -786,23 +786,23 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createSubmenuItem("Modulation Quality", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(
 					"Balanced", "",
-					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_BALANCED; },
+					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_BALANCED; },
 					[=]() {
-						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_BALANCED;
+						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_BALANCED, std::memory_order_relaxed);
 						bifurx->controlFastCacheValid = false;
 					}));
 				submenu->addChild(createCheckMenuItem(
 					"High", "",
-					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_HIGH; },
+					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_HIGH; },
 					[=]() {
-						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_HIGH;
+						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_HIGH, std::memory_order_relaxed);
 						bifurx->controlFastCacheValid = false;
 					}));
 				submenu->addChild(createCheckMenuItem(
 					"Exact", "",
-					[=]() { return bifurx->modulationQualityMode == Bifurx::MOD_QUALITY_EXACT; },
+					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_EXACT; },
 					[=]() {
-						bifurx->modulationQualityMode = Bifurx::MOD_QUALITY_EXACT;
+						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_EXACT, std::memory_order_relaxed);
 						bifurx->controlFastCacheValid = false;
 					}));
 			}));
@@ -813,20 +813,32 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_NANOVG, false); }));
 			submenu->addChild(createCheckMenuItem(
 				"OpenGL", "",
-				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && !bifurx->useGlShaderRenderer; },
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && !bifurx->useGlShaderRenderer.load(std::memory_order_relaxed); },
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, false); }));
 			submenu->addChild(createCheckMenuItem(
 				"OpenGL SHDR", "",
-				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer; },
+				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer.load(std::memory_order_relaxed); },
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
 			}));
-			menu->addChild(createBoolPtrMenuItem("High Resonance Self-Osc", "", &bifurx->highResonanceSelfOscEnabled));
-			menu->addChild(createBoolPtrMenuItem("Soft Limiting", "", &bifurx->softLimitingEnabled));
-			menu->addChild(createBoolPtrMenuItem("Dynamic FFT Scale", "", &bifurx->fftScaleDynamic));
-			menu->addChild(createBoolPtrMenuItem("Show Module Response", "", &bifurx->showModuleResponseOverlay));
+			menu->addChild(createCheckMenuItem("High Resonance Self-Osc", "",
+				[=]() { return bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed); },
+				[=]() { bifurx->highResonanceSelfOscEnabled.store(!bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createCheckMenuItem("Soft Limiting", "",
+				[=]() { return bifurx->softLimitingEnabled.load(std::memory_order_relaxed); },
+				[=]() { bifurx->softLimitingEnabled.store(!bifurx->softLimitingEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createCheckMenuItem("Dynamic FFT Scale", "",
+				[=]() { return bifurx->fftScaleDynamic.load(std::memory_order_relaxed); },
+				[=]() { bifurx->fftScaleDynamic.store(!bifurx->fftScaleDynamic.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createCheckMenuItem("Show Module Response", "",
+				[=]() { return bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed); },
+				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 		if (isDragonKingDebugEnabled()) {
-			menu->addChild(createBoolPtrMenuItem("Log Curve Debug", "", &bifurx->curveDebugLogging));
-			menu->addChild(createBoolPtrMenuItem("Log Performance Debug", "", &bifurx->perfDebugLogging));
+			menu->addChild(createCheckMenuItem("Log Curve Debug", "",
+				[=]() { return bifurx->curveDebugLogging.load(std::memory_order_relaxed); },
+				[=]() { bifurx->curveDebugLogging.store(!bifurx->curveDebugLogging.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createCheckMenuItem("Log Performance Debug", "",
+				[=]() { return bifurx->perfDebugLogging.load(std::memory_order_relaxed); },
+				[=]() { bifurx->perfDebugLogging.store(!bifurx->perfDebugLogging.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 		}
 	}
 };

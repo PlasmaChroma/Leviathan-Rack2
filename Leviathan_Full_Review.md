@@ -31,6 +31,7 @@ Quick fixes completed from this review:
 - `Integral Flux` and `Proc`: moved `timingUpdateDiv` changes to an audio-thread apply path via atomic requested-divider handoff (`requestTimingUpdateDiv()` + `applyRequestedTimingUpdateDiv()`), so UI/JSON no longer mutate timing counters/cache-valid flags directly.
 - `Wyrm`: converted the simple `lfoMode`, `editorLocked`, and `sandViewEnabled` flags to `std::atomic<bool>` and updated JSON/menu/UI/audio accessors to use atomic load/store.
 - `Wyrm`: implemented rock-state snapshot handoff. Audio now reads a published active rock snapshot, while UI edits pending rock data and publishes on meaningful mutations (move/lift/release/count/mode/JSON load), avoiding direct UI writes to audio-read rock arrays.
+- `Bifurx`: converted shared UI/audio/render settings to atomics (`fftScaleDynamic`, `showModuleResponseOverlay`, `useGlShaderRenderer`, `highResonanceSelfOscEnabled`, `softLimitingEnabled`, `modulationQualityMode`, debug logging flags), updated JSON accessors, and replaced pointer-based menu toggles with atomic check-menu actions.
 - `Sil`: replaced repeated constructor-time `APP->engine->getSampleRate()` calls with one guarded `initialSampleRate` value and clamped histogram bin size to at least one sample.
 
 Verification after these changes:
@@ -43,7 +44,7 @@ Result: all available tests passed after the quick-fix pass.
 
 Still not addressed by this pass:
 
-- Bifurx, TD.Scope, and Temporal Deck still have additional plain UI/audio shared settings that should be classified and converted.
+- TD.Scope and Temporal Deck still have additional plain UI/audio shared settings that should be classified and converted.
 - Sil still needs a realtime-safety pass for repair-buffer reconfiguration/debug I/O behavior from or near the audio path.
 - Temporal Deck file I/O should still move to an async UI-owned workflow where practical.
 
@@ -101,7 +102,6 @@ Target design:
 
 Concrete remaining items:
 
-- Bifurx: classify `highResonanceSelfOscEnabled`, `softLimitingEnabled`, `fftScaleDynamic`, `showModuleResponseOverlay`, `useGlShaderRenderer`, debug flags, modulation quality, and control update division.
 - TD.Scope: classify range/channel/invert/color/debug settings and any values touched by both expander processing and widget rendering.
 - Temporal Deck: move interpolation and trace/debug toggles to atomics or a pending settings snapshot.
 
