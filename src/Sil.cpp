@@ -784,6 +784,10 @@ struct Sil : Module {
 		micropeakActivityHoldLevel = 0.f;
 	}
 
+	bool repairFeatureAvailable() const {
+		return isDragonKingDebugEnabled();
+	}
+
 	void initializeLimiterFastPathStorage() {
 		const int fastLatency = 1;
 		const int delayBufferLength = fastLatency + 1;
@@ -1304,21 +1308,23 @@ struct Sil : Module {
 		saturator.reset(e.sampleRate);
 		initializeLimiterFastPathStorage();
 		initializeRepairPathStorage(e.sampleRate);
-		applyRepairLatencyModeNoAlloc(e.sampleRate, repairEnabled);
+		const bool repairActive = repairFeatureAvailable() && repairEnabled;
+		applyRepairLatencyModeNoAlloc(e.sampleRate, repairActive);
 	}
 
 	void process(const ProcessArgs& args) override {
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > 0.5f;
 		repairEnabled = params[REPAIR_ENABLED_PARAM].getValue() > 0.5f;
+		const bool repairActive = repairFeatureAvailable() && repairEnabled;
 
 		const float inL = inputs[INPUT_L_INPUT].getVoltage();
 		const float inR = inputs[INPUT_R_INPUT].getVoltage();
-		applyRepairLatencyModeNoAlloc(args.sampleRate, repairEnabled);
+		applyRepairLatencyModeNoAlloc(args.sampleRate, repairActive);
 
 		float repairInputL = inL;
 		float repairInputR = inR;
 		float repairLedTarget = 0.f;
-		if (repairEnabled) {
+		if (repairActive) {
 			repairBuffer.push(inL, inR);
 			const sil::repair::StereoWindows windows = repairBuffer.readCurrentWindows();
 			const bool candidateL = sil::repair::detectCandidate(windows.left, repairCandidateConfig, kAudioFullScaleV);
@@ -1888,8 +1894,8 @@ struct Sil : Module {
 			const float limitingActivity = std::sqrt(clamp(limiterDemandDb / 1.5f, 0.f, 1.f));
 			limiterLed = clamp(std::max(0.25f * ceilingProximity, limitingActivity), 0.f, 1.f);
 		}
-		const float bypassL = repairEnabled ? delayedInL : inL;
-		const float bypassR = repairEnabled ? delayedInR : inR;
+		const float bypassL = repairActive ? delayedInL : inL;
+		const float bypassR = repairActive ? delayedInR : inR;
 		const float audibleL = masteringEnabled ? outL : bypassL;
 		const float audibleR = masteringEnabled ? outR : bypassR;
 
@@ -1907,9 +1913,9 @@ struct Sil : Module {
 			lights[GLUE_COMP_LIGHT].setSmoothBrightness(masteringEnabled ? glueLed : 0.f, lightDt);
 			lights[STEREO_ENHANCE_LIGHT].setSmoothBrightness(masteringEnabled ? stereoEnhanceLed : 0.f, lightDt);
 			lights[SATURATOR_LIGHT].setSmoothBrightness(masteringEnabled ? saturatorLed : 0.f, lightDt);
-			lights[MICROPEAK_LIGHT].setSmoothBrightness(repairEnabled ? micropeakActivity : 0.f, lightDt);
+			lights[MICROPEAK_LIGHT].setSmoothBrightness(repairActive ? micropeakActivity : 0.f, lightDt);
 			lights[MASTERING_ENABLED_LIGHT].setSmoothBrightness(masteringEnabled ? 0.5f : 0.f, lightDt);
-			lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairEnabled ? 0.5f : 0.f, lightDt);
+			lights[REPAIR_ENABLED_LIGHT].setSmoothBrightness(repairActive ? 0.5f : 0.f, lightDt);
 		}
 
 		// Update histogram (Waveform)
@@ -2326,7 +2332,7 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 	Vec textPosPx;
 
 	void draw(const DrawArgs& args) override {
-		if (!module || !APP || !APP->window || !APP->window->uiFont) {
+		if (!module || !isDragonKingDebugEnabled() || !APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -2438,9 +2444,11 @@ struct SilWidget : ModuleWidget {
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT
 		));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(repairButtonPos), module, Sil::REPAIR_ENABLED_PARAM, Sil::REPAIR_ENABLED_LIGHT
-		));
+		if (isDragonKingDebugEnabled()) {
+			addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+				mm2px(repairButtonPos), module, Sil::REPAIR_ENABLED_PARAM, Sil::REPAIR_ENABLED_LIGHT
+			));
+		}
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(limiterLightPos), module, Sil::LIMITER_ACTIVE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(lowRecoveryLightPos), module, Sil::LOW_RECOVERY_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(impactAirLightPos), module, Sil::IMPACT_AIR_LIGHT));
@@ -2449,13 +2457,17 @@ struct SilWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(glueCompLightPos), module, Sil::GLUE_COMP_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(stereoEnhanceLightPos), module, Sil::STEREO_ENHANCE_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(saturatorLightPos), module, Sil::SATURATOR_LIGHT));
-		addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
+		if (isDragonKingDebugEnabled()) {
+			addChild(createLightCentered<SmallLight<RedLight>>(mm2px(micropeakLightPos), module, Sil::MICROPEAK_LIGHT));
+		}
 
-		MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
-		micropeakCount->box.size = box.size;
-		micropeakCount->module = module;
-		micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 4.4f, micropeakLightPos.y));
-		addChild(micropeakCount);
+		if (isDragonKingDebugEnabled()) {
+			MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
+			micropeakCount->box.size = box.size;
+			micropeakCount->module = module;
+			micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 4.4f, micropeakLightPos.y));
+			addChild(micropeakCount);
+		}
 
 		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
 		chainLedReadout->box.size = box.size;
