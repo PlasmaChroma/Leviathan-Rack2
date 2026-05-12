@@ -749,33 +749,43 @@ void Wyrm::process(const ProcessArgs& args) {
 	const bool slitherAmountCvPoly = inputs[SLITHER_CV_INPUT].getChannels() > 1;
 	const bool slitherSpeedCvPoly = inputs[SLITHER_SPEED_CV_INPUT].getChannels() > 1;
 	const bool foldCvPoly = inputs[FOLD_CV_INPUT].getChannels() > 1;
+	const bool voctConnected = inputs[VOCT_INPUT].isConnected();
+	const bool fmConnected = inputs[FM_INPUT].isConnected();
+	const bool slitherAmountCvConnected = inputs[SLITHER_CV_INPUT].isConnected();
+	const bool slitherSpeedCvConnected = inputs[SLITHER_SPEED_CV_INPUT].isConnected();
+	const bool foldCvConnected = inputs[FOLD_CV_INPUT].isConnected();
 	auto readPolyOrMonoVoltage = [&](InputId id, int channel, bool poly, float monoValue) {
 		if (poly) {
 			return finiteOr(inputs[id].getPolyVoltage(channel));
 		}
 		return monoValue;
 	};
-	auto readBipolarCvNorm = [&](InputId id, int channel, bool poly) {
-		if (!inputs[id].isConnected()) {
+	auto readBipolarCvNorm = [&](InputId id, bool connected, int channel, bool poly, float monoNorm) {
+		if (!connected) {
 			return 0.f;
 		}
-		const float v = poly ? inputs[id].getPolyVoltage(channel) : inputs[id].getVoltage();
-		return clamp(finiteOr(v) / 10.f, -1.f, 1.f);
+		if (poly) {
+			return clamp(finiteOr(inputs[id].getPolyVoltage(channel)) / 10.f, -1.f, 1.f);
+		}
+		return monoNorm;
 	};
+	const float monoSlitherAmountCvNorm = slitherAmountCvConnected ? clamp(finiteOr(inputs[SLITHER_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
+	const float monoSlitherSpeedCvNorm = slitherSpeedCvConnected ? clamp(finiteOr(inputs[SLITHER_SPEED_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
+	const float monoFoldCvNorm = foldCvConnected ? clamp(finiteOr(inputs[FOLD_CV_INPUT].getVoltage()) / 10.f, -1.f, 1.f) : 0.f;
 	auto effectiveSlitherAmount = [&](int channel) {
-		const float cv = slitherAmountCvPoly ? readBipolarCvNorm(SLITHER_CV_INPUT, channel, true) : readBipolarCvNorm(SLITHER_CV_INPUT, 0, false);
+		const float cv = readBipolarCvNorm(SLITHER_CV_INPUT, slitherAmountCvConnected, channel, slitherAmountCvPoly, monoSlitherAmountCvNorm);
 		return clamp(slitherAmountKnob + cv, 0.f, 1.f);
 	};
 	auto effectiveSlitherSpeed = [&](int channel) {
-		const float cv = slitherSpeedCvPoly ? readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, channel, true) : readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, 0, false);
+		const float cv = readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, slitherSpeedCvConnected, channel, slitherSpeedCvPoly, monoSlitherSpeedCvNorm);
 		return slitherSpeedFactor(clamp(slitherSpeedKnob + cv, 0.f, 1.f));
 	};
 	auto effectiveFoldAmt = [&](int channel) {
-		const float cv = foldCvPoly ? readBipolarCvNorm(FOLD_CV_INPUT, channel, true) : readBipolarCvNorm(FOLD_CV_INPUT, 0, false);
+		const float cv = readBipolarCvNorm(FOLD_CV_INPUT, foldCvConnected, channel, foldCvPoly, monoFoldCvNorm);
 		return clamp(foldBase + cv, 0.f, 2.f);
 	};
-	const float monoVoct = inputs[VOCT_INPUT].isConnected() ? finiteOr(inputs[VOCT_INPUT].getVoltage()) : 0.f;
-	const float monoFmVoltage = inputs[FM_INPUT].isConnected() ? finiteOr(inputs[FM_INPUT].getVoltage()) : 0.f;
+	const float monoVoct = voctConnected ? finiteOr(inputs[VOCT_INPUT].getVoltage()) : 0.f;
+	const float monoFmVoltage = fmConnected ? finiteOr(inputs[FM_INPUT].getVoltage()) : 0.f;
 	const float monoSlitherAmount = effectiveSlitherAmount(0);
 	const float monoSlitherSpeed = effectiveSlitherSpeed(0);
 	const float monoFoldAmt = effectiveFoldAmt(0);
