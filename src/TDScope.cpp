@@ -218,11 +218,33 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   NVGcolor silWaveformLowColor() const {
-    return nvgRGBA(0x7a, 0x5c, 0xff, 0xff);
+    float lowR = 28.f, lowG = 204.f, lowB = 217.f;
+    if (module) {
+      switch (module->scopeColorScheme) {
+        case TDScope::COLOR_SCHEME_CLASSIC: lowR = 0.f; lowG = 255.f; lowB = 65.f; break;
+        case TDScope::COLOR_SCHEME_MONOCHROME: lowR = 92.f; lowG = 92.f; lowB = 92.f; break;
+        case TDScope::COLOR_SCHEME_FIRE: lowR = 140.f; lowG = 0.f; lowB = 0.f; break;
+        default: break;
+      }
+    }
+    NVGcolor c = nvgRGBAf(lowR / 255.f, lowG / 255.f, lowB / 255.f, 1.f);
+    if (module) c = module->applyScopeColorBrightness(c);
+    return c;
   }
 
   NVGcolor silWaveformHighColor() const {
-    return nvgRGBA(0x1c, 0xcc, 0xd9, 0xff);
+    float highR = 122.f, highG = 92.f, highB = 255.f;
+    if (module) {
+      switch (module->scopeColorScheme) {
+        case TDScope::COLOR_SCHEME_CLASSIC: highR = 255.f; highG = 15.f; highB = 5.f; break;
+        case TDScope::COLOR_SCHEME_MONOCHROME: highR = 242.f; highG = 242.f; highB = 242.f; break;
+        case TDScope::COLOR_SCHEME_FIRE: highR = 255.f; highG = 255.f; highB = 30.f; break;
+        default: break;
+      }
+    }
+    NVGcolor c = nvgRGBAf(highR / 255.f, highG / 255.f, highB / 255.f, 1.f);
+    if (module) c = module->applyScopeColorBrightness(c);
+    return c;
   }
 
   void drawSilWaveformBackground(NVGcontext *vg, bool renderStereo, float laneWidth, float laneGap, float drawTop, float drawBottom) const {
@@ -236,7 +258,9 @@ struct TDScopeDisplayWidget final : Widget {
       nvgBeginPath(vg);
       nvgMoveTo(vg, dividerX, drawTop);
       nvgLineTo(vg, dividerX, drawBottom);
-      nvgStrokeColor(vg, nvgRGBA(0x1c, 0xca, 0xd8, 0x40));
+      NVGcolor divC = silWaveformLowColor();
+      divC.a = 0.25f;
+      nvgStrokeColor(vg, divC);
       nvgStrokeWidth(vg, 0.5f);
       nvgStroke(vg);
     }
@@ -1570,16 +1594,16 @@ struct TDScopeDisplayWidget final : Widget {
       float midHoldHalfWidth = 0.f;
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:
-          lowR = 26.f;
-          lowG = 146.f;
-          lowB = 78.f;
-          midR = 176.f;
-          midG = 138.f;
-          midB = 78.f;
-          highR = 244.f;
-          highG = 74.f;
-          highB = 58.f;
-          midPoint = 0.56f;
+          lowR = 0.f;
+          lowG = 255.f;
+          lowB = 65.f;
+          midR = 255.f;
+          midG = 232.f;
+          midB = 32.f;
+          highR = 255.f;
+          highG = 15.f;
+          highB = 5.f;
+          midPoint = 0.5f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f;
@@ -1594,16 +1618,16 @@ struct TDScopeDisplayWidget final : Widget {
           midPoint = 0.52f;
           break;
         case TDScope::COLOR_SCHEME_FIRE:
-          lowR = 124.f;
-          lowG = 30.f;
-          lowB = 16.f;
-          midR = 229.f;
-          midG = 91.f;
-          midB = 28.f;
+          lowR = 140.f;
+          lowG = 0.f;
+          lowB = 0.f;
+          midR = 255.f;
+          midG = 120.f;
+          midB = 0.f;
           highR = 255.f;
-          highG = 210.f;
-          highB = 84.f;
-          midPoint = 0.60f;
+          highG = 255.f;
+          highB = 30.f;
+          midPoint = 0.5f;
           break;
         case TDScope::COLOR_SCHEME_DEFAULT:
         default:

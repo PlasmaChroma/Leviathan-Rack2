@@ -1265,10 +1265,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float midPoint = 0.5f;
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:
-          lowR = 26.f; lowG = 146.f; lowB = 78.f;
-          midR = 176.f; midG = 138.f; midB = 78.f;
-          highR = 244.f; highG = 74.f; highB = 58.f;
-          midPoint = 0.56f;
+          lowR = 0.f; lowG = 255.f; lowB = 65.f;
+          midR = 255.f; midG = 232.f; midB = 32.f;
+          highR = 255.f; highG = 15.f; highB = 5.f;
+          midPoint = 0.5f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f; lowG = 92.f; lowB = 92.f;
@@ -1277,10 +1277,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           midPoint = 0.52f;
           break;
         case TDScope::COLOR_SCHEME_FIRE:
-          lowR = 124.f; lowG = 30.f; lowB = 16.f;
-          midR = 229.f; midG = 91.f; midB = 28.f;
-          highR = 255.f; highG = 210.f; highB = 84.f;
-          midPoint = 0.60f;
+          lowR = 140.f; lowG = 0.f; lowB = 0.f;
+          midR = 255.f; midG = 120.f; midB = 0.f;
+          highR = 255.f; highG = 255.f; highB = 30.f;
+          midPoint = 0.5f;
           break;
         default:
           break;
@@ -1706,7 +1706,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  if (uRenderMain > 0.5) {\n"
         "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.28);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
-        "    baseRgb += mainColor.rgb * mainPremult;\n"
+        "    float heatPriority = mix(0.24, 1.0, tone);\n"
+        "    float coverAlpha = clamp(mainPremult * heatPriority, 0.0, 1.0);\n"
+        "    baseRgb = baseRgb * (1.0 - coverAlpha) + mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
         "  }\n"
         "  if (uRenderHalo > 0.5) {\n"
@@ -1774,7 +1776,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
         "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
         "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.52;\n"
-        "  baseRgb += c.rgb * contAlpha;\n"
+        "  float contPriority = mix(0.28, 0.95, connectTone);\n"
+        "  float contCover = clamp(contAlpha * contPriority, 0.0, 1.0);\n"
+        "  baseRgb = baseRgb * (1.0 - contCover) + c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
         "}\n"
         "void main() {\n"
@@ -2127,7 +2131,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
         glUniform1f(fieldUniformTime, (float)system::getTime());
-        glUniform1f(fieldUniformShdrEffect, module->debugShdrEffectEnabled ? 1.f : 0.f);
+        // Temporarily force SHDR effect off while the option is disabled in UI.
+        glUniform1f(fieldUniformShdrEffect, 0.f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
         glActiveTexture(GL_TEXTURE1);
