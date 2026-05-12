@@ -427,6 +427,7 @@ struct WyrmWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createBoolPtrMenuItem("LFO Mode", "", &module->lfoMode));
 		menu->addChild(createBoolPtrMenuItem("Lock Wave Editor", "", &module->editorLocked));
+		menu->addChild(createBoolPtrMenuItem("Sand View", "", &module->sandViewEnabled));
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"Mouse Drags Rocks", "",

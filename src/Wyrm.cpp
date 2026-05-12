@@ -631,6 +631,7 @@ json_t* Wyrm::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "lfoMode", json_boolean(lfoMode));
 	json_object_set_new(root, "editorLocked", json_boolean(editorLocked));
+	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled));
 	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
@@ -661,6 +662,8 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (lfoJ) lfoMode = json_is_true(lfoJ);
 	json_t* lockJ = json_object_get(root, "editorLocked");
 	if (lockJ) editorLocked = json_is_true(lockJ);
+	json_t* sandViewJ = json_object_get(root, "sandViewEnabled");
+	if (sandViewJ) sandViewEnabled = json_is_true(sandViewJ);
 	json_t* customizedJ = json_object_get(root, "waveCustomized");
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* shapeJ = json_object_get(root, "selectedShape");

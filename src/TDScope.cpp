@@ -217,6 +217,31 @@ struct TDScopeDisplayWidget final : Widget {
     return 1.f;
   }
 
+  NVGcolor silWaveformLowColor() const {
+    return nvgRGBA(0x7a, 0x5c, 0xff, 0xff);
+  }
+
+  NVGcolor silWaveformHighColor() const {
+    return nvgRGBA(0x1c, 0xcc, 0xd9, 0xff);
+  }
+
+  void drawSilWaveformBackground(NVGcontext *vg, bool renderStereo, float laneWidth, float laneGap, float drawTop, float drawBottom) const {
+    nvgBeginPath(vg);
+    nvgRect(vg, 0.f, 0.f, box.size.x, box.size.y);
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 255));
+    nvgFill(vg);
+
+    if (renderStereo) {
+      const float dividerX = laneWidth + laneGap * 0.5f;
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, dividerX, drawTop);
+      nvgLineTo(vg, dividerX, drawBottom);
+      nvgStrokeColor(vg, nvgRGBA(0x1c, 0xca, 0xd8, 0x40));
+      nvgStrokeWidth(vg, 0.5f);
+      nvgStroke(vg);
+    }
+  }
+
   bool beginLagDragAt(Vec pos) {
     if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
       return false;
@@ -569,6 +594,7 @@ struct TDScopeDisplayWidget final : Widget {
     bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
+    const bool silStandardStyle = module->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -601,6 +627,9 @@ struct TDScopeDisplayWidget final : Widget {
     const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
     const float laneAmpHalfWidth = laneWidth * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
+    if (silStandardStyle) {
+      drawSilWaveformBackground(args.vg, renderStereo && module->debugRenderStereoRightLaneEnabled, laneWidth, laneGap, drawTop, drawBottom);
+    }
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
     const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
@@ -1853,6 +1882,39 @@ struct TDScopeDisplayWidget final : Widget {
         return (float(bin) + 0.5f) / float(binCount);
       };
 
+      if (silStandardStyle) {
+        const NVGcolor silLow = module->applyScopeColorBrightness(silWaveformLowColor());
+        const NVGcolor silHigh = module->applyScopeColorBrightness(silWaveformHighColor());
+        constexpr int kSilStrokeBins = 12;
+        for (int bin = 0; bin < kSilStrokeBins; ++bin) {
+          bool hasPath = false;
+          nvgBeginPath(args.vg);
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            if (!valid[idx]) {
+              continue;
+            }
+            const float amp = clamp(0.84f * visualIntensity[idx] + 0.16f * colorDrive[idx], 0.f, 1.f);
+            if (quantizeStrokeBin(amp, kSilStrokeBins) != bin) {
+              continue;
+            }
+            nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+            nvgLineTo(args.vg, x1[idx], rowY[idx]);
+            hasPath = true;
+          }
+          if (!hasPath) {
+            continue;
+          }
+          const float ampCenter = strokeBinCenter(bin, kSilStrokeBins);
+          NVGcolor c = nvgLerpRGBA(silLow, silHigh, ampCenter);
+          c.a = 1.f;
+          nvgStrokeColor(args.vg, c);
+          nvgStrokeWidth(args.vg, std::max(0.75f, 1.0f * zoomThicknessMul));
+          nvgStroke(args.vg);
+        }
+        return;
+      }
+
       // Keep halo as a separate diffuse layer so stronger transients can still
       // bloom independently of the quantized main-trace bins.
       for (int iy = 0; iy < rowCount; ++iy) {
@@ -1999,13 +2061,15 @@ struct TDScopeDisplayWidget final : Widget {
         drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
 
         // Draw subtle lane divider for stereo side-by-side view.
-        float dividerX = laneWidth + laneGap * 0.5f;
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, dividerX, drawTop);
-        nvgLineTo(args.vg, dividerX, drawBottom);
-        nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
-        nvgStrokeWidth(args.vg, 1.f);
-        nvgStroke(args.vg);
+        if (!silStandardStyle) {
+          float dividerX = laneWidth + laneGap * 0.5f;
+          nvgBeginPath(args.vg);
+          nvgMoveTo(args.vg, dividerX, drawTop);
+          nvgLineTo(args.vg, dividerX, drawBottom);
+          nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
+          nvgStrokeWidth(args.vg, 1.f);
+          nvgStroke(args.vg);
+        }
       }
       tailRasterValid = false;
     } else {
@@ -2096,7 +2160,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float lineX0 = 2.f;
     float lineX1 = box.size.x - 2.f;
-    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+    if (renderStereo && module->debugRenderStereoRightLaneEnabled && !silStandardStyle) {
       float dividerX = laneWidth + laneGap * 0.5f;
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, dividerX, drawTop);

@@ -215,6 +215,7 @@ struct Wyrm : Module {
 
 	bool lfoMode = false;
 	bool editorLocked = false;
+	bool sandViewEnabled = true;
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;
