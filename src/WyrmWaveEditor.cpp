@@ -324,10 +324,12 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		if (module->liftedRock == draggingRock) {
 			module->liftedRock = -1;
+			module->publishRockState();
 		}
 		dragRockMouseMode = nextMode;
 		if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 			module->liftedRock = draggingRock;
+			module->publishRockState();
 		}
 		previousDragRock = module->rocks[draggingRock];
 	}
@@ -429,6 +431,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 			prevStepRock = rock;
 		}
+		module->publishRockState();
 		previousDragRock = rock;
 		const Vec newCenter = rockCenter(rock);
 		const Vec radius = rockPixelRadius(rock);
@@ -482,6 +485,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				dragRockMouseMode = rockDragModeForMods(e.mods);
 				if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 					module->liftedRock = rockIndex;
+					module->publishRockState();
 				}
 				previousDragRock = module->rocks[rockIndex];
 				rockDragOffset = e.pos.minus(rockCenter(module->rocks[rockIndex]));
@@ -501,6 +505,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			updateActiveRockDragMode(e.mods);
 			if (module->liftedRock == draggingRock) {
 				module->liftedRock = -1;
+				module->publishRockState();
 			}
 			if (releasedRock >= 0) {
 				module->rebuildRockBoundaryCache(releasedRock);
@@ -512,6 +517,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					const Vec radius = rockPixelRadius(module->rocks[releasedRock]);
 					stampSand(center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
 				}
+				module->publishRockState();
 			}
 			draggingRock = -1;
 			dragRockMouseMode = -1;

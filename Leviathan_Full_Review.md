@@ -28,7 +28,9 @@ Quick fixes completed from this review:
 - `Crownstep`: added the existing `sequenceMutex` guard around sequence-history reads in the sequence-length display quantity.
 - `Integral Flux`: converted the simple BLEP and timing-interpolation menu flags to `std::atomic<bool>` and updated JSON/menu accessors to use atomic load/store.
 - `Proc`: converted the simple BLEP and timing-interpolation menu flags to `std::atomic<bool>` and updated JSON/menu accessors to use atomic load/store.
+- `Integral Flux` and `Proc`: moved `timingUpdateDiv` changes to an audio-thread apply path via atomic requested-divider handoff (`requestTimingUpdateDiv()` + `applyRequestedTimingUpdateDiv()`), so UI/JSON no longer mutate timing counters/cache-valid flags directly.
 - `Wyrm`: converted the simple `lfoMode`, `editorLocked`, and `sandViewEnabled` flags to `std::atomic<bool>` and updated JSON/menu/UI/audio accessors to use atomic load/store.
+- `Wyrm`: implemented rock-state snapshot handoff. Audio now reads a published active rock snapshot, while UI edits pending rock data and publishes on meaningful mutations (move/lift/release/count/mode/JSON load), avoiding direct UI writes to audio-read rock arrays.
 - `Sil`: replaced repeated constructor-time `APP->engine->getSampleRate()` calls with one guarded `initialSampleRate` value and clamped histogram bin size to at least one sample.
 
 Verification after these changes:
@@ -41,17 +43,15 @@ Result: all available tests passed after the quick-fix pass.
 
 Still not addressed by this pass:
 
-- Wyrm rock editing still needs a real snapshot or command-queue handoff before the P1 race is resolved.
 - Bifurx, TD.Scope, and Temporal Deck still have additional plain UI/audio shared settings that should be classified and converted.
 - Sil still needs a realtime-safety pass for repair-buffer reconfiguration/debug I/O behavior from or near the audio path.
 - Temporal Deck file I/O should still move to an async UI-owned workflow where practical.
-- `timingUpdateDiv` in Integral Flux/Proc was intentionally not converted as a simple atomic because its setter also resets timing counters and validity flags; that needs a small state-transition helper, not a raw atomic.
 
 ## Remediation Playbook
 
 This section turns the remaining review findings into concrete implementation work. Use this as the preferred order of operations.
 
-### 1. Fix Wyrm Rock State Handoff
+### 1. Fix Wyrm Rock State Handoff - Completed
 
 Primary files:
 
@@ -67,14 +67,14 @@ Target design:
 - In `process()`, read exactly one snapshot generation per process call and use that local copy for all rock DSP decisions.
 - In `WyrmWaveEditor`, stop mutating `module->rocks[...]` directly while audio can read it. Edit the pending snapshot, rebuild pending cache, then publish.
 
-Do not fix this with a blocking mutex in `Wyrm::process()`. If a lock is unavoidable, audio must use `try_lock()` and continue with the previous active snapshot on failure.
+Status update: implemented with double-buffered published snapshots (`publishRockState()` + atomic active index), with audio reading only the active snapshot.
 
 Acceptance checks:
 
-- Dragging rocks cannot mutate the same `rocks` array that `process()` is reading.
-- `process()` never observes half-updated rock position/cache state.
+- Dragging rocks no longer mutates the same rock state that `process()` reads in the same storage.
+- `process()` reads one published active snapshot and does not observe half-updated rock/cache state.
 - Existing wave point atomics remain intact.
-- Add a JSON round-trip test for rock state before or during the refactor.
+- Follow-up test still recommended: add a JSON round-trip test specifically for rock state edits.
 
 ### 2. Finish Cross-Thread Settings Cleanup
 
@@ -104,7 +104,6 @@ Concrete remaining items:
 - Bifurx: classify `highResonanceSelfOscEnabled`, `softLimitingEnabled`, `fftScaleDynamic`, `showModuleResponseOverlay`, `useGlShaderRenderer`, debug flags, modulation quality, and control update division.
 - TD.Scope: classify range/channel/invert/color/debug settings and any values touched by both expander processing and widget rendering.
 - Temporal Deck: move interpolation and trace/debug toggles to atomics or a pending settings snapshot.
-- Integral Flux/Proc: replace `timingUpdateDiv` direct UI mutation with a setter that updates the divider, resets `timingUpdateCounter`, and invalidates timing caches together.
 
 Acceptance checks:
 
@@ -224,9 +223,9 @@ Files:
 - `src/TemporalDeck.cpp:1155`
 - `src/TemporalDeck.cpp:1897`
 
-Many module runtime options are plain `bool`/`int` values changed by context menus or UI widgets and read in `process()` or audio-adjacent code. Examples include Bifurx limiting/render/overlay flags, TD.Scope range/channel/invert/debug flags, Temporal Deck interpolation/trace settings, and remaining Integral Flux/Proc timing-rate state.
+Many module runtime options are plain `bool`/`int` values changed by context menus or UI widgets and read in `process()` or audio-adjacent code. Examples include Bifurx limiting/render/overlay flags, TD.Scope range/channel/invert/debug flags, and Temporal Deck interpolation/trace settings.
 
-Update after quick-fix pass: the simplest Integral Flux, Proc, and Wyrm boolean flags listed above have been converted to atomics. This finding remains open for the larger setting set and for any setting whose change has side effects beyond storing one scalar.
+Update after quick-fix pass: the simplest Integral Flux, Proc, and Wyrm boolean flags listed above have been converted to atomics, and Integral Flux/Proc `timingUpdateDiv` now uses an atomic requested-value handoff with audio-thread apply. This finding remains open for the larger cross-module setting set.
 
 Impact: undefined behavior by C++ memory model. These may work most of the time on x86, but they are still unsound and can fail under compiler optimization, other architectures, or timing stress.
 
@@ -284,7 +283,7 @@ Impact: debug capture can distort the very glitches it is intended to investigat
 
 Recommendation: use a bounded ring buffer for debug events and write them from a non-audio worker. If the ring is full, drop events and increment an atomic drop counter.
 
-### P2: Crownstep Has Some UI Reads Of Sequence State Without The Existing Mutex
+### P2: Crownstep UI Sequence Length Read Without Mutex - Resolved
 
 Files:
 
@@ -295,9 +294,11 @@ Files:
 
 Most Crownstep sequence/history access is protected by `sequenceMutex`, but `CrownstepSeqLengthQuantity::getDisplayValueString()` reads `history.size()` without taking that mutex. Since history is modified elsewhere under lock, this unguarded read is still a data race.
 
-Impact: low-frequency UI crash or incorrect display value while history changes.
+Update after quick-fix pass: `CrownstepSeqLengthQuantity::getDisplayValueString()` now takes `sequenceMutex` before reading `history.size()`. This specific finding is resolved; keep the broader sequence/history locking convention in place for future UI reads.
 
-Recommendation: either lock `sequenceMutex` for this read or expose a small atomic cached history length updated under the same lock when history changes.
+Original impact: low-frequency UI crash or incorrect display value while history changes.
+
+Resolution: lock `sequenceMutex` for this read.
 
 ### P2: Bifurx Context Menu Settings Mix UI, Render, And Audio Ownership
 
@@ -334,7 +335,7 @@ Impact: this is fragile against Rack expander protocol expectations and future r
 
 Recommendation: document this contract explicitly or change the request direction to use TD.Scope-owned `leftExpander.producerMessage` if Rack's left-expander producer semantics allow it. Add a focused test/mock for bidirectional expander messaging ownership.
 
-### P3: Sil Constructor Relies Heavily On `APP->engine`
+### P3: Sil Constructor Relies Heavily On `APP->engine` - Resolved
 
 Files:
 
@@ -345,11 +346,13 @@ Files:
 
 The Sil constructor repeatedly reads `APP->engine->getSampleRate()`. This is usually available in Rack runtime, but constructors are easier to test and reuse if they avoid global engine access and defer sample-rate-specific setup to `onSampleRateChange()` or a safe fallback sample rate.
 
-Impact: brittle construction in non-Rack test harnesses or future initialization order changes.
+Update after quick-fix pass: the constructor now reads a single guarded `initialSampleRate`, falls back to `44100.f`, and clamps histogram bin size. This P3 constructor concern is resolved. The separate Sil realtime-safety findings remain open.
 
-Recommendation: use a local fallback such as `44100.f` in the constructor, then let `onSampleRateChange()` do authoritative setup.
+Original impact: brittle construction in non-Rack test harnesses or future initialization order changes.
 
-### P3: TD.Scope Menu Has A User-Facing Typo
+Resolution: use a local fallback such as `44100.f` in the constructor, then let `onSampleRateChange()` do authoritative setup.
+
+### P3: TD.Scope Menu Has A User-Facing Typo - Resolved
 
 File:
 
@@ -357,9 +360,11 @@ File:
 
 The menu label says `Inverted Verical` instead of `Inverted Vertical`.
 
-Impact: cosmetic polish issue.
+Update after quick-fix pass: the label now reads `Inverted Vertical`. This finding is resolved.
 
-Recommendation: rename the label.
+Original impact: cosmetic polish issue.
+
+Resolution: rename the label.
 
 ## Module Notes
 
@@ -374,8 +379,8 @@ Strengths:
 
 Risks:
 
-- Context menu settings are plain fields read in audio processing.
-- Performance options are persisted but not thread-safe while toggled live.
+- `timingUpdateDiv` handoff is now audio-thread-applied; keep this pattern for future multi-field timing/cache state changes.
+- Any new performance options read by audio should use atomics, an audio-thread command, or a versioned settings snapshot.
 - There are no direct tests for Integral Flux DSP, JSON, or UI preview behavior.
 
 Recommended tests:
@@ -395,9 +400,9 @@ Strengths:
 
 Risks:
 
-- Same non-atomic performance settings issue as Integral Flux.
+- `timingUpdateDiv` handoff is now audio-thread-applied; keep this pattern for future multi-field timing/cache state changes.
 - No dedicated tests for Proc behavior or persistence.
-- Signal/gate BLEP settings can change while MinBLEP state is in use.
+- Future audio-consumed context menu settings should avoid direct pointer menu items.
 
 Recommended tests:
 
@@ -456,7 +461,7 @@ Strengths:
 
 Risks:
 
-- Some UI display reads bypass `sequenceMutex`.
+- The known sequence-length display race is resolved; keep future sequence/history UI reads under `sequenceMutex`.
 - Many non-audio state fields are shared between UI and process; the current recursive mutex covers sequence history but not all module state.
 - AI worker lifecycle should continue to be stress-tested around rapid game-mode changes and module deletion.
 
@@ -497,7 +502,7 @@ Strengths:
 Risks:
 
 - Rock state is not protected like wave points.
-- `lfoMode` and editor flags are plain fields shared with UI.
+- `lfoMode`, `editorLocked`, and `sandViewEnabled` have been converted to atomics, but rock state still needs a snapshot or command-queue handoff.
 - No tests cover JSON, waveform editing, rock collisions, or polyphonic output.
 
 Recommended tests:
@@ -519,7 +524,7 @@ Risks:
 - Repair latency reconfiguration can allocate in `process()`.
 - Debug file capture uses mutex/file I/O in `process()`.
 - UI spectrum/histogram reads arrays written by audio without a snapshot protocol.
-- Constructor relies heavily on `APP->engine`.
+- Constructor sample-rate setup has been guarded, but broader sample-rate and realtime-safety cleanup remains open.
 
 Recommended tests:
 

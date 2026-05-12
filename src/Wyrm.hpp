@@ -171,6 +171,13 @@ struct WyrmRockBoundaryCache {
 	std::array<float, kWyrmRockBoundarySamples> upper {};
 };
 
+struct WyrmRockStateSnapshot {
+	int rockCount = 0;
+	int liftedRock = -1;
+	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
+	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
+};
+
 struct Wyrm : Module {
 	enum ParamId {
 		FREQ_PARAM,
@@ -224,6 +231,8 @@ struct Wyrm : Module {
 	int liftedRock = -1;
 	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
 	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
+	std::array<WyrmRockStateSnapshot, 2> activeRockState {};
+	std::atomic<int> activeRockStateIndex {0};
 	double createdUnixTimeSec = 0.0;
 
 	Wyrm();
@@ -243,7 +252,10 @@ struct Wyrm : Module {
 	float rockEdgeY(const WyrmRock& rock, float dx, float clearanceValue, float clearancePhase) const;
 	void rebuildRockBoundaryCache(int rockIndex);
 	void rebuildAllRockBoundaryCaches();
+	void publishRockState();
+	const WyrmRockStateSnapshot& getActiveRockState() const;
 	bool cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float* upper) const;
+	static bool cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockIndex, float ph, float* lower, float* upper);
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float* lower, float* upper) const;
 	bool rockBoundsAtPhase(const WyrmRock& rock, float ph, float clearanceValue, float clearancePhase, float* lower, float* upper) const;
@@ -251,8 +263,11 @@ struct Wyrm : Module {
 	void sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock = nullptr);
 	float resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue = kWyrmRockClearance) const;
 	float resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) const;
+	static float resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase = -1.f);
 	float applyRockPush(float base, float ph) const;
 	float applyRockClamp(float base, float ph, float offset) const;
+	static float applyRockPush(const WyrmRockStateSnapshot& state, float base, float ph);
+	static float applyRockClamp(const WyrmRockStateSnapshot& state, float base, float ph, float offset);
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
 	void process(const ProcessArgs& args) override;

@@ -446,6 +446,7 @@ struct WyrmWidget : ModuleWidget {
 				[=]() {
 					module->rockMouseMode = ROCK_MOUSE_DRAGS;
 					module->liftedRock = -1;
+					module->publishRockState();
 				}));
 			submenu->addChild(createCheckMenuItem(
 				"Mouse Lifts Rocks", "",
@@ -454,6 +455,7 @@ struct WyrmWidget : ModuleWidget {
 				},
 				[=]() {
 					module->rockMouseMode = ROCK_MOUSE_LIFTS;
+					module->publishRockState();
 				}));
 			submenu->addChild(new MenuSeparator());
 			for (int count = 0; count <= kWyrmMaxRocks; ++count) {

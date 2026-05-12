@@ -41,6 +41,7 @@ Wyrm::Wyrm() {
 	for (int i = 0; i < kWyrmMaxRocks; ++i) {
 		placeRock(i);
 	}
+	publishRockState();
 }
 
 void Wyrm::placeRock(int index) {
@@ -53,6 +54,7 @@ void Wyrm::placeRock(int index) {
 	rock.radiusPhase = 0.035f + 0.02f * hashUnit(seed ^ 0x4c2du);
 	rock.radiusValue = 0.105f + 0.055f * hashUnit(seed ^ 0x732u);
 	rebuildRockBoundaryCache(index);
+	publishRockState();
 }
 
 void Wyrm::setRockCount(int count) {
@@ -67,6 +69,7 @@ void Wyrm::setRockCount(int count) {
 	for (int i = rockCount; i < kWyrmMaxRocks; ++i) {
 		rockBoundaryCaches[i].valid = false;
 	}
+	publishRockState();
 }
 
 void Wyrm::setWavePoint(int index, float value) {
@@ -252,6 +255,22 @@ void Wyrm::rebuildAllRockBoundaryCaches() {
 	}
 }
 
+void Wyrm::publishRockState() {
+	const int currentIndex = activeRockStateIndex.load(std::memory_order_relaxed);
+	const int nextIndex = 1 - currentIndex;
+	WyrmRockStateSnapshot& next = activeRockState[nextIndex];
+	next.rockCount = rockCount;
+	next.liftedRock = liftedRock;
+	next.rocks = rocks;
+	next.rockBoundaryCaches = rockBoundaryCaches;
+	activeRockStateIndex.store(nextIndex, std::memory_order_release);
+}
+
+const WyrmRockStateSnapshot& Wyrm::getActiveRockState() const {
+	const int index = activeRockStateIndex.load(std::memory_order_acquire);
+	return activeRockState[index];
+}
+
 bool Wyrm::cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float* upper) const {
 	if (rockIndex < 0 || rockIndex >= rockCount) {
 		return false;
@@ -269,6 +288,57 @@ bool Wyrm::cachedRockBoundsAtPhase(int rockIndex, float ph, float* lower, float*
 	}
 	const float rx = rock.radiusPhase + rockClearancePhase(rock);
 	const float dx = rockDx(ph, rock);
+	if (std::fabs(dx) >= rx) {
+		return false;
+	}
+	const float x = (0.5f + 0.5f * dx / std::max(rx, 1e-4f)) * float(kWyrmRockBoundarySamples - 1);
+	const int i0 = clamp(int(std::floor(x)), 0, kWyrmRockBoundarySamples - 1);
+	const int i1 = std::min(i0 + 1, kWyrmRockBoundarySamples - 1);
+	const float t = x - float(i0);
+	if (lower) {
+		*lower = cache.lower[i0] + (cache.lower[i1] - cache.lower[i0]) * t;
+	}
+	if (upper) {
+		*upper = cache.upper[i0] + (cache.upper[i1] - cache.upper[i0]) * t;
+	}
+	return true;
+}
+
+bool Wyrm::cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockIndex, float ph, float* lower, float* upper) {
+	if (rockIndex < 0 || rockIndex >= state.rockCount) {
+		return false;
+	}
+	const WyrmRock& rock = state.rocks[rockIndex];
+	const WyrmRockBoundaryCache& cache = state.rockBoundaryCaches[rockIndex];
+	const bool cacheMatches =
+		cache.valid &&
+		cache.phase == rock.phase &&
+		cache.value == rock.value &&
+		cache.radiusPhase == rock.radiusPhase &&
+		cache.radiusValue == rock.radiusValue;
+	if (!cacheMatches) {
+		const float rx = rock.radiusPhase + kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
+		const float dxRaw = wrap01(ph) - wrap01(rock.phase);
+		float dx = dxRaw;
+		if (dx > 0.5f) dx -= 1.f;
+		else if (dx < -0.5f) dx += 1.f;
+		if (std::fabs(dx) >= rx) {
+			return false;
+		}
+		const float nx = dx / std::max(rx, 1e-4f);
+		const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
+		const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+		if (edgeY <= 0.f) {
+			return false;
+		}
+		if (lower) *lower = rock.value - edgeY;
+		if (upper) *upper = rock.value + edgeY;
+		return true;
+	}
+	const float rx = rock.radiusPhase + kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
+	float dx = wrap01(ph) - wrap01(rock.phase);
+	if (dx > 0.5f) dx -= 1.f;
+	else if (dx < -0.5f) dx += 1.f;
 	if (std::fabs(dx) >= rx) {
 		return false;
 	}
@@ -555,6 +625,17 @@ float Wyrm::applyRockClamp(float base, float ph, float offset) const {
 	return resolveAgainstRocks(base, base + offset, ph) - base;
 }
 
+float Wyrm::applyRockPush(const WyrmRockStateSnapshot& state, float base, float ph) {
+	return resolveAgainstRocks(state, base, base, ph, kWyrmRockClearance, -1.f);
+}
+
+float Wyrm::applyRockClamp(const WyrmRockStateSnapshot& state, float base, float ph, float offset) {
+	if (state.rockCount <= 0 || std::fabs(offset) <= 1e-6f) {
+		return offset;
+	}
+	return resolveAgainstRocks(state, base, base + offset, ph, kWyrmRockClearance, -1.f) - base;
+}
+
 float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float clearanceValue) const {
 	return resolveAgainstRocks(anchorY, desiredY, ph, clearanceValue, -1.f);
 }
@@ -585,6 +666,74 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 			bool hasBounds = false;
 			if (useCachedDefault) {
 				hasBounds = cachedRockBoundsAtPhase(i, ph, &lower, &upper);
+			}
+			else {
+				const float invRx = 1.f / std::max(rx, 1e-4f);
+				const float nx = dx * invRx;
+				const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
+				const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+				if (edgeY > 0.f) {
+					lower = rock.value - edgeY;
+					upper = rock.value + edgeY;
+					hasBounds = true;
+				}
+			}
+			if (!hasBounds) continue;
+			const bool anchorInside = (anchorY > lower && anchorY < upper);
+			const bool yInside = (y > lower && y < upper);
+			const bool crossesUp = (anchorY <= lower && y >= lower);
+			const bool crossesDown = (anchorY >= upper && y <= upper);
+			if (anchorInside || yInside || crossesUp || crossesDown) {
+				float projected = y;
+				if (anchorY <= lower) {
+					projected = lower;
+				}
+				else if (anchorY >= upper) {
+					projected = upper;
+				}
+				else {
+					projected = (std::fabs(y - lower) < std::fabs(upper - y)) ? lower : upper;
+				}
+				projected = clamp(projected, -1.f, 1.f);
+				if (std::fabs(projected - y) > 1e-6f) {
+					y = projected;
+					changed = true;
+				}
+			}
+		}
+		if (!changed) {
+			break;
+		}
+	}
+	return clamp(y, -1.f, 1.f);
+}
+
+float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchorY, float desiredY, float ph, float clearanceValue, float clearancePhase) {
+	if (state.rockCount <= 0) {
+		return clamp(desiredY, -1.f, 1.f);
+	}
+	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
+	float y = clamp(desiredY, -1.f, 1.f);
+	for (int pass = 0; pass < 3; ++pass) {
+		bool changed = false;
+		for (int i = 0; i < state.rockCount; ++i) {
+			if (i == state.liftedRock) continue;
+			const WyrmRock& rock = state.rocks[i];
+			const float effectiveClearancePhase = (clearancePhase >= 0.f)
+				? clearancePhase
+				: ((clearanceValue > 0.f) ? (clearanceValue * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f)) : 0.f);
+			const float rx = rock.radiusPhase + std::max(0.f, effectiveClearancePhase);
+			float dx = wrap01(ph) - wrap01(rock.phase);
+			if (dx > 0.5f) dx -= 1.f;
+			else if (dx < -0.5f) dx += 1.f;
+			if (std::fabs(dx) >= rx) {
+				continue;
+			}
+			float lower = 0.f;
+			float upper = 0.f;
+			bool hasBounds = false;
+			if (useCachedDefault) {
+				hasBounds = cachedRockBoundsAtPhase(state, i, ph, &lower, &upper);
 			}
 			else {
 				const float invRx = 1.f / std::max(rx, 1e-4f);
@@ -719,6 +868,7 @@ void Wyrm::dataFromJson(json_t* root) {
 		}
 		rebuildAllRockBoundaryCaches();
 	}
+	publishRockState();
 }
 
 void Wyrm::process(const ProcessArgs& args) {
@@ -747,7 +897,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
 	const float slitherAmountKnob = clamp01(params[SLITHER_PARAM].getValue());
 	const float slitherSpeedKnob = clamp01(params[SLITHER_SPEED_PARAM].getValue());
-	const bool hasRocks = rockCount > 0;
+	const WyrmRockStateSnapshot& activeRockStateNow = getActiveRockState();
+	const bool hasRocks = activeRockStateNow.rockCount > 0;
 	const bool voctPoly = inputs[VOCT_INPUT].getChannels() > 1;
 	const bool fmPoly = inputs[FM_INPUT].getChannels() > 1;
 	const bool slitherAmountCvPoly = inputs[SLITHER_CV_INPUT].getChannels() > 1;
@@ -823,11 +974,11 @@ void Wyrm::process(const ProcessArgs& args) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
 		const float baseWave = finiteOr(lookupWave(phase[c]));
-		const float base = hasRocks ? finiteOr(applyRockPush(baseWave, phase[c])) : baseWave;
+		const float base = hasRocks ? finiteOr(applyRockPush(activeRockStateNow, baseWave, phase[c])) : baseWave;
 		float slither = 0.f;
 		if (slitherAmount > 1e-5f) {
 			const float slitherTarget = slitherOffset(phase[c], slitherPhase[c], slitherAmount);
-			slither = hasRocks ? finiteOr(applyRockClamp(base, phase[c], slitherTarget)) : slitherTarget;
+			slither = hasRocks ? finiteOr(applyRockClamp(activeRockStateNow, base, phase[c], slitherTarget)) : slitherTarget;
 		}
 		const float raw = clamp(finiteOr(base + slither), -1.f, 1.f);
 		const float foldAmt = foldCvPoly ? effectiveFoldAmt(c) : monoFoldAmt;

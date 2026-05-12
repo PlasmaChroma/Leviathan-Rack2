@@ -154,6 +154,7 @@ struct Proc : Module {
 	std::atomic<bool> bandlimitedSignalOutputs {true};
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
+	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
@@ -385,11 +386,22 @@ struct Proc : Module {
 		ch.signalBlep.insertDiscontinuity(p, step * ch.signalOutputGain);
 	}
 
-	void setTimingUpdateDiv(int div) {
+	void applyTimingUpdateDiv(int div) {
 		// Changing update rate invalidates cached timing so the channel resyncs immediately.
 		timingUpdateDiv = std::max(1, div);
 		timingUpdateCounter = 0;
 		channel.stageTimeValid = false;
+	}
+
+	void requestTimingUpdateDiv(int div) {
+		requestedTimingUpdateDiv.store(std::max(1, div), std::memory_order_relaxed);
+	}
+
+	void applyRequestedTimingUpdateDiv() {
+		const int requested = requestedTimingUpdateDiv.load(std::memory_order_relaxed);
+		if (requested != timingUpdateDiv) {
+			applyTimingUpdateDiv(requested);
+		}
 	}
 
 	void initKnobCurveLut() {
@@ -856,7 +868,7 @@ struct Proc : Module {
 		json_object_set_new(rootJ, "cycleLatched", json_boolean(channel.cycleLatched));
 		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
-		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
+		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
@@ -883,7 +895,7 @@ struct Proc : Module {
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
 		if (timingDivJ) {
-			setTimingUpdateDiv(json_integer_value(timingDivJ));
+			requestTimingUpdateDiv(json_integer_value(timingDivJ));
 		}
 
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
@@ -893,6 +905,7 @@ struct Proc : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
 			CYCLE_PARAM,
 			TRIGGER_INPUT,
@@ -1341,8 +1354,8 @@ struct ProcWidget : ModuleWidget {
 				[=](Menu* submenu) {
 					auto addDivItem = [=](int div, std::string label) {
 						submenu->addChild(createCheckMenuItem(label, "",
-							[=]() { return proc->timingUpdateDiv == div; },
-							[=]() { proc->setTimingUpdateDiv(div); }
+							[=]() { return proc->requestedTimingUpdateDiv.load(std::memory_order_relaxed) == div; },
+							[=]() { proc->requestTimingUpdateDiv(div); }
 						));
 					};
 					addDivItem(1, "Audio rate (/1)");
