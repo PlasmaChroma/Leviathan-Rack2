@@ -181,11 +181,32 @@ struct WyrmWaveEditor : TransparentWidget {
 		const WyrmRock previousRock = rock;
 		const float phase = phaseFromX(adjusted.x);
 		const float value = valueFromY(adjusted.y);
-		rock.phase = phase;
-		rock.value = value;
-		module->rebuildRockBoundaryCache(rockIndex);
-		if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
-			module->sculptWaveAroundRock(rockIndex, &previousRock);
+		auto shortestPhaseDelta = [](float from, float to) {
+			float d = wrap01(to) - wrap01(from);
+			if (d > 0.5f) d -= 1.f;
+			if (d < -0.5f) d += 1.f;
+			return d;
+		};
+
+		const float dPhase = shortestPhaseDelta(previousRock.phase, phase);
+		const float dValue = value - previousRock.value;
+		// Trace the drag path to avoid tunneling through the waveform on fast moves.
+		const float phaseStep = std::max(0.004f, 0.18f * previousRock.radiusPhase);
+		const float valueStep = std::max(0.01f, 0.18f * kWyrmRockValueScale * previousRock.radiusValue);
+		const int phaseSteps = int(std::ceil(std::fabs(dPhase) / phaseStep));
+		const int valueSteps = int(std::ceil(std::fabs(dValue) / valueStep));
+		const int steps = clamp(std::max(1, std::max(phaseSteps, valueSteps)), 1, 16);
+
+		WyrmRock prevStepRock = previousRock;
+		for (int s = 1; s <= steps; ++s) {
+			const float t = float(s) / float(steps);
+			rock.phase = wrap01(previousRock.phase + dPhase * t);
+			rock.value = clamp(previousRock.value + dValue * t, -1.f, 1.f);
+			module->rebuildRockBoundaryCache(rockIndex);
+			if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
+				module->sculptWaveAroundRock(rockIndex, &prevStepRock);
+			}
+			prevStepRock = rock;
 		}
 		previousDragRock = rock;
 	}

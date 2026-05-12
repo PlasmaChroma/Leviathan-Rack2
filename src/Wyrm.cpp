@@ -1,5 +1,11 @@
 #include "Wyrm.hpp"
 
+namespace {
+inline float finiteOr(float x, float fallback = 0.f) {
+	return std::isfinite(x) ? x : fallback;
+}
+}
+
 const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Sine",
 	"Triangle",
@@ -732,9 +738,9 @@ void Wyrm::process(const ProcessArgs& args) {
 
 	const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
 	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoMode);
-	const float fmAtten = params[FM_ATTEN_PARAM].getValue();
-	const float fine = params[FINE_PARAM].getValue() / 1200.f;
-	const float foldBase = params[FOLD_PARAM].getValue();
+	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
+	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
+	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
 	const float slitherAmountKnob = clamp01(params[SLITHER_PARAM].getValue());
 	const float slitherSpeedKnob = clamp01(params[SLITHER_SPEED_PARAM].getValue());
 
@@ -746,14 +752,15 @@ void Wyrm::process(const ProcessArgs& args) {
 				slitherPhase[c] = 0.f;
 			}
 		}
-		const float voct = inputs[VOCT_INPUT].isConnected() ? inputs[VOCT_INPUT].getPolyVoltage(c) : 0.f;
-		const float fm = inputs[FM_INPUT].isConnected() ? inputs[FM_INPUT].getPolyVoltage(c) * fmAtten : 0.f;
-		const float slitherAmountCv = inputs[SLITHER_CV_INPUT].isConnected() ? clamp(inputs[SLITHER_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
-		const float slitherSpeedCv = inputs[SLITHER_SPEED_CV_INPUT].isConnected() ? clamp(inputs[SLITHER_SPEED_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
+		const float voct = inputs[VOCT_INPUT].isConnected() ? finiteOr(inputs[VOCT_INPUT].getPolyVoltage(c)) : 0.f;
+		const float fm = inputs[FM_INPUT].isConnected() ? finiteOr(inputs[FM_INPUT].getPolyVoltage(c)) * fmAtten : 0.f;
+		const float slitherAmountCv = inputs[SLITHER_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[SLITHER_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
+		const float slitherSpeedCv = inputs[SLITHER_SPEED_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[SLITHER_SPEED_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
 		const float slitherAmount = clamp(slitherAmountKnob + slitherAmountCv, 0.f, 1.f);
 		const float slitherSpeed = slitherSpeedFactor(clamp(slitherSpeedKnob + slitherSpeedCv, 0.f, 1.f));
 		const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
+		hz = finiteOr(hz, baseFreq);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
 			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
@@ -765,14 +772,14 @@ void Wyrm::process(const ProcessArgs& args) {
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
-		const float base = applyRockPush(lookupWave(phase[c]), phase[c]);
-		const float slither = applyRockClamp(base, phase[c], slitherOffset(phase[c], slitherPhase[c], slitherAmount));
-		const float raw = clamp(base + slither, -1.f, 1.f);
-		const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(inputs[FOLD_CV_INPUT].getPolyVoltage(c) / 10.f, -1.f, 1.f) : 0.f;
+		const float base = finiteOr(applyRockPush(lookupWave(phase[c]), phase[c]));
+		const float slither = finiteOr(applyRockClamp(base, phase[c], slitherOffset(phase[c], slitherPhase[c], slitherAmount)));
+		const float raw = clamp(finiteOr(base + slither), -1.f, 1.f);
+		const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[FOLD_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
 		const float foldAmt = clamp(foldBase + foldCv, 0.f, 2.f);
 		float folded = raw;
 		if (foldAmt > 1e-5f) {
-			folded = clamp(softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain, -1.f, 1.f);
+			folded = clamp(finiteOr(softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
 		}
 		outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 		outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);
