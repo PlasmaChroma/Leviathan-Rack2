@@ -82,6 +82,7 @@ struct TDScope final : Module {
   std::atomic<int> scopeColorScheme {COLOR_SCHEME_DEFAULT};
   float scopeColorBrightness = 0.5f;
   std::atomic<bool> scopeTransientHaloEnabled {true};
+  std::atomic<bool> debugFixedBinPairingEnabled {false};
   std::atomic<bool> debugRenderMainTraceEnabled {true};
   std::atomic<bool> debugRenderConnectorsEnabled {true};
   std::atomic<bool> debugRenderStereoRightLaneEnabled {true};
@@ -220,9 +221,11 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
     json_object_set_new(root, "scopeVerticalInverted", json_boolean(scopeVerticalInverted));
     json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
-    json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme));
+    json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
     json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
+    json_object_set_new(root, "debugFixedBinPairingEnabled", json_boolean(debugFixedBinPairingEnabled));
     json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
     json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
     json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
@@ -252,7 +255,14 @@ struct TDScope final : Module {
     }
     json_t *schemeJ = json_object_get(root, "scopeColorScheme");
     if (schemeJ) {
-      scopeColorScheme = normalizeColorSchemeIndex(int(json_integer_value(schemeJ)));
+      int rawScheme = int(json_integer_value(schemeJ));
+      json_t *schemeVersionJ = json_object_get(root, "scopeColorSchemeVersion");
+      int schemeVersion = schemeVersionJ ? int(json_integer_value(schemeVersionJ)) : 1;
+      if (schemeVersion >= 2) {
+        scopeColorScheme = clamp(rawScheme, COLOR_SCHEME_DEFAULT, COLOR_SCHEME_COUNT - 1);
+      } else {
+        scopeColorScheme = normalizeColorSchemeIndex(rawScheme);
+      }
     }
     json_t *brightnessJ = json_object_get(root, "scopeColorBrightness");
     if (brightnessJ) {
@@ -261,6 +271,10 @@ struct TDScope final : Module {
     json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
     if (haloJ) {
       scopeTransientHaloEnabled = json_boolean_value(haloJ);
+    }
+    json_t *fixedPairJ = json_object_get(root, "debugFixedBinPairingEnabled");
+    if (fixedPairJ) {
+      debugFixedBinPairingEnabled = json_boolean_value(fixedPairJ);
     }
     json_t *mainTraceJ = json_object_get(root, "debugRenderMainTraceEnabled");
     if (mainTraceJ) {

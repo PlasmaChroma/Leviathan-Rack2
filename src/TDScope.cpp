@@ -830,7 +830,7 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = 333;
+    const int rowCount = 512;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
@@ -1024,6 +1024,40 @@ struct TDScopeDisplayWidget final : Widget {
       return true;
     };
 
+    auto sampleEnvelopeForFixedRowPair = [&](const temporaldeck_expander::ScopeBin *scopeData, int rowIndex,
+                                             float *minNormOut, float *maxNormOut) -> bool {
+      if (!scopeData || scopeBinCount < 2u) {
+        return false;
+      }
+      int row = clamp(rowIndex, 0, rowCount - 1);
+      int i0 = row * 2;
+      int i1 = i0 + 1;
+      if (i1 >= int(scopeBinCount)) {
+        return false;
+      }
+      const temporaldeck_expander::ScopeBin &b0 = scopeData[size_t(i0)];
+      const temporaldeck_expander::ScopeBin &b1 = scopeData[size_t(i1)];
+      bool v0 = temporaldeck_expander::isScopeBinValid(b0);
+      bool v1 = temporaldeck_expander::isScopeBinValid(b1);
+      if (!v0 && !v1) {
+        return false;
+      }
+      float min0 = 0.f, max0 = 0.f, min1 = 0.f, max1 = 0.f;
+      if (v0) decodeScopeBin(b0, &min0, &max0);
+      if (v1) decodeScopeBin(b1, &min1, &max1);
+      if (v0 && v1) {
+        *minNormOut = std::min(min0, min1);
+        *maxNormOut = std::max(max0, max1);
+      } else if (v0) {
+        *minNormOut = min0;
+        *maxNormOut = max0;
+      } else {
+        *minNormOut = min1;
+        *maxNormOut = max1;
+      }
+      return true;
+    };
+
     auto sampleEnvelopeForLagRange = [&](const temporaldeck_expander::ScopeBin *scopeData, float lagHi, float lagLo,
                                          float *minNormOut, float *maxNormOut) -> bool {
       float binPos0 = (msg.scopeStartLagSamples - lagHi) / scopeBinSpanSamples;
@@ -1075,6 +1109,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       constexpr uint8_t kRowTailHoldFrames = 2u;
       constexpr float kRowTailIntensityDecay = 0.92f;
+      bool fixedPairing = module->debugFixedBinPairingEnabled.load(std::memory_order_relaxed);
       for (int iy = 0; iy < rowCount; ++iy) {
         size_t idx = size_t(iy);
         bool prevValid = (*validOut)[idx] != 0u;
@@ -1084,11 +1119,17 @@ struct TDScopeDisplayWidget final : Widget {
         uint8_t prevHold = (*holdOut)[idx];
         float y = drawTop + (float(iy) + 0.5f) * rowStep;
         rowY[idx] = y;
-        float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
-        float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
         float rowMinNorm = 0.f;
         float rowMaxNorm = 0.f;
-        if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
+        bool haveRow = false;
+        if (fixedPairing) {
+          haveRow = sampleEnvelopeForFixedRowPair(scopeData, iy, &rowMinNorm, &rowMaxNorm);
+        } else {
+          float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
+          float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
+          haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
+        }
+        if (!haveRow) {
           if (prevValid && prevHold > 0u) {
             (*x0Out)[idx] = prevX0;
             (*x1Out)[idx] = prevX1;
@@ -1116,8 +1157,7 @@ struct TDScopeDisplayWidget final : Widget {
         float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
         float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
         float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-        constexpr float kIntensityGamma = 0.68f;
-        float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f, 0.f, 1.f);
+        float visualIntensity = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
         (*visualOut)[idx] = visualIntensity;
         (*validOut)[idx] = 1u;
         (*holdOut)[idx] = kRowTailHoldFrames;
@@ -1134,7 +1174,6 @@ struct TDScopeDisplayWidget final : Widget {
         }
         constexpr uint8_t kGapHoldFrames = 1u;
         constexpr float kGapIntensityDecay = 0.88f;
-        constexpr float kIntensityGamma = 0.68f;
         for (int iy = 0; iy < rowCount; ++iy) {
           size_t idx = size_t(iy);
           bool prevValid = (*validOut)[idx] != 0u;
@@ -1188,7 +1227,7 @@ struct TDScopeDisplayWidget final : Widget {
           // scope look artificially dim. Keep some coverage influence for
           // fidelity, but apply a floor so visibility remains stable.
           float fillInfluence = 0.55f + 0.45f * fillFraction;
-          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillInfluence, 0.f, 1.f);
+          float visualIntensity = clamp(std::pow(intensity, 0.60f) * 1.12f * fillInfluence, 0.f, 1.f);
           (*visualOut)[idx] = visualIntensity;
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
@@ -1365,7 +1404,7 @@ struct TDScopeDisplayWidget final : Widget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -1534,13 +1573,13 @@ struct TDScopeDisplayWidget final : Widget {
           lowR = 26.f;
           lowG = 146.f;
           lowB = 78.f;
-          midR = 133.f;
-          midG = 203.f;
-          midB = 84.f;
-          highR = 228.f;
-          highG = 86.f;
-          highB = 74.f;
-          midPoint = 0.58f;
+          midR = 176.f;
+          midG = 138.f;
+          midB = 78.f;
+          highR = 244.f;
+          highG = 74.f;
+          highB = 58.f;
+          midPoint = 0.56f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f;
@@ -1627,13 +1666,18 @@ struct TDScopeDisplayWidget final : Widget {
       ensureColorLut(scheme);
       int index = clamp(int(std::lround(clamp(intensity, 0.f, 1.f) * 255.f)), 0, 255);
       NVGcolor c = colorLut[size_t(scheme)][size_t(index)];
-      // Keep a strong top-end accent without paying for a second boost stroke pass.
-      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.82f) / 0.18f, 0.f, 1.f);
-      hotT = hotT * hotT;
-      float hotLift = 0.24f * hotT;
-      c.r = c.r + (1.f - c.r) * hotLift;
-      c.g = c.g + (1.f - c.g) * hotLift;
-      c.b = c.b + (1.f - c.b) * hotLift;
+      // Keep hue/chroma strong (Sil-like vibrance) before brightness shaping.
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      constexpr float kVibrance = 1.40f;
+      c.r = clamp(luma + (c.r - luma) * kVibrance, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * kVibrance, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * kVibrance, 0.f, 1.f);
+      // Keep a strong top-end accent without washing hue toward white.
+      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.74f) / 0.26f, 0.f, 1.f);
+      float hotLift = 0.22f * std::pow(hotT, 1.15f);
+      c.r = clamp(c.r * (1.f + hotLift), 0.f, 1.f);
+      c.g = clamp(c.g * (1.f + hotLift), 0.f, 1.f);
+      c.b = clamp(c.b * (1.f + hotLift), 0.f, 1.f);
       c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
@@ -1641,9 +1685,15 @@ struct TDScopeDisplayWidget final : Widget {
 
     auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
       lift = clamp(lift, 0.f, 1.f);
-      c.r = c.r + (1.f - c.r) * lift;
-      c.g = c.g + (1.f - c.g) * lift;
-      c.b = c.b + (1.f - c.b) * lift;
+      float gain = 1.f + 0.88f * lift;
+      c.r = clamp(c.r * gain, 0.f, 1.f);
+      c.g = clamp(c.g * gain, 0.f, 1.f);
+      c.b = clamp(c.b * gain, 0.f, 1.f);
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      float sat = 1.f + 0.30f * lift;
+      c.r = clamp(luma + (c.r - luma) * sat, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * sat, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * sat, 0.f, 1.f);
       return c;
     };
 
@@ -1742,10 +1792,10 @@ struct TDScopeDisplayWidget final : Widget {
           int yPx = clamp(int(std::lround(rowY[idx])), 0, tailRasterH - 1);
           float visual = clamp(visualIntensity[idx], 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           NVGcolor c = brightenColor(
             gradientColorForIntensity(tone, uint8_t(std::lround(122.f + 120.f * tone))),
-            transientLift * 0.90f);
+            transientLift * 0.62f);
           uint8_t r = uint8_t(std::lround(clamp(c.r, 0.f, 1.f) * 255.f));
           uint8_t g = uint8_t(std::lround(clamp(c.g, 0.f, 1.f) * 255.f));
           uint8_t b = uint8_t(std::lround(clamp(c.b, 0.f, 1.f) * 255.f));
@@ -1904,7 +1954,7 @@ struct TDScopeDisplayWidget final : Widget {
             }
             float visual = clamp(visualIntensity[idx], 0.f, 1.f);
             float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+            float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
             if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
               continue;
             }
@@ -1920,7 +1970,7 @@ struct TDScopeDisplayWidget final : Widget {
           float transientCenter = toneCenter;
           NVGcolor mainC = brightenColor(
             gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
-            transientCenter * 0.90f);
+            transientCenter * 0.62f);
           float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
           nvgStrokeColor(args.vg, mainC);
           nvgStrokeWidth(args.vg, mainW);
@@ -1985,7 +2035,7 @@ struct TDScopeDisplayWidget final : Widget {
           float connectTransientLift = toneCenter;
           NVGcolor connectC = brightenColor(
             gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
-            connectTransientLift * 0.72f);
+            connectTransientLift * 0.58f);
           float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
           nvgStrokeColor(args.vg, connectC);
           nvgStrokeWidth(args.vg, connectW);

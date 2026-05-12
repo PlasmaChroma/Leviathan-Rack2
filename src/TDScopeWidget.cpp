@@ -269,6 +269,13 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createCheckMenuItem(
       "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled.load(std::memory_order_relaxed); },
       [=]() { scopeModule->scopeTransientHaloEnabled.store(!scopeModule->scopeTransientHaloEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+    menu->addChild(createCheckMenuItem(
+      "Fixed 2:1 bin mapping", "",
+      [=]() { return scopeModule->debugFixedBinPairingEnabled.load(std::memory_order_relaxed); },
+      [=]() {
+        bool enabled = scopeModule->debugFixedBinPairingEnabled.load(std::memory_order_relaxed);
+        scopeModule->debugFixedBinPairingEnabled.store(!enabled, std::memory_order_relaxed);
+      }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {

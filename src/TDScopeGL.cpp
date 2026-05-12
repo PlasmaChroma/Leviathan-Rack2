@@ -452,7 +452,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     float windowTopLag = msg.lagSamples + backwardWindowSamples;
     float windowBottomLag = msg.lagSamples - forwardWindowSamples;
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = 333;
+    const int rowCount = 512;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
@@ -650,12 +650,47 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       return true;
     };
 
+    auto sampleEnvelopeForFixedRowPair = [&](const temporaldeck_expander::ScopeBin *scopeData, int rowIndex,
+                                             float *minNormOut, float *maxNormOut) -> bool {
+      if (!scopeData || scopeBinCount < 2u) {
+        return false;
+      }
+      int row = clamp(rowIndex, 0, rowCount - 1);
+      int i0 = row * 2;
+      int i1 = i0 + 1;
+      if (i1 >= int(scopeBinCount)) {
+        return false;
+      }
+      const temporaldeck_expander::ScopeBin &b0 = scopeData[size_t(i0)];
+      const temporaldeck_expander::ScopeBin &b1 = scopeData[size_t(i1)];
+      bool v0 = temporaldeck_expander::isScopeBinValid(b0);
+      bool v1 = temporaldeck_expander::isScopeBinValid(b1);
+      if (!v0 && !v1) {
+        return false;
+      }
+      float min0 = 0.f, max0 = 0.f, min1 = 0.f, max1 = 0.f;
+      if (v0) decodeScopeBin(b0, &min0, &max0);
+      if (v1) decodeScopeBin(b1, &min1, &max1);
+      if (v0 && v1) {
+        *minNormOut = std::min(min0, min1);
+        *maxNormOut = std::max(max0, max1);
+      } else if (v0) {
+        *minNormOut = min0;
+        *maxNormOut = max0;
+      } else {
+        *minNormOut = min1;
+        *maxNormOut = max1;
+      }
+      return true;
+    };
+
     auto rebuildLaneFromScopeBins =
       [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
           std::vector<uint8_t> *holdOut) {
         constexpr uint8_t kRowTailHoldFrames = 2u;
         constexpr float kRowTailIntensityDecay = 0.92f;
+        bool fixedPairing = module->debugFixedBinPairingEnabled.load(std::memory_order_relaxed);
         for (int iy = 0; iy < rowCount; ++iy) {
           size_t idx = size_t(iy);
           bool prevValid = (*validOut)[idx] != 0u;
@@ -666,11 +701,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float y = drawTop + (float(iy) + 0.5f) * rowStep;
           rowY[idx] = y;
           int sampleRow = visualRowIndex(iy);
-          float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
-          float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
           float rowMinNorm = 0.f;
           float rowMaxNorm = 0.f;
-          if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
+          bool haveRow = false;
+          if (fixedPairing) {
+            haveRow = sampleEnvelopeForFixedRowPair(scopeData, sampleRow, &rowMinNorm, &rowMaxNorm);
+          } else {
+            float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
+            float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
+            haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
+          }
+          if (!haveRow) {
             if (prevValid && prevHold > 0u) {
               (*x0Out)[idx] = prevX0;
               (*x1Out)[idx] = prevX1;
@@ -696,7 +737,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -752,7 +793,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           float fillInfluence = 0.55f + 0.45f * clamp(fillFraction, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f * fillInfluence, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f * fillInfluence, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
         }
@@ -1027,7 +1068,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -1225,9 +1266,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:
           lowR = 26.f; lowG = 146.f; lowB = 78.f;
-          midR = 133.f; midG = 203.f; midB = 84.f;
-          highR = 228.f; highG = 86.f; highB = 74.f;
-          midPoint = 0.58f;
+          midR = 176.f; midG = 138.f; midB = 78.f;
+          highR = 244.f; highG = 74.f; highB = 58.f;
+          midPoint = 0.56f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f; lowG = 92.f; lowB = 92.f;
@@ -1271,20 +1312,31 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       ensureColorLut(scheme);
       int index = clamp(int(std::lround(clamp(intensity, 0.f, 1.f) * 255.f)), 0, 255);
       NVGcolor c = colorLut[size_t(scheme)][size_t(index)];
-      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.82f) / 0.18f, 0.f, 1.f);
-      float hotLift = 0.24f * hotT * hotT;
-      c.r = c.r + (1.f - c.r) * hotLift;
-      c.g = c.g + (1.f - c.g) * hotLift;
-      c.b = c.b + (1.f - c.b) * hotLift;
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      constexpr float kVibrance = 1.40f;
+      c.r = clamp(luma + (c.r - luma) * kVibrance, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * kVibrance, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * kVibrance, 0.f, 1.f);
+      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.74f) / 0.26f, 0.f, 1.f);
+      float hotLift = 0.22f * std::pow(hotT, 1.15f);
+      c.r = clamp(c.r * (1.f + hotLift), 0.f, 1.f);
+      c.g = clamp(c.g * (1.f + hotLift), 0.f, 1.f);
+      c.b = clamp(c.b * (1.f + hotLift), 0.f, 1.f);
       c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
     };
     auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
       lift = clamp(lift, 0.f, 1.f);
-      c.r = c.r + (1.f - c.r) * lift;
-      c.g = c.g + (1.f - c.g) * lift;
-      c.b = c.b + (1.f - c.b) * lift;
+      float gain = 1.f + 0.88f * lift;
+      c.r = clamp(c.r * gain, 0.f, 1.f);
+      c.g = clamp(c.g * gain, 0.f, 1.f);
+      c.b = clamp(c.b * gain, 0.f, 1.f);
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      float sat = 1.f + 0.30f * lift;
+      c.r = clamp(luma + (c.r - luma) * sat, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * sat, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * sat, 0.f, 1.f);
       return c;
     };
     auto encodeColorByte = [](float v) -> GLubyte {
@@ -1598,7 +1650,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "}\n"
         "vec4 brightenColor(vec4 c, float lift) {\n"
         "  lift = clamp(lift, 0.0, 1.0);\n"
-        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * lift;\n"
+        "  float gain = 1.0 + 0.88 * lift;\n"
+        "  c.rgb = clamp(c.rgb * gain, 0.0, 1.0);\n"
+        "  float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
+        "  float sat = 1.0 + 0.30 * lift;\n"
+        "  c.rgb = clamp(mix(vec3(luma), c.rgb, sat), 0.0, 1.0);\n"
         "  return c;\n"
         "}\n"
         "float segmentDistance(vec2 p, vec2 a, vec2 b) {\n"
@@ -1627,15 +1683,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float x1 = row.y;\n"
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
-        "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
+        "  float tone = clamp(0.70 * visual + 0.30 * transientLift, 0.0, 1.0);\n"
         "  float colorVisual = tone;\n"
         "  float mainAlpha = clamp(((155.0 + 100.0 * colorVisual) / 255.0) * 1.25 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainHotT = clamp((colorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
         "  float mainHotLift = (0.32 + 0.18 * uShdrEffect) * mainHotT * mainHotT;\n"
-        "  mainColor.rgb = mainColor.rgb + (vec3(1.0) - mainColor.rgb) * mainHotLift;\n"
-        "  mainColor = brightenColor(mainColor, clamp(transientLift * (0.95 + 0.05 * uShdrEffect), 0.0, 1.0));\n"
-        "  mainColor.rgb = saturate(mainColor.rgb, 1.12 + 0.38 * uShdrEffect);\n"
+        "  mainColor.rgb = clamp(mainColor.rgb * (1.0 + mainHotLift), 0.0, 1.0);\n"
+        "  mainColor = brightenColor(mainColor, clamp(transientLift * (0.66 + 0.06 * uShdrEffect), 0.0, 1.0));\n"
+        "  mainColor.rgb = saturate(mainColor.rgb, 1.28 + 0.45 * uShdrEffect);\n"
         "  float mainW = (0.85 + 0.65 * tone) * uZoomThickness * 1.15 * uZoomInWidthComp;\n"
         "  float lowVisualBoost = 1.0 + 0.35 * (1.0 - clamp(visual, 0.0, 1.0));\n"
         "  mainW *= lowVisualBoost;\n"
@@ -1700,7 +1756,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float connectHotT = clamp((connectColorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
         "  float connectHotLift = 0.30 * connectHotT * connectHotT;\n"
         "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
-        "  c = brightenColor(c, clamp(connectTransientLift * 0.82, 0.0, 1.0));\n"
+        "  c = brightenColor(c, clamp(connectTransientLift * 0.62, 0.0, 1.0));\n"
         "  float drift0 = abs(x0b - x0a);\n"
         "  float drift1 = abs(x1b - x1a);\n"
         "  float edgeDrift = max(drift0, drift1);\n"
@@ -2200,12 +2256,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float y = rowY[idx];
           float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           NVGcolor mainColor = brightenColor(
             gradientColorForIntensity(
               tone,
               uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
           GLubyte mainR = encodeColorByte(mainColor.r);
           GLubyte mainG = encodeColorByte(mainColor.g);
           GLubyte mainB = encodeColorByte(mainColor.b);
@@ -2245,7 +2301,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                   connectVisual,
                   uint8_t(std::lround(clamp(
                     (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-                clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+                clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
               GLubyte r = encodeColorByte(c.r);
               GLubyte g = encodeColorByte(c.g);
               GLubyte b = encodeColorByte(c.b);
@@ -2378,13 +2434,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
           float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
           NVGcolor c = brightenColor(
             gradientColorForIntensity(
               tone,
               uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
           GLubyte r = encodeColorByte(c.r);
           GLubyte g = encodeColorByte(c.g);
           GLubyte b = encodeColorByte(c.b);
@@ -2462,7 +2518,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                 connectVisual,
                 uint8_t(std::lround(clamp(
                   (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-              clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+              clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
