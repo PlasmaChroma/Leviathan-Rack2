@@ -1259,9 +1259,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       if (colorLutValid[size_t(scheme)]) {
         return;
       }
-      float lowR = 28.f, lowG = 204.f, lowB = 217.f;
+      float lowR = 122.f, lowG = 92.f, lowB = 255.f;
       float midR = 81.f, midG = 157.f, midB = 244.f;
-      float highR = 122.f, highG = 92.f, highB = 255.f;
+      float highR = 28.f, highG = 204.f, highB = 217.f;
       float midPoint = 0.5f;
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:

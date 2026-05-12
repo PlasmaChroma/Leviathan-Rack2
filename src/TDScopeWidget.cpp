@@ -252,17 +252,17 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
-        "Default (Cyan/Purple)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_DEFAULT; },
+        "Default (Purple/Cyan)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_DEFAULT; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_DEFAULT; }));
       submenu->addChild(createCheckMenuItem(
         "Classic (Green/Red)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_CLASSIC; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_CLASSIC; }));
       submenu->addChild(createCheckMenuItem(
-        "Monochrome (White/Gray)", "",
+        "Monochrome (Gray/White)", "",
         [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_MONOCHROME; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_MONOCHROME; }));
       submenu->addChild(createCheckMenuItem(
-        "Fire (Yellow/Red)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
+        "Fire (Red/Yellow)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
     }));
     addBrightnessSlider(menu);

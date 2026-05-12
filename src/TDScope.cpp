@@ -218,7 +218,7 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   NVGcolor silWaveformLowColor() const {
-    float lowR = 28.f, lowG = 204.f, lowB = 217.f;
+    float lowR = 122.f, lowG = 92.f, lowB = 255.f;
     if (module) {
       switch (module->scopeColorScheme) {
         case TDScope::COLOR_SCHEME_CLASSIC: lowR = 0.f; lowG = 255.f; lowB = 65.f; break;
@@ -233,7 +233,7 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   NVGcolor silWaveformHighColor() const {
-    float highR = 122.f, highG = 92.f, highB = 255.f;
+    float highR = 28.f, highG = 204.f, highB = 217.f;
     if (module) {
       switch (module->scopeColorScheme) {
         case TDScope::COLOR_SCHEME_CLASSIC: highR = 255.f; highG = 15.f; highB = 5.f; break;
@@ -1631,15 +1631,15 @@ struct TDScopeDisplayWidget final : Widget {
           break;
         case TDScope::COLOR_SCHEME_DEFAULT:
         default:
-          lowR = 28.f;
-          lowG = 204.f;
-          lowB = 217.f;
+          lowR = 122.f;
+          lowG = 92.f;
+          lowB = 255.f;
           midR = 81.f;
           midG = 157.f;
           midB = 244.f;
-          highR = 122.f;
-          highG = 92.f;
-          highB = 255.f;
+          highR = 28.f;
+          highG = 204.f;
+          highB = 217.f;
           midPoint = 0.5f;
           midHoldHalfWidth = 0.f;
           break;

@@ -2499,10 +2499,10 @@ struct SilWidget : ModuleWidget {
 						[=]() { sil->colorScheme = scheme; }
 					));
 				};
-				addSchemeItem(Sil::SCHEME_DEFAULT, "Default (Cyan/Purple)");
+				addSchemeItem(Sil::SCHEME_DEFAULT, "Default (Purple/Cyan)");
 				addSchemeItem(Sil::SCHEME_CLASSIC, "Classic (Green/Red)");
-				addSchemeItem(Sil::SCHEME_MONOCHROME, "Monochrome (White/Gray)");
-				addSchemeItem(Sil::SCHEME_FIRE, "Fire (Yellow/Red)");
+				addSchemeItem(Sil::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
+				addSchemeItem(Sil::SCHEME_FIRE, "Fire (Red/Yellow)");
 			}
 		));
 		if (isDragonKingDebugEnabled()) {
