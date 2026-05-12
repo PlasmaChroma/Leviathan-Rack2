@@ -207,6 +207,8 @@ struct Wyrm : Module {
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
 	std::atomic<float> displaySlitherPhase {0.f};
+	std::atomic<float> displaySlitherAmount {0.f};
+	std::atomic<float> displaySlitherSpeedFactor {1.f};
 	std::array<float, kWyrmMaxChannels> phase {};
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;

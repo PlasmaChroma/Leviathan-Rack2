@@ -764,6 +764,8 @@ void Wyrm::process(const ProcessArgs& args) {
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
 			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
+			displaySlitherAmount.store(slitherAmount, std::memory_order_relaxed);
+			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
 		}
 		phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
 		const float slitherBaseHz = lfoMode ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);

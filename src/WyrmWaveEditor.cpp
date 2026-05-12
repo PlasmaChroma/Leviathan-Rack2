@@ -128,8 +128,15 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float elapsed = clamp(float(nowSec - lastVisualUpdateSec), 0.f, 0.25f);
 		lastVisualUpdateSec = nowSec;
 		if (!module) return;
-		const float speedFactor = slitherSpeedFactor(module->params[Wyrm::SLITHER_SPEED_PARAM].getValue());
+		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
 		visualSlitherPhase = wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
+	}
+
+	float effectiveSlitherAmount() const {
+		if (!module) {
+			return 0.f;
+		}
+		return clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 	}
 
 	float slitherOffsetForIndex(int index) const {
@@ -138,7 +145,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	float slitherOffsetForIndex(int index, float travelPhase) const {
 		if (!module || module->pointCount <= 0) return 0.f;
-		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
+		const float amount = effectiveSlitherAmount();
 		if (amount <= 1e-5f) return 0.f;
 		const float phase = (float(index) + 0.5f) / float(module->pointCount);
 		return slitherOffset(phase, travelPhase, amount);
@@ -146,7 +153,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	float slitherOffsetForPhase(float phase) const {
 		if (!module) return 0.f;
-		const float amount = clamp01(module->params[Wyrm::SLITHER_PARAM].getValue());
+		const float amount = effectiveSlitherAmount();
 		if (amount <= 1e-5f) return 0.f;
 		return slitherOffset(phase, visualSlitherPhase, amount);
 	}
