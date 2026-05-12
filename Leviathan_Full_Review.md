@@ -32,6 +32,7 @@ Quick fixes completed from this review:
 - `Wyrm`: converted the simple `lfoMode`, `editorLocked`, and `sandViewEnabled` flags to `std::atomic<bool>` and updated JSON/menu/UI/audio accessors to use atomic load/store.
 - `Wyrm`: implemented rock-state snapshot handoff. Audio now reads a published active rock snapshot, while UI edits pending rock data and publishes on meaningful mutations (move/lift/release/count/mode/JSON load), avoiding direct UI writes to audio-read rock arrays.
 - `Bifurx`: converted shared UI/audio/render settings to atomics (`fftScaleDynamic`, `showModuleResponseOverlay`, `useGlShaderRenderer`, `highResonanceSelfOscEnabled`, `softLimitingEnabled`, `modulationQualityMode`, debug logging flags), updated JSON accessors, and replaced pointer-based menu toggles with atomic check-menu actions.
+- `TD.Scope`: converted core shared bool/int settings (range/channel/invert/color-scheme and debug render toggles/modes) to atomics, updated menu predicate/toggle lambdas for explicit atomic access, and retained passing full test/build verification.
 - `Sil`: replaced repeated constructor-time `APP->engine->getSampleRate()` calls with one guarded `initialSampleRate` value and clamped histogram bin size to at least one sample.
 
 Verification after these changes:
@@ -44,9 +45,7 @@ Result: all available tests passed after the quick-fix pass.
 
 Still not addressed by this pass:
 
-- TD.Scope and Temporal Deck still have additional plain UI/audio shared settings that should be classified and converted.
-- Sil still needs a realtime-safety pass for repair-buffer reconfiguration/debug I/O behavior from or near the audio path.
-- Temporal Deck file I/O should still move to an async UI-owned workflow where practical.
+- Temporal Deck still has additional UI/audio shared settings and trace/debug ownership boundaries that should be hardened further (beyond the completed scope-drag trace path).
 
 ## Remediation Playbook
 
@@ -102,7 +101,6 @@ Target design:
 
 Concrete remaining items:
 
-- TD.Scope: classify range/channel/invert/color/debug settings and any values touched by both expander processing and widget rendering.
 - Temporal Deck: move interpolation and trace/debug toggles to atomics or a pending settings snapshot.
 
 Acceptance checks:
@@ -135,6 +133,14 @@ Acceptance checks:
 - Repair enable/disable can be toggled without vector assignment from the audio thread.
 - Debug capture failure cannot block audio.
 
+Status update: completed. Sil now preallocates repair/bypass path storage and switches active repair latency mode without `process()` reallocations, and micropeak debug capture in `process()` now enqueues bounded fixed-size events for non-audio CSV draining.
+
+Implementation notes:
+
+- `sil::repair::RepairBuffer` now supports fixed-capacity configuration plus runtime lookahead switching (`setLookaheadSamples`) without reallocating storage.
+- Sil initializes limiter/repair storage in constructor and sample-rate change handlers; `process()` only applies mode latency via no-alloc state changes.
+- Micropeak debug logging now uses an audio-thread event queue with drop counting; CSV writes happen in widget/UI thread via `SilWidget::step()` drain.
+
 ### 4. Move Temporal Deck Trace I/O Out Of `process()`
 
 Primary files:
@@ -153,6 +159,14 @@ Acceptance checks:
 - `process()` contains no directory creation, file open, file close, or stream write for trace logging.
 - Ring overflow is handled by dropping trace events and tracking a counter.
 
+Status update: completed for scope-drag tracing. `TemporalDeck::process()` now emits fixed-size events into a bounded SPSC-style ring (`ScopeDragTraceEvent` queue + drop counter), and `TemporalDeckWidget` owns file lifecycle + CSV writes by draining events on the UI thread.
+
+Implementation notes:
+
+- Added `ScopeDragTraceEvent` API on `TemporalDeck` (`popScopeDragTraceEvent()`, `consumeScopeDragTraceDroppedCount()`).
+- Converted scope-drag/platter trace enable toggles to atomics for UI/audio-safe reads/writes.
+- Added capture boundary events (`CAPTURE_STARTED`, `CAPTURE_STOPPED`) and drag events (`SCOPE_DRAG`, `SCOPE_DRAG_END`) so session transitions are explicit in trace output.
+
 ### 5. Document Or Refactor TD.Scope Expander Request Ownership
 
 Primary files:
@@ -170,6 +184,8 @@ Acceptance checks:
 
 - The request path has comments explaining which module owns each producer/consumer message buffer.
 - Add a focused hostless test or mock if feasible.
+
+Status update: completed via explicit in-code ownership contract comments at expander setup and request/data publish-consume sites in `TDScope` and `TemporalDeck`, with no behavior change.
 
 ## Executive Summary
 

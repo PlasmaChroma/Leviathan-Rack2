@@ -81,20 +81,20 @@ struct TDScope final : Module {
   uint64_t lastPublishSeq = 0;
   int staleFrames = 0;
   bool previewValid = false;
-  int scopeDisplayRangeMode = SCOPE_RANGE_5V;
-  bool scopeVerticalInverted = false;
-  int scopeChannelMode = SCOPE_CHANNEL_MONO;
-  int scopeColorScheme = COLOR_SCHEME_TEMPORAL_DECK;
+  std::atomic<int> scopeDisplayRangeMode {SCOPE_RANGE_5V};
+  std::atomic<bool> scopeVerticalInverted {false};
+  std::atomic<int> scopeChannelMode {SCOPE_CHANNEL_MONO};
+  std::atomic<int> scopeColorScheme {COLOR_SCHEME_TEMPORAL_DECK};
   float scopeColorBrightness = 0.5f;
-  bool scopeTransientHaloEnabled = true;
-  bool debugRenderMainTraceEnabled = true;
-  bool debugRenderConnectorsEnabled = true;
-  bool debugRenderStereoRightLaneEnabled = true;
-  bool debugUseGlShaderRenderer = true;
-  bool debugShdrEffectEnabled = true;
-  bool debugFramebufferCacheEnabled = true;
-  int debugRenderMode = DEBUG_RENDER_OPENGL;
-  int debugUiPublishRateMode = DEBUG_UI_PUBLISH_120HZ;
+  std::atomic<bool> scopeTransientHaloEnabled {true};
+  std::atomic<bool> debugRenderMainTraceEnabled {true};
+  std::atomic<bool> debugRenderConnectorsEnabled {true};
+  std::atomic<bool> debugRenderStereoRightLaneEnabled {true};
+  std::atomic<bool> debugUseGlShaderRenderer {true};
+  std::atomic<bool> debugShdrEffectEnabled {true};
+  std::atomic<bool> debugFramebufferCacheEnabled {true};
+  std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
+  std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_120HZ};
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
@@ -116,6 +116,13 @@ struct TDScope final : Module {
   TDScope() {
     config(0, 0, 0, LIGHTS_LEN);
     debugInstanceId = tdscope::gTDScopeDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
+    // Expander contract (TD.Scope side):
+    // - Host-to-display stream (`HostToDisplay`) is owned/published by TemporalDeck
+    //   via TemporalDeck::rightExpander.producerMessage and consumed here via
+    //   this module's leftExpander.consumerMessage.
+    // - Display-to-host requests (`DisplayToHost`) are published here by writing
+    //   into TemporalDeck's rightExpander.producerMessage (reached through
+    //   leftExpander.module), and TemporalDeck consumes via rightExpander.consumerMessage.
     leftExpander.producerMessage = &leftMessages[0];
     leftExpander.consumerMessage = &leftMessages[1];
     uiSnapshots[0] = temporaldeck_expander::HostToDisplay();
@@ -429,6 +436,10 @@ struct TDScope final : Module {
         auto *request =
           reinterpret_cast<temporaldeck_expander::DisplayToHost *>(left->rightExpander.producerMessage);
         if (request) {
+          // Request direction contract:
+          // TD.Scope publishes DisplayToHost into TemporalDeck's producer slot,
+          // then flips TemporalDeck's right-expander message so TemporalDeck
+          // reads it from rightExpander.consumerMessage in its next process().
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
                                                         lagDragStationaryHold, lagDragSamples, lagDragVelocity);

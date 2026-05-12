@@ -3225,12 +3225,24 @@ static bool isTDScopeModule(const engine::Module *neighbor) {
 }
 
 struct TemporalDeckWidget : ModuleWidget {
+  struct ScopeDragTraceRecorder {
+    bool active = false;
+    std::ofstream file;
+    std::string path;
+    uint64_t rowsWritten = 0;
+  };
+
   PanelBorder *panelBorder = nullptr;
   TemporalDeckScopeSpawnButton *scopeSpawnButton = nullptr;
+  ScopeDragTraceRecorder scopeDragTraceRecorder;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarRightEndMm = 97.413935f;
 
   void spawnTDScopeRight();
+  void startScopeDragTraceCapture();
+  void stopScopeDragTraceCapture();
+  void syncScopeDragTraceCaptureState();
+  void drainScopeDragTraceEvents(TemporalDeck *deckModule);
 
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
@@ -3473,6 +3485,12 @@ struct TemporalDeckWidget : ModuleWidget {
 
   void step() override {
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    if (deckModule) {
+      syncScopeDragTraceCaptureState();
+      drainScopeDragTraceEvents(deckModule);
+    } else {
+      stopScopeDragTraceCapture();
+    }
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (scopeSpawnButton) {
       scopeSpawnButton->setVisible(!linkedToScope);
@@ -3486,6 +3504,8 @@ struct TemporalDeckWidget : ModuleWidget {
     }
     ModuleWidget::step();
   }
+
+  ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
@@ -3917,6 +3937,90 @@ struct TemporalDeckWidget : ModuleWidget {
     }
   }
 };
+
+void TemporalDeckWidget::startScopeDragTraceCapture() {
+  if (scopeDragTraceRecorder.active) {
+    return;
+  }
+  std::string traceDir = system::join(temporalDeckUserRootPath(), "scope_traces");
+  system::createDirectories(traceDir);
+  long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+  std::string filename = "scope_drag_trace_" + std::to_string(stampMs) + ".csv";
+  scopeDragTraceRecorder.path = system::join(traceDir, filename);
+  scopeDragTraceRecorder.file.open(scopeDragTraceRecorder.path.c_str(), std::ios::out | std::ios::trunc);
+  if (!scopeDragTraceRecorder.file.good()) {
+    WARN("TemporalDeck: failed to open scope drag trace file: %s", scopeDragTraceRecorder.path.c_str());
+    scopeDragTraceRecorder.path.clear();
+    return;
+  }
+  scopeDragTraceRecorder.file.setf(std::ios::fixed);
+  scopeDragTraceRecorder.file << std::setprecision(6);
+  scopeDragTraceRecorder.file << "# TemporalDeck scope drag trace v2\n";
+  scopeDragTraceRecorder.file << "# Audio thread emits events, UI thread persists CSV\n";
+  scopeDragTraceRecorder.file
+    << "seq,t_sec,event,request_seq,scope_active,new_request,just_started,stall_frames,target_lag,target_delta,"
+       "request_velocity,applied_velocity,frame_lag,frame_lag_delta,freeze,sample_mode\n";
+  scopeDragTraceRecorder.rowsWritten = 0;
+  scopeDragTraceRecorder.active = true;
+  INFO("TemporalDeck: scope drag trace capture started: %s", scopeDragTraceRecorder.path.c_str());
+}
+
+void TemporalDeckWidget::stopScopeDragTraceCapture() {
+  if (!scopeDragTraceRecorder.active) {
+    return;
+  }
+  if (scopeDragTraceRecorder.file.good()) {
+    scopeDragTraceRecorder.file.flush();
+    scopeDragTraceRecorder.file.close();
+  }
+  INFO("TemporalDeck: scope drag trace capture saved: %s", scopeDragTraceRecorder.path.c_str());
+  scopeDragTraceRecorder.active = false;
+  scopeDragTraceRecorder.rowsWritten = 0;
+  scopeDragTraceRecorder.path.clear();
+}
+
+void TemporalDeckWidget::syncScopeDragTraceCaptureState() {
+  TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+  if (!deckModule) {
+    stopScopeDragTraceCapture();
+    return;
+  }
+  if (deckModule->isScopeDragTraceLoggingEnabled() && isDragonKingDebugEnabled()) {
+    startScopeDragTraceCapture();
+  } else {
+    stopScopeDragTraceCapture();
+  }
+}
+
+void TemporalDeckWidget::drainScopeDragTraceEvents(TemporalDeck *deckModule) {
+  if (!deckModule || !scopeDragTraceRecorder.active || !scopeDragTraceRecorder.file.good()) {
+    return;
+  }
+  uint32_t dropped = deckModule->consumeScopeDragTraceDroppedCount();
+  if (dropped > 0u) {
+    WARN("TemporalDeck: scope drag trace dropped %u events (queue full)", dropped);
+  }
+  TemporalDeck::ScopeDragTraceEvent event;
+  while (deckModule->popScopeDragTraceEvent(&event)) {
+    const char *eventName = "UNKNOWN";
+    if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_CAPTURE_STARTED) {
+      eventName = "CAPTURE_STARTED";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_SCOPE_DRAG) {
+      eventName = "SCOPE_DRAG";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_SCOPE_DRAG_END) {
+      eventName = "SCOPE_DRAG_END";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_CAPTURE_STOPPED) {
+      eventName = "CAPTURE_STOPPED";
+    }
+    scopeDragTraceRecorder.file << event.eventSeq << "," << event.tSec << "," << eventName << "," << event.requestSeq << ","
+                                << (event.scopeActive ? 1 : 0) << "," << (event.newRequest ? 1 : 0) << ","
+                                << (event.justStarted ? 1 : 0) << "," << event.stallFrames << "," << event.targetLag
+                                << "," << event.targetDelta << "," << event.requestVelocity << ","
+                                << event.appliedVelocity << "," << event.frameLag << "," << event.frameLagDelta << ","
+                                << (event.freeze ? 1 : 0) << "," << (event.sampleMode ? 1 : 0) << "\n";
+    scopeDragTraceRecorder.rowsWritten++;
+  }
+}
 
 void TemporalDeckWidget::spawnTDScopeRight() {
   TemporalDeck *deckModule = dynamic_cast<TemporalDeck *>(module);

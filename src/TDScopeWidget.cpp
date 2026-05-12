@@ -59,7 +59,7 @@ const char *debugRenderModeLabel(const TDScope *scopeModule) {
     case TDScope::DEBUG_RENDER_TAIL_RASTER:
       return "RASTER";
     case TDScope::DEBUG_RENDER_OPENGL:
-      return scopeModule->debugUseGlShaderRenderer ? "GL SHDR" : "GL";
+      return scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed) ? "GL SHDR" : "GL";
     default:
       return "STD";
   }
@@ -231,8 +231,8 @@ struct TDScopeWidget : ModuleWidget {
       [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
       [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
 	menu->addChild(createCheckMenuItem(
-      "Inverted Vertical", "", [=]() { return scopeModule->scopeVerticalInverted; },
-      [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
+      "Inverted Vertical", "", [=]() { return scopeModule->scopeVerticalInverted.load(std::memory_order_relaxed); },
+      [=]() { scopeModule->scopeVerticalInverted.store(!scopeModule->scopeVerticalInverted.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
     menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
         "Auto (window peak)", "",
@@ -281,8 +281,8 @@ struct TDScopeWidget : ModuleWidget {
     }));
     addBrightnessSlider(menu);
     menu->addChild(createCheckMenuItem(
-      "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
-      [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
+      "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled.load(std::memory_order_relaxed); },
+      [=]() { scopeModule->scopeTransientHaloEnabled.store(!scopeModule->scopeTransientHaloEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
@@ -298,8 +298,8 @@ struct TDScopeWidget : ModuleWidget {
         [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
       submenu->addChild(new MenuSeparator());
       submenu->addChild(createCheckMenuItem(
-        "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled; },
-        [=]() { scopeModule->debugFramebufferCacheEnabled = !scopeModule->debugFramebufferCacheEnabled; }));
+        "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed); },
+        [=]() { scopeModule->debugFramebufferCacheEnabled.store(!scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
       submenu->addChild(createMenuLabel("Render Mode"));
       submenu->addChild(createCheckMenuItem(
         "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
@@ -311,35 +311,35 @@ struct TDScopeWidget : ModuleWidget {
         "OpenGL", "",
         [=]() {
           return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                 !scopeModule->debugUseGlShaderRenderer;
+                 !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
         },
         [=]() {
           scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-          scopeModule->debugUseGlShaderRenderer = false;
+          scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
         }));
       submenu->addChild(createCheckMenuItem(
         "OpenGL SHDR", "",
         [=]() {
           return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                 scopeModule->debugUseGlShaderRenderer;
+                 scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
         },
         [=]() {
           scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-          scopeModule->debugUseGlShaderRenderer = true;
+          scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
         }));
       submenu->addChild(createCheckMenuItem(
-        "SHDR Effect", "", [=]() { return scopeModule->debugShdrEffectEnabled; },
-        [=]() { scopeModule->debugShdrEffectEnabled = !scopeModule->debugShdrEffectEnabled; }));
+        "SHDR Effect", "", [=]() { return scopeModule->debugShdrEffectEnabled.load(std::memory_order_relaxed); },
+        [=]() { scopeModule->debugShdrEffectEnabled.store(!scopeModule->debugShdrEffectEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
       submenu->addChild(new MenuSeparator());
       submenu->addChild(createCheckMenuItem(
-        "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
-        [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
+        "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled.load(std::memory_order_relaxed); },
+        [=]() { scopeModule->debugRenderMainTraceEnabled.store(!scopeModule->debugRenderMainTraceEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
       submenu->addChild(createCheckMenuItem(
-        "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
-        [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));
+        "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled.load(std::memory_order_relaxed); },
+        [=]() { scopeModule->debugRenderConnectorsEnabled.store(!scopeModule->debugRenderConnectorsEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
       submenu->addChild(createCheckMenuItem(
-        "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled; },
-        [=]() { scopeModule->debugRenderStereoRightLaneEnabled = !scopeModule->debugRenderStereoRightLaneEnabled; }));
+        "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled.load(std::memory_order_relaxed); },
+        [=]() { scopeModule->debugRenderStereoRightLaneEnabled.store(!scopeModule->debugRenderStereoRightLaneEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
     }));
   }
 };

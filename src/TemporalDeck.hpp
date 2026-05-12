@@ -2,6 +2,7 @@
 
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -186,6 +187,32 @@ struct TemporalDeck final : Module {
   void setPlatterTraceLoggingEnabled(bool enabled);
   bool isScopeDragTraceLoggingEnabled() const;
   void setScopeDragTraceLoggingEnabled(bool enabled);
+  struct ScopeDragTraceEvent {
+    enum Type : uint8_t {
+      EVENT_CAPTURE_STARTED = 1,
+      EVENT_SCOPE_DRAG = 2,
+      EVENT_SCOPE_DRAG_END = 3,
+      EVENT_CAPTURE_STOPPED = 4
+    };
+    uint8_t type = 0;
+    uint64_t eventSeq = 0;
+    uint64_t requestSeq = 0;
+    float tSec = 0.f;
+    float frameLag = 0.f;
+    float targetLag = 0.f;
+    float targetDelta = 0.f;
+    float requestVelocity = 0.f;
+    float appliedVelocity = 0.f;
+    float frameLagDelta = 0.f;
+    int32_t stallFrames = 0;
+    bool scopeActive = false;
+    bool newRequest = false;
+    bool justStarted = false;
+    bool freeze = false;
+    bool sampleMode = false;
+  };
+  bool popScopeDragTraceEvent(ScopeDragTraceEvent *outEvent);
+  uint32_t consumeScopeDragTraceDroppedCount();
 
   bool isHighQualityRateInterpolationEnabled() const;
   void setHighQualityRateInterpolationEnabled(bool enabled);

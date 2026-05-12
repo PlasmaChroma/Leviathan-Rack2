@@ -15,10 +15,15 @@ struct StereoWindows {
 
 class RepairBuffer {
 public:
+	void setLookaheadSamples(int lookaheadSamples) {
+		lookaheadSamples_ = std::max(0, std::min(lookaheadSamples, maxLookaheadSamples_));
+	}
+
 	void configure(int lookaheadSamples, int minHistorySamples) {
-		lookaheadSamples_ = std::max(0, lookaheadSamples);
-		const int historySamples = std::max(lookaheadSamples_, std::max(0, minHistorySamples));
-		const int requiredLength = lookaheadSamples_ + historySamples + 1;
+		maxLookaheadSamples_ = std::max(0, lookaheadSamples);
+		lookaheadSamples_ = maxLookaheadSamples_;
+		const int historySamples = std::max(maxLookaheadSamples_, std::max(0, minHistorySamples));
+		const int requiredLength = maxLookaheadSamples_ + historySamples + 1;
 		if (int(left_.size()) == requiredLength && int(right_.size()) == requiredLength) {
 			return;
 		}
@@ -85,6 +90,7 @@ private:
 	std::vector<float> right_;
 	int writeIndex_ = 0;
 	int lookaheadSamples_ = 0;
+	int maxLookaheadSamples_ = 0;
 };
 
 } // namespace repair
