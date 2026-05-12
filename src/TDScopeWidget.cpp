@@ -252,32 +252,18 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
-        "Temporal Deck", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_TEMPORAL_DECK; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_TEMPORAL_DECK; }));
+        "Default (Cyan/Purple)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_DEFAULT; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_DEFAULT; }));
       submenu->addChild(createCheckMenuItem(
-        "Leviathan", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_LEVIATHAN; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_LEVIATHAN; }));
+        "Classic (Green/Red)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_CLASSIC; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_CLASSIC; }));
       submenu->addChild(createCheckMenuItem(
-        "Pickle", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PICKLE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PICKLE; }));
+        "Monochrome (White/Gray)", "",
+        [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_MONOCHROME; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_MONOCHROME; }));
       submenu->addChild(createCheckMenuItem(
-        "Hellfire", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_HELLFIRE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_HELLFIRE; }));
-      submenu->addChild(createCheckMenuItem(
-        "Angelic", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_ANGELIC; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_ANGELIC; }));
-      submenu->addChild(createCheckMenuItem(
-        "Violet Flame", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_VIOLET_FLAME; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_VIOLET_FLAME; }));
-      submenu->addChild(createCheckMenuItem(
-        "Pixie", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PIXIE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PIXIE; }));
-      submenu->addChild(createCheckMenuItem(
-        "Wasp", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_WASP; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_WASP; }));
-      submenu->addChild(createCheckMenuItem(
-        "Emerald", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_EMERALD; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_EMERALD; }));
+        "Fire (Yellow/Red)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
     }));
     addBrightnessSlider(menu);
     menu->addChild(createCheckMenuItem(

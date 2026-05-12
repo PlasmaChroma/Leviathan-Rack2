@@ -45,15 +45,10 @@ struct TDScope final : Module {
     DEBUG_RENDER_COUNT
   };
   enum ColorScheme {
-    COLOR_SCHEME_TEMPORAL_DECK = 0,
-    COLOR_SCHEME_LEVIATHAN,
-    COLOR_SCHEME_PICKLE,
-    COLOR_SCHEME_HELLFIRE,
-    COLOR_SCHEME_ANGELIC,
-    COLOR_SCHEME_VIOLET_FLAME,
-    COLOR_SCHEME_PIXIE,
-    COLOR_SCHEME_WASP,
-    COLOR_SCHEME_EMERALD,
+    COLOR_SCHEME_DEFAULT = 0,
+    COLOR_SCHEME_CLASSIC,
+    COLOR_SCHEME_MONOCHROME,
+    COLOR_SCHEME_FIRE,
     COLOR_SCHEME_COUNT
   };
 
@@ -84,7 +79,7 @@ struct TDScope final : Module {
   std::atomic<int> scopeDisplayRangeMode {SCOPE_RANGE_5V};
   std::atomic<bool> scopeVerticalInverted {false};
   std::atomic<int> scopeChannelMode {SCOPE_CHANNEL_MONO};
-  std::atomic<int> scopeColorScheme {COLOR_SCHEME_TEMPORAL_DECK};
+  std::atomic<int> scopeColorScheme {COLOR_SCHEME_DEFAULT};
   float scopeColorBrightness = 0.5f;
   std::atomic<bool> scopeTransientHaloEnabled {true};
   std::atomic<bool> debugRenderMainTraceEnabled {true};
@@ -112,6 +107,27 @@ struct TDScope final : Module {
   static constexpr float kRequestPublishIntervalDragSec = 1.f / 120.f;
   static constexpr float kLinkDropGraceSec = 1.f / 45.f;
   static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
+
+  static int normalizeColorSchemeIndex(int raw) {
+    // Preserve older patch values by mapping legacy scheme ids.
+    switch (raw) {
+      case 0: // Temporal Deck
+      case 1: // Leviathan
+      case 5: // Violet Flame
+      case 6: // Pixie
+        return COLOR_SCHEME_DEFAULT;
+      case 2: // Pickle
+      case 8: // Emerald
+        return COLOR_SCHEME_CLASSIC;
+      case 4: // Angelic
+        return COLOR_SCHEME_MONOCHROME;
+      case 3: // Hellfire
+      case 7: // Wasp
+        return COLOR_SCHEME_FIRE;
+      default:
+        return clamp(raw, COLOR_SCHEME_DEFAULT, COLOR_SCHEME_COUNT - 1);
+    }
+  }
 
   TDScope() {
     config(0, 0, 0, LIGHTS_LEN);
@@ -236,7 +252,7 @@ struct TDScope final : Module {
     }
     json_t *schemeJ = json_object_get(root, "scopeColorScheme");
     if (schemeJ) {
-      scopeColorScheme = clamp(int(json_integer_value(schemeJ)), COLOR_SCHEME_TEMPORAL_DECK, COLOR_SCHEME_COUNT - 1);
+      scopeColorScheme = normalizeColorSchemeIndex(int(json_integer_value(schemeJ)));
     }
     json_t *brightnessJ = json_object_get(root, "scopeColorBrightness");
     if (brightnessJ) {

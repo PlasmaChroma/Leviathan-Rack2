@@ -1218,24 +1218,48 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       if (colorLutValid[size_t(scheme)]) {
         return;
       }
-      float lowR = 85.f, lowG = 227.f, lowB = 238.f;
-      float highR = 233.f, highG = 112.f, highB = 218.f;
+      float lowR = 28.f, lowG = 204.f, lowB = 217.f;
+      float midR = 81.f, midG = 157.f, midB = 244.f;
+      float highR = 122.f, highG = 92.f, highB = 255.f;
+      float midPoint = 0.5f;
       switch (scheme) {
-        case TDScope::COLOR_SCHEME_EMERALD: lowR = 15.f; lowG = 79.f; lowB = 54.f; highR = 87.f; highG = 240.f; highB = 182.f; break;
-        case TDScope::COLOR_SCHEME_WASP: lowR = 33.f; lowG = 27.f; lowB = 18.f; highR = 255.f; highG = 216.f; highB = 74.f; break;
-        case TDScope::COLOR_SCHEME_PIXIE: lowR = 255.f; lowG = 143.f; lowB = 209.f; highR = 129.f; highG = 255.f; highB = 210.f; break;
-        case TDScope::COLOR_SCHEME_VIOLET_FLAME: lowR = 42.f; lowG = 31.f; lowB = 95.f; highR = 181.f; highG = 109.f; highB = 255.f; break;
-        case TDScope::COLOR_SCHEME_ANGELIC: lowR = 248.f; lowG = 245.f; lowB = 255.f; highR = 179.f; highG = 229.f; highB = 255.f; break;
-        case TDScope::COLOR_SCHEME_HELLFIRE: lowR = 120.f; lowG = 24.f; lowB = 15.f; highR = 255.f; highG = 209.f; highB = 102.f; break;
-        case TDScope::COLOR_SCHEME_PICKLE: lowR = 62.f; lowG = 111.f; lowB = 49.f; highR = 190.f; highG = 234.f; highB = 97.f; break;
-        case TDScope::COLOR_SCHEME_LEVIATHAN: lowR = 122.f; lowG = 92.f; lowB = 255.f; highR = 92.f; highG = 190.f; highB = 246.f; break;
-        default: break;
+        case TDScope::COLOR_SCHEME_CLASSIC:
+          lowR = 26.f; lowG = 146.f; lowB = 78.f;
+          midR = 133.f; midG = 203.f; midB = 84.f;
+          highR = 228.f; highG = 86.f; highB = 74.f;
+          midPoint = 0.58f;
+          break;
+        case TDScope::COLOR_SCHEME_MONOCHROME:
+          lowR = 92.f; lowG = 92.f; lowB = 92.f;
+          midR = 168.f; midG = 168.f; midB = 168.f;
+          highR = 242.f; highG = 242.f; highB = 242.f;
+          midPoint = 0.52f;
+          break;
+        case TDScope::COLOR_SCHEME_FIRE:
+          lowR = 124.f; lowG = 30.f; lowB = 16.f;
+          midR = 229.f; midG = 91.f; midB = 28.f;
+          highR = 255.f; highG = 210.f; highB = 84.f;
+          midPoint = 0.60f;
+          break;
+        default:
+          break;
       }
       for (int i = 0; i < 256; ++i) {
         float intensity = float(i) / 255.f;
-        float r = lowR + (highR - lowR) * intensity;
-        float g = lowG + (highG - lowG) * intensity;
-        float b = lowB + (highB - lowB) * intensity;
+        float r = 0.f;
+        float g = 0.f;
+        float b = 0.f;
+        if (intensity <= midPoint) {
+          float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
+          r = lowR + (midR - lowR) * t;
+          g = lowG + (midG - lowG) * t;
+          b = lowB + (midB - lowB) * t;
+        } else {
+          float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
+          r = midR + (highR - midR) * t;
+          g = midG + (highG - midG) * t;
+          b = midB + (highB - midB) * t;
+        }
         colorLut[size_t(scheme)][size_t(i)] = nvgRGBA(uint8_t(std::lround(clamp(r, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(g, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(b, 0.f, 255.f))), 255);

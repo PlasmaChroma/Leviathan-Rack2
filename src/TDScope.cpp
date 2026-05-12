@@ -1530,113 +1530,53 @@ struct TDScopeDisplayWidget final : Widget {
       float midPoint = 0.5f;
       float midHoldHalfWidth = 0.f;
       switch (scheme) {
-        case TDScope::COLOR_SCHEME_EMERALD:
-          lowR = 15.f;
-          lowG = 79.f;
-          lowB = 54.f;
-          midR = 47.f;
-          midG = 168.f;
-          midB = 110.f;
-          highR = 87.f;
-          highG = 240.f;
-          highB = 182.f;
-          midPoint = 0.52f;
-          break;
-        case TDScope::COLOR_SCHEME_WASP:
-          lowR = 33.f;
-          lowG = 27.f;
-          lowB = 18.f;
-          midR = 231.f;
-          midG = 137.f;
-          midB = 47.f;
-          highR = 255.f;
-          highG = 216.f;
+        case TDScope::COLOR_SCHEME_CLASSIC:
+          lowR = 26.f;
+          lowG = 146.f;
+          lowB = 78.f;
+          midR = 133.f;
+          midG = 203.f;
+          midB = 84.f;
+          highR = 228.f;
+          highG = 86.f;
           highB = 74.f;
           midPoint = 0.58f;
           break;
-        case TDScope::COLOR_SCHEME_PIXIE:
-          lowR = 255.f;
-          lowG = 143.f;
-          lowB = 209.f;
-          midR = 211.f;
-          midG = 180.f;
-          midB = 239.f;
-          highR = 129.f;
-          highG = 255.f;
-          highB = 210.f;
-          midPoint = 0.48f;
-          break;
-        case TDScope::COLOR_SCHEME_VIOLET_FLAME:
-          lowR = 42.f;
-          lowG = 31.f;
-          lowB = 95.f;
-          midR = 147.f;
-          midG = 71.f;
-          midB = 217.f;
-          highR = 181.f;
-          highG = 109.f;
-          highB = 255.f;
-          midPoint = 0.54f;
-          break;
-        case TDScope::COLOR_SCHEME_ANGELIC:
-          lowR = 248.f;
-          lowG = 245.f;
-          lowB = 255.f;
-          midR = 232.f;
-          midG = 220.f;
-          midB = 255.f;
-          highR = 179.f;
-          highG = 229.f;
-          highB = 255.f;
-          midPoint = 0.40f;
-          break;
-        case TDScope::COLOR_SCHEME_HELLFIRE:
-          lowR = 120.f;
-          lowG = 24.f;
-          lowB = 15.f;
-          midR = 255.f;
-          midG = 111.f;
-          midB = 43.f;
-          highR = 255.f;
-          highG = 209.f;
-          highB = 102.f;
-          midPoint = 0.60f;
-          break;
-        case TDScope::COLOR_SCHEME_PICKLE:
-          lowR = 62.f;
-          lowG = 111.f;
-          lowB = 49.f;
-          midR = 132.f;
-          midG = 185.f;
-          midB = 72.f;
-          highR = 190.f;
-          highG = 234.f;
-          highB = 97.f;
-          midPoint = 0.56f;
-          break;
-        case TDScope::COLOR_SCHEME_LEVIATHAN:
-          lowR = 122.f;
+        case TDScope::COLOR_SCHEME_MONOCHROME:
+          lowR = 92.f;
           lowG = 92.f;
-          lowB = 255.f;
-          midR = 75.f;
-          midG = 141.f;
-          midB = 255.f;
-          highR = 28.f;
-          highG = 204.f;
-          highB = 217.f;
+          lowB = 92.f;
+          midR = 168.f;
+          midG = 168.f;
+          midB = 168.f;
+          highR = 242.f;
+          highG = 242.f;
+          highB = 242.f;
           midPoint = 0.52f;
           break;
-        case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
+        case TDScope::COLOR_SCHEME_FIRE:
+          lowR = 124.f;
+          lowG = 30.f;
+          lowB = 16.f;
+          midR = 229.f;
+          midG = 91.f;
+          midB = 28.f;
+          highR = 255.f;
+          highG = 210.f;
+          highB = 84.f;
+          midPoint = 0.60f;
+          break;
+        case TDScope::COLOR_SCHEME_DEFAULT:
         default:
-          lowR = 85.f;
-          lowG = 227.f;
-          lowB = 238.f;
-          midR = 255.f;
-          midG = 191.f;
-          midB = 86.f;
-          highR = 233.f;
-          highG = 112.f;
-          highB = 218.f;
+          lowR = 28.f;
+          lowG = 204.f;
+          lowB = 217.f;
+          midR = 81.f;
+          midG = 157.f;
+          midB = 244.f;
+          highR = 122.f;
+          highG = 92.f;
+          highB = 255.f;
           midPoint = 0.5f;
           midHoldHalfWidth = 0.f;
           break;
@@ -1883,8 +1823,8 @@ struct TDScopeDisplayWidget final : Widget {
       };
 
       if (silStandardStyle) {
-        const NVGcolor silLow = module->applyScopeColorBrightness(silWaveformLowColor());
-        const NVGcolor silHigh = module->applyScopeColorBrightness(silWaveformHighColor());
+        const NVGcolor silLow = gradientColorForIntensity(0.f, 255u);
+        const NVGcolor silHigh = gradientColorForIntensity(1.f, 255u);
         constexpr int kSilStrokeBins = 12;
         for (int bin = 0; bin < kSilStrokeBins; ++bin) {
           bool hasPath = false;
