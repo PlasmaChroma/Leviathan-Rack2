@@ -12,8 +12,7 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"Saw Up",
 	"Saw Down",
 	"Square",
-	"S.Saw Up",
-	"S.Saw Down"
+	"S.Saw"
 };
 
 Wyrm::Wyrm() {
@@ -122,20 +121,6 @@ void Wyrm::setFactoryShape(int shapeId) {
 				const float base = baseSum / float(sizeof(phaseOffsets) / sizeof(phaseOffsets[0]));
 				const float inner1 = 2.f * wrap01(p * 2.f + 0.13f) - 1.f;
 				const float inner2 = 2.f * wrap01(p * 3.f - 0.21f) - 1.f;
-				v = base + 0.22f * inner1 + 0.11f * inner2;
-				v = clamp(v * 1.05f, -1.f, 1.f);
-			} break;
-			case SHAPE_SUPERSAW_DOWN: {
-				// Downward counterpart of supersaw: reverse all saw slopes.
-				static constexpr float phaseOffsets[] = {-0.032f, -0.016f, 0.f, 0.016f, 0.032f};
-				float baseSum = 0.f;
-				for (float offset : phaseOffsets) {
-					const float ph = wrap01(p + offset);
-					baseSum += 1.f - 2.f * ph;
-				}
-				const float base = baseSum / float(sizeof(phaseOffsets) / sizeof(phaseOffsets[0]));
-				const float inner1 = 1.f - 2.f * wrap01(p * 2.f + 0.13f);
-				const float inner2 = 1.f - 2.f * wrap01(p * 3.f - 0.21f);
 				v = base + 0.22f * inner1 + 0.11f * inner2;
 				v = clamp(v * 1.05f, -1.f, 1.f);
 			} break;

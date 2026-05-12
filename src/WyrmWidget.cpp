@@ -438,8 +438,11 @@ struct WyrmWidget : ModuleWidget {
 			[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 		));
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
+			const bool dragModeSelected = (module->rockMouseMode == ROCK_MOUSE_DRAGS);
+			const std::string dragLabel = dragModeSelected ? "Mouse Drags Rocks" : "Mouse Drags Rocks (shift)";
+			const std::string liftLabel = dragModeSelected ? "Mouse Lifts Rocks (shift)" : "Mouse Lifts Rocks";
 			submenu->addChild(createCheckMenuItem(
-				"Mouse Drags Rocks", "",
+				dragLabel, "",
 				[=]() {
 					return module->rockMouseMode == ROCK_MOUSE_DRAGS;
 				},
@@ -449,7 +452,7 @@ struct WyrmWidget : ModuleWidget {
 					module->publishRockState();
 				}));
 			submenu->addChild(createCheckMenuItem(
-				"Mouse Lifts Rocks", "",
+				liftLabel, "",
 				[=]() {
 					return module->rockMouseMode == ROCK_MOUSE_LIFTS;
 				},

@@ -2267,7 +2267,7 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 	float histogramStartX = 0.f;
 
 	void draw(const DrawArgs& args) override {
-		if (!module || !isDragonKingDebugEnabled() || !APP || !APP->window || !APP->window->uiFont) {
+		if (!module || !APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
 
