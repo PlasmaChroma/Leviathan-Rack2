@@ -743,6 +743,42 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
 	const float slitherAmountKnob = clamp01(params[SLITHER_PARAM].getValue());
 	const float slitherSpeedKnob = clamp01(params[SLITHER_SPEED_PARAM].getValue());
+	const bool hasRocks = rockCount > 0;
+	const bool voctPoly = inputs[VOCT_INPUT].getChannels() > 1;
+	const bool fmPoly = inputs[FM_INPUT].getChannels() > 1;
+	const bool slitherAmountCvPoly = inputs[SLITHER_CV_INPUT].getChannels() > 1;
+	const bool slitherSpeedCvPoly = inputs[SLITHER_SPEED_CV_INPUT].getChannels() > 1;
+	const bool foldCvPoly = inputs[FOLD_CV_INPUT].getChannels() > 1;
+	auto readPolyOrMonoVoltage = [&](InputId id, int channel, bool poly, float monoValue) {
+		if (poly) {
+			return finiteOr(inputs[id].getPolyVoltage(channel));
+		}
+		return monoValue;
+	};
+	auto readBipolarCvNorm = [&](InputId id, int channel, bool poly) {
+		if (!inputs[id].isConnected()) {
+			return 0.f;
+		}
+		const float v = poly ? inputs[id].getPolyVoltage(channel) : inputs[id].getVoltage();
+		return clamp(finiteOr(v) / 10.f, -1.f, 1.f);
+	};
+	auto effectiveSlitherAmount = [&](int channel) {
+		const float cv = slitherAmountCvPoly ? readBipolarCvNorm(SLITHER_CV_INPUT, channel, true) : readBipolarCvNorm(SLITHER_CV_INPUT, 0, false);
+		return clamp(slitherAmountKnob + cv, 0.f, 1.f);
+	};
+	auto effectiveSlitherSpeed = [&](int channel) {
+		const float cv = slitherSpeedCvPoly ? readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, channel, true) : readBipolarCvNorm(SLITHER_SPEED_CV_INPUT, 0, false);
+		return slitherSpeedFactor(clamp(slitherSpeedKnob + cv, 0.f, 1.f));
+	};
+	auto effectiveFoldAmt = [&](int channel) {
+		const float cv = foldCvPoly ? readBipolarCvNorm(FOLD_CV_INPUT, channel, true) : readBipolarCvNorm(FOLD_CV_INPUT, 0, false);
+		return clamp(foldBase + cv, 0.f, 2.f);
+	};
+	const float monoVoct = inputs[VOCT_INPUT].isConnected() ? finiteOr(inputs[VOCT_INPUT].getVoltage()) : 0.f;
+	const float monoFmVoltage = inputs[FM_INPUT].isConnected() ? finiteOr(inputs[FM_INPUT].getVoltage()) : 0.f;
+	const float monoSlitherAmount = effectiveSlitherAmount(0);
+	const float monoSlitherSpeed = effectiveSlitherSpeed(0);
+	const float monoFoldAmt = effectiveFoldAmt(0);
 
 	for (int c = 0; c < channels; ++c) {
 		if (inputs[SYNC_INPUT].isConnected()) {
@@ -752,12 +788,10 @@ void Wyrm::process(const ProcessArgs& args) {
 				slitherPhase[c] = 0.f;
 			}
 		}
-		const float voct = inputs[VOCT_INPUT].isConnected() ? finiteOr(inputs[VOCT_INPUT].getPolyVoltage(c)) : 0.f;
-		const float fm = inputs[FM_INPUT].isConnected() ? finiteOr(inputs[FM_INPUT].getPolyVoltage(c)) * fmAtten : 0.f;
-		const float slitherAmountCv = inputs[SLITHER_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[SLITHER_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
-		const float slitherSpeedCv = inputs[SLITHER_SPEED_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[SLITHER_SPEED_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
-		const float slitherAmount = clamp(slitherAmountKnob + slitherAmountCv, 0.f, 1.f);
-		const float slitherSpeed = slitherSpeedFactor(clamp(slitherSpeedKnob + slitherSpeedCv, 0.f, 1.f));
+		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
+		const float fm = readPolyOrMonoVoltage(FM_INPUT, c, fmPoly, monoFmVoltage) * fmAtten;
+		const float slitherAmount = slitherAmountCvPoly ? effectiveSlitherAmount(c) : monoSlitherAmount;
+		const float slitherSpeed = slitherSpeedCvPoly ? effectiveSlitherSpeed(c) : monoSlitherSpeed;
 		const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 		hz = finiteOr(hz, baseFreq);
@@ -774,11 +808,15 @@ void Wyrm::process(const ProcessArgs& args) {
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
-		const float base = finiteOr(applyRockPush(lookupWave(phase[c]), phase[c]));
-		const float slither = finiteOr(applyRockClamp(base, phase[c], slitherOffset(phase[c], slitherPhase[c], slitherAmount)));
+		const float baseWave = finiteOr(lookupWave(phase[c]));
+		const float base = hasRocks ? finiteOr(applyRockPush(baseWave, phase[c])) : baseWave;
+		float slither = 0.f;
+		if (slitherAmount > 1e-5f) {
+			const float slitherTarget = slitherOffset(phase[c], slitherPhase[c], slitherAmount);
+			slither = hasRocks ? finiteOr(applyRockClamp(base, phase[c], slitherTarget)) : slitherTarget;
+		}
 		const float raw = clamp(finiteOr(base + slither), -1.f, 1.f);
-		const float foldCv = inputs[FOLD_CV_INPUT].isConnected() ? clamp(finiteOr(inputs[FOLD_CV_INPUT].getPolyVoltage(c)) / 10.f, -1.f, 1.f) : 0.f;
-		const float foldAmt = clamp(foldBase + foldCv, 0.f, 2.f);
+		const float foldAmt = foldCvPoly ? effectiveFoldAmt(c) : monoFoldAmt;
 		float folded = raw;
 		if (foldAmt > 1e-5f) {
 			folded = clamp(finiteOr(softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
