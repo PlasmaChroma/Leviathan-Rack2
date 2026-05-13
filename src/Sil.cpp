@@ -311,6 +311,10 @@ struct Sil : Module {
 	float limiterMetricGrCoeff = 0.f;
 	float limiterTriggerEma = 0.f;
 	float limiterRecentGrDb = 0.f;
+	float limiterPrevSatL1 = 0.f;
+	float limiterPrevSatL2 = 0.f;
+	float limiterPrevSatR1 = 0.f;
+	float limiterPrevSatR2 = 0.f;
 	struct RemoveMudState {
 		dsp::RCFilter mudHp;
 		dsp::RCFilter mudLp;
@@ -602,6 +606,24 @@ struct Sil : Module {
 	static float toDbFsSafe(float volts) {
 		return 20.f * std::log10(std::max(volts, 1e-7f) / kAudioFullScaleV);
 	}
+	static float hermiteCausal(float y0, float y1, float m0, float m1, float t) {
+		const float t2 = t * t;
+		const float t3 = t2 * t;
+		const float h00 = 2.f * t3 - 3.f * t2 + 1.f;
+		const float h10 = t3 - 2.f * t2 + t;
+		const float h01 = -2.f * t3 + 3.f * t2;
+		const float h11 = t3 - t2;
+		return h00 * y0 + h10 * m0 + h01 * y1 + h11 * m1;
+	}
+	static float intersamplePeak4xCausal(float prev2, float prev1, float current) {
+		const float m0 = prev1 - prev2;
+		const float m1 = current - prev1;
+		float peak = std::max(std::fabs(prev1), std::fabs(current));
+		for (float t : {0.25f, 0.5f, 0.75f}) {
+			peak = std::max(peak, std::fabs(hermiteCausal(prev1, current, m0, m1, t)));
+		}
+		return peak;
+	}
 
 	static float softKnee01(float xDb, float thresholdDb, float kneeDb) {
 		const float halfKnee = 0.5f * std::max(0.f, kneeDb);
@@ -796,6 +818,10 @@ struct Sil : Module {
 		limiterDelayR.assign(size_t(delayBufferLength), 0.f);
 		limiterDelayWrite = 0;
 		limiterGain = 1.f;
+		limiterPrevSatL1 = 0.f;
+		limiterPrevSatL2 = 0.f;
+		limiterPrevSatR1 = 0.f;
+		limiterPrevSatR2 = 0.f;
 	}
 
 	int saturatorPeakToHistIndex(float peak) const {
@@ -1840,8 +1866,13 @@ struct Sil : Module {
 		float outR = saturatedR;
 		float limiterLed = 0.f;
 		{
-			const float peak = std::max(std::fabs(saturatedL), std::fabs(saturatedR));
-			const float detectorPeak = peak;
+			const float detectorPeakL = intersamplePeak4xCausal(limiterPrevSatL2, limiterPrevSatL1, saturatedL);
+			const float detectorPeakR = intersamplePeak4xCausal(limiterPrevSatR2, limiterPrevSatR1, saturatedR);
+			const float detectorPeak = std::max(detectorPeakL, detectorPeakR);
+			limiterPrevSatL2 = limiterPrevSatL1;
+			limiterPrevSatL1 = saturatedL;
+			limiterPrevSatR2 = limiterPrevSatR1;
+			limiterPrevSatR1 = saturatedR;
 
 			const int delayLen = std::max(1, int(limiterDelayL.size()));
 			const int readIdx = (limiterDelayWrite + 1) % delayLen;
@@ -1880,6 +1911,12 @@ struct Sil : Module {
 			}
 			outL = delayedL * limiterGain;
 			outR = delayedR * limiterGain;
+			const float finalPeak = std::max(std::fabs(outL), std::fabs(outR));
+			if (finalPeak > limiterCeiling && finalPeak > 1e-9f) {
+				const float guardGain = limiterCeiling / finalPeak;
+				outL *= guardGain;
+				outR *= guardGain;
+			}
 			const float detectorPeakDbTp = toDbFsSafe(detectorPeak);
 			const float limiterDemandDb = std::max(0.f, detectorPeakDbTp - kLimiterCeilingDb);
 			const float triggeredNow = (limiterDemandDb >= kLimiterTriggerDb) ? 1.f : 0.f;

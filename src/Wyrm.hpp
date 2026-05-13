@@ -6,7 +6,7 @@
 #include <atomic>
 #include <cmath>
 
-constexpr int kWyrmPointCountDefault = 64;
+constexpr int kWyrmPointCountDefault = 128;
 constexpr int kWyrmPointCountMax = 256;
 constexpr int kWyrmTableSize = 2048;
 constexpr int kWyrmMaxChannels = 16;
