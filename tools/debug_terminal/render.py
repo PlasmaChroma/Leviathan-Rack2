@@ -50,6 +50,23 @@ MODULE_COLUMNS = {
         ("curve_prep_us", "Curve us"),
         ("overlay_prep_us", "Overlay us"),
     ),
+    "Wyrm": (
+        ("ui_ms", "UI ms"),
+        ("ed_us", "Ed us"),
+        ("sand_up_us", "SUp us"),
+        ("sand_dr_us", "SDr us"),
+        ("audio_us", "Aud us"),
+        ("ch", "Ch"),
+        ("pts", "Pts"),
+        ("rocks", "Rock"),
+        ("sand", "Sand"),
+        ("body", "Body"),
+        ("fm", "FM"),
+        ("fold", "Fold"),
+        ("slith", "Slith"),
+        ("lfo", "LFO"),
+        ("wt", "WT"),
+    ),
 }
 
 KEY_UP = "up"

@@ -232,6 +232,16 @@ struct Wyrm : Module {
 	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
 	std::array<WyrmRockStateSnapshot, 2> activeRockState {};
 	std::atomic<int> activeRockStateIndex {0};
+	dsp::ClockDivider perfMeasureDivider;
+	std::atomic<uint64_t> perfAudioSampledCount {0};
+	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<int> perfChannels {1};
+	std::atomic<bool> perfFmConnected {false};
+	std::atomic<bool> perfFoldActive {false};
+	std::atomic<bool> perfSlitherActive {false};
+	std::atomic<bool> perfLfoMode {false};
+	std::atomic<bool> perfWavetableRebuilt {false};
+	uint32_t debugInstanceId = 0;
 	double createdUnixTimeSec = 0.0;
 
 	Wyrm();

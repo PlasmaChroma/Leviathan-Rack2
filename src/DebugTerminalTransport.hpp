@@ -28,4 +28,21 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float curvePrepUs,
                            float overlayPrepUs);
 
+void submitWyrmMetrics(uint32_t instanceId,
+                       float uiMs,
+                       float editorDrawUs,
+                       float sandUpdateUs,
+                       float sandDrawUs,
+                       float audioUs,
+                       int channels,
+                       int pointCount,
+                       int rockCount,
+                       bool sandEnabled,
+                       int bodySamples,
+                       bool fmConnected,
+                       bool foldActive,
+                       bool slitherActive,
+                       bool lfoMode,
+                       bool wavetableRebuilt);
+
 } // namespace debug_terminal

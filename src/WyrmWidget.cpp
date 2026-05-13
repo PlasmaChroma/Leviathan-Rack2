@@ -1,6 +1,8 @@
 #include "Wyrm.hpp"
 #include "PanelSvgUtils.hpp"
 
+#include <cstdio>
+
 struct BananutBlack : app::SvgPort {
 	BananutBlack() {
 		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
@@ -395,6 +397,21 @@ struct WyrmWidget : ModuleWidget {
 	void draw(const DrawArgs& args) override {
 		ModuleWidget::draw(args);
 		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
+		if (wyrm && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+			char debugIdLabel[32];
+			std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", wyrm->debugInstanceId);
+			const float x = box.size.x - mm2px(0.9f);
+			const float y = mm2px(2.5f);
+			nvgSave(args.vg);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 6.8f);
+			nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+			nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+			nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+			nvgText(args.vg, x, y, debugIdLabel, nullptr);
+			nvgRestore(args.vg);
+		}
 		if (!wyrm || !ageSigilSvg || !ageSigilUnlocked) {
 			return;
 		}

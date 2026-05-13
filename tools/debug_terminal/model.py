@@ -7,6 +7,7 @@ class DebugState(object):
     def __init__(self):
         self._lock = threading.Lock()
         self._rows = {}
+        self._row_stale_sec = 3.0
         self._client_count = 0
         self._events_total = 0
         self._parse_errors = 0
@@ -52,6 +53,11 @@ class DebugState(object):
     def snapshot(self):
         now = time.time()
         with self._lock:
+            stale_cutoff = now - self._row_stale_sec
+            stale_keys = [key for key, row in self._rows.items() if row["last_seen_sec"] < stale_cutoff]
+            for key in stale_keys:
+                self._rows.pop(key, None)
+
             rows = []
             for row in self._rows.values():
                 snap = dict(row)

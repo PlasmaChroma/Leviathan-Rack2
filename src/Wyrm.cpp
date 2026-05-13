@@ -1,6 +1,11 @@
 #include "Wyrm.hpp"
 
+#include <chrono>
+
 namespace {
+static std::atomic<uint32_t> gWyrmDebugInstanceCounter {1u};
+constexpr int kWyrmPerfMeasureDivision = 17;
+
 inline float finiteOr(float x, float fallback = 0.f) {
 	return std::isfinite(x) ? x : fallback;
 }
@@ -16,7 +21,9 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 };
 
 Wyrm::Wyrm() {
+	debugInstanceId = gWyrmDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	createdUnixTimeSec = system::getUnixTime();
+	perfMeasureDivider.setDivision(kWyrmPerfMeasureDivision);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	const float defaultFreqKnob = wyrmKnobValueForFrequency(261.63f, false);
 	configParam<WyrmFreqQuantity>(FREQ_PARAM, 0.f, 1.f, defaultFreqKnob, "Frequency");
@@ -857,10 +864,15 @@ void Wyrm::dataFromJson(json_t* root) {
 }
 
 void Wyrm::process(const ProcessArgs& args) {
+	using PerfClock = std::chrono::steady_clock;
+	const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
+	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+	bool wavetableRebuilt = false;
 	const uint32_t v = waveVersion.load(std::memory_order_acquire);
 	if (v != appliedWaveVersion) {
 		rebuildWavetable();
 		appliedWaveVersion = v;
+		wavetableRebuilt = true;
 	}
 
 	const int channels = std::max(1, std::max({
@@ -929,6 +941,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float monoSlitherAmount = effectiveSlitherAmount(0);
 	const float monoSlitherSpeed = effectiveSlitherSpeed(0);
 	const float monoFoldAmt = effectiveFoldAmt(0);
+	const bool slitherActiveNow = slitherAmountCvConnected || slitherAmountKnob > 1e-5f;
+	const bool foldActiveNow = foldCvConnected || foldBase > 1e-5f;
 
 	for (int c = 0; c < channels; ++c) {
 		if (inputs[SYNC_INPUT].isConnected()) {
@@ -973,6 +987,23 @@ void Wyrm::process(const ProcessArgs& args) {
 		}
 		outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 		outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);
+	}
+
+	if (isDragonKingDebugEnabled()) {
+		perfChannels.store(channels, std::memory_order_relaxed);
+		perfFmConnected.store(fmConnected, std::memory_order_relaxed);
+		perfFoldActive.store(foldActiveNow, std::memory_order_relaxed);
+		perfSlitherActive.store(slitherActiveNow, std::memory_order_relaxed);
+		perfLfoMode.store(lfoModeNow, std::memory_order_relaxed);
+		if (wavetableRebuilt) {
+			perfWavetableRebuilt.store(true, std::memory_order_release);
+		}
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+		}
 	}
 }
 

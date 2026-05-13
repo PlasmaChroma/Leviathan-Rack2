@@ -31,6 +31,7 @@ namespace {
 static constexpr int kDefaultPort = 8765;
 static constexpr int kReconnectIntervalMs = 1000;
 static constexpr int kPublishIntervalMs = 125;
+static constexpr double kSnapshotStaleSec = 2.0;
 
 struct Snapshot {
   std::string module;
@@ -171,7 +172,7 @@ private:
         continue;
       }
 
-      std::vector<Snapshot> snapshots = copySnapshots();
+      std::vector<Snapshot> snapshots = collectFreshSnapshots(system::getTime());
       for (const Snapshot &snap : snapshots) {
         if (!sendSnapshot(snap)) {
           closeSocket();
@@ -182,12 +183,22 @@ private:
     }
   }
 
-  std::vector<Snapshot> copySnapshots() {
+  std::vector<Snapshot> collectFreshSnapshots(double nowSec) {
     std::vector<Snapshot> out;
     std::lock_guard<std::mutex> lock(mutex_);
+    if (snapshots_.empty()) {
+      return out;
+    }
     out.reserve(snapshots_.size());
-    for (const auto &entry : snapshots_) {
-      out.push_back(entry.second);
+    for (auto it = snapshots_.begin(); it != snapshots_.end();) {
+      const Snapshot &snap = it->second;
+      const bool stale = (nowSec - snap.ts) > kSnapshotStaleSec;
+      if (stale) {
+        it = snapshots_.erase(it);
+        continue;
+      }
+      out.push_back(snap);
+      ++it;
     }
     return out;
   }
@@ -383,6 +394,45 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                 std::max(0.f, overlayPrepUs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitWyrmMetrics(uint32_t instanceId,
+                       float uiMs,
+                       float editorDrawUs,
+                       float sandUpdateUs,
+                       float sandDrawUs,
+                       float audioUs,
+                       int channels,
+                       int pointCount,
+                       int rockCount,
+                       bool sandEnabled,
+                       int bodySamples,
+                       bool fmConnected,
+                       bool foldActive,
+                       bool slitherActive,
+                       bool lfoMode,
+                       bool wavetableRebuilt) {
+  char dataBuf[512];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"pts\":%d,\"rocks\":%d,\"sand\":%d,\"body\":%d,\"fm\":%d,\"fold\":%d,\"slith\":%d,\"lfo\":%d,\"wt\":%d}",
+                std::max(0.f, uiMs),
+                std::max(0.f, editorDrawUs),
+                std::max(0.f, sandUpdateUs),
+                std::max(0.f, sandDrawUs),
+                std::max(0.f, audioUs),
+                std::max(0, channels),
+                std::max(0, pointCount),
+                std::max(0, rockCount),
+                sandEnabled ? 1 : 0,
+                std::max(0, bodySamples),
+                fmConnected ? 1 : 0,
+                foldActive ? 1 : 0,
+                slitherActive ? 1 : 0,
+                lfoMode ? 1 : 0,
+                wavetableRebuilt ? 1 : 0);
+  double ts = system::getTime();
+  transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
 }
 
 } // namespace debug_terminal

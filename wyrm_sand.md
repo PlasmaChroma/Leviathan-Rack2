@@ -146,6 +146,60 @@ These can remain UI-only for the first pass. Persist them to JSON only if the mo
 - Target grid budget: <= 128 x 72 cells.
 - Target additional UI cost: visually smooth at normal Rack zoom while dragging knobs and editing points.
 
+## Current telemetry and optimization direction
+
+After adding Wyrm debug-terminal metrics, a two-module test showed the sand path is the dominant Wyrm UI cost when enabled:
+
+```text
+ID 1: sand=1 rocks=2 fm=1 fold=1 slith=1 pts=128 body=512
+  UI ms: 3.13 to 3.73
+  Ed us: ~3477
+  SUp us: ~435
+  SDr us: ~2252
+  Aud us: ~0.39
+
+ID 2: sand=0 rocks=0 fm=0 fold=0 slith=0 pts=128 body=512
+  UI ms: 0.44 to 0.51
+  Ed us: ~513
+  SUp us: ~0
+  SDr us: ~0.4
+  Aud us: ~0.20
+```
+
+Interpretation:
+
+- The normal Wyrm editor/body path at 128 points is roughly in the sub-millisecond range.
+- Sand drawing alone can add about 2.25 ms per visible module.
+- Sand update can add another ~0.4 ms.
+- Audio cost is not the main issue in this measurement.
+- Multiple visible Wyrms with sand enabled can plausibly cause Rack UI stalls.
+
+Defaulting sand view off is the right immediate mitigation for new modules. Existing patches may still load with sand enabled, so the rendering path needs an optimization plan.
+
+### Recommended optimization sequence
+
+1. **Cheap NanoVG pass first**
+   - Lower or adapt the sand grid resolution.
+   - Skip cells whose depth/energy are visually near the static base.
+   - Draw every other cell at lower zoom or when UI frame cost is high.
+   - Consider a `Sand Detail` submenu: Low / Medium / High.
+   - Keep this pass small and measurable; use `SUp us`, `SDr us`, and `UI ms` as the pass/fail metrics.
+
+2. **Cache or batch the sand layer**
+   - Treat the static base noise and low-energy field as cacheable.
+   - Redraw the full sand texture only when disturbance meaningfully changes.
+   - Keep body, rocks, hover, and edit overlays in the existing NanoVG path.
+   - This may reduce CPU draw calls without committing to a full GL renderer.
+
+3. **OpenGL shader sand renderer**
+   - Move only the sand field to a GPU feedback/composite path first.
+   - Keep Wyrm/slither/rock path generation CPU-side as the source of truth.
+   - Keep editable points, hover guides, rocks, drag arrows, and panel UI in NanoVG.
+   - Use NanoVG as fallback and treat shader rendering as an acceleration backend.
+   - This is the likely large win, but it is a larger implementation and QA surface.
+
+Do not start by shader-rendering the whole editor. The measured hotspot is the sand field, so isolate acceleration there before moving the Wyrm body or interaction overlays.
+
 ## Acceptance criteria
 
 - With `Sand View` on, the waveform editor has a clearly sandy background.

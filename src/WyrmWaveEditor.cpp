@@ -1,6 +1,14 @@
 #include "Wyrm.hpp"
+#include "DebugTerminalTransport.hpp"
 
+#include <chrono>
+#include <unordered_map>
 #include <vector>
+
+namespace {
+constexpr double kWyrmDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+std::unordered_map<uint32_t, double> gWyrmDebugTerminalLastSubmitSec;
+}
 
 struct WyrmWaveEditor : TransparentWidget {
 	Wyrm* module = nullptr;
@@ -545,12 +553,27 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!args.vg) return;
+		using PerfClock = std::chrono::steady_clock;
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+		float sandUpdateUs = 0.f;
+		float sandDrawUs = 0.f;
 		const double nowSec = system::getTime();
 		advanceVisualSlitherPhase(nowSec);
 		renderedSlitherPhase = visualSlitherPhase;
+		const PerfClock::time_point sandUpdateStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		updateSand(nowSec);
+		if (measurePerf) {
+			sandUpdateUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - sandUpdateStart).count()) * 0.001f;
+		}
 
+		const PerfClock::time_point sandDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		drawSandBackground(args.vg);
+		if (measurePerf) {
+			sandDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - sandDrawStart).count()) * 0.001f;
+		}
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, 0.f, 0.5f * box.size.y);
@@ -640,6 +663,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		auto xAt = [&](int i) {
 			return pointX(i, count);
 		};
+		const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
 		for (int i = 0; i < count; ++i) {
 			const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
 			const bool hotColumn = (i == hoveredColumn);
@@ -658,7 +682,6 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		auto emitRoundedBodyPath = [&]() {
 			const float roundCosThreshold = -0.25f;
-			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
 			if (bodySampleCount <= 0) {
 				return;
 			}
@@ -801,6 +824,38 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
+
+		if (measurePerf) {
+			const float editorDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count()) * 0.001f;
+			uint32_t debugId = module->debugInstanceId;
+			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
+			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
+				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+				const bool wavetableRebuilt = module->perfWavetableRebuilt.exchange(false, std::memory_order_acq_rel);
+				lastSubmitSec = nowSec;
+				debug_terminal::submitWyrmMetrics(
+					debugId,
+					editorDrawUs * 0.001f,
+					editorDrawUs,
+					sandUpdateUs,
+					sandDrawUs,
+					audioUs,
+					module->perfChannels.load(std::memory_order_relaxed),
+					module->pointCount,
+					module->rockCount,
+					module->sandViewEnabled.load(std::memory_order_relaxed),
+					bodySampleCount,
+					module->perfFmConnected.load(std::memory_order_relaxed),
+					module->perfFoldActive.load(std::memory_order_relaxed),
+					module->perfSlitherActive.load(std::memory_order_relaxed),
+					module->perfLfoMode.load(std::memory_order_relaxed),
+					wavetableRebuilt
+				);
+			}
+		}
 	}
 };
 
