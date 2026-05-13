@@ -401,6 +401,20 @@ struct BifurxSpectrumBase {
 	mutable BifurxPreviewModel cachedModel;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
+	mutable std::vector<BifurxCurvePoint> refinedCurveTemplate;
+	mutable bool refinedCurveTemplateValid = false;
+	mutable float refinedCurveTemplateW = 0.f;
+	mutable float refinedCurveTemplateH = 0.f;
+	mutable float refinedCurveTemplateSampleRate = 0.f;
+	mutable float refinedCurveTemplateAnchorX01[2] = {0.f, 0.f};
+	mutable bool refinedCurveTemplateMarkerPinned[2] = {false, false};
+	mutable BifurxMarkerLayout cachedMarkerLayout;
+	mutable bool cachedMarkerLayoutValid = false;
+	mutable float cachedMarkerLayoutW = 0.f;
+	mutable float cachedMarkerLayoutH = 0.f;
+	mutable float cachedMarkerLayoutSampleRate = 0.f;
+	mutable float cachedMarkerLayoutAnchorX01[2] = {0.f, 0.f};
+	mutable bool cachedMarkerLayoutMarkerPinned[2] = {false, false};
 
 	BifurxSpectrumBase() : fft(kFftSize) {
 		for (int i = 0; i < kFftSize; i++) {
@@ -477,6 +491,7 @@ struct BifurxSpectrumBase {
 	}
 
 	void calculateMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const;
+	void getCachedMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const;
 	void calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const;
 };
 

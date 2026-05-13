@@ -25,12 +25,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	std::vector<GlVertex> fillVertices;
 	std::vector<GlVertex> fillSoftCapVertices;
 	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
-	std::vector<GlVertex> curveVertices;
-	std::vector<GlVertex> curveHaloVertices;
 	std::vector<GlVertex> cyanVertices;
 	std::vector<GlVertex> cyanHaloVertices;
 	std::vector<GlStrokeQuadVertex> strokeQuadVertices;
-	std::vector<BifurxCurvePoint> refinedPoints;
+	std::vector<BifurxCurvePoint> overlayCurvePoints;
 
 	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
 	GLuint vbo = 0;
@@ -69,12 +67,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillVertices.reserve(overlaySegmentCount * 6);
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
 		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
-		curveVertices.reserve(refinedPointReserve);
-		curveHaloVertices.reserve(refinedPointReserve);
 		cyanVertices.reserve(size_t(kCurvePointCount));
 		cyanHaloVertices.reserve(size_t(kCurvePointCount));
 		strokeQuadVertices.reserve(size_t(kCurvePointCount) * 24u);
-		refinedPoints.reserve(refinedPointReserve);
+		overlayCurvePoints.reserve(refinedPointReserve);
 	}
 
 	void releaseShaderResources() {
@@ -683,14 +679,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
-		fillVertices.clear();
-		fillSoftCapVertices.clear();
-		fillCrestStrokeVertices.clear();
-		curveVertices.clear();
-		curveHaloVertices.clear();
-		cyanVertices.clear();
-		cyanHaloVertices.clear();
-		const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+			fillVertices.clear();
+			fillSoftCapVertices.clear();
+			fillCrestStrokeVertices.clear();
+			cyanVertices.clear();
+			cyanHaloVertices.clear();
+			const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 
 		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
@@ -770,18 +764,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			}
 		}
 
-		// 3. Main Yellow Filter Curve (with shared refinements)
-		calculateRefinedCurvePoints(&refinedPoints, w, h);
-		NVGcolor curveColor = nvgRGBA(235, 204, 128, 250);
-		NVGcolor curveHaloColor = curveColor;
-		curveHaloColor.a = 0.28f;
-		for (const auto& p : refinedPoints) {
-			curveVertices.push_back({w * p.x01, p.y, curveColor.r, curveColor.g, curveColor.b, curveColor.a});
-			curveHaloVertices.push_back({w * p.x01, p.y, curveHaloColor.r, curveHaloColor.g, curveHaloColor.b, curveHaloColor.a});
-		}
-
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		const bool useShaderRenderer = module->useGlShaderRenderer.load(std::memory_order_relaxed) && ensureShaderReady();
 		shaderRendererActiveLastFrame = useShaderRenderer;
@@ -811,7 +795,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (ensureStrokeShaderReady()) {
 			drawStrokeQuadsShader(fillCrestStrokeVertices, w, h);
 		}
-		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestStrokeVertices.size() + curveVertices.size() + cyanVertices.size());
+			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestStrokeVertices.size() + cyanVertices.size());
 
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		{
@@ -830,14 +814,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		
 		const float w = box.size.x, h = box.size.y;
 		BifurxMarkerLayout layout;
-		calculateMarkerLayout(&layout, w, h);
+		getCachedMarkerLayout(&layout, w, h);
 
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 		const float spectrumTopY = padY * 0.35f;
 		const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
-		std::vector<BifurxCurvePoint> overlayCurvePoints;
 		calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
 
 		nvgSave(args.vg);

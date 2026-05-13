@@ -514,7 +514,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const NVGcolor expectedPurple = nvgRGB(122, 92, 255), expectedCyan = nvgRGB(28, 204, 217), expectedWhite = nvgRGB(206, 210, 216);
 	
 	BifurxMarkerLayout layout;
-	calculateMarkerLayout(&layout, w, h);
+	getCachedMarkerLayout(&layout, w, h);
 
 	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbVal) {
 		const float posAmt = clamp01(curveDbVal / 18.f), negAmt = clamp01(-curveDbVal / 18.f), emph = std::max(posAmt, negAmt);

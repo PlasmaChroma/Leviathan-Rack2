@@ -1326,14 +1326,47 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 	layout->guideYBottom = clamp(labelBandTop + std::min(2.1f, 0.18f * labelBandHeight), labelBandTop + 0.2f, layout->labelY - 0.5f * layout->labelFontSize - 0.6f);
 }
 
+void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const {
+	if (!layout) return;
+	const float minHz = 10.f;
+	const float maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const BifurxPreviewModel& model = getOrUpdateModel();
+	const DisplayAnchor anchors[2] = {
+		displayAnchorForMarker(0, model.markerFreqA, minHz, maxHz),
+		displayAnchorForMarker(1, model.markerFreqB, minHz, maxHz)
+	};
+	const bool markerPinned[2] = {
+		markerPinnedToBottomLane(0),
+		markerPinnedToBottomLane(1)
+	};
+
+	bool rebuild = !cachedMarkerLayoutValid;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutW - w) > 1e-4f;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutH - h) > 1e-4f;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutSampleRate - state.previewState.sampleRate) > 0.5f;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[0] - anchors[0].x01) > 1e-7f;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[1] - anchors[1].x01) > 1e-7f;
+	rebuild = rebuild || cachedMarkerLayoutMarkerPinned[0] != markerPinned[0];
+	rebuild = rebuild || cachedMarkerLayoutMarkerPinned[1] != markerPinned[1];
+
+	if (rebuild) {
+		calculateMarkerLayout(&cachedMarkerLayout, w, h);
+		cachedMarkerLayoutW = w;
+		cachedMarkerLayoutH = h;
+		cachedMarkerLayoutSampleRate = state.previewState.sampleRate;
+		cachedMarkerLayoutAnchorX01[0] = anchors[0].x01;
+		cachedMarkerLayoutAnchorX01[1] = anchors[1].x01;
+		cachedMarkerLayoutMarkerPinned[0] = markerPinned[0];
+		cachedMarkerLayoutMarkerPinned[1] = markerPinned[1];
+		cachedMarkerLayoutValid = true;
+	}
+
+	*layout = cachedMarkerLayout;
+}
+
 void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const {
 	if (!points) return;
-	points->clear();
 	const size_t refinedPointReserve = size_t(kCurvePointCount) + 6;
-	if (points->capacity() < refinedPointReserve) {
-		points->reserve(refinedPointReserve);
-	}
-	
 	const float padY = std::max(4.f, h * 0.035f);
 	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
@@ -1341,38 +1374,76 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	const BifurxPreviewModel& model = getOrUpdateModel();
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
-
-	// Initial grid points
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		points->push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
-	}
-
-	auto addRefinement = [&](int mIdx, float targetHz) {
-		const auto anchor = displayAnchorForMarker(mIdx, targetHz, minHz, maxHz);
-		const float dx = 0.35f / float(kCurvePointCount - 1);
-		points->push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 0.f, 1});
-		points->push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, 2});
-		points->push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 0.f, 1});
+	const DisplayAnchor anchors[2] = {
+		displayAnchorForMarker(0, model.markerFreqA, minHz, maxHz),
+		displayAnchorForMarker(1, model.markerFreqB, minHz, maxHz)
+	};
+	const bool markerPinned[2] = {
+		markerPinnedToBottomLane(0),
+		markerPinnedToBottomLane(1)
 	};
 
-	addRefinement(0, model.markerFreqA);
-	addRefinement(1, model.markerFreqB);
+	bool rebuildTemplate = !refinedCurveTemplateValid;
+	rebuildTemplate = rebuildTemplate || std::fabs(w - refinedCurveTemplateW) > 1e-4f;
+	rebuildTemplate = rebuildTemplate || std::fabs(h - refinedCurveTemplateH) > 1e-4f;
+	rebuildTemplate = rebuildTemplate || std::fabs(state.previewState.sampleRate - refinedCurveTemplateSampleRate) > 0.5f;
+	rebuildTemplate = rebuildTemplate || std::fabs(anchors[0].x01 - refinedCurveTemplateAnchorX01[0]) > 1e-7f;
+	rebuildTemplate = rebuildTemplate || std::fabs(anchors[1].x01 - refinedCurveTemplateAnchorX01[1]) > 1e-7f;
+	rebuildTemplate = rebuildTemplate || markerPinned[0] != refinedCurveTemplateMarkerPinned[0];
+	rebuildTemplate = rebuildTemplate || markerPinned[1] != refinedCurveTemplateMarkerPinned[1];
 
-	std::sort(points->begin(), points->end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
-		if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
-		return a.priority > b.priority;
-	});
-	points->erase(std::unique(points->begin(), points->end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
-		return std::fabs(a.x01 - b.x01) < 1e-7f;
-	}), points->end());
+	if (rebuildTemplate) {
+		refinedCurveTemplate.clear();
+		if (refinedCurveTemplate.capacity() < refinedPointReserve) {
+			refinedCurveTemplate.reserve(refinedPointReserve);
+		}
 
-	// Evaluate Y coordinates for all final points
+		// Initial grid points
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			refinedCurveTemplate.push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
+		}
+
+		auto addRefinement = [&](const DisplayAnchor& anchor) {
+			const float dx = 0.35f / float(kCurvePointCount - 1);
+			refinedCurveTemplate.push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 0.f, 1});
+			refinedCurveTemplate.push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, 2});
+			refinedCurveTemplate.push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 0.f, 1});
+		};
+
+		addRefinement(anchors[0]);
+		addRefinement(anchors[1]);
+
+		std::sort(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+			if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
+			return a.priority > b.priority;
+		});
+		refinedCurveTemplate.erase(std::unique(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+			return std::fabs(a.x01 - b.x01) < 1e-7f;
+		}), refinedCurveTemplate.end());
+
+		refinedCurveTemplateW = w;
+		refinedCurveTemplateH = h;
+		refinedCurveTemplateSampleRate = state.previewState.sampleRate;
+		refinedCurveTemplateAnchorX01[0] = anchors[0].x01;
+		refinedCurveTemplateAnchorX01[1] = anchors[1].x01;
+		refinedCurveTemplateMarkerPinned[0] = markerPinned[0];
+		refinedCurveTemplateMarkerPinned[1] = markerPinned[1];
+		refinedCurveTemplateValid = true;
+	}
+
+	points->clear();
+	if (points->capacity() < refinedCurveTemplate.size()) {
+		points->reserve(refinedCurveTemplate.size());
+	}
+	points->insert(points->end(), refinedCurveTemplate.begin(), refinedCurveTemplate.end());
+
+	// Evaluate Y coordinates for all final points from live curve data.
 	for (auto& p : *points) {
 		p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
 	}
 	for (int markerIndex = 0; markerIndex < 2; ++markerIndex) {
-		if (!markerPinnedToBottomLane(markerIndex)) continue;
-		const auto anchor = displayAnchorForMarker(markerIndex, markerIndex == 0 ? model.markerFreqA : model.markerFreqB, minHz, maxHz);
+		if (!markerPinned[markerIndex]) continue;
+		const DisplayAnchor& anchor = anchors[markerIndex];
 		for (auto& p : *points) {
 			if (p.priority == 2 && std::fabs(p.x01 - anchor.x01) < 1e-7f) {
 				p.y = markerBottomLaneY;
