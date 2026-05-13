@@ -137,6 +137,7 @@ struct Sil : Module {
 	ColorScheme colorScheme = SCHEME_DEFAULT;
 	bool masteringEnabled = true;
 	bool repairEnabled = true;
+	float masteringMix = 1.f;
 
 	static constexpr int HISTOGRAM_BINS = 1000;
 	static constexpr float HISTOGRAM_DURATION = 10.f;
@@ -200,6 +201,7 @@ struct Sil : Module {
 	std::vector<float> limiterDelayR;
 	int limiterDelayWrite = 0;
 	int limiterLatencySamples = 1;
+	int limiterLookaheadSamples = 1;
 	std::vector<float> bypassDelayL;
 	std::vector<float> bypassDelayR;
 	int bypassDelayWrite = 0;
@@ -323,6 +325,16 @@ struct Sil : Module {
 	float limiterPrevSatL2 = 0.f;
 	float limiterPrevSatR1 = 0.f;
 	float limiterPrevSatR2 = 0.f;
+	static constexpr int kLimiterTruePeakOversample = 4;
+	static constexpr int kLimiterTruePeakQuality = 8;
+	dsp::Upsampler<kLimiterTruePeakOversample, kLimiterTruePeakQuality> limiterTruePeakUpsamplerL;
+	dsp::Upsampler<kLimiterTruePeakOversample, kLimiterTruePeakQuality> limiterTruePeakUpsamplerR;
+	struct LimiterPeakWindowEntry {
+		uint64_t sampleIndex = 0;
+		float peak = 0.f;
+	};
+	std::deque<LimiterPeakWindowEntry> limiterPeakWindow;
+	uint64_t limiterDetectorSampleIndex = 0;
 	struct RemoveMudState {
 		dsp::RCFilter mudHp;
 		dsp::RCFilter mudLp;
@@ -580,7 +592,9 @@ struct Sil : Module {
 	static constexpr float kStereoSideGainReleaseSec = 1.200f;
 	static constexpr int kStereoEnhanceCoeffDivision = 32;
 	static constexpr float kLimiterCeilingDb = -1.0f;
-	static constexpr float kRepairLookaheadSeconds = 0.001f;
+	static constexpr float kRepairLookaheadSeconds = 0.0005f;
+	static constexpr float kLimiterLookaheadSeconds = 0.0005f;
+	static constexpr float kMasteringCrossfadeSeconds = 0.010f;
 	static constexpr int kMaxLimiterLookaheadSamples = 512;
 	static constexpr float kLimiterRepairKneeLeadDb = 0.75f;
 	static constexpr float kLimiterRepairKneeDepthDb = 0.20f;
@@ -860,12 +874,16 @@ struct Sil : Module {
 		int lookahead = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kRepairLookaheadSeconds)));
 		return clamp(lookahead, 1, kMaxLimiterLookaheadSamples);
 	}
+	int limiterLookaheadSamplesForRate(float sampleRate) const {
+		int lookahead = std::max(1, int(std::round(std::max(sampleRate, 1.f) * kLimiterLookaheadSeconds)));
+		return clamp(lookahead, 1, kMaxLimiterLookaheadSamples);
+	}
 
 	void initializeRepairPathStorage(float sampleRate) {
 		repairBuffer.configure(kMaxLimiterLookaheadSamples, kMicropeakHistorySamples);
 		repairLookaheadSamples = 0;
 		repairBuffer.setLookaheadSamples(0);
-		const int maxBypassBufferLength = (kMaxLimiterLookaheadSamples + 1) + 1;
+		const int maxBypassBufferLength = (kMaxLimiterLookaheadSamples + kMaxLimiterLookaheadSamples);
 		bypassDelayL.assign(size_t(maxBypassBufferLength), 0.f);
 		bypassDelayR.assign(size_t(maxBypassBufferLength), 0.f);
 		bypassDelayWrite = 0;
@@ -876,15 +894,32 @@ struct Sil : Module {
 	}
 
 	void applyRepairLatencyModeNoAlloc(float sampleRate, bool repairMode) {
-		int requestedLatency = repairMode ? repairLookaheadSamplesForRate(sampleRate) : 0;
-		if (requestedLatency == repairLookaheadSamples) {
+		(void)repairMode;
+		const int requestedRepairLatency = repairLookaheadSamplesForRate(sampleRate);
+		const int requestedLimiterLookahead = limiterLookaheadSamplesForRate(sampleRate);
+		if (requestedRepairLatency == repairLookaheadSamples
+			&& requestedLimiterLookahead == limiterLookaheadSamples) {
 			return;
 		}
-		repairLookaheadSamples = requestedLatency;
+		repairLookaheadSamples = requestedRepairLatency;
+		limiterLookaheadSamples = requestedLimiterLookahead;
+		limiterLatencySamples = limiterLookaheadSamples;
 		repairBuffer.setLookaheadSamples(repairLookaheadSamples);
 		std::fill(bypassDelayL.begin(), bypassDelayL.end(), 0.f);
 		std::fill(bypassDelayR.begin(), bypassDelayR.end(), 0.f);
 		bypassDelayWrite = 0;
+		std::fill(limiterDelayL.begin(), limiterDelayL.end(), 0.f);
+		std::fill(limiterDelayR.begin(), limiterDelayR.end(), 0.f);
+		limiterDelayWrite = 0;
+		limiterGain = 1.f;
+		limiterPrevSatL1 = 0.f;
+		limiterPrevSatL2 = 0.f;
+		limiterPrevSatR1 = 0.f;
+		limiterPrevSatR2 = 0.f;
+		limiterTruePeakUpsamplerL.reset();
+		limiterTruePeakUpsamplerR.reset();
+		limiterPeakWindow.clear();
+		limiterDetectorSampleIndex = 0;
 		micropeakActivity = 0.f;
 		micropeakActivityHoldSamples = 0;
 		micropeakActivityHoldLevel = 0.f;
@@ -895,9 +930,9 @@ struct Sil : Module {
 	}
 
 	void initializeLimiterFastPathStorage() {
-		const int fastLatency = 1;
-		const int delayBufferLength = fastLatency + 1;
-		limiterLatencySamples = fastLatency;
+		const int delayBufferLength = kMaxLimiterLookaheadSamples;
+		limiterLookaheadSamples = 1;
+		limiterLatencySamples = limiterLookaheadSamples;
 		limiterDelayL.assign(size_t(delayBufferLength), 0.f);
 		limiterDelayR.assign(size_t(delayBufferLength), 0.f);
 		limiterDelayWrite = 0;
@@ -906,6 +941,10 @@ struct Sil : Module {
 		limiterPrevSatL2 = 0.f;
 		limiterPrevSatR1 = 0.f;
 		limiterPrevSatR2 = 0.f;
+		limiterTruePeakUpsamplerL.reset();
+		limiterTruePeakUpsamplerR.reset();
+		limiterPeakWindow.clear();
+		limiterDetectorSampleIndex = 0;
 	}
 
 	int saturatorPeakToHistIndex(float peak) const {
@@ -1428,16 +1467,20 @@ struct Sil : Module {
 		repairEnabled = params[REPAIR_ENABLED_PARAM].getValue() > 0.5f;
 		const bool repairActive = repairFeatureAvailable() && repairEnabled;
 
-		const float inL = inputs[INPUT_L_INPUT].getVoltage();
-		const float inR = inputs[INPUT_R_INPUT].getVoltage();
+		const bool hasL = inputs[INPUT_L_INPUT].isConnected();
+		const bool hasR = inputs[INPUT_R_INPUT].isConnected();
+		const float rawL = inputs[INPUT_L_INPUT].getVoltage();
+		const float rawR = inputs[INPUT_R_INPUT].getVoltage();
+		const float inL = hasL ? rawL : rawR;
+		const float inR = hasR ? rawR : rawL;
 		applyRepairLatencyModeNoAlloc(args.sampleRate, repairActive);
 
-		float repairInputL = inL;
-		float repairInputR = inR;
+		repairBuffer.push(inL, inR);
+		const sil::repair::StereoWindows windows = repairBuffer.readCurrentWindows();
+		float repairInputL = windows.left.center;
+		float repairInputR = windows.right.center;
 		float repairLedTarget = 0.f;
 		if (repairActive) {
-			repairBuffer.push(inL, inR);
-			const sil::repair::StereoWindows windows = repairBuffer.readCurrentWindows();
 			const bool candidateL = sil::repair::detectCandidate(windows.left, repairCandidateConfig, kAudioFullScaleV);
 			const bool candidateR = sil::repair::detectCandidate(windows.right, repairCandidateConfig, kAudioFullScaleV);
 			const sil::repair::RepairDecision repairL = sil::repair::repairCenterLinear(windows.left, candidateL);
@@ -1481,10 +1524,10 @@ struct Sil : Module {
 					micropeakNearMissCount.fetch_add(1u, std::memory_order_relaxed);
 					enqueueMicropeakDebugEvent(args.sampleRate, "near_miss", windows, repairL, repairR, candidateL, candidateR, debugFeatureL, debugFeatureR);
 				}
-				repairInputL = windows.left.center;
-				repairInputR = windows.right.center;
+					repairInputL = windows.left.center;
+					repairInputR = windows.right.center;
+				}
 			}
-		}
 		if (micropeakActivityHoldSamples > 0) {
 			micropeakActivityHoldSamples--;
 			repairLedTarget = std::max(repairLedTarget, micropeakActivityHoldLevel);
@@ -1496,13 +1539,12 @@ struct Sil : Module {
 			(repairLedTarget > micropeakActivity) ? micropeakActivityAttackCoeff : micropeakActivityReleaseCoeff;
 		micropeakActivity = repairLedTarget + micropeakCoeff * (micropeakActivity - repairLedTarget);
 
-		const int bypassDelayLen = std::max(1, repairLookaheadSamples + 2);
-		const int bypassReadIdx = (bypassDelayWrite + 1) % bypassDelayLen;
-		const float delayedInL = bypassDelayL[size_t(bypassReadIdx)];
-		const float delayedInR = bypassDelayR[size_t(bypassReadIdx)];
+		const int bypassDelayLen = std::max(1, repairLookaheadSamples + limiterLookaheadSamples);
+		const float delayedInL = bypassDelayL[size_t(bypassDelayWrite)];
+		const float delayedInR = bypassDelayR[size_t(bypassDelayWrite)];
 		bypassDelayL[size_t(bypassDelayWrite)] = inL;
 		bypassDelayR[size_t(bypassDelayWrite)] = inR;
-		bypassDelayWrite = bypassReadIdx;
+		bypassDelayWrite = (bypassDelayWrite + 1) % bypassDelayLen;
 
 		// Low-band mono recovery below 120 Hz:
 		// preserve coherent bass stereo, progressively collapse risky low side content.
@@ -1951,21 +1993,44 @@ struct Sil : Module {
 		float outR = saturatedR;
 		float limiterLed = 0.f;
 		{
-			const float detectorPeakL = intersamplePeak4xCausal(limiterPrevSatL2, limiterPrevSatL1, saturatedL);
-			const float detectorPeakR = intersamplePeak4xCausal(limiterPrevSatR2, limiterPrevSatR1, saturatedR);
-			const float detectorPeak = std::max(detectorPeakL, detectorPeakR);
+			const float causalPeakL = intersamplePeak4xCausal(limiterPrevSatL2, limiterPrevSatL1, saturatedL);
+			const float causalPeakR = intersamplePeak4xCausal(limiterPrevSatR2, limiterPrevSatR1, saturatedR);
 			limiterPrevSatL2 = limiterPrevSatL1;
 			limiterPrevSatL1 = saturatedL;
 			limiterPrevSatR2 = limiterPrevSatR1;
 			limiterPrevSatR1 = saturatedR;
+			float truePeakSamplesL[kLimiterTruePeakOversample];
+			float truePeakSamplesR[kLimiterTruePeakOversample];
+			limiterTruePeakUpsamplerL.process(saturatedL, truePeakSamplesL);
+			limiterTruePeakUpsamplerR.process(saturatedR, truePeakSamplesR);
+			float detectorPeakL = causalPeakL;
+			float detectorPeakR = causalPeakR;
+				for (int i = 0; i < kLimiterTruePeakOversample; ++i) {
+					detectorPeakL = std::max(detectorPeakL, std::fabs(truePeakSamplesL[i]));
+					detectorPeakR = std::max(detectorPeakR, std::fabs(truePeakSamplesR[i]));
+				}
+				const float detectorPeakNow = std::max(detectorPeakL, detectorPeakR);
+				const uint64_t sampleIndex = limiterDetectorSampleIndex++;
+				const uint64_t maxAge = uint64_t(std::max(1, limiterLookaheadSamples));
+				while (!limiterPeakWindow.empty() && limiterPeakWindow.back().peak <= detectorPeakNow) {
+					limiterPeakWindow.pop_back();
+				}
+				LimiterPeakWindowEntry peakEntry;
+				peakEntry.sampleIndex = sampleIndex;
+				peakEntry.peak = detectorPeakNow;
+				limiterPeakWindow.push_back(peakEntry);
+				const uint64_t minValidIndex = (sampleIndex + 1u > maxAge) ? (sampleIndex + 1u - maxAge) : 0u;
+				while (!limiterPeakWindow.empty() && limiterPeakWindow.front().sampleIndex < minValidIndex) {
+					limiterPeakWindow.pop_front();
+				}
+				const float detectorPeak = limiterPeakWindow.empty() ? detectorPeakNow : limiterPeakWindow.front().peak;
 
-			const int delayLen = std::max(1, int(limiterDelayL.size()));
-			const int readIdx = (limiterDelayWrite + 1) % delayLen;
-			const float delayedL = limiterDelayL[size_t(readIdx)];
-			const float delayedR = limiterDelayR[size_t(readIdx)];
+			const int delayLen = std::max(1, limiterLookaheadSamples);
+			const float delayedL = limiterDelayL[size_t(limiterDelayWrite)];
+			const float delayedR = limiterDelayR[size_t(limiterDelayWrite)];
 			limiterDelayL[size_t(limiterDelayWrite)] = saturatedL;
 			limiterDelayR[size_t(limiterDelayWrite)] = saturatedR;
-			limiterDelayWrite = readIdx;
+			limiterDelayWrite = (limiterDelayWrite + 1) % delayLen;
 
 			float desiredGain = 1.f;
 			if (repairEnabled) {
@@ -2016,10 +2081,18 @@ struct Sil : Module {
 			const float limitingActivity = std::sqrt(clamp(limiterDemandDb / 1.5f, 0.f, 1.f));
 			limiterLed = clamp(std::max(0.25f * ceilingProximity, limitingActivity), 0.f, 1.f);
 		}
-		const float bypassL = repairActive ? delayedInL : inL;
-		const float bypassR = repairActive ? delayedInR : inR;
-		const float audibleL = masteringEnabled ? outL : bypassL;
-		const float audibleR = masteringEnabled ? outR : bypassR;
+		const float bypassL = delayedInL;
+		const float bypassR = delayedInR;
+		const float targetMasteringMix = masteringEnabled ? 1.f : 0.f;
+		const float mixStep = args.sampleTime / std::max(kMasteringCrossfadeSeconds, 1e-6f);
+		if (masteringMix < targetMasteringMix) {
+			masteringMix = std::min(targetMasteringMix, masteringMix + mixStep);
+		}
+		else if (masteringMix > targetMasteringMix) {
+			masteringMix = std::max(targetMasteringMix, masteringMix - mixStep);
+		}
+		const float audibleL = bypassL + masteringMix * (outL - bypassL);
+		const float audibleR = bypassR + masteringMix * (outR - bypassR);
 
 		outputs[OUTPUT_L_OUTPUT].setChannels(1);
 		outputs[OUTPUT_R_OUTPUT].setChannels(1);
