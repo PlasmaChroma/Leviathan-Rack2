@@ -773,6 +773,9 @@ json_t* Wyrm::dataToJson() {
 	json_object_set_new(root, "lfoMode", json_boolean(lfoMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "editorLocked", json_boolean(editorLocked.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "sandBackend", json_integer(sandBackend.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "sandDetail", json_integer(sandDetail.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "sandPersistence", json_integer(sandPersistence.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
@@ -805,6 +808,21 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (lockJ) editorLocked.store(json_is_true(lockJ), std::memory_order_relaxed);
 	json_t* sandViewJ = json_object_get(root, "sandViewEnabled");
 	if (sandViewJ) sandViewEnabled.store(json_is_true(sandViewJ), std::memory_order_relaxed);
+	json_t* sandBackendJ = json_object_get(root, "sandBackend");
+	if (sandBackendJ) {
+		const int v = clamp(int(json_integer_value(sandBackendJ)), WYRMSAND_NANOVG_CELLS, WYRMSAND_SHADER_FEEDBACK);
+		sandBackend.store(v, std::memory_order_relaxed);
+	}
+	json_t* sandDetailJ = json_object_get(root, "sandDetail");
+	if (sandDetailJ) {
+		const int v = clamp(int(json_integer_value(sandDetailJ)), WYRMSAND_DETAIL_LOW, WYRMSAND_DETAIL_AUTO);
+		sandDetail.store(v, std::memory_order_relaxed);
+	}
+	json_t* sandPersistenceJ = json_object_get(root, "sandPersistence");
+	if (sandPersistenceJ) {
+		const int v = clamp(int(json_integer_value(sandPersistenceJ)), WYRMSAND_PERSISTENCE_SHORT, WYRMSAND_PERSISTENCE_LONG);
+		sandPersistence.store(v, std::memory_order_relaxed);
+	}
 	json_t* customizedJ = json_object_get(root, "waveCustomized");
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* shapeJ = json_object_get(root, "selectedShape");

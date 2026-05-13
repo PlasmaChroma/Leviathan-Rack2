@@ -481,20 +481,22 @@ struct WyrmWaveEditor : TransparentWidget {
 			return pointX(i, count);
 		};
 		const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
-		for (int i = 0; i < count; ++i) {
-			const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
-			const bool hotColumn = (i == hoveredColumn);
-			float x = xAt(i);
-			if (hotColumn && hoveredColumnCenterValid) {
-				x = hoveredColumnCenterX;
+		const bool drawWaveColumns = !sandEnabled();
+		if (drawWaveColumns) {
+			for (int i = 0; i < count; ++i) {
+				const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
+				const bool hotColumn = (i == hoveredColumn);
+				float x = xAt(i);
+				if (hotColumn && hoveredColumnCenterValid) {
+					x = hoveredColumnCenterX;
+				}
+				nvgBeginPath(args.vg);
+				const float yTop = std::min(midY, y);
+				const float yBottom = std::max(midY, y);
+				nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
+				nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(34, 27, 70, 196));
+				nvgFill(args.vg);
 			}
-			nvgBeginPath(args.vg);
-			const float yTop = std::min(midY, y);
-			const float yBottom = std::max(midY, y);
-			nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-			nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(34, 27, 70, 196));
-			nvgFill(args.vg);
-
 		}
 
 		auto emitRoundedBodyPath = [&]() {

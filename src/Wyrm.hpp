@@ -28,6 +28,26 @@ enum WyrmRockMouseMode {
 	ROCK_MOUSE_LIFTS,
 };
 
+enum WyrmSandBackend {
+	WYRMSAND_NANOVG_CELLS = 0,
+	WYRMSAND_NANOVG_IMAGE,
+	WYRMSAND_OPENGL_TEXTURE,
+	WYRMSAND_SHADER_FEEDBACK,
+};
+
+enum WyrmSandDetail {
+	WYRMSAND_DETAIL_LOW = 0,
+	WYRMSAND_DETAIL_MEDIUM,
+	WYRMSAND_DETAIL_HIGH,
+	WYRMSAND_DETAIL_AUTO,
+};
+
+enum WyrmSandPersistence {
+	WYRMSAND_PERSISTENCE_SHORT = 0,
+	WYRMSAND_PERSISTENCE_MEDIUM,
+	WYRMSAND_PERSISTENCE_LONG,
+};
+
 extern const char* const kWyrmShapeLabels[SHAPE_COUNT];
 
 constexpr float kWyrmAudioMinHz = 9.99f;
@@ -222,6 +242,9 @@ struct Wyrm : Module {
 	std::atomic<bool> lfoMode {false};
 	std::atomic<bool> editorLocked {false};
 	std::atomic<bool> sandViewEnabled {false};
+	std::atomic<int> sandBackend {WYRMSAND_NANOVG_IMAGE};
+	std::atomic<int> sandDetail {WYRMSAND_DETAIL_AUTO};
+	std::atomic<int> sandPersistence {WYRMSAND_PERSISTENCE_MEDIUM};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int pointCount = kWyrmPointCountDefault;

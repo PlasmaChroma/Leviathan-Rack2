@@ -440,6 +440,32 @@ struct WyrmWidget : ModuleWidget {
 		ModuleWidget::appendContextMenu(menu);
 		auto* module = dynamic_cast<Wyrm*>(this->module);
 		if (!module) return;
+		auto sandBackendLabel = [&](int backend) {
+			switch (backend) {
+				case WYRMSAND_NANOVG_CELLS: return "NanoVG Cells";
+				case WYRMSAND_NANOVG_IMAGE: return "NanoVG Image";
+				case WYRMSAND_OPENGL_TEXTURE: return "OpenGL Texture";
+				case WYRMSAND_SHADER_FEEDBACK: return "Shader Feedback";
+				default: return "Unknown";
+			}
+		};
+		auto sandDetailLabel = [&](int detail) {
+			switch (detail) {
+				case WYRMSAND_DETAIL_LOW: return "Low";
+				case WYRMSAND_DETAIL_MEDIUM: return "Medium";
+				case WYRMSAND_DETAIL_HIGH: return "High";
+				case WYRMSAND_DETAIL_AUTO: return "Auto";
+				default: return "Unknown";
+			}
+		};
+		auto sandPersistenceLabel = [&](int persistence) {
+			switch (persistence) {
+				case WYRMSAND_PERSISTENCE_SHORT: return "Short";
+				case WYRMSAND_PERSISTENCE_MEDIUM: return "Medium";
+				case WYRMSAND_PERSISTENCE_LONG: return "Long";
+				default: return "Unknown";
+			}
+		};
 
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createCheckMenuItem("LFO Mode", "",
@@ -450,10 +476,55 @@ struct WyrmWidget : ModuleWidget {
 			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
 			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 		));
-		menu->addChild(createCheckMenuItem("Sand View", "",
-			[=]() { return module->sandViewEnabled.load(std::memory_order_relaxed); },
-			[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-		));
+		menu->addChild(createSubmenuItem("Sand", sandBackendLabel(module->sandBackend.load(std::memory_order_relaxed)), [=](Menu* submenu) {
+			submenu->addChild(createCheckMenuItem("Sand View", "",
+				[=]() { return module->sandViewEnabled.load(std::memory_order_relaxed); },
+				[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			submenu->addChild(new MenuSeparator());
+			submenu->addChild(createSubmenuItem("Backend", sandBackendLabel(module->sandBackend.load(std::memory_order_relaxed)), [=](Menu* backendMenu) {
+				backendMenu->addChild(createCheckMenuItem("NanoVG Image", "",
+					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_NANOVG_IMAGE; },
+					[=]() { module->sandBackend.store(WYRMSAND_NANOVG_IMAGE, std::memory_order_relaxed); }
+				));
+				backendMenu->addChild(createCheckMenuItem("NanoVG Cells", "",
+					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_NANOVG_CELLS; },
+					[=]() { module->sandBackend.store(WYRMSAND_NANOVG_CELLS, std::memory_order_relaxed); }
+				));
+			}));
+			submenu->addChild(createSubmenuItem("Detail", sandDetailLabel(module->sandDetail.load(std::memory_order_relaxed)), [=](Menu* detailMenu) {
+				detailMenu->addChild(createCheckMenuItem("Auto", "",
+					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_AUTO; },
+					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_AUTO, std::memory_order_relaxed); }
+				));
+				detailMenu->addChild(createCheckMenuItem("Low", "",
+					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_LOW; },
+					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_LOW, std::memory_order_relaxed); }
+				));
+				detailMenu->addChild(createCheckMenuItem("Medium", "",
+					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_MEDIUM; },
+					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_MEDIUM, std::memory_order_relaxed); }
+				));
+				detailMenu->addChild(createCheckMenuItem("High", "",
+					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_HIGH; },
+					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_HIGH, std::memory_order_relaxed); }
+				));
+			}));
+			submenu->addChild(createSubmenuItem("Persistence", sandPersistenceLabel(module->sandPersistence.load(std::memory_order_relaxed)), [=](Menu* persistenceMenu) {
+				persistenceMenu->addChild(createCheckMenuItem("Short", "",
+					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_SHORT; },
+					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_SHORT, std::memory_order_relaxed); }
+				));
+				persistenceMenu->addChild(createCheckMenuItem("Medium", "",
+					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_MEDIUM; },
+					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_MEDIUM, std::memory_order_relaxed); }
+				));
+				persistenceMenu->addChild(createCheckMenuItem("Long", "",
+					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_LONG; },
+					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_LONG, std::memory_order_relaxed); }
+				));
+			}));
+		}));
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
 			const bool dragModeSelected = (module->rockMouseMode == ROCK_MOUSE_DRAGS);
 			const std::string dragLabel = dragModeSelected ? "Mouse Drags Rocks" : "Mouse Drags Rocks (shift)";

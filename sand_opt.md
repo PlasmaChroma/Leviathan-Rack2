@@ -1,15 +1,48 @@
 # Wyrm Sand Optimization Design
 
+## Completion Status
+
+Last updated: 2026-05-13
+
+Implementation checklist:
+
+- [x] Keep the `WyrmSand` split as the implementation boundary.
+- [x] Add sand backend/detail/persistence enums in `Wyrm.hpp`.
+- [x] Persist sand backend/detail/persistence in `Wyrm::dataToJson()` / `Wyrm::dataFromJson()`.
+- [x] Add `Sand` context submenu with `Sand View`, `Backend`, `Detail`, and `Persistence`.
+- [ ] Add backend dispatch inside `WyrmSand::draw()`.
+- [ ] Keep current cell renderer as explicit `NanoVGCells` backend implementation.
+- [ ] Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
+- [ ] Add `NanoVGImage` state, lifecycle, and one-image draw path to `WyrmSand`.
+- [ ] Make `NanoVGImage` the default backend in runtime behavior.
+- [ ] Add active cell tracking for dirty decisions and later active-only decay.
+- [ ] Add path stride by detail.
+- [ ] Extend debug metrics (`sandBackend`, `sandDetail`, `sandCellCount`, `sandActiveCellCount`, `sandImageUploadUs`).
+- [ ] Evaluate `OpenGLTexture` backend only after `NanoVGImage` is stable.
+- [ ] Evaluate `ShaderFeedback` backend only after GL texture lifecycle is proven safe.
+
 ## Current Baseline
 
-Wyrm's sand view is UI-only and lives inside `WyrmWaveEditor`. It uses:
+Wyrm's sand view is UI-only and is now split between `WyrmWaveEditor` and `WyrmSand`.
 
-- `sandDepth`
-- `sandEnergy`
-- `sandBaseNoise`
-- `previousWyrmPath`
+`WyrmWaveEditor` owns editor-specific inputs:
+
 - `visualSlitherPhase`
-- `drawSandBackground()`
+- displayed Wyrm path generation
+- point/rock interaction stamps
+- the `sandEnabled()` gate
+
+`WyrmSand` owns sand state and rendering:
+
+- `depth`
+- `energy`
+- `baseNoise`
+- `previousPath`
+- `ensureField()`
+- `stamp()`
+- `disturbSegment()`
+- `update()`
+- `draw()`
 
 The audio path is separate and should stay untouched.
 
@@ -25,15 +58,15 @@ for every sand cell:
 The current grid is sized from the editor bounds:
 
 ```cpp
-targetW = clamp(int(box.size.x * 0.65f), 64, 128);
-targetH = clamp(int(box.size.y * 0.65f), 32, 72);
+targetW = clamp(int(size.x * 0.65f), 64, 128);
+targetH = clamp(int(size.y * 0.65f), 32, 72);
 ```
 
 That can mean several thousand NanoVG draw operations per frame. The first optimization target should be sand rendering, not Wyrm body/waveform/rock drawing.
 
 ## Design Rule
 
-Sand should become a replaceable visual backend. The rest of the editor remains NanoVG:
+`WyrmSand` should become the replaceable visual backend boundary. The rest of the editor remains NanoVG:
 
 ```text
 Keep as-is:
@@ -52,6 +85,16 @@ Sand backend candidates:
 ```
 
 Do not start by shader-rendering the whole editor. Keep the backend boundary around the sand layer only.
+
+The current `WyrmWaveEditor::drawSandBackground()` wrapper should stay thin:
+
+```cpp
+void drawSandBackground(NVGcontext* vg) {
+	sand.draw(vg, box.size, sandEnabled());
+}
+```
+
+Backend dispatch should happen inside `WyrmSand`, not by re-growing sand implementation details inside `WyrmWaveEditor`.
 
 ## Recommended Backend Path
 
@@ -161,12 +204,12 @@ Avoid `128x72` as a normal mode. It is expensive for a small Rack editor rectang
 Keep the existing CPU field:
 
 ```text
-sandDepth[]
-sandEnergy[]
-sandBaseNoise[]
+WyrmSand::depth[]
+WyrmSand::energy[]
+WyrmSand::baseNoise[]
 ```
 
-Add image state to `WyrmWaveEditor`:
+Add image state to `WyrmSand`:
 
 ```cpp
 std::vector<unsigned char> sandRgba;
@@ -177,13 +220,16 @@ bool sandImageDirty = true;
 bool sandImageValid = false;
 ```
 
-Release `sandImage` in the editor destructor with `nvgDeleteImage()` when a valid NanoVG context is available.
+Release `sandImage` with `nvgDeleteImage()` when a valid NanoVG context is available.
+
+If direct cleanup from `WyrmSand` is not practical because the NanoVG context is not available at destruction time, add an explicit `WyrmSand::destroyImage(NVGcontext* vg)` and call it from the widget lifecycle path that has access to `vg`.
 
 Rendering flow:
 
 ```text
-ensureSandField()
-updateSand()
+WyrmWaveEditor builds current displayed path
+WyrmSand::ensureField(size)
+WyrmSand::update(size, nowSec, currentPath, pathCount, slitherAmount)
 shadeSandImageIfDirty()
 create/update NanoVG image
 draw one image-pattern rectangle
@@ -193,25 +239,25 @@ draw normal editor overlays
 Representative structure:
 
 ```cpp
-void drawSandBackground(NVGcontext* vg) {
-	if (!sandEnabled()) {
-		drawFlatBackground(vg);
+void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled) {
+	if (!enabled) {
+		drawFlatBackground(vg, size);
 		return;
 	}
 
 	switch (currentSandBackend()) {
 		case WYRMSAND_NANOVG_IMAGE:
-			drawSandNanoVGImage(vg);
+			drawNanoVGImage(vg, size);
 			break;
 		case WYRMSAND_NANOVG_CELLS:
 		default:
-			drawSandNanoVGCells(vg);
+			drawCells(vg, size);
 			break;
 	}
 }
 ```
 
-If image creation or update fails, fall back to `drawSandNanoVGCells(vg)` for that frame and mark the image backend invalid.
+If image creation or update fails, fall back to `drawCells(vg, size)` for that frame and mark the image backend invalid.
 
 Pixel shading can be richer than the current cell fill without adding draw calls:
 
@@ -265,7 +311,7 @@ std::vector<uint8_t> sandActiveFlags;
 int sandActiveCompactCountdown = 0;
 ```
 
-When `stampSand()` or `disturbSandSegment()` changes a cell above threshold, mark it active:
+When `WyrmSand::stamp()` or `WyrmSand::disturbSegment()` changes a cell above threshold, mark it active:
 
 ```cpp
 void markSandActive(int idx) {
@@ -281,9 +327,9 @@ Decay can initially remain full-grid for simplicity. Once `NanoVGImage` is stabl
 
 ```cpp
 for (int idx : sandActiveCells) {
-	sandDepth[idx] *= depthDecay;
-	sandEnergy[idx] *= energyDecay;
-	if (std::fabs(sandDepth[idx]) + sandEnergy[idx] < retireThreshold) {
+	depth[idx] *= depthDecay;
+	energy[idx] *= energyDecay;
+	if (std::fabs(depth[idx]) + energy[idx] < retireThreshold) {
 		sandActiveFlags[idx] = 0;
 	}
 }
@@ -299,7 +345,7 @@ Use the detail preset's `pathStride`:
 
 ```cpp
 for (int i = 0; i < count - pathStride; i += pathStride) {
-	disturbSandSegment(currentPath[i], currentPath[i + pathStride], troughStrength, ridgeStrength, energyStrength);
+	disturbSegment(size, currentPath[i], currentPath[i + pathStride], troughStrength, ridgeStrength, energyStrength);
 }
 ```
 
@@ -334,17 +380,18 @@ Keep audio metrics separate. Sand optimization should not change `process()`.
 
 ## Implementation Order
 
-1. Add sand backend/detail/persistence enums, JSON persistence, and menu entries.
-2. Refactor `drawSandBackground()` into backend-specific draw functions.
-3. Keep current cell renderer as `NanoVGCells`.
-4. Add detail presets and deterministic grid sizing.
-5. Add `NanoVGImage` state, image lifecycle, and one-image draw path.
-6. Make `NanoVGImage` the default backend.
-7. Add active cell tracking for dirty decisions and later active-only decay.
-8. Add path stride by detail.
-9. Extend debug metrics.
-10. Consider `OpenGLTexture` only after `NanoVGImage` is stable.
-11. Consider `ShaderFeedback` only after GL texture lifecycle is proven safe.
+1. Keep the current `WyrmSand` split as the implementation boundary. Status: done.
+2. Add sand backend/detail/persistence enums, JSON persistence, and menu entries. Status: done.
+3. Add backend dispatch inside `WyrmSand::draw()`. Status: pending.
+4. Keep current cell renderer as `NanoVGCells`.
+5. Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
+6. Add `NanoVGImage` state, image lifecycle, and one-image draw path to `WyrmSand`.
+7. Make `NanoVGImage` the default backend.
+8. Add active cell tracking for dirty decisions and later active-only decay.
+9. Add path stride by detail.
+10. Extend debug metrics.
+11. Consider `OpenGLTexture` only after `NanoVGImage` is stable.
+12. Consider `ShaderFeedback` only after GL texture lifecycle is proven safe.
 
 ## Acceptance Targets
 
