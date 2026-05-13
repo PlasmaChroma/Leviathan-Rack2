@@ -17,6 +17,49 @@ The current source confirms that `Sil` contains both DSP state and UI/widget cod
 
 ---
 
+## Current implementation status
+
+This review has partially been acted on. Treat the original recommendations below as historical context plus remaining roadmap, not as a completely current description of the code.
+
+### Completed or materially improved
+
+1. **Limiter hard safety:** implemented. The limiter now applies a final instantaneous sample-ceiling guard after the smoothed limiter gain.
+
+2. **Limiter true-peak concern:** improved, but not fully complete. The old sample-peak detector has been replaced by a causal 4x-style intersample estimator. This is a useful true-peak approximation for the safety limiter, but it is not a standards-grade oversampled true-peak detector.
+
+3. **FFT/analyzer work in audio thread:** materially improved. The audio thread now publishes spectrum snapshots; FFT/bin mapping/display normalization are performed from the UI side. The remaining concern is not FFT cost in `process()`, but thread hygiene around shared analyzer/histogram buffers.
+
+4. **Micropeak CSV writes from audio path:** improved beyond the original review. The audio path enqueues debug events into a ring buffer, and UI-side code drains the queue to CSV.
+
+5. **Repair latency mode changes:** already uses a no-allocation path and early-outs when the requested latency has not changed.
+
+### Still recommended soon
+
+1. **Mono input normalization:** still open and should be the next correctness patch. If only left is connected, feed left to both channels. If only right is connected, feed right to both channels. If both are connected, preserve stereo.
+
+2. **Analyzer/histogram thread hygiene:** spectrum FFT is no longer in the audio path, but the snapshot handoff should be made stricter. Histogram arrays are still written by audio and read by UI directly. This is less urgent than the old FFT issue, but still worth cleaning up.
+
+3. **Actual true-peak limiter:** if the UI/docs are going to claim strict dBTP behavior, add a real detector-only oversampled true-peak stage. Recommended shape:
+   - 4x detector-only oversampling after saturation;
+   - a small FIR/polyphase or halfband reconstruction detector;
+   - full-rate limiter audio path delayed by enough samples to match detector/group delay;
+   - likely 8-16 samples of limiter lookahead instead of the current 1-sample fast path;
+   - retain the final sample-peak ceiling guard as a last resort.
+
+### Defer until after correctness work
+
+1. **Scored/cubic micropeak repair:** still valuable, but it is a repair-quality project, not a quick safety fix.
+
+2. **Saturator anti-aliasing or color limiter:** still plausible, but should be driven by listening tests and metrics.
+
+3. **Global `ProgramContext` / shared processing budget:** still architecturally sound, but requires broader refactoring.
+
+4. **Stage/profile context menus:** useful for tuning and diagnosis, but lower priority than mono normalization and analyzer safety.
+
+5. **Splitting `Sil.cpp`:** still recommended for maintainability, but should be done after the current behavior is stabilized and covered by focused tests.
+
+---
+
 ## What is already good
 
 The **overall chain ordering is sensible**. Repair before mastering makes sense; low-band mono recovery early is defensible; mud removal before mid enhancement is right; glue before stereo enhancement is reasonable; saturation before the final limiter is exactly where I would put it. The signal path is not arbitrary—it has a mastering logic.
