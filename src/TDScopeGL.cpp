@@ -363,6 +363,26 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
+    {
+      const float xInset = 0.75f;
+      const float fillX = xInset;
+      const float fillY = drawTop;
+      const float fillW = std::max(0.f, box.size.x - 2.f * xInset);
+      const float fillH = std::max(0.f, drawBottom - drawTop);
+      const float sx = (box.size.x > 1e-6f) ? (fbSize.x / box.size.x) : 1.f;
+      const float sy = (box.size.y > 1e-6f) ? (fbSize.y / box.size.y) : 1.f;
+      const int scX = std::max(0, int(std::floor(fillX * sx)));
+      const int scY = std::max(0, int(std::floor((box.size.y - (fillY + fillH)) * sy)));
+      const int scW = std::max(0, int(std::ceil(fillW * sx)));
+      const int scH = std::max(0, int(std::ceil(fillH * sy)));
+      if (scW > 0 && scH > 0) {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(scX, scY, scW, scH);
+        glClearColor(0.f, 0.f, 0.f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+      }
+    }
     const float laneGap = renderStereo ? 2.f : 0.f;
     const float laneWidth =
       renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);

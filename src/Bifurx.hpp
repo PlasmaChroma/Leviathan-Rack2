@@ -419,6 +419,7 @@ struct BifurxSpectrumBase {
 	virtual ~BifurxSpectrumBase() {}
 
 	void syncBase();
+	void initializeStaticPreviewStateIfNeeded();
 	void updateAxisCache();
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;

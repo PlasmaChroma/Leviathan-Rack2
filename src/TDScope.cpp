@@ -248,8 +248,13 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   void drawSilWaveformBackground(NVGcontext *vg, bool renderStereo, float laneWidth, float laneGap, float drawTop, float drawBottom) const {
+    const float xInset = 0.75f;
+    const float bgX = xInset;
+    const float bgY = drawTop;
+    const float bgW = std::max(0.f, box.size.x - 2.f * xInset);
+    const float bgH = std::max(0.f, drawBottom - drawTop);
     nvgBeginPath(vg);
-    nvgRect(vg, 0.f, 0.f, box.size.x, box.size.y);
+    nvgRect(vg, bgX, bgY, bgW, bgH);
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 255));
     nvgFill(vg);
 
@@ -550,29 +555,29 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep stale-frame reuse short so we prefer freshest scope state.
     constexpr double kUiSnapshotGraceSec = 0.02;
 
-    auto drawStatusMessage = [&](const char* line1, const char* line2) {
-      if (!APP || !APP->window || !APP->window->uiFont) {
-        return;
-      }
-      const float centerX = box.size.x * 0.5f;
-      const float centerY = box.size.y * 0.5f;
-      const float fontSize1 = 12.f;
-      const float fontSize2 = 14.f;
-      const float lineGap = 9.f;
+	    auto drawStatusMessage = [&](const char* line1, const char* line2) {
+	      if (!APP || !APP->window || !APP->window->uiFont) {
+	        return;
+	      }
+	      const float centerX = box.size.x * 0.5f;
+	      const float bottomY = box.size.y - 7.f;
+	      const float fontSize1 = 12.f;
+	      const float fontSize2 = 14.f;
+	      const float lineGap = 9.f;
 
       nvgSave(args.vg);
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
       nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 
-      nvgFontSize(args.vg, fontSize1);
-      nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
-      nvgText(args.vg, centerX, centerY - lineGap, line1, nullptr);
+	      nvgFontSize(args.vg, fontSize1);
+	      nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
+	      nvgText(args.vg, centerX, bottomY - 2.f * lineGap, line1, nullptr);
 
-      nvgFontSize(args.vg, fontSize2);
-      nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
-      nvgText(args.vg, centerX, centerY + lineGap, line2, nullptr);
-      nvgRestore(args.vg);
-    };
+	      nvgFontSize(args.vg, fontSize2);
+	      nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
+	      nvgText(args.vg, centerX, bottomY - lineGap + 2.f, line2, nullptr);
+	      nvgRestore(args.vg);
+	    };
 
     if (!module) {
       drawStatusMessage("Attach to", "Temporal Deck");
@@ -651,6 +656,17 @@ struct TDScopeDisplayWidget final : Widget {
     const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
     const float laneAmpHalfWidth = laneWidth * 0.46f;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
+    if (!module->useOpenGlGeometryRenderMode()) {
+      const float xInset = 0.75f;
+      const float bgX = xInset;
+      const float bgY = drawTop;
+      const float bgW = std::max(0.f, box.size.x - 2.f * xInset);
+      const float bgH = std::max(0.f, drawBottom - drawTop);
+      nvgBeginPath(args.vg);
+      nvgRect(args.vg, bgX, bgY, bgW, bgH);
+      nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+      nvgFill(args.vg);
+    }
     if (silStandardStyle) {
       drawSilWaveformBackground(args.vg, renderStereo && module->debugRenderStereoRightLaneEnabled, laneWidth, laneGap, drawTop, drawBottom);
     }

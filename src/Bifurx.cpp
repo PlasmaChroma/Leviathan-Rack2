@@ -1070,6 +1070,56 @@ void BifurxSpectrumBase::syncBase() {
 	}
 }
 
+void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
+	if (state.hasPreview) return;
+	BifurxPreviewState preview;
+	preview.sampleRate = 48000.f;
+	preview.mode = 8;          // Band + High
+	preview.freqA = 180.f;
+	preview.freqB = 3120.f;
+	preview.qA = 2.1f;
+	preview.qB = 1.6f;
+	preview.balance = 0.22f;
+	preview.balanceTarget = preview.balance;
+	preview.resoNorm = 0.72f;
+	preview.spanParamNorm = 0.78f;
+	preview.spanCvNorm = 0.f;
+	preview.spanAtten = 0.f;
+	preview.spanNorm = 0.78f;
+	preview.spanOct = std::log2(preview.freqB / preview.freqA);
+	preview.freqParamNorm = bifurxParamFromFrequencyHz(preview.freqA);
+	preview.voctCv = 0.f;
+
+	state.previewState = preview;
+	state.lastPreviewSeq = 1u;
+	state.cachedAxisSampleRate = 0.f;
+	state.hasPreview = true;
+	updateAxisCache();
+	updateCurveCache();
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		state.curveDb[i] = state.curveTargetDb[i];
+	}
+	state.hasCurveTarget = false;
+
+	// Browser preview is static art: synthesize deterministic response shading.
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		const float x01 = float(i) / float(kCurvePointCount - 1);
+		const float curveNorm = clamp01((state.curveTargetDb[i] - kResponseMinDb) / (kResponseMaxDb - kResponseMinDb));
+		const float bed = -35.f + 15.f * curveNorm;
+		const float ridge = 1.8f * std::sin(2.f * kPi * (2.6f * x01 + 0.11f));
+		state.overlayTargetOutputDbfs[i] = bed + ridge;
+		state.overlayTargetModuleDb[i] = state.curveTargetDb[i];
+	}
+	state.displayTopTargetDbfs = -6.f;
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
+		state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
+	}
+	state.hasOverlay = true;
+	state.hasOverlayTarget = false;
+	state.displayTopDbfs = state.displayTopTargetDbfs;
+}
+
 void BifurxSpectrumBase::updateAxisCache() {
 	if (std::fabs(state.cachedAxisSampleRate - state.previewState.sampleRate) < 0.5f) return;
 	state.cachedAxisSampleRate = state.previewState.sampleRate;

@@ -322,7 +322,14 @@ void BifurxSpectrumWidget::step() {
 	Widget::step();
 	syncCurveDebugCaptureState();
 	syncPerfDebugCaptureState();
-	if (!module) return;
+	if (!module) {
+		const bool hadPreview = state.hasPreview;
+		initializeStaticPreviewStateIfNeeded();
+		if (!hadPreview && framebuffer) {
+			framebuffer->dirty = true;
+		}
+		return;
+	}
 	if (module->renderMode != Bifurx::RENDER_NANOVG) return;
 
 	bool dirty = false;
