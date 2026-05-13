@@ -2447,7 +2447,7 @@ struct SilWidget : ModuleWidget {
 		Vec glueCompLightPos(48.f, 49.2f);
 		Vec stereoEnhanceLightPos(48.f, 50.0f);
 		Vec saturatorLightPos(48.f, 50.8f);
-		Vec micropeakLightPos(48.f, 51.6f);
+		Vec micropeakLightPos(69.506f, 50.048f);
 		Vec masteringButtonPos(48.f, 53.f);
 		Vec repairButtonPos(48.f, 56.f);
 
