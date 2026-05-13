@@ -179,6 +179,14 @@ struct Sil : Module {
 
 		float smoothedPeakDb = 0.f;
 	} spec;
+	struct SpectrumSnapshot {
+		alignas(16) float mid[FFT_SIZE] = {};
+		alignas(16) float side[FFT_SIZE] = {};
+	};
+	SpectrumSnapshot specSnapshots[2];
+	std::atomic<int> specSnapshotIndex {0};
+	std::atomic<uint32_t> specSnapshotSeq {0u};
+	uint32_t specUiLastSeq = 0u;
 	struct SpectrumBinMapEntry {
 		int idx = 0;
 		float frac = 0.f;
@@ -732,6 +740,82 @@ struct Sil : Module {
 		lowpassR2.setCutoff(cutoffNorm);
 	}
 
+	void updateSpectrumUpdateDivider(float sampleRate) {
+		const float sr = std::max(sampleRate, 1.f);
+		static constexpr float kSpectrumUpdateHz = 24.f;
+		const int division = std::max(1, int(std::round(sr / kSpectrumUpdateHz)));
+		specDivider.setDivision(division);
+	}
+
+	void updateSpectrumDisplayFromLatestSnapshot() {
+		const uint32_t latestSeq = specSnapshotSeq.load(std::memory_order_acquire);
+		if (latestSeq == specUiLastSeq) {
+			return;
+		}
+
+		const int snapshotIndex = specSnapshotIndex.load(std::memory_order_acquire);
+		const SpectrumSnapshot& snapshot = specSnapshots[snapshotIndex];
+
+		for (int i = 0; i < FFT_SIZE; ++i) {
+			spec.fftInL[i] = snapshot.mid[i] * spec.window[i];
+			spec.fftInR[i] = snapshot.side[i] * spec.window[i];
+		}
+
+		spec.fft->rfft(spec.fftInL, spec.fftOutL);
+		spec.fft->rfft(spec.fftInR, spec.fftOutR);
+
+		auto getMagnitudePow = [&](float* fftOut, int bin) {
+			if (bin <= 0) return fftOut[0] * fftOut[0];
+			if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
+			const float re = fftOut[2 * bin];
+			const float im = fftOut[2 * bin + 1];
+			return re * re + im * im;
+		};
+
+		float maxPow = 0.f;
+		static constexpr float kSpecNormPowInv = 1.f / (10240.f * 10240.f);
+		for (int i = 0; i < SPEC_FREQ_BINS; i++) {
+			const int binIdx = specBinMap[i].idx;
+			const float frac = specBinMap[i].frac;
+			float powL = 0.f;
+			float powR = 0.f;
+			if (binIdx < FFT_SIZE / 2) {
+				powL = (1.f - frac) * getMagnitudePow(spec.fftOutL, binIdx) + frac * getMagnitudePow(spec.fftOutL, binIdx + 1);
+				powR = (1.f - frac) * getMagnitudePow(spec.fftOutR, binIdx) + frac * getMagnitudePow(spec.fftOutR, binIdx + 1);
+			}
+			else {
+				powL = getMagnitudePow(spec.fftOutL, FFT_SIZE / 2);
+				powR = getMagnitudePow(spec.fftOutR, FFT_SIZE / 2);
+			}
+
+			powL *= kSpecNormPowInv;
+			powR *= kSpecNormPowInv;
+			spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + powL * 0.7f;
+			spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + powR * 0.7f;
+			maxPow = std::max(maxPow, std::max(spec.magnitudesL[i], spec.magnitudesR[i]));
+		}
+
+		const float instantPeakDb = 10.f * std::log10(maxPow + 1e-12f);
+		if (instantPeakDb > spec.smoothedPeakDb) {
+			spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f;
+		}
+		else {
+			spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f;
+		}
+		spec.smoothedPeakDb = clamp(spec.smoothedPeakDb, -100.f, 20.f);
+		const float ceilingDb = spec.smoothedPeakDb + 6.f;
+		const float floorDb = ceilingDb - 70.f;
+		const float dbSpanInv = 1.f / std::max(ceilingDb - floorDb, 1e-6f);
+		for (int i = 0; i < SPEC_FREQ_BINS; ++i) {
+			const float dbL = 10.f * std::log10(spec.magnitudesL[i] + 1e-12f);
+			const float dbR = 10.f * std::log10(spec.magnitudesR[i] + 1e-12f);
+			spec.displayNormL[i] = clamp((dbL - floorDb) * dbSpanInv, 0.f, 1.f);
+			spec.displayNormR[i] = clamp((dbR - floorDb) * dbSpanInv, 0.f, 1.f);
+		}
+
+		specUiLastSeq = latestSeq;
+	}
+
 	void updateDynamicsCoefficients(float sampleRate) {
 		const float sr = std::max(sampleRate, 1.f);
 		lowBandCorrCoeff = std::exp(-1.f / (kLowBandCorrTauSec * sr));
@@ -1002,8 +1086,8 @@ struct Sil : Module {
 			spec.window[i] = 0.5f - 0.5f * std::cos(2.f * M_PI * i / (FFT_SIZE - 1));
 		}
 
-		// Keep spectrum visually responsive; this is UI-only work.
-		specDivider.setDivision(2048);
+		// Keep spectrum visually responsive at a stable update rate across sample rates.
+		updateSpectrumUpdateDivider(initialSampleRate);
 		lightDivider.setDivision(kLightDivision);
 		glueThresholdUpdateDivider.setDivision(kGlueThresholdUpdateDivision);
 		impactAir.coeffDivider.setDivision(kImpactAirCoeffDivision);
@@ -1318,6 +1402,7 @@ struct Sil : Module {
 		updateStereoEnhanceCutoffs(e.sampleRate);
 		updateDynamicsCoefficients(e.sampleRate);
 		updateSpectrumBinMap(e.sampleRate);
+		updateSpectrumUpdateDivider(e.sampleRate);
 		glueAdaptiveThresholdDb = kGlueThresholdDb;
 		configureRollingBuffer(e.sampleRate);
 		resetRemoveMudState();
@@ -1992,65 +2077,19 @@ struct Sil : Module {
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
+			const int writeIndex = 1 - specSnapshotIndex.load(std::memory_order_relaxed);
+			SpectrumSnapshot& snapshot = specSnapshots[writeIndex];
 			int outIdx = 0;
 			for (int idx = spec.writePtr; idx < FFT_SIZE; ++idx, ++outIdx) {
-				spec.fftInL[outIdx] = spec.bufferL[idx] * spec.window[outIdx];
-				spec.fftInR[outIdx] = spec.bufferR[idx] * spec.window[outIdx];
+				snapshot.mid[outIdx] = spec.bufferL[idx];
+				snapshot.side[outIdx] = spec.bufferR[idx];
 			}
 			for (int idx = 0; idx < spec.writePtr; ++idx, ++outIdx) {
-				spec.fftInL[outIdx] = spec.bufferL[idx] * spec.window[outIdx];
-				spec.fftInR[outIdx] = spec.bufferR[idx] * spec.window[outIdx];
+				snapshot.mid[outIdx] = spec.bufferL[idx];
+				snapshot.side[outIdx] = spec.bufferR[idx];
 			}
-
-			spec.fft->rfft(spec.fftInL, spec.fftOutL);
-			spec.fft->rfft(spec.fftInR, spec.fftOutR);
-
-			auto getMagnitudePow = [&](float* fftOut, int bin) {
-				if (bin <= 0) return fftOut[0] * fftOut[0];
-				if (bin >= FFT_SIZE / 2) return fftOut[1] * fftOut[1];
-				float re = fftOut[2 * bin];
-				float im = fftOut[2 * bin + 1];
-				return re * re + im * im;
-			};
-
-			float maxPow = 0.f;
-			static constexpr float kSpecNormPowInv = 1.f / (10240.f * 10240.f);
-			for (int i = 0; i < SPEC_FREQ_BINS; i++) {
-				const int binIdx = specBinMap[i].idx;
-				const float frac = specBinMap[i].frac;
-				float powL, powR;
-				if (binIdx < FFT_SIZE / 2) {
-					powL = (1.f - frac) * getMagnitudePow(spec.fftOutL, binIdx) + frac * getMagnitudePow(spec.fftOutL, binIdx + 1);
-					powR = (1.f - frac) * getMagnitudePow(spec.fftOutR, binIdx) + frac * getMagnitudePow(spec.fftOutR, binIdx + 1);
-				} else {
-					powL = getMagnitudePow(spec.fftOutL, FFT_SIZE / 2);
-					powR = getMagnitudePow(spec.fftOutR, FFT_SIZE / 2);
-				}
-
-				powL *= kSpecNormPowInv;
-				powR *= kSpecNormPowInv;
-
-				spec.magnitudesL[i] = spec.magnitudesL[i] * 0.3f + powL * 0.7f;
-				spec.magnitudesR[i] = spec.magnitudesR[i] * 0.3f + powR * 0.7f;
-				maxPow = std::max(maxPow, std::max(spec.magnitudesL[i], spec.magnitudesR[i]));
-			}
-
-			float instantPeakDb = 10.f * std::log10(maxPow + 1e-12f);
-			if (instantPeakDb > spec.smoothedPeakDb)
-				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.1f + instantPeakDb * 0.9f;
-			else
-				spec.smoothedPeakDb = spec.smoothedPeakDb * 0.995f + instantPeakDb * 0.005f;
-			
-			spec.smoothedPeakDb = clamp(spec.smoothedPeakDb, -100.f, 20.f);
-			const float ceilingDb = spec.smoothedPeakDb + 6.f;
-			const float floorDb = ceilingDb - 70.f;
-			const float dbSpanInv = 1.f / std::max(ceilingDb - floorDb, 1e-6f);
-			for (int i = 0; i < SPEC_FREQ_BINS; ++i) {
-				const float dbL = 10.f * std::log10(spec.magnitudesL[i] + 1e-12f);
-				const float dbR = 10.f * std::log10(spec.magnitudesR[i] + 1e-12f);
-				spec.displayNormL[i] = clamp((dbL - floorDb) * dbSpanInv, 0.f, 1.f);
-				spec.displayNormR[i] = clamp((dbR - floorDb) * dbSpanInv, 0.f, 1.f);
-			}
+			specSnapshotIndex.store(writeIndex, std::memory_order_release);
+			specSnapshotSeq.fetch_add(1u, std::memory_order_release);
 		}
 	}
 
@@ -2152,6 +2191,9 @@ struct SpectrumWidget : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!module) return;
+		if (!isRightChannel) {
+			module->updateSpectrumDisplayFromLatestSnapshot();
+		}
 		SilColors colors = SilColors::get(module->colorScheme);
 		auto rgbToHsv = [](const NVGcolor& c, float& h, float& s, float& v) {
 			const float r = clamp(c.r, 0.f, 1.f);
