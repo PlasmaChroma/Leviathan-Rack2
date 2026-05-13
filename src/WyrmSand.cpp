@@ -1,0 +1,196 @@
+#include "WyrmSand.hpp"
+
+void WyrmSand::resetHistory() {
+	previousPathCount = 0;
+	lastUpdateSec = -1.0;
+}
+
+void WyrmSand::ensureField(Vec size) {
+	const int targetW = clamp(int(size.x * 0.65f), 64, 128);
+	const int targetH = clamp(int(size.y * 0.65f), 32, 72);
+	if (initialized && w == targetW && h == targetH) {
+		return;
+	}
+	w = targetW;
+	h = targetH;
+	const int cellCount = w * h;
+	depth.assign(cellCount, 0.f);
+	energy.assign(cellCount, 0.f);
+	baseNoise.resize(cellCount);
+	for (int y = 0; y < h; ++y) {
+		for (int x = 0; x < w; ++x) {
+			const uint32_t seed = 0x6d2b79f5u ^ uint32_t(x * 73856093) ^ uint32_t(y * 19349663);
+			const float grain = hashUnit(seed);
+			const float dune = 0.5f + 0.5f * std::sin(0.17f * float(x) + 0.31f * float(y));
+			baseNoise[y * w + x] = 0.72f * grain + 0.28f * dune;
+		}
+	}
+	initialized = true;
+	resetHistory();
+}
+
+void WyrmSand::stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float energyDelta) {
+	if (!initialized || w <= 0 || h <= 0 || size.x <= 1.f || size.y <= 1.f) {
+		return;
+	}
+	const float cellW = size.x / float(w);
+	const float cellH = size.y / float(h);
+	const int x0 = clamp(int(std::floor((pos.x - radiusPx) / cellW)), 0, w - 1);
+	const int x1 = clamp(int(std::ceil((pos.x + radiusPx) / cellW)), 0, w - 1);
+	const int y0 = clamp(int(std::floor((pos.y - radiusPx) / cellH)), 0, h - 1);
+	const int y1 = clamp(int(std::ceil((pos.y + radiusPx) / cellH)), 0, h - 1);
+	const float invRadius = 1.f / std::max(radiusPx, 1e-4f);
+	for (int gy = y0; gy <= y1; ++gy) {
+		const float cy = (float(gy) + 0.5f) * cellH;
+		for (int gx = x0; gx <= x1; ++gx) {
+			const float cx = (float(gx) + 0.5f) * cellW;
+			const float dx = cx - pos.x;
+			const float dy = cy - pos.y;
+			const float dist = std::sqrt(dx * dx + dy * dy);
+			const float falloff = smoother01(1.f - dist * invRadius);
+			if (falloff <= 0.f) {
+				continue;
+			}
+			const int idx = gy * w + gx;
+			depth[idx] = clamp(depth[idx] + depthDelta * falloff, -1.f, 1.f);
+			energy[idx] = clamp(energy[idx] + energyDelta * falloff, 0.f, 1.f);
+		}
+	}
+}
+
+void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength) {
+	if (!initialized || w <= 0 || h <= 0 || size.x <= 1.f || size.y <= 1.f) {
+		return;
+	}
+	Vec ab = b.minus(a);
+	float len = std::sqrt(ab.x * ab.x + ab.y * ab.y);
+	if (len < 1e-3f) {
+		stamp(size, a, 4.f, -troughStrength, energyStrength);
+		return;
+	}
+	ab = ab.div(len);
+	const Vec normal(-ab.y, ab.x);
+	const float cellW = size.x / float(w);
+	const float cellH = size.y / float(h);
+	const float bodyRadiusPx = 3.1f;
+	const float ridgeOffsetPx = 3.8f;
+	const float effectRadiusPx = bodyRadiusPx + ridgeOffsetPx + 1.2f;
+	const float minX = std::min(a.x, b.x) - effectRadiusPx;
+	const float maxX = std::max(a.x, b.x) + effectRadiusPx;
+	const float minY = std::min(a.y, b.y) - effectRadiusPx;
+	const float maxY = std::max(a.y, b.y) + effectRadiusPx;
+	const int x0 = clamp(int(std::floor(minX / cellW)), 0, w - 1);
+	const int x1 = clamp(int(std::ceil(maxX / cellW)), 0, w - 1);
+	const int y0 = clamp(int(std::floor(minY / cellH)), 0, h - 1);
+	const int y1 = clamp(int(std::ceil(maxY / cellH)), 0, h - 1);
+	for (int gy = y0; gy <= y1; ++gy) {
+		const float cy = (float(gy) + 0.5f) * cellH;
+		for (int gx = x0; gx <= x1; ++gx) {
+			const float cx = (float(gx) + 0.5f) * cellW;
+			const Vec p(cx, cy);
+			const Vec ap = p.minus(a);
+			const float along = clamp(ap.x * ab.x + ap.y * ab.y, 0.f, len);
+			const Vec nearest = a.plus(ab.mult(along));
+			const float signedSide = (p.x - nearest.x) * normal.x + (p.y - nearest.y) * normal.y;
+			const float absSide = std::fabs(signedSide);
+			const float trough = smoother01(1.f - absSide / bodyRadiusPx);
+			const float ridge = smoother01(1.f - std::fabs(absSide - ridgeOffsetPx) / 2.4f);
+			const float e = smoother01(1.f - absSide / effectRadiusPx);
+			if (trough <= 0.f && ridge <= 0.f && e <= 0.f) {
+				continue;
+			}
+			const int idx = gy * w + gx;
+			depth[idx] = clamp(depth[idx] - troughStrength * trough + ridgeStrength * ridge, -1.f, 1.f);
+			energy[idx] = clamp(energy[idx] + energyStrength * e, 0.f, 1.f);
+		}
+	}
+}
+
+void WyrmSand::update(Vec size, double nowSec, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount) {
+	if (!std::isfinite(nowSec)) {
+		resetHistory();
+		return;
+	}
+	ensureField(size);
+	if (lastUpdateSec < 0.0 || !std::isfinite(lastUpdateSec)) {
+		lastUpdateSec = nowSec;
+	}
+	const float elapsed = clamp(float(nowSec - lastUpdateSec), 0.f, 0.25f);
+	lastUpdateSec = nowSec;
+	const float depthDecay = std::exp(-0.55f * elapsed);
+	const float energyDecay = std::exp(-3.5f * elapsed);
+	for (int i = 0, n = w * h; i < n; ++i) {
+		depth[i] *= depthDecay;
+		energy[i] *= energyDecay;
+	}
+	if (pathCount <= 1) {
+		previousPathCount = 0;
+		return;
+	}
+
+	const bool animateDisturbance = slitherAmount > 1e-4f;
+	if (animateDisturbance && previousPathCount == pathCount) {
+		const float troughStrength = (0.018f + 0.052f * slitherAmount) * std::min(1.f, elapsed * 60.f);
+		const float ridgeStrength = (0.010f + 0.032f * slitherAmount) * std::min(1.f, elapsed * 60.f);
+		for (int i = 0; i < pathCount - 1; ++i) {
+			const Vec delta = currentPath[i].minus(previousPath[i]);
+			const float motion = clamp(std::sqrt(delta.x * delta.x + delta.y * delta.y) / 7.f, 0.f, 1.f);
+			const float energyStrength = (0.015f + 0.075f * motion) * slitherAmount;
+			disturbSegment(size, currentPath[i], currentPath[i + 1], troughStrength, ridgeStrength, energyStrength);
+		}
+	}
+
+	for (int i = 0; i < pathCount; ++i) {
+		previousPath[i] = currentPath[i];
+	}
+	previousPathCount = pathCount;
+}
+
+void WyrmSand::drawFlatBackground(NVGcontext* vg, Vec size) const {
+	nvgBeginPath(vg);
+	nvgRect(vg, 0.f, 0.f, size.x, size.y);
+	nvgFillColor(vg, nvgRGBA(14, 14, 14, 205));
+	nvgFill(vg);
+}
+
+void WyrmSand::drawCells(NVGcontext* vg, Vec size) {
+	ensureField(size);
+	nvgBeginPath(vg);
+	nvgRect(vg, 0.f, 0.f, size.x, size.y);
+	nvgFillColor(vg, nvgRGBA(72, 50, 28, 224));
+	nvgFill(vg);
+	const float cellW = size.x / float(std::max(w, 1));
+	const float cellH = size.y / float(std::max(h, 1));
+	for (int gy = 0; gy < h; ++gy) {
+		for (int gx = 0; gx < w; ++gx) {
+			const int idx = gy * w + gx;
+			const float grain = baseNoise[idx];
+			const float d = clamp(depth[idx], -1.f, 1.f);
+			const float e = clamp(energy[idx], 0.f, 1.f);
+			float shade = 0.68f + 0.24f * grain + 0.28f * std::max(d, 0.f) - 0.35f * std::max(-d, 0.f);
+			shade = clamp(shade + 0.22f * e, 0.f, 1.25f);
+			const int r = clamp(int(118.f * shade + 30.f * e), 0, 255);
+			const int g = clamp(int(82.f * shade + 22.f * e), 0, 255);
+			const int b = clamp(int(42.f * shade + 10.f * grain), 0, 255);
+			const int alpha = clamp(116 + int(78.f * std::fabs(d)) + int(64.f * e), 72, 235);
+			nvgBeginPath(vg);
+			nvgRect(vg, float(gx) * cellW, float(gy) * cellH, cellW + 0.5f, cellH + 0.5f);
+			nvgFillColor(vg, nvgRGBA(r, g, b, alpha));
+			nvgFill(vg);
+			if (e > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
+				nvgBeginPath(vg);
+				nvgCircle(vg, (float(gx) + 0.5f) * cellW, (float(gy) + 0.5f) * cellH, 0.35f + 0.75f * e);
+				nvgFillColor(vg, nvgRGBA(245, 204, 126, int(90.f * e)));
+				nvgFill(vg);
+			}
+		}
+	}
+}
+
+void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled) {
+	if (!enabled) {
+		drawFlatBackground(vg, size);
+		return;
+	}
+	drawCells(vg, size);
+}

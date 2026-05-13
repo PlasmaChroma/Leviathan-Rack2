@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
 
 #include <chrono>
@@ -21,17 +22,9 @@ struct WyrmWaveEditor : TransparentWidget {
 	float visualSlitherPhase = 0.f;
 	float renderedSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
-	double lastSandUpdateSec = -1.0;
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
-	bool sandInitialized = false;
-	int sandW = 0;
-	int sandH = 0;
-	std::vector<float> sandDepth;
-	std::vector<float> sandEnergy;
-	std::vector<float> sandBaseNoise;
-	std::array<Vec, kWyrmPointCountMax> previousWyrmPath {};
-	int previousWyrmPathCount = 0;
+	WyrmSand sand;
 
 	explicit WyrmWaveEditor(Wyrm* m) {
 		module = m;
@@ -39,204 +32,6 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	bool sandEnabled() const {
 		return module && module->sandViewEnabled.load(std::memory_order_relaxed);
-	}
-
-	void resetSandHistory() {
-		previousWyrmPathCount = 0;
-		lastSandUpdateSec = -1.0;
-	}
-
-	void ensureSandField() {
-		const int targetW = clamp(int(box.size.x * 0.65f), 64, 128);
-		const int targetH = clamp(int(box.size.y * 0.65f), 32, 72);
-		if (sandInitialized && sandW == targetW && sandH == targetH) {
-			return;
-		}
-		sandW = targetW;
-		sandH = targetH;
-		const int cellCount = sandW * sandH;
-		sandDepth.assign(cellCount, 0.f);
-		sandEnergy.assign(cellCount, 0.f);
-		sandBaseNoise.resize(cellCount);
-		for (int y = 0; y < sandH; ++y) {
-			for (int x = 0; x < sandW; ++x) {
-				const uint32_t seed = 0x6d2b79f5u ^ uint32_t(x * 73856093) ^ uint32_t(y * 19349663);
-				const float grain = hashUnit(seed);
-				const float dune = 0.5f + 0.5f * std::sin(0.17f * float(x) + 0.31f * float(y));
-				sandBaseNoise[y * sandW + x] = 0.72f * grain + 0.28f * dune;
-			}
-		}
-		sandInitialized = true;
-		resetSandHistory();
-	}
-
-	void stampSand(Vec pos, float radiusPx, float depthDelta, float energyDelta) {
-		if (!sandInitialized || sandW <= 0 || sandH <= 0 || box.size.x <= 1.f || box.size.y <= 1.f) {
-			return;
-		}
-		const float cellW = box.size.x / float(sandW);
-		const float cellH = box.size.y / float(sandH);
-		const int x0 = clamp(int(std::floor((pos.x - radiusPx) / cellW)), 0, sandW - 1);
-		const int x1 = clamp(int(std::ceil((pos.x + radiusPx) / cellW)), 0, sandW - 1);
-		const int y0 = clamp(int(std::floor((pos.y - radiusPx) / cellH)), 0, sandH - 1);
-		const int y1 = clamp(int(std::ceil((pos.y + radiusPx) / cellH)), 0, sandH - 1);
-		const float invRadius = 1.f / std::max(radiusPx, 1e-4f);
-		for (int gy = y0; gy <= y1; ++gy) {
-			const float cy = (float(gy) + 0.5f) * cellH;
-			for (int gx = x0; gx <= x1; ++gx) {
-				const float cx = (float(gx) + 0.5f) * cellW;
-				const float dx = cx - pos.x;
-				const float dy = cy - pos.y;
-				const float dist = std::sqrt(dx * dx + dy * dy);
-				const float falloff = smoother01(1.f - dist * invRadius);
-				if (falloff <= 0.f) {
-					continue;
-				}
-				const int idx = gy * sandW + gx;
-				sandDepth[idx] = clamp(sandDepth[idx] + depthDelta * falloff, -1.f, 1.f);
-				sandEnergy[idx] = clamp(sandEnergy[idx] + energyDelta * falloff, 0.f, 1.f);
-			}
-		}
-	}
-
-	void disturbSandSegment(Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength) {
-		if (!sandInitialized || sandW <= 0 || sandH <= 0 || box.size.x <= 1.f || box.size.y <= 1.f) {
-			return;
-		}
-		Vec ab = b.minus(a);
-		float len = std::sqrt(ab.x * ab.x + ab.y * ab.y);
-		if (len < 1e-3f) {
-			stampSand(a, 4.f, -troughStrength, energyStrength);
-			return;
-		}
-		ab = ab.div(len);
-		const Vec normal(-ab.y, ab.x);
-		const float cellW = box.size.x / float(sandW);
-		const float cellH = box.size.y / float(sandH);
-		const float bodyRadiusPx = 3.1f;
-		const float ridgeOffsetPx = 3.8f;
-		const float effectRadiusPx = bodyRadiusPx + ridgeOffsetPx + 1.2f;
-		const float minX = std::min(a.x, b.x) - effectRadiusPx;
-		const float maxX = std::max(a.x, b.x) + effectRadiusPx;
-		const float minY = std::min(a.y, b.y) - effectRadiusPx;
-		const float maxY = std::max(a.y, b.y) + effectRadiusPx;
-		const int x0 = clamp(int(std::floor(minX / cellW)), 0, sandW - 1);
-		const int x1 = clamp(int(std::ceil(maxX / cellW)), 0, sandW - 1);
-		const int y0 = clamp(int(std::floor(minY / cellH)), 0, sandH - 1);
-		const int y1 = clamp(int(std::ceil(maxY / cellH)), 0, sandH - 1);
-		for (int gy = y0; gy <= y1; ++gy) {
-			const float cy = (float(gy) + 0.5f) * cellH;
-			for (int gx = x0; gx <= x1; ++gx) {
-				const float cx = (float(gx) + 0.5f) * cellW;
-				const Vec p(cx, cy);
-				const Vec ap = p.minus(a);
-				const float along = clamp(ap.x * ab.x + ap.y * ab.y, 0.f, len);
-				const Vec nearest = a.plus(ab.mult(along));
-				const float signedSide = (p.x - nearest.x) * normal.x + (p.y - nearest.y) * normal.y;
-				const float absSide = std::fabs(signedSide);
-				const float trough = smoother01(1.f - absSide / bodyRadiusPx);
-				const float ridge = smoother01(1.f - std::fabs(absSide - ridgeOffsetPx) / 2.4f);
-				const float energy = smoother01(1.f - absSide / effectRadiusPx);
-				if (trough <= 0.f && ridge <= 0.f && energy <= 0.f) {
-					continue;
-				}
-				const int idx = gy * sandW + gx;
-				sandDepth[idx] = clamp(sandDepth[idx] - troughStrength * trough + ridgeStrength * ridge, -1.f, 1.f);
-				sandEnergy[idx] = clamp(sandEnergy[idx] + energyStrength * energy, 0.f, 1.f);
-			}
-		}
-	}
-
-	void updateSand(double nowSec) {
-		if (!sandEnabled() || !std::isfinite(nowSec)) {
-			resetSandHistory();
-			return;
-		}
-		ensureSandField();
-		if (lastSandUpdateSec < 0.0 || !std::isfinite(lastSandUpdateSec)) {
-			lastSandUpdateSec = nowSec;
-		}
-		const float elapsed = clamp(float(nowSec - lastSandUpdateSec), 0.f, 0.25f);
-		lastSandUpdateSec = nowSec;
-		const float depthDecay = std::exp(-0.55f * elapsed);
-		const float energyDecay = std::exp(-3.5f * elapsed);
-		for (int i = 0, n = sandW * sandH; i < n; ++i) {
-			sandDepth[i] *= depthDecay;
-			sandEnergy[i] *= energyDecay;
-		}
-		if (!module || module->pointCount <= 1) {
-			previousWyrmPathCount = 0;
-			return;
-		}
-
-		const int count = clamp(module->pointCount, 2, kWyrmPointCountMax);
-		std::array<Vec, kWyrmPointCountMax> currentPath {};
-		for (int i = 0; i < count; ++i) {
-			currentPath[i] = Vec(pointX(i, count), yFromValue(displayWavePoint(i)));
-		}
-
-		const float slitherAmount = effectiveSlitherAmount();
-		const bool animateDisturbance = slitherAmount > 1e-4f;
-		if (animateDisturbance && previousWyrmPathCount == count) {
-			const float troughStrength = (0.018f + 0.052f * slitherAmount) * std::min(1.f, elapsed * 60.f);
-			const float ridgeStrength = (0.010f + 0.032f * slitherAmount) * std::min(1.f, elapsed * 60.f);
-			for (int i = 0; i < count - 1; ++i) {
-				const Vec delta = currentPath[i].minus(previousWyrmPath[i]);
-				const float motion = clamp(std::sqrt(delta.x * delta.x + delta.y * delta.y) / 7.f, 0.f, 1.f);
-				const float energyStrength = (0.015f + 0.075f * motion) * slitherAmount;
-				disturbSandSegment(currentPath[i], currentPath[i + 1], troughStrength, ridgeStrength, energyStrength);
-			}
-		}
-
-		for (int i = 0; i < count; ++i) {
-			previousWyrmPath[i] = currentPath[i];
-		}
-		previousWyrmPathCount = count;
-	}
-
-	void drawFlatBackground(NVGcontext* vg) const {
-		nvgBeginPath(vg);
-		nvgRect(vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillColor(vg, nvgRGBA(14, 14, 14, 205));
-		nvgFill(vg);
-	}
-
-	void drawSandBackground(NVGcontext* vg) {
-		if (!sandEnabled()) {
-			drawFlatBackground(vg);
-			return;
-		}
-		ensureSandField();
-		nvgBeginPath(vg);
-		nvgRect(vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillColor(vg, nvgRGBA(72, 50, 28, 224));
-		nvgFill(vg);
-		const float cellW = box.size.x / float(std::max(sandW, 1));
-		const float cellH = box.size.y / float(std::max(sandH, 1));
-		for (int gy = 0; gy < sandH; ++gy) {
-			for (int gx = 0; gx < sandW; ++gx) {
-				const int idx = gy * sandW + gx;
-				const float grain = sandBaseNoise[idx];
-				const float depth = clamp(sandDepth[idx], -1.f, 1.f);
-				const float energy = clamp(sandEnergy[idx], 0.f, 1.f);
-				float shade = 0.68f + 0.24f * grain + 0.28f * std::max(depth, 0.f) - 0.35f * std::max(-depth, 0.f);
-				shade = clamp(shade + 0.22f * energy, 0.f, 1.25f);
-				const int r = clamp(int(118.f * shade + 30.f * energy), 0, 255);
-				const int g = clamp(int(82.f * shade + 22.f * energy), 0, 255);
-				const int b = clamp(int(42.f * shade + 10.f * grain), 0, 255);
-				const int alpha = clamp(116 + int(78.f * std::fabs(depth)) + int(64.f * energy), 72, 235);
-				nvgBeginPath(vg);
-				nvgRect(vg, float(gx) * cellW, float(gy) * cellH, cellW + 0.5f, cellH + 0.5f);
-				nvgFillColor(vg, nvgRGBA(r, g, b, alpha));
-				nvgFill(vg);
-				if (energy > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
-					nvgBeginPath(vg);
-					nvgCircle(vg, (float(gx) + 0.5f) * cellW, (float(gy) + 0.5f) * cellH, 0.35f + 0.75f * energy);
-					nvgFillColor(vg, nvgRGBA(245, 204, 126, int(90.f * energy)));
-					nvgFill(vg);
-				}
-			}
-		}
 	}
 
 	float pointEdgeInset() const {
@@ -390,6 +185,28 @@ struct WyrmWaveEditor : TransparentWidget {
 		return module->resolveAgainstRocks(base, base + slitherOffsetForIndex(index), phase, clearance, phaseClearance);
 	}
 
+	void updateSand(double nowSec) {
+		if (!sandEnabled() || !std::isfinite(nowSec)) {
+			sand.resetHistory();
+			return;
+		}
+		if (!module || module->pointCount <= 1) {
+			std::array<Vec, kWyrmPointCountMax> emptyPath {};
+			sand.update(box.size, nowSec, emptyPath, 0, 0.f);
+			return;
+		}
+		const int count = clamp(module->pointCount, 2, kWyrmPointCountMax);
+		std::array<Vec, kWyrmPointCountMax> currentPath {};
+		for (int i = 0; i < count; ++i) {
+			currentPath[i] = Vec(pointX(i, count), yFromValue(displayWavePoint(i)));
+		}
+		sand.update(box.size, nowSec, currentPath, count, effectiveSlitherAmount());
+	}
+
+	void drawSandBackground(NVGcontext* vg) {
+		sand.draw(vg, box.size, sandEnabled());
+	}
+
 	int rockIndexAt(Vec pos) const {
 		if (!module) return -1;
 		for (int i = module->rockCount - 1; i >= 0; --i) {
@@ -445,8 +262,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		const Vec radius = rockPixelRadius(rock);
 		const float stampRadius = clamp(0.35f * std::max(radius.x, radius.y), 5.f, 18.f);
 		const bool liftMode = (dragRockMouseMode == ROCK_MOUSE_LIFTS);
-		stampSand(previousCenter, stampRadius, liftMode ? -0.025f : -0.075f, liftMode ? 0.04f : 0.18f);
-		stampSand(newCenter, stampRadius, liftMode ? -0.020f : 0.055f, liftMode ? 0.04f : 0.14f);
+		sand.stamp(box.size, previousCenter, stampRadius, liftMode ? -0.025f : -0.075f, liftMode ? 0.04f : 0.18f);
+		sand.stamp(box.size, newCenter, stampRadius, liftMode ? -0.020f : 0.055f, liftMode ? 0.04f : 0.14f);
 	}
 
 	Vec currentLocalMousePos() const {
@@ -475,7 +292,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			writeDisplayValue(idx);
 		}
 		lastIndex = idx;
-		stampSand(pos, 5.5f, -0.16f, 0.28f);
+		sand.stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -523,7 +340,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				else if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 					const Vec center = rockCenter(module->rocks[releasedRock]);
 					const Vec radius = rockPixelRadius(module->rocks[releasedRock]);
-					stampSand(center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
+					sand.stamp(box.size, center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
 				}
 				module->publishRockState();
 			}
