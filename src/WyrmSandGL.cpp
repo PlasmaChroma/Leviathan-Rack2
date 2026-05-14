@@ -3,6 +3,7 @@
 
 #include <array>
 #include <chrono>
+#include <string>
 #include <nanovg_gl.h>
 
 struct WyrmSandGlWidget final : widget::OpenGlWidget {
@@ -13,6 +14,82 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	int textureH = 0;
 	uint64_t uploadedRevision = 0;
 	double lastUiPhaseUpdateSec = -1.0;
+	GLuint bodyShaderProgram = 0;
+	GLint bodyShaderSoftnessLoc = -1;
+	bool bodyShaderInitAttempted = false;
+	bool bodyShaderReady = false;
+
+	static GLuint compileShader(GLenum type, const char* src) {
+		GLuint shader = glCreateShader(type);
+		if (!shader) return 0;
+		glShaderSource(shader, 1, &src, nullptr);
+		glCompileShader(shader);
+		GLint ok = GL_FALSE;
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+		if (ok != GL_TRUE) {
+			glDeleteShader(shader);
+			return 0;
+		}
+		return shader;
+	}
+
+	void ensureBodyShader() {
+		if (bodyShaderInitAttempted) return;
+		bodyShaderInitAttempted = true;
+		static const char* kVs = R"GLSL(
+			#version 120
+			varying vec4 vColor;
+			varying vec2 vUv;
+			void main() {
+				gl_Position = ftransform();
+				vColor = gl_Color;
+				vUv = gl_MultiTexCoord0.xy;
+			}
+		)GLSL";
+		static const char* kFs = R"GLSL(
+			#version 120
+			varying vec4 vColor;
+			varying vec2 vUv;
+			uniform float uSoftness;
+			void main() {
+				float edge = abs(vUv.x * 2.0 - 1.0);
+				float inner = clamp(1.0 - uSoftness, 0.0, 1.0);
+				float aa = 1.0 - smoothstep(inner, 1.0, edge);
+				gl_FragColor = vec4(vColor.rgb, vColor.a * aa);
+			}
+		)GLSL";
+		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
+		GLuint fs = compileShader(GL_FRAGMENT_SHADER, kFs);
+		if (!vs || !fs) {
+			if (vs) glDeleteShader(vs);
+			if (fs) glDeleteShader(fs);
+			return;
+		}
+		bodyShaderProgram = glCreateProgram();
+		if (!bodyShaderProgram) {
+			glDeleteShader(vs);
+			glDeleteShader(fs);
+			return;
+		}
+		glAttachShader(bodyShaderProgram, vs);
+		glAttachShader(bodyShaderProgram, fs);
+		glLinkProgram(bodyShaderProgram);
+		glDeleteShader(vs);
+		glDeleteShader(fs);
+		GLint linkOk = GL_FALSE;
+		glGetProgramiv(bodyShaderProgram, GL_LINK_STATUS, &linkOk);
+		if (linkOk != GL_TRUE) {
+			glDeleteProgram(bodyShaderProgram);
+			bodyShaderProgram = 0;
+			return;
+		}
+		bodyShaderSoftnessLoc = glGetUniformLocation(bodyShaderProgram, "uSoftness");
+		bodyShaderReady = (bodyShaderSoftnessLoc >= 0);
+		if (!bodyShaderReady) {
+			glDeleteProgram(bodyShaderProgram);
+			bodyShaderProgram = 0;
+		}
+	}
 
 	void advanceUiSlitherPhase() {
 		if (!module) return;
@@ -164,7 +241,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glEnd();
 	}
 
-	static void drawBodyStrip(const std::vector<Vec>& pts, float widthPx, const NVGcolor& color) {
+	static void drawBodyStrip(const std::vector<Vec>& pts, float widthPx, const NVGcolor& color, bool shaderPath) {
 		if (pts.size() < 2) return;
 		auto safeNormalize = [](const Vec& v, const Vec& fallback) -> Vec {
 			const float len = std::sqrt(v.x * v.x + v.y * v.y);
@@ -189,7 +266,21 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			const Vec miterOff = j.mult(halfW * miter);
 			const Vec bevelOff = nNext.mult(halfW);
 			const float t = clamp((turnDot - 0.12f) / 0.18f, 0.f, 1.f);
-			return bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+			Vec off = bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+			// Corner safety: if blended join points against either adjacent normal, force bevel.
+			if (off.x * nPrev.x + off.y * nPrev.y <= 0.02f * halfW ||
+				off.x * nNext.x + off.y * nNext.y <= 0.02f * halfW) {
+				off = bevelOff;
+			}
+			const float prevLen = pts[i].minus(pts[i - 1]).norm();
+			const float nextLen = pts[i + 1].minus(pts[i]).norm();
+			const float localLen = std::max(1e-4f, std::min(prevLen, nextLen));
+			const float offLen = off.norm();
+			const float maxOff = std::max(halfW, 0.42f * localLen);
+			if (offLen > maxOff && offLen > 1e-4f) {
+				off = off.mult(maxOff / offLen);
+			}
+			return off;
 		};
 		const float halfW = 0.5f * widthPx;
 		std::vector<Vec> off(pts.size());
@@ -198,19 +289,34 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glColor4f(color.r, color.g, color.b, color.a);
 		glBegin(GL_QUADS);
 		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			Vec seg = pts[i + 1].minus(pts[i]);
+			const float segLen = seg.norm();
+			if (segLen < 1e-4f) continue;
+			const Vec t = seg.div(segLen);
+			const float extend = std::min(0.55f, 0.22f * halfW + 0.10f);
+			const Vec ext = t.mult(extend);
+
 			const Vec aL = pts[i].minus(off[i]);
 			const Vec aR = pts[i].plus(off[i]);
 			const Vec bL = pts[i + 1].minus(off[i + 1]);
 			const Vec bR = pts[i + 1].plus(off[i + 1]);
-			glVertex2f(aL.x, aL.y);
-			glVertex2f(aR.x, aR.y);
-			glVertex2f(bR.x, bR.y);
-			glVertex2f(bL.x, bL.y);
+			const Vec aLe = aL.minus(ext);
+			const Vec aRe = aR.minus(ext);
+			const Vec bLe = bL.plus(ext);
+			const Vec bRe = bR.plus(ext);
+			if (shaderPath) glTexCoord2f(0.f, 0.f);
+			glVertex2f(aLe.x, aLe.y);
+			if (shaderPath) glTexCoord2f(1.f, 0.f);
+			glVertex2f(aRe.x, aRe.y);
+			if (shaderPath) glTexCoord2f(1.f, 1.f);
+			glVertex2f(bRe.x, bRe.y);
+			if (shaderPath) glTexCoord2f(0.f, 1.f);
+			glVertex2f(bLe.x, bLe.y);
 		}
 		glEnd();
 	}
 
-	static void drawBodyStripFeather(const std::vector<Vec>& pts, float widthPx, float featherPx, const NVGcolor& color, float edgeAlphaScale) {
+	static void drawBodyStripFeather(const std::vector<Vec>& pts, float widthPx, float featherPx, const NVGcolor& color, float edgeAlphaScale, bool shaderPath) {
 		if (pts.size() < 2 || featherPx <= 1e-4f) return;
 		auto safeNormalize = [](const Vec& v, const Vec& fallback) -> Vec {
 			const float len = std::sqrt(v.x * v.x + v.y * v.y);
@@ -235,7 +341,20 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			const Vec miterOff = j.mult(halfW * miter);
 			const Vec bevelOff = nNext.mult(halfW);
 			const float t = clamp((turnDot - 0.12f) / 0.18f, 0.f, 1.f);
-			return bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+			Vec off = bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+			if (off.x * nPrev.x + off.y * nPrev.y <= 0.02f * halfW ||
+				off.x * nNext.x + off.y * nNext.y <= 0.02f * halfW) {
+				off = bevelOff;
+			}
+			const float prevLen = pts[i].minus(pts[i - 1]).norm();
+			const float nextLen = pts[i + 1].minus(pts[i]).norm();
+			const float localLen = std::max(1e-4f, std::min(prevLen, nextLen));
+			const float offLen = off.norm();
+			const float maxOff = std::max(halfW, 0.42f * localLen);
+			if (offLen > maxOff && offLen > 1e-4f) {
+				off = off.mult(maxOff / offLen);
+			}
+			return off;
 		};
 		const float edgeA = clamp(color.a * edgeAlphaScale, 0.f, 1.f);
 		const float innerW = 0.5f * widthPx;
@@ -250,48 +369,78 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		// Left feather quads.
 		glBegin(GL_QUADS);
 		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			Vec seg = pts[i + 1].minus(pts[i]);
+			const float segLen = seg.norm();
+			if (segLen < 1e-4f) continue;
+			const Vec t = seg.div(segLen);
+			const float extend = std::min(0.50f, 0.18f * innerW + 0.08f);
+			const Vec ext = t.mult(extend);
+
 			const Vec aI = pts[i].minus(innerOff[i]);
 			const Vec bI = pts[i + 1].minus(innerOff[i + 1]);
 			const Vec aO = pts[i].minus(outerOff[i]);
 			const Vec bO = pts[i + 1].minus(outerOff[i + 1]);
+			const Vec aIe = aI.minus(ext);
+			const Vec bIe = bI.plus(ext);
+			const Vec aOe = aO.minus(ext);
+			const Vec bOe = bO.plus(ext);
 			glColor4f(color.r, color.g, color.b, edgeA);
-			glVertex2f(aI.x, aI.y);
+			if (shaderPath) glTexCoord2f(0.f, 0.f);
+			glVertex2f(aIe.x, aIe.y);
 			glColor4f(color.r, color.g, color.b, edgeA);
-			glVertex2f(bI.x, bI.y);
+			if (shaderPath) glTexCoord2f(0.f, 1.f);
+			glVertex2f(bIe.x, bIe.y);
 			glColor4f(color.r, color.g, color.b, 0.f);
-			glVertex2f(bO.x, bO.y);
+			if (shaderPath) glTexCoord2f(1.f, 1.f);
+			glVertex2f(bOe.x, bOe.y);
 			glColor4f(color.r, color.g, color.b, 0.f);
-			glVertex2f(aO.x, aO.y);
+			if (shaderPath) glTexCoord2f(1.f, 0.f);
+			glVertex2f(aOe.x, aOe.y);
 		}
 		glEnd();
 
 		// Right feather quads.
 		glBegin(GL_QUADS);
 		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			Vec seg = pts[i + 1].minus(pts[i]);
+			const float segLen = seg.norm();
+			if (segLen < 1e-4f) continue;
+			const Vec t = seg.div(segLen);
+			const float extend = std::min(0.50f, 0.18f * innerW + 0.08f);
+			const Vec ext = t.mult(extend);
+
 			const Vec aI = pts[i].plus(innerOff[i]);
 			const Vec bI = pts[i + 1].plus(innerOff[i + 1]);
 			const Vec aO = pts[i].plus(outerOff[i]);
 			const Vec bO = pts[i + 1].plus(outerOff[i + 1]);
+			const Vec aIe = aI.minus(ext);
+			const Vec bIe = bI.plus(ext);
+			const Vec aOe = aO.minus(ext);
+			const Vec bOe = bO.plus(ext);
 			glColor4f(color.r, color.g, color.b, edgeA);
-			glVertex2f(aI.x, aI.y);
+			if (shaderPath) glTexCoord2f(0.f, 0.f);
+			glVertex2f(aIe.x, aIe.y);
 			glColor4f(color.r, color.g, color.b, edgeA);
-			glVertex2f(bI.x, bI.y);
+			if (shaderPath) glTexCoord2f(0.f, 1.f);
+			glVertex2f(bIe.x, bIe.y);
 			glColor4f(color.r, color.g, color.b, 0.f);
-			glVertex2f(bO.x, bO.y);
+			if (shaderPath) glTexCoord2f(1.f, 1.f);
+			glVertex2f(bOe.x, bOe.y);
 			glColor4f(color.r, color.g, color.b, 0.f);
-			glVertex2f(aO.x, aO.y);
+			if (shaderPath) glTexCoord2f(1.f, 0.f);
+			glVertex2f(aOe.x, aOe.y);
 		}
 		glEnd();
 	}
 
-	void drawBodyGl(Vec size) {
+	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
 		if (!module || module->pointCount < 2) return;
-		const int baseSampleCount = std::max(module->pointCount, std::min(768, std::max(128, module->pointCount * 4)));
+		const int baseSampleCount = std::max(module->pointCount, std::min(1536, std::max(256, module->pointCount * 8)));
 		const float zoom = std::max(1.f, getAbsoluteZoom());
 		const float drawWidth = std::max(1.f, size.x - 4.4f);
 		// Keep roughly <= 1px phase step in screen-space at high zoom to avoid visible strip aliasing.
-		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom));
-		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 4096);
+		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * 1.75f));
+		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 8192);
 		std::array<float, kWyrmPointCountMax> bodyPoints {};
 		for (int i = 0; i < module->pointCount; ++i) {
 			bodyPoints[i] = module->getWavePoint(i);
@@ -303,16 +452,26 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			samples.push_back(bodyPointForPhase(module, bodyPoints, phase, size));
 		}
 
-		drawBodyStrip(samples, 3.75f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f));
-		drawBodyStripFeather(samples, 3.75f, 0.66f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f);
-		drawBodyStripFeather(samples, 3.75f, 1.35f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f);
-		drawBodyStrip(samples, 2.45f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f));
-		drawBodyStripFeather(samples, 2.45f, 0.52f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f);
-		drawBodyStrip(samples, 1.08f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f));
-		drawBodyStripFeather(samples, 1.08f, 0.38f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f);
+		if (includeBase) {
+			drawBodyStrip(samples, 3.75f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), shaderPath);
+			drawBodyStripFeather(samples, 3.75f, 0.66f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f, false);
+			drawBodyStripFeather(samples, 3.75f, 1.35f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f, false);
+			drawBodyStrip(samples, 2.45f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), shaderPath);
+			drawBodyStripFeather(samples, 2.45f, 0.52f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f, false);
+			drawBodyStrip(samples, 1.08f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), shaderPath);
+			drawBodyStripFeather(samples, 1.08f, 0.38f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f, false);
+		}
+		if (includeGlow) {
+			drawBodyStrip(samples, 5.10f, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f), true);
+			drawBodyStripFeather(samples, 5.10f, 1.45f, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f), 0.34f, false);
+		}
 	}
 
 	~WyrmSandGlWidget() override {
+		if (bodyShaderProgram != 0) {
+			glDeleteProgram(bodyShaderProgram);
+			bodyShaderProgram = 0;
+		}
 		if (texture != 0) {
 			glDeleteTextures(1, &texture);
 			texture = 0;
@@ -359,6 +518,11 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glMatrixMode(GL_MODELVIEW);
 		glPushMatrix();
 		glLoadIdentity();
+		const int mode = module->renderMode.load(std::memory_order_relaxed);
+		const bool useShdr = (mode == WYRM_RENDER_OPENGL_SHDR);
+		if (useShdr) {
+			ensureBodyShader();
+		}
 
 		if (module->sandViewEnabled.load(std::memory_order_relaxed)) {
 			const int detailSetting = module->sandDetail.load(std::memory_order_relaxed);
@@ -403,7 +567,19 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 
 		drawHoverGuidesGl(box.size);
 		drawWaveColumnsGl(box.size);
-		drawBodyGl(box.size);
+		const bool shaderPath = useShdr && bodyShaderReady;
+		if (shaderPath) {
+			glUseProgram(bodyShaderProgram);
+			glUniform1f(bodyShaderSoftnessLoc, 0.22f);
+		}
+		drawBodyGl(box.size, shaderPath, true, false);
+		if (shaderPath) {
+			glUniform1f(bodyShaderSoftnessLoc, 0.50f);
+			drawBodyGl(box.size, true, false, true);
+		}
+		if (shaderPath) {
+			glUseProgram(0);
+		}
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();
