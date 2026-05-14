@@ -18,6 +18,10 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	GLint bodyShaderSoftnessLoc = -1;
 	bool bodyShaderInitAttempted = false;
 	bool bodyShaderReady = false;
+	GLuint bodyRtFbo = 0;
+	GLuint bodyRtTex = 0;
+	int bodyRtW = 0;
+	int bodyRtH = 0;
 
 	static GLuint compileShader(GLenum type, const char* src) {
 		GLuint shader = glCreateShader(type);
@@ -89,6 +93,49 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
 		}
+	}
+
+	void ensureBodyRenderTarget(int w, int h) {
+		w = std::max(1, w);
+		h = std::max(1, h);
+		if (bodyRtTex != 0 && bodyRtW == w && bodyRtH == h && bodyRtFbo != 0) {
+			return;
+		}
+		GLint previousFbo = 0;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+		if (bodyRtFbo != 0) {
+			glDeleteFramebuffers(1, &bodyRtFbo);
+			bodyRtFbo = 0;
+		}
+		if (bodyRtTex != 0) {
+			glDeleteTextures(1, &bodyRtTex);
+			bodyRtTex = 0;
+		}
+		glGenTextures(1, &bodyRtTex);
+		glBindTexture(GL_TEXTURE_2D, bodyRtTex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		glGenFramebuffers(1, &bodyRtFbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, bodyRtFbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bodyRtTex, 0);
+		const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFbo));
+		if (status != GL_FRAMEBUFFER_COMPLETE) {
+			glDeleteFramebuffers(1, &bodyRtFbo);
+			bodyRtFbo = 0;
+			glDeleteTextures(1, &bodyRtTex);
+			bodyRtTex = 0;
+			bodyRtW = 0;
+			bodyRtH = 0;
+			return;
+		}
+		bodyRtW = w;
+		bodyRtH = h;
 	}
 
 	void advanceUiSlitherPhase() {
@@ -467,7 +514,43 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 	}
 
+	void drawBodyMaskGl(Vec size) {
+		if (!module || module->pointCount < 2) return;
+		const int baseSampleCount = std::max(module->pointCount, std::min(1536, std::max(256, module->pointCount * 8)));
+		const float zoom = std::max(1.f, getAbsoluteZoom());
+		const float drawWidth = std::max(1.f, size.x - 4.4f);
+		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * 1.75f));
+		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 8192);
+		std::array<float, kWyrmPointCountMax> bodyPoints {};
+		for (int i = 0; i < module->pointCount; ++i) {
+			bodyPoints[i] = module->getWavePoint(i);
+		}
+		std::vector<Vec> samples;
+		samples.reserve(size_t(sampleCount));
+		for (int i = 0; i < sampleCount; ++i) {
+			const float phase = (float(i) + 0.5f) / float(sampleCount);
+			samples.push_back(bodyPointForPhase(module, bodyPoints, phase, size));
+		}
+
+		// Phase 5B refined: soft alpha mask (core + graded fringe), not binary coverage.
+		// This preserves contour detail better when compositing back to panel space.
+		drawBodyStrip(samples, 3.15f, nvgRGBAf(1.f, 1.f, 1.f, 0.88f), false);
+		drawBodyStrip(samples, 1.85f, nvgRGBAf(1.f, 1.f, 1.f, 0.74f), false);
+		drawBodyStrip(samples, 1.18f, nvgRGBAf(1.f, 1.f, 1.f, 1.00f), false);
+		drawBodyStripFeather(samples, 3.15f, 0.82f, nvgRGBAf(1.f, 1.f, 1.f, 0.44f), 0.78f, false);
+		drawBodyStripFeather(samples, 1.85f, 0.52f, nvgRGBAf(1.f, 1.f, 1.f, 0.40f), 0.72f, false);
+		drawBodyStripFeather(samples, 3.15f, 1.45f, nvgRGBAf(1.f, 1.f, 1.f, 0.20f), 0.58f, false);
+	}
+
 	~WyrmSandGlWidget() override {
+		if (bodyRtFbo != 0) {
+			glDeleteFramebuffers(1, &bodyRtFbo);
+			bodyRtFbo = 0;
+		}
+		if (bodyRtTex != 0) {
+			glDeleteTextures(1, &bodyRtTex);
+			bodyRtTex = 0;
+		}
 		if (bodyShaderProgram != 0) {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
@@ -565,20 +648,107 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			}
 		}
 
-		drawHoverGuidesGl(box.size);
 		drawWaveColumnsGl(box.size);
+		drawHoverGuidesGl(box.size);
 		const bool shaderPath = useShdr && bodyShaderReady;
-		if (shaderPath) {
-			glUseProgram(bodyShaderProgram);
-			glUniform1f(bodyShaderSoftnessLoc, 0.22f);
+		const bool useBodyRt = useShdr;
+		// SHDR path: supersample mask RT, then downsample on composite for smoother body edges.
+		const float rtScale = useShdr ? 1.5f : 1.0f;
+		const int rtW = std::max(1, int(std::lround(box.size.x * rtScale)));
+		const int rtH = std::max(1, int(std::lround(box.size.y * rtScale)));
+		if (useBodyRt) {
+			ensureBodyRenderTarget(rtW, rtH);
 		}
-		drawBodyGl(box.size, shaderPath, true, false);
-		if (shaderPath) {
-			glUniform1f(bodyShaderSoftnessLoc, 0.50f);
-			drawBodyGl(box.size, true, false, true);
+		if (useBodyRt && bodyRtFbo != 0 && bodyRtTex != 0) {
+			GLint previousFbo = 0;
+			glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+			const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+			const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+			if (scissorWasEnabled) glDisable(GL_SCISSOR_TEST);
+			if (cullWasEnabled) glDisable(GL_CULL_FACE);
+
+			glBindFramebuffer(GL_FRAMEBUFFER, bodyRtFbo);
+			glViewport(0, 0, bodyRtW, bodyRtH);
+			glClearColor(0.f, 0.f, 0.f, 0.f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glMatrixMode(GL_PROJECTION);
+			glPushMatrix();
+			glLoadIdentity();
+			glOrtho(0.0, bodyRtW, bodyRtH, 0.0, -1.0, 1.0);
+			glMatrixMode(GL_MODELVIEW);
+			glPushMatrix();
+			glLoadIdentity();
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glColor4f(1.f, 1.f, 1.f, 1.f);
+			drawBodyMaskGl(Vec(float(bodyRtW), float(bodyRtH)));
+			glMatrixMode(GL_MODELVIEW);
+			glPopMatrix();
+			glMatrixMode(GL_PROJECTION);
+			glPopMatrix();
+			glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFbo));
+			glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+
+			glEnable(GL_TEXTURE_2D);
+			glBindTexture(GL_TEXTURE_2D, bodyRtTex);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			// Composite color layers from the mask in main framebuffer.
+			glColor4f(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 0.68f);
+			glBegin(GL_TRIANGLE_STRIP);
+			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
+			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
+			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
+			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
+			glEnd();
+
+			glColor4f(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 0.66f);
+			glBegin(GL_TRIANGLE_STRIP);
+			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
+			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
+			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
+			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
+			glEnd();
+
+			glColor4f(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 0.72f);
+			glBegin(GL_TRIANGLE_STRIP);
+			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
+			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
+			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
+			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
+			glEnd();
+			if (useShdr) {
+				// SHDR polish taps.
+				glColor4f(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 0.13f);
+				const float dx = 0.6f / std::max(1.f, box.size.x);
+				const float dy = 0.6f / std::max(1.f, box.size.y);
+				glBegin(GL_TRIANGLE_STRIP);
+				glTexCoord2f(0.f + dx, 1.f); glVertex2f(0.f, 0.f);
+				glTexCoord2f(1.f + dx, 1.f); glVertex2f(box.size.x, 0.f);
+				glTexCoord2f(0.f + dx, 0.f); glVertex2f(0.f, box.size.y);
+				glTexCoord2f(1.f + dx, 0.f); glVertex2f(box.size.x, box.size.y);
+				glEnd();
+				glBegin(GL_TRIANGLE_STRIP);
+				glTexCoord2f(0.f, 1.f - dy); glVertex2f(0.f, 0.f);
+				glTexCoord2f(1.f, 1.f - dy); glVertex2f(box.size.x, 0.f);
+				glTexCoord2f(0.f, 0.f - dy); glVertex2f(0.f, box.size.y);
+				glTexCoord2f(1.f, 0.f - dy); glVertex2f(box.size.x, box.size.y);
+				glEnd();
+			}
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glDisable(GL_TEXTURE_2D);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			if (scissorWasEnabled) glEnable(GL_SCISSOR_TEST);
+			if (cullWasEnabled) glEnable(GL_CULL_FACE);
 		}
-		if (shaderPath) {
-			glUseProgram(0);
+		else {
+			if (shaderPath) {
+				glUseProgram(bodyShaderProgram);
+				glUniform1f(bodyShaderSoftnessLoc, 0.22f);
+			}
+			drawBodyGl(box.size, shaderPath, true, false);
+			if (shaderPath) {
+				glUseProgram(0);
+			}
 		}
 
 		glMatrixMode(GL_MODELVIEW);

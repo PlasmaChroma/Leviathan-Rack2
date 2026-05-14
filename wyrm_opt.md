@@ -244,6 +244,97 @@ Open questions:
 - Whether GL body should be part of `OpenGL Texture` sand mode or a separate `Body Backend` setting.
 - Whether body GL should be enabled automatically when sand GL is active.
 
+### Phase 5B: GL/SHDR Body Mask Composite
+
+The direct GL body renderer is fast, but visual parity with NanoVG is hard to reach by tuning per-segment quads, joins, feathers, and oversampling. Sharp turns during slither can expose small corner artifacts, and shader feathering can create tangent-looking bars when it interacts with overlapping geometry.
+
+The next rendering direction should be an offscreen body-mask pipeline. The goal is to keep one stable geometry source and move smoothness into compositing, where it is easier to reason about and cheaper to tune.
+
+Proposed pipeline:
+
+```text
+1. Build the same CPU centerline used by NanoVG/direct GL.
+2. Render body coverage into an offscreen single-channel or alpha-only mask.
+3. Composite the mask back into the editor with the Wyrm body colors.
+4. Keep waveform columns, hover crosshairs, rocks, and sand on their current direct paths.
+5. Use OpenGL mode for the basic mask composite.
+6. Use SHDR mode for extra polish: wider glow taps, softer edge shaping, or small multi-sample composite.
+```
+
+Important distinction from the first failed RT attempt:
+
+- The RT should be a body mask, not the full colored layered waveform.
+- Color layering should happen during composite in the main framebuffer.
+- The first rollout should be SHDR-only until the body is verified visible and stable.
+- Normal `OpenGL` should stay on the known direct draw path while SHDR proves the mask path.
+- The direct GL renderer should remain as the fallback if FBO allocation, shader compile, or mask composite fails.
+
+Suggested implementation steps:
+
+1. Add a hidden/internal `useBodyMaskComposite` flag enabled only for `OpenGL SHDR`.
+2. Allocate a body-mask FBO sized from the editor bounds; start at full resolution for correctness, then test `0.75x` or `0.5x`.
+3. Render only opaque body coverage into the mask using conservative core geometry; do not draw feathers into the mask initially.
+4. Composite the mask with a simple textured quad and known blend state.
+5. Add one SHDR-only composite shader that maps mask alpha to the existing three body colors.
+6. Add optional glow taps only after the plain mask path matches direct GL placement.
+7. Move `OpenGL` mode to the mask path only after SHDR has stable body visibility, correct layering, and no sharp-turn cutouts.
+
+Layering target:
+
+```text
+sand/background
+midline
+purple waveform columns
+hover crosshairs
+body mask composite
+rocks / drag UI, if these remain NanoVG-side
+```
+
+The body should cover crosshairs, but crosshairs should stay above purple waveform columns. This matches the current GL/SHDR direct ordering.
+
+Blend/state requirements:
+
+- Save and restore framebuffer binding, viewport, projection/modelview matrices, blend function, texture binding, shader program, scissor, and cull state.
+- Clear the mask RT to transparent black before drawing coverage.
+- Verify the mask pass is visible with a temporary debug tint before adding the final composite shader.
+- Avoid relying on inherited Rack/NanoVG GL state.
+
+Telemetry:
+
+```text
+BodyP us     CPU centerline/geometry prep
+BodyGL us    direct GL body draw
+BodyRT us    mask render target pass
+BodyCmp us   mask composite pass
+```
+
+These can be temporary while comparing direct GL, SHDR mask, and NanoVG.
+
+Acceptance criteria for this phase:
+
+- SHDR body is always visible after toggling renderer modes.
+- Body aligns exactly with NanoVG/direct GL phase and slither speed.
+- No tangent bars, missing body, or corner cutouts on sharp waveforms.
+- Crosshairs remain above purple columns and under the body.
+- `SGL us`/body GL timing remains low enough that the mode is still a clear UI win over NanoVG.
+- Direct `OpenGL` remains available as a stable fallback while SHDR mask work is in progress.
+
+Implementation notes:
+
+- Start with `GL_RGBA8` for the mask RT even if only alpha is needed. It is less elegant than `GL_R8`/`GL_ALPHA`, but it is more likely to work across Rack/OpenGL compatibility contexts. Store coverage in alpha and write white RGB only for debug visibility.
+- Use `GL_LINEAR` filtering and `GL_CLAMP_TO_EDGE` on the mask texture. Disable mipmaps.
+- Start at full editor resolution. Only test `0.75x` or `0.5x` after the full-res mask is visibly correct and stable.
+- First mask draw should use simple core body coverage only. Do not include the current feather quads, glow pass, or shader UV falloff in the mask.
+- Mask geometry should initially be conservative: a single body width close to the current middle/wide layer, using the known direct-GL centerline. Prefer fewer moving parts over visual richness for the first proof.
+- Composite shader input should be `sampler2D uMask`, `vec2 uTexel`, and a small set of color/width/softness constants. The first version can simply sample mask alpha and emit the existing body color stack approximation.
+- SHDR polish should be in the composite shader, not in the mask draw. Use neighboring alpha taps to derive edge softness/glow, for example center alpha plus horizontal/vertical taps. This keeps tangent-space UV artifacts out of the geometry pass.
+- Normal `OpenGL` should not use the mask composite until SHDR proves the path. When it does move over, use the same mask with fewer taps or a cheaper composite shader.
+- Add a temporary debug view that composites the raw mask as white alpha over the editor. This should be hidden/internal or only present while developing the feature.
+- Add a temporary visual fallback indicator only in logs/telemetry, not in the user-facing menu. If FBO/shader setup fails, direct GL should draw without changing the selected renderer mode.
+- Clean up or isolate the currently disabled RT code before reattempting the mask path. The next implementation should not reuse the colored-body RT composite as-is.
+- State handling should be explicit: save/restore framebuffer binding, viewport, blend function, active texture/texture binding, shader program, matrix mode/stacks, scissor, and cull state around mask draw and composite.
+- Validate in this order: mask debug visible, mask aligns with direct GL, mask composite matches body position, SHDR edge polish enabled, downsample tested, normal OpenGL optionally migrated.
+
 ### Phase 6: Waveform Column Cache Or GL Batch
 
 Waveform columns only draw when sand is off. They are now batched in NanoVG, but still CPU/NanoVG.
@@ -278,7 +369,9 @@ This could reduce `SUp us`, but it adds GL lifecycle and fallback complexity. It
 4. Promote body geometry to a persistent cache.
 5. Tune body sample count policy.
 6. Prototype GL triangle-strip body renderer.
-7. Revisit GPU sand feedback only if `SUp us` remains high after the above.
+7. Prototype SHDR-only body mask composite.
+8. Move normal OpenGL to the mask composite only after SHDR is stable.
+9. Revisit GPU sand feedback only if `SUp us` remains high after the above.
 
 ## Acceptance Criteria
 
@@ -296,6 +389,7 @@ This could reduce `SUp us`, but it adds GL lifecycle and fallback complexity. It
 - Body geometry caching can go stale unless versioning is explicit.
 - Lower body sample counts can create visible faceting around rocks or sharp waveforms.
 - GL triangle strips need careful normal joins to avoid spikes at sharp corners.
+- Body mask compositing can fail invisibly if framebuffer, viewport, blend, or shader state is inherited incorrectly.
 - GPU sand feedback can be fragile in Rack/OpenGL lifecycle paths.
 
 ## Notes
