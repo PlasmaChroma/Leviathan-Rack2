@@ -166,25 +166,120 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 
 	static void drawBodyStrip(const std::vector<Vec>& pts, float widthPx, const NVGcolor& color) {
 		if (pts.size() < 2) return;
+		auto safeNormalize = [](const Vec& v, const Vec& fallback) -> Vec {
+			const float len = std::sqrt(v.x * v.x + v.y * v.y);
+			if (len < 1e-4f) return fallback;
+			return v.div(len);
+		};
+		auto segmentNormal = [&](size_t a, size_t b) -> Vec {
+			const Vec t = safeNormalize(pts[b].minus(pts[a]), Vec(1.f, 0.f));
+			return Vec(-t.y, t.x);
+		};
+		auto joinOffset = [&](size_t i, float halfW) -> Vec {
+			if (i == 0) return segmentNormal(0, 1).mult(halfW);
+			if (i + 1 >= pts.size()) return segmentNormal(pts.size() - 2, pts.size() - 1).mult(halfW);
+			const Vec tPrev = safeNormalize(pts[i].minus(pts[i - 1]), Vec(1.f, 0.f));
+			const Vec tNext = safeNormalize(pts[i + 1].minus(pts[i]), tPrev);
+			const Vec nPrev = Vec(-tPrev.y, tPrev.x);
+			const Vec nNext = Vec(-tNext.y, tNext.x);
+			const float turnDot = tPrev.x * tNext.x + tPrev.y * tNext.y;
+			const Vec j = safeNormalize(nPrev.plus(nNext), nNext);
+			const float denom = std::max(0.80f, std::abs(j.x * nNext.x + j.y * nNext.y));
+			const float miter = std::min(1.18f, 1.f / denom);
+			const Vec miterOff = j.mult(halfW * miter);
+			const Vec bevelOff = nNext.mult(halfW);
+			const float t = clamp((turnDot - 0.12f) / 0.18f, 0.f, 1.f);
+			return bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+		};
+		const float halfW = 0.5f * widthPx;
+		std::vector<Vec> off(pts.size());
+		for (size_t i = 0; i < pts.size(); ++i) off[i] = joinOffset(i, halfW);
+
 		glColor4f(color.r, color.g, color.b, color.a);
-		glBegin(GL_TRIANGLE_STRIP);
+		glBegin(GL_QUADS);
+		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			const Vec aL = pts[i].minus(off[i]);
+			const Vec aR = pts[i].plus(off[i]);
+			const Vec bL = pts[i + 1].minus(off[i + 1]);
+			const Vec bR = pts[i + 1].plus(off[i + 1]);
+			glVertex2f(aL.x, aL.y);
+			glVertex2f(aR.x, aR.y);
+			glVertex2f(bR.x, bR.y);
+			glVertex2f(bL.x, bL.y);
+		}
+		glEnd();
+	}
+
+	static void drawBodyStripFeather(const std::vector<Vec>& pts, float widthPx, float featherPx, const NVGcolor& color, float edgeAlphaScale) {
+		if (pts.size() < 2 || featherPx <= 1e-4f) return;
+		auto safeNormalize = [](const Vec& v, const Vec& fallback) -> Vec {
+			const float len = std::sqrt(v.x * v.x + v.y * v.y);
+			if (len < 1e-4f) return fallback;
+			return v.div(len);
+		};
+		auto segmentNormal = [&](size_t a, size_t b) -> Vec {
+			const Vec t = safeNormalize(pts[b].minus(pts[a]), Vec(1.f, 0.f));
+			return Vec(-t.y, t.x);
+		};
+		auto joinOffset = [&](size_t i, float halfW) -> Vec {
+			if (i == 0) return segmentNormal(0, 1).mult(halfW);
+			if (i + 1 >= pts.size()) return segmentNormal(pts.size() - 2, pts.size() - 1).mult(halfW);
+			const Vec tPrev = safeNormalize(pts[i].minus(pts[i - 1]), Vec(1.f, 0.f));
+			const Vec tNext = safeNormalize(pts[i + 1].minus(pts[i]), tPrev);
+			const Vec nPrev = Vec(-tPrev.y, tPrev.x);
+			const Vec nNext = Vec(-tNext.y, tNext.x);
+			const float turnDot = tPrev.x * tNext.x + tPrev.y * tNext.y;
+			const Vec j = safeNormalize(nPrev.plus(nNext), nNext);
+			const float denom = std::max(0.80f, std::abs(j.x * nNext.x + j.y * nNext.y));
+			const float miter = std::min(1.18f, 1.f / denom);
+			const Vec miterOff = j.mult(halfW * miter);
+			const Vec bevelOff = nNext.mult(halfW);
+			const float t = clamp((turnDot - 0.12f) / 0.18f, 0.f, 1.f);
+			return bevelOff.mult(1.f - t).plus(miterOff.mult(t));
+		};
+		const float edgeA = clamp(color.a * edgeAlphaScale, 0.f, 1.f);
+		const float innerW = 0.5f * widthPx;
+		const float outerW = innerW + featherPx;
+		std::vector<Vec> innerOff(pts.size());
+		std::vector<Vec> outerOff(pts.size());
 		for (size_t i = 0; i < pts.size(); ++i) {
-			Vec tangent;
-			if (i == 0) tangent = pts[1].minus(pts[0]);
-			else if (i + 1 >= pts.size()) tangent = pts[i].minus(pts[i - 1]);
-			else tangent = pts[i + 1].minus(pts[i - 1]);
-			const float len = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-			if (len < 1e-4f) {
-				tangent = Vec(1.f, 0.f);
-			}
-			else {
-				tangent = tangent.div(len);
-			}
-			const Vec normal(-tangent.y, tangent.x);
-			const Vec left = pts[i].minus(normal.mult(0.5f * widthPx));
-			const Vec right = pts[i].plus(normal.mult(0.5f * widthPx));
-			glVertex2f(left.x, left.y);
-			glVertex2f(right.x, right.y);
+			innerOff[i] = joinOffset(i, innerW);
+			outerOff[i] = joinOffset(i, outerW);
+		}
+
+		// Left feather quads.
+		glBegin(GL_QUADS);
+		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			const Vec aI = pts[i].minus(innerOff[i]);
+			const Vec bI = pts[i + 1].minus(innerOff[i + 1]);
+			const Vec aO = pts[i].minus(outerOff[i]);
+			const Vec bO = pts[i + 1].minus(outerOff[i + 1]);
+			glColor4f(color.r, color.g, color.b, edgeA);
+			glVertex2f(aI.x, aI.y);
+			glColor4f(color.r, color.g, color.b, edgeA);
+			glVertex2f(bI.x, bI.y);
+			glColor4f(color.r, color.g, color.b, 0.f);
+			glVertex2f(bO.x, bO.y);
+			glColor4f(color.r, color.g, color.b, 0.f);
+			glVertex2f(aO.x, aO.y);
+		}
+		glEnd();
+
+		// Right feather quads.
+		glBegin(GL_QUADS);
+		for (size_t i = 0; i + 1 < pts.size(); ++i) {
+			const Vec aI = pts[i].plus(innerOff[i]);
+			const Vec bI = pts[i + 1].plus(innerOff[i + 1]);
+			const Vec aO = pts[i].plus(outerOff[i]);
+			const Vec bO = pts[i + 1].plus(outerOff[i + 1]);
+			glColor4f(color.r, color.g, color.b, edgeA);
+			glVertex2f(aI.x, aI.y);
+			glColor4f(color.r, color.g, color.b, edgeA);
+			glVertex2f(bI.x, bI.y);
+			glColor4f(color.r, color.g, color.b, 0.f);
+			glVertex2f(bO.x, bO.y);
+			glColor4f(color.r, color.g, color.b, 0.f);
+			glVertex2f(aO.x, aO.y);
 		}
 		glEnd();
 	}
@@ -208,9 +303,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			samples.push_back(bodyPointForPhase(module, bodyPoints, phase, size));
 		}
 
-		drawBodyStrip(samples, 4.0f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f));
-		drawBodyStrip(samples, 2.6f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f));
-		drawBodyStrip(samples, 1.15f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f));
+		drawBodyStrip(samples, 3.75f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f));
+		drawBodyStripFeather(samples, 3.75f, 0.66f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f);
+		drawBodyStripFeather(samples, 3.75f, 1.35f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f);
+		drawBodyStrip(samples, 2.45f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f));
+		drawBodyStripFeather(samples, 2.45f, 0.52f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f);
+		drawBodyStrip(samples, 1.08f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f));
+		drawBodyStripFeather(samples, 1.08f, 0.38f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f);
 	}
 
 	~WyrmSandGlWidget() override {
