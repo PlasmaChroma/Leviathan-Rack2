@@ -43,7 +43,6 @@ struct WyrmSand {
 	void disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength);
 	void update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount);
 	void drawFlatBackground(NVGcontext* vg, Vec size) const;
-	void drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting);
 	void drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting);
 	void draw(NVGcontext* vg, Vec size, bool enabled, int backendSetting, int detailSetting);
 };

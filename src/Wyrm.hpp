@@ -36,6 +36,12 @@ enum WyrmSandBackend {
 	WYRMSAND_SHADER_FEEDBACK,
 };
 
+enum WyrmRenderMode {
+	WYRM_RENDER_NANOVG = 0,
+	WYRM_RENDER_OPENGL,
+	WYRM_RENDER_OPENGL_SHDR,
+};
+
 enum WyrmSandDetail {
 	WYRMSAND_DETAIL_LOW = 0,
 	WYRMSAND_DETAIL_MEDIUM,
@@ -235,6 +241,7 @@ struct Wyrm : Module {
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
 	std::atomic<float> displaySlitherPhase {0.f};
+	std::atomic<float> uiSlitherPhase {0.f};
 	std::atomic<float> displaySlitherAmount {0.f};
 	std::atomic<float> displaySlitherSpeedFactor {1.f};
 	std::array<float, kWyrmMaxChannels> phase {};
@@ -244,6 +251,7 @@ struct Wyrm : Module {
 	std::atomic<bool> lfoMode {false};
 	std::atomic<bool> editorLocked {false};
 	std::atomic<bool> sandViewEnabled {false};
+	std::atomic<int> renderMode {WYRM_RENDER_NANOVG};
 	std::atomic<int> sandBackend {WYRMSAND_NANOVG_IMAGE};
 	std::atomic<int> sandDetail {WYRMSAND_DETAIL_AUTO};
 	std::atomic<int> sandPersistence {WYRMSAND_PERSISTENCE_MEDIUM};

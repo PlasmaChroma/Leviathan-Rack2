@@ -450,13 +450,28 @@ struct WyrmWidget : ModuleWidget {
 		ModuleWidget::appendContextMenu(menu);
 		auto* module = dynamic_cast<Wyrm*>(this->module);
 		if (!module) return;
-		auto sandBackendLabel = [&](int backend) {
+		auto sandRendererLabel = [&](int backend) {
 			switch (backend) {
-				case WYRMSAND_NANOVG_CELLS: return "NanoVG Cells";
-				case WYRMSAND_NANOVG_IMAGE: return "NanoVG Image";
-				case WYRMSAND_OPENGL_TEXTURE: return "OpenGL Texture";
-				case WYRMSAND_SHADER_FEEDBACK: return "Shader Feedback";
-				default: return "Unknown";
+				case WYRM_RENDER_OPENGL: return "OpenGL";
+				case WYRM_RENDER_OPENGL_SHDR: return "OpenGL SHDR";
+				case WYRM_RENDER_NANOVG:
+				default: return "NanoVG";
+			}
+		};
+		auto applyRenderMode = [=](int mode) {
+			mode = clamp(mode, WYRM_RENDER_NANOVG, WYRM_RENDER_OPENGL_SHDR);
+			module->renderMode.store(mode, std::memory_order_relaxed);
+			switch (mode) {
+				case WYRM_RENDER_OPENGL:
+					module->sandBackend.store(WYRMSAND_OPENGL_TEXTURE, std::memory_order_relaxed);
+					break;
+				case WYRM_RENDER_OPENGL_SHDR:
+					module->sandBackend.store(WYRMSAND_SHADER_FEEDBACK, std::memory_order_relaxed);
+					break;
+				case WYRM_RENDER_NANOVG:
+				default:
+					module->sandBackend.store(WYRMSAND_NANOVG_IMAGE, std::memory_order_relaxed);
+					break;
 			}
 		};
 		auto sandDetailLabel = [&](int detail) {
@@ -486,30 +501,26 @@ struct WyrmWidget : ModuleWidget {
 			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
 			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 		));
-		menu->addChild(createSubmenuItem("Sand", sandBackendLabel(module->sandBackend.load(std::memory_order_relaxed)), [=](Menu* submenu) {
+		menu->addChild(createSubmenuItem("Renderer", sandRendererLabel(module->renderMode.load(std::memory_order_relaxed)), [=](Menu* rendererMenu) {
+			rendererMenu->addChild(createCheckMenuItem("NanoVG", "",
+				[=]() { return module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG; },
+				[=]() { applyRenderMode(WYRM_RENDER_NANOVG); }
+			));
+			rendererMenu->addChild(createCheckMenuItem("OpenGL", "",
+				[=]() { return module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_OPENGL; },
+				[=]() { applyRenderMode(WYRM_RENDER_OPENGL); }
+			));
+			rendererMenu->addChild(createCheckMenuItem("OpenGL SHDR", "",
+				[=]() { return module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_OPENGL_SHDR; },
+				[=]() { applyRenderMode(WYRM_RENDER_OPENGL_SHDR); }
+			));
+		}));
+		menu->addChild(createSubmenuItem("Sand", "", [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem("Sand View", "",
 				[=]() { return module->sandViewEnabled.load(std::memory_order_relaxed); },
 				[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			submenu->addChild(new MenuSeparator());
-			submenu->addChild(createSubmenuItem("Backend", sandBackendLabel(module->sandBackend.load(std::memory_order_relaxed)), [=](Menu* backendMenu) {
-				backendMenu->addChild(createCheckMenuItem("NanoVG Image", "",
-					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_NANOVG_IMAGE; },
-					[=]() { module->sandBackend.store(WYRMSAND_NANOVG_IMAGE, std::memory_order_relaxed); }
-				));
-				backendMenu->addChild(createCheckMenuItem("NanoVG Cells", "",
-					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_NANOVG_CELLS; },
-					[=]() { module->sandBackend.store(WYRMSAND_NANOVG_CELLS, std::memory_order_relaxed); }
-				));
-				backendMenu->addChild(createCheckMenuItem("OpenGL Texture", "",
-					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_OPENGL_TEXTURE; },
-					[=]() { module->sandBackend.store(WYRMSAND_OPENGL_TEXTURE, std::memory_order_relaxed); }
-				));
-				backendMenu->addChild(createCheckMenuItem("Shader Feedback", "",
-					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_SHADER_FEEDBACK; },
-					[=]() { module->sandBackend.store(WYRMSAND_SHADER_FEEDBACK, std::memory_order_relaxed); }
-				));
-			}));
 			submenu->addChild(createSubmenuItem("Detail", sandDetailLabel(module->sandDetail.load(std::memory_order_relaxed)), [=](Menu* detailMenu) {
 				detailMenu->addChild(createCheckMenuItem("Auto", "",
 					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_AUTO; },

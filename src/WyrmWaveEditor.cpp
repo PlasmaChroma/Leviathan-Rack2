@@ -33,6 +33,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
 	bool lastSandEnabledState = false;
+	int lastRenderMode = -1;
 	int lastSandBackend = -1;
 	int lastSandDetail = -1;
 	int lastSandPersistence = -1;
@@ -226,7 +227,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	void drawSandBackground(NVGcontext* vg) {
 		const int backendSetting = module
 			? module->sandBackend.load(std::memory_order_relaxed)
-			: WYRMSAND_NANOVG_CELLS;
+			: WYRMSAND_NANOVG_IMAGE;
 		const int detailSetting = module
 			? module->sandDetail.load(std::memory_order_relaxed)
 			: WYRMSAND_DETAIL_AUTO;
@@ -399,6 +400,11 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void step() override {
 		TransparentWidget::step();
+		const double nowSec = system::getTime();
+		advanceVisualSlitherPhase(nowSec);
+		if (module) {
+			module->uiSlitherPhase.store(visualSlitherPhase, std::memory_order_relaxed);
+		}
 		auto* framebuffer = dynamic_cast<widget::FramebufferWidget*>(parent);
 		if (!framebuffer) {
 			return;
@@ -416,6 +422,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const bool sandEnabledNow = sandEnabled();
+		const int renderModeNow = module->renderMode.load(std::memory_order_relaxed);
 		const int sandBackendNow = module->sandBackend.load(std::memory_order_relaxed);
 		const int sandDetailNow = module->sandDetail.load(std::memory_order_relaxed);
 		const int sandPersistenceNow = module->sandPersistence.load(std::memory_order_relaxed);
@@ -426,7 +433,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (waveVersionNow != lastWaveVersion || pointCountNow != lastPointCount || rockStateIndexNow != lastRockStateIndex) {
 			dirty = true;
 		}
-		if (sandEnabledNow != lastSandEnabledState || sandBackendNow != lastSandBackend || sandDetailNow != lastSandDetail || sandPersistenceNow != lastSandPersistence) {
+		if (sandEnabledNow != lastSandEnabledState || renderModeNow != lastRenderMode || sandBackendNow != lastSandBackend || sandDetailNow != lastSandDetail || sandPersistenceNow != lastSandPersistence) {
 			dirty = true;
 		}
 		if (editorLockedNow != lastEditorLocked) {
@@ -455,6 +462,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastPointCount = pointCountNow;
 		lastRockStateIndex = rockStateIndexNow;
 		lastSandEnabledState = sandEnabledNow;
+		lastRenderMode = renderModeNow;
 		lastSandBackend = sandBackendNow;
 		lastSandDetail = sandDetailNow;
 		lastSandPersistence = sandPersistenceNow;
@@ -468,7 +476,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		if (isDragonKingDebugEnabled()) {
-			const double nowSec = system::getTime();
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
@@ -499,7 +506,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		float sandUpdateUs = 0.f;
 		float sandDrawUs = 0.f;
 		const double nowSec = system::getTime();
-		advanceVisualSlitherPhase(nowSec);
 		renderedSlitherPhase = visualSlitherPhase;
 		const PerfClock::time_point sandUpdateStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		updateSand(nowSec);
@@ -571,7 +577,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		float hoveredColumnCenterX = 0.f;
 		bool hoveredColumnCenterValid = false;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		if (hasModule && mouseInside) {
+		const bool drawHoverNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
+		if (hasModule && mouseInside && drawHoverNanoVG) {
 			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
 			const int hoverIdx = hoveredColumn;
 			const float dxHover = pointStep(count);
@@ -604,7 +611,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			return pointX(i, count);
 		};
 		const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
-		const bool drawWaveColumns = !sandEnabled();
+		const bool drawWaveColumns = (!sandEnabled()) && (!module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG);
 		if (drawWaveColumns) {
 			nvgBeginPath(args.vg);
 			for (int i = 0; i < count; ++i) {
@@ -696,29 +703,32 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgLineTo(args.vg, pEnd.x, pEnd.y);
 		};
 
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgBeginPath(args.vg);
-		emitRoundedBodyPath();
-		nvgStrokeWidth(args.vg, 4.0f);
-		nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
-		nvgStroke(args.vg);
+		const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
+		if (drawBodyNanoVG) {
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgBeginPath(args.vg);
+			emitRoundedBodyPath();
+			nvgStrokeWidth(args.vg, 4.0f);
+			nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
+			nvgStroke(args.vg);
 
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgBeginPath(args.vg);
-		emitRoundedBodyPath();
-		nvgStrokeWidth(args.vg, 2.6f);
-		nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
-		nvgStroke(args.vg);
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgBeginPath(args.vg);
+			emitRoundedBodyPath();
+			nvgStrokeWidth(args.vg, 2.6f);
+			nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
+			nvgStroke(args.vg);
 
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgBeginPath(args.vg);
-		emitRoundedBodyPath();
-		nvgStrokeWidth(args.vg, 1.15f);
-		nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
-		nvgStroke(args.vg);
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgBeginPath(args.vg);
+			emitRoundedBodyPath();
+			nvgStrokeWidth(args.vg, 1.15f);
+			nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
+			nvgStroke(args.vg);
+		}
 
 		for (int i = 0; hasModule && i < module->rockCount; ++i) {
 			const WyrmRock& rock = module->rocks[i];

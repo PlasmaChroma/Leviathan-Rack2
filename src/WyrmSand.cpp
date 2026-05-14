@@ -413,7 +413,7 @@ void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
 	}
 
 	if (imageHandle < 0) {
-		drawNanoVGCells(vg, size, detailSetting);
+		drawFlatBackground(vg, size);
 		return;
 	}
 
@@ -424,64 +424,21 @@ void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
 	nvgFill(vg);
 }
 
-void WyrmSand::drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting) {
-	ensureField(size, detailSetting);
-	const int resolvedDetail = resolveSandDetail(detailSetting, size);
-	const float sparkleThreshold =
-		(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 0.32f :
-		(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 0.37f : 0.42f;
-	const float sparkleAlphaScale =
-		(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 1.45f :
-		(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 1.20f : 1.00f;
-	nvgBeginPath(vg);
-	nvgRect(vg, 0.f, 0.f, size.x, size.y);
-	nvgFillColor(vg, nvgRGBA(58, 40, 22, 224));
-	nvgFill(vg);
-	const float cellW = size.x / float(std::max(w, 1));
-	const float cellH = size.y / float(std::max(h, 1));
-	for (int gy = 0; gy < h; ++gy) {
-		for (int gx = 0; gx < w; ++gx) {
-			const int idx = gy * w + gx;
-			const float grain = baseNoise[idx];
-			const float d = clamp(depth[idx], -1.f, 1.f);
-			const float e = clamp(energy[idx], 0.f, 1.f);
-			float shade = 0.58f + 0.21f * grain + 0.25f * std::max(d, 0.f) - 0.33f * std::max(-d, 0.f);
-			shade = clamp(shade + 0.16f * e, 0.f, 1.12f);
-			const int r = clamp(int(118.f * shade + 30.f * e), 0, 255);
-			const int g = clamp(int(82.f * shade + 22.f * e), 0, 255);
-			const int b = clamp(int(42.f * shade + 10.f * grain), 0, 255);
-			const int alpha = clamp(116 + int(78.f * std::fabs(d)) + int(64.f * e), 72, 235);
-			nvgBeginPath(vg);
-			nvgRect(vg, float(gx) * cellW, float(gy) * cellH, cellW + 0.5f, cellH + 0.5f);
-			nvgFillColor(vg, nvgRGBA(r, g, b, alpha));
-			nvgFill(vg);
-			if (e > sparkleThreshold && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
-				nvgBeginPath(vg);
-				nvgCircle(vg, (float(gx) + 0.5f) * cellW, (float(gy) + 0.5f) * cellH, 0.35f + 0.75f * e);
-				nvgFillColor(vg, nvgRGBA(230, 188, 112, int(72.f * sparkleAlphaScale * e)));
-				nvgFill(vg);
-			}
-		}
-	}
-}
-
 void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled, int backendSetting, int detailSetting) {
 	if (!enabled) {
 		drawFlatBackground(vg, size);
 		return;
 	}
 	switch (backendSetting) {
-		case WYRMSAND_NANOVG_CELLS:
-			drawNanoVGCells(vg, size, detailSetting);
-			return;
 		case WYRMSAND_NANOVG_IMAGE:
+		case WYRMSAND_NANOVG_CELLS: // Legacy value: treat as image backend.
 			drawNanoVGImage(vg, size, detailSetting);
 			return;
 		case WYRMSAND_OPENGL_TEXTURE:
 		case WYRMSAND_SHADER_FEEDBACK:
 		default:
-			// Non-cell backends are not wired yet; keep deterministic fallback.
-			drawNanoVGCells(vg, size, detailSetting);
+			// GL backends draw in WyrmSandGlWidget. Keep a cheap fallback here.
+			drawFlatBackground(vg, size);
 			return;
 	}
 }

@@ -773,6 +773,7 @@ json_t* Wyrm::dataToJson() {
 	json_object_set_new(root, "lfoMode", json_boolean(lfoMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "editorLocked", json_boolean(editorLocked.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "renderMode", json_integer(renderMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandBackend", json_integer(sandBackend.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandDetail", json_integer(sandDetail.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandPersistence", json_integer(sandPersistence.load(std::memory_order_relaxed)));
@@ -808,10 +809,24 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (lockJ) editorLocked.store(json_is_true(lockJ), std::memory_order_relaxed);
 	json_t* sandViewJ = json_object_get(root, "sandViewEnabled");
 	if (sandViewJ) sandViewEnabled.store(json_is_true(sandViewJ), std::memory_order_relaxed);
+	json_t* renderModeJ = json_object_get(root, "renderMode");
+	if (renderModeJ) {
+		const int mode = clamp(int(json_integer_value(renderModeJ)), WYRM_RENDER_NANOVG, WYRM_RENDER_OPENGL_SHDR);
+		renderMode.store(mode, std::memory_order_relaxed);
+	}
 	json_t* sandBackendJ = json_object_get(root, "sandBackend");
 	if (sandBackendJ) {
 		const int v = clamp(int(json_integer_value(sandBackendJ)), WYRMSAND_NANOVG_CELLS, WYRMSAND_SHADER_FEEDBACK);
-		sandBackend.store(v, std::memory_order_relaxed);
+		// Legacy "NanoVG Cells" backend now maps to NanoVG Image.
+		const int backend = (v == WYRMSAND_NANOVG_CELLS) ? WYRMSAND_NANOVG_IMAGE : v;
+		sandBackend.store(backend, std::memory_order_relaxed);
+		// If no explicit renderMode was saved, infer mode from backend for compatibility.
+		if (!renderModeJ) {
+			int mode = WYRM_RENDER_NANOVG;
+			if (backend == WYRMSAND_OPENGL_TEXTURE) mode = WYRM_RENDER_OPENGL;
+			else if (backend == WYRMSAND_SHADER_FEEDBACK) mode = WYRM_RENDER_OPENGL_SHDR;
+			renderMode.store(mode, std::memory_order_relaxed);
+		}
 	}
 	json_t* sandDetailJ = json_object_get(root, "sandDetail");
 	if (sandDetailJ) {
