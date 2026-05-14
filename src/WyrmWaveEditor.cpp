@@ -24,10 +24,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	double lastVisualUpdateSec = -1.0;
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
-	WyrmSand sand;
+	std::shared_ptr<WyrmSand> sand;
 
-	explicit WyrmWaveEditor(Wyrm* m) {
+	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
 		module = m;
+		sand = sandState ? sandState : std::make_shared<WyrmSand>();
 	}
 
 	bool sandEnabled() const {
@@ -187,7 +188,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void updateSand(double nowSec) {
 		if (!sandEnabled() || !std::isfinite(nowSec)) {
-			sand.resetHistory();
+			sand->resetHistory();
 			return;
 		}
 		const int detailSetting = module
@@ -195,7 +196,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			: WYRMSAND_DETAIL_AUTO;
 		if (!module || module->pointCount <= 1) {
 			std::array<Vec, kWyrmPointCountMax> emptyPath {};
-			sand.update(box.size, nowSec, detailSetting, emptyPath, 0, 0.f);
+			sand->update(box.size, nowSec, detailSetting, emptyPath, 0, 0.f);
 			return;
 		}
 		const int count = clamp(module->pointCount, 2, kWyrmPointCountMax);
@@ -203,7 +204,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		for (int i = 0; i < count; ++i) {
 			currentPath[i] = Vec(pointX(i, count), yFromValue(displayWavePoint(i)));
 		}
-		sand.update(box.size, nowSec, detailSetting, currentPath, count, effectiveSlitherAmount());
+		sand->update(box.size, nowSec, detailSetting, currentPath, count, effectiveSlitherAmount());
 	}
 
 	void drawSandBackground(NVGcontext* vg) {
@@ -213,7 +214,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		const int detailSetting = module
 			? module->sandDetail.load(std::memory_order_relaxed)
 			: WYRMSAND_DETAIL_AUTO;
-		sand.draw(vg, box.size, sandEnabled(), backendSetting, detailSetting);
+		if (backendSetting != WYRMSAND_OPENGL_TEXTURE && backendSetting != WYRMSAND_SHADER_FEEDBACK) {
+			sand->draw(vg, box.size, sandEnabled(), backendSetting, detailSetting);
+		}
 	}
 
 	int rockIndexAt(Vec pos) const {
@@ -271,8 +274,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		const Vec radius = rockPixelRadius(rock);
 		const float stampRadius = clamp(0.35f * std::max(radius.x, radius.y), 5.f, 18.f);
 		const bool liftMode = (dragRockMouseMode == ROCK_MOUSE_LIFTS);
-		sand.stamp(box.size, previousCenter, stampRadius, liftMode ? -0.025f : -0.075f, liftMode ? 0.04f : 0.18f);
-		sand.stamp(box.size, newCenter, stampRadius, liftMode ? -0.020f : 0.055f, liftMode ? 0.04f : 0.14f);
+		sand->stamp(box.size, previousCenter, stampRadius, liftMode ? -0.025f : -0.075f, liftMode ? 0.04f : 0.18f);
+		sand->stamp(box.size, newCenter, stampRadius, liftMode ? -0.020f : 0.055f, liftMode ? 0.04f : 0.14f);
 	}
 
 	Vec currentLocalMousePos() const {
@@ -301,7 +304,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			writeDisplayValue(idx);
 		}
 		lastIndex = idx;
-		sand.stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
+		sand->stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -349,7 +352,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				else if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
 					const Vec center = rockCenter(module->rocks[releasedRock]);
 					const Vec radius = rockPixelRadius(module->rocks[releasedRock]);
-					sand.stamp(box.size, center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
+					sand->stamp(box.size, center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
 				}
 				module->publishRockState();
 			}
@@ -682,5 +685,9 @@ struct WyrmWaveEditor : TransparentWidget {
 };
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
-	return new WyrmWaveEditor(module);
+	return new WyrmWaveEditor(module, std::make_shared<WyrmSand>());
+}
+
+TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
+	return new WyrmWaveEditor(module, sandState);
 }

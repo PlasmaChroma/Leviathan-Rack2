@@ -15,11 +15,44 @@ int resolveSandDetail(int detailSetting, Vec size) {
 		}
 	}
 }
+
+inline unsigned char clampU8(int v) {
+	return (unsigned char) clamp(v, 0, 255);
+}
+
+inline void blendOverOpaque(unsigned char* rgb, int sr, int sg, int sb, int sa) {
+	const int a = clamp(sa, 0, 255);
+	const int invA = 255 - a;
+	rgb[0] = clampU8((sr * a + int(rgb[0]) * invA) / 255);
+	rgb[1] = clampU8((sg * a + int(rgb[1]) * invA) / 255);
+	rgb[2] = clampU8((sb * a + int(rgb[2]) * invA) / 255);
+}
 }
 
 void WyrmSand::resetHistory() {
 	previousPathCount = 0;
 	lastUpdateSec = -1.0;
+}
+
+void WyrmSand::markImageDirty() {
+	imageDirty = true;
+	imageRevision++;
+}
+
+const unsigned char* WyrmSand::imageData() const {
+	return imagePixels.empty() ? nullptr : imagePixels.data();
+}
+
+int WyrmSand::imageWidth() const {
+	return imageW;
+}
+
+int WyrmSand::imageHeight() const {
+	return imageH;
+}
+
+uint64_t WyrmSand::imageDataRevision() const {
+	return imageRevision;
 }
 
 void WyrmSand::ensureField(Vec size, int detailSetting) {
@@ -66,6 +99,7 @@ void WyrmSand::ensureField(Vec size, int detailSetting) {
 			baseNoise[y * w + x] = 0.72f * grain + 0.28f * dune;
 		}
 	}
+	imageDirty = true;
 	initialized = true;
 	resetHistory();
 }
@@ -97,6 +131,7 @@ void WyrmSand::stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float 
 			energy[idx] = clamp(energy[idx] + energyDelta * falloff, 0.f, 1.f);
 		}
 	}
+	markImageDirty();
 }
 
 void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength) {
@@ -145,6 +180,7 @@ void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, floa
 			energy[idx] = clamp(energy[idx] + energyStrength * e, 0.f, 1.f);
 		}
 	}
+	markImageDirty();
 }
 
 void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount) {
@@ -164,6 +200,7 @@ void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::arr
 		depth[i] *= depthDecay;
 		energy[i] *= energyDecay;
 	}
+	markImageDirty();
 	if (pathCount <= 1) {
 		previousPathCount = 0;
 		return;
@@ -191,6 +228,98 @@ void WyrmSand::drawFlatBackground(NVGcontext* vg, Vec size) const {
 	nvgBeginPath(vg);
 	nvgRect(vg, 0.f, 0.f, size.x, size.y);
 	nvgFillColor(vg, nvgRGBA(14, 14, 14, 205));
+	nvgFill(vg);
+}
+
+void WyrmSand::ensureImageRaster(Vec size, int detailSetting) {
+	ensureField(size, detailSetting);
+	if (w <= 0 || h <= 0) {
+		return;
+	}
+
+	const int targetImageW = std::max(1, int(std::round(size.x)));
+	const int targetImageH = std::max(1, int(std::round(size.y)));
+	if (imageW != targetImageW || imageH != targetImageH || imagePixels.size() != size_t(targetImageW * targetImageH * 4)) {
+		imageW = targetImageW;
+		imageH = targetImageH;
+		imagePixels.assign(size_t(std::max(0, imageW * imageH * 4)), 0);
+		imageDirty = true;
+	}
+
+	if (imageDirty) {
+		const int baseR = 58;
+		const int baseG = 40;
+		const int baseB = 22;
+		for (int py = 0; py < imageH; ++py) {
+			const float gyf = (float(py) + 0.5f) * float(h) / float(imageH);
+			const int gy = clamp(int(gyf), 0, h - 1);
+			for (int pxIdx = 0; pxIdx < imageW; ++pxIdx) {
+				const float gxf = (float(pxIdx) + 0.5f) * float(w) / float(imageW);
+				const int gx = clamp(int(gxf), 0, w - 1);
+				const int idx = gy * w + gx;
+				const float grain = baseNoise[idx];
+				const float d = clamp(depth[idx], -1.f, 1.f);
+				const float e = clamp(energy[idx], 0.f, 1.f);
+				float shade = 0.58f + 0.21f * grain + 0.25f * std::max(d, 0.f) - 0.33f * std::max(-d, 0.f);
+				shade = clamp(shade + 0.16f * e, 0.f, 1.12f);
+				const int r = clamp(int(118.f * shade + 30.f * e), 0, 255);
+				const int g = clamp(int(82.f * shade + 22.f * e), 0, 255);
+				const int b = clamp(int(42.f * shade + 10.f * grain), 0, 255);
+				const int alpha = clamp(116 + int(78.f * std::fabs(d)) + int(64.f * e), 72, 235);
+
+				unsigned char* outPx = &imagePixels[size_t((py * imageW + pxIdx) * 4)];
+				outPx[0] = clampU8(baseR);
+				outPx[1] = clampU8(baseG);
+				outPx[2] = clampU8(baseB);
+				outPx[3] = 255;
+				blendOverOpaque(outPx, r, g, b, alpha);
+
+				if (e > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
+					blendOverOpaque(outPx, 230, 188, 112, int(72.f * e));
+				}
+			}
+		}
+
+		imageDirty = false;
+	}
+}
+
+void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
+	if (!vg) {
+		return;
+	}
+	ensureImageRaster(size, detailSetting);
+	if (w <= 0 || h <= 0 || imageW <= 0 || imageH <= 0 || imagePixels.empty()) {
+		drawFlatBackground(vg, size);
+		return;
+	}
+	if (imageHandle < 0) {
+		imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED, imagePixels.data());
+		imageUploadedW = imageW;
+		imageUploadedH = imageH;
+		imageUploadedRevision = imageRevision;
+	}
+	else if (imageUploadedW != imageW || imageUploadedH != imageH) {
+		nvgDeleteImage(vg, imageHandle);
+		imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED, imagePixels.data());
+		imageUploadedW = imageW;
+		imageUploadedH = imageH;
+		imageUploadedRevision = imageRevision;
+	}
+	else if (imageUploadedRevision != imageRevision) {
+		nvgUpdateImage(vg, imageHandle, imagePixels.data());
+		imageUploadedRevision = imageRevision;
+	}
+
+	if (imageHandle < 0) {
+		drawNanoVGCells(vg, size, detailSetting);
+		return;
+	}
+
+	nvgBeginPath(vg);
+	nvgRect(vg, 0.f, 0.f, size.x, size.y);
+	const NVGpaint imagePaint = nvgImagePattern(vg, 0.f, 0.f, size.x, size.y, 0.f, imageHandle, 1.f);
+	nvgFillPaint(vg, imagePaint);
 	nvgFill(vg);
 }
 
@@ -238,6 +367,8 @@ void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled, int backendSetting, 
 			drawNanoVGCells(vg, size, detailSetting);
 			return;
 		case WYRMSAND_NANOVG_IMAGE:
+			drawNanoVGImage(vg, size, detailSetting);
+			return;
 		case WYRMSAND_OPENGL_TEXTURE:
 		case WYRMSAND_SHADER_FEEDBACK:
 		default:

@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <memory>
 
 constexpr int kWyrmPointCountDefault = 128;
 constexpr int kWyrmPointCountMax = 256;
@@ -165,6 +166,7 @@ inline float slitherSpeedFactor(float speedKnob) {
 }
 
 struct Wyrm;
+struct WyrmSand;
 
 struct WyrmFreqQuantity final : ParamQuantity {
 	float getDisplayValue() override;
@@ -306,3 +308,5 @@ struct Wyrm : Module {
 };
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module);
+TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
+Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState);

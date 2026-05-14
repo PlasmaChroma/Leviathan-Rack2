@@ -13,7 +13,7 @@ Implementation checklist:
 - [x] Add backend dispatch inside `WyrmSand::draw()`.
 - [x] Keep current cell renderer as explicit `NanoVGCells` backend implementation.
 - [x] Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
-- [ ] Add `NanoVGImage` state, lifecycle, and one-image draw path to `WyrmSand`.
+- [x] Add `NanoVGImage` state, lifecycle, and one-image draw path to `WyrmSand`.
 - [ ] Make `NanoVGImage` the default backend in runtime behavior.
 - [ ] Add active cell tracking for dirty decisions and later active-only decay.
 - [ ] Add path stride by detail.

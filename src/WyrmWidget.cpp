@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
 
 #include <cstdio>
@@ -341,7 +342,12 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
 
-		auto* editor = createWyrmWaveEditor(module);
+		std::shared_ptr<WyrmSand> sandState = std::make_shared<WyrmSand>();
+		auto* sandGl = createWyrmSandGlWidget(module, sandState);
+		sandGl->box.pos = mm2px(editorRectMm.pos);
+		sandGl->box.size = mm2px(editorRectMm.size);
+		addChild(sandGl);
+		auto* editor = createWyrmWaveEditor(module, sandState);
 		editor->box.pos = mm2px(editorRectMm.pos);
 		editor->box.size = mm2px(editorRectMm.size);
 		addChild(editor);
