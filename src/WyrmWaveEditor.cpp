@@ -25,6 +25,22 @@ struct WyrmWaveEditor : TransparentWidget {
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
 	std::shared_ptr<WyrmSand> sand;
+	Vec lastBoxSize = Vec(-1.f, -1.f);
+	bool lastMouseInside = false;
+	int lastHoverColumn = -2;
+	int lastHoverRock = -2;
+	uint32_t lastWaveVersion = 0;
+	int lastPointCount = -1;
+	int lastRockStateIndex = -1;
+	bool lastSandEnabledState = false;
+	int lastSandBackend = -1;
+	int lastSandDetail = -1;
+	int lastSandPersistence = -1;
+	bool lastEditorLocked = false;
+	float lastEditorDrawUs = 0.f;
+	float lastSandUpdateUs = 0.f;
+	float lastSandDrawUs = 0.f;
+	int lastBodySampleCount = 0;
 
 	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
 		module = m;
@@ -282,7 +298,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
 			return Vec();
 		}
-		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
+		const Vec editorRackPos = const_cast<WyrmWaveEditor*>(this)->getRelativeOffset(Vec(), APP->scene->rack);
+		return APP->scene->rack->getMousePos().minus(editorRackPos);
 	}
 
 	void applyPointFromPos(Vec pos) {
@@ -378,6 +395,100 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		applyPointFromPos(currentLocalMousePos());
 		e.consume(this);
+	}
+
+	void step() override {
+		TransparentWidget::step();
+		auto* framebuffer = dynamic_cast<widget::FramebufferWidget*>(parent);
+		if (!framebuffer) {
+			return;
+		}
+
+		bool dirty = false;
+		if (std::fabs(box.size.x - lastBoxSize.x) > 1e-4f || std::fabs(box.size.y - lastBoxSize.y) > 1e-4f) {
+			lastBoxSize = box.size;
+			dirty = true;
+		}
+
+		if (!module) {
+			framebuffer->setDirty();
+			return;
+		}
+
+		const bool sandEnabledNow = sandEnabled();
+		const int sandBackendNow = module->sandBackend.load(std::memory_order_relaxed);
+		const int sandDetailNow = module->sandDetail.load(std::memory_order_relaxed);
+		const int sandPersistenceNow = module->sandPersistence.load(std::memory_order_relaxed);
+		const bool editorLockedNow = module->editorLocked.load(std::memory_order_relaxed);
+		const uint32_t waveVersionNow = module->waveVersion.load(std::memory_order_acquire);
+		const int pointCountNow = module->pointCount;
+		const int rockStateIndexNow = module->activeRockStateIndex.load(std::memory_order_acquire);
+		if (waveVersionNow != lastWaveVersion || pointCountNow != lastPointCount || rockStateIndexNow != lastRockStateIndex) {
+			dirty = true;
+		}
+		if (sandEnabledNow != lastSandEnabledState || sandBackendNow != lastSandBackend || sandDetailNow != lastSandDetail || sandPersistenceNow != lastSandPersistence) {
+			dirty = true;
+		}
+		if (editorLockedNow != lastEditorLocked) {
+			dirty = true;
+		}
+
+		const Vec mouseLocal = currentLocalMousePos();
+		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
+		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
+		const int hoverRockNow = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
+		if (mouseInside != lastMouseInside || hoverColumnNow != lastHoverColumn || hoverRockNow != lastHoverRock) {
+			dirty = true;
+		}
+
+		if (pointEditActive || draggingRock >= 0) {
+			dirty = true;
+		}
+		if (effectiveSlitherAmount() > 1e-5f) {
+			dirty = true;
+		}
+		if (sandEnabledNow && sand && sand->hasActiveVisual()) {
+			dirty = true;
+		}
+
+		lastWaveVersion = waveVersionNow;
+		lastPointCount = pointCountNow;
+		lastRockStateIndex = rockStateIndexNow;
+		lastSandEnabledState = sandEnabledNow;
+		lastSandBackend = sandBackendNow;
+		lastSandDetail = sandDetailNow;
+		lastSandPersistence = sandPersistenceNow;
+		lastEditorLocked = editorLockedNow;
+		lastMouseInside = mouseInside;
+		lastHoverColumn = hoverColumnNow;
+		lastHoverRock = hoverRockNow;
+
+		if (dirty) {
+			framebuffer->setDirty();
+		}
+
+		if (isDragonKingDebugEnabled()) {
+			const double nowSec = system::getTime();
+			uint32_t debugId = module->debugInstanceId;
+			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
+			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
+				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+				lastSubmitSec = nowSec;
+				debug_terminal::submitWyrmMetrics(
+					debugId,
+					lastEditorDrawUs * 0.001f,
+					lastEditorDrawUs,
+					lastSandUpdateUs,
+					lastSandDrawUs,
+					module->perfSandGlUs.load(std::memory_order_relaxed),
+					audioUs,
+					module->perfChannels.load(std::memory_order_relaxed),
+					lastBodySampleCount
+				);
+			}
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -680,25 +791,10 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (measurePerf) {
 			const float editorDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count()) * 0.001f;
-			uint32_t debugId = module->debugInstanceId;
-			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
-			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
-				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				lastSubmitSec = nowSec;
-				debug_terminal::submitWyrmMetrics(
-					debugId,
-					editorDrawUs * 0.001f,
-					editorDrawUs,
-					sandUpdateUs,
-					sandDrawUs,
-					module->perfSandGlUs.load(std::memory_order_relaxed),
-					audioUs,
-					module->perfChannels.load(std::memory_order_relaxed),
-					bodySampleCount
-				);
-			}
+			lastEditorDrawUs = editorDrawUs;
+			lastSandUpdateUs = sandUpdateUs;
+			lastSandDrawUs = sandDrawUs;
+			lastBodySampleCount = bodySampleCount;
 		}
 	}
 };

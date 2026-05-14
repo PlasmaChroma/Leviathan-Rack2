@@ -348,9 +348,13 @@ struct WyrmWidget : ModuleWidget {
 		sandGl->box.size = mm2px(editorRectMm.size);
 		addChild(sandGl);
 		auto* editor = createWyrmWaveEditor(module, sandState);
-		editor->box.pos = mm2px(editorRectMm.pos);
-		editor->box.size = mm2px(editorRectMm.size);
-		addChild(editor);
+		auto* editorFb = new widget::FramebufferWidget();
+		editorFb->box.pos = mm2px(editorRectMm.pos);
+		editorFb->box.size = mm2px(editorRectMm.size);
+		editorFb->dirtyOnSubpixelChange = false;
+		editor->box.size = editorFb->box.size;
+		editorFb->addChild(editor);
+		addChild(editorFb);
 		auto* freqReadout = new WyrmFrequencyReadoutWidget();
 		freqReadout->module = module;
 		freqReadout->box.pos = mm2px(freqReadoutRectMm.pos);

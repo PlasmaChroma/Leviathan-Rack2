@@ -38,6 +38,7 @@ struct WyrmSand {
 	int imageWidth() const;
 	int imageHeight() const;
 	uint64_t imageDataRevision() const;
+	bool hasActiveVisual() const;
 	void stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float energyDelta);
 	void disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength);
 	void update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount);

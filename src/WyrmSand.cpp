@@ -73,6 +73,10 @@ uint64_t WyrmSand::imageDataRevision() const {
 	return imageRevision;
 }
 
+bool WyrmSand::hasActiveVisual() const {
+	return imageDirty || !activeIndices.empty();
+}
+
 void WyrmSand::ensureField(Vec size, int detailSetting) {
 	const int resolvedDetail = resolveSandDetail(detailSetting, size);
 	float density = 0.65f;
