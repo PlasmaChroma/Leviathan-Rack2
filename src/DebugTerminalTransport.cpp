@@ -404,12 +404,11 @@ void submitWyrmMetrics(uint32_t instanceId,
                        float audioUs,
                        int channels,
                        int pointCount,
-                       int bodySamples,
-                       bool wavetableRebuilt) {
+                       int bodySamples) {
   char dataBuf[384];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"pts\":%d,\"body\":%d,\"wt\":%d}",
+                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"pts\":%d,\"body\":%d}",
                 std::max(0.f, uiMs),
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, sandUpdateUs),
@@ -417,8 +416,7 @@ void submitWyrmMetrics(uint32_t instanceId,
                 std::max(0.f, audioUs),
                 std::max(0, channels),
                 std::max(0, pointCount),
-                std::max(0, bodySamples),
-                wavetableRebuilt ? 1 : 0);
+                std::max(0, bodySamples));
   double ts = system::getTime();
   transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
 }

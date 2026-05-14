@@ -665,7 +665,6 @@ struct WyrmWaveEditor : TransparentWidget {
 				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				const bool wavetableRebuilt = module->perfWavetableRebuilt.exchange(false, std::memory_order_acq_rel);
 				lastSubmitSec = nowSec;
 				debug_terminal::submitWyrmMetrics(
 					debugId,
@@ -676,8 +675,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					audioUs,
 					module->perfChannels.load(std::memory_order_relaxed),
 					module->pointCount,
-					bodySampleCount,
-					wavetableRebuilt
+					bodySampleCount
 				);
 			}
 		}

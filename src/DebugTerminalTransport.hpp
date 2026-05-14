@@ -36,7 +36,6 @@ void submitWyrmMetrics(uint32_t instanceId,
                        float audioUs,
                        int channels,
                        int pointCount,
-                       int bodySamples,
-                       bool wavetableRebuilt);
+                       int bodySamples);
 
 } // namespace debug_terminal

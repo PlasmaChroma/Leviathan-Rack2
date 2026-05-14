@@ -59,7 +59,6 @@ MODULE_COLUMNS = {
         ("ch", "Ch"),
         ("pts", "Pts"),
         ("body", "Body"),
-        ("wt", "WT"),
     ),
 }
 

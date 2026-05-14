@@ -497,6 +497,14 @@ struct WyrmWidget : ModuleWidget {
 					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_NANOVG_CELLS; },
 					[=]() { module->sandBackend.store(WYRMSAND_NANOVG_CELLS, std::memory_order_relaxed); }
 				));
+				backendMenu->addChild(createCheckMenuItem("OpenGL Texture", "",
+					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_OPENGL_TEXTURE; },
+					[=]() { module->sandBackend.store(WYRMSAND_OPENGL_TEXTURE, std::memory_order_relaxed); }
+				));
+				backendMenu->addChild(createCheckMenuItem("Shader Feedback", "",
+					[=]() { return module->sandBackend.load(std::memory_order_relaxed) == WYRMSAND_SHADER_FEEDBACK; },
+					[=]() { module->sandBackend.store(WYRMSAND_SHADER_FEEDBACK, std::memory_order_relaxed); }
+				));
 			}));
 			submenu->addChild(createSubmenuItem("Detail", sandDetailLabel(module->sandDetail.load(std::memory_order_relaxed)), [=](Menu* detailMenu) {
 				detailMenu->addChild(createCheckMenuItem("Auto", "",
