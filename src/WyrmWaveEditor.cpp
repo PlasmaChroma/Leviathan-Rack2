@@ -495,6 +495,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
 		const bool drawWaveColumns = !sandEnabled();
 		if (drawWaveColumns) {
+			nvgBeginPath(args.vg);
 			for (int i = 0; i < count; ++i) {
 				const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
 				const bool hotColumn = (i == hoveredColumn);
@@ -502,40 +503,61 @@ struct WyrmWaveEditor : TransparentWidget {
 				if (hotColumn && hoveredColumnCenterValid) {
 					x = hoveredColumnCenterX;
 				}
+				const float yTop = std::min(midY, y);
+				const float yBottom = std::max(midY, y);
+				if (!hotColumn) {
+					nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
+				}
+			}
+			nvgFillColor(args.vg, nvgRGBA(34, 27, 70, 196));
+			nvgFill(args.vg);
+
+			if (hoveredColumn >= 0 && hoveredColumn < count) {
 				nvgBeginPath(args.vg);
+				const float y = (0.5f - 0.5f * waveValueAt(hoveredColumn)) * box.size.y;
+				float x = xAt(hoveredColumn);
+				if (hoveredColumnCenterValid) {
+					x = hoveredColumnCenterX;
+				}
 				const float yTop = std::min(midY, y);
 				const float yBottom = std::max(midY, y);
 				nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-				nvgFillColor(args.vg, hotColumn ? nvgRGBA(28, 204, 217, 238) : nvgRGBA(34, 27, 70, 196));
+				nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
 				nvgFill(args.vg);
 			}
 		}
 
+		static constexpr int kBodySamplesMax = 768;
+		std::array<Vec, kBodySamplesMax> bodyPathPoints {};
+		std::array<uint8_t, kBodySamplesMax> bodyPathNearRock {};
+		const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
+		for (int i = 0; i < cachedBodySamples; ++i) {
+			const float phase = (float(i) + 0.5f) / float(std::max(cachedBodySamples, 1));
+			bodyPathPoints[i] = Vec(
+				pointEdgeInset() + phase * pointDrawWidth(),
+				(0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y
+			);
+			bodyPathNearRock[i] = phaseNearAnyRock(phase, 1.5f / float(std::max(cachedBodySamples, 1))) ? 1u : 0u;
+		}
+
 		auto emitRoundedBodyPath = [&]() {
 			const float roundCosThreshold = -0.25f;
-			if (bodySampleCount <= 0) {
+			if (cachedBodySamples <= 0) {
 				return;
 			}
-			if (bodySampleCount == 1) {
-				const float phase = 0.5f;
-				const float x = pointEdgeInset() + phase * pointDrawWidth();
-				const float y = (0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y;
-				nvgMoveTo(args.vg, x, y);
+			if (cachedBodySamples == 1) {
+				const Vec p = bodyPathPoints[0];
+				nvgMoveTo(args.vg, p.x, p.y);
 				return;
 			}
 
-			auto pointAt = [&](int i) {
-				const float phase = (float(i) + 0.5f) / float(bodySampleCount);
-				return Vec(pointEdgeInset() + phase * pointDrawWidth(), (0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y);
-			};
-
-			const Vec pStart = pointAt(0);
+			const Vec pStart = bodyPathPoints[0];
 			nvgMoveTo(args.vg, pStart.x, pStart.y);
 
-			for (int i = 1; i < bodySampleCount - 1; ++i) {
-				const Vec p0 = pointAt(i - 1);
-				const Vec p1 = pointAt(i);
-				const Vec p2 = pointAt(i + 1);
+			for (int i = 1; i < cachedBodySamples - 1; ++i) {
+				const Vec p0 = bodyPathPoints[i - 1];
+				const Vec p1 = bodyPathPoints[i];
+				const Vec p2 = bodyPathPoints[i + 1];
 				Vec vIn = p1.minus(p0);
 				Vec vOut = p2.minus(p1);
 				const float inLen = std::sqrt(vIn.x * vIn.x + vIn.y * vIn.y);
@@ -547,8 +569,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				vIn = vIn.div(inLen);
 				vOut = vOut.div(outLen);
 				const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
-				const float phase = (float(i) + 0.5f) / float(bodySampleCount);
-				if (phaseNearAnyRock(phase, 1.5f / float(bodySampleCount))) {
+				if (bodyPathNearRock[i]) {
 					nvgLineTo(args.vg, p1.x, p1.y);
 				}
 				else if (cornerCos >= roundCosThreshold) {
@@ -560,7 +581,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				}
 			}
 
-			const Vec pEnd = pointAt(bodySampleCount - 1);
+			const Vec pEnd = bodyPathPoints[cachedBodySamples - 1];
 			nvgLineTo(args.vg, pEnd.x, pEnd.y);
 		};
 
