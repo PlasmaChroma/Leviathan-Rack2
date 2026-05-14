@@ -14,6 +14,8 @@ struct WyrmSand {
 	std::vector<float> depth;
 	std::vector<float> energy;
 	std::vector<float> baseNoise;
+	std::vector<uint8_t> activeMask;
+	std::vector<int> activeIndices;
 	int imageHandle = -1;
 	int imageW = 0;
 	int imageH = 0;
@@ -25,10 +27,12 @@ struct WyrmSand {
 	std::vector<unsigned char> imagePixels;
 	std::array<Vec, kWyrmPointCountMax> previousPath {};
 	int previousPathCount = 0;
+	int idleFrameCounter = 0;
 
 	void resetHistory();
 	void ensureField(Vec size, int detailSetting);
 	void markImageDirty();
+	void markCellActive(int idx);
 	void ensureImageRaster(Vec size, int detailSetting);
 	const unsigned char* imageData() const;
 	int imageWidth() const;

@@ -16,6 +16,15 @@ int resolveSandDetail(int detailSetting, Vec size) {
 	}
 }
 
+int sandPathStrideForDetail(int resolvedDetail) {
+	switch (resolvedDetail) {
+		case WYRMSAND_DETAIL_LOW: return 3;
+		case WYRMSAND_DETAIL_MEDIUM: return 2;
+		case WYRMSAND_DETAIL_HIGH:
+		default: return 1;
+	}
+}
+
 inline unsigned char clampU8(int v) {
 	return (unsigned char) clamp(v, 0, 255);
 }
@@ -32,11 +41,20 @@ inline void blendOverOpaque(unsigned char* rgb, int sr, int sg, int sb, int sa) 
 void WyrmSand::resetHistory() {
 	previousPathCount = 0;
 	lastUpdateSec = -1.0;
+	idleFrameCounter = 0;
 }
 
 void WyrmSand::markImageDirty() {
 	imageDirty = true;
 	imageRevision++;
+}
+
+void WyrmSand::markCellActive(int idx) {
+	if (idx < 0 || idx >= int(activeMask.size()) || activeMask[idx]) {
+		return;
+	}
+	activeMask[idx] = 1;
+	activeIndices.push_back(idx);
 }
 
 const unsigned char* WyrmSand::imageData() const {
@@ -90,6 +108,8 @@ void WyrmSand::ensureField(Vec size, int detailSetting) {
 	const int cellCount = w * h;
 	depth.assign(cellCount, 0.f);
 	energy.assign(cellCount, 0.f);
+	activeMask.assign(cellCount, 0u);
+	activeIndices.clear();
 	baseNoise.resize(cellCount);
 	for (int y = 0; y < h; ++y) {
 		for (int x = 0; x < w; ++x) {
@@ -115,6 +135,7 @@ void WyrmSand::stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float 
 	const int y0 = clamp(int(std::floor((pos.y - radiusPx) / cellH)), 0, h - 1);
 	const int y1 = clamp(int(std::ceil((pos.y + radiusPx) / cellH)), 0, h - 1);
 	const float invRadius = 1.f / std::max(radiusPx, 1e-4f);
+	bool changed = false;
 	for (int gy = y0; gy <= y1; ++gy) {
 		const float cy = (float(gy) + 0.5f) * cellH;
 		for (int gx = x0; gx <= x1; ++gx) {
@@ -127,11 +148,19 @@ void WyrmSand::stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float 
 				continue;
 			}
 			const int idx = gy * w + gx;
-			depth[idx] = clamp(depth[idx] + depthDelta * falloff, -1.f, 1.f);
-			energy[idx] = clamp(energy[idx] + energyDelta * falloff, 0.f, 1.f);
+			const float newDepth = clamp(depth[idx] + depthDelta * falloff, -1.f, 1.f);
+			const float newEnergy = clamp(energy[idx] + energyDelta * falloff, 0.f, 1.f);
+			if (std::fabs(newDepth - depth[idx]) > 1e-6f || std::fabs(newEnergy - energy[idx]) > 1e-6f) {
+				depth[idx] = newDepth;
+				energy[idx] = newEnergy;
+				markCellActive(idx);
+				changed = true;
+			}
 		}
 	}
-	markImageDirty();
+	if (changed) {
+		markImageDirty();
+	}
 }
 
 void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength) {
@@ -159,6 +188,7 @@ void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, floa
 	const int x1 = clamp(int(std::ceil(maxX / cellW)), 0, w - 1);
 	const int y0 = clamp(int(std::floor(minY / cellH)), 0, h - 1);
 	const int y1 = clamp(int(std::ceil(maxY / cellH)), 0, h - 1);
+	bool changed = false;
 	for (int gy = y0; gy <= y1; ++gy) {
 		const float cy = (float(gy) + 0.5f) * cellH;
 		for (int gx = x0; gx <= x1; ++gx) {
@@ -176,11 +206,19 @@ void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, floa
 				continue;
 			}
 			const int idx = gy * w + gx;
-			depth[idx] = clamp(depth[idx] - troughStrength * trough + ridgeStrength * ridge, -1.f, 1.f);
-			energy[idx] = clamp(energy[idx] + energyStrength * e, 0.f, 1.f);
+			const float newDepth = clamp(depth[idx] - troughStrength * trough + ridgeStrength * ridge, -1.f, 1.f);
+			const float newEnergy = clamp(energy[idx] + energyStrength * e, 0.f, 1.f);
+			if (std::fabs(newDepth - depth[idx]) > 1e-6f || std::fabs(newEnergy - energy[idx]) > 1e-6f) {
+				depth[idx] = newDepth;
+				energy[idx] = newEnergy;
+				markCellActive(idx);
+				changed = true;
+			}
 		}
 	}
-	markImageDirty();
+	if (changed) {
+		markImageDirty();
+	}
 }
 
 void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount) {
@@ -189,6 +227,7 @@ void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::arr
 		return;
 	}
 	ensureField(size, detailSetting);
+	const int resolvedDetail = resolveSandDetail(detailSetting, size);
 	if (lastUpdateSec < 0.0 || !std::isfinite(lastUpdateSec)) {
 		lastUpdateSec = nowSec;
 	}
@@ -196,11 +235,32 @@ void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::arr
 	lastUpdateSec = nowSec;
 	const float depthDecay = std::exp(-0.55f * elapsed);
 	const float energyDecay = std::exp(-3.5f * elapsed);
-	for (int i = 0, n = w * h; i < n; ++i) {
-		depth[i] *= depthDecay;
-		energy[i] *= energyDecay;
+	const float settleDepth = (resolvedDetail == WYRMSAND_DETAIL_LOW) ? 0.005f : 0.003f;
+	const float settleEnergy = (resolvedDetail == WYRMSAND_DETAIL_LOW) ? 0.007f : 0.004f;
+	bool changed = false;
+	int write = 0;
+	for (int read = 0; read < int(activeIndices.size()); ++read) {
+		const int idx = activeIndices[read];
+		const float newDepth = depth[idx] * depthDecay;
+		const float newEnergy = energy[idx] * energyDecay;
+		if (std::fabs(newDepth - depth[idx]) > 1e-6f || std::fabs(newEnergy - energy[idx]) > 1e-6f) {
+			depth[idx] = newDepth;
+			energy[idx] = newEnergy;
+			changed = true;
+		}
+		if (std::fabs(newDepth) >= settleDepth || newEnergy >= settleEnergy) {
+			activeIndices[write++] = idx;
+		}
+		else {
+			depth[idx] = 0.f;
+			energy[idx] = 0.f;
+			activeMask[idx] = 0;
+		}
 	}
-	markImageDirty();
+	activeIndices.resize(write);
+	if (changed) {
+		markImageDirty();
+	}
 	if (pathCount <= 1) {
 		previousPathCount = 0;
 		return;
@@ -210,12 +270,42 @@ void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::arr
 	if (animateDisturbance && previousPathCount == pathCount) {
 		const float troughStrength = (0.018f + 0.052f * slitherAmount) * std::min(1.f, elapsed * 60.f);
 		const float ridgeStrength = (0.010f + 0.032f * slitherAmount) * std::min(1.f, elapsed * 60.f);
-		for (int i = 0; i < pathCount - 1; ++i) {
+		const int baseStride = sandPathStrideForDetail(resolvedDetail);
+		float summedMotion = 0.f;
+		for (int i = 0; i < pathCount; ++i) {
 			const Vec delta = currentPath[i].minus(previousPath[i]);
-			const float motion = clamp(std::sqrt(delta.x * delta.x + delta.y * delta.y) / 7.f, 0.f, 1.f);
-			const float energyStrength = (0.015f + 0.075f * motion) * slitherAmount;
-			disturbSegment(size, currentPath[i], currentPath[i + 1], troughStrength, ridgeStrength, energyStrength);
+			summedMotion += std::sqrt(delta.x * delta.x + delta.y * delta.y);
 		}
+		const float avgMotionPx = summedMotion / float(std::max(1, pathCount));
+		const bool lowActivity = (slitherAmount < 0.22f && avgMotionPx < 0.33f);
+		if (lowActivity) {
+			idleFrameCounter++;
+		}
+		else {
+			idleFrameCounter = 0;
+		}
+		const bool throttleDisturbance = (idleFrameCounter % 2) == 1;
+		if (!throttleDisturbance) {
+			int stride = baseStride;
+			if (resolvedDetail == WYRMSAND_DETAIL_HIGH && (lowActivity || avgMotionPx < 0.55f)) {
+				stride = 2;
+			}
+			const float motionGatePx = (resolvedDetail == WYRMSAND_DETAIL_HIGH) ? 0.18f : 0.14f;
+			for (int i = 0; i < pathCount - 1; i += stride) {
+				const int next = std::min(i + stride, pathCount - 1);
+				const Vec delta = currentPath[i].minus(previousPath[i]);
+				const float motionPx = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+				if (motionPx < motionGatePx) {
+					continue;
+				}
+				const float motion = clamp(motionPx / 7.f, 0.f, 1.f);
+				const float energyStrength = (0.015f + 0.075f * motion) * slitherAmount;
+				disturbSegment(size, currentPath[i], currentPath[next], troughStrength, ridgeStrength, energyStrength);
+			}
+		}
+	}
+	else {
+		idleFrameCounter = 0;
 	}
 
 	for (int i = 0; i < pathCount; ++i) {
@@ -233,6 +323,7 @@ void WyrmSand::drawFlatBackground(NVGcontext* vg, Vec size) const {
 
 void WyrmSand::ensureImageRaster(Vec size, int detailSetting) {
 	ensureField(size, detailSetting);
+	const int resolvedDetail = resolveSandDetail(detailSetting, size);
 	if (w <= 0 || h <= 0) {
 		return;
 	}
@@ -247,6 +338,12 @@ void WyrmSand::ensureImageRaster(Vec size, int detailSetting) {
 	}
 
 	if (imageDirty) {
+		const float sparkleThreshold =
+			(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 0.32f :
+			(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 0.37f : 0.42f;
+		const float sparkleAlphaScale =
+			(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 1.45f :
+			(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 1.20f : 1.00f;
 		const int baseR = 58;
 		const int baseG = 40;
 		const int baseB = 22;
@@ -274,8 +371,8 @@ void WyrmSand::ensureImageRaster(Vec size, int detailSetting) {
 				outPx[3] = 255;
 				blendOverOpaque(outPx, r, g, b, alpha);
 
-				if (e > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
-					blendOverOpaque(outPx, 230, 188, 112, int(72.f * e));
+				if (e > sparkleThreshold && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
+					blendOverOpaque(outPx, 230, 188, 112, int(72.f * sparkleAlphaScale * e));
 				}
 			}
 		}
@@ -325,6 +422,13 @@ void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
 
 void WyrmSand::drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting) {
 	ensureField(size, detailSetting);
+	const int resolvedDetail = resolveSandDetail(detailSetting, size);
+	const float sparkleThreshold =
+		(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 0.32f :
+		(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 0.37f : 0.42f;
+	const float sparkleAlphaScale =
+		(resolvedDetail == WYRMSAND_DETAIL_LOW) ? 1.45f :
+		(resolvedDetail == WYRMSAND_DETAIL_MEDIUM) ? 1.20f : 1.00f;
 	nvgBeginPath(vg);
 	nvgRect(vg, 0.f, 0.f, size.x, size.y);
 	nvgFillColor(vg, nvgRGBA(58, 40, 22, 224));
@@ -347,10 +451,10 @@ void WyrmSand::drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting) {
 			nvgRect(vg, float(gx) * cellW, float(gy) * cellH, cellW + 0.5f, cellH + 0.5f);
 			nvgFillColor(vg, nvgRGBA(r, g, b, alpha));
 			nvgFill(vg);
-			if (e > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
+			if (e > sparkleThreshold && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
 				nvgBeginPath(vg);
 				nvgCircle(vg, (float(gx) + 0.5f) * cellW, (float(gy) + 0.5f) * cellH, 0.35f + 0.75f * e);
-				nvgFillColor(vg, nvgRGBA(230, 188, 112, int(72.f * e)));
+				nvgFillColor(vg, nvgRGBA(230, 188, 112, int(72.f * sparkleAlphaScale * e)));
 				nvgFill(vg);
 			}
 		}

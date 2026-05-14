@@ -266,6 +266,7 @@ struct Wyrm : Module {
 	std::atomic<bool> perfSlitherActive {false};
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
+	std::atomic<float> perfSandGlUs {0.f};
 	uint32_t debugInstanceId = 0;
 	double createdUnixTimeSec = 0.0;
 

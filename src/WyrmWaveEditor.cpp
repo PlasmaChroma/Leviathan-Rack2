@@ -672,9 +672,9 @@ struct WyrmWaveEditor : TransparentWidget {
 					editorDrawUs,
 					sandUpdateUs,
 					sandDrawUs,
+					module->perfSandGlUs.load(std::memory_order_relaxed),
 					audioUs,
 					module->perfChannels.load(std::memory_order_relaxed),
-					module->pointCount,
 					bodySampleCount
 				);
 			}

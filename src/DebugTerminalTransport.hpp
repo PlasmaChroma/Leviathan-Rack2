@@ -33,9 +33,9 @@ void submitWyrmMetrics(uint32_t instanceId,
                        float editorDrawUs,
                        float sandUpdateUs,
                        float sandDrawUs,
+                       float sandGlUs,
                        float audioUs,
                        int channels,
-                       int pointCount,
                        int bodySamples);
 
 } // namespace debug_terminal

@@ -55,9 +55,9 @@ MODULE_COLUMNS = {
         ("ed_us", "Ed us"),
         ("sand_up_us", "SUp us"),
         ("sand_dr_us", "SDr us"),
+        ("sand_gl_us", "SGL us"),
         ("audio_us", "Aud us"),
         ("ch", "Ch"),
-        ("pts", "Pts"),
         ("body", "Body"),
     ),
 }

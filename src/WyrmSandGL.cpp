@@ -1,6 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 
+#include <chrono>
 #include <nanovg_gl.h>
 
 struct WyrmSandGlWidget final : widget::OpenGlWidget {
@@ -26,19 +27,26 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const bool isGlBackend = (backend == WYRMSAND_OPENGL_TEXTURE || backend == WYRMSAND_SHADER_FEEDBACK);
 		visible = isGlBackend;
 		if (!visible) {
+			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 		OpenGlWidget::step();
 	}
 
 	void drawFramebuffer() override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point perfStart = PerfClock::now();
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		if (!module || !sand) {
+			if (module) {
+				module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
+			}
 			return;
 		}
 		if (!module->sandViewEnabled.load(std::memory_order_relaxed)) {
+			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 
@@ -48,6 +56,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const int imageW = sand->imageWidth();
 		const int imageH = sand->imageHeight();
 		if (!pixels || imageW <= 0 || imageH <= 0) {
+			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 
@@ -102,6 +111,9 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glMatrixMode(GL_MODELVIEW);
 
 		glDisable(GL_TEXTURE_2D);
+		const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - perfStart).count()) * 0.001f;
+		module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
 	}
 };
 
