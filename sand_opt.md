@@ -10,9 +10,9 @@ Implementation checklist:
 - [x] Add sand backend/detail/persistence enums in `Wyrm.hpp`.
 - [x] Persist sand backend/detail/persistence in `Wyrm::dataToJson()` / `Wyrm::dataFromJson()`.
 - [x] Add `Sand` context submenu with `Sand View`, `Backend`, `Detail`, and `Persistence`.
-- [ ] Add backend dispatch inside `WyrmSand::draw()`.
-- [ ] Keep current cell renderer as explicit `NanoVGCells` backend implementation.
-- [ ] Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
+- [x] Add backend dispatch inside `WyrmSand::draw()`.
+- [x] Keep current cell renderer as explicit `NanoVGCells` backend implementation.
+- [x] Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
 - [ ] Add `NanoVGImage` state, lifecycle, and one-image draw path to `WyrmSand`.
 - [ ] Make `NanoVGImage` the default backend in runtime behavior.
 - [ ] Add active cell tracking for dirty decisions and later active-only decay.
@@ -382,7 +382,7 @@ Keep audio metrics separate. Sand optimization should not change `process()`.
 
 1. Keep the current `WyrmSand` split as the implementation boundary. Status: done.
 2. Add sand backend/detail/persistence enums, JSON persistence, and menu entries. Status: done.
-3. Add backend dispatch inside `WyrmSand::draw()`. Status: pending.
+3. Add backend dispatch inside `WyrmSand::draw()`. Status: done.
 4. Keep current cell renderer as `NanoVGCells`.
 5. Add detail presets and deterministic grid sizing to `WyrmSand::ensureField()`.
 6. Add `NanoVGImage` state, image lifecycle, and one-image draw path to `WyrmSand`.

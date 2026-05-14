@@ -190,9 +190,12 @@ struct WyrmWaveEditor : TransparentWidget {
 			sand.resetHistory();
 			return;
 		}
+		const int detailSetting = module
+			? module->sandDetail.load(std::memory_order_relaxed)
+			: WYRMSAND_DETAIL_AUTO;
 		if (!module || module->pointCount <= 1) {
 			std::array<Vec, kWyrmPointCountMax> emptyPath {};
-			sand.update(box.size, nowSec, emptyPath, 0, 0.f);
+			sand.update(box.size, nowSec, detailSetting, emptyPath, 0, 0.f);
 			return;
 		}
 		const int count = clamp(module->pointCount, 2, kWyrmPointCountMax);
@@ -200,11 +203,17 @@ struct WyrmWaveEditor : TransparentWidget {
 		for (int i = 0; i < count; ++i) {
 			currentPath[i] = Vec(pointX(i, count), yFromValue(displayWavePoint(i)));
 		}
-		sand.update(box.size, nowSec, currentPath, count, effectiveSlitherAmount());
+		sand.update(box.size, nowSec, detailSetting, currentPath, count, effectiveSlitherAmount());
 	}
 
 	void drawSandBackground(NVGcontext* vg) {
-		sand.draw(vg, box.size, sandEnabled());
+		const int backendSetting = module
+			? module->sandBackend.load(std::memory_order_relaxed)
+			: WYRMSAND_NANOVG_CELLS;
+		const int detailSetting = module
+			? module->sandDetail.load(std::memory_order_relaxed)
+			: WYRMSAND_DETAIL_AUTO;
+		sand.draw(vg, box.size, sandEnabled(), backendSetting, detailSetting);
 	}
 
 	int rockIndexAt(Vec pos) const {
@@ -664,13 +673,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					audioUs,
 					module->perfChannels.load(std::memory_order_relaxed),
 					module->pointCount,
-					module->rockCount,
-					module->sandViewEnabled.load(std::memory_order_relaxed),
 					bodySampleCount,
-					module->perfFmConnected.load(std::memory_order_relaxed),
-					module->perfFoldActive.load(std::memory_order_relaxed),
-					module->perfSlitherActive.load(std::memory_order_relaxed),
-					module->perfLfoMode.load(std::memory_order_relaxed),
 					wavetableRebuilt
 				);
 			}

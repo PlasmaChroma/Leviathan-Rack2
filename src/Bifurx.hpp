@@ -413,6 +413,7 @@ struct BifurxSpectrumBase {
 	mutable float cachedMarkerLayoutW = 0.f;
 	mutable float cachedMarkerLayoutH = 0.f;
 	mutable float cachedMarkerLayoutSampleRate = 0.f;
+	mutable uint32_t cachedMarkerLayoutPreviewSeq = 0;
 	mutable float cachedMarkerLayoutAnchorX01[2] = {0.f, 0.f};
 	mutable bool cachedMarkerLayoutMarkerPinned[2] = {false, false};
 

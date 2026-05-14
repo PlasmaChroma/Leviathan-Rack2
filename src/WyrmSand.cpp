@@ -1,13 +1,54 @@
 #include "WyrmSand.hpp"
 
+namespace {
+int resolveSandDetail(int detailSetting, Vec size) {
+	switch (detailSetting) {
+		case WYRMSAND_DETAIL_LOW: return WYRMSAND_DETAIL_LOW;
+		case WYRMSAND_DETAIL_MEDIUM: return WYRMSAND_DETAIL_MEDIUM;
+		case WYRMSAND_DETAIL_HIGH: return WYRMSAND_DETAIL_HIGH;
+		case WYRMSAND_DETAIL_AUTO:
+		default: {
+			const float area = size.x * size.y;
+			if (area <= 120000.f) return WYRMSAND_DETAIL_LOW;
+			if (area <= 220000.f) return WYRMSAND_DETAIL_MEDIUM;
+			return WYRMSAND_DETAIL_HIGH;
+		}
+	}
+}
+}
+
 void WyrmSand::resetHistory() {
 	previousPathCount = 0;
 	lastUpdateSec = -1.0;
 }
 
-void WyrmSand::ensureField(Vec size) {
-	const int targetW = clamp(int(size.x * 0.65f), 64, 128);
-	const int targetH = clamp(int(size.y * 0.65f), 32, 72);
+void WyrmSand::ensureField(Vec size, int detailSetting) {
+	const int resolvedDetail = resolveSandDetail(detailSetting, size);
+	float density = 0.65f;
+	int minW = 64;
+	int maxW = 128;
+	int minH = 32;
+	int maxH = 72;
+	switch (resolvedDetail) {
+		case WYRMSAND_DETAIL_LOW:
+			density = 0.50f;
+			minW = 48; maxW = 96;
+			minH = 24; maxH = 54;
+			break;
+		case WYRMSAND_DETAIL_MEDIUM:
+			density = 0.65f;
+			minW = 64; maxW = 128;
+			minH = 32; maxH = 72;
+			break;
+		case WYRMSAND_DETAIL_HIGH:
+		default:
+			density = 0.82f;
+			minW = 80; maxW = 156;
+			minH = 40; maxH = 92;
+			break;
+	}
+	const int targetW = clamp(int(size.x * density), minW, maxW);
+	const int targetH = clamp(int(size.y * density), minH, maxH);
 	if (initialized && w == targetW && h == targetH) {
 		return;
 	}
@@ -106,12 +147,12 @@ void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, floa
 	}
 }
 
-void WyrmSand::update(Vec size, double nowSec, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount) {
+void WyrmSand::update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount) {
 	if (!std::isfinite(nowSec)) {
 		resetHistory();
 		return;
 	}
-	ensureField(size);
+	ensureField(size, detailSetting);
 	if (lastUpdateSec < 0.0 || !std::isfinite(lastUpdateSec)) {
 		lastUpdateSec = nowSec;
 	}
@@ -153,11 +194,11 @@ void WyrmSand::drawFlatBackground(NVGcontext* vg, Vec size) const {
 	nvgFill(vg);
 }
 
-void WyrmSand::drawCells(NVGcontext* vg, Vec size) {
-	ensureField(size);
+void WyrmSand::drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting) {
+	ensureField(size, detailSetting);
 	nvgBeginPath(vg);
 	nvgRect(vg, 0.f, 0.f, size.x, size.y);
-	nvgFillColor(vg, nvgRGBA(72, 50, 28, 224));
+	nvgFillColor(vg, nvgRGBA(58, 40, 22, 224));
 	nvgFill(vg);
 	const float cellW = size.x / float(std::max(w, 1));
 	const float cellH = size.y / float(std::max(h, 1));
@@ -167,8 +208,8 @@ void WyrmSand::drawCells(NVGcontext* vg, Vec size) {
 			const float grain = baseNoise[idx];
 			const float d = clamp(depth[idx], -1.f, 1.f);
 			const float e = clamp(energy[idx], 0.f, 1.f);
-			float shade = 0.68f + 0.24f * grain + 0.28f * std::max(d, 0.f) - 0.35f * std::max(-d, 0.f);
-			shade = clamp(shade + 0.22f * e, 0.f, 1.25f);
+			float shade = 0.58f + 0.21f * grain + 0.25f * std::max(d, 0.f) - 0.33f * std::max(-d, 0.f);
+			shade = clamp(shade + 0.16f * e, 0.f, 1.12f);
 			const int r = clamp(int(118.f * shade + 30.f * e), 0, 255);
 			const int g = clamp(int(82.f * shade + 22.f * e), 0, 255);
 			const int b = clamp(int(42.f * shade + 10.f * grain), 0, 255);
@@ -180,17 +221,28 @@ void WyrmSand::drawCells(NVGcontext* vg, Vec size) {
 			if (e > 0.42f && hashUnit(uint32_t(idx) ^ 0xa53c9e7du) > 0.62f) {
 				nvgBeginPath(vg);
 				nvgCircle(vg, (float(gx) + 0.5f) * cellW, (float(gy) + 0.5f) * cellH, 0.35f + 0.75f * e);
-				nvgFillColor(vg, nvgRGBA(245, 204, 126, int(90.f * e)));
+				nvgFillColor(vg, nvgRGBA(230, 188, 112, int(72.f * e)));
 				nvgFill(vg);
 			}
 		}
 	}
 }
 
-void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled) {
+void WyrmSand::draw(NVGcontext* vg, Vec size, bool enabled, int backendSetting, int detailSetting) {
 	if (!enabled) {
 		drawFlatBackground(vg, size);
 		return;
 	}
-	drawCells(vg, size);
+	switch (backendSetting) {
+		case WYRMSAND_NANOVG_CELLS:
+			drawNanoVGCells(vg, size, detailSetting);
+			return;
+		case WYRMSAND_NANOVG_IMAGE:
+		case WYRMSAND_OPENGL_TEXTURE:
+		case WYRMSAND_SHADER_FEEDBACK:
+		default:
+			// Non-cell backends are not wired yet; keep deterministic fallback.
+			drawNanoVGCells(vg, size, detailSetting);
+			return;
+	}
 }

@@ -1344,6 +1344,8 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutW - w) > 1e-4f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutH - h) > 1e-4f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutSampleRate - state.previewState.sampleRate) > 0.5f;
+	rebuild = rebuild || cachedMarkerLayoutPreviewSeq != state.lastPreviewSeq;
+	rebuild = rebuild || state.hasCurveTarget;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[0] - anchors[0].x01) > 1e-7f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[1] - anchors[1].x01) > 1e-7f;
 	rebuild = rebuild || cachedMarkerLayoutMarkerPinned[0] != markerPinned[0];
@@ -1354,6 +1356,7 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 		cachedMarkerLayoutW = w;
 		cachedMarkerLayoutH = h;
 		cachedMarkerLayoutSampleRate = state.previewState.sampleRate;
+		cachedMarkerLayoutPreviewSeq = state.lastPreviewSeq;
 		cachedMarkerLayoutAnchorX01[0] = anchors[0].x01;
 		cachedMarkerLayoutAnchorX01[1] = anchors[1].x01;
 		cachedMarkerLayoutMarkerPinned[0] = markerPinned[0];

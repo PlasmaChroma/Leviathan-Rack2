@@ -58,13 +58,7 @@ MODULE_COLUMNS = {
         ("audio_us", "Aud us"),
         ("ch", "Ch"),
         ("pts", "Pts"),
-        ("rocks", "Rock"),
-        ("sand", "Sand"),
         ("body", "Body"),
-        ("fm", "FM"),
-        ("fold", "Fold"),
-        ("slith", "Slith"),
-        ("lfo", "LFO"),
         ("wt", "WT"),
     ),
 }

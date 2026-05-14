@@ -17,11 +17,11 @@ struct WyrmSand {
 	int previousPathCount = 0;
 
 	void resetHistory();
-	void ensureField(Vec size);
+	void ensureField(Vec size, int detailSetting);
 	void stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float energyDelta);
 	void disturbSegment(Vec size, Vec a, Vec b, float troughStrength, float ridgeStrength, float energyStrength);
-	void update(Vec size, double nowSec, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount);
+	void update(Vec size, double nowSec, int detailSetting, const std::array<Vec, kWyrmPointCountMax>& currentPath, int pathCount, float slitherAmount);
 	void drawFlatBackground(NVGcontext* vg, Vec size) const;
-	void drawCells(NVGcontext* vg, Vec size);
-	void draw(NVGcontext* vg, Vec size, bool enabled);
+	void drawNanoVGCells(NVGcontext* vg, Vec size, int detailSetting);
+	void draw(NVGcontext* vg, Vec size, bool enabled, int backendSetting, int detailSetting);
 };
