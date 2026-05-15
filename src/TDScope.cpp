@@ -220,7 +220,8 @@ struct TDScopeDisplayWidget final : Widget {
   NVGcolor silWaveformLowColor() const {
     float lowR = 122.f, lowG = 92.f, lowB = 255.f;
     if (module) {
-      switch (module->scopeColorScheme) {
+      const int colorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      switch (colorScheme) {
         case TDScope::COLOR_SCHEME_CLASSIC: lowR = 0.f; lowG = 255.f; lowB = 65.f; break;
         case TDScope::COLOR_SCHEME_MONOCHROME: lowR = 92.f; lowG = 92.f; lowB = 92.f; break;
         case TDScope::COLOR_SCHEME_FIRE: lowR = 140.f; lowG = 0.f; lowB = 0.f; break;
@@ -235,7 +236,8 @@ struct TDScopeDisplayWidget final : Widget {
   NVGcolor silWaveformHighColor() const {
     float highR = 28.f, highG = 204.f, highB = 217.f;
     if (module) {
-      switch (module->scopeColorScheme) {
+      const int colorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      switch (colorScheme) {
         case TDScope::COLOR_SCHEME_CLASSIC: highR = 255.f; highG = 15.f; highB = 5.f; break;
         case TDScope::COLOR_SCHEME_MONOCHROME: highR = 242.f; highG = 242.f; highB = 242.f; break;
         case TDScope::COLOR_SCHEME_FIRE: highR = 255.f; highG = 255.f; highB = 30.f; break;

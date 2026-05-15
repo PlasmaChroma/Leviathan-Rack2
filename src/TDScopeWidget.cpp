@@ -54,7 +54,8 @@ const char *debugRenderModeLabel(const TDScope *scopeModule) {
   if (!scopeModule) {
     return "STD";
   }
-  switch (scopeModule->debugRenderMode) {
+  const int renderMode = scopeModule->debugRenderMode.load(std::memory_order_relaxed);
+  switch (renderMode) {
     case TDScope::DEBUG_RENDER_STANDARD:
       return "STD";
     case TDScope::DEBUG_RENDER_TAIL_RASTER:

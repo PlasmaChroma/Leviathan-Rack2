@@ -148,7 +148,8 @@ struct TDScope final : Module {
   }
 
   float scopeDisplayFullScaleVolts() const {
-    switch (scopeDisplayRangeMode) {
+    const int rangeMode = scopeDisplayRangeMode.load(std::memory_order_relaxed);
+    switch (rangeMode) {
       case SCOPE_RANGE_10V:
         return 10.f;
       case SCOPE_RANGE_2V5:
@@ -162,7 +163,8 @@ struct TDScope final : Module {
   }
 
   float debugUiPublishIntervalSec() const {
-    switch (debugUiPublishRateMode) {
+    const int publishRateMode = debugUiPublishRateMode.load(std::memory_order_relaxed);
+    switch (publishRateMode) {
       case DEBUG_UI_PUBLISH_30HZ:
         return 1.f / 30.f;
       case DEBUG_UI_PUBLISH_60HZ:
