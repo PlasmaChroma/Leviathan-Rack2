@@ -456,7 +456,7 @@ void BifurxSpectrumWidget::step() {
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
 				debugId,
-				lastDrawMsEma,
+				module->perfUiRenderMs.load(std::memory_order_relaxed),
 				filterMode,
 				false, // opengl
 				audioUs,
@@ -711,6 +711,8 @@ struct BifurxWidget final : ModuleWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point perfDrawStart = PerfClock::now();
 		ModuleWidget::draw(args);
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		if (bifurx && ageSigilSvg && ageSigilUnlocked) {
@@ -755,6 +757,13 @@ struct BifurxWidget final : ModuleWidget {
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
 			nvgText(args.vg, x, y, debugIdLabel, nullptr);
 			nvgRestore(args.vg);
+		}
+		if (bifurx) {
+			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfDrawStart).count()) * 1e-6f;
+			const float prevMs = bifurx->perfUiRenderMs.load(std::memory_order_relaxed);
+			const float emaMs = (prevMs > 0.f) ? (prevMs + (drawMs - prevMs) * 0.18f) : drawMs;
+			bifurx->perfUiRenderMs.store(std::max(0.f, emaMs), std::memory_order_relaxed);
 		}
 	}
 

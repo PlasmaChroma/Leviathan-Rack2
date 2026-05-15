@@ -421,4 +421,17 @@ void submitWyrmMetrics(uint32_t instanceId,
   transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitIntegralFluxMetrics(uint32_t instanceId,
+                               float uiMs,
+                               float audioUs) {
+  char dataBuf[192];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f}",
+                std::max(0.f, uiMs),
+                std::max(0.f, audioUs));
+  double ts = system::getTime();
+  transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
+}
+
 } // namespace debug_terminal

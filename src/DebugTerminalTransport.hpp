@@ -38,4 +38,8 @@ void submitWyrmMetrics(uint32_t instanceId,
                        int channels,
                        int bodySamples);
 
+void submitIntegralFluxMetrics(uint32_t instanceId,
+                               float uiMs,
+                               float audioUs);
+
 } // namespace debug_terminal

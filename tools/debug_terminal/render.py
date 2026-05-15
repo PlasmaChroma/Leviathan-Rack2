@@ -60,6 +60,10 @@ MODULE_COLUMNS = {
         ("ch", "Ch"),
         ("body", "Body"),
     ),
+    "IntegralFlux": (
+        ("ui_ms", "UI ms"),
+        ("audio_us", "Audio us"),
+    ),
 }
 
 KEY_UP = "up"

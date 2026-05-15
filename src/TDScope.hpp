@@ -66,6 +66,7 @@ struct TDScope final : Module {
   std::atomic<float> uiDebugScopeZoomThicknessMul {1.f};
   std::atomic<float> uiDebugScopeUiDrawUs {0.f};
   std::atomic<float> uiDebugScopeUiDrawUsEma {0.f};
+  std::atomic<float> uiDebugModuleUiDrawUsEma {0.f};
   std::atomic<float> uiDebugScopeDensityPct {100.f};
   std::atomic<int> uiDebugScopeDensityRows {0};
   uint32_t debugInstanceId = 0u;

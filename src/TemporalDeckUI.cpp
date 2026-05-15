@@ -3450,8 +3450,6 @@ struct TemporalDeckWidget : ModuleWidget {
     } else {
       ModuleWidget::draw(args);
     }
-    publishUiDrawMetric(deckModule);
-
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
@@ -3481,6 +3479,8 @@ struct TemporalDeckWidget : ModuleWidget {
         nvgRestore(args.vg);
       }
     }
+
+    publishUiDrawMetric(deckModule);
   }
 
   void step() override {

@@ -635,7 +635,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				lastSubmitSec = nowSec;
 				debug_terminal::submitBifurxUiMetrics(
 					debugId,
-					lastDrawMsEma,
+					module->perfUiRenderMs.load(std::memory_order_relaxed),
 					filterMode,
 					true, // opengl
 					audioUs,

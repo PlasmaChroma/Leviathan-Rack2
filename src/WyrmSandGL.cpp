@@ -500,7 +500,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const float zoom = std::max(1.f, getAbsoluteZoom());
 		const float drawWidth = std::max(1.f, size.x - 4.4f);
 		// Keep roughly <= 1px phase step in screen-space at high zoom to avoid visible strip aliasing.
-		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * 1.75f));
+		const float shdrSampleScale = shaderPath ? 2.05f : 1.75f;
+		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * shdrSampleScale));
 		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 8192);
 		std::array<float, kWyrmPointCountMax> bodyPoints {};
 		for (int i = 0; i < module->pointCount; ++i) {
@@ -760,7 +761,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		else {
 			if (shaderPath) {
 				glUseProgram(bodyShaderProgram);
-				glUniform1f(bodyShaderSoftnessLoc, 0.19f);
+				glUniform1f(bodyShaderSoftnessLoc, 0.205f);
 			}
 			drawBodyGl(box.size, shaderPath, true, false);
 			if (shaderPath) {

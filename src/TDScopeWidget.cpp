@@ -1,5 +1,6 @@
 #include "TDScope.hpp"
 
+#include <chrono>
 #include <cstdio>
 
 namespace {
@@ -127,6 +128,8 @@ struct TDScopeWidget : ModuleWidget {
   }
 
   void draw(const DrawArgs &args) override {
+    using PerfClock = std::chrono::steady_clock;
+    const PerfClock::time_point moduleDrawStart = PerfClock::now();
     bool linkedToDeck = shouldRenderDockBridge();
     if (linkedToDeck) {
       DrawArgs adjusted = args;
@@ -166,12 +169,21 @@ struct TDScopeWidget : ModuleWidget {
       nvgRestore(args.vg);
     }
 
+    if (scopeModule) {
+      const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   PerfClock::now() - moduleDrawStart).count()) *
+                           0.001f;
+      const float prevUs = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
+      const float emaUs = (prevUs > 0.f) ? (prevUs + (drawUs - prevUs) * 0.18f) : drawUs;
+      scopeModule->uiDebugModuleUiDrawUsEma.store(std::max(0.f, emaUs), std::memory_order_relaxed);
+    }
+
     if (scopeModule && isDragonKingDebugEnabled()) {
       double nowSec = system::getTime();
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
-        float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
+        float uiDrawUsEma = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);

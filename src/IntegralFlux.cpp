@@ -1,11 +1,19 @@
 #include "plugin.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
 #include <atomic>
+#include <chrono>
 #include <limits>
+#include <unordered_map>
 
+namespace {
+std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
+constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
+}
 
 struct IntegralFlux : Module {
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
@@ -175,12 +183,17 @@ struct IntegralFlux : Module {
 	PreviewUpdateState previewUpdateCh4;
 	std::atomic<bool> bandlimitedGateOutputs {false};
 	std::atomic<bool> bandlimitedSignalOutputs {true};
+	std::atomic<uint64_t> perfAudioSampledCount {0};
+	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<float> perfUiRenderMs {0.f};
+	uint32_t debugInstanceId = 0u;
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
+	float previewDotPublishTimer = 0.f;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
 	static constexpr float OUTER_V_MAX = 10.2f;
@@ -219,6 +232,7 @@ struct IntegralFlux : Module {
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
+	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
@@ -597,7 +611,11 @@ struct IntegralFlux : Module {
 		const OuterChannelConfig& cfg,
 		PreviewSharedState& previewShared,
 		PreviewUpdateState& previewUpdateState,
-		bool timingTick
+		bool timingTick,
+		bool bandlimitedSignalEnabled,
+		bool bandlimitedGateEnabled,
+		bool timingInterpolateEnabled,
+		float injectAlphaBase
 	) {
 		// This routine handles both behaviors of an outer channel:
 		// 1) function generator when cycling/triggered
@@ -623,7 +641,7 @@ struct IntegralFlux : Module {
 				// Manual behavior: trigger can reset only during FALL, restarting from cycle start.
 				float prevOut = ch.out;
 				ch.out = OUTER_V_MIN;
-				if (bandlimitedSignalOutputs) {
+				if (bandlimitedSignalEnabled) {
 					insertSignalTransition(ch, ch.out - prevOut, 1e-6f);
 				}
 			}
@@ -676,7 +694,7 @@ struct IntegralFlux : Module {
 					ch.fallTimeStep = 0.f;
 					ch.timeInterpSamplesLeft = 0;
 				}
-				else if (timingInterpolate && timingUpdateDiv > 1) {
+				else if (timingInterpolateEnabled && timingUpdateDiv > 1) {
 					// Interpolate timing across N samples to avoid sample-and-hold zipper tone.
 					ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
 					ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
@@ -745,7 +763,7 @@ struct IntegralFlux : Module {
 			bool gateIsHigh = (ch.phase == cfg.gateHighPhase);
 			if (gateIsHigh != gateWasHigh) {
 				// Transition occurred at start-of-sample due to trigger/cycle state.
-				if (bandlimitedGateOutputs) {
+				if (bandlimitedGateEnabled) {
 					insertGateTransition(ch, gateIsHigh, 1e-6f);
 				}
 				else {
@@ -754,7 +772,7 @@ struct IntegralFlux : Module {
 			}
 		}
 		else if (!signalPatched && gateWasHigh) {
-			if (bandlimitedGateOutputs) {
+			if (bandlimitedGateEnabled) {
 				insertGateTransition(ch, false, 1e-6f);
 			}
 			else {
@@ -772,8 +790,7 @@ struct IntegralFlux : Module {
 				// Map patched input into the same normalized domain as the internal integrator state.
 				float inSoft = softClamp8(signalIn);
 				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
-				float a = 1.f - std::exp(-dt / OUTER_INJECT_TAU);
-				injectAlpha = OUTER_INJECT_GAIN * clamp(a, 0.f, 1.f);
+				injectAlpha = injectAlphaBase;
 			}
 
 			if (ch.phase == OUTER_RISE) {
@@ -795,7 +812,7 @@ struct IntegralFlux : Module {
 					ch.phasePos = overshoot * (riseTime / std::max(fallTime, 1e-6f));
 					ch.phase = OUTER_FALL;
 					// Keep output continuous at rise->fall boundary (no hard snap to max).
-					if (bandlimitedGateOutputs) {
+					if (bandlimitedGateEnabled) {
 						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 					}
 					else {
@@ -821,10 +838,10 @@ struct IntegralFlux : Module {
 					ch.phase = OUTER_IDLE;
 					float prevOut = ch.out;
 					ch.out = OUTER_V_MIN;
-					if (bandlimitedSignalOutputs) {
+					if (bandlimitedSignalEnabled) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
-					if (bandlimitedGateOutputs) {
+					if (bandlimitedGateEnabled) {
 						insertGateTransition(ch, ch.phase == cfg.gateHighPhase, f);
 					}
 					else {
@@ -847,7 +864,7 @@ struct IntegralFlux : Module {
 			ch.out = slewStep.out;
 			bool gateIsHigh = (cfg.gateHighPhase == OUTER_RISE) ? (slewStep.direction > 0) : (slewStep.direction < 0);
 			if (gateIsHigh != gateWasHigh) {
-				if (bandlimitedGateOutputs) {
+				if (bandlimitedGateEnabled) {
 					insertGateTransition(ch, gateIsHigh, 1e-6f);
 				}
 				else {
@@ -867,6 +884,7 @@ struct IntegralFlux : Module {
 
 	IntegralFlux() {
 		initKnobCurveLut();
+		debugInstanceId = gIntegralFluxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
@@ -951,6 +969,13 @@ struct IntegralFlux : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+		const bool bandlimitedSignalEnabled = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
+		const bool bandlimitedGateEnabled = bandlimitedGateOutputs.load(std::memory_order_relaxed);
+		const bool timingInterpolateEnabled = timingInterpolate.load(std::memory_order_relaxed);
+		const float injectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-args.sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
 		applyRequestedTimingUpdateDiv();
 		// Static config structs remove repeated branching and keep CH1/CH4 path unified.
 		static const OuterChannelConfig ch1Cfg {
@@ -1005,40 +1030,51 @@ struct IntegralFlux : Module {
 			}
 			lightTick = true;
 		}
+		previewDotPublishTimer += args.sampleTime;
+		bool previewDotPublishTick = false;
+		if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+			previewDotPublishTimer -= PREVIEW_DOT_PUBLISH_INTERVAL;
+			if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+				previewDotPublishTimer = 0.f;
+			}
+			previewDotPublishTick = true;
+		}
 		OuterChannelResult ch1Result;
 		OuterChannelResult ch4Result;
-		ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick);
-		ch4Result = processOuterChannel(args, ch4, ch4Cfg, previewCh4, previewUpdateCh4, timingTick);
-		float ch1OutRendered = ch1.out + (bandlimitedSignalOutputs ? ch1.signalBlep.process() : 0.f);
-		float ch4OutRendered = ch4.out + (bandlimitedSignalOutputs ? ch4.signalBlep.process() : 0.f);
-		float outRangeInv = 1.f / std::max(OUTER_V_MAX - OUTER_V_MIN, 1e-6f);
-		auto computeDotX = [](const OuterChannelState& ch) {
-			if (ch.phase == OUTER_IDLE) {
+		ch1Result = processOuterChannel(args, ch1, ch1Cfg, previewCh1, previewUpdateCh1, timingTick, bandlimitedSignalEnabled, bandlimitedGateEnabled, timingInterpolateEnabled, injectAlphaBase);
+		ch4Result = processOuterChannel(args, ch4, ch4Cfg, previewCh4, previewUpdateCh4, timingTick, bandlimitedSignalEnabled, bandlimitedGateEnabled, timingInterpolateEnabled, injectAlphaBase);
+		float ch1OutRendered = ch1.out + (bandlimitedSignalEnabled ? ch1.signalBlep.process() : 0.f);
+		float ch4OutRendered = ch4.out + (bandlimitedSignalEnabled ? ch4.signalBlep.process() : 0.f);
+		if (previewDotPublishTick) {
+			float outRangeInv = 1.f / std::max(OUTER_V_MAX - OUTER_V_MIN, 1e-6f);
+			auto computeDotX = [](const OuterChannelState& ch) {
+				if (ch.phase == OUTER_IDLE) {
+					return 0.f;
+				}
+				float rise = std::max(ch.activeRiseTime, 1e-6f);
+				float fall = std::max(ch.activeFallTime, 1e-6f);
+				float total = rise + fall;
+				if (ch.phase == OUTER_RISE) {
+					return clamp((ch.phasePos * rise) / total, 0.f, 1.f);
+				}
+				if (ch.phase == OUTER_FALL) {
+					return clamp((rise + ch.phasePos * fall) / total, 0.f, 1.f);
+				}
 				return 0.f;
-			}
-			float rise = std::max(ch.activeRiseTime, 1e-6f);
-			float fall = std::max(ch.activeFallTime, 1e-6f);
-			float total = rise + fall;
-			if (ch.phase == OUTER_RISE) {
-				return clamp((ch.phasePos * rise) / total, 0.f, 1.f);
-			}
-			if (ch.phase == OUTER_FALL) {
-				return clamp((rise + ch.phasePos * fall) / total, 0.f, 1.f);
-			}
-			return 0.f;
-		};
-		publishPreviewDot(
-			previewCh1,
-			ch1.phase != OUTER_IDLE,
-			computeDotX(ch1),
-			(ch1OutRendered - OUTER_V_MIN) * outRangeInv
-		);
-		publishPreviewDot(
-			previewCh4,
-			ch4.phase != OUTER_IDLE,
-			computeDotX(ch4),
-			(ch4OutRendered - OUTER_V_MIN) * outRangeInv
-		);
+			};
+			publishPreviewDot(
+				previewCh1,
+				ch1.phase != OUTER_IDLE,
+				computeDotX(ch1),
+				(ch1OutRendered - OUTER_V_MIN) * outRangeInv
+			);
+			publishPreviewDot(
+				previewCh4,
+				ch4.phase != OUTER_IDLE,
+				computeDotX(ch4),
+				(ch4OutRendered - OUTER_V_MIN) * outRangeInv
+			);
+		}
 		// Variable outputs are attenuverters; unity outputs bypass this scaling.
 		float ch1Var = clamp(ch1OutRendered * attenuverterGain(params[ATTENUATE_1_PARAM].getValue()), -10.f, 10.f);
 		float ch2In = inputs[INPUT_2_INPUT].isConnected() ? inputs[INPUT_2_INPUT].getVoltage() : 10.f;
@@ -1046,8 +1082,8 @@ struct IntegralFlux : Module {
 		float ch3In = inputs[INPUT_3_INPUT].isConnected() ? inputs[INPUT_3_INPUT].getVoltage() : 5.f;
 		float ch3Var = clamp(ch3In * attenuverterGain(params[ATTENUATE_3_PARAM].getValue()), -10.f, 10.f);
 		float ch4Var = clamp(ch4OutRendered * attenuverterGain(params[ATTENUATE_4_PARAM].getValue()), -10.f, 10.f);
-		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch1.gateBlep.process() : 0.f);
-		float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? ch4.gateBlep.process() : 0.f);
+		float eorOut = (ch1.gateState ? 10.f : 0.f) + (bandlimitedGateEnabled ? ch1.gateBlep.process() : 0.f);
+		float eocOut = (ch4.gateState ? 10.f : 0.f) + (bandlimitedGateEnabled ? ch4.gateBlep.process() : 0.f);
 		bool eorHigh = ch1.gateState;
 		bool eocHigh = ch4.gateState;
 		float sumOut = 0.f;
@@ -1095,6 +1131,12 @@ struct IntegralFlux : Module {
 			// red = negative SUM, green = positive SUM.
 			lights[OR_LED_LIGHT].setBrightness(clamp((-sumOut) / 10.f, 0.f, 1.f));
 			lights[INV_LED_LIGHT].setBrightness(clamp(sumOut / 10.f, 0.f, 1.f));
+		}
+		if (measurePerf) {
+			const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count();
+			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
 		}
 	}
 };
@@ -1146,6 +1188,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
 	int channel = 1;
+	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
@@ -1154,7 +1197,8 @@ struct WavePreviewWidget : Widget {
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
 
-	WavePreviewWidget(int channel) {
+	WavePreviewWidget(IntegralFlux* module, int channel) {
+		modulePtr = module;
 		this->channel = channel;
 	}
 
@@ -1239,10 +1283,6 @@ struct WavePreviewWidget : Widget {
 
 	void step() override {
 		Widget::step();
-		IntegralFlux* modulePtr = nullptr;
-		if (ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>()) {
-			modulePtr = moduleWidget->getModule<IntegralFlux>();
-		}
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1489,7 +1529,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
-			WavePreviewWidget* ch1Preview = new WavePreviewWidget(1);
+			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
@@ -1503,7 +1543,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(ch1Preview);
 		}
 		{
-			WavePreviewWidget* ch4Preview = new WavePreviewWidget(4);
+			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
@@ -1557,6 +1597,48 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
+	}
+
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point perfStart = PerfClock::now();
+		ModuleWidget::draw(args);
+		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
+		if (!flux) {
+			return;
+		}
+		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - perfStart).count()) * 1e-6f;
+		const float prevUiMs = flux->perfUiRenderMs.load(std::memory_order_relaxed);
+		const float uiMs = (prevUiMs > 0.f) ? (prevUiMs + (drawMs - prevUiMs) * 0.18f) : drawMs;
+		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
+
+		if (isDragonKingDebugEnabled()) {
+			double nowSec = system::getTime();
+			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[flux->debugInstanceId];
+			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
+				lastSubmitSec = nowSec;
+				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs);
+			}
+			if (APP && APP->window && APP->window->uiFont) {
+				char debugIdLabel[32];
+				std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", flux->debugInstanceId);
+				const float x = box.size.x - mm2px(0.9f);
+				const float y = mm2px(2.5f);
+				nvgSave(args.vg);
+				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+				nvgFontSize(args.vg, 6.8f);
+				nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+				nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+				nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+				nvgText(args.vg, x, y, debugIdLabel, nullptr);
+				nvgRestore(args.vg);
+			}
+		}
 	}
 
 	void appendContextMenu(Menu* menu) override {

@@ -676,6 +676,7 @@ struct Bifurx : Module {
 	std::atomic<uint64_t> perfAudioAnalysisNs{0};
 	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
 	std::atomic<float> perfSampleRate{0.f};
+	std::atomic<float> perfUiRenderMs{0.f};
 	std::atomic<int> perfMode{0};
 	std::atomic<bool> perfFastPathEligible{false};
 	std::atomic<bool> perfPreviewPitchCvConnected{false};
