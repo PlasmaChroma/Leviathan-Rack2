@@ -38,6 +38,7 @@ MODULE_COLUMNS = {
     ),
     "TemporalDeck": (
         ("ui_ms", "UI ms"),
+        ("audio_us", "Audio us"),
         ("scope_preview_us", "Scope us"),
         ("scope_stride", "Stride"),
         ("scope_metric_valid", "Scope OK"),

@@ -16,6 +16,7 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  float uiMs,
+                                 float audioUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid);

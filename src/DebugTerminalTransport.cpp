@@ -360,14 +360,16 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  float uiMs,
+                                 float audioUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
-  char dataBuf[256];
+  char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
                 std::max(0.f, uiMs),
+                std::max(0.f, audioUs),
                 std::max(0.f, scopePreviewUs),
                 std::max(0, scopeStride),
                 scopeMetricValid ? 1 : 0);

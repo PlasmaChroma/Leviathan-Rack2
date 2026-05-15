@@ -657,6 +657,8 @@ struct TemporalDeck::Impl {
   std::atomic<double> uiLagSamples{0.0};
   std::atomic<double> uiAccessibleLagSamples{0.0};
   std::atomic<float> uiSampleRate{44100.f};
+  std::atomic<uint64_t> perfAudioSampledCount{0u};
+  std::atomic<uint64_t> perfAudioProcessNs{0u};
   uint32_t debugInstanceId = 0u;
   std::atomic<float> uiDrawCostUs{0.f};
   std::atomic<float> uiScopePreviewCostUs{0.f};
@@ -1038,6 +1040,9 @@ void TemporalDeck::dataFromJson(json_t *root) {
 }
 
 void TemporalDeck::process(const ProcessArgs &args) {
+  const bool perfTimingEnabled = isDragonKingDebugEnabled();
+  const auto processStart = perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+
   if (impl->sampleLifecycle.consumeAllocationFallbackPending()) {
     impl->sampleLifecycle.clearDecodedAndPreparedState();
     impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
@@ -1623,6 +1628,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
     temporaldeck_ui::publishArcLights(this, sampleFrames, maxLagSamples, frame.sampleMode, frame.sampleLoaded,
                                       frame.lag, frame.accessibleLag, frame.sampleProgress);
   }
+  if (perfTimingEnabled) {
+    const auto processEnd = std::chrono::steady_clock::now();
+    const uint64_t elapsedNs =
+      uint64_t(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(processEnd - processStart).count()));
+    impl->perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+    impl->perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+  }
 }
 
 void TemporalDeck::setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples) {
@@ -1651,6 +1663,15 @@ double TemporalDeck::getUiAccessibleLagSamples() const {
 
 float TemporalDeck::getUiSampleRate() const {
   return impl->uiSampleRate.load(std::memory_order_relaxed);
+}
+
+float TemporalDeck::consumeAudioProcessUs() {
+  const uint64_t sampleCount = impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
+  const uint64_t processNs = impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
+  if (sampleCount == 0u || processNs == 0u) {
+    return 0.f;
+  }
+  return float(double(processNs) / double(sampleCount) * 0.001);
 }
 
 float TemporalDeck::getUiScopePreviewCostUs() const {

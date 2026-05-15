@@ -158,6 +158,8 @@ struct Proc : Module {
 	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
+	float previewDotPublishTimer = 0.f;
+	bool previewDotWasVisible = false;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float FUNCTION_V_MIN = 0.f;
 	// Proc's free-running FG mode spans 0-10 V, while slew mode keeps the wider reference range.
@@ -199,6 +201,7 @@ struct Proc : Module {
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
+	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
@@ -577,10 +580,14 @@ struct Proc : Module {
 		const ChannelConfig& cfg,
 		PreviewSharedState& previewShared,
 		PreviewUpdateState& previewUpdateState,
-		bool timingTick
+		bool timingTick,
+		bool bandlimitedSignal,
+		bool bandlimitedGate,
+		bool timingInterpEnabled,
+		float injectAlphaBase
 	) {
 		auto updateGateOutputs = [&](bool eorHigh, bool eocHigh, float fraction01) {
-			if (bandlimitedGateOutputs) {
+			if (bandlimitedGate) {
 				insertGateTransition(ch.eorGateBlep, ch.eorGateState, eorHigh, fraction01);
 				insertGateTransition(ch.eocGateBlep, ch.eocGateState, eocHigh, fraction01);
 			}
@@ -613,7 +620,7 @@ struct Proc : Module {
 				// Manual behavior: trigger can reset only during FALL, restarting from cycle start.
 				float prevOut = ch.out;
 				ch.out = FUNCTION_V_MIN;
-				if (bandlimitedSignalOutputs) {
+				if (bandlimitedSignal) {
 					insertSignalTransition(ch, ch.out - prevOut, 1e-6f);
 				}
 			}
@@ -666,7 +673,7 @@ struct Proc : Module {
 					ch.fallTimeStep = 0.f;
 					ch.timeInterpSamplesLeft = 0;
 				}
-				else if (timingInterpolate && timingUpdateDiv > 1) {
+				else if (timingInterpEnabled && timingUpdateDiv > 1) {
 					// Interpolate timing across N samples to avoid sample-and-hold zipper tone.
 					ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
 					ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
@@ -764,8 +771,7 @@ struct Proc : Module {
 					? clamp((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
 					: 0.f;
 				xIn = targetNorm;
-				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
-				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
+				injectAlpha = injectAlphaBase;
 			}
 
 			if (ch.phase == CHANNEL_RISE) {
@@ -808,7 +814,7 @@ struct Proc : Module {
 					ch.phase = CHANNEL_IDLE;
 					float prevOut = ch.out;
 					ch.out = FUNCTION_V_MIN;
-					if (bandlimitedSignalOutputs) {
+					if (bandlimitedSignal) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					updateGateOutputs(ch.phase == cfg.gateHighPhase, ch.phase == CHANNEL_RISE, f);
@@ -923,6 +929,11 @@ struct Proc : Module {
 		};
 
 		bool timingTick = true;
+		const bool bandlimitedSignal = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
+		const bool bandlimitedGate = bandlimitedGateOutputs.load(std::memory_order_relaxed);
+		const bool timingInterpEnabled = timingInterpolate.load(std::memory_order_relaxed);
+		const float injectAlphaBase = SIGNAL_INJECT_GAIN *
+			clamp(1.f - std::exp(-args.sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
 		if (timingUpdateDiv > 1) {
 			timingUpdateCounter++;
 			if (timingUpdateCounter >= timingUpdateDiv) {
@@ -941,10 +952,29 @@ struct Proc : Module {
 			}
 			lightTick = true;
 		}
+		previewDotPublishTimer += args.sampleTime;
+		bool previewDotTick = false;
+		if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+			previewDotPublishTimer -= PREVIEW_DOT_PUBLISH_INTERVAL;
+			if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+				previewDotPublishTimer = 0.f;
+			}
+			previewDotTick = true;
+		}
 
-		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
+		ChannelResult channelResult = processChannel(
+			args,
+			channel,
+			channelConfig,
+			previewState,
+			previewUpdate,
+			timingTick,
+			bandlimitedSignal,
+			bandlimitedGate,
+			timingInterpEnabled,
+			injectAlphaBase);
 		float outRendered = channel.out * channel.signalOutputGain
-			+ (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+			+ (bandlimitedSignal ? channel.signalBlep.process() : 0.f);
 		auto computeDotX = [](const ChannelState& ch) {
 			if (ch.phase == CHANNEL_IDLE) {
 				return 0.f;
@@ -960,15 +990,19 @@ struct Proc : Module {
 			}
 			return 0.f;
 		};
-		float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
-		publishPreviewDot(
-			previewState,
-			channel.phase != CHANNEL_IDLE,
-			computeDotX(channel),
-			(channel.out - FUNCTION_V_MIN) * outRangeInv
-		);
-		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
-		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
+		const bool dotVisible = channel.phase != CHANNEL_IDLE;
+		if (previewDotTick || dotVisible != previewDotWasVisible) {
+			float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
+			publishPreviewDot(
+				previewState,
+				dotVisible,
+				computeDotX(channel),
+				(channel.out - FUNCTION_V_MIN) * outRangeInv
+			);
+			previewDotWasVisible = dotVisible;
+		}
+		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGate ? channel.eorGateBlep.process() : 0.f);
+		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGate ? channel.eocGateBlep.process() : 0.f);
 		float negOut = -outRendered;
 
 		outputs[EOR_OUTPUT].setVoltage(eorOut);

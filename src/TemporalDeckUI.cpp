@@ -3460,6 +3460,7 @@ struct TemporalDeckWidget : ModuleWidget {
           lastSubmitSec = nowSec;
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
                                                       deckModule->getUiDrawCostUs() * 0.001f,
+                                                      deckModule->consumeAudioProcessUs(),
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);
