@@ -8,6 +8,18 @@ The central design rule is simple: preserve the PPW brain, discard the PPW body 
 
 The official ALM/VCV version already proves that the PPW behavior can exist in Rack with the same hardware-style UI. This project should not compete by reproducing that UI. Its value is a Rack-native interaction layer that makes PPW's hidden state visible and editable without long-presses, serial page navigation, or context-menu dependence for primary work.
 
+## Compatibility Tier
+
+This module targets behavioral compatibility where documented and musically observable. It does not target binary firmware compatibility, official ALM/VCV patch compatibility, or hardware-backup compatibility unless a later import/export layer explicitly implements those paths.
+
+Compatibility priority order:
+
+- Preserve musical semantics: timing, phase, reset, probability, loop, Euclidean generation, cross processing, quantization, and voltage behavior.
+- Preserve user-facing ranges and names where legally and practically safe.
+- Preserve patch-local behavior inside this module.
+- Do not guarantee official ALM/VCV patch compatibility.
+- Do not claim exact firmware parity unless backed by golden tests.
+
 ## Source Notes
 
 Primary source: user-supplied *Pamela's Pro Workout* manual dated March 31, 2026, manual version 0.35 / firmware 130.
@@ -25,7 +37,7 @@ Known source conflict: the March 2026 manual says the tempo range is `10-330 BPM
 
 ### V1
 
-- Main PPW-style module with eight outputs.
+- Main Pam-style timing module with eight outputs.
 - Internal BPM clock and external clock/run sync.
 - Per-output divisors/multipliers, waveform, width, slew, level, offset, phase, probability, Euclidean rhythm, loop, flex, cross operations, invert, quantization, scope/preview, save/load/reset, and assignable CV modulation.
 - PPW output voltage behavior: `0-5 V` outputs by default.
@@ -39,6 +51,8 @@ Known source conflict: the March 2026 manual says the tempo range is `10-330 BPM
 
 - Reuse an existing PPW-compatible timing/signal engine and build the new interaction shell around it.
 - Add golden tests around known PPW behaviors before changing UI-facing state or serialization.
+
+Assume no official PPW/VCV engine code is reusable unless it is explicitly available under a compatible license or provided by the rights holder. Until proven otherwise, implement a clean-room engine from public behavior, manual documentation, and user-measured or golden-test observations.
 
 ### Deferred
 
@@ -54,6 +68,29 @@ Known source conflict: the March 2026 manual says the tempo range is `10-330 BPM
 - Long-hold gestures for primary workflows.
 - Hiding primary editing behind the context menu.
 - Recreating ALM branding, trade dress, or protected panel identity.
+
+## State Locality Rule
+
+Default rule: all musical state is patch-local.
+
+Patch-local musical state includes:
+
+- Live output settings.
+- Banks.
+- Output stores.
+- User scales.
+- Random seeds.
+- CV assignments.
+- Quantizer selections.
+- Selected output and selected tab, if useful for restoring the editing context.
+
+Plugin-global state is allowed only for non-musical preferences:
+
+- Default theme.
+- Tooltip verbosity.
+- Debug display defaults.
+
+Hardware-style global memory and imported bank libraries may be added later as compatibility utilities, but they must be clearly labeled because global musical state can make Rack patches non-self-contained.
 
 ## Blocking Unknowns
 
@@ -120,6 +157,16 @@ The module should have three primary zones:
 
 Patch-heavy I/O should live on panel edges so cables do not cover the editor. The center of the module should be reserved for state visibility and editing.
 
+### UI Density Rules
+
+At `32 HP`:
+
+- Overview rows must remain readable at 100% Rack zoom.
+- Inspector tabs may use compact controls, but not hidden nested pages.
+- If a tab requires vertical scrolling for primary parameters, widen the module before hiding those parameters.
+- Numeric fields may be abbreviated in the overview but must be exact in the inspector.
+- Contextual help should be terse and local, not a substitute for visible controls.
+
 ### Global Bar
 
 Expose these directly on the panel:
@@ -150,6 +197,53 @@ Each output row should show:
 
 The overview's job is to prevent hidden state. A user should be able to glance at all eight outputs and identify which channels are doing musically significant extra work.
 
+### All-Channel Timeline
+
+Provide a dedicated timeline view that shows what all eight outputs are doing now, what they recently did, and what they are expected to do over the next configurable number of cycles.
+
+This is not a generic oscilloscope. It is a Pam-specific performance map tuned for clocks, gates, modulation shapes, Euclidean patterns, probability, loops, phase offsets, cross operations, and quantized CV.
+
+Primary goals:
+
+- Show all eight outputs in one synchronized time view.
+- Put a clear `now` cursor at the current transport position.
+- Prioritize future events over deep history.
+- Make upcoming triggers, gates, envelopes, modulation peaks, loop boundaries, mutes, probability skips, and quantized voltage steps visible before they happen.
+- Keep the selected output visually emphasized without hiding the other seven channels.
+
+Recommended default horizon:
+
+- History: `0.25-1` cycle behind `now`.
+- Future: `2-8` cycles ahead of `now`.
+- User control: compact horizon selector such as `1x`, `2x`, `4x`, `8x`.
+
+Timeline row content:
+
+- Recent output trace, drawn faintly behind `now`.
+- Predicted future trace or event rail, drawn brighter ahead of `now`.
+- Trigger/gate onset markers.
+- Gate length or pulse width blocks.
+- Loop boundary markers.
+- Probability markers, with uncertain future events visually distinct from deterministic events.
+- Euclidean hit/rest visualization where active.
+- Quantized CV step labels or pitch/scale badges where useful.
+- Cross-source indicator when an output depends on another output/source.
+- Mute overlay that shows output is forced to `0 V` while internal timing continues.
+
+Interaction:
+
+- Clicking a row selects that output in the inspector.
+- Hovering an event shows source details: channel, time offset, modifier, probability, Euclidean index, loop position, voltage estimate, and CV/cross dependencies.
+- Dragging the horizon or zoom control changes timeline scale without changing engine state.
+- A freeze/hold button may pause the visual timeline for inspection without pausing audio.
+
+Prediction rules:
+
+- Deterministic future events should be shown as committed predictions.
+- Probabilistic future events should be shown as possible events until their musical decision point has passed.
+- If a future value depends on live external CV, external clock instability, or expander input, mark that region as input-dependent rather than pretending the prediction is exact.
+- The predictive timeline must be generated from a copied/snapshot state and must not advance the audio engine RNG, transport phase, or live event counters.
+
 ### Selected-Output Inspector
 
 Use fixed tabs instead of nested menus:
@@ -172,6 +266,10 @@ All primary per-output tasks must follow this path: select output, select tab, e
 - Custom widgets should follow Rack conventions: vertical drag, fine adjustment, double-click reset, and right-click exact-value editing where practical.
 - Conditional parameters should remain visible but disabled, with a short reason such as `Available when Loop > 0` or `Available for random shapes only`.
 - The selected output should always show a live preview/scope without leaving the current editing context.
+- Edits represented as Rack parameters should use Rack's normal undo/redo behavior.
+- Large custom state edits should either map to Rack history actions or be documented as serialized state changes without undo.
+- Mute should force the output voltage to `0 V` without stopping internal phase or event generation, so unmuting resumes coherently.
+- Provide a panic/reset-transport action that clears stuck run/sync state without destroying patch or bank data.
 
 ## Tab Specification
 
@@ -269,7 +367,20 @@ Global bank actions stay in the top bar. Output-level actions stay in the select
 
 Keep timing and signal generation separate from UI. The UI should edit a data model; the engine should consume a validated runtime state.
 
-If a PPW-compatible engine is available, preserve it and build a new shell around it. This is safer than rewriting timing/DSP behavior from manual prose. If no engine is available, implement the engine behind a narrow interface and keep parity tests close to it.
+Assume a clean-room engine unless compatible engine access is explicitly proven. If a PPW-compatible engine is legally available, preserve it and build a new shell around it. This is safer than rewriting timing/DSP behavior from manual prose. If no engine is available, implement the engine behind a narrow interface and keep parity tests close to it.
+
+### State Ownership Rules
+
+`LiveState` is the currently sounding state. `BankState` is saved material that can be loaded into `LiveState`. A bank load copies `BankState` into `LiveState`. A bank save copies `LiveState` into `BankState`.
+
+Ownership rules:
+
+- Changing `LiveState` does not mutate `BankState` until the user explicitly saves.
+- Loading a bank replaces the live output state and any bank-owned global timing state.
+- Saving a bank captures the live output state and any bank-owned global timing state.
+- Patch serialization stores both `LiveState` and `BankState`.
+- Top-level transport state such as `running` is patch-local but should not be saved into every bank unless hardware parity requires it.
+- BPM ownership must be explicit: either bank-owned, live-only, or both with defined copy rules.
 
 ### Data-Driven UI
 
@@ -287,6 +398,30 @@ Do not hardcode page logic into widget code. Use a parameter registry that descr
 - Affected waveform/modifier families.
 
 This avoids scattering conditions such as utility-modifier suppression, triggered-output subsets, random-shape slew, and expander-dependent CV sources through the UI.
+
+Use a source registry alongside the parameter registry. CV assignment, cross-source selection, expander availability, and disabled-source UI must all consume the same source descriptors.
+
+```cpp
+enum class SourceKind {
+    Output,
+    CvInput,
+    ClockInput,
+    RunInput,
+    ExpanderCv,
+    ExpanderButton,
+};
+
+struct SourceDescriptor {
+    int id = -1;
+    std::string label;
+    SourceKind kind = SourceKind::CvInput;
+    bool audioRate = false;
+    bool available = true;
+    std::string unavailableReason;
+    float nominalMinV = 0.0f;
+    float nominalMaxV = 5.0f;
+};
+```
 
 ### Illustrative State Shape
 
@@ -358,19 +493,83 @@ struct BankState {
     std::array<OutputState, 8> outputs;
 };
 
-struct ModuleState {
-    static constexpr int kSchemaVersion = 1;
-
+struct LiveState {
     float bpm = 120.0f;
     bool running = false;
     ClockInputMode clkMode = ClockInputMode::Clock;
     RunInputMode runMode = RunInputMode::RunGate;
     int extPpqn = 24;
     int activeBank = 0;
+    std::array<OutputState, 8> outputs;
+};
+
+struct UiState {
+    int selectedOutput = 0;
+    TabId selectedTab = TabId::Timing;
+};
+
+struct ModuleState {
+    static constexpr int kSchemaVersion = 1;
+
+    LiveState live;
     std::array<BankState, 64> banks;
-    std::array<OutputState, 8> liveOutputs;
+    UiState ui;
 };
 ```
+
+## Timing Event Ordering
+
+Within each `process()` frame, evaluate engine work in this order unless later parity tests prove a different order is required:
+
+- Read raw CV, clock, run, reset, and expander sources.
+- Detect rising/falling edges with Schmitt triggers.
+- Apply run, reset, rotate, and bank-change events.
+- Resolve external clock phase and tempo updates.
+- Advance internal transport phase.
+- Generate per-output phase positions.
+- Apply per-output timing modifiers: divisor/multiplier, phase, flex, and loop.
+- Generate base shape, gate, or envelope.
+- Apply probability and Euclidean decisions at deterministic event boundaries only.
+- Apply cross operations.
+- Apply quantization.
+- Apply level, offset, invert, mute, and output clamp.
+- Write outputs, lights, meters, and history buffers.
+
+Level, offset, invert, mute, and final clamp are post-quantization output-shaping operations unless direct parity evidence requires different ordering.
+
+## Randomness Contract
+
+Random behavior must be deterministic under identical patch state, BPM, transport position, reset events, and seed.
+
+Randomness rules:
+
+- Random, probability, and flex decisions consume random values only at documented musical decision points.
+- Random values must not be consumed every audio sample.
+- Seed reset must restore repeatable musical output for the same transport/reset conditions.
+- UI previews must use separate preview RNG state or cached engine event data.
+- UI redraws, tab changes, hover states, and scope refreshes must never advance the audio engine RNG.
+
+## Preview Contract
+
+Previews are diagnostic approximations unless explicitly marked as engine-derived.
+
+Preview types:
+
+- Live scope: sampled from actual output history.
+- Predictive preview: generated from current state and transport assumptions.
+- All-channel timeline: synchronized view of all eight output histories and lookahead predictions.
+- Cross preview: may use reduced-resolution buffers but must preserve operation ordering.
+- CV meters: derived from current source values after attenuation and offset.
+
+Preview generation must not mutate engine state, consume engine RNG, or change transport phase.
+
+All-channel timeline predictions should be explicitly labeled by confidence:
+
+- `Committed`: deterministic events already implied by current transport and state.
+- `Possible`: probabilistic/random events whose decision point has not arrived.
+- `Input-dependent`: predictions that depend on external CV, external clock timing, run/rotate input, or expander state that cannot be known ahead of time.
+
+The timeline may use lower-resolution rendering than the audio engine, but event positions must remain musically aligned to the same timing model used by output generation.
 
 ## Serialization Contract
 
@@ -385,9 +584,9 @@ Serialization requirements:
 - Keep migration functions small and explicit.
 - Add tests for old/missing/partial JSON payloads once schema version `2` exists.
 
-Patch storage should be reserved for optional large or file-backed data such as hardware-backup import/export. Do not use patch storage for normal PPW state unless JSON size becomes demonstrably problematic.
+Patch storage should be reserved for optional large or file-backed data such as hardware-backup import/export. Do not use patch storage for normal Pam-style state unless JSON size becomes demonstrably problematic.
 
-Plugin-global settings may be appropriate for default theme, advanced tooltip preference, and possibly user scale slots if intentionally modeled as device-wide memory. Be careful with plugin-global musical state because it can make patches non-self-contained.
+Plugin-global settings are appropriate for non-musical preferences such as default theme, advanced tooltip preference, and debug display defaults. User scale slots are musical state and should remain patch-local unless a later compatibility layer deliberately models hardware-style global memory with clear UI warnings.
 
 ## Rack Implementation Notes
 
@@ -426,8 +625,20 @@ Display implementation guidance:
 - Use custom widgets for the editor surface.
 - Cache static regions with a framebuffer where redraw cost is non-trivial.
 - Redraw live scope, clock cursor, meters, and assignment activity separately from static chrome.
+- Render the all-channel timeline as its own dirty-flagged widget so lookahead recomputation is decoupled from paint frequency.
 - Provide dark-panel assets from the start.
 - Keep text readable at 100% zoom on a normal display.
+
+Performance budgets:
+
+- Audio `process()` must avoid heap allocation.
+- UI preview generation must not run on every audio frame.
+- Live meters and scopes should update at a capped UI rate, typically `30-60 Hz`.
+- Static panel/editor chrome should be framebuffer-cached.
+- Expensive preview recomputation should be dirty-flagged by state changes.
+- Timeline lookahead should recompute only when transport position crosses a meaningful display quantum or when relevant state changes.
+- Timeline lookahead should have a bounded maximum horizon and bounded event count per channel.
+- Expander message handling must not allocate on the audio thread.
 
 Timing implementation guidance:
 
@@ -435,6 +646,42 @@ Timing implementation guidance:
 - Use pulse generators for generated triggers.
 - Avoid sequencing races around reset by briefly ignoring or ordering clock edges after reset-like events according to Rack sequencing best practice.
 - Surface sync lock/state clearly in the top bar.
+
+Golden fixture candidates:
+
+```text
+tests/fixtures/pams/
+  clock_24ppqn_run_reset.json
+  euclid_loop_repeatability.json
+  probability_seed_repeatability.json
+  cross_before_quant.json
+  level_zero_offset_constant_voltage.json
+  triggered_modifier_reduced_params.json
+```
+
+Each fixture should define:
+
+- `name`
+- `sampleRate`
+- `durationBeats`
+- `initialState`
+- `inputEvents`
+- `expectedEvents`
+- `expectedVoltageRanges`
+
+Example:
+
+```json
+{
+  "name": "cross_before_quant",
+  "sampleRate": 48000,
+  "durationBeats": 8,
+  "initialState": {},
+  "inputEvents": [],
+  "expectedEvents": [],
+  "expectedVoltageRanges": []
+}
+```
 
 ## AXON-Style Expander Contract
 
@@ -474,7 +721,9 @@ Do not place primary musical editing in the context menu.
 - Per-output state model.
 - Overview rows.
 - Selected-output inspector.
-- Timing, Shape, Pattern, CV, Quant, and Store tabs.
+- All-channel timeline with recent-history and future-lookahead modes.
+- Timing, Shape, Pattern, Cross, CV, Quant, and Store tabs.
+- Minimal Cross implementation with source selection, operation selection, and tested pre-quantization ordering.
 - Serialization with schema version.
 - Bank/output save/load/reset.
 - Seed reset.
@@ -482,9 +731,10 @@ Do not place primary musical editing in the context menu.
 
 ### Phase 2: Cross And Visual Polish
 
-- Full Cross tab.
+- Cross tab visual polish.
 - Result preview for cross processing.
 - More complete live preview/scope behavior.
+- Timeline hover details, confidence labeling, and freeze/hold inspection.
 - Framebuffer/static redraw optimization.
 - Dark panel.
 - Tooltip and disabled-state polish.
@@ -511,13 +761,22 @@ V1 is acceptable when:
 - No primary per-output function requires context-menu access.
 - All primary per-output tasks are reachable via select output, select tab, edit visible control.
 - Overview rows expose hidden musically significant state for all eight outputs.
+- All-channel timeline shows all eight outputs against a shared `now` cursor.
+- Timeline shows at least brief recent history and a configurable future horizon.
+- Timeline predictions distinguish deterministic, probabilistic, and input-dependent future events.
 - Selected-output editor always includes a live preview/scope.
 - Output voltage behavior defaults to documented PPW `0-5 V` semantics.
 - CV input range can be configured where relevant.
 - Patch save/load restores all module state needed for musical behavior.
+- Musical state is patch-local by default.
+- Live state and bank state follow the documented copy-on-load/copy-on-save ownership rules.
+- Minimal Cross processing is implemented in V1 and tested before quantization.
 - Bank save/load, output save/load, reset, and seed reset are covered by automated tests.
 - External clock plus run sync at `24 PPQN` is covered by automated tests.
 - Reset/rotate behavior is covered by automated tests if rotate is implemented in V1.
+- Random/probability/flex behavior is deterministic for identical seed, patch state, and reset/transport conditions.
+- UI previews do not mutate engine state, transport phase, or engine RNG.
+- Timeline lookahead does not allocate or run unbounded simulation from the audio thread.
 - JSON loading is robust to missing fields and out-of-range enum values.
 - Static display regions are cached or otherwise proven cheap enough not to matter.
 
