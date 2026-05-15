@@ -1,8 +1,8 @@
-# Pamela's Pro Workout Rack-Native Redesign
+# Chronomaw
 
 ## Product Decision
 
-Build a Rack-native reinterpretation of Pamela's Pro Workout rather than a visual clone of the hardware panel. Preserve the PPW timing engine, patch semantics, voltage behavior, bank behavior, per-output behavior, and expander concepts where relevant. Replace the encoder-and-menu workflow with a direct mouse-first editor built around overview, inspection, visual editing, and exact entry.
+Build Chronomaw as a Rack-native reinterpretation of Pamela's Pro Workout rather than a visual clone of the hardware panel. Preserve the PPW timing engine, patch semantics, voltage behavior, bank behavior, per-output behavior, and expander concepts where relevant. Replace the encoder-and-menu workflow with a direct mouse-first editor built around overview, inspection, visual editing, and exact entry.
 
 The central design rule is simple: preserve the PPW brain, discard the PPW body language.
 
@@ -147,25 +147,39 @@ Important edge rules to preserve:
 
 ### Layout Decision
 
-Use an overview-plus-inspector design. The recommended starting size is `32 HP`. If the editor becomes cramped, widen the module rather than reintroducing hidden pages.
+Use an overview-plus-inspector design. The recommended canonical width is `36-40 HP`, with `40 HP` preferred if the all-channel timeline remains a V1 feature. A narrower `32 HP` variant can be considered later as a compact edition after the full interaction model is proven.
+
+Width is not cosmetic for this module. It is the primary replacement for the encoder menu: the design needs enough panel area to keep global state, the all-channel timeline, and selected-output editing legible at the same time.
+
+Width targets:
+
+- `28 HP`: too compressed for the canonical concept.
+- `32 HP`: plausible only as a later compact variant with reduced timeline density.
+- `36 HP`: minimum serious target.
+- `40 HP`: preferred canonical target.
+- `42+ HP`: useful only if the timeline becomes the visual centerpiece.
 
 The module should have three primary zones:
 
 - Top global transport/clock bar.
 - Eight-row output overview.
+- All-channel timeline.
 - Selected-output inspector.
 
 Patch-heavy I/O should live on panel edges so cables do not cover the editor. The center of the module should be reserved for state visibility and editing.
 
 ### UI Density Rules
 
-At `32 HP`:
+At the canonical `36-40 HP` size:
 
 - Overview rows must remain readable at 100% Rack zoom.
 - Inspector tabs may use compact controls, but not hidden nested pages.
 - If a tab requires vertical scrolling for primary parameters, widen the module before hiding those parameters.
 - Numeric fields may be abbreviated in the overview but must be exact in the inspector.
 - Contextual help should be terse and local, not a substitute for visible controls.
+- The global bar and output overview remain visible in normal Monitor and Edit workflows.
+- The all-channel timeline and selected-output inspector should not be mutually exclusive in normal use.
+- Dynamic view density may change the vertical allocation of the timeline and inspector, but it must not become the only way the design remains usable.
 
 ### Global Bar
 
@@ -243,6 +257,58 @@ Prediction rules:
 - Probabilistic future events should be shown as possible events until their musical decision point has passed.
 - If a future value depends on live external CV, external clock instability, or expander input, mark that region as input-dependent rather than pretending the prediction is exact.
 - The predictive timeline must be generated from a copied/snapshot state and must not advance the audio engine RNG, transport phase, or live event counters.
+
+### View Density Modes
+
+The module supports density modes to balance performance monitoring and detailed editing without reintroducing hidden primary workflows. These modes adjust how much space each surface receives; they must not change engine state.
+
+#### Monitor Mode
+
+Monitor Mode emphasizes global timing visibility.
+
+Visible:
+
+- Global transport/clock bar.
+- Eight-output overview.
+- Full all-channel timeline.
+- Compact selected-output summary.
+
+The inspector may collapse, but selected-output identity, mute state, modifier, shape, and active badges remain visible.
+
+#### Edit Mode
+
+Edit Mode emphasizes exact editing of the selected output.
+
+Visible:
+
+- Global transport/clock bar.
+- Eight-output overview.
+- Compact all-channel timeline or event strip.
+- Full selected-output inspector with fixed tabs.
+
+The timeline must not disappear entirely. It may compress vertically, but it should continue to show the shared `now` cursor and the selected output's relationship to the other channels.
+
+#### Focus Mode
+
+Focus Mode is optional and intended for deep editing, debugging, or visual inspection.
+
+Visible:
+
+- Selected-output inspector.
+- Large selected-output preview or tab-specific visualization.
+- Compact global/output context.
+
+Focus Mode may hide the full all-channel timeline, but it must be clearly reversible and must not be required for ordinary editing.
+
+#### Density Mode Rules
+
+- Density modes are direct panel controls, not context-menu options.
+- Switching density mode must not change engine state, random state, transport position, or bank state.
+- Selected output and selected tab persist across density changes.
+- No primary parameter may exist only in Focus Mode.
+- Monitor Mode and Edit Mode are both first-class workflows.
+- The global bar and output overview are persistent in Monitor Mode and Edit Mode.
+- The all-channel timeline and selected-output inspector are never fully mutually exclusive in Monitor Mode or Edit Mode.
 
 ### Selected-Output Inspector
 
@@ -715,6 +781,7 @@ Do not place primary musical editing in the context menu.
 ### Phase 1: Main Module Shell And Core Behavior
 
 - Main module UI shell.
+- Canonical `36-40 HP` layout, with `40 HP` preferred while the timeline is in V1.
 - Internal clock.
 - External clock/run sync.
 - Eight outputs.
@@ -722,6 +789,7 @@ Do not place primary musical editing in the context menu.
 - Overview rows.
 - Selected-output inspector.
 - All-channel timeline with recent-history and future-lookahead modes.
+- Monitor Mode and Edit Mode density behavior.
 - Timing, Shape, Pattern, Cross, CV, Quant, and Store tabs.
 - Minimal Cross implementation with source selection, operation selection, and tested pre-quantization ordering.
 - Serialization with schema version.
@@ -735,6 +803,7 @@ Do not place primary musical editing in the context menu.
 - Result preview for cross processing.
 - More complete live preview/scope behavior.
 - Timeline hover details, confidence labeling, and freeze/hold inspection.
+- Optional Focus Mode for deep editing/debug inspection.
 - Framebuffer/static redraw optimization.
 - Dark panel.
 - Tooltip and disabled-state polish.
@@ -760,11 +829,17 @@ V1 is acceptable when:
 - No primary function requires long-hold.
 - No primary per-output function requires context-menu access.
 - All primary per-output tasks are reachable via select output, select tab, edit visible control.
+- Canonical layout targets `36-40 HP`, with `40 HP` preferred while the all-channel timeline remains a V1 feature.
 - Overview rows expose hidden musically significant state for all eight outputs.
 - All-channel timeline shows all eight outputs against a shared `now` cursor.
 - Timeline shows at least brief recent history and a configurable future horizon.
 - Timeline predictions distinguish deterministic, probabilistic, and input-dependent future events.
 - Selected-output editor always includes a live preview/scope.
+- Monitor Mode and Edit Mode are both available from direct panel controls.
+- Monitor Mode keeps global bar, output overview, full timeline, and compact selected-output context visible.
+- Edit Mode keeps global bar, output overview, compact timeline, and full selected-output inspector visible.
+- Switching density mode does not change engine state, random state, transport position, or bank state.
+- No primary parameter exists only in Focus Mode.
 - Output voltage behavior defaults to documented PPW `0-5 V` semantics.
 - CV input range can be configured where relevant.
 - Patch save/load restores all module state needed for musical behavior.
