@@ -321,6 +321,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec voctPos(14.0f, 111.0f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
+		Vec lfoModePos(50.0f, 111.0f);
 		Vec foldCvPos(57.0f, 111.0f);
 		Vec rawOutPos(24.0f, 122.0f);
 		Vec outPos(47.0f, 122.0f);
@@ -338,6 +339,7 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
+		applyPt("WYRM_LFO_MODE_PARAM", &lfoModePos);
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
@@ -386,6 +388,9 @@ struct WyrmWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
+		));
 		addInput(createInputCentered<PJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
@@ -493,10 +498,6 @@ struct WyrmWidget : ModuleWidget {
 		};
 
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createCheckMenuItem("LFO Mode", "",
-			[=]() { return module->lfoMode.load(std::memory_order_relaxed); },
-			[=]() { module->lfoMode.store(!module->lfoMode.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-		));
 		menu->addChild(createCheckMenuItem("Lock Wave Editor", "",
 			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
 			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }

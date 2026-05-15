@@ -34,6 +34,7 @@ Wyrm::Wyrm() {
 	configParam(SLITHER_SPEED_PARAM, 0.f, 1.f, 0.5f, "Slither speed");
 	configButton(WAVE_LEFT_PARAM, "Waveform previous");
 	configButton(WAVE_RIGHT_PARAM, "Waveform next");
+	configSwitch(LFO_MODE_PARAM, 0.f, 1.f, 0.f, "LFO mode", {"Audio", "LFO"});
 	configInput(VOCT_INPUT, "V/Oct");
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
@@ -770,7 +771,6 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 
 json_t* Wyrm::dataToJson() {
 	json_t* root = json_object();
-	json_object_set_new(root, "lfoMode", json_boolean(lfoMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "editorLocked", json_boolean(editorLocked.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandViewEnabled", json_boolean(sandViewEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "renderMode", json_integer(renderMode.load(std::memory_order_relaxed)));
@@ -803,8 +803,6 @@ json_t* Wyrm::dataToJson() {
 }
 
 void Wyrm::dataFromJson(json_t* root) {
-	json_t* lfoJ = json_object_get(root, "lfoMode");
-	if (lfoJ) lfoMode.store(json_is_true(lfoJ), std::memory_order_relaxed);
 	json_t* lockJ = json_object_get(root, "editorLocked");
 	if (lockJ) editorLocked.store(json_is_true(lockJ), std::memory_order_relaxed);
 	json_t* sandViewJ = json_object_get(root, "sandViewEnabled");
@@ -920,7 +918,9 @@ void Wyrm::process(const ProcessArgs& args) {
 	outputs[RAW_OUTPUT].setChannels(channels);
 
 	const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
-	const bool lfoModeNow = lfoMode.load(std::memory_order_relaxed);
+	const bool lfoModeNow = params[LFO_MODE_PARAM].getValue() > 0.5f;
+	lfoMode.store(lfoModeNow, std::memory_order_relaxed);
+	lights[LFO_MODE_LIGHT].setBrightness(lfoModeNow ? 0.5f : 0.f);
 	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoModeNow);
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
@@ -1041,13 +1041,15 @@ void Wyrm::process(const ProcessArgs& args) {
 }
 
 float WyrmFreqQuantity::getDisplayValue() {
-	const auto* wyrm = static_cast<const Wyrm*>(module);
-	return wyrmBaseFrequencyFromKnob(getValue(), wyrm ? wyrm->lfoMode.load(std::memory_order_relaxed) : false);
+	auto* wyrm = static_cast<Wyrm*>(module);
+	const bool lfoModeNow = wyrm ? (wyrm->params[Wyrm::LFO_MODE_PARAM].getValue() > 0.5f) : false;
+	return wyrmBaseFrequencyFromKnob(getValue(), lfoModeNow);
 }
 
 void WyrmFreqQuantity::setDisplayValue(float displayValue) {
-	const auto* wyrm = static_cast<const Wyrm*>(module);
-	setImmediateValue(wyrmKnobValueForFrequency(displayValue, wyrm ? wyrm->lfoMode.load(std::memory_order_relaxed) : false));
+	auto* wyrm = static_cast<Wyrm*>(module);
+	const bool lfoModeNow = wyrm ? (wyrm->params[Wyrm::LFO_MODE_PARAM].getValue() > 0.5f) : false;
+	setImmediateValue(wyrmKnobValueForFrequency(displayValue, lfoModeNow));
 }
 
 std::string WyrmFreqQuantity::getDisplayValueString() {

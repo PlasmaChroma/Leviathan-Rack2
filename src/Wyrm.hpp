@@ -215,6 +215,7 @@ struct Wyrm : Module {
 		SLITHER_SPEED_PARAM,
 		WAVE_LEFT_PARAM,
 		WAVE_RIGHT_PARAM,
+		LFO_MODE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -232,6 +233,7 @@ struct Wyrm : Module {
 		OUTPUTS_LEN
 	};
 	enum LightId {
+		LFO_MODE_LIGHT,
 		LIGHTS_LEN
 	};
 
