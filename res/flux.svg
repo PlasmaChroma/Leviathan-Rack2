@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="flux.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -447,15 +447,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="150.06996"
-   inkscape:cy="218.18831"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:zoom="4.771108"
+   inkscape:cx="140.63819"
+   inkscape:cy="407.76692"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="1978"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g34"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -1565,7 +1565,7 @@
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="EoR_CH_1"
-     cx="1653.6869"
+     cx="1654.6868"
      cy="9694.5723"
      rx="114.98675"
      ry="120.83137" /><ellipse
@@ -1637,7 +1637,7 @@
      ry="120.83137" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.68373"
      id="Light_Unity_4"
-     cx="8473.0996"
+     cx="8467.9873"
      cy="11068.226"
      rx="120"
      ry="120.83137" /><ellipse
