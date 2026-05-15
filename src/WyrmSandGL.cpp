@@ -334,6 +334,20 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		for (size_t i = 0; i < pts.size(); ++i) off[i] = joinOffset(i, halfW);
 
 		glColor4f(color.r, color.g, color.b, color.a);
+		if (shaderPath) {
+			glBegin(GL_TRIANGLE_STRIP);
+			for (size_t i = 0; i < pts.size(); ++i) {
+				const Vec l = pts[i].minus(off[i]);
+				const Vec r = pts[i].plus(off[i]);
+				glTexCoord2f(0.f, 0.f);
+				glVertex2f(l.x, l.y);
+				glTexCoord2f(1.f, 0.f);
+				glVertex2f(r.x, r.y);
+			}
+			glEnd();
+			return;
+		}
+
 		glBegin(GL_QUADS);
 		for (size_t i = 0; i + 1 < pts.size(); ++i) {
 			Vec seg = pts[i + 1].minus(pts[i]);
@@ -500,13 +514,21 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 
 		if (includeBase) {
-			drawBodyStrip(samples, 3.75f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), shaderPath);
-			drawBodyStripFeather(samples, 3.75f, 0.66f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f, false);
-			drawBodyStripFeather(samples, 3.75f, 1.35f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f, false);
-			drawBodyStrip(samples, 2.45f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), shaderPath);
-			drawBodyStripFeather(samples, 2.45f, 0.52f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f, false);
-			drawBodyStrip(samples, 1.08f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), shaderPath);
-			drawBodyStripFeather(samples, 1.08f, 0.38f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f, false);
+			if (shaderPath) {
+				// SHDR: rely on fragment AA softness and avoid extra feather geometry passes.
+				drawBodyStrip(samples, 4.20f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 184.f / 255.f), true);
+				drawBodyStrip(samples, 2.54f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 212.f / 255.f), true);
+				drawBodyStrip(samples, 1.12f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 224.f / 255.f), true);
+			}
+			else {
+				drawBodyStrip(samples, 3.75f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), false);
+				drawBodyStripFeather(samples, 3.75f, 0.66f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f, false);
+				drawBodyStripFeather(samples, 3.75f, 1.35f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f, false);
+				drawBodyStrip(samples, 2.45f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), false);
+				drawBodyStripFeather(samples, 2.45f, 0.52f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f, false);
+				drawBodyStrip(samples, 1.08f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), false);
+				drawBodyStripFeather(samples, 1.08f, 0.38f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f, false);
+			}
 		}
 		if (includeGlow) {
 			drawBodyStrip(samples, 5.10f, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f), true);
@@ -651,9 +673,10 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		drawWaveColumnsGl(box.size);
 		drawHoverGuidesGl(box.size);
 		const bool shaderPath = useShdr && bodyShaderReady;
-		const bool useBodyRt = useShdr;
-		// SHDR path: supersample mask RT, then downsample on composite for smoother body edges.
-		const float rtScale = useShdr ? 1.5f : 1.0f;
+		// SHDR now draws direct shader-softened strips. Keep RT path disabled.
+		const bool useBodyRt = false;
+		// Legacy RT sizing retained for quick rollback.
+		const float rtScale = useShdr ? 1.25f : 1.0f;
 		const int rtW = std::max(1, int(std::lround(box.size.x * rtScale)));
 		const int rtH = std::max(1, int(std::lround(box.size.y * rtScale)));
 		if (useBodyRt) {
@@ -722,16 +745,10 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 				const float dx = 0.6f / std::max(1.f, box.size.x);
 				const float dy = 0.6f / std::max(1.f, box.size.y);
 				glBegin(GL_TRIANGLE_STRIP);
-				glTexCoord2f(0.f + dx, 1.f); glVertex2f(0.f, 0.f);
-				glTexCoord2f(1.f + dx, 1.f); glVertex2f(box.size.x, 0.f);
-				glTexCoord2f(0.f + dx, 0.f); glVertex2f(0.f, box.size.y);
-				glTexCoord2f(1.f + dx, 0.f); glVertex2f(box.size.x, box.size.y);
-				glEnd();
-				glBegin(GL_TRIANGLE_STRIP);
-				glTexCoord2f(0.f, 1.f - dy); glVertex2f(0.f, 0.f);
-				glTexCoord2f(1.f, 1.f - dy); glVertex2f(box.size.x, 0.f);
-				glTexCoord2f(0.f, 0.f - dy); glVertex2f(0.f, box.size.y);
-				glTexCoord2f(1.f, 0.f - dy); glVertex2f(box.size.x, box.size.y);
+				glTexCoord2f(0.f + dx, 1.f - dy); glVertex2f(0.f, 0.f);
+				glTexCoord2f(1.f + dx, 1.f - dy); glVertex2f(box.size.x, 0.f);
+				glTexCoord2f(0.f + dx, 0.f - dy); glVertex2f(0.f, box.size.y);
+				glTexCoord2f(1.f + dx, 0.f - dy); glVertex2f(box.size.x, box.size.y);
 				glEnd();
 			}
 			glBindTexture(GL_TEXTURE_2D, 0);
@@ -743,7 +760,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		else {
 			if (shaderPath) {
 				glUseProgram(bodyShaderProgram);
-				glUniform1f(bodyShaderSoftnessLoc, 0.22f);
+				glUniform1f(bodyShaderSoftnessLoc, 0.19f);
 			}
 			drawBodyGl(box.size, shaderPath, true, false);
 			if (shaderPath) {
