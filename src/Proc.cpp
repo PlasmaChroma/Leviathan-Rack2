@@ -1057,8 +1057,9 @@ struct BananutBlack : app::SvgPort {
 };
 
 struct WavePreviewWidget : Widget {
-	static constexpr int POINT_COUNT = 320;
-	static constexpr int PREVIEW_LUT_SIZE = 1024;
+	// Small preview box: lower geometry density reduces UI cost while staying smooth.
+	static constexpr int POINT_COUNT = 128;
+	static constexpr int PREVIEW_LUT_SIZE = 512;
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
@@ -1146,10 +1147,15 @@ struct WavePreviewWidget : Widget {
 			points[i] = Vec(x, py);
 		}
 
-		int peakIndex = int(std::round(riseRatio * float(POINT_COUNT - 1)));
-		peakIndex = std::max(0, std::min(POINT_COUNT - 1, peakIndex));
-		float peakPx = left + (float(peakIndex) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex] = Vec(peakPx, top);
+		// Preserve full crest height under extreme rise/fall asymmetry by pinning
+		// both vertices that bracket the true peak location.
+		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
+		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
+		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
+		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
+		points[peakIndex0] = Vec(peakPx0, top);
+		points[peakIndex1] = Vec(peakPx1, top);
 		points.front() = Vec(left, bottom);
 		points.back() = Vec(right, bottom);
 		pointsValid = true;
@@ -1222,21 +1228,27 @@ struct WavePreviewWidget : Widget {
 			float drawH = bottom - top;
 			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
 			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
-			// Keep the marker locked to the drawn curve while still honoring
-			// both audio-space Y (dotYNorm) and phase-space X (dotXNorm).
-			int bestIndex = 0;
-			float bestCost = std::numeric_limits<float>::infinity();
-			for (int i = 0; i < POINT_COUNT; ++i) {
-				float dy = std::fabs(points[i].y - targetY);
-				float dx = std::fabs(points[i].x - targetX);
-				float cost = dy + 0.15f * dx;
-				if (cost < bestCost) {
-					bestCost = cost;
-					bestIndex = i;
+			// Keep the marker on the drawn curve, but use continuous interpolation
+			// across neighboring points to avoid visible stepping at slow rates.
+			int i0 = 0;
+			for (int i = 1; i < POINT_COUNT; ++i) {
+				if (points[i].x >= targetX) {
+					i0 = i - 1;
+					break;
 				}
+				i0 = i - 1;
 			}
-			float x = points[bestIndex].x;
-			float y = points[bestIndex].y;
+			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
+			float x0 = points[i0].x;
+			float x1 = points[i1].x;
+			float x = targetX;
+			float y = points[i0].y;
+			if (i1 != i0 && x1 > x0) {
+				float t = clamp((targetX - x0) / (x1 - x0), 0.f, 1.f);
+				y = points[i0].y + (points[i1].y - points[i0].y) * t;
+			}
+			float blendToCurve = 0.9f;
+			y = y * blendToCurve + targetY * (1.f - blendToCurve);
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, DOT_RADIUS);
 			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
