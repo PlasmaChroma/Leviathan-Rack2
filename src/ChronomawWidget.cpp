@@ -17,29 +17,29 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 	addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-	Vec runPos(9.0f, 14.0f);
-	Vec bpmPos(21.0f, 14.0f);
-	Vec activeBankPos(33.0f, 14.0f);
-	Vec loadBankPos(9.0f, 24.0f);
-	Vec saveBankPos(15.0f, 24.0f);
-	Vec resetAllPos(21.0f, 24.0f);
-	Vec selectedOutputPos(27.0f, 24.0f);
-	Vec densityModePos(33.0f, 24.0f);
-	Vec clkInPos(9.0f, 39.0f);
-	Vec runInPos(15.0f, 39.0f);
-	Vec resetInPos(21.0f, 39.0f);
-	Vec cv1InPos(27.0f, 39.0f);
-	Vec cv2InPos(33.0f, 39.0f);
-	Vec cv3InPos(27.0f, 49.0f);
-	Vec cv4InPos(33.0f, 49.0f);
-	Vec runLightPos(21.0f, 39.0f);
-	Vec syncLightPos(21.0f, 49.0f);
+	Vec runPos(27.0f, 16.0f);
+	Vec bpmPos(47.0f, 16.0f);
+	Vec activeBankPos(67.0f, 16.0f);
+	Vec loadBankPos(88.0f, 16.0f);
+	Vec saveBankPos(98.0f, 16.0f);
+	Vec resetAllPos(108.0f, 16.0f);
+	Vec selectedOutputPos(133.0f, 16.0f);
+	Vec densityModePos(153.0f, 16.0f);
+	Vec clkInPos(9.5f, 22.0f);
+	Vec runInPos(9.5f, 35.5f);
+	Vec resetInPos(9.5f, 49.0f);
+	Vec cv1InPos(9.5f, 67.0f);
+	Vec cv2InPos(9.5f, 80.5f);
+	Vec cv3InPos(9.5f, 94.0f);
+	Vec cv4InPos(9.5f, 107.5f);
+	Vec runLightPos(32.5f, 16.0f);
+	Vec syncLightPos(173.0f, 16.0f);
 	std::array<Vec, chronomaw::kNumOutputs> outPos {};
 	std::array<Vec, chronomaw::kNumOutputs> outLightPos {};
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
-		const float y = 56.0f + 8.0f * float(i);
-		outPos[size_t(i)] = Vec(9.0f, y);
-		outLightPos[size_t(i)] = Vec(15.0f, y);
+		const float y = 18.5f + 13.0f * float(i);
+		outPos[size_t(i)] = Vec(193.5f, y);
+		outLightPos[size_t(i)] = Vec(184.8f, y);
 	}
 
 	auto applyPointOverride = [&](const char* elementId, Vec* outPosMm) {

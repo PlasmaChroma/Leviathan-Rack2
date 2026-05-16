@@ -161,7 +161,7 @@ Width targets:
 - `40 HP`: preferred canonical target.
 - `42+ HP`: useful only if the timeline becomes the visual centerpiece.
 
-The module should have three primary zones:
+The module should have four primary zones:
 
 - Top global transport/clock bar.
 - Eight-row output overview.
@@ -169,6 +169,14 @@ The module should have three primary zones:
 - Selected-output inspector.
 
 Patch-heavy I/O should live on panel edges so cables do not cover the editor. The center of the module should be reserved for state visibility and editing.
+
+For the canonical `40 HP` layout, prefer vertical side rails over bottom jack rows:
+
+- Inputs live on the left edge in a vertical rail: `CLK`, `RUN`, `RESET`, then assignable `CV 1-4`.
+- Outputs live on the right edge in a vertical rail: `OUT 1-8`, with per-output activity lights immediately inside the output rail.
+- The global bar spans the top center between the rails.
+- The overview, timeline, and inspector occupy the uninterrupted center column below the global bar.
+- Do not consume bottom vertical space with a horizontal output bank unless a later compact variant requires it.
 
 ### UI Density Rules
 

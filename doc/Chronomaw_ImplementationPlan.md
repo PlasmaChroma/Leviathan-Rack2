@@ -143,6 +143,29 @@ The four `CV_*` inputs are built into the main module for Phase 1 assignable CV.
 
 `LOAD_BANK_PARAM`, `SAVE_BANK_PARAM`, and `RESET_ALL_PARAM` are momentary action params. `ACTIVE_BANK_PARAM`, `SELECTED_OUTPUT_PARAM`, and `DENSITY_MODE_PARAM` are UI-facing state selectors. Primary per-output editing is owned by the custom editor/state model rather than by hundreds of Rack params in Phase 1.
 
+## Panel Layout V1
+
+Canonical Phase 1 layout targets `40 HP` and spends width to preserve vertical editor space.
+
+Physical component placement:
+
+- Left rail: vertically stack `CLK_INPUT`, `RUN_INPUT`, `RESET_INPUT`, then `CV_1_INPUT` through `CV_4_INPUT`.
+- Right rail: vertically stack `OUT_1_OUTPUT` through `OUT_8_OUTPUT`.
+- Output activity lights sit immediately inside the right output rail, one light per output.
+- The top center global bar holds run, BPM, active bank, load/save/reset, selected output, density mode, run light, and sync light.
+- The center column below the global bar is reserved for custom UI widgets rather than jacks.
+
+SVG anchor rectangles:
+
+```text
+GLOBAL_BAR_RECT: top-center transport and bank strip.
+OVERVIEW_RECT: left-center eight-output state summary.
+TIMELINE_RECT: upper-right-center shared timeline.
+INSPECTOR_RECT: lower-right-center selected-output editor.
+```
+
+The `components` layer in `res/chronomaw.svg` is the source of truth for Phase 1 component anchors. It may be hidden visually; `ChronomawWidget` must continue to resolve positions by SVG element ID through `PanelSvgUtils` and use matching C++ fallback positions.
+
 ## State Representation Contract
 
 Phase 1 uses a hybrid state model:

@@ -4,7 +4,9 @@
 
 This document turns `bifurx-perf-threads.md` into an implementation spec for moving Bifurx visual preparation work off the Rack UI thread.
 
-The goal is not to make the audio engine multithreaded and not to draw from a worker thread. The goal is to let a background worker prepare immutable display snapshots so the Rack UI thread spends less time doing FFT, response-curve, marker, and vertex preparation.
+The goal is not to make the audio engine multithreaded and not to draw from a worker thread. The goal is to let a background worker prepare the practical maximum amount of safe CPU-side visual work so the Rack UI thread spends less time doing FFT, response-curve, marker, animation-target, layout, and vertex preparation.
+
+The worker should produce render-ready data, not rendered pixels. In this plan, "render-ready" means immutable arrays, layouts, labels, confidence/state flags, and CPU-side vertex buffers that the UI thread can consume with minimal branching and minimal recomputation. It does not mean calling NanoVG, OpenGL, Rack widget APIs, or uploading textures/buffers from the worker.
 
 The short recommendation: this is feasible and likely worth doing if Bifurx UI cost remains material after the current redraw gating and OpenGL shader path. It should be implemented as an optional visual-worker pipeline with conservative fallback, not as a rewrite of the module or its DSP.
 
@@ -30,7 +32,7 @@ The existing split means the worker should attach at the visual preparation laye
 
 The design is technically sound if kept narrow:
 
-- Move pure CPU preparation off-thread.
+- Move all worthwhile pure CPU preparation off-thread.
 - Keep all Rack widget access on the UI thread.
 - Keep all NanoVG and OpenGL calls on the UI thread.
 - Pass copied request data into the worker.
@@ -45,10 +47,14 @@ The main risk is complexity. The current code is still manageable because `Bifur
 
 - Do not call `gl*()` from the worker.
 - Do not call NanoVG from the worker.
+- Do not create or migrate OpenGL contexts for Bifurx visual preparation.
+- Do not use worker-side CPU software rasterization as the default path.
 - Do not read `module->params`, `widget->box`, Rack scene state, or expander state from the worker.
 - Do not mutate `BifurxSpectrumBase::state` from the worker.
 - Do not move filter DSP or audio analysis capture out of `Bifurx::process()` in this pass.
 - Do not create a FIFO queue of old visual jobs.
+
+Software rasterization is only a fallback research path. It would make the worker return an RGBA image, but it would also add scaling, text rendering, antialiasing, memory bandwidth, and UI-thread upload costs. Do not pursue it unless metrics prove that normal UI-thread drawing is the bottleneck and data-prep offload is insufficient.
 
 ## Threading Model
 
@@ -62,7 +68,7 @@ UI thread
   copies the newest module state, display size, flags, and animation state into a request
 
 Bifurx visual worker
-  computes target arrays, layout, and renderer-neutral geometry from that copied request
+  computes target arrays, layout, labels, animation targets, and renderer-ready CPU geometry from that copied request
 
 UI thread
   atomically adopts the newest completed immutable snapshot and renders it
@@ -117,11 +123,15 @@ struct BifurxUiRenderRequest {
 	float width = 0.f;
 	float height = 0.f;
 	float uiFrameSec = 1.f / 60.f;
+	float workerFrameSec = 1.f / 30.f;
 
 	bool hasPreview = false;
 	bool hasOverlay = false;
 	bool showModuleResponseOverlay = false;
 	bool fftScaleDynamic = true;
+	bool prepareNanovgGeometry = true;
+	bool prepareGlGeometry = true;
+	bool prepareAnimation = false;
 
 	BifurxPreviewState previewState;
 	BifurxSpectrumState displayState;
@@ -137,6 +147,8 @@ Important details:
 - `analysisFrame` is large, so only include it when `analysisSeq` changes.
 - The worker should not use `module` to check `fftScaleDynamic`; that flag is copied into the request.
 - The request should include dimensions because marker layout and refined curve points depend on `width` and `height`.
+- `prepareAnimation` should be enabled only after target preparation is stable and profiling shows `updateAnimation()` remains a material UI cost.
+- `workerFrameSec` lets the worker produce frame-rate-independent animation interpolation if animation is moved into snapshots.
 
 ## Snapshot Contract
 
@@ -154,6 +166,10 @@ struct BifurxUiRenderSnapshot {
 	BifurxSpectrumState state;
 	BifurxMarkerLayout markerLayout;
 	std::vector<BifurxCurvePoint> refinedCurvePoints;
+	std::vector<BifurxTextLabel> textLabels;
+	std::vector<BifurxTickMark> tickMarks;
+	std::vector<BifurxCurvePoint> nanovgResponsePolyline;
+	std::vector<BifurxCurvePoint> nanovgOverlayPolyline;
 
 	std::vector<BifurxGlVertex> fillVertices;
 	std::vector<BifurxGlVertex> fillSoftCapVertices;
@@ -166,11 +182,12 @@ struct BifurxUiRenderSnapshot {
 
 Renderer-specific notes:
 
-- It is acceptable for the first implementation to prepare only renderer-neutral state and `refinedCurvePoints`.
+- It is acceptable for the extraction patch to prepare only renderer-neutral state and `refinedCurvePoints`, but the worker target should include every CPU-side structure that is reasonably reusable by the active renderer.
 - Preparing OpenGL vertex arrays in the worker is safe because they are plain CPU-side structs.
 - `BifurxSpectrumGLWidget::GlVertex` is currently local to `src/BifurxGL.cpp`; if the worker prepares GL vertices, move a renamed POD type such as `BifurxGlVertex` into `Bifurx.hpp` or a small shared render header.
 - VBO creation, buffer upload, shader setup, and draw calls stay in `BifurxSpectrumGLWidget::drawFramebuffer()`.
-- NanoVG path may still draw paths from arrays on the UI thread.
+- NanoVG path should consume prebuilt polylines and label/tick layouts from the snapshot. It still issues NanoVG draw calls on the UI thread, but it should not rebuild response/overlay points, marker positions, or text placement during draw.
+- If text measurement is needed for exact placement, keep the actual font measurement on the UI thread unless the worker can use a deterministic precomputed font metric table. Do not call NanoVG text APIs from the worker.
 
 ## Worker API
 
@@ -271,29 +288,53 @@ Implementation invariants:
 - unregistering a display must make late worker results harmless.
 - stale requests are replaced, not processed.
 
-## First Implementation Scope
+## Practical Maximum Worker Scope
 
-Phase 1 should move target preparation, not drawing.
+The worker should own the practical maximum amount of work that is:
 
-Move these into pure worker-callable helpers:
+- pure CPU work
+- independent of Rack widget state after the request is copied
+- independent of NanoVG/OpenGL contexts
+- reusable by at least one active renderer
+- not more expensive to copy/upload than to compute on the UI thread
 
-- Axis cache generation from sample rate.
+Target worker-owned work:
+
+- Axis cache generation from sample rate and display dimensions.
 - Response curve target calculation from `BifurxPreviewState`.
 - FFT overlay target calculation from `BifurxAnalysisFrame`.
 - Display top target calculation.
 - Marker layout calculation.
+- Tick mark and label placement.
 - Refined curve point calculation.
+- NanoVG-consumable response and overlay polylines.
+- CPU-side OpenGL vertex generation for fill, soft caps, cyan overlay, and curve lines.
+- Dirty-stage reuse and incremental caches keyed by size, render mode, preview sequence, and analysis sequence.
+- Optional display-array animation/interpolation after target preparation is stable and profiling justifies moving it.
 
 Keep these on the UI thread:
 
-- `updateAnimation()`, unless profiling shows it is costly.
 - NanoVG drawing.
 - OpenGL draw calls.
 - Shader compilation and VBO uploads.
 - Debug terminal submission.
 - Context menu and widget visibility behavior.
+- Exact text measurement that requires the active NanoVG font context.
+- Final framebuffer dirty decisions that depend on Rack widget visibility or renderer lifecycle.
 
-Leaving animation on the UI thread is a good first split because it keeps frame-to-frame smoothing deterministic and avoids the worker needing to run at display frame rate.
+Animation policy:
+
+- First extraction keeps `updateAnimation()` on the UI thread.
+- Worker mode may later publish already-interpolated display arrays when `prepareAnimation` is enabled.
+- If animation moves to the worker, snapshots must include the source/target sequence and interpolation timestamp so the UI can reject stale animation frames cleanly.
+- Do not make the worker run at unbounded Rack frame rate just to own animation. Worker animation should be capped by `Visual worker rate`; the UI may still do cheap final lerp toward the newest snapshot if needed.
+
+Copy-cost rule:
+
+- Do not move a stage into the worker if the snapshot copy/upload cost exceeds the UI-thread compute cost in normal patches.
+- Prefer compact POD arrays and preallocated/reused vectors in snapshots.
+- Large analysis frames should be copied only when `analysisSeq` changes.
+- Large vertex arrays should be generated only for the active renderer path unless profiling shows dual-path generation is cheap enough.
 
 ## File Structure
 
@@ -326,7 +367,8 @@ src/BifurxRenderPrep.hpp
 src/BifurxRenderPrep.cpp
   Pure visual preparation helpers:
   axis cache generation, response curve targets, FFT overlay targets,
-  marker layout, refined curve point calculation, and optional CPU-side GL vertex generation.
+  marker layout, tick/label placement, refined curve point calculation,
+  NanoVG-consumable polylines, and CPU-side GL vertex generation.
   These functions must not touch Rack widgets, GL, NanoVG, or live module pointers.
 
 src/BifurxWorker.hpp
@@ -360,7 +402,8 @@ Suggested extraction order:
 1. Add `BifurxRenderData.hpp` with request/snapshot contracts and any shared POD geometry.
 2. Add `BifurxRenderPrep.hpp/.cpp` and move existing pure helper logic there.
 3. Update `BifurxSpectrumBase` to call the prep helpers on the UI thread with identical behavior.
-4. Add `BifurxWorker.hpp/.cpp` only after the prep helpers are isolated and tested.
+4. Expand prep helpers until they cover all reasonable CPU prep for the active render path.
+5. Add `BifurxWorker.hpp/.cpp` only after the prep helpers are isolated and tested.
 
 ## Proposed Integration Steps
 
@@ -368,26 +411,50 @@ Suggested extraction order:
 2. Add pure preparation helpers in `src/BifurxRenderPrep.hpp/.cpp`.
 3. Extract pure functions from `BifurxSpectrumBase::updateCurveCache()` and `BifurxSpectrumBase::updateOverlayCache()` into those prep helpers.
 4. Verify `BifurxSpectrumBase` can call the prep helpers on the UI thread with unchanged behavior.
-5. Add a shared `BifurxUiRenderService` implementation in `src/BifurxWorker.hpp/.cpp`.
-6. Have `BifurxSpectrumBase` build a request after `syncBase()` copies new module data.
-7. Submit requests only when preview, analysis, display size, or relevant display flags changed.
-8. Adopt completed snapshots in `BifurxSpectrumBase::runRenderTick()`.
-9. Mark the framebuffer dirty when a new snapshot is adopted or animation remains active.
-10. Add a context menu setting for visual worker mode.
-11. Add performance logging fields so worker time and stale-frame count are visible in debug traces.
+5. Extract marker layout, tick/label placement, and refined curve point generation into prep helpers.
+6. Extract CPU-side GL vertex generation where the active OpenGL path can reuse the resulting POD arrays.
+7. Feed both NanoVG and OpenGL UI paths from the same prep snapshot on the UI thread.
+8. Add a shared `BifurxUiRenderService` implementation in `src/BifurxWorker.hpp/.cpp`.
+9. Have `BifurxSpectrumBase` build a request after `syncBase()` copies new module data.
+10. Submit requests only when preview, analysis, display size, render path, or relevant display flags changed.
+11. Adopt completed snapshots in `BifurxSpectrumBase::runRenderTick()`.
+12. Mark the framebuffer dirty when a new snapshot is adopted or animation remains active.
+13. Add optional worker-side animation preparation if metrics show UI animation work remains material.
+14. Add global-default and per-module override settings for visual worker mode in the context menu.
+15. Add performance logging fields so worker time and stale-frame count are visible in debug traces.
 
 ## Worker Mode Setting
 
-Add a persisted setting on `Bifurx`:
+Worker mode should be controlled by global default plus per-module override.
+
+Global plugin-level setting:
+
+- `Bifurx visual worker default`: `Off / Auto / On`
+- Stored in plugin settings, not in patch musical state.
+
+Per-module persisted override on `Bifurx`:
 
 ```cpp
 enum VisualWorkerMode {
+	VISUAL_WORKER_INHERIT = -1,
 	VISUAL_WORKER_OFF = 0,
 	VISUAL_WORKER_AUTO,
 	VISUAL_WORKER_ON,
 	VISUAL_WORKER_COUNT
 };
 ```
+
+Effective mode resolution:
+
+- if module override is `Inherit`, use global plugin default.
+- if module override is `Off`, force worker off for that module.
+- if module override is `Auto`, use per-module auto policy regardless of global default.
+- if module override is `On`, force worker on for that module.
+
+UI location:
+
+- Do not add a front-panel control for worker mode.
+- Expose both global default and per-module override through the module context menu.
 
 Recommended default for development: `Off`.
 
@@ -563,21 +630,31 @@ Correctness checks:
 
 ## Recommended Path
 
-Proceed in two patches.
+Proceed in three patches.
 
 Patch 1 should be a refactor-only extraction:
 
 - extract pure curve and overlay target preparation helpers
+- extract marker layout, tick/label placement, and refined polyline construction
 - keep execution on the UI thread
 - verify NanoVG and OpenGL output remain unchanged
 
-Patch 2 should add the worker:
+Patch 2 should maximize CPU-side render preparation while still running on the UI thread:
+
+- move shared POD geometry into `BifurxRenderData.hpp`
+- prepare NanoVG-consumable polylines and layout snapshots
+- prepare CPU-side OpenGL vertex arrays for the active GL render path
+- add dirty-stage reuse keyed by display size, render mode, preview sequence, and analysis sequence
+- measure snapshot build cost and copy/upload cost before adding the worker
+
+Patch 3 should add the worker:
 
 - introduce request/snapshot structs
 - introduce the shared `BifurxUiRenderService`
 - register/unregister each Bifurx display with the service
 - submit latest request from `BifurxSpectrumBase`
 - adopt completed snapshots on the UI thread
+- optionally enable worker-side animation preparation only after target snapshots are stable
 - add worker menu settings and perf counters
 
-That order keeps the highest-risk behavioral split separate from the mechanical extraction work.
+That order keeps the highest-risk behavioral split separate from the mechanical extraction work and ensures the worker receives the maximum useful CPU workload instead of only the earliest extracted helper functions.
