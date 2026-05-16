@@ -107,6 +107,8 @@ Resolve these before implementation is treated as parity work:
 
 If exact parity matters, validate these against the official VCV module or hardware firmware with golden tests. If exact parity is not available, document each approximation explicitly in the implementation notes.
 
+Chronomaw v1 may proceed as a clean-room, Rack-native implementation before these parity unknowns are resolved. The v1 implementation decisions are frozen separately in [Chronomaw_ImplementationPlan.md](Chronomaw_ImplementationPlan.md); behavior that is not parity-proven must be treated as documented Chronomaw behavior rather than claimed PPW firmware parity.
+
 ## Parity Requirements
 
 Pamela's Pro Workout is an eight-channel BPM-synced modulation and clock engine. Feature parity means preserving behavior, not preserving encoder choreography.
@@ -662,28 +664,31 @@ Recommended file grouping if this becomes a new module:
 
 ```text
 src/
-  PamsReimagined.cpp
-  PamsReimagined.hpp
-  PamsReimaginedWidget.cpp
-  PamsReimaginedWidget.hpp
-  PamsEngine.hpp
-  PamsEngine.cpp
-  PamsState.hpp
-  PamsParamRegistry.hpp
-  PamsSerialization.hpp
-  PamsQuantizer.hpp
-  PamsClock.hpp
-  PamsUiWidgets.hpp
+  Chronomaw.cpp
+  Chronomaw.hpp
+  ChronomawWidget.cpp
+  ChronomawWidget.hpp
+  ChronomawEngine.hpp
+  ChronomawEngine.cpp
+  ChronomawState.hpp
+  ChronomawParamRegistry.hpp
+  ChronomawSourceRegistry.hpp
+  ChronomawSerialization.hpp
+  ChronomawQuantizer.hpp
+  ChronomawClock.hpp
+  ChronomawTimeline.hpp
+  ChronomawUiWidgets.hpp
 
 tests/
-  pams_serialization_spec.cpp
-  pams_clock_spec.cpp
-  pams_bank_spec.cpp
-  pams_output_seed_spec.cpp
+  chronomaw_serialization_spec.cpp
+  chronomaw_clock_spec.cpp
+  chronomaw_bank_spec.cpp
+  chronomaw_output_seed_spec.cpp
+  chronomaw_cross_quant_spec.cpp
 
 res/
-  pams_reimagined.svg
-  pams_reimagined-dark.svg
+  chronomaw.svg
+  chronomaw-dark.svg
 ```
 
 Display implementation guidance:
@@ -716,7 +721,7 @@ Timing implementation guidance:
 Golden fixture candidates:
 
 ```text
-tests/fixtures/pams/
+tests/fixtures/chronomaw/
   clock_24ppqn_run_reset.json
   euclid_loop_repeatability.json
   probability_seed_repeatability.json
