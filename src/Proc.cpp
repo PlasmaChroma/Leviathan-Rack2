@@ -115,6 +115,7 @@ struct Proc : Module {
 
 	struct ChannelResult {
 		bool cycleOn = false;
+		bool previewStatePublished = false;
 	};
 
 	struct SlewStepResult {
@@ -279,6 +280,24 @@ struct Proc : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
+	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
+		outputNorm = clamp(outputNorm, 0.f, 1.f);
+		if (std::fabs(shapeSigned) < 1e-6f) {
+			return rising ? outputNorm : (1.f - outputNorm);
+		}
+		const float start = rising ? 0.f : outputNorm;
+		const float end = rising ? outputNorm : 1.f;
+		const float span = std::max(end - start, 0.f);
+		float partialSum = 0.f;
+		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
+			float t = (float(i) + 0.5f) / float(WARP_SCALE_SAMPLES);
+			partialSum += 1.f / slopeWarp(start + span * t, shapeSigned);
+		}
+		const float partialIntegral = span * partialSum / float(WARP_SCALE_SAMPLES);
+		const float totalIntegral = std::max(slopeWarpScale(shapeSigned), 1e-6f);
+		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
+	}
+
 	static float computeSegPhase(float out, float startOut, float invSpan) {
 		if (std::fabs(invSpan) < 1e-9f) {
 			return 1.f;
@@ -362,6 +381,26 @@ struct Proc : Module {
 			return 1.f;
 		}
 		return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
+	}
+
+	static void remapPhasePosForStageTimeChange(ChannelState& ch, float oldRise, float oldFall, float newRise, float newFall) {
+		if (ch.phase == CHANNEL_IDLE) {
+			return;
+		}
+		oldRise = std::max(oldRise, 1e-6f);
+		oldFall = std::max(oldFall, 1e-6f);
+		newRise = std::max(newRise, 1e-6f);
+		newFall = std::max(newFall, 1e-6f);
+		const float oldTotal = oldRise + oldFall;
+		const float newTotal = newRise + newFall;
+		if (ch.phase == CHANNEL_RISE) {
+			const float dotX = clamp((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
+			ch.phasePos = clamp((dotX * newTotal) / newRise, 0.f, 2.f);
+		}
+		else if (ch.phase == CHANNEL_FALL) {
+			const float dotX = clamp((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
+			ch.phasePos = clamp(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
+		}
 	}
 
 	static void insertGateTransition(dsp::MinBlepGenerator<16, 16>& blep, bool& state, bool newState, float fraction01) {
@@ -463,7 +502,7 @@ struct Proc : Module {
 		return riseAbs > 1e-4f || fallAbs > 1e-4f || riseRel > 0.01f || fallRel > 0.01f || std::fabs(curveNow - curvePrev) > 0.005f;
 	}
 
-	void updatePreviewChannel(
+	bool updatePreviewChannel(
 		PreviewSharedState& shared,
 		PreviewUpdateState& state,
 		float riseKnob,
@@ -505,7 +544,9 @@ struct Proc : Module {
 			state.lastCurveSent = curveSigned;
 			state.sentOnce = true;
 			state.timer = 0.f;
+			return true;
 		}
+		return false;
 	}
 
 	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm, float& dotYNorm,
@@ -689,9 +730,15 @@ struct Proc : Module {
 				ch.stageTimeValid = true;
 			}
 		}
+		float prevRiseTime = ch.activeRiseTime;
+		float prevFallTime = ch.activeFallTime;
 		updateActiveStageTimes(ch);
 		float riseTime = ch.activeRiseTime;
 		float fallTime = ch.activeFallTime;
+		if (ch.phase != CHANNEL_IDLE
+			&& (std::fabs(riseTime - prevRiseTime) > 1e-6f || std::fabs(fallTime - prevFallTime) > 1e-6f)) {
+			remapPhasePosForStageTimeChange(ch, prevRiseTime, prevFallTime, riseTime, fallTime);
+		}
 		bool fgActive = (ch.phase != CHANNEL_IDLE);
 		if (trigAccepted) {
 			// External trigger may run faster than self-cycle, but with an explicit ceiling.
@@ -706,7 +753,7 @@ struct Proc : Module {
 			enforceSpeedLimit(riseTime, fallTime, 1.f / std::max(MAX_TRIGGER_HZ, 1.f));
 		}
 		float shapeSigned = shapeSignedFromKnob(shape);
-		updatePreviewChannel(
+		bool previewStatePublished = updatePreviewChannel(
 			previewShared,
 			previewUpdateState,
 			riseKnob,
@@ -728,7 +775,7 @@ struct Proc : Module {
 			// location is invalidated/recomputed against the updated curve shape.
 			float range = std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
 			float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
-			ch.phasePos = (ch.phase == CHANNEL_RISE) ? x : (1.f - x);
+			ch.phasePos = segmentPhaseFromOutputNorm(x, shapeSigned, ch.phase == CHANNEL_RISE);
 		}
 		float scale = ch.cachedWarpScale;
 
@@ -744,6 +791,7 @@ struct Proc : Module {
 		if (haltHigh) {
 			ChannelResult result;
 			result.cycleOn = cycleOn;
+			result.previewStatePublished = previewStatePublished;
 			return result;
 		}
 
@@ -846,6 +894,7 @@ struct Proc : Module {
 
 		ChannelResult result;
 		result.cycleOn = cycleOn;
+		result.previewStatePublished = previewStatePublished;
 		return result;
 	}
 
@@ -991,7 +1040,7 @@ struct Proc : Module {
 			return 0.f;
 		};
 		const bool dotVisible = channel.phase != CHANNEL_IDLE;
-		if (previewDotTick || dotVisible != previewDotWasVisible) {
+		if (previewDotTick || channelResult.previewStatePublished || dotVisible != previewDotWasVisible) {
 			float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
 			publishPreviewDot(
 				previewState,
