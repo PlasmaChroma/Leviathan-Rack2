@@ -54,6 +54,108 @@ static constexpr float kOutputMaxV = 5.0f;
 static constexpr int kDefaultExternalPpqn = 24;
 ```
 
+## Rack Integration Contract
+
+Phase 1 uses these repo-facing identifiers:
+
+```cpp
+extern Model* modelChronomaw;
+Model* modelChronomaw = createModel<Chronomaw, ChronomawWidget>("Chronomaw");
+```
+
+Add `modelChronomaw` to `src/plugin.hpp` and register it in `init()` in `src/plugin.cpp`.
+
+Add this module entry to `plugin.json`:
+
+```json
+{
+  "slug": "Chronomaw",
+  "name": "Chronomaw",
+  "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
+  "tags": [
+    "Clock generator",
+    "Function Generator",
+    "Sequencer",
+    "Random"
+  ],
+  "hidden": false
+}
+```
+
+## Rack Surface V1
+
+Chronomaw is unreleased, so enum ordering can be chosen for implementation clarity in Phase 1. Once any public build ships, append-only compatibility rules apply to `ParamId`, `InputId`, `OutputId`, and `LightId`.
+
+Initial module surface:
+
+```cpp
+enum ParamId {
+    RUN_PARAM,
+    BPM_PARAM,
+    ACTIVE_BANK_PARAM,
+    LOAD_BANK_PARAM,
+    SAVE_BANK_PARAM,
+    RESET_ALL_PARAM,
+    SELECTED_OUTPUT_PARAM,
+    DENSITY_MODE_PARAM,
+    PARAMS_LEN
+};
+
+enum InputId {
+    CLK_INPUT,
+    RUN_INPUT,
+    RESET_INPUT,
+    CV_1_INPUT,
+    CV_2_INPUT,
+    CV_3_INPUT,
+    CV_4_INPUT,
+    INPUTS_LEN
+};
+
+enum OutputId {
+    OUT_1_OUTPUT,
+    OUT_2_OUTPUT,
+    OUT_3_OUTPUT,
+    OUT_4_OUTPUT,
+    OUT_5_OUTPUT,
+    OUT_6_OUTPUT,
+    OUT_7_OUTPUT,
+    OUT_8_OUTPUT,
+    OUTPUTS_LEN
+};
+
+enum LightId {
+    RUN_LIGHT,
+    SYNC_LIGHT,
+    OUT_1_LIGHT,
+    OUT_2_LIGHT,
+    OUT_3_LIGHT,
+    OUT_4_LIGHT,
+    OUT_5_LIGHT,
+    OUT_6_LIGHT,
+    OUT_7_LIGHT,
+    OUT_8_LIGHT,
+    LIGHTS_LEN
+};
+```
+
+The four `CV_*` inputs are built into the main module for Phase 1 assignable CV. AXON-style expansion remains deferred and adds more sources later through the source registry.
+
+`LOAD_BANK_PARAM`, `SAVE_BANK_PARAM`, and `RESET_ALL_PARAM` are momentary action params. `ACTIVE_BANK_PARAM`, `SELECTED_OUTPUT_PARAM`, and `DENSITY_MODE_PARAM` are UI-facing state selectors. Primary per-output editing is owned by the custom editor/state model rather than by hundreds of Rack params in Phase 1.
+
+## State Representation Contract
+
+Phase 1 uses a hybrid state model:
+
+- Rack params hold only global panel controls and action triggers listed in `Rack Surface V1`.
+- Per-output musical settings live in `LiveState.outputs` and `BankState.outputs`.
+- Per-output editor widgets write through validated state-update functions, not directly through scattered widget-local fields.
+- `dataToJson()` serializes all custom musical state, all banks, random seeds, CV assignments, quantizer masks, and patch-local UI state.
+- `dataFromJson()` validates then applies a complete state snapshot before audio processing observes it.
+- Tests should target state/engine/serialization APIs directly before the full custom UI exists.
+
+The consequence is explicit: Phase 1 does not get Rack's automatic undo/redo for every per-output field unless specific custom history actions are added. This is acceptable for the scaffold, but any high-risk destructive actions such as reset, bank load, or paste should receive explicit history support before public release.
+
 ## Bank And BPM Ownership
 
 All musical state is patch-local in v1.

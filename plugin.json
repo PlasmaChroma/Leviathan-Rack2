@@ -96,6 +96,18 @@
         "EQ"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Chronomaw",
+      "name": "Chronomaw",
+      "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
+      "tags": [
+        "Clock generator",
+        "Function Generator",
+        "Sequencer",
+        "Random"
+      ],
+      "hidden": false
     }
   ]
 }
