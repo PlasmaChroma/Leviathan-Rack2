@@ -153,6 +153,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 	snapshot->requestSeq = request.requestSeq;
 	snapshot->previewSeq = request.previewSeq;
 	snapshot->analysisSeq = request.analysisSeq;
+	snapshot->requestSubmittedAtSec = request.requestSubmittedAtSec;
 	snapshot->sourcePreviewTimeSec = request.sourcePreviewTimeSec;
 	if (!(request.skipCurvePrep && snapshot->hasCurveTarget)) {
 		fillAxisForSampleRate(

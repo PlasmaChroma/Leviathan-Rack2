@@ -1169,18 +1169,24 @@ int BifurxSpectrumBase::effectiveVisualWorkerMode() const {
 }
 
 float BifurxSpectrumBase::workerSnapshotAgeMs() const {
-	if (!workerSnapshotCache || workerSnapshotCache->sourcePreviewTimeSec <= 0.0) {
+	if (!workerSnapshotCache || workerSnapshotCache->completedAtSec <= 0.0) {
 		return 0.f;
 	}
-	const double ageSec = std::max(0.0, system::getTime() - workerSnapshotCache->sourcePreviewTimeSec);
+	// Report age only when the rendered snapshot is behind the most recent published state.
+	const bool previewBehind = workerLastAppliedPreviewSeq < state.lastPreviewSeq;
+	const bool analysisBehind = workerLastAppliedAnalysisSeq < state.lastAnalysisSeq;
+	if (!previewBehind && !analysisBehind) {
+		return 0.f;
+	}
+	const double ageSec = std::max(0.0, system::getTime() - workerSnapshotCache->completedAtSec);
 	return float(ageSec * 1000.0);
 }
 
 float BifurxSpectrumBase::workerQueueLatencyMs() const {
-	if (!workerSnapshotCache || workerSnapshotCache->sourcePreviewTimeSec <= 0.0 || workerSnapshotCache->completedAtSec <= 0.0) {
+	if (!workerSnapshotCache || workerSnapshotCache->requestSubmittedAtSec <= 0.0 || workerSnapshotCache->completedAtSec <= 0.0) {
 		return 0.f;
 	}
-	const double queueSec = std::max(0.0, workerSnapshotCache->completedAtSec - workerSnapshotCache->sourcePreviewTimeSec);
+	const double queueSec = std::max(0.0, workerSnapshotCache->completedAtSec - workerSnapshotCache->requestSubmittedAtSec);
 	return float(queueSec * 1000.0);
 }
 
@@ -1221,6 +1227,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.requestSeq = ++workerRequestSeq;
 	request.previewSeq = state.lastPreviewSeq;
 	request.analysisSeq = state.lastAnalysisSeq;
+	request.requestSubmittedAtSec = system::getTime();
 	request.sourcePreviewTimeSec = state.previewPublishTimeSec;
 	request.previewState = state.previewState;
 	request.fftScaleDynamic = module->fftScaleDynamic.load(std::memory_order_relaxed);
@@ -1280,6 +1287,11 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 		}
 	}
 	state.hasCurveTarget = true;
+	// Force marker/layout recompute after worker-provided curve adoption.
+	// Without this, first-frame VW spawns can retain stale marker Y positions
+	// from pre-adoption cache state until another parameter change occurs.
+	cachedMarkerLayoutValid = false;
+	refinedCurveTemplateValid = false;
 	lastCurvePrepUs = workerSnapshotCache->curvePrepUs;
 	if (workerSnapshotCache->hasOverlayTarget &&
 		workerSnapshotCache->analysisSeq >= workerLastAppliedAnalysisSeq) {
