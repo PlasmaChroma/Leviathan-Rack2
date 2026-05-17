@@ -560,7 +560,11 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		for (int i = 0; i < 2; i++) {
 			if (!layout.markers[i].visible) continue;
 			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 150)); nvgStrokeWidth(args.vg, 1.75f); nvgStroke(args.vg);
+			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+			nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
 		};
 	}
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
@@ -601,11 +605,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	};
 	nvgLineJoin(args.vg, NVG_ROUND);
 	nvgLineCap(args.vg, NVG_ROUND);
-	// DK_DEBUG_CURVE_CORE_GLOW_TRY: localized 2-pass curve stroke, easy to revert.
 	if (!displayOnlyMode) {
 		drawRefinedCurvePath();
-		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 96));
-		nvgStrokeWidth(args.vg, 2.9f);
+		nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+		nvgStrokeWidth(args.vg, 1.9f);
 		nvgStroke(args.vg);
 		drawRefinedCurvePath();
 		nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248));
@@ -619,7 +622,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	if (!displayOnlyMode) {
 		for (int i = 0; i < 2; ++i) {
 			if (!layout.markers[i].visible) continue;
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 170)); nvgStrokeWidth(args.vg, 1.35f); nvgStroke(args.vg);
 			nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
 			nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
 		}
@@ -973,11 +975,11 @@ struct BifurxWidget final : ModuleWidget {
 				addSchemeItem(Bifurx::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
 				addSchemeItem(Bifurx::SCHEME_FIRE, "Fire (Red/Yellow)");
 			}));
-			menu->addChild(createCheckMenuItem("Low Latency Visual", "",
+			menu->addChild(createCheckMenuItem("Low Latency Offload", "",
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 			menu->addChild(createCheckMenuItem(
-				"Disable Visual Worker", "",
+				"Disable Visual Offload", "",
 				[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF; },
 				[=]() {
 					const bool disabledNow = bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF;

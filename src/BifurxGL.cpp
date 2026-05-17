@@ -879,6 +879,46 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 
 		if (!displayOnlyMode) {
+			for (int i = 0; i < 2; i++) {
+				if (!layout.markers[i].visible) continue;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+				nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+				nvgStrokeWidth(args.vg, 2.2f);
+				nvgStroke(args.vg);
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+				nvgStrokeWidth(args.vg, 1.7f);
+				nvgStroke(args.vg);
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+				nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+				nvgStrokeWidth(args.vg, 2.2f);
+				nvgStroke(args.vg);
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+				nvgStrokeWidth(args.vg, 1.7f);
+				nvgStroke(args.vg);
+			}
+
+			nvgBeginPath(args.vg);
+			for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
+				const float x = w * overlayCurvePoints[i].x01;
+				const float y = overlayCurvePoints[i].y;
+				if (i == 0) nvgMoveTo(args.vg, x, y);
+				else nvgLineTo(args.vg, x, y);
+			}
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokeWidth(args.vg, 2.2f);
+			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+			nvgStroke(args.vg);
 			nvgBeginPath(args.vg);
 			for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
 				const float x = w * overlayCurvePoints[i].x01;
@@ -899,23 +939,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (!displayOnlyMode) {
 			for (int i = 0; i < 2; i++) {
 				if (!layout.markers[i].visible) continue;
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 122));
-				nvgStrokeWidth(args.vg, 1.75f);
-				nvgStroke(args.vg);
-			}
-
-			for (int i = 0; i < 2; i++) {
-				if (!layout.markers[i].visible) continue;
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 138));
-				nvgStrokeWidth(args.vg, 1.35f);
-				nvgStroke(args.vg);
-				
 				nvgBeginPath(args.vg);
 				nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
 				nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
