@@ -630,6 +630,77 @@ TestResult testRuntimeSelfOscHighResBounded() {
   };
 }
 
+TestResult testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough() {
+  bool pass = true;
+  std::string detail;
+
+  for (int scheme = 0; scheme < Bifurx::SCHEME_LEN; ++scheme) {
+    Bifurx source;
+    source.onReset();
+    source.params[Bifurx::MODE_PARAM].setValue(float(kBifurxDisplayOnlyMode));
+    source.colorScheme = (Bifurx::ColorScheme) scheme;
+
+    json_t* stateJ = source.dataToJson();
+    if (!stateJ) {
+      return {"Display-only JSON round-trip + pass-through", false, "dataToJson returned null"};
+    }
+
+    Bifurx loaded;
+    loaded.onReset();
+    loaded.params[Bifurx::MODE_PARAM].setValue(float(kBifurxDisplayOnlyMode));
+    loaded.dataFromJson(stateJ);
+    json_decref(stateJ);
+
+    const bool schemeOk = int(loaded.colorScheme) == scheme;
+    pass = pass && schemeOk;
+
+    Module::ProcessArgs args;
+    args.sampleRate = 48000.f;
+    args.sampleTime = 1.f / args.sampleRate;
+
+    float inSq = 0.f;
+    float errSq = 0.f;
+    for (int n = 0; n < 4096; ++n) {
+      const float t = float(n) * args.sampleTime;
+      const float in = 3.6f * std::sin(2.f * kRuntimePi * 733.f * t) +
+        0.9f * std::sin(2.f * kRuntimePi * 1471.f * t + 0.31f);
+      loaded.inputs[Bifurx::IN_INPUT].setVoltage(in);
+      loaded.process(args);
+      const float out = loaded.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      const float e = out - in;
+      inSq += in * in;
+      errSq += e * e;
+      pass = pass && std::isfinite(out);
+    }
+
+    const float relErr = std::sqrt(errSq / std::max(inSq, 1e-12f));
+    const bool passThroughOk = relErr < 1e-6f;
+    pass = pass && passThroughOk;
+
+    detail += " scheme" + std::to_string(scheme) +
+      "(ok=" + std::to_string(int(schemeOk)) +
+      ",relErr=" + std::to_string(relErr) + ")";
+  }
+
+  {
+    Bifurx clamped;
+    clamped.onReset();
+    json_t* root = json_object();
+    json_object_set_new(root, "colorScheme", json_integer(1234));
+    clamped.dataFromJson(root);
+    json_decref(root);
+    const bool clampOk = int(clamped.colorScheme) == int(Bifurx::SCHEME_LEN - 1);
+    pass = pass && clampOk;
+    detail += " clampOk=" + std::to_string(int(clampOk));
+  }
+
+  return {
+    "Display-only JSON round-trip + pass-through",
+    pass,
+    detail
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -644,6 +715,7 @@ int main() {
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
+    testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
   };
 
   int fails = 0;

@@ -199,6 +199,7 @@ struct SvfOutputs {
 };
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t);
+float displayOnlyColorTone(float energy, float shapeControl);
 void formatFrequencyLabel(float hz, char* out, size_t outSize);
 
 struct SvfCoeffs {

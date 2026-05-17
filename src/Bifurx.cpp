@@ -204,6 +204,19 @@ NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	return out;
 }
 
+float displayOnlyColorTone(float energy, float shapeControl) {
+	const float e = bifurx::clamp01(energy);
+	const float ctl = clamp(shapeControl, -1.f, 1.f);
+	if (ctl < 0.f) {
+		// Cool side: blend linear -> squared to delay hot color.
+		const float sq = e * e;
+		return bifurx::mixf(e, sq, -ctl);
+	}
+	// Hot side: blend linear -> fast-rising polynomial.
+	const float hot = e * (2.f - e);
+	return bifurx::mixf(e, hot, ctl);
+}
+
 BifurxColors BifurxColors::get(Bifurx::ColorScheme scheme) {
 	switch (scheme) {
 		case Bifurx::SCHEME_CLASSIC:

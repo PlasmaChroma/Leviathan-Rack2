@@ -567,13 +567,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	if (state.hasOverlay) {
 		const bool showModuleResponse = !displayOnlyMode && module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+		const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
 			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 			if (energy <= 0.005f) continue;
 			NVGcolor fill;
 			if (displayOnlyMode) {
-				fill = mixColor(expectedPurple, expectedCyan, energy);
+				fill = mixColor(expectedPurple, expectedCyan, displayOnlyColorTone(energy, displayOnlyShapeControl));
 			}
 			else {
 				const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);

@@ -703,6 +703,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			cyanVertices.clear();
 			cyanHaloVertices.clear();
 			const bool showModuleResponse = !displayOnlyMode && module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+			const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
 
 		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
@@ -719,7 +720,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				NVGcolor expectedPurple = palette.low;
 				NVGcolor fill;
 				if (displayOnlyMode) {
-					fill = mixColor(expectedPurple, expectedCyan, energy);
+					fill = mixColor(expectedPurple, expectedCyan, displayOnlyColorTone(energy, displayOnlyShapeControl));
 				}
 				else {
 					NVGcolor tint = expectedWhite; 
