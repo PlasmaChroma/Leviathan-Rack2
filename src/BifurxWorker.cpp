@@ -4,7 +4,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <fstream>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -13,47 +12,19 @@ namespace bifurx {
 
 namespace {
 
-std::atomic<int> gBifurxVisualWorkerDefaultMode {VISUAL_WORKER_OFF};
+std::atomic<int> gBifurxVisualWorkerDefaultMode {VISUAL_WORKER_ON};
 std::atomic<bool> gBifurxVisualWorkerSettingsLoaded {false};
 std::atomic<bool> gBifurxRenderServiceShuttingDown {false};
-std::mutex gBifurxVisualWorkerSettingsMutex;
-
-std::string bifurxVisualWorkerSettingsPath() {
-	return system::join(asset::user(), "Leviathan/Bifurx/visual_worker_settings.json");
-}
-
-void saveBifurxVisualWorkerDefaultModeUnlocked(int mode) {
-	system::createDirectories(system::join(asset::user(), "Leviathan/Bifurx"));
-	json_t* root = json_object();
-	json_object_set_new(root, "visualWorkerDefaultMode", json_integer(mode));
-	json_dump_file(root, bifurxVisualWorkerSettingsPath().c_str(), JSON_INDENT(2));
-	json_decref(root);
-}
 
 void loadBifurxVisualWorkerDefaultModeIfNeeded() {
 	if (gBifurxVisualWorkerSettingsLoaded.load(std::memory_order_acquire)) {
 		return;
 	}
-	std::lock_guard<std::mutex> lock(gBifurxVisualWorkerSettingsMutex);
 	if (gBifurxVisualWorkerSettingsLoaded.load(std::memory_order_relaxed)) {
 		return;
 	}
-	const std::string settingsPath = bifurxVisualWorkerSettingsPath();
-	json_error_t error {};
-	json_t* root = json_load_file(settingsPath.c_str(), 0, &error);
-	if (root && json_is_object(root)) {
-		json_t* modeJ = json_object_get(root, "visualWorkerDefaultMode");
-		if (modeJ && json_is_integer(modeJ)) {
-			const int loadedMode = int(json_integer_value(modeJ));
-			gBifurxVisualWorkerDefaultMode.store(
-				clamp(loadedMode, VISUAL_WORKER_OFF, VISUAL_WORKER_ON),
-				std::memory_order_relaxed
-			);
-		}
-	}
-	if (root) {
-		json_decref(root);
-	}
+	// Global default is intentionally fixed to ON.
+	gBifurxVisualWorkerDefaultMode.store(VISUAL_WORKER_ON, std::memory_order_relaxed);
 	gBifurxVisualWorkerSettingsLoaded.store(true, std::memory_order_release);
 }
 
@@ -263,11 +234,9 @@ void shutdownBifurxRenderService() {
 }
 
 void setBifurxVisualWorkerDefaultMode(int mode) {
+	(void) mode;
 	loadBifurxVisualWorkerDefaultModeIfNeeded();
-	const int clamped = clamp(mode, VISUAL_WORKER_OFF, VISUAL_WORKER_ON);
-	gBifurxVisualWorkerDefaultMode.store(clamped, std::memory_order_relaxed);
-	std::lock_guard<std::mutex> lock(gBifurxVisualWorkerSettingsMutex);
-	saveBifurxVisualWorkerDefaultModeUnlocked(clamped);
+	gBifurxVisualWorkerDefaultMode.store(VISUAL_WORKER_ON, std::memory_order_relaxed);
 }
 
 int getBifurxVisualWorkerDefaultMode() {

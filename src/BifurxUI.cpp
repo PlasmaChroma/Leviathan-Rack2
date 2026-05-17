@@ -866,18 +866,6 @@ struct BifurxWidget final : ModuleWidget {
 			}
 		};
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createSubmenuItem("Filter Mode", "", [=](Menu* submenu) {
-			for (int mode = 0; mode < kBifurxUiModeCount; ++mode) {
-				submenu->addChild(createCheckMenuItem(
-					kBifurxModeLabels[mode], "",
-					[=]() {
-						return int(std::round(bifurx->params[Bifurx::MODE_PARAM].getValue())) == mode;
-					},
-					[=]() {
-						bifurx->params[Bifurx::MODE_PARAM].setValue(float(mode));
-					}));
-			}
-		}));
 			menu->addChild(createSubmenuItem("Modulation Quality", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(
 					"Balanced", "",
@@ -943,38 +931,17 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Low Latency Visual", "",
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
-			menu->addChild(createSubmenuItem("Visual Worker Default", "", [=](Menu* submenu) {
-				submenu->addChild(createCheckMenuItem(
-					"Off", "",
-					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_OFF; },
-					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_OFF); }));
-				submenu->addChild(createCheckMenuItem(
-					"Auto", "",
-					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_AUTO; },
-					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_AUTO); }));
-				submenu->addChild(createCheckMenuItem(
-					"On", "",
-					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_ON; },
-					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_ON); }));
-			}));
-			menu->addChild(createSubmenuItem("Visual Worker (This Module)", "", [=](Menu* submenu) {
-				submenu->addChild(createCheckMenuItem(
-					"Inherit", "",
-					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_INHERIT; },
-					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_INHERIT, std::memory_order_relaxed); }));
-				submenu->addChild(createCheckMenuItem(
-					"Off", "",
-					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF; },
-					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_OFF, std::memory_order_relaxed); }));
-				submenu->addChild(createCheckMenuItem(
-					"Auto", "",
-					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_AUTO; },
-					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_AUTO, std::memory_order_relaxed); }));
-				submenu->addChild(createCheckMenuItem(
-					"On", "",
-					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_ON; },
-					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON, std::memory_order_relaxed); }));
-			}));
+			menu->addChild(createCheckMenuItem(
+				"Disable Visual Worker (This Module)", "",
+				[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF; },
+				[=]() {
+					const bool disabledNow = bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF;
+					bifurx->visualWorkerMode.store(
+						disabledNow ? Bifurx::VISUAL_WORKER_INHERIT : Bifurx::VISUAL_WORKER_OFF,
+						std::memory_order_relaxed
+					);
+				}
+			));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createCheckMenuItem("Log Curve Debug", "",
 				[=]() { return bifurx->curveDebugLogging.load(std::memory_order_relaxed); },
