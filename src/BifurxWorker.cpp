@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <fstream>
 #include <mutex>
 #include <thread>
@@ -59,6 +60,7 @@ void loadBifurxVisualWorkerDefaultModeIfNeeded() {
 struct DisplaySlot {
 	bool active = true;
 	bool inFlight = false;
+	bool queued = false;
 	bool hasPending = false;
 	BifurxUiRenderRequest pending;
 	std::shared_ptr<const BifurxUiRenderSnapshot> latestSnapshot;
@@ -70,6 +72,7 @@ struct BifurxUiRenderService::Impl {
 	mutable std::mutex mutex;
 	std::condition_variable cv;
 	std::unordered_map<uint64_t, DisplaySlot> slots;
+	std::deque<uint64_t> readyQueue;
 	std::thread thread;
 	bool running = false;
 	bool stopRequested = false;
@@ -86,19 +89,20 @@ struct BifurxUiRenderService::Impl {
 					if (stopRequested) {
 						return true;
 					}
-					for (auto& kv : slots) {
-						DisplaySlot& slot = kv.second;
-						if (slot.active && slot.hasPending && !slot.inFlight) {
-							return true;
-						}
-					}
-					return false;
+					return !readyQueue.empty();
 				});
 				if (stopRequested) {
 					return;
 				}
-				for (auto& kv : slots) {
-					DisplaySlot& slot = kv.second;
+				while (!readyQueue.empty()) {
+					const uint64_t displayId = readyQueue.front();
+					readyQueue.pop_front();
+					auto it = slots.find(displayId);
+					if (it == slots.end()) {
+						continue;
+					}
+					DisplaySlot& slot = it->second;
+					slot.queued = false;
 					if (!slot.active || !slot.hasPending || slot.inFlight) {
 						continue;
 					}
@@ -137,6 +141,10 @@ struct BifurxUiRenderService::Impl {
 				DisplaySlot& slot = it->second;
 				slot.latestSnapshot = snapshot;
 				slot.inFlight = false;
+				if (slot.active && slot.hasPending && !slot.queued) {
+					slot.queued = true;
+					readyQueue.push_back(request.displayId);
+				}
 			}
 		}
 	}
@@ -191,6 +199,7 @@ void BifurxUiRenderService::unregisterDisplay(uint64_t displayId) {
 		auto it = impl->slots.find(displayId);
 		if (it != impl->slots.end()) {
 			it->second.active = false;
+			it->second.queued = false;
 			impl->slots.erase(it);
 		}
 		if (impl->slots.empty() && impl->running) {
@@ -220,8 +229,13 @@ void BifurxUiRenderService::submitLatest(const BifurxUiRenderRequest& request) {
 		if (it == impl->slots.end() || !it->second.active) {
 			return;
 		}
-		it->second.pending = request;
-		it->second.hasPending = true;
+		DisplaySlot& slot = it->second;
+		slot.pending = request;
+		slot.hasPending = true;
+		if (!slot.inFlight && !slot.queued) {
+			slot.queued = true;
+			impl->readyQueue.push_back(request.displayId);
+		}
 	}
 	impl->cv.notify_one();
 }

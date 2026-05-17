@@ -1270,11 +1270,9 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 	if (!workerSnapshotCache->hasCurveTarget) {
 		return false;
 	}
-	if (module && module->lowLatencyVisual.load(std::memory_order_relaxed) &&
-		workerSnapshotCache->previewSeq < workerLastSubmittedPreviewSeq) {
-		workerLastAppliedRequestSeq = workerSnapshotCache->requestSeq;
-		return false;
-	}
+	// Do not reject snapshots solely for being older than the latest submitted seq.
+	// Under heavy load this can cause a module to repeatedly drop usable snapshots
+	// and appear permanently behind.
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		state.curveHz[i] = workerSnapshotCache->curveHz[i];
 		state.curveBinPos[i] = workerSnapshotCache->curveBinPos[i];
