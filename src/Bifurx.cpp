@@ -203,6 +203,20 @@ NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 	return out;
 }
 
+BifurxColors BifurxColors::get(Bifurx::ColorScheme scheme) {
+	switch (scheme) {
+		case Bifurx::SCHEME_CLASSIC:
+			return {nvgRGBA(0x00, 0xff, 0x00, 0xff), nvgRGBA(0xff, 0x00, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+		case Bifurx::SCHEME_MONOCHROME:
+			return {nvgRGBA(0x40, 0x40, 0x40, 0xff), nvgRGBA(0xff, 0xff, 0xff, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+		case Bifurx::SCHEME_FIRE:
+			return {nvgRGBA(0x80, 0x00, 0x00, 0xff), nvgRGBA(0xff, 0xff, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+		case Bifurx::SCHEME_DEFAULT:
+		default:
+			return {nvgRGBA(0x7a, 0x5c, 0xff, 0xff), nvgRGBA(0x1c, 0xcc, 0xd9, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+	}
+}
+
 void formatFrequencyLabel(float hz, char* out, size_t outSize) {
 	const float safeHz = std::max(hz, 0.f);
 	if (safeHz >= 1000.f) {
@@ -543,7 +557,7 @@ Bifurx::Bifurx() {
 		kBifurxModeLabels[8],
 		kBifurxModeLabels[9]
 	});
-	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam<BifurxFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam<BifurxSpanQuantity>(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next");
+	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam<BifurxFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam<BifurxSpanQuantity>(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next"); configButton(MODE_MENU_PARAM, "Filter mode");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
 	outputs[OUT_OUTPUT].setChannels(1);
 	paramQuantities[MODE_PARAM]->snapEnabled = true;
@@ -555,6 +569,7 @@ json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "colorScheme", json_integer(colorScheme));
 	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "lowLatencyVisual", json_boolean(lowLatencyVisual.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "visualWorkerMode", json_integer(visualWorkerMode.load(std::memory_order_relaxed)));
@@ -580,6 +595,10 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* showModuleResponseOverlayJ = json_object_get(root, "showModuleResponseOverlay");
 	if (showModuleResponseOverlayJ) {
 		showModuleResponseOverlay.store(json_is_true(showModuleResponseOverlayJ), std::memory_order_relaxed);
+	}
+	json_t* colorSchemeJ = json_object_get(root, "colorScheme");
+	if (colorSchemeJ) {
+		colorScheme = (ColorScheme) clamp(int(json_integer_value(colorSchemeJ)), 0, SCHEME_LEN - 1);
 	}
 	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
 	if (useGlShaderRendererJ) {

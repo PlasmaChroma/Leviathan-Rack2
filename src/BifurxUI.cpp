@@ -528,7 +528,10 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230)); nvgText(args.vg, w - 2.2f, 1.6f, "NVG", nullptr);
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
-	const NVGcolor expectedPurple = nvgRGB(122, 92, 255), expectedCyan = nvgRGB(28, 204, 217), expectedWhite = nvgRGB(206, 210, 216);
+	const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+	const NVGcolor expectedPurple = palette.low;
+	const NVGcolor expectedCyan = palette.high;
+	const NVGcolor expectedWhite = palette.white;
 	
 	BifurxMarkerLayout layout;
 	getCachedMarkerLayout(&layout, w, h);
@@ -664,6 +667,46 @@ void drawModeStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool po
 
 struct BifurxModeLeftButton final : TL1105 { void draw(const DrawArgs& args) override { TL1105::draw(args); drawModeStepTriangle(args, box.size, false); } };
 struct BifurxModeRightButton final : TL1105 { void draw(const DrawArgs& args) override { TL1105::draw(args); drawModeStepTriangle(args, box.size, true); } };
+struct BifurxModeMenuButton final : TL1105 {
+	Bifurx* module = nullptr;
+
+	void onButton(const event::Button& e) override {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			TL1105::onButton(e);
+			return;
+		}
+		ui::Menu* menu = createMenu();
+		menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
+		menu->addChild(createMenuLabel("Filter Mode"));
+		for (int mode = 0; mode < kBifurxUiModeCount; ++mode) {
+			menu->addChild(createCheckMenuItem(
+				kBifurxModeLabels[mode], "",
+				[=]() { return int(std::round(module->params[Bifurx::MODE_PARAM].getValue())) == mode; },
+				[=]() { module->params[Bifurx::MODE_PARAM].setValue(float(mode)); }
+			));
+		}
+		e.consume(this);
+	}
+
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		const float cx = 0.5f * box.size.x;
+		const float cy = 0.5f * box.size.y;
+		const float dy = std::max(1.6f, 0.16f * box.size.y);
+		const float halfW = std::max(1.9f, 0.22f * box.size.x);
+		const float y0 = cy - dy;
+		for (int i = 0; i < 3; ++i) {
+			const float y = y0 + dy * float(i);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, cx - halfW, y);
+			nvgLineTo(args.vg, cx + halfW, y);
+			nvgStrokeWidth(args.vg, 1.2f);
+			nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+			nvgStroke(args.vg);
+		}
+	}
+};
+
 struct BifurxModeReadoutWidget final : Widget {
 	Module* module = nullptr;
 	void draw(const DrawArgs& args) override {
@@ -711,10 +754,14 @@ struct BifurxWidget final : ModuleWidget {
 		}
 
 		BifurxModeReadoutWidget* mR = new BifurxModeReadoutWidget(); mR->module = module; mR->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f)); mR->box.size = mm2px(Vec(sRect.size.x, 4.2f)); addChild(mR);
-		Vec mP(13.4f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
+		Vec mP(13.4f, 22.f), mmP(8.9f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
 		Vec iP(7.6f, 112.2f), vP(17.15f, 112.2f), fmP(26.7f, 112.2f), rcP(36.25f, 112.2f), bcP(45.8f, 112.2f), scP(55.35f, 112.2f), oP(64.9f, 112.2f);
 		applyPt("MODE_PARAM", &mP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
+		applyPt("MODE_MENU_BUTTON", &mmP);
 		applyPt("IN_INPUT", &iP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
+		auto* modeMenuButton = createParamCentered<BifurxModeMenuButton>(mm2px(mmP), module, Bifurx::MODE_MENU_PARAM);
+		modeMenuButton->module = module;
+		addParam(modeMenuButton);
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fP), module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
@@ -880,6 +927,19 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Show Module Response", "",
 				[=]() { return bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed); },
 				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createSubmenuItem("Color Scheme", "", [=](Menu* submenu) {
+				auto addSchemeItem = [=](Bifurx::ColorScheme scheme, const std::string& label) {
+					submenu->addChild(createCheckMenuItem(
+						label, "",
+						[=]() { return bifurx->colorScheme == scheme; },
+						[=]() { bifurx->colorScheme = scheme; }
+					));
+				};
+				addSchemeItem(Bifurx::SCHEME_DEFAULT, "Default (Purple/Cyan)");
+				addSchemeItem(Bifurx::SCHEME_CLASSIC, "Classic (Green/Red)");
+				addSchemeItem(Bifurx::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
+				addSchemeItem(Bifurx::SCHEME_FIRE, "Fire (Red/Yellow)");
+			}));
 			menu->addChild(createCheckMenuItem("Low Latency Visual", "",
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));

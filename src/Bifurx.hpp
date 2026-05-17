@@ -551,6 +551,13 @@ void simulatePreviewProbeImpulseResponse(
 );
 
 struct Bifurx : Module {
+	enum ColorScheme {
+		SCHEME_DEFAULT = 0,
+		SCHEME_CLASSIC,
+		SCHEME_MONOCHROME,
+		SCHEME_FIRE,
+		SCHEME_LEN
+	};
 	enum ParamId {
 		MODE_PARAM,
 		LEVEL_PARAM,
@@ -563,6 +570,7 @@ struct Bifurx : Module {
 		TITO_PARAM,
 		MODE_LEFT_PARAM,
 		MODE_RIGHT_PARAM,
+		MODE_MENU_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -690,6 +698,7 @@ struct Bifurx : Module {
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
+	ColorScheme colorScheme = SCHEME_DEFAULT;
 	std::atomic<bool> useGlShaderRenderer {true};
 	std::atomic<bool> lowLatencyVisual {false};
 	std::atomic<int> visualWorkerMode {VISUAL_WORKER_INHERIT};
@@ -726,6 +735,13 @@ struct Bifurx : Module {
 	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
 	void process(const ProcessArgs& args) override;
+};
+
+struct BifurxColors {
+	NVGcolor low;
+	NVGcolor high;
+	NVGcolor white;
+	static BifurxColors get(Bifurx::ColorScheme scheme);
 };
 
 } // namespace bifurx

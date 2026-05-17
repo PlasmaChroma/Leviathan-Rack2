@@ -712,9 +712,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				if (energy <= 0.005f) continue;
 				
 				float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
-				NVGcolor expectedWhite = nvgRGB(206, 210, 216);
-				NVGcolor expectedCyan = nvgRGB(28, 204, 217);
-				NVGcolor expectedPurple = nvgRGB(122, 92, 255);
+				const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+				NVGcolor expectedWhite = palette.white;
+				NVGcolor expectedCyan = palette.high;
+				NVGcolor expectedPurple = palette.low;
 				NVGcolor tint = expectedWhite; 
 				if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); 
 				if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
@@ -766,8 +767,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		// 2. Cyan Module Response
 		if (state.hasOverlay && showModuleResponse) {
-			NVGcolor expectedWhite = nvgRGB(206, 210, 216);
-			NVGcolor expectedCyan = nvgRGB(28, 204, 217);
+			const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+			NVGcolor expectedWhite = palette.white;
+			NVGcolor expectedCyan = palette.high;
 			NVGcolor cyanColor = mixColor(expectedWhite, expectedCyan, 0.35f);
 			cyanColor = mixColor(cyanColor, nvgRGB(236, 244, 250), 0.10f);
 			cyanColor.a = 0.98f;
