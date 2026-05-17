@@ -16,7 +16,8 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"High + Low",
 	"High + Notch",
 	"Band + High",
-	"High + High"
+	"High + High",
+	"Display Only"
 };
 
 std::string bifurxUserRootPath() {
@@ -555,7 +556,8 @@ Bifurx::Bifurx() {
 		kBifurxModeLabels[6],
 		kBifurxModeLabels[7],
 		kBifurxModeLabels[8],
-		kBifurxModeLabels[9]
+		kBifurxModeLabels[9],
+		kBifurxModeLabels[10]
 	});
 	configParam(LEVEL_PARAM, 0.f, 1.f, 0.5f, "Level"); configParam<BifurxFreqQuantity>(FREQ_PARAM, 0.f, 1.f, 0.5f, "Frequency"); configParam(RESO_PARAM, 0.f, 1.f, 0.35f, "Resonance"); configParam(BALANCE_PARAM, -1.f, 1.f, 0.f, "Balance"); configParam<BifurxSpanQuantity>(SPAN_PARAM, 0.f, 1.f, 0.33f, "Span"); configParam(FM_AMT_PARAM, -1.f, 1.f, 0.f, "FM amount"); configParam(SPAN_CV_ATTEN_PARAM, -1.f, 1.f, 0.f, "Span CV attenuator"); configParam(TITO_PARAM, -1.f, 1.f, 0.f, "TITO strength"); configButton(MODE_LEFT_PARAM, "Mode previous"); configButton(MODE_RIGHT_PARAM, "Mode next"); configButton(MODE_MENU_PARAM, "Filter mode");
 	configInput(IN_INPUT, "Signal In"); configInput(VOCT_INPUT, "V/Oct"); configInput(FM_INPUT, "FM"); configInput(RESO_CV_INPUT, "Resonance CV"); configInput(BALANCE_CV_INPUT, "Balance CV"); configInput(SPAN_CV_INPUT, "Span CV"); configOutput(OUT_OUTPUT, "Signal Out"); configBypass(IN_INPUT, OUT_OUTPUT);
@@ -913,22 +915,28 @@ void Bifurx::process(const ProcessArgs& args) {
 		);
 	};
 
-	switch (mode) {
-		case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 2: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, spanWideMorph); } break;
-		case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-		case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
-		default: { const SvfOutputs a = pA(excitation), b = pB(a.lp); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+	const bool displayOnlyMode = isBifurxDisplayOnlyMode(mode);
+	if (displayOnlyMode) {
+		modeOut = in;
+	}
+	else {
+		switch (mode) {
+			case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 2: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, spanWideMorph); } break;
+			case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
+			default: { const SvfOutputs a = pA(excitation), b = pB(a.lp); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+		}
 	}
 
 	const bool softLimitingEnabledNow = softLimitingEnabled.load(std::memory_order_relaxed);
-	const float out = applyLevelOutputStage(modeOut, level, softLimitingEnabledNow);
+	const float out = displayOnlyMode ? in : applyLevelOutputStage(modeOut, level, softLimitingEnabledNow);
 	outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;
 	if (mode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
@@ -1005,6 +1013,12 @@ void Bifurx::process(const ProcessArgs& args) {
 namespace {
 
 inline void prepareCurveTargets(const BifurxPreviewModel& model, const float* curveHz, float* curveTargetDb) {
+	if (isBifurxDisplayOnlyMode(model.mode)) {
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			curveTargetDb[i] = 0.f;
+		}
+		return;
+	}
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float db = previewModelResponseDb(model, curveHz[i]);
 		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
@@ -1043,6 +1057,7 @@ inline void prepareOverlayTargetsFromSpectra(
 	const float* fftOutputFreq,
 	const float* fftResponseOutputFreq,
 	const float* fftRawInputFreq,
+	bool moduleResponseEnabled,
 	bool hasOverlayTarget,
 	bool fftScaleDynamic,
 	float* overlayTargetModuleDb,
@@ -1061,8 +1076,10 @@ inline void prepareOverlayTargetsFromSpectra(
 		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
-		binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
-		binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
+		if (moduleResponseEnabled) {
+			binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
+			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
+		}
 	}
 
 	constexpr int kOverlayBandRadius = 2;
@@ -1075,11 +1092,14 @@ inline void prepareOverlayTargetsFromSpectra(
 			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
 			outputEnergy += w * binOutputPower[sampleBin];
-			responseOutputEnergy += w * binResponseOutputPower[sampleBin];
-			rawInputEnergy += w * binRawInputPower[sampleBin];
+			if (moduleResponseEnabled) {
+				responseOutputEnergy += w * binResponseOutputPower[sampleBin];
+				rawInputEnergy += w * binRawInputPower[sampleBin];
+			}
 		}
-		rawInputEnergy += 1e-12f;
-		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / rawInputEnergy));
+		binModuleDeltaDb[bin] = moduleResponseEnabled
+			? softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f)))
+			: 0.f;
 		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
@@ -1427,14 +1447,17 @@ void BifurxSpectrumBase::updateOverlayCache() {
 		fftOutputTime[i] = outputFrame[i] * window[i];
 	}
 	fft.rfft(fftOutputTime, fftOutputFreq);
-	for (int i = 0; i < kFftSize; i++) {
-		fftOutputTime[i] = responseFrame[i] * window[i];
+	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
+	if (!displayOnlyMode) {
+		for (int i = 0; i < kFftSize; i++) {
+			fftOutputTime[i] = responseFrame[i] * window[i];
+		}
+		fft.rfft(fftOutputTime, fftResponseOutputFreq);
+		for (int i = 0; i < kFftSize; i++) {
+			fftInputTime[i] = inputFrame[i] * window[i];
+		}
+		fft.rfft(fftInputTime, fftRawInputFreq);
 	}
-	fft.rfft(fftOutputTime, fftResponseOutputFreq);
-	for (int i = 0; i < kFftSize; i++) {
-		fftInputTime[i] = inputFrame[i] * window[i];
-	}
-	fft.rfft(fftInputTime, fftRawInputFreq);
 	const bool fftScaleDynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
 	prepareOverlayTargetsFromSpectra(
 		state.previewState.sampleRate,
@@ -1442,6 +1465,7 @@ void BifurxSpectrumBase::updateOverlayCache() {
 		fftOutputFreq,
 		fftResponseOutputFreq,
 		fftRawInputFreq,
+		!displayOnlyMode,
 		state.hasOverlayTarget,
 		fftScaleDynamic,
 		state.overlayTargetModuleDb,

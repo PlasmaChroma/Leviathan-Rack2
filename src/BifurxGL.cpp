@@ -696,12 +696,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
+		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 			fillVertices.clear();
 			fillSoftCapVertices.clear();
 			fillCrestStrokeVertices.clear();
 			cyanVertices.clear();
 			cyanHaloVertices.clear();
-			const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+			const bool showModuleResponse = !displayOnlyMode && module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 
 		// 1. FFT Fill Overlay
 		if (state.hasOverlay) {
@@ -716,10 +717,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				NVGcolor expectedWhite = palette.white;
 				NVGcolor expectedCyan = palette.high;
 				NVGcolor expectedPurple = palette.low;
-				NVGcolor tint = expectedWhite; 
-				if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); 
-				if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
-				NVGcolor fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
+				NVGcolor fill;
+				if (displayOnlyMode) {
+					fill = mixColor(expectedPurple, expectedCyan, energy);
+				}
+				else {
+					NVGcolor tint = expectedWhite; 
+					if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); 
+					if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
+					fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
+				}
 				
 				float x0 = w * (float(i) / float(kCurvePointCount - 1));
 				float x1 = w * (float(i + 1) / float(kCurvePointCount - 1));
@@ -832,20 +839,28 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (!state.hasPreview) return;
 		
 		const float w = box.size.x, h = box.size.y;
+		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 		BifurxMarkerLayout layout;
-		getCachedMarkerLayout(&layout, w, h);
+		if (!displayOnlyMode) {
+			getCachedMarkerLayout(&layout, w, h);
+		}
 
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 		const float spectrumTopY = padY * 0.35f;
 		const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
-		calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
+		if (!displayOnlyMode) {
+			calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
+		}
+		else {
+			overlayCurvePoints.clear();
+		}
 
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, std::max(1.f, w), std::max(1.f, spectrumBottomY + 1.f));
 
-		if (state.hasOverlay && module->showModuleResponseOverlay.load(std::memory_order_relaxed)) {
+		if (!displayOnlyMode && state.hasOverlay && module->showModuleResponseOverlay.load(std::memory_order_relaxed)) {
 			NVGcolor ml = mixColor(nvgRGB(206, 210, 216), nvgRGB(28, 204, 217), 0.35f);
 			ml.a = 0.95f;
 			nvgBeginPath(args.vg);
@@ -862,64 +877,66 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			nvgStroke(args.vg);
 		}
 
-		nvgBeginPath(args.vg);
-		for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
-			const float x = w * overlayCurvePoints[i].x01;
-			const float y = overlayCurvePoints[i].y;
-			if (i == 0) nvgMoveTo(args.vg, x, y);
-			else nvgLineTo(args.vg, x, y);
+		if (!displayOnlyMode) {
+			nvgBeginPath(args.vg);
+			for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
+				const float x = w * overlayCurvePoints[i].x01;
+				const float y = overlayCurvePoints[i].y;
+				if (i == 0) nvgMoveTo(args.vg, x, y);
+				else nvgLineTo(args.vg, x, y);
+			}
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokeWidth(args.vg, 1.7f);
+			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+			nvgStroke(args.vg);
 		}
-		nvgLineJoin(args.vg, NVG_ROUND);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgStrokeWidth(args.vg, 1.7f);
-		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
-		nvgStroke(args.vg);
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
 
 		// 1. Vertical Guide Lines
-		for (int i = 0; i < 2; i++) {
-			if (!layout.markers[i].visible) continue;
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
-			nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 122));
-			nvgStrokeWidth(args.vg, 1.75f);
-			nvgStroke(args.vg);
-		}
+		if (!displayOnlyMode) {
+			for (int i = 0; i < 2; i++) {
+				if (!layout.markers[i].visible) continue;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 122));
+				nvgStrokeWidth(args.vg, 1.75f);
+				nvgStroke(args.vg);
+			}
 
-		// 2. Peak Markers
-		for (int i = 0; i < 2; i++) {
-			if (!layout.markers[i].visible) continue;
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
-			nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 138));
-			nvgStrokeWidth(args.vg, 1.35f);
-			nvgStroke(args.vg);
-			
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
-			nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
-			nvgFill(args.vg);
-			
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius);
-			nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
-			nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
-			nvgStroke(args.vg);
-		}
+			for (int i = 0; i < 2; i++) {
+				if (!layout.markers[i].visible) continue;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 138));
+				nvgStrokeWidth(args.vg, 1.35f);
+				nvgStroke(args.vg);
+				
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
+				nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
+				nvgFill(args.vg);
+				
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius);
+				nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
+				nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
+				nvgStroke(args.vg);
+			}
 
-		// 3. Labels
-		nvgFontSize(args.vg, layout.labelFontSize);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		for (int i = 0; i < 2; i++) {
-			if (!layout.markers[i].visible) continue;
-			nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
-			nvgText(args.vg, layout.labelX[i], layout.labelY + 0.75f, layout.markers[i].label, nullptr);
-			nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
-			nvgText(args.vg, layout.labelX[i], layout.labelY, layout.markers[i].label, nullptr);
+			nvgFontSize(args.vg, layout.labelFontSize);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			for (int i = 0; i < 2; i++) {
+				if (!layout.markers[i].visible) continue;
+				nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
+				nvgText(args.vg, layout.labelX[i], layout.labelY + 0.75f, layout.markers[i].label, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
+				nvgText(args.vg, layout.labelX[i], layout.labelY, layout.markers[i].label, nullptr);
+			}
 		}
 
 		// 4. dBFS Label

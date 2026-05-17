@@ -508,8 +508,14 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float displayMaxDbfs = state.displayTopDbfs, displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 	auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 	updateCurveXCache(plotX, usableW);
+	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 	
-	calculateRefinedCurvePoints(&refinedPoints, w, h);
+	if (!displayOnlyMode) {
+		calculateRefinedCurvePoints(&refinedPoints, w, h);
+	}
+	else {
+		refinedPoints.clear();
+	}
 
 	recordDrawSection(uiDrawSetupCount, uiDrawSetupNs);
 
@@ -534,36 +540,47 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const NVGcolor expectedWhite = palette.white;
 	
 	BifurxMarkerLayout layout;
-	getCachedMarkerLayout(&layout, w, h);
+	if (!displayOnlyMode) {
+		getCachedMarkerLayout(&layout, w, h);
+	}
 
 	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbVal) {
 		const float posAmt = clamp01(curveDbVal / 18.f), negAmt = clamp01(-curveDbVal / 18.f), emph = std::max(posAmt, negAmt);
 		NVGcolor tint = expectedWhite; if (posAmt > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posAmt * 1.35f)); if (negAmt > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negAmt * 1.25f));
 		tint.a = 0.025f + 0.095f * emph; nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, y); nvgStrokeColor(args.vg, tint); nvgStrokeWidth(args.vg, 1.05f); nvgStroke(args.vg);
 	};
-	const float markerGuideClearanceX01 = 1.35f / float(kCurvePointCount - 1);
-	for (int i = 0; i < kCurvePointCount; i += 3) {
-		const float x01 = float(i) / float(kCurvePointCount - 1);
-		if (std::fabs(x01 - layout.markers[0].x / w) < markerGuideClearanceX01 || std::fabs(x01 - layout.markers[1].x / w) < markerGuideClearanceX01) continue;
-		drawExpectedGuideStroke(curveX[i], responseYForDb(state.curveDb[i]), state.curveDb[i]);
+	if (!displayOnlyMode) {
+		const float markerGuideClearanceX01 = 1.35f / float(kCurvePointCount - 1);
+		for (int i = 0; i < kCurvePointCount; i += 3) {
+			const float x01 = float(i) / float(kCurvePointCount - 1);
+			if (std::fabs(x01 - layout.markers[0].x / w) < markerGuideClearanceX01 || std::fabs(x01 - layout.markers[1].x / w) < markerGuideClearanceX01) continue;
+			drawExpectedGuideStroke(curveX[i], responseYForDb(state.curveDb[i]), state.curveDb[i]);
+		}
+		
+		for (int i = 0; i < 2; i++) {
+			if (!layout.markers[i].visible) continue;
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 150)); nvgStrokeWidth(args.vg, 1.75f); nvgStroke(args.vg);
+		};
 	}
-	
-	for (int i = 0; i < 2; i++) {
-		if (!layout.markers[i].visible) continue;
-		nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 150)); nvgStrokeWidth(args.vg, 1.75f); nvgStroke(args.vg);
-	};
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
 	if (state.hasOverlay) {
-		const bool showModuleResponse = module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+		const bool showModuleResponse = !displayOnlyMode && module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
 			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 			if (energy <= 0.005f) continue;
-			const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
-			NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
-			NVGcolor fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy); fill.a = 1.f;
+			NVGcolor fill;
+			if (displayOnlyMode) {
+				fill = mixColor(expectedPurple, expectedCyan, energy);
+			}
+			else {
+				const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
+				NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
+				fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
+			}
+			fill.a = 1.f;
 			nvgBeginPath(args.vg); nvgMoveTo(args.vg, curveX[i] - 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i])); nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumYForDbfs(state.overlayOutputDbfs[i + 1]));
 			nvgLineTo(args.vg, curveX[i + 1] + 0.45f, spectrumBottomY); nvgLineTo(args.vg, curveX[i] - 0.45f, spectrumBottomY); nvgClosePath(args.vg); nvgFillColor(args.vg, fill); nvgFill(args.vg);
 		}
@@ -584,26 +601,30 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgLineJoin(args.vg, NVG_ROUND);
 	nvgLineCap(args.vg, NVG_ROUND);
 	// DK_DEBUG_CURVE_CORE_GLOW_TRY: localized 2-pass curve stroke, easy to revert.
-	drawRefinedCurvePath();
-	nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 96));
-	nvgStrokeWidth(args.vg, 2.9f);
-	nvgStroke(args.vg);
-	drawRefinedCurvePath();
-	nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248));
-	nvgStrokeWidth(args.vg, 1.25f);
-	nvgStroke(args.vg);
+	if (!displayOnlyMode) {
+		drawRefinedCurvePath();
+		nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 96));
+		nvgStrokeWidth(args.vg, 2.9f);
+		nvgStroke(args.vg);
+		drawRefinedCurvePath();
+		nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248));
+		nvgStrokeWidth(args.vg, 1.25f);
+		nvgStroke(args.vg);
+	}
 	lastDrawVertexCount = uint64_t(refinedPoints.size());
 	recordDrawSection(uiDrawCurveCount, uiDrawCurveNs);
 	nvgRestore(args.vg);
 
-	for (int i = 0; i < 2; ++i) {
-		if (!layout.markers[i].visible) continue;
-		nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 170)); nvgStrokeWidth(args.vg, 1.35f); nvgStroke(args.vg);
-		nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
-		nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
+	if (!displayOnlyMode) {
+		for (int i = 0; i < 2; ++i) {
+			if (!layout.markers[i].visible) continue;
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 170)); nvgStrokeWidth(args.vg, 1.35f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius); nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244)); nvgFill(args.vg);
+			nvgBeginPath(args.vg); nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius); nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth); nvgStroke(args.vg);
+		}
+		nvgFontSize(args.vg, layout.labelFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		for (int i = 0; i < 2; ++i) { if (!layout.markers[i].visible) continue; nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240)); nvgText(args.vg, layout.labelX[i], layout.labelY + 0.75f, layout.markers[i].label, nullptr); nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250)); nvgText(args.vg, layout.labelX[i], layout.labelY, layout.markers[i].label, nullptr); }
 	}
-	nvgFontSize(args.vg, layout.labelFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-	for (int i = 0; i < 2; ++i) { if (!layout.markers[i].visible) continue; nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240)); nvgText(args.vg, layout.labelX[i], layout.labelY + 0.75f, layout.markers[i].label, nullptr); nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250)); nvgText(args.vg, layout.labelX[i], layout.labelY, layout.markers[i].label, nullptr); }
 	nvgResetScissor(args.vg); nvgRestore(args.vg);
 	recordDrawSection(uiDrawMarkersCount, uiDrawMarkersNs);
 	lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
@@ -621,6 +642,7 @@ struct BifurxSpectrumBackgroundWidget final : Widget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	uint32_t lastPreviewSeq = 0;
 	float sampleRate = 48000.f;
+	int lastMode = -1;
 	float lastDrawWidth = -1.f;
 	float lastDrawHeight = -1.f;
 
@@ -635,6 +657,8 @@ struct BifurxSpectrumBackgroundWidget final : Widget {
 				if (std::fabs(newSampleRate - sampleRate) > 0.5f) { sampleRate = newSampleRate; dirty = true; }
 				lastPreviewSeq = previewSeq;
 			}
+			const int mode = clamp(int(std::round(module->params[Bifurx::MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1);
+			if (mode != lastMode) { lastMode = mode; dirty = true; }
 		}
 		if (std::fabs(box.size.x - lastDrawWidth) > 1e-4f || std::fabs(box.size.y - lastDrawHeight) > 1e-4f) { lastDrawWidth = box.size.x; lastDrawHeight = box.size.y; dirty = true; }
 		if (dirty && framebuffer) framebuffer->setDirty();
@@ -651,7 +675,27 @@ struct BifurxSpectrumBackgroundWidget final : Widget {
 		nvgSave(args.vg); nvgScissor(args.vg, plotX, 0.f, usableW, std::max(1.f, spectrumBottomY));
 		for (float dS = 10.f; dS < maxHz; dS *= 10.f) { for (int m = 1; m <= 9; ++m) { float gH = dS * float(m); if (gH >= maxHz) continue; const bool maj = (m == 1); float gX = plotX + usableW * logPosition(gH, minHz, maxHz); nvgBeginPath(args.vg); nvgMoveTo(args.vg, gX, padY * 0.35f); nvgLineTo(args.vg, gX, spectrumBottomY); nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, maj ? 34 : 16)); nvgStrokeWidth(args.vg, maj ? 1.f : 0.7f); nvgStroke(args.vg); } }
 		nvgBeginPath(args.vg); float y0 = responseYForDbDisplay(0.f, kResponseMinDb, kResponseMaxDb, spectrumBottomY, padY * 0.35f); nvgMoveTo(args.vg, plotX, y0); nvgLineTo(args.vg, plotX + usableW, y0); nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24)); nvgStrokeWidth(args.vg, 1.2f); nvgStroke(args.vg);
-		nvgResetScissor(args.vg); nvgRestore(args.vg); nvgRestore(args.vg);
+		nvgResetScissor(args.vg); nvgRestore(args.vg);
+		if (isBifurxDisplayOnlyMode(lastMode)) {
+			const struct { float hz; const char* label; } marks[] = {
+				{100.f, "100Hz"},
+				{1000.f, "1kHz"},
+				{10000.f, "10kHz"}
+			};
+			nvgFontSize(args.vg, std::max(7.f, h * 0.055f));
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			const float labelY = labelBandTop + 0.52f * labelBandHeight;
+			for (const auto& mark : marks) {
+				if (mark.hz <= minHz || mark.hz >= maxHz) continue;
+				const float x = clamp(plotX + usableW * logPosition(mark.hz, minHz, maxHz), 14.f, w - 14.f);
+				nvgFillColor(args.vg, nvgRGBA(4, 6, 9, 240));
+				nvgText(args.vg, x, labelY + 0.75f, mark.label, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(241, 246, 252, 250));
+				nvgText(args.vg, x, labelY, mark.label, nullptr);
+			}
+		}
+		nvgRestore(args.vg);
 	}
 };
 

@@ -60,10 +60,15 @@ constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
-constexpr int kBifurxModeCount = 10;
+constexpr int kBifurxModeCount = 11;
+constexpr int kBifurxDisplayOnlyMode = 10;
 constexpr int kBifurxUiModeCount = kBifurxModeCount;
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
+
+inline bool isBifurxDisplayOnlyMode(int mode) {
+	return mode == kBifurxDisplayOnlyMode;
+}
 
 constexpr float kResponseMinDb = -48.f;
 constexpr float kResponseMaxDb = 48.f;

@@ -69,6 +69,7 @@ void prepareOverlayTargetsFromSpectra(
 	const float* fftOutputFreq,
 	const float* fftResponseOutputFreq,
 	const float* fftRawInputFreq,
+	bool moduleResponseEnabled,
 	bool hasOverlayTarget,
 	bool fftScaleDynamic,
 	float* overlayTargetModuleDb,
@@ -87,8 +88,10 @@ void prepareOverlayTargetsFromSpectra(
 		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
-		binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
-		binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
+		if (moduleResponseEnabled) {
+			binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
+			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
+		}
 	}
 
 	constexpr int kOverlayBandRadius = 2;
@@ -101,11 +104,14 @@ void prepareOverlayTargetsFromSpectra(
 			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
 			outputEnergy += w * binOutputPower[sampleBin];
-			responseOutputEnergy += w * binResponseOutputPower[sampleBin];
-			rawInputEnergy += w * binRawInputPower[sampleBin];
+			if (moduleResponseEnabled) {
+				responseOutputEnergy += w * binResponseOutputPower[sampleBin];
+				rawInputEnergy += w * binRawInputPower[sampleBin];
+			}
 		}
-		rawInputEnergy += 1e-12f;
-		binModuleDeltaDb[bin] = softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / rawInputEnergy));
+		binModuleDeltaDb[bin] = moduleResponseEnabled
+			? softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f)))
+			: 0.f;
 		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
@@ -163,10 +169,17 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 			&snapshot->cachedAxisSampleRate
 		);
 
-		const BifurxPreviewModel model = makePreviewModel(request.previewState);
-		for (int i = 0; i < kCurvePointCount; ++i) {
-			const float db = previewModelResponseDb(model, snapshot->curveHz[i]);
-			snapshot->curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
+		if (isBifurxDisplayOnlyMode(request.previewState.mode)) {
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				snapshot->curveTargetDb[i] = 0.f;
+			}
+		}
+		else {
+			const BifurxPreviewModel model = makePreviewModel(request.previewState);
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				const float db = previewModelResponseDb(model, snapshot->curveHz[i]);
+				snapshot->curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
+			}
 		}
 		snapshot->hasCurveTarget = true;
 		snapshot->curvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
@@ -182,18 +195,21 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 
 	const auto overlayPrepStart = std::chrono::steady_clock::now();
 	thread_local WorkerOverlayScratch scratch;
+	const bool displayOnlyMode = isBifurxDisplayOnlyMode(request.previewState.mode);
 	for (int i = 0; i < kFftSize; ++i) {
 		scratch.fftOutputTime[i] = request.analysisOutput[i] * scratch.window[i];
 	}
 	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftOutputFreq);
-	for (int i = 0; i < kFftSize; ++i) {
-		scratch.fftOutputTime[i] = request.analysisResponseOutput[i] * scratch.window[i];
+	if (!displayOnlyMode) {
+		for (int i = 0; i < kFftSize; ++i) {
+			scratch.fftOutputTime[i] = request.analysisResponseOutput[i] * scratch.window[i];
+		}
+		scratch.fft.rfft(scratch.fftOutputTime, scratch.fftResponseOutputFreq);
+		for (int i = 0; i < kFftSize; ++i) {
+			scratch.fftInputTime[i] = request.analysisRawInput[i] * scratch.window[i];
+		}
+		scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
 	}
-	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftResponseOutputFreq);
-	for (int i = 0; i < kFftSize; ++i) {
-		scratch.fftInputTime[i] = request.analysisRawInput[i] * scratch.window[i];
-	}
-	scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		snapshot->overlayTargetModuleDb[i] = request.previousOverlayTargetModuleDb[i];
@@ -205,6 +221,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		scratch.fftOutputFreq,
 		scratch.fftResponseOutputFreq,
 		scratch.fftRawInputFreq,
+		!displayOnlyMode,
 		request.hasOverlayTarget,
 		request.fftScaleDynamic,
 		snapshot->overlayTargetModuleDb,
