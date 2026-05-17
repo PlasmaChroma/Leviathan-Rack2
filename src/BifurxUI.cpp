@@ -977,7 +977,7 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 			menu->addChild(createCheckMenuItem(
-				"Disable Visual Worker (This Module)", "",
+				"Disable Visual Worker", "",
 				[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF; },
 				[=]() {
 					const bool disabledNow = bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF;
