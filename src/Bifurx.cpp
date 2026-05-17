@@ -668,7 +668,32 @@ void Bifurx::dataFromJson(json_t* root) {
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishTimeSec.store(system::getTime(), std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
 void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
-void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1); if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; analysisPublishedWritePos.store(analysisWritePos, std::memory_order_release); analysisPublishSeq.fetch_add(1, std::memory_order_release); analysisPublishedOnce = true; } } }
+void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) {
+	analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample);
+	analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample);
+	analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample);
+	analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1);
+	if (analysisFilled < kFftSize) {
+		analysisFilled++;
+	}
+	if (analysisFilled == kFftSize) {
+		analysisHopCounter++;
+		if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) {
+			analysisHopCounter = 0;
+			const int writeFrameIndex = 1 - analysisPublishedFrameIndex.load(std::memory_order_relaxed);
+			const int start = clamp(analysisWritePos, 0, kFftSize - 1);
+			for (int i = 0; i < kFftSize; ++i) {
+				const int index = (start + i) & (kFftSize - 1);
+				analysisPublishedRawInputFrames[writeFrameIndex][i] = analysisRawInputHistory[index];
+				analysisPublishedOutputFrames[writeFrameIndex][i] = analysisOutputHistory[index];
+				analysisPublishedResponseOutputFrames[writeFrameIndex][i] = analysisResponseOutputHistory[index];
+			}
+			analysisPublishedFrameIndex.store(writeFrameIndex, std::memory_order_release);
+			analysisPublishSeq.fetch_add(1, std::memory_order_release);
+			analysisPublishedOnce = true;
+		}
+	}
+}
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
 	voctCvFilterInitialized = false;
@@ -1095,9 +1120,8 @@ void BifurxSpectrumBase::syncBase() {
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != state.lastAnalysisSeq) {
 		if (!useWorkerCurve) {
-			const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
 			const auto overlayPrepStart = std::chrono::steady_clock::now();
-			updateOverlayCache(writePos);
+			updateOverlayCache();
 			lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
 				std::chrono::steady_clock::now() - overlayPrepStart).count());
 			state.hasOverlay = true;
@@ -1214,15 +1238,11 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	const bool analysisChangedSinceSubmit =
 		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
 	if (analysisChangedSinceSubmit) {
-		const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
-		const int start = clamp(writePos, 0, kFftSize - 1);
 		request.hasAnalysisFrame = true;
-		for (int i = 0; i < kFftSize; ++i) {
-			const int index = (start + i) & (kFftSize - 1);
-			request.analysisRawInput[i] = module->analysisRawInputHistory[index];
-			request.analysisOutput[i] = module->analysisOutputHistory[index];
-			request.analysisResponseOutput[i] = module->analysisResponseOutputHistory[index];
-		}
+		const int frameIndex = clamp(module->analysisPublishedFrameIndex.load(std::memory_order_acquire), 0, 1);
+		std::memcpy(request.analysisRawInput, module->analysisPublishedRawInputFrames[frameIndex], sizeof(request.analysisRawInput));
+		std::memcpy(request.analysisOutput, module->analysisPublishedOutputFrames[frameIndex], sizeof(request.analysisOutput));
+		std::memcpy(request.analysisResponseOutput, module->analysisPublishedResponseOutputFrames[frameIndex], sizeof(request.analysisResponseOutput));
 	}
 	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
 	workerLastSubmittedAnalysisSeq = state.lastAnalysisSeq;
@@ -1366,24 +1386,24 @@ const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
 	return cachedModel;
 }
 
-void BifurxSpectrumBase::updateOverlayCache(int writePos) {
+void BifurxSpectrumBase::updateOverlayCache() {
 	if (!state.hasPreview) return;
 	if (!module) return;
 	updateAxisCache();
-	const int start = clamp(writePos, 0, kFftSize - 1);
+	const int frameIndex = clamp(module->analysisPublishedFrameIndex.load(std::memory_order_acquire), 0, 1);
+	const float* outputFrame = module->analysisPublishedOutputFrames[frameIndex];
+	const float* responseFrame = module->analysisPublishedResponseOutputFrames[frameIndex];
+	const float* inputFrame = module->analysisPublishedRawInputFrames[frameIndex];
 	for (int i = 0; i < kFftSize; i++) {
-		const int index = (start + i) & (kFftSize - 1);
-		fftOutputTime[i] = module->analysisOutputHistory[index] * window[i];
+		fftOutputTime[i] = outputFrame[i] * window[i];
 	}
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	for (int i = 0; i < kFftSize; i++) {
-		const int index = (start + i) & (kFftSize - 1);
-		fftOutputTime[i] = module->analysisResponseOutputHistory[index] * window[i];
+		fftOutputTime[i] = responseFrame[i] * window[i];
 	}
 	fft.rfft(fftOutputTime, fftResponseOutputFreq);
 	for (int i = 0; i < kFftSize; i++) {
-		const int index = (start + i) & (kFftSize - 1);
-		fftInputTime[i] = module->analysisRawInputHistory[index] * window[i];
+		fftInputTime[i] = inputFrame[i] * window[i];
 	}
 	fft.rfft(fftInputTime, fftRawInputFreq);
 	const bool fftScaleDynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;

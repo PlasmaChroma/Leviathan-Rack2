@@ -457,7 +457,7 @@ struct BifurxSpectrumBase {
 	void updateAxisCache();
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;
-	void updateOverlayCache(int writePos);
+	void updateOverlayCache();
 	bool updateAnimation(float dt);
 	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
@@ -673,6 +673,9 @@ struct Bifurx : Module {
 	float analysisRawInputHistory[kFftSize] = {};
 	float analysisOutputHistory[kFftSize] = {};
 	float analysisResponseOutputHistory[kFftSize] = {};
+	float analysisPublishedRawInputFrames[2][kFftSize] = {};
+	float analysisPublishedOutputFrames[2][kFftSize] = {};
+	float analysisPublishedResponseOutputFrames[2][kFftSize] = {};
 	float llTelemetryExcitationSq = 0.f;
 	float llTelemetryStageALpSq = 0.f;
 	float llTelemetryStageBLpSq = 0.f;
@@ -683,7 +686,7 @@ struct Bifurx : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	std::atomic<int> analysisPublishedWritePos{0};
+	std::atomic<int> analysisPublishedFrameIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};

@@ -7,18 +7,6 @@
 Plugin* pluginInstance;
 static std::atomic<bool> gDragonKingDebugEnabled{false};
 
-namespace {
-
-struct PluginShutdownGuard {
-	~PluginShutdownGuard() {
-		bifurx::shutdownBifurxRenderService();
-	}
-};
-
-PluginShutdownGuard gPluginShutdownGuard;
-
-} // namespace
-
 void refreshDragonKingDebugEnabled() {
 	if (!pluginInstance) {
 		gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
@@ -51,4 +39,9 @@ void init(Plugin* p) {
 	p->addModel(modelChronomaw);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
+}
+
+void destroy() {
+	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	bifurx::shutdownBifurxRenderService();
 }
