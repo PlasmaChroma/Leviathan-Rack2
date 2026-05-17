@@ -45,8 +45,13 @@ MODULE_COLUMNS = {
     ),
     "Bifurx": (
         ("ui_ms", "UI ms"),
-        ("filter", "Filt"),
+        ("ui_draw_ms", "UI dr"),
+        ("ui_sync_ms", "UI sy"),
+        ("ui_local_prep_ms", "UI prep"),
         ("opengl", "GL"),
+        ("vw_mode", "VW"),
+        ("vw_age_ms", "VW age"),
+        ("vw_queue_ms", "VW q"),
         ("audio_us", "Audio us"),
         ("curve_prep_us", "Curve us"),
         ("overlay_prep_us", "Overlay us"),
@@ -129,6 +134,20 @@ def _format_metric(value):
     return str(value)
 
 
+def _format_bifurx_vw_mode(value):
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return _format_metric(value)
+    if mode == 0:
+        return "OFF"
+    if mode == 1:
+        return "AUTO"
+    if mode == 2:
+        return "ON"
+    return str(mode)
+
+
 def _module_columns(module_name):
     return MODULE_COLUMNS.get(module_name, tuple())
 
@@ -175,7 +194,10 @@ def build_module_table(module_name, rows, selected=False, collapsed=False):
         metrics = row["data"]
         cells = [row["instance"], row["stream"]]
         for key, _ in _module_columns(module_name):
-            cells.append(_format_metric(metrics.get(key)))
+            if module_name == "Bifurx" and key == "vw_mode":
+                cells.append(_format_bifurx_vw_mode(metrics.get(key)))
+            else:
+                cells.append(_format_metric(metrics.get(key)))
         cells.append("%.2fs" % row["age_sec"])
         table.add_row(*cells)
 

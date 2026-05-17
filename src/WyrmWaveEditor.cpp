@@ -39,6 +39,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
 	float lastEditorDrawUs = 0.f;
+	float lastStepUsEma = 0.f;
 	float lastSandUpdateUs = 0.f;
 	float lastSandDrawUs = 0.f;
 	int lastBodySampleCount = 0;
@@ -399,6 +400,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	void step() override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point stepStart = PerfClock::now();
 		TransparentWidget::step();
 		const double nowSec = system::getTime();
 		advanceVisualSlitherPhase(nowSec);
@@ -483,7 +486,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 				const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
-				const float totalUiUs = lastEditorDrawUs + sandGlUs;
+				const float totalUiUs = lastStepUsEma + lastEditorDrawUs + sandGlUs;
 				lastSubmitSec = nowSec;
 				debug_terminal::submitWyrmMetrics(
 					debugId,
@@ -498,6 +501,9 @@ struct WyrmWaveEditor : TransparentWidget {
 				);
 			}
 		}
+		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - stepStart).count()) * 0.001f;
+		lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
 	}
 
 	void draw(const DrawArgs& args) override {

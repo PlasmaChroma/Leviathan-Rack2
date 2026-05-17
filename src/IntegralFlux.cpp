@@ -1465,6 +1465,18 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 }
 
 struct IntegralFluxWidget : ModuleWidget {
+	float uiStepMsEma = 0.f;
+	float uiDrawMsEma = 0.f;
+
+	void step() override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point stepStart = PerfClock::now();
+		ModuleWidget::step();
+		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - stepStart).count()) * 1e-6f;
+		uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
+	}
+
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
@@ -1670,8 +1682,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStart).count()) * 1e-6f;
-		const float prevUiMs = flux->perfUiRenderMs.load(std::memory_order_relaxed);
-		const float uiMs = (prevUiMs > 0.f) ? (prevUiMs + (drawMs - prevUiMs) * 0.18f) : drawMs;
+		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
+		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
 
 		if (isDragonKingDebugEnabled()) {

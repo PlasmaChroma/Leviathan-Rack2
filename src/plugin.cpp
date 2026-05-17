@@ -1,10 +1,23 @@
 #include "plugin.hpp"
+#include "BifurxWorker.hpp"
 
 #include <atomic>
 #include <fstream>
 
 Plugin* pluginInstance;
 static std::atomic<bool> gDragonKingDebugEnabled{false};
+
+namespace {
+
+struct PluginShutdownGuard {
+	~PluginShutdownGuard() {
+		bifurx::shutdownBifurxRenderService();
+	}
+};
+
+PluginShutdownGuard gPluginShutdownGuard;
+
+} // namespace
 
 void refreshDragonKingDebugEnabled() {
 	if (!pluginInstance) {

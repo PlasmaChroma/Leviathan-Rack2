@@ -1,4 +1,6 @@
 #include "Bifurx.hpp"
+#include "BifurxRenderData.hpp"
+#include "BifurxWorker.hpp"
 
 namespace bifurx {
 
@@ -554,6 +556,8 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "lowLatencyVisual", json_boolean(lowLatencyVisual.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "visualWorkerMode", json_integer(visualWorkerMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "modulationQualityMode", json_integer(modulationQualityMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging.load(std::memory_order_relaxed)));
@@ -580,6 +584,15 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
 	if (useGlShaderRendererJ) {
 		useGlShaderRenderer.store(json_is_true(useGlShaderRendererJ), std::memory_order_relaxed);
+	}
+	json_t* lowLatencyVisualJ = json_object_get(root, "lowLatencyVisual");
+	if (lowLatencyVisualJ) {
+		lowLatencyVisual.store(json_is_true(lowLatencyVisualJ), std::memory_order_relaxed);
+	}
+	json_t* visualWorkerModeJ = json_object_get(root, "visualWorkerMode");
+	if (visualWorkerModeJ) {
+		const int mode = int(json_integer_value(visualWorkerModeJ));
+		visualWorkerMode.store(clamp(mode, VISUAL_WORKER_INHERIT, VISUAL_WORKER_ON), std::memory_order_relaxed);
 	}
 	json_t* modulationQualityModeJ = json_object_get(root, "modulationQualityMode");
 	if (modulationQualityModeJ) {
@@ -653,7 +666,7 @@ void Bifurx::dataFromJson(json_t* root) {
 	}
 }
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
-void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
+void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishTimeSec.store(system::getTime(), std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
 void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
 void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) { analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample); analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample); analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample); analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1); if (analysisFilled < kFftSize) analysisFilled++; if (analysisFilled == kFftSize) { analysisHopCounter++; if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) { analysisHopCounter = 0; analysisPublishedWritePos.store(analysisWritePos, std::memory_order_release); analysisPublishSeq.fetch_add(1, std::memory_order_release); analysisPublishedOnce = true; } } }
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
@@ -881,6 +894,17 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool pPitchCvConn = voctConnected || fmConnected;
 	perfPreviewPitchCvConnected.store(pPitchCvConn, std::memory_order_relaxed);
 	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
+	const bool lowLatencyVisualNow = lowLatencyVisual.load(std::memory_order_relaxed);
+	const int targetFastPreviewDivision = lowLatencyVisualNow ? 64 : bifurx::kPreviewPublishFastDivision;
+	const int targetSlowPreviewDivision = lowLatencyVisualNow ? 128 : bifurx::kPreviewPublishSlowDivision;
+	if (targetFastPreviewDivision != previewPublishFastDivision) {
+		previewPublishFastDivision = targetFastPreviewDivision;
+		previewPublishDivider.setDivision(previewPublishFastDivision);
+	}
+	if (targetSlowPreviewDivision != previewPublishSlowDivision) {
+		previewPublishSlowDivision = targetSlowPreviewDivision;
+		previewPublishSlowDivider.setDivision(previewPublishSlowDivision);
+	}
 	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
 	previewSampleAccum++;
 	const bool shouldUpdatePreviewState = perTick || !hasLastPreviewState;
@@ -1045,29 +1069,219 @@ inline void prepareOverlayTargetsFromSpectra(
 
 void BifurxSpectrumBase::syncBase() {
 	if (!module) return;
+	const bool useWorkerCurve = shouldUseVisualWorker();
+	if (useWorkerCurve) {
+		ensureWorkerRegistration();
+	}
+	else {
+		releaseWorkerRegistration();
+	}
 	const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
 	if (previewSeq != state.lastPreviewSeq) {
 		const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
 		state.previewState = module->previewStates[index];
+		state.previewPublishTimeSec = module->previewPublishTimeSec.load(std::memory_order_acquire);
 		state.hasPreview = true;
 		state.lastPreviewSeq = previewSeq;
-		updateAxisCache();
-		const auto curvePrepStart = std::chrono::steady_clock::now();
-		updateCurveCache();
-		lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-			std::chrono::steady_clock::now() - curvePrepStart).count());
+		if (!useWorkerCurve) {
+			updateAxisCache();
+			const auto curvePrepStart = std::chrono::steady_clock::now();
+			updateCurveCache();
+			lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::steady_clock::now() - curvePrepStart).count());
+		}
 	}
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != state.lastAnalysisSeq) {
-		const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
-		const auto overlayPrepStart = std::chrono::steady_clock::now();
-		updateOverlayCache(writePos);
-		lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-			std::chrono::steady_clock::now() - overlayPrepStart).count());
-		state.hasOverlay = true;
+		if (!useWorkerCurve) {
+			const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
+			const auto overlayPrepStart = std::chrono::steady_clock::now();
+			updateOverlayCache(writePos);
+			lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::steady_clock::now() - overlayPrepStart).count());
+			state.hasOverlay = true;
+		}
 		state.lastAnalysisSeq = analysisSeq;
 	}
+
+	if (useWorkerCurve) {
+		submitWorkerCurveRequest();
+	}
+}
+
+BifurxSpectrumBase::~BifurxSpectrumBase() {
+	releaseWorkerRegistration();
+}
+
+bool BifurxSpectrumBase::shouldUseVisualWorker() const {
+	return effectiveVisualWorkerMode() != Bifurx::VISUAL_WORKER_OFF;
+}
+
+int BifurxSpectrumBase::effectiveVisualWorkerMode() const {
+	if (!module) {
+		return Bifurx::VISUAL_WORKER_OFF;
+	}
+	int mode = module->visualWorkerMode.load(std::memory_order_relaxed);
+	if (mode == Bifurx::VISUAL_WORKER_INHERIT) {
+		mode = getBifurxVisualWorkerDefaultMode();
+	}
+	mode = clamp(mode, Bifurx::VISUAL_WORKER_OFF, Bifurx::VISUAL_WORKER_ON);
+	if (mode == Bifurx::VISUAL_WORKER_OFF) {
+		return Bifurx::VISUAL_WORKER_OFF;
+	}
+	if (mode == Bifurx::VISUAL_WORKER_ON) {
+		return Bifurx::VISUAL_WORKER_ON;
+	}
+	// AUTO mode: keep it conservative for MVP.
+	if (module->renderMode == Bifurx::RENDER_OPENGL && module->useGlShaderRenderer.load(std::memory_order_relaxed)) {
+		return (state.hasOverlay || module->showModuleResponseOverlay.load(std::memory_order_relaxed))
+			? Bifurx::VISUAL_WORKER_AUTO
+			: Bifurx::VISUAL_WORKER_OFF;
+	}
+	return (module->renderMode == Bifurx::RENDER_NANOVG)
+		? Bifurx::VISUAL_WORKER_AUTO
+		: Bifurx::VISUAL_WORKER_OFF;
+}
+
+float BifurxSpectrumBase::workerSnapshotAgeMs() const {
+	if (!workerSnapshotCache || workerSnapshotCache->sourcePreviewTimeSec <= 0.0) {
+		return 0.f;
+	}
+	const double ageSec = std::max(0.0, system::getTime() - workerSnapshotCache->sourcePreviewTimeSec);
+	return float(ageSec * 1000.0);
+}
+
+float BifurxSpectrumBase::workerQueueLatencyMs() const {
+	if (!workerSnapshotCache || workerSnapshotCache->sourcePreviewTimeSec <= 0.0 || workerSnapshotCache->completedAtSec <= 0.0) {
+		return 0.f;
+	}
+	const double queueSec = std::max(0.0, workerSnapshotCache->completedAtSec - workerSnapshotCache->sourcePreviewTimeSec);
+	return float(queueSec * 1000.0);
+}
+
+void BifurxSpectrumBase::ensureWorkerRegistration() {
+	if (workerDisplayId != 0) {
+		return;
+	}
+	BifurxUiRenderService& service = bifurxRenderService();
+	service.start();
+	workerDisplayId = service.registerDisplay();
+}
+
+void BifurxSpectrumBase::releaseWorkerRegistration() {
+	if (workerDisplayId == 0) {
+		return;
+	}
+	bifurxRenderService().unregisterDisplay(workerDisplayId);
+	workerDisplayId = 0;
+	workerRequestSeq = 0;
+	workerLastAppliedRequestSeq = 0;
+	workerLastSubmittedPreviewSeq = 0;
+	workerLastAppliedPreviewSeq = 0;
+	workerLastSubmittedAnalysisSeq = 0;
+	workerLastAppliedAnalysisSeq = 0;
+	workerSnapshotCache.reset();
+}
+
+void BifurxSpectrumBase::submitWorkerCurveRequest() {
+	if (!module || workerDisplayId == 0 || !state.hasPreview) {
+		return;
+	}
+	if (workerLastSubmittedPreviewSeq == state.lastPreviewSeq &&
+		workerLastSubmittedAnalysisSeq == state.lastAnalysisSeq) {
+		return;
+	}
+	BifurxUiRenderRequest request;
+	request.displayId = workerDisplayId;
+	request.requestSeq = ++workerRequestSeq;
+	request.previewSeq = state.lastPreviewSeq;
+	request.analysisSeq = state.lastAnalysisSeq;
+	request.sourcePreviewTimeSec = state.previewPublishTimeSec;
+	request.previewState = state.previewState;
+	request.fftScaleDynamic = module->fftScaleDynamic.load(std::memory_order_relaxed);
+	request.hasOverlayTarget = state.hasOverlayTarget;
+	std::memcpy(
+		request.previousOverlayTargetModuleDb,
+		state.overlayTargetModuleDb,
+		sizeof(request.previousOverlayTargetModuleDb)
+	);
+	std::memcpy(
+		request.previousOverlayTargetOutputDbfs,
+		state.overlayTargetOutputDbfs,
+		sizeof(request.previousOverlayTargetOutputDbfs)
+	);
+	const bool analysisChangedSinceSubmit =
+		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
+	if (analysisChangedSinceSubmit) {
+		const int writePos = module->analysisPublishedWritePos.load(std::memory_order_acquire);
+		const int start = clamp(writePos, 0, kFftSize - 1);
+		request.hasAnalysisFrame = true;
+		for (int i = 0; i < kFftSize; ++i) {
+			const int index = (start + i) & (kFftSize - 1);
+			request.analysisRawInput[i] = module->analysisRawInputHistory[index];
+			request.analysisOutput[i] = module->analysisOutputHistory[index];
+			request.analysisResponseOutput[i] = module->analysisResponseOutputHistory[index];
+		}
+	}
+	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
+	workerLastSubmittedAnalysisSeq = state.lastAnalysisSeq;
+	bifurxRenderService().submitLatest(request);
+}
+
+bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
+	if (workerDisplayId == 0) {
+		return false;
+	}
+	workerSnapshotCache = bifurxRenderService().getLatestSnapshot(workerDisplayId);
+	if (!workerSnapshotCache) {
+		return false;
+	}
+	if (workerSnapshotCache->requestSeq <= workerLastAppliedRequestSeq) {
+		return false;
+	}
+	if (!workerSnapshotCache->hasCurveTarget) {
+		return false;
+	}
+	if (module && module->lowLatencyVisual.load(std::memory_order_relaxed) &&
+		workerSnapshotCache->previewSeq < workerLastSubmittedPreviewSeq) {
+		workerLastAppliedRequestSeq = workerSnapshotCache->requestSeq;
+		return false;
+	}
+	for (int i = 0; i < kCurvePointCount; ++i) {
+		state.curveHz[i] = workerSnapshotCache->curveHz[i];
+		state.curveBinPos[i] = workerSnapshotCache->curveBinPos[i];
+		state.curveTargetDb[i] = workerSnapshotCache->curveTargetDb[i];
+	}
+	state.cachedAxisSampleRate = workerSnapshotCache->cachedAxisSampleRate;
+	if (!state.hasCurveTarget) {
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			state.curveDb[i] = state.curveTargetDb[i];
+		}
+	}
+	state.hasCurveTarget = true;
+	lastCurvePrepUs = workerSnapshotCache->curvePrepUs;
+	if (workerSnapshotCache->hasOverlayTarget &&
+		workerSnapshotCache->analysisSeq >= workerLastAppliedAnalysisSeq) {
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			state.overlayTargetModuleDb[i] = workerSnapshotCache->overlayTargetModuleDb[i];
+			state.overlayTargetOutputDbfs[i] = workerSnapshotCache->overlayTargetOutputDbfs[i];
+		}
+		state.displayTopTargetDbfs = workerSnapshotCache->displayTopTargetDbfs;
+		if (!state.hasOverlayTarget) {
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
+				state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
+			}
+			state.hasOverlayTarget = true;
+		}
+		state.hasOverlay = true;
+		lastOverlayPrepUs = workerSnapshotCache->overlayPrepUs;
+		workerLastAppliedAnalysisSeq = workerSnapshotCache->analysisSeq;
+	}
+	workerLastAppliedRequestSeq = workerSnapshotCache->requestSeq;
+	workerLastAppliedPreviewSeq = workerSnapshotCache->previewSeq;
+	return true;
 }
 
 void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
@@ -1264,10 +1478,11 @@ BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
 	const uint32_t prevAnalysisSeq = state.lastAnalysisSeq;
 
 	syncBase();
-	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq);
+	const bool workerAdopted = adoptWorkerCurveSnapshot();
+	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq) || workerAdopted;
 	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq);
 	result.animationActive = updateAnimation(dt);
-	result.curvePrepUs = result.previewUpdated ? lastCurvePrepUs : 0.f;
+	result.curvePrepUs = (result.previewUpdated || workerAdopted) ? lastCurvePrepUs : 0.f;
 	result.overlayPrepUs = result.analysisUpdated ? lastOverlayPrepUs : 0.f;
 	return result;
 }

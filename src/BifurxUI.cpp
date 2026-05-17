@@ -1,5 +1,6 @@
 #include "Bifurx.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "BifurxWorker.hpp"
 #include <unordered_map>
 
 namespace bifurx {
@@ -64,6 +65,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	double lastCurveDebugLogTimeSec = -1.0;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
+	float lastStepMsEma = 0.f;
 	uint64_t lastDrawVertexCount = 0;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
@@ -317,8 +319,8 @@ float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float
 
 void BifurxSpectrumWidget::step() {
 	using PerfClock = std::chrono::steady_clock;
+	const PerfClock::time_point perfStepStart = PerfClock::now();
 	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
-	const PerfClock::time_point perfStepStart = perfLoggingActive ? PerfClock::now() : PerfClock::time_point();
 	Widget::step();
 	syncCurveDebugCaptureState();
 	syncPerfDebugCaptureState();
@@ -438,13 +440,16 @@ void BifurxSpectrumWidget::step() {
 	}
 
 	if (dirty && framebuffer) framebuffer->setDirty();
+
+	const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+		PerfClock::now() - perfStepStart).count()) * 1e-6f;
+	lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
 	
 	if (isDragonKingDebugEnabled() && module->renderMode == Bifurx::RENDER_NANOVG) {
 		double nowSec = system::getTime();
 		uint32_t debugId = module->debugInstanceId;
 		double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
 		if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-			const int filterMode = clamp(int(state.previewState.mode), 0, kBifurxModeCount - 1);
 			const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 			const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 			module->perfAudioControlsNs.store(0, std::memory_order_release);
@@ -453,15 +458,27 @@ void BifurxSpectrumWidget::step() {
 			module->perfAudioAnalysisNs.store(0, std::memory_order_release);
 			module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
 			const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+			const int vwMode = effectiveVisualWorkerMode();
+			const float uiSyncMs = std::max(0.f, lastStepMsEma);
+			const float uiDrawMs = std::max(0.f, lastDrawMsEma);
+			const float uiTotalMs = uiSyncMs + uiDrawMs;
+			const float uiLocalPrepMs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
+				? 0.001f * (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
+				: 0.f;
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
 				debugId,
-				module->perfUiRenderMs.load(std::memory_order_relaxed),
-				filterMode,
+				uiTotalMs,
+				uiDrawMs,
+				uiSyncMs,
+				uiLocalPrepMs,
 				false, // opengl
 				audioUs,
 				lastCurvePrepUs,
-				lastOverlayPrepUs
+				lastOverlayPrepUs,
+				vwMode,
+				workerSnapshotAgeMs(),
+				workerQueueLatencyMs()
 			);
 		}
 	}
@@ -554,9 +571,24 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		recordDrawSection(uiDrawOverlayCount, uiDrawOverlayNs);
 	}
 
-	nvgBeginPath(args.vg);
-	for (int i = 0; i < (int)refinedPoints.size(); ++i) { if (i == 0) nvgMoveTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y); else nvgLineTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y); }
-	nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244)); nvgLineJoin(args.vg, NVG_ROUND); nvgLineCap(args.vg, NVG_ROUND); nvgStrokeWidth(args.vg, 1.7f); nvgStroke(args.vg);
+	auto drawRefinedCurvePath = [&]() {
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < (int)refinedPoints.size(); ++i) {
+			if (i == 0) nvgMoveTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y);
+			else nvgLineTo(args.vg, w * refinedPoints[i].x01, refinedPoints[i].y);
+		}
+	};
+	nvgLineJoin(args.vg, NVG_ROUND);
+	nvgLineCap(args.vg, NVG_ROUND);
+	// DK_DEBUG_CURVE_CORE_GLOW_TRY: localized 2-pass curve stroke, easy to revert.
+	drawRefinedCurvePath();
+	nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 96));
+	nvgStrokeWidth(args.vg, 2.9f);
+	nvgStroke(args.vg);
+	drawRefinedCurvePath();
+	nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248));
+	nvgStrokeWidth(args.vg, 1.25f);
+	nvgStroke(args.vg);
 	lastDrawVertexCount = uint64_t(refinedPoints.size());
 	recordDrawSection(uiDrawCurveCount, uiDrawCurveNs);
 	nvgRestore(args.vg);
@@ -848,6 +880,41 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Show Module Response", "",
 				[=]() { return bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed); },
 				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createCheckMenuItem("Low Latency Visual", "",
+				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
+				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			menu->addChild(createSubmenuItem("Visual Worker Default", "", [=](Menu* submenu) {
+				submenu->addChild(createCheckMenuItem(
+					"Off", "",
+					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_OFF; },
+					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_OFF); }));
+				submenu->addChild(createCheckMenuItem(
+					"Auto", "",
+					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_AUTO; },
+					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_AUTO); }));
+				submenu->addChild(createCheckMenuItem(
+					"On", "",
+					[=]() { return getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_ON; },
+					[=]() { setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_ON); }));
+			}));
+			menu->addChild(createSubmenuItem("Visual Worker (This Module)", "", [=](Menu* submenu) {
+				submenu->addChild(createCheckMenuItem(
+					"Inherit", "",
+					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_INHERIT; },
+					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_INHERIT, std::memory_order_relaxed); }));
+				submenu->addChild(createCheckMenuItem(
+					"Off", "",
+					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_OFF; },
+					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_OFF, std::memory_order_relaxed); }));
+				submenu->addChild(createCheckMenuItem(
+					"Auto", "",
+					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_AUTO; },
+					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_AUTO, std::memory_order_relaxed); }));
+				submenu->addChild(createCheckMenuItem(
+					"On", "",
+					[=]() { return bifurx->visualWorkerMode.load(std::memory_order_relaxed) == Bifurx::VISUAL_WORKER_ON; },
+					[=]() { bifurx->visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON, std::memory_order_relaxed); }));
+			}));
 		if (isDragonKingDebugEnabled()) {
 			menu->addChild(createCheckMenuItem("Log Curve Debug", "",
 				[=]() { return bifurx->curveDebugLogging.load(std::memory_order_relaxed); },

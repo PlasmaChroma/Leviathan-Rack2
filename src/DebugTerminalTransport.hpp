@@ -23,11 +23,16 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 
 void submitBifurxUiMetrics(uint32_t instanceId,
                            float uiMs,
-                           int filterMode,
+                           float uiDrawMs,
+                           float uiSyncMs,
+                           float uiLocalPrepMs,
                            bool renderOpengl,
                            float audioUs,
                            float curvePrepUs,
-                           float overlayPrepUs);
+                           float overlayPrepUs,
+                           int visualWorkerMode,
+                           float visualWorkerAgeMs,
+                           float visualWorkerQueueMs);
 
 void submitWyrmMetrics(uint32_t instanceId,
                        float uiMs,

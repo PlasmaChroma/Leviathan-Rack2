@@ -379,21 +379,31 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 
 void submitBifurxUiMetrics(uint32_t instanceId,
                            float uiMs,
-                           int filterMode,
+                           float uiDrawMs,
+                           float uiSyncMs,
+                           float uiLocalPrepMs,
                            bool renderOpengl,
                            float audioUs,
                            float curvePrepUs,
-                           float overlayPrepUs) {
-  char dataBuf[448];
+                           float overlayPrepUs,
+                           int visualWorkerMode,
+                           float visualWorkerAgeMs,
+                           float visualWorkerQueueMs) {
+  char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"filter\":%d,\"opengl\":%d,\"audio_us\":%.3f,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f}",
+                "{\"ui_ms\":%.4f,\"ui_draw_ms\":%.4f,\"ui_sync_ms\":%.4f,\"ui_local_prep_ms\":%.4f,\"opengl\":%d,\"audio_us\":%.3f,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
                 std::max(0.f, uiMs),
-                filterMode,
+                std::max(0.f, uiDrawMs),
+                std::max(0.f, uiSyncMs),
+                std::max(0.f, uiLocalPrepMs),
                 renderOpengl ? 1 : 0,
                 std::max(0.f, audioUs),
                 std::max(0.f, curvePrepUs),
-                std::max(0.f, overlayPrepUs));
+                std::max(0.f, overlayPrepUs),
+                visualWorkerMode,
+                std::max(0.f, visualWorkerAgeMs),
+                std::max(0.f, visualWorkerQueueMs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
 }

@@ -112,6 +112,8 @@ struct TDScopeWidget : ModuleWidget {
   }
 
   void step() override {
+    using PerfClock = std::chrono::steady_clock;
+    const PerfClock::time_point stepStart = PerfClock::now();
     bool linkedToDeck = shouldRenderDockBridge();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
@@ -126,6 +128,14 @@ struct TDScopeWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
+    if (scopeModule) {
+      const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   PerfClock::now() - stepStart).count()) *
+                           0.001f;
+      const float prevStepUs = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
+      const float emaStepUs = (prevStepUs > 0.f) ? (prevStepUs + (stepUs - prevStepUs) * 0.18f) : stepUs;
+      scopeModule->uiDebugModuleUiStepUsEma.store(std::max(0.f, emaStepUs), std::memory_order_relaxed);
+    }
   }
 
   void draw(const DrawArgs &args) override {
@@ -185,6 +195,7 @@ struct TDScopeWidget : ModuleWidget {
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
         float uiDrawUsEma = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
+        float uiStepUsEma = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
@@ -193,7 +204,7 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                               uiDrawUsEma * 0.001f,
+                                               (uiStepUsEma + uiDrawUsEma) * 0.001f,
                                                densityRows,
                                                densityPct,
                                                rackZoom,

@@ -13,6 +13,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <vector>
 
 namespace bifurx {
@@ -20,6 +21,7 @@ namespace bifurx {
 // Forward declarations
 struct Bifurx;
 struct BifurxSpectrumGLWidget;
+struct BifurxUiRenderSnapshot;
 struct BifurxFreqQuantity final : ParamQuantity {
 	float getDisplayValue() override;
 	void setDisplayValue(float displayValue) override;
@@ -345,6 +347,7 @@ struct BifurxSpectrumState {
 	float cachedAxisSampleRate = 0.f;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
+	double previewPublishTimeSec = 0.0;
 	bool hasPreview = false;
 	bool hasOverlay = false;
 	bool hasCurveTarget = false;
@@ -386,6 +389,14 @@ struct BifurxRenderTickResult {
 struct BifurxSpectrumBase {
 	Bifurx* module = nullptr;
 	BifurxSpectrumState state;
+	uint64_t workerDisplayId = 0;
+	uint64_t workerRequestSeq = 0;
+	uint64_t workerLastAppliedRequestSeq = 0;
+	uint32_t workerLastSubmittedPreviewSeq = 0;
+	uint32_t workerLastAppliedPreviewSeq = 0;
+	uint32_t workerLastSubmittedAnalysisSeq = 0;
+	uint32_t workerLastAppliedAnalysisSeq = 0;
+	std::shared_ptr<const BifurxUiRenderSnapshot> workerSnapshotCache;
 
 	// Common FF resources for analysis
 	dsp::RealFFT fft;
@@ -431,9 +442,17 @@ struct BifurxSpectrumBase {
 		}
 	}
 
-	virtual ~BifurxSpectrumBase() {}
+	virtual ~BifurxSpectrumBase();
 
 	void syncBase();
+	bool shouldUseVisualWorker() const;
+	int effectiveVisualWorkerMode() const;
+	float workerSnapshotAgeMs() const;
+	float workerQueueLatencyMs() const;
+	void ensureWorkerRegistration();
+	void releaseWorkerRegistration();
+	void submitWorkerCurveRequest();
+	bool adoptWorkerCurveSnapshot();
 	void initializeStaticPreviewStateIfNeeded();
 	void updateAxisCache();
 	void updateCurveCache();
@@ -579,6 +598,12 @@ struct Bifurx : Module {
 		MOD_QUALITY_EXACT,
 		MOD_QUALITY_COUNT
 	};
+	enum VisualWorkerMode {
+		VISUAL_WORKER_INHERIT = -1,
+		VISUAL_WORKER_OFF = 0,
+		VISUAL_WORKER_AUTO = 1,
+		VISUAL_WORKER_ON = 2
+	};
 
 	TptSvf coreA;
 	TptSvf coreB;
@@ -592,6 +617,7 @@ struct Bifurx : Module {
 	BifurxPreviewState previewStates[2];
 	std::atomic<int> previewPublishedIndex{0};
 	std::atomic<uint32_t> previewPublishSeq{0};
+	std::atomic<double> previewPublishTimeSec{0.0};
 	BifurxLlTelemetryState llTelemetryStates[2];
 	std::atomic<int> llTelemetryPublishedIndex{0};
 	std::atomic<uint32_t> llTelemetryPublishSeq{0};
@@ -662,10 +688,14 @@ struct Bifurx : Module {
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
 	std::atomic<bool> useGlShaderRenderer {true};
+	std::atomic<bool> lowLatencyVisual {false};
+	std::atomic<int> visualWorkerMode {VISUAL_WORKER_INHERIT};
 	std::atomic<bool> highResonanceSelfOscEnabled {false};
 	std::atomic<bool> softLimitingEnabled {true};
 	std::atomic<int> modulationQualityMode {MOD_QUALITY_BALANCED};
 	int controlUpdateDivision = 16;
+	int previewPublishFastDivision = kPreviewPublishFastDivision;
+	int previewPublishSlowDivision = kPreviewPublishSlowDivision;
 	std::atomic<bool> curveDebugLogging {false};
 	std::atomic<bool> perfDebugLogging {false};
 	std::atomic<uint64_t> perfAudioSampledCount{0};
