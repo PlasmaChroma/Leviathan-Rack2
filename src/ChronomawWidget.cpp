@@ -95,7 +95,7 @@ struct ChronomawSurfaceWidget : Widget {
 		double pendingSliderCommitTime = -1.0;
 
 		static constexpr int kTabCount = 7;
-		static constexpr int kMaxInspectorControls = 14;
+		static constexpr int kMaxInspectorControls = 20;
 		static constexpr double kCustomDoubleClickWindowSec = 0.24;
 		static constexpr double kSingleClickCommitDelaySec = 0.10;
 		static constexpr int kControlNone = -1;
@@ -114,6 +114,15 @@ struct ChronomawSurfaceWidget : Widget {
 		static constexpr int kControlWavePrev = 12;
 		static constexpr int kControlWaveNext = 13;
 		static constexpr int kControlWaveMenu = 14;
+		static constexpr int kControlModeDiv = 15;
+		static constexpr int kControlModeMult = 16;
+		static constexpr int kControlModeUtil = 17;
+		static constexpr float kMinRatio = 1.f;
+		static constexpr float kMaxMultiplier = 192.f;
+		static constexpr float kMaxDivisor = 16384.f;
+		static constexpr float kRatioPivotT = 0.7f;
+		static constexpr float kMultiplierPivot = 16.f;
+		static constexpr float kDivisorPivot = 16.f;
 
 	struct InspectorControl {
 		int id = kControlNone;
@@ -130,6 +139,15 @@ struct ChronomawSurfaceWidget : Widget {
 
 		static const char* waveformName(chronomaw::WaveformMode wf) {
 			return chronomaw::waveformLabel(wf);
+		}
+
+		static const char* modifierModeName(chronomaw::ModifierMode mode) {
+			switch (mode) {
+				case chronomaw::ModifierMode::Div: return "DIV";
+				case chronomaw::ModifierMode::Mult: return "MULT";
+				case chronomaw::ModifierMode::Util: return "UTIL";
+			}
+			return "MULT";
 		}
 
 	explicit ChronomawSurfaceWidget(Chronomaw* module, const ChronomawUiRects& uiRects) : module(module), uiRects(uiRects) {}
@@ -245,6 +263,50 @@ struct ChronomawSurfaceWidget : Widget {
 		return minV + t * (maxV - minV);
 	}
 
+	static float multiplierFromSliderT(float t) {
+		const float clampedT = clamp(t, 0.f, 1.f);
+		if (clampedT <= kRatioPivotT) {
+			const float lt = clampedT / kRatioPivotT;
+			return kMinRatio + lt * (kMultiplierPivot - kMinRatio);
+		}
+		const float rt = (clampedT - kRatioPivotT) / (1.f - kRatioPivotT);
+		const float ratio = kMaxMultiplier / kMultiplierPivot;
+		return kMultiplierPivot * std::pow(ratio, rt);
+	}
+
+	static float sliderTFromMultiplier(float value) {
+		const float clampedV = clamp(value, kMinRatio, kMaxMultiplier);
+		if (clampedV <= kMultiplierPivot) {
+			const float lt = (clampedV - kMinRatio) / (kMultiplierPivot - kMinRatio);
+			return kRatioPivotT * lt;
+		}
+		const float ratio = kMaxMultiplier / kMultiplierPivot;
+		const float rt = std::log(clampedV / kMultiplierPivot) / std::log(ratio);
+		return kRatioPivotT + (1.f - kRatioPivotT) * clamp(rt, 0.f, 1.f);
+	}
+
+	static float divisorFromSliderT(float t) {
+		const float clampedT = clamp(t, 0.f, 1.f);
+		if (clampedT <= kRatioPivotT) {
+			const float lt = clampedT / kRatioPivotT;
+			return kMinRatio + lt * (kDivisorPivot - kMinRatio);
+		}
+		const float rt = (clampedT - kRatioPivotT) / (1.f - kRatioPivotT);
+		const float ratio = kMaxDivisor / kDivisorPivot;
+		return kDivisorPivot * std::pow(ratio, rt);
+	}
+
+	static float sliderTFromDivisor(float value) {
+		const float clampedV = clamp(value, kMinRatio, kMaxDivisor);
+		if (clampedV <= kDivisorPivot) {
+			const float lt = (clampedV - kMinRatio) / (kDivisorPivot - kMinRatio);
+			return kRatioPivotT * lt;
+		}
+		const float ratio = kMaxDivisor / kDivisorPivot;
+		const float rt = std::log(clampedV / kDivisorPivot) / std::log(ratio);
+		return kRatioPivotT + (1.f - kRatioPivotT) * clamp(rt, 0.f, 1.f);
+	}
+
 		void applySliderFromPointer(int id, const Vec& local) {
 			chronomaw::OutputState* out = selectedOutputState();
 			if (!out) {
@@ -259,11 +321,18 @@ struct ChronomawSurfaceWidget : Widget {
 				return;
 			}
 			if (id == kControlMultiplier) {
-				out->multiplier = sliderValueFromPoint(rect, local.x, 0.25f, 8.f);
+				const float t = clamp((local.x - rect.pos.x) / rect.size.x, 0.f, 1.f);
+				if (out->modifierMode == chronomaw::ModifierMode::Div) {
+					const float div = divisorFromSliderT(t);
+					out->multiplier = 1.f / std::max(kMinRatio, div);
+				}
+				else if (out->modifierMode == chronomaw::ModifierMode::Mult) {
+					out->multiplier = multiplierFromSliderT(t);
+				}
 				return;
 			}
 			if (id == kControlWidth) {
-				out->widthPct = sliderValueFromPoint(rect, local.x, 1.f, 100.f);
+				out->widthPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
 				return;
 			}
 			if (id == kControlSwing) {
@@ -339,6 +408,24 @@ struct ChronomawSurfaceWidget : Widget {
 				const int count = chronomaw::waveformCount();
 				const int current = chronomaw::waveformIndex(out->waveform);
 				out->waveform = chronomaw::waveformFromIndex((current + 1) % count);
+				return;
+			}
+			if (id == kControlModeDiv) {
+				out->modifierMode = chronomaw::ModifierMode::Div;
+				if (out->multiplier > 1.f) {
+					out->multiplier = 1.f / out->multiplier;
+				}
+				return;
+			}
+			if (id == kControlModeMult) {
+				out->modifierMode = chronomaw::ModifierMode::Mult;
+				if (out->multiplier < 1.f) {
+					out->multiplier = clamp(1.f / std::max(1.f / kMaxDivisor, out->multiplier), kMinRatio, kMaxMultiplier);
+				}
+				return;
+			}
+			if (id == kControlModeUtil) {
+				out->modifierMode = chronomaw::ModifierMode::Util;
 			}
 		}
 
@@ -531,14 +618,22 @@ struct ChronomawSurfaceWidget : Widget {
 				return;
 			}
 			if (controlId == kControlMultiplier) {
-				const float snapped = std::round(out->multiplier * 10.f) * 0.1f;
-				out->multiplier = clamp(snapped + step * 0.1f, 0.25f, 8.f);
+				if (out->modifierMode == chronomaw::ModifierMode::Div) {
+					const float currentDiv = 1.f / std::max(1.f / kMaxDivisor, out->multiplier);
+					const float snapped = std::round(currentDiv);
+					const float div = clamp(snapped + step, kMinRatio, kMaxDivisor);
+					out->multiplier = 1.f / div;
+				}
+				else if (out->modifierMode == chronomaw::ModifierMode::Mult) {
+					const float snapped = std::round(out->multiplier);
+					out->multiplier = clamp(snapped + step, kMinRatio, kMaxMultiplier);
+				}
 				e.consume(this);
 				return;
 			}
 			if (controlId == kControlWidth) {
 				const float snapped = std::round(out->widthPct);
-				out->widthPct = clamp(snapped + step, 1.f, 100.f);
+				out->widthPct = clamp(snapped + step, 0.f, 100.f);
 				e.consume(this);
 				return;
 			}
@@ -598,6 +693,19 @@ struct ChronomawSurfaceWidget : Widget {
 	void drawSlider(const DrawArgs& args, const math::Rect& rect, float value, float minV, float maxV, const std::string& label, int controlId) {
 		drawRectFilled(args, rect, chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
 		float t = (maxV <= minV) ? 0.f : clamp((value - minV) / (maxV - minV), 0.f, 1.f);
+		if (controlId == kControlMultiplier) {
+			const chronomaw::OutputState* out = selectedOutputState();
+			if (out && out->modifierMode == chronomaw::ModifierMode::Div) {
+				const float div = 1.f / std::max(1.f / kMaxDivisor, value);
+				t = sliderTFromDivisor(div);
+			}
+			else if (out && out->modifierMode == chronomaw::ModifierMode::Util) {
+				t = 0.f;
+			}
+			else {
+				t = sliderTFromMultiplier(value);
+			}
+		}
 		math::Rect fillRect(rect.pos, Vec(rect.size.x * t, rect.size.y));
 		if (fillRect.size.x > 0.5f && fillRect.size.y > 0.5f) {
 			nvgBeginPath(args.vg);
@@ -629,9 +737,29 @@ struct ChronomawSurfaceWidget : Widget {
 			nvgFillPaint(args.vg, sheenPaint);
 			nvgFill(args.vg);
 		}
+			std::string valueLabel = string::f("%.1f", value);
+			std::string leftLabel = label;
+			if (controlId == kControlMultiplier) {
+				const chronomaw::OutputState* out = selectedOutputState();
+				if (out) {
+					if (out->modifierMode == chronomaw::ModifierMode::Div) {
+						const float div = 1.f / std::max(1.f / kMaxDivisor, value);
+						valueLabel = string::f("/%.0f", div);
+						leftLabel = "Divider";
+					}
+					else if (out->modifierMode == chronomaw::ModifierMode::Mult) {
+						valueLabel = string::f("x%.0f", value);
+						leftLabel = "Multiplier";
+					}
+					else {
+						valueLabel = "UTILITY";
+						leftLabel = "Utility";
+					}
+				}
+			}
 			const float midY = rect.pos.y + 0.5f * rect.size.y;
-			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.25f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 7.8f, chronomawRgb(182, 220, 240, 236), label);
-			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.75f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 240), string::f("%.1f", value));
+			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.25f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 7.8f, chronomawRgb(182, 220, 240, 236), leftLabel);
+			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.75f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 240), valueLabel);
 			addControl(controlId, rect);
 		}
 
@@ -876,9 +1004,28 @@ struct ChronomawSurfaceWidget : Widget {
 		float y = inspectorRect.pos.y + tabStripH + 12.f;
 		if (outState) {
 				if (tabSel == 0) {
-					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->multiplier, 0.25f, 8.f, "Multiplier", kControlMultiplier);
+					const float modeGap = 2.f;
+					const float modeW = (contentW - 2.f * modeGap) / 3.f;
+					const math::Rect divRect(Vec(contentX, y), Vec(modeW, rowH));
+					const math::Rect multRect(Vec(contentX + modeW + modeGap, y), Vec(modeW, rowH));
+					const math::Rect utilRect(Vec(contentX + 2.f * (modeW + modeGap), y), Vec(modeW, rowH));
+					const auto drawModeButton = [&](const math::Rect& r, const char* txt, bool active, int id) {
+						drawRectFilled(
+							args,
+							r,
+							active ? chronomawRgb(36, 66, 94, 220) : chronomawRgb(16, 24, 34, 200),
+							active ? chronomawRgb(168, 226, 255, 228) : chronomawRgb(90, 122, 148, 176)
+						);
+						drawLabel(args, r.pos.x + 0.5f * r.size.x, r.pos.y + 0.5f * r.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 7.9f, chronomawRgb(234, 246, 255, 240), txt);
+						addControl(id, r);
+					};
+					drawModeButton(divRect, "DIV", outState->modifierMode == chronomaw::ModifierMode::Div, kControlModeDiv);
+					drawModeButton(multRect, "MULT", outState->modifierMode == chronomaw::ModifierMode::Mult, kControlModeMult);
+					drawModeButton(utilRect, "UTIL", outState->modifierMode == chronomaw::ModifierMode::Util, kControlModeUtil);
 					y += rowH + 3.f;
-					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->widthPct, 1.f, 100.f, "Width %", kControlWidth);
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->multiplier, 1.f / 16384.f, 192.f, "Multiplier", kControlMultiplier);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->widthPct, 0.f, 100.f, "Width %", kControlWidth);
 					y += rowH + 3.f;
 					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->phasePct, -100.f, 100.f, "Phase %", kControlPhase);
 					y += rowH + 3.f;

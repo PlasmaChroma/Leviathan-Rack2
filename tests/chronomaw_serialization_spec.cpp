@@ -22,6 +22,8 @@ bool nearlyEqual(float a, float b, float eps = 1e-6f) {
 chronomaw::OutputState makeOutputState(float base, uint32_t seedBase) {
 	chronomaw::OutputState out;
 	out.muted = std::fmod(base, 2.f) > 0.5f;
+	out.modifierMode = chronomaw::ModifierMode(int(base) % 3);
+	out.multiplier = 0.5f + std::fmod(base, 7.f);
 	out.levelPct = 10.f + base;
 	out.offsetPct = -50.f + base;
 	out.phasePct = -25.f + base;
@@ -33,6 +35,8 @@ chronomaw::OutputState makeOutputState(float base, uint32_t seedBase) {
 
 bool outputStateEqual(const chronomaw::OutputState& a, const chronomaw::OutputState& b) {
 	return a.muted == b.muted &&
+		a.modifierMode == b.modifierMode &&
+		nearlyEqual(a.multiplier, b.multiplier) &&
 		nearlyEqual(a.levelPct, b.levelPct) &&
 		nearlyEqual(a.offsetPct, b.offsetPct) &&
 		nearlyEqual(a.phasePct, b.phasePct) &&
@@ -187,4 +191,3 @@ int main() {
 	std::cout << "[SUMMARY] chronomaw_serialization_spec passed " << tests.size() << " tests\n";
 	return 0;
 }
-

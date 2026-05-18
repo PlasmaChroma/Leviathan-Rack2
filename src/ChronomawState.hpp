@@ -48,9 +48,16 @@ enum class WaveformMode : int {
 	SmoothRandom = 10,
 };
 
+enum class ModifierMode : int {
+	Div = 0,
+	Mult = 1,
+	Util = 2,
+};
+
 struct OutputState {
 	bool muted = false;
 	WaveformMode waveform = WaveformMode::Gate;
+	ModifierMode modifierMode = ModifierMode::Mult;
 	float multiplier = 1.f;
 	float widthPct = 50.f;
 	float levelPct = 100.f;

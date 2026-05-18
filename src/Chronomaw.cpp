@@ -24,6 +24,7 @@ static json_t* outputStateToJson(const chronomaw::OutputState& out) {
 	json_t* outJ = json_object();
 	json_object_set_new(outJ, "muted", json_boolean(out.muted));
 	json_object_set_new(outJ, "waveform", json_integer(int(out.waveform)));
+	json_object_set_new(outJ, "modifierMode", json_integer(int(out.modifierMode)));
 	json_object_set_new(outJ, "multiplier", json_real(out.multiplier));
 	json_object_set_new(outJ, "widthPct", json_real(out.widthPct));
 	json_object_set_new(outJ, "levelPct", json_real(out.levelPct));
@@ -44,8 +45,10 @@ static void outputStateFromJson(json_t* outJ, chronomaw::OutputState* out) {
 	}
 	out->muted = json_is_true(json_object_get(outJ, "muted"));
 	out->waveform = chronomaw::waveformFromIndex(jsonIntOr(outJ, "waveform", 0));
-	out->multiplier = clamp(jsonFloatOr(outJ, "multiplier", 1.f), 0.25f, 8.f);
-	out->widthPct = clamp(jsonFloatOr(outJ, "widthPct", 50.f), 1.f, 100.f);
+	out->multiplier = clamp(jsonFloatOr(outJ, "multiplier", 1.f), 1.f / 16384.f, 192.f);
+	const int legacyMode = (out->multiplier < 1.f) ? int(chronomaw::ModifierMode::Div) : int(chronomaw::ModifierMode::Mult);
+	out->modifierMode = chronomaw::ModifierMode(clamp(jsonIntOr(outJ, "modifierMode", legacyMode), 0, 2));
+	out->widthPct = clamp(jsonFloatOr(outJ, "widthPct", 50.f), 0.f, 100.f);
 	out->levelPct = clamp(jsonFloatOr(outJ, "levelPct", 100.f), 0.f, 100.f);
 	out->offsetPct = clamp(jsonFloatOr(outJ, "offsetPct", 0.f), -100.f, 100.f);
 	out->phasePct = clamp(jsonFloatOr(outJ, "phasePct", 0.f), -100.f, 100.f);

@@ -127,7 +127,7 @@ inline float unitRand(uint32_t seed, uint64_t cycle) {
 
 inline float applyTimingPhase(const OutputState& outState, float basePhase01) {
 	float p = basePhase01;
-	p = p * clamp(outState.multiplier, 0.25f, 8.f);
+	p = p * clamp(outState.multiplier, 1.f / 16384.f, 192.f);
 	p += clamp(outState.phasePct * 0.005f, -0.5f, 0.5f);
 	p += clamp(outState.rotatePct * 0.005f, -0.5f, 0.5f);
 	p -= std::floor(p);
