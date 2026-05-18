@@ -1,4 +1,5 @@
 #include "Chronomaw.hpp"
+#include "ChronomawWaveforms.hpp"
 #include "PanelSvgUtils.hpp"
 #include <array>
 #include <string>
@@ -95,21 +96,24 @@ struct ChronomawSurfaceWidget : Widget {
 
 		static constexpr int kTabCount = 7;
 		static constexpr int kMaxInspectorControls = 14;
-		static constexpr int kWaveformCount = 11;
 		static constexpr double kCustomDoubleClickWindowSec = 0.24;
 		static constexpr double kSingleClickCommitDelaySec = 0.10;
-	static constexpr int kControlNone = -1;
-	static constexpr int kControlPhase = 0;
-	static constexpr int kControlLevel = 1;
-	static constexpr int kControlOffset = 2;
-		static constexpr int kControlProbability = 3;
-		static constexpr int kControlMute = 4;
-		static constexpr int kControlInvert = 5;
-		static constexpr int kControlSeedDec = 6;
-		static constexpr int kControlSeedInc = 7;
-		static constexpr int kControlWavePrev = 8;
-		static constexpr int kControlWaveNext = 9;
-		static constexpr int kControlWaveMenu = 10;
+		static constexpr int kControlNone = -1;
+		static constexpr int kControlMultiplier = 0;
+		static constexpr int kControlWidth = 1;
+		static constexpr int kControlPhase = 2;
+		static constexpr int kControlSwing = 3;
+		static constexpr int kControlSkew = 4;
+		static constexpr int kControlRotate = 5;
+		static constexpr int kControlLevel = 6;
+		static constexpr int kControlOffset = 7;
+		static constexpr int kControlProbability = 8;
+		static constexpr int kControlInvert = 9;
+		static constexpr int kControlSeedDec = 10;
+		static constexpr int kControlSeedInc = 11;
+		static constexpr int kControlWavePrev = 12;
+		static constexpr int kControlWaveNext = 13;
+		static constexpr int kControlWaveMenu = 14;
 
 	struct InspectorControl {
 		int id = kControlNone;
@@ -125,20 +129,7 @@ struct ChronomawSurfaceWidget : Widget {
 		}
 
 		static const char* waveformName(chronomaw::WaveformMode wf) {
-			switch (wf) {
-			case chronomaw::WaveformMode::Gate: return "Gate/Pulse";
-			case chronomaw::WaveformMode::RatchetX2: return "Ratchet x2";
-			case chronomaw::WaveformMode::RatchetX4: return "Ratchet x4";
-			case chronomaw::WaveformMode::Triangle: return "Triangle";
-			case chronomaw::WaveformMode::Trapezoid: return "Trapezoid";
-			case chronomaw::WaveformMode::Sine: return "Sine";
-			case chronomaw::WaveformMode::Hump: return "Hump";
-			case chronomaw::WaveformMode::ExpEnvelope: return "Exp Envelope";
-			case chronomaw::WaveformMode::LogEnvelope: return "Log Envelope";
-			case chronomaw::WaveformMode::ClassicRandom: return "Classic Random";
-			case chronomaw::WaveformMode::SmoothRandom: return "Smooth Random";
-			default: return "Gate/Pulse";
-			}
+			return chronomaw::waveformLabel(wf);
 		}
 
 	explicit ChronomawSurfaceWidget(Chronomaw* module, const ChronomawUiRects& uiRects) : module(module), uiRects(uiRects) {}
@@ -186,7 +177,7 @@ struct ChronomawSurfaceWidget : Widget {
 			const float h = std::max(7.f, rowRect.size.y - 2.f);
 			const float w = 24.f;
 			return math::Rect(
-				Vec(rowRect.pos.x + rowRect.size.x - w - 4.f, rowRect.pos.y + 0.5f * (rowRect.size.y - h)),
+				Vec(rowRect.pos.x + rowRect.size.x - w - 1.5f, rowRect.pos.y + 0.5f * (rowRect.size.y - h)),
 				Vec(w, h)
 			);
 		}
@@ -263,10 +254,30 @@ struct ChronomawSurfaceWidget : Widget {
 			if (rect.size.x <= 0.f || rect.size.y <= 0.f) {
 				return;
 			}
-		if (id == kControlPhase) {
-			out->phasePct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
-			return;
-		}
+			if (id == kControlPhase) {
+				out->phasePct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+				return;
+			}
+			if (id == kControlMultiplier) {
+				out->multiplier = sliderValueFromPoint(rect, local.x, 0.25f, 8.f);
+				return;
+			}
+			if (id == kControlWidth) {
+				out->widthPct = sliderValueFromPoint(rect, local.x, 1.f, 100.f);
+				return;
+			}
+			if (id == kControlSwing) {
+				out->swingPct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+				return;
+			}
+			if (id == kControlSkew) {
+				out->skewPct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+				return;
+			}
+			if (id == kControlRotate) {
+				out->rotatePct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+				return;
+			}
 		if (id == kControlLevel) {
 			out->levelPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
 			return;
@@ -304,14 +315,10 @@ struct ChronomawSurfaceWidget : Widget {
 			if (!out) {
 				return;
 			}
-			if (id == kControlMute) {
-				out->muted = !out->muted;
+			if (id == kControlInvert) {
+				out->invert = !out->invert;
 				return;
-		}
-		if (id == kControlInvert) {
-			out->invert = !out->invert;
-			return;
-		}
+			}
 			if (id == kControlSeedDec) {
 				if (out->randomSeed > 0u) {
 					--out->randomSeed;
@@ -323,39 +330,41 @@ struct ChronomawSurfaceWidget : Widget {
 				return;
 			}
 			if (id == kControlWavePrev) {
-				const int current = clamp(int(out->waveform), 0, kWaveformCount - 1);
-				out->waveform = chronomaw::WaveformMode((current + (kWaveformCount - 1)) % kWaveformCount);
+				const int count = chronomaw::waveformCount();
+				const int current = chronomaw::waveformIndex(out->waveform);
+				out->waveform = chronomaw::waveformFromIndex((current + (count - 1)) % count);
 				return;
 			}
 			if (id == kControlWaveNext) {
-				const int current = clamp(int(out->waveform), 0, kWaveformCount - 1);
-				out->waveform = chronomaw::WaveformMode((current + 1) % kWaveformCount);
+				const int count = chronomaw::waveformCount();
+				const int current = chronomaw::waveformIndex(out->waveform);
+				out->waveform = chronomaw::waveformFromIndex((current + 1) % count);
 			}
 		}
 
-		void openWaveformMenu(const math::Rect& anchorRect) {
+		void openWaveformMenu(const Vec& localClickPos) {
 			if (!module) {
 				return;
 			}
 			const int outIdx = selectedOutput();
 			ui::Menu* menu = createMenu();
-			menu->box.pos = getAbsoluteOffset(Vec(anchorRect.pos.x, anchorRect.pos.y + anchorRect.size.y));
+			menu->box.pos = getAbsoluteOffset(Vec(localClickPos.x, localClickPos.y + 2.f));
 			menu->addChild(createMenuLabel("Waveform"));
-			for (int mode = 0; mode < kWaveformCount; ++mode) {
+			for (int mode = 0; mode < chronomaw::waveformCount(); ++mode) {
 				menu->addChild(createCheckMenuItem(
-					waveformName(chronomaw::WaveformMode(mode)), "",
+					waveformName(chronomaw::waveformFromIndex(mode)), "",
 					[=]() {
 						if (!module) {
 							return false;
 						}
-						const int current = clamp(int(module->state.live.outputs[size_t(outIdx)].waveform), 0, kWaveformCount - 1);
+						const int current = chronomaw::waveformIndex(module->state.live.outputs[size_t(outIdx)].waveform);
 						return current == mode;
 					},
 					[=]() {
 						if (!module) {
 							return;
 						}
-						module->state.live.outputs[size_t(outIdx)].waveform = chronomaw::WaveformMode(mode);
+						module->state.live.outputs[size_t(outIdx)].waveform = chronomaw::waveformFromIndex(mode);
 					}
 				));
 			}
@@ -368,6 +377,26 @@ struct ChronomawSurfaceWidget : Widget {
 			}
 			if (id == kControlPhase) {
 				out->phasePct = 0.f;
+				return;
+			}
+			if (id == kControlMultiplier) {
+				out->multiplier = 1.f;
+				return;
+			}
+			if (id == kControlWidth) {
+				out->widthPct = 50.f;
+				return;
+			}
+			if (id == kControlSwing) {
+				out->swingPct = 0.f;
+				return;
+			}
+			if (id == kControlSkew) {
+				out->skewPct = 0.f;
+				return;
+			}
+			if (id == kControlRotate) {
+				out->rotatePct = 0.f;
 				return;
 			}
 			if (id == kControlLevel) {
@@ -428,7 +457,7 @@ struct ChronomawSurfaceWidget : Widget {
 		if (controlId == kControlNone) {
 			return;
 		}
-			if (controlId == kControlPhase || controlId == kControlLevel || controlId == kControlOffset || controlId == kControlProbability) {
+			if (controlId == kControlMultiplier || controlId == kControlWidth || controlId == kControlPhase || controlId == kControlSwing || controlId == kControlSkew || controlId == kControlRotate || controlId == kControlLevel || controlId == kControlOffset || controlId == kControlProbability) {
 				const double now = glfwGetTime();
 				if (lastSliderClickId == controlId && lastSliderClickTime >= 0.0 && (now - lastSliderClickTime) <= kCustomDoubleClickWindowSec) {
 					pendingSliderClickId = kControlNone;
@@ -453,7 +482,7 @@ struct ChronomawSurfaceWidget : Widget {
 				return;
 			}
 			if (controlId == kControlWaveMenu) {
-				openWaveformMenu(controlRect(kControlWaveMenu));
+				openWaveformMenu(local);
 				e.consume(this);
 				return;
 			}
@@ -495,12 +524,42 @@ struct ChronomawSurfaceWidget : Widget {
 			return;
 		}
 		const float step = (delta > 0.f) ? 1.f : -1.f;
-		if (controlId == kControlPhase) {
-			const float snapped = std::round(out->phasePct);
-			out->phasePct = clamp(snapped + step, -100.f, 100.f);
-			e.consume(this);
-			return;
-		}
+			if (controlId == kControlPhase) {
+				const float snapped = std::round(out->phasePct);
+				out->phasePct = clamp(snapped + step, -100.f, 100.f);
+				e.consume(this);
+				return;
+			}
+			if (controlId == kControlMultiplier) {
+				const float snapped = std::round(out->multiplier * 10.f) * 0.1f;
+				out->multiplier = clamp(snapped + step * 0.1f, 0.25f, 8.f);
+				e.consume(this);
+				return;
+			}
+			if (controlId == kControlWidth) {
+				const float snapped = std::round(out->widthPct);
+				out->widthPct = clamp(snapped + step, 1.f, 100.f);
+				e.consume(this);
+				return;
+			}
+			if (controlId == kControlSwing) {
+				const float snapped = std::round(out->swingPct);
+				out->swingPct = clamp(snapped + step, -100.f, 100.f);
+				e.consume(this);
+				return;
+			}
+			if (controlId == kControlSkew) {
+				const float snapped = std::round(out->skewPct);
+				out->skewPct = clamp(snapped + step, -100.f, 100.f);
+				e.consume(this);
+				return;
+			}
+			if (controlId == kControlRotate) {
+				const float snapped = std::round(out->rotatePct);
+				out->rotatePct = clamp(snapped + step, -100.f, 100.f);
+				e.consume(this);
+				return;
+			}
 		if (controlId == kControlLevel) {
 			const float snapped = std::round(out->levelPct);
 			out->levelPct = clamp(snapped + step, 0.f, 100.f);
@@ -583,49 +642,12 @@ struct ChronomawSurfaceWidget : Widget {
 		addControl(controlId, rect);
 	}
 
-	void drawTrace(const DrawArgs& args, const math::Rect& rect, int channel, bool internalTrace, NVGcolor color, bool useTimelineHistory) {
-		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 2.f || rect.size.y <= 2.f) {
-			return;
-		}
-		const int hist = useTimelineHistory ? Chronomaw::kTimelineHistorySize : Chronomaw::kPreviewHistorySize;
-		const int writePos = useTimelineHistory ? module->timelineWritePos.load(std::memory_order_relaxed) : module->previewWritePos.load(std::memory_order_relaxed);
-		nvgBeginPath(args.vg);
-		for (int i = 0; i < hist; ++i) {
-			const int idx = (writePos + i) % hist;
-			float v = 0.f;
-			if (internalTrace && useTimelineHistory) {
-				v = module->timelineInternalHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
-			}
-			else if (internalTrace) {
-				v = module->previewInternalHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
-			}
-			else if (useTimelineHistory) {
-				v = module->timelineOutputHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
-			}
-			else {
-				v = module->previewOutputHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
-			}
-			v = clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV);
-			const float t = (hist <= 1) ? 0.f : (float(i) / float(hist - 1));
-			const float x = rect.pos.x + t * rect.size.x;
-			const float yNorm = (chronomaw::kOutputMaxV <= chronomaw::kOutputMinV) ? 0.f : ((v - chronomaw::kOutputMinV) / (chronomaw::kOutputMaxV - chronomaw::kOutputMinV));
-			const float y = rect.pos.y + (1.f - yNorm) * rect.size.y;
-			if (i == 0) {
-				nvgMoveTo(args.vg, x, y);
-			}
-			else {
-				nvgLineTo(args.vg, x, y);
-			}
-		}
-		nvgStrokeWidth(args.vg, internalTrace ? 0.9f : 1.15f);
-		nvgStrokeColor(args.vg, color);
-		nvgStroke(args.vg);
-	}
-
 	void drawTimelineLaneTrace(const DrawArgs& args, const math::Rect& rect, int channel, bool selected, float nowFrac) {
 		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 3.f || rect.size.y <= 2.f) {
 			return;
 		}
+		nvgSave(args.vg);
+		nvgScissor(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
 		const int hist = Chronomaw::kTimelineHistorySize;
 		const int writePos = module->timelineWritePos.load(std::memory_order_relaxed);
 		const int latestIdx = (writePos - 1 + hist) % hist;
@@ -664,44 +686,61 @@ struct ChronomawSurfaceWidget : Widget {
 			return v0 + (v1 - v0) * frac;
 		};
 
-		const int visibleCount = std::max(8, int(historyWidth));
-		nvgBeginPath(args.vg);
-		for (int i = 0; i < visibleCount; ++i) {
-			const float t = (visibleCount <= 1) ? 0.f : (float(i) / float(visibleCount - 1));
-			const float x = rect.pos.x + t * historyWidth;
-			const float ageSec = (historyWidth - (x - rect.pos.x)) * secPerPixel;
-			const float ageStepsFloat = ageSec / dtSec;
-			const float v = historyValueAtAgeSteps(ageStepsFloat);
-			const float y = voltsToY(v);
-			if (i == 0) {
-				nvgMoveTo(args.vg, x, y);
+			const int visibleCount = std::max(8, int(historyWidth));
+			const float historyStopX = nowX;
+			const float futureStartX = nowX;
+			nvgBeginPath(args.vg);
+			bool moved = false;
+			for (int i = 0; i < visibleCount; ++i) {
+				const float t = (visibleCount <= 1) ? 0.f : (float(i) / float(visibleCount - 1));
+				const float x = rect.pos.x + t * historyWidth;
+				if (x > historyStopX) {
+					break;
+				}
+				const float ageSec = (historyWidth - (x - rect.pos.x)) * secPerPixel;
+				const float ageStepsFloat = ageSec / dtSec;
+				const float v = historyValueAtAgeSteps(ageStepsFloat);
+				const float y = voltsToY(v);
+				if (!moved) {
+					nvgMoveTo(args.vg, x, y);
+					moved = true;
+				}
+				else {
+					nvgLineTo(args.vg, x, y);
+				}
 			}
-			else {
-				nvgLineTo(args.vg, x, y);
+			if (moved) {
+				nvgStrokeWidth(args.vg, selected ? 1.35f : 1.0f);
+				nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+				nvgStroke(args.vg);
 			}
-		}
-		nvgStrokeWidth(args.vg, selected ? 1.35f : 1.0f);
-		nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
-		nvgStroke(args.vg);
 
 		// Draw deterministic future projection to the right of "now".
-		if (futureWidth > 0.f) {
-			nvgBeginPath(args.vg);
-			const float latestV = module->timelineOutputHistory[size_t(channel)][size_t(latestIdx)].load(std::memory_order_relaxed);
-			nvgMoveTo(args.vg, nowX, voltsToY(latestV));
-			const int futureCount = std::max(8, int(futureWidth));
-			for (int i = 0; i < futureCount; ++i) {
-				const float t = (futureCount <= 1) ? 1.f : float(i + 1) / float(futureCount);
-				const float x = nowX + t * futureWidth;
-				const float futureSec = t * futureWidth * secPerPixel;
-				const float futureStepFloat = std::max(0.f, (futureSec / dtSec) - 1.f);
-				const float v = futureValueAtSteps(futureStepFloat);
+			if (futureWidth > 0.f) {
+				nvgBeginPath(args.vg);
+				const float latestV = module->timelineOutputHistory[size_t(channel)][size_t(latestIdx)].load(std::memory_order_relaxed);
+				const float futureStartT = (futureWidth <= 0.f) ? 0.f : clamp((futureStartX - nowX) / futureWidth, 0.f, 1.f);
+				const float futureStartSec = futureStartT * futureWidth * secPerPixel;
+				const float futureStartStep = std::max(0.f, (futureStartSec / dtSec));
+				const float startV = (futureStartT <= 0.f) ? latestV : futureValueAtSteps(futureStartStep);
+				nvgMoveTo(args.vg, futureStartX, voltsToY(startV));
+				const int futureCount = std::max(8, int(futureWidth));
+				for (int i = 0; i < futureCount; ++i) {
+					const float t = (futureCount <= 1) ? 1.f : float(i + 1) / float(futureCount);
+					const float x = nowX + t * futureWidth;
+					if (x <= futureStartX) {
+						continue;
+					}
+					const float futureSec = t * futureWidth * secPerPixel;
+					const float futureStepFloat = std::max(0.f, (futureSec / dtSec));
+					const float v = futureValueAtSteps(futureStepFloat);
 				nvgLineTo(args.vg, x, voltsToY(v));
 			}
 			nvgStrokeWidth(args.vg, selected ? 1.0f : 0.85f);
-			nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
-			nvgStroke(args.vg);
-		}
+				nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+				nvgStroke(args.vg);
+			}
+		nvgRestore(args.vg);
 	}
 
 	void drawOverview(const DrawArgs& args) {
@@ -782,19 +821,19 @@ struct ChronomawSurfaceWidget : Widget {
 			nvgStroke(args.vg);
 		}
 		const float nowX = timelineRect.pos.x + timelineRect.size.x * nowFrac;
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
-		nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
-		// Match Bifurx curve-line colors and two-pass stroke treatment.
-		nvgStrokeWidth(args.vg, 2.8f);
-		nvgStrokeColor(args.vg, chronomawRgb(6, 8, 12, 210));
-		nvgStroke(args.vg);
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
-		nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
-		nvgStrokeWidth(args.vg, 1.5f);
-		nvgStrokeColor(args.vg, chronomawRgb(249, 236, 190, 248));
-		nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
+			nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
+			// Match TD.Scope read-head color treatment.
+			nvgStrokeWidth(args.vg, 2.2f);
+			nvgStrokeColor(args.vg, chronomawRgb(244, 220, 96, 128));
+			nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
+			nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
+			nvgStrokeWidth(args.vg, 1.15f);
+			nvgStrokeColor(args.vg, chronomawRgb(244, 220, 96, 128));
+			nvgStroke(args.vg);
 		drawLabel(args, timelineRect.pos.x + 4.f, timelineRect.pos.y - 2.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 9.4f, chronomawRgb(180, 226, 251, 236), "Timeline");
 	}
 
@@ -836,9 +875,19 @@ struct ChronomawSurfaceWidget : Widget {
 		const float rowH = 10.0f;
 		float y = inspectorRect.pos.y + tabStripH + 12.f;
 		if (outState) {
-			if (tabSel == 0) {
-				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->phasePct, -100.f, 100.f, "Phase %", kControlPhase);
-			}
+				if (tabSel == 0) {
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->multiplier, 0.25f, 8.f, "Multiplier", kControlMultiplier);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->widthPct, 1.f, 100.f, "Width %", kControlWidth);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->phasePct, -100.f, 100.f, "Phase %", kControlPhase);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->swingPct, -100.f, 100.f, "Swing %", kControlSwing);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->skewPct, -100.f, 100.f, "Skew %", kControlSkew);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->rotatePct, -100.f, 100.f, "Rotate %", kControlRotate);
+				}
 				else if (tabSel == 1) {
 					drawRectFilled(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
 					const float btnW = 12.f;
@@ -874,11 +923,9 @@ struct ChronomawSurfaceWidget : Widget {
 					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->levelPct, 0.f, 100.f, "Level %", kControlLevel);
 					y += rowH + 3.f;
 					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->offsetPct, -100.f, 100.f, "Offset %", kControlOffset);
-				y += rowH + 3.f;
-				drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Invert", outState->invert, kControlInvert);
-				y += rowH + 3.f;
-				drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Mute", outState->muted, kControlMute);
-			}
+					y += rowH + 3.f;
+					drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Invert", outState->invert, kControlInvert);
+				}
 			else if (tabSel == 2) {
 				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->probabilityPct, 0.f, 100.f, "Probability %", kControlProbability);
 				y += rowH + 3.f;

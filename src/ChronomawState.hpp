@@ -51,9 +51,14 @@ enum class WaveformMode : int {
 struct OutputState {
 	bool muted = false;
 	WaveformMode waveform = WaveformMode::Gate;
+	float multiplier = 1.f;
+	float widthPct = 50.f;
 	float levelPct = 100.f;
 	float offsetPct = 0.f;
 	float phasePct = 0.f;
+	float swingPct = 0.f;
+	float skewPct = 0.f;
+	float rotatePct = 0.f;
 	float probabilityPct = 100.f;
 	bool invert = false;
 	uint32_t randomSeed = 0u;

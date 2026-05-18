@@ -17,6 +17,7 @@ struct FrameInputs {
 struct FrameOutputs {
 	bool running = false;
 	float phaseBeats = 0.f;
+	uint64_t cycleCount = 0u;
 	std::array<float, kNumOutputs> internalVolts {};
 	std::array<float, kNumOutputs> outVolts {};
 };
@@ -28,6 +29,7 @@ public:
 
 private:
 	float phaseBeats_ = 0.f;
+	uint64_t cycleCount_ = 0u;
 	float currentGate_ = 0.f;
 };
 

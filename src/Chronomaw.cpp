@@ -1,4 +1,5 @@
 #include "Chronomaw.hpp"
+#include "ChronomawWaveforms.hpp"
 
 namespace {
 
@@ -23,9 +24,14 @@ static json_t* outputStateToJson(const chronomaw::OutputState& out) {
 	json_t* outJ = json_object();
 	json_object_set_new(outJ, "muted", json_boolean(out.muted));
 	json_object_set_new(outJ, "waveform", json_integer(int(out.waveform)));
+	json_object_set_new(outJ, "multiplier", json_real(out.multiplier));
+	json_object_set_new(outJ, "widthPct", json_real(out.widthPct));
 	json_object_set_new(outJ, "levelPct", json_real(out.levelPct));
 	json_object_set_new(outJ, "offsetPct", json_real(out.offsetPct));
 	json_object_set_new(outJ, "phasePct", json_real(out.phasePct));
+	json_object_set_new(outJ, "swingPct", json_real(out.swingPct));
+	json_object_set_new(outJ, "skewPct", json_real(out.skewPct));
+	json_object_set_new(outJ, "rotatePct", json_real(out.rotatePct));
 	json_object_set_new(outJ, "probabilityPct", json_real(out.probabilityPct));
 	json_object_set_new(outJ, "invert", json_boolean(out.invert));
 	json_object_set_new(outJ, "randomSeed", json_integer(out.randomSeed));
@@ -37,10 +43,15 @@ static void outputStateFromJson(json_t* outJ, chronomaw::OutputState* out) {
 		return;
 	}
 	out->muted = json_is_true(json_object_get(outJ, "muted"));
-	out->waveform = chronomaw::WaveformMode(clamp(jsonIntOr(outJ, "waveform", 0), 0, 10));
+	out->waveform = chronomaw::waveformFromIndex(jsonIntOr(outJ, "waveform", 0));
+	out->multiplier = clamp(jsonFloatOr(outJ, "multiplier", 1.f), 0.25f, 8.f);
+	out->widthPct = clamp(jsonFloatOr(outJ, "widthPct", 50.f), 1.f, 100.f);
 	out->levelPct = clamp(jsonFloatOr(outJ, "levelPct", 100.f), 0.f, 100.f);
 	out->offsetPct = clamp(jsonFloatOr(outJ, "offsetPct", 0.f), -100.f, 100.f);
 	out->phasePct = clamp(jsonFloatOr(outJ, "phasePct", 0.f), -100.f, 100.f);
+	out->swingPct = clamp(jsonFloatOr(outJ, "swingPct", 0.f), -100.f, 100.f);
+	out->skewPct = clamp(jsonFloatOr(outJ, "skewPct", 0.f), -100.f, 100.f);
+	out->rotatePct = clamp(jsonFloatOr(outJ, "rotatePct", 0.f), -100.f, 100.f);
 	out->probabilityPct = clamp(jsonFloatOr(outJ, "probabilityPct", 100.f), 0.f, 100.f);
 	out->invert = json_is_true(json_object_get(outJ, "invert"));
 	out->randomSeed = uint32_t(std::max<int64_t>(0, jsonIntOr<int64_t>(outJ, "randomSeed", 0)));
@@ -100,10 +111,6 @@ Chronomaw::Chronomaw() {
 	configOutput(OUT_8_OUTPUT, "Output 8");
 
 	for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
-		for (int i = 0; i < kPreviewHistorySize; ++i) {
-			previewInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
-			previewOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
-		}
 		for (int i = 0; i < kTimelineHistorySize; ++i) {
 			timelineInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -117,18 +124,12 @@ Chronomaw::Chronomaw() {
 void Chronomaw::onReset() {
 	state = chronomaw::ModuleState();
 	engine.reset();
-	previewWritePos.store(0, std::memory_order_relaxed);
 	timelineWritePos.store(0, std::memory_order_relaxed);
 	timelinePhaseBeats.store(0.f, std::memory_order_relaxed);
 	timelineBpm.store(chronomaw::kDefaultBpm, std::memory_order_relaxed);
 	timelineRunning.store(false, std::memory_order_relaxed);
-	previewWriteDecimator = 0;
 	timelineCaptureElapsedSec = 0.f;
 	for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
-		for (int i = 0; i < kPreviewHistorySize; ++i) {
-			previewInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
-			previewOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
-		}
 		for (int i = 0; i < kTimelineHistorySize; ++i) {
 			timelineInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -177,17 +178,6 @@ void Chronomaw::process(const ProcessArgs& args) {
 		outputs[OUT_1_OUTPUT + i].setVoltage(frameOut.outVolts[size_t(i)]);
 	}
 
-	// Keep lightweight preview history for UI traces; decimation avoids pushing every audio sample.
-	previewWriteDecimator = (previewWriteDecimator + 1) & 7;
-	if (previewWriteDecimator == 0) {
-		const int writePos = previewWritePos.load(std::memory_order_relaxed);
-		for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
-			previewInternalHistory[size_t(i)][size_t(writePos)].store(frameOut.internalVolts[size_t(i)], std::memory_order_relaxed);
-			previewOutputHistory[size_t(i)][size_t(writePos)].store(frameOut.outVolts[size_t(i)], std::memory_order_relaxed);
-		}
-		previewWritePos.store((writePos + 1) % kPreviewHistorySize, std::memory_order_relaxed);
-	}
-
 	timelineCaptureElapsedSec += args.sampleTime;
 	if (timelineCaptureElapsedSec >= kTimelineCaptureIntervalSec) {
 		timelineCaptureElapsedSec -= kTimelineCaptureIntervalSec;
@@ -198,36 +188,32 @@ void Chronomaw::process(const ProcessArgs& args) {
 		}
 		timelineWritePos.store((writePos + 1) % kTimelineHistorySize, std::memory_order_relaxed);
 
-		// Deterministic preview horizon for the right-of-now timeline region.
-		const float phaseNow = frameOut.phaseBeats;
-		const float bpmNow = clamp(state.live.bpm, chronomaw::kMinBpm, chronomaw::kMaxBpm);
-		const bool runningNow = frameOut.running;
-		const float beatsPerSec = bpmNow / 60.f;
-		for (int step = 0; step < kTimelineFutureSize; ++step) {
-			const float tSec = float(step + 1) * kTimelineCaptureIntervalSec;
-			float phase = phaseNow + beatsPerSec * tSec;
-			phase -= std::floor(phase);
-			for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
-				const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
-				const float phaseOffset = clamp(outState.phasePct * 0.005f, -0.5f, 0.5f);
-				float phaseCh = phase + phaseOffset;
-				phaseCh -= std::floor(phaseCh);
-				const float internalVCh = (runningNow && phaseCh < 0.5f) ? chronomaw::kOutputMaxV : chronomaw::kOutputMinV;
-				float v = internalVCh;
-				if (outState.muted) {
-					v = 0.f;
-				}
-				else {
-					const float level = clamp(outState.levelPct * 0.01f, 0.f, 1.f);
-					const float offset = clamp(outState.offsetPct * 0.01f, -1.f, 1.f);
-					v = v * level + offset * chronomaw::kOutputMaxV;
-					if (outState.invert) {
-						v = chronomaw::kOutputMaxV - v;
+			// Deterministic preview horizon for the right-of-now timeline region.
+			const float phaseNow = frameOut.phaseBeats;
+			const uint64_t cycleNow = frameOut.cycleCount;
+			const float bpmNow = clamp(state.live.bpm, chronomaw::kMinBpm, chronomaw::kMaxBpm);
+				const bool runningNow = frameOut.running;
+				const float beatsPerSec = bpmNow / 60.f;
+				for (int step = 0; step < kTimelineFutureSize; ++step) {
+					const float tSec = float(step) * kTimelineCaptureIntervalSec;
+					const float phaseRaw = phaseNow + beatsPerSec * tSec;
+					const int64_t baseCycleAdvance = int64_t(std::floor(phaseRaw));
+					float phase = phaseRaw - std::floor(phaseRaw);
+				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
+					const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
+					uint64_t chCycle = cycleNow;
+					const int64_t totalOffset = baseCycleAdvance;
+					if (totalOffset > 0) {
+						chCycle += uint64_t(totalOffset);
 					}
+					else if (totalOffset < 0) {
+						const uint64_t dec = uint64_t(-totalOffset);
+						chCycle = (chCycle >= dec) ? (chCycle - dec) : 0u;
+					}
+				const float v = renderOutputVoltage(outState, runningNow, phase, chCycle);
+					timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
 				}
-				timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
 			}
-		}
 	}
 
 	lights[RUN_LIGHT].setBrightness(state.live.running ? 1.f : 0.f);

@@ -1,4 +1,5 @@
 #include "ChronomawEngine.hpp"
+#include "ChronomawWaveforms.hpp"
 
 #include "plugin.hpp"
 
@@ -6,6 +7,7 @@ namespace chronomaw {
 
 void Engine::reset() {
 	phaseBeats_ = 0.f;
+	cycleCount_ = 0u;
 	currentGate_ = 0.f;
 }
 
@@ -15,18 +17,21 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 	}
 	out->running = live.running;
 	out->phaseBeats = phaseBeats_;
+	out->cycleCount = cycleCount_;
 	if (in.runConnected) {
 		live.running = (in.runVoltage >= 2.f);
 	}
 	if (in.resetConnected && in.resetVoltage >= 2.f) {
 		phaseBeats_ = 0.f;
+		cycleCount_ = 0u;
 	}
 	live.bpm = clamp(live.bpm, kMinBpm, kMaxBpm);
 	if (!live.running) {
 		currentGate_ = 0.f;
-		out->running = false;
-		out->phaseBeats = phaseBeats_;
-		for (int i = 0; i < kNumOutputs; ++i) {
+			out->running = false;
+			out->phaseBeats = phaseBeats_;
+			out->cycleCount = cycleCount_;
+			for (int i = 0; i < kNumOutputs; ++i) {
 			out->internalVolts[size_t(i)] = 0.f;
 			out->outVolts[size_t(i)] = 0.f;
 		}
@@ -36,34 +41,43 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 	const float beatsPerSecond = live.bpm / 60.f;
 	phaseBeats_ += beatsPerSecond * in.sampleTime;
 	if (phaseBeats_ >= 1.f) {
-		phaseBeats_ -= std::floor(phaseBeats_);
+		const float wraps = std::floor(phaseBeats_);
+		phaseBeats_ -= wraps;
+		cycleCount_ += uint64_t(std::max(0.f, wraps));
 	}
 	out->running = true;
 	out->phaseBeats = phaseBeats_;
+	out->cycleCount = cycleCount_;
 
 	// First-pass engine: generate a simple per-output gate clock.
 	// Phase control offsets each output by up to +/- half a cycle.
 	currentGate_ = (phaseBeats_ < 0.5f) ? kOutputMaxV : kOutputMinV;
 	for (int i = 0; i < kNumOutputs; ++i) {
 		const OutputState& ch = live.outputs[size_t(i)];
-		const float phaseOffset = clamp(ch.phasePct * 0.005f, -0.5f, 0.5f);
-		float channelPhase = phaseBeats_ + phaseOffset;
+		float channelPhase = applyTimingPhase(ch, phaseBeats_);
+		int64_t cycleOffset = 0;
+		if (channelPhase >= 1.f) {
+			const float wraps = std::floor(channelPhase);
+			channelPhase -= wraps;
+			cycleOffset = int64_t(wraps);
+		}
+		else if (channelPhase < 0.f) {
+			const float wraps = std::ceil(-channelPhase);
+			channelPhase += wraps;
+			cycleOffset = -int64_t(wraps);
+		}
 		channelPhase -= std::floor(channelPhase);
-		const float channelGate = (channelPhase < 0.5f) ? kOutputMaxV : kOutputMinV;
-		out->internalVolts[size_t(i)] = channelGate;
-		float v = channelGate;
-		if (ch.muted) {
-			v = 0.f;
+		uint64_t channelCycle = cycleCount_;
+		if (cycleOffset > 0) {
+			channelCycle += uint64_t(cycleOffset);
 		}
-		else {
-			float level = clamp(ch.levelPct * 0.01f, 0.f, 1.f);
-			float offset = clamp(ch.offsetPct * 0.01f, -1.f, 1.f);
-			v = v * level + offset * kOutputMaxV;
-			if (ch.invert) {
-				v = kOutputMaxV - v;
-			}
+		else if (cycleOffset < 0) {
+			const uint64_t dec = uint64_t(-cycleOffset);
+			channelCycle = (channelCycle >= dec) ? (channelCycle - dec) : 0u;
 		}
-		out->outVolts[size_t(i)] = clamp(v, kOutputMinV, kOutputMaxV);
+		const float internalV = live.running ? waveformInternalVoltage(ch, channelPhase, channelCycle) : kOutputMinV;
+		out->internalVolts[size_t(i)] = internalV;
+		out->outVolts[size_t(i)] = renderOutputVoltage(ch, live.running, phaseBeats_, channelCycle);
 	}
 }
 
