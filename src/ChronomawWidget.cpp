@@ -28,6 +28,38 @@ static void drawRectFilled(const Widget::DrawArgs& args, const math::Rect& rect,
 	nvgStroke(args.vg);
 }
 
+static void drawModeStepTriangle(const Widget::DrawArgs& args, const Vec& center, float size, bool pointRight, NVGcolor color) {
+	const float hW = size;
+	const float hH = size * 1.15f;
+	const float off = pointRight ? (hW / 3.f) : (-hW / 3.f);
+	nvgBeginPath(args.vg);
+	if (pointRight) {
+		nvgMoveTo(args.vg, center.x - hW + off, center.y - hH);
+		nvgLineTo(args.vg, center.x + hW + off, center.y);
+		nvgLineTo(args.vg, center.x - hW + off, center.y + hH);
+	}
+	else {
+		nvgMoveTo(args.vg, center.x + hW + off, center.y - hH);
+		nvgLineTo(args.vg, center.x - hW + off, center.y);
+		nvgLineTo(args.vg, center.x + hW + off, center.y + hH);
+	}
+	nvgClosePath(args.vg);
+	nvgFillColor(args.vg, color);
+	nvgFill(args.vg);
+}
+
+static void drawMenuGlyph(const Widget::DrawArgs& args, const Vec& center, float halfW, float dy, NVGcolor color) {
+	for (int i = 0; i < 3; ++i) {
+		const float y = center.y + (float(i) - 1.f) * dy;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x - halfW, y);
+		nvgLineTo(args.vg, center.x + halfW, y);
+		nvgStrokeWidth(args.vg, 1.2f);
+		nvgStrokeColor(args.vg, color);
+		nvgStroke(args.vg);
+	}
+}
+
 	static void drawLabel(const Widget::DrawArgs& args, float x, float y, int align, float size, NVGcolor color, const std::string& text) {
 		if (!APP || !APP->window || !APP->window->uiFont) {
 			return;
@@ -62,7 +94,7 @@ struct ChronomawSurfaceWidget : Widget {
 		double pendingSliderCommitTime = -1.0;
 
 		static constexpr int kTabCount = 7;
-		static constexpr int kMaxInspectorControls = 12;
+		static constexpr int kMaxInspectorControls = 14;
 		static constexpr int kWaveformCount = 11;
 		static constexpr double kCustomDoubleClickWindowSec = 0.24;
 		static constexpr double kSingleClickCommitDelaySec = 0.10;
@@ -77,6 +109,7 @@ struct ChronomawSurfaceWidget : Widget {
 		static constexpr int kControlSeedInc = 7;
 		static constexpr int kControlWavePrev = 8;
 		static constexpr int kControlWaveNext = 9;
+		static constexpr int kControlWaveMenu = 10;
 
 	struct InspectorControl {
 		int id = kControlNone;
@@ -132,17 +165,31 @@ struct ChronomawSurfaceWidget : Widget {
 		return math::Rect(uiRects.inspector.pos, Vec(uiRects.inspector.size.x, std::max(38.f, uiRects.inspector.size.y * 0.34f)));
 	}
 
-	int outputRowAt(const Vec& p) const {
-		if (!uiRects.overview.contains(p)) {
-			return -1;
-		}
+		int outputRowAt(const Vec& p) const {
+			if (!uiRects.overview.contains(p)) {
+				return -1;
+			}
 		const float rowH = uiRects.overview.size.y / float(chronomaw::kNumOutputs);
 		if (rowH <= 1.f) {
 			return -1;
 		}
 		const int row = int((p.y - uiRects.overview.pos.y) / rowH);
-		return clamp(row, 0, chronomaw::kNumOutputs - 1);
-	}
+			return clamp(row, 0, chronomaw::kNumOutputs - 1);
+		}
+
+		math::Rect overviewMuteRectForRow(int row) const {
+			const float rowH = uiRects.overview.size.y / float(chronomaw::kNumOutputs);
+			const math::Rect rowRect(
+				Vec(uiRects.overview.pos.x + 1.5f, uiRects.overview.pos.y + rowH * float(row) + 1.f),
+				Vec(uiRects.overview.size.x - 3.f, rowH - 1.8f)
+			);
+			const float h = std::max(7.f, rowRect.size.y - 2.f);
+			const float w = 24.f;
+			return math::Rect(
+				Vec(rowRect.pos.x + rowRect.size.x - w - 4.f, rowRect.pos.y + 0.5f * (rowRect.size.y - h)),
+				Vec(w, h)
+			);
+		}
 
 	int tabAt(const Vec& p, const math::Rect& inspectorRect) const {
 		const float tabStripH = 16.f;
@@ -286,6 +333,34 @@ struct ChronomawSurfaceWidget : Widget {
 			}
 		}
 
+		void openWaveformMenu(const math::Rect& anchorRect) {
+			if (!module) {
+				return;
+			}
+			const int outIdx = selectedOutput();
+			ui::Menu* menu = createMenu();
+			menu->box.pos = getAbsoluteOffset(Vec(anchorRect.pos.x, anchorRect.pos.y + anchorRect.size.y));
+			menu->addChild(createMenuLabel("Waveform"));
+			for (int mode = 0; mode < kWaveformCount; ++mode) {
+				menu->addChild(createCheckMenuItem(
+					waveformName(chronomaw::WaveformMode(mode)), "",
+					[=]() {
+						if (!module) {
+							return false;
+						}
+						const int current = clamp(int(module->state.live.outputs[size_t(outIdx)].waveform), 0, kWaveformCount - 1);
+						return current == mode;
+					},
+					[=]() {
+						if (!module) {
+							return;
+						}
+						module->state.live.outputs[size_t(outIdx)].waveform = chronomaw::WaveformMode(mode);
+					}
+				));
+			}
+		}
+
 		void resetControlToDefault(int id) {
 			chronomaw::OutputState* out = selectedOutputState();
 			if (!out) {
@@ -324,13 +399,21 @@ struct ChronomawSurfaceWidget : Widget {
 				return;
 			}
 
-		const Vec local = e.pos;
-		const int row = outputRowAt(local);
-		if (row >= 0) {
-			module->state.ui.selectedOutput = row;
-			module->params[Chronomaw::SELECTED_OUTPUT_PARAM].setValue(float(row + 1));
-			e.consume(this);
-			return;
+			const Vec local = e.pos;
+			const int row = outputRowAt(local);
+			if (row >= 0) {
+				if (module) {
+					const math::Rect muteRect = overviewMuteRectForRow(row);
+					if (muteRect.contains(local)) {
+						module->state.live.outputs[size_t(row)].muted = !module->state.live.outputs[size_t(row)].muted;
+						e.consume(this);
+						return;
+					}
+				}
+				module->state.ui.selectedOutput = row;
+				module->params[Chronomaw::SELECTED_OUTPUT_PARAM].setValue(float(row + 1));
+				e.consume(this);
+				return;
 		}
 
 		const math::Rect inspectorRect = inspectorRectForDensity();
@@ -369,9 +452,14 @@ struct ChronomawSurfaceWidget : Widget {
 				e.consume(this);
 				return;
 			}
-		applyControlClick(controlId);
-		e.consume(this);
-	}
+			if (controlId == kControlWaveMenu) {
+				openWaveformMenu(controlRect(kControlWaveMenu));
+				e.consume(this);
+				return;
+			}
+			applyControlClick(controlId);
+			e.consume(this);
+		}
 
 		void onDragMove(const event::DragMove& e) override {
 			if (!module || activeSliderId == kControlNone) {
@@ -632,25 +720,33 @@ struct ChronomawSurfaceWidget : Widget {
 				isSelected ? chronomawRgb(34, 68, 98, 210) : chronomawRgb(14, 24, 33, 168),
 				isSelected ? chronomawRgb(154, 212, 255, 232) : chronomawRgb(84, 118, 143, 174)
 			);
-			drawLabel(
-				args,
-				rowRect.pos.x + 5.f,
-				rowRect.pos.y + 0.5f * rowRect.size.y,
-				NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-				9.5f,
-				chronomawRgb(222, 238, 250, 240),
-				"Out " + std::to_string(i + 1)
-			);
-			drawLabel(
-				args,
-				rowRect.pos.x + rowRect.size.x - 6.f,
-				rowRect.pos.y + 0.5f * rowRect.size.y,
-				NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE,
-				8.4f,
-				chronomawRgb(184, 214, 236, 220),
-				(i == selected ? "SEL" : "--")
-			);
-		}
+				drawLabel(
+					args,
+					rowRect.pos.x + 5.f,
+					rowRect.pos.y + 0.5f * rowRect.size.y,
+					NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+					9.5f,
+					chronomawRgb(222, 238, 250, 240),
+					"Out " + std::to_string(i + 1)
+				);
+				const bool muted = module ? module->state.live.outputs[size_t(i)].muted : false;
+				const math::Rect muteRect = overviewMuteRectForRow(i);
+				drawRectFilled(
+					args,
+					muteRect,
+					muted ? chronomawRgb(72, 26, 30, 220) : chronomawRgb(24, 58, 38, 220),
+					muted ? chronomawRgb(214, 108, 112, 210) : chronomawRgb(132, 224, 164, 210)
+				);
+				drawLabel(
+					args,
+					muteRect.pos.x + 0.5f * muteRect.size.x,
+					muteRect.pos.y + 0.5f * muteRect.size.y,
+					NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE,
+					7.5f,
+					chronomawRgb(238, 246, 252, 242),
+					muted ? "MUTE" : "ON"
+				);
+			}
 		drawLabel(
 			args,
 			uiRects.overview.pos.x + 4.f,
@@ -702,9 +798,12 @@ struct ChronomawSurfaceWidget : Widget {
 		drawLabel(args, timelineRect.pos.x + 4.f, timelineRect.pos.y - 2.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 9.4f, chronomawRgb(180, 226, 251, 236), "Timeline");
 	}
 
-	void drawInspector(const DrawArgs& args, const math::Rect& inspectorRect) {
-		clearControls();
-		drawRectFilled(args, inspectorRect, chronomawRgb(10, 16, 22, 170), chronomawRgb(96, 136, 160, 184));
+		void drawInspector(const DrawArgs& args, const math::Rect& inspectorRect) {
+			clearControls();
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, inspectorRect.pos.x, inspectorRect.pos.y, inspectorRect.size.x, inspectorRect.size.y, 4.0f);
+			nvgFillColor(args.vg, chronomawRgb(10, 16, 22, 170));
+			nvgFill(args.vg);
 		const float tabStripH = 16.f;
 		const float tabW = inspectorRect.size.x / float(kTabCount);
 		const int tabSel = clamp(selectedTab(), 0, kTabCount - 1);
@@ -742,15 +841,35 @@ struct ChronomawSurfaceWidget : Widget {
 			}
 				else if (tabSel == 1) {
 					drawRectFilled(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
-					drawLabel(args, contentX + 3.f, y - 1.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 7.8f, chronomawRgb(182, 220, 240, 232), "Waveform");
-					drawLabel(args, contentX + contentW * 0.5f, y + 0.5f * rowH, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), waveformName(outState->waveform));
 					const float btnW = 12.f;
-					const math::Rect wavePrevRect(Vec(contentX + contentW - 2.f * btnW - 3.f, y + 1.f), Vec(btnW, rowH - 2.f));
-					const math::Rect waveNextRect(Vec(contentX + contentW - btnW - 1.5f, y + 1.f), Vec(btnW, rowH - 2.f));
-					drawToggle(args, wavePrevRect, "", false, kControlWavePrev);
-					drawToggle(args, waveNextRect, "", false, kControlWaveNext);
-					drawLabel(args, wavePrevRect.pos.x + 0.5f * wavePrevRect.size.x, wavePrevRect.pos.y + 0.5f * wavePrevRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), "<");
-					drawLabel(args, waveNextRect.pos.x + 0.5f * waveNextRect.size.x, waveNextRect.pos.y + 0.5f * waveNextRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), ">");
+					const float btnPad = 1.5f;
+					const math::Rect wavePrevRect(Vec(contentX + btnPad, y + 1.f), Vec(btnW, rowH - 2.f));
+					const math::Rect waveNextRect(Vec(contentX + btnPad + btnW + 1.5f, y + 1.f), Vec(btnW, rowH - 2.f));
+					const float menuIconX = contentX + contentW - 6.f;
+					const float menuLeft = waveNextRect.pos.x + waveNextRect.size.x + 3.f;
+					const float menuW = std::max(8.f, menuIconX - menuLeft - 2.f);
+					addControl(kControlWaveMenu, math::Rect(Vec(menuLeft, y), Vec(menuW, rowH)));
+					addControl(kControlWavePrev, wavePrevRect);
+					addControl(kControlWaveNext, waveNextRect);
+					drawLabel(args, contentX + 0.5f * contentW, y + 0.5f * rowH, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), std::string("Waveform: ") + waveformName(outState->waveform));
+					const auto drawCircleButton = [&](const math::Rect& r, bool right) {
+						const Vec c(r.pos.x + 0.5f * r.size.x, r.pos.y + 0.5f * r.size.y);
+						const float radius = std::max(2.2f, std::min(r.size.x, r.size.y) * 0.38f);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, c.x, c.y, radius);
+						nvgFillColor(args.vg, chronomawRgb(25, 34, 44, 220));
+						nvgFill(args.vg);
+						nvgBeginPath(args.vg);
+						nvgCircle(args.vg, c.x, c.y, radius);
+						nvgStrokeWidth(args.vg, 0.9f);
+						nvgStrokeColor(args.vg, chronomawRgb(108, 140, 168, 188));
+						nvgStroke(args.vg);
+						drawModeStepTriangle(args, c, radius * 0.44f, right, chronomawRgb(225, 232, 240, 244));
+					};
+					drawCircleButton(wavePrevRect, false);
+					drawCircleButton(waveNextRect, true);
+					const Vec menuIconCenter(menuIconX, y + 0.5f * rowH);
+					drawMenuGlyph(args, menuIconCenter, 2.0f, 1.8f, chronomawRgb(225, 232, 240, 240));
 					y += rowH + 3.f;
 					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->levelPct, 0.f, 100.f, "Level %", kControlLevel);
 					y += rowH + 3.f;
@@ -786,8 +905,7 @@ struct ChronomawSurfaceWidget : Widget {
 				);
 			}
 		}
-		drawLabel(args, inspectorRect.pos.x + 4.f, inspectorRect.pos.y - 2.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 9.4f, chronomawRgb(180, 226, 251, 236), "Inspector");
-	}
+		}
 
 	void draw(const DrawArgs& args) override {
 		if (!module) {
