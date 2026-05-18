@@ -10,7 +10,6 @@ struct Chronomaw : Module {
 		ACTIVE_BANK_PARAM,
 		LOAD_BANK_PARAM,
 		SAVE_BANK_PARAM,
-		RESET_ALL_PARAM,
 		SELECTED_OUTPUT_PARAM,
 		DENSITY_MODE_PARAM,
 		PARAMS_LEN
@@ -59,7 +58,6 @@ struct Chronomaw : Module {
 	dsp::SchmittTrigger runButtonEdge;
 	dsp::SchmittTrigger loadBankEdge;
 	dsp::SchmittTrigger saveBankEdge;
-	dsp::SchmittTrigger resetAllEdge;
 
 	Chronomaw();
 
@@ -74,4 +72,3 @@ struct ChronomawWidget : ModuleWidget {
 };
 
 extern Model* modelChronomaw;
-

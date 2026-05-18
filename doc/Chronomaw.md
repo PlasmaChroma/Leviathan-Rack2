@@ -204,7 +204,6 @@ Expose these directly on the panel:
 - Active bank.
 - Load bank.
 - Save bank.
-- Reset all.
 
 These are operating controls, not secondary settings. They should not require context-menu access.
 

@@ -6,6 +6,46 @@ Chronomaw v1 is approved for implementation as a clean-room, Rack-native timing 
 
 Chronomaw v1 does not claim exact Pamela's Pro Workout firmware parity. Exact parity remains a later golden-test target. Any behavior not explicitly frozen in this document must be implemented as a Chronomaw v1 approximation and marked in the relevant registry entry.
 
+## Current Status Snapshot
+
+Status note updated from current code scaffold. This section records implementation reality; the rest of the document remains target behavior.
+
+Implemented:
+
+- Module identity and integration are live: `Chronomaw` model exists and is registered.
+- Core constants are present in `ChronomawState.hpp`: `8` outputs, `64` banks, BPM `10-330`, output clamp `0-5 V`, external PPQN default `24`.
+- Rack surface v1 enums are present and wired (`ParamId`, `InputId`, `OutputId`, `LightId`).
+- Panel widget scaffold exists and reads SVG component anchors through `PanelSvgUtils` with fallback coordinates.
+- Bank save/load copies `bpm` and `outputs` between `LiveState` and selected `BankState`.
+- JSON schema root contains `schemaVersion`, `live`, `banks`, `ui`.
+- JSON now serializes and restores:
+  - `live`: bpm/running/activeBank/density plus full live `outputs`.
+  - `banks`: bpm plus full per-bank `outputs`.
+  - `ui`: selected output/tab.
+- Basic engine loop exists with run/reset behavior and per-output mute/level/offset/invert clamp.
+
+Partial:
+
+- Engine timing is scaffold-level and does not yet implement the frozen Chronomaw DSP order.
+- External clock support is minimal (clock input connectivity currently drives sync light; no PPQN lock model yet).
+- Output generation is currently a shared gate-like placeholder, not per-output modifier/shape/probability/euclid/cross/quant behavior.
+
+Missing:
+
+- Modifier/shape/cross/quantizer registries beyond minimal enum stubs.
+- Deterministic random event boundary semantics and seed reset handling.
+- Full source registry and assignable CV plumbing into output parameters.
+- Baseline custom editor widgets: eight-output overview, timeline/event strip, selected-output inspector, tab bar, and custom value controls.
+- Phase-1 fixture tests listed in this plan (`chronomaw_*_spec.cpp` set).
+
+Immediate next steps:
+
+1. Implement `chronomaw_serialization_spec.cpp` to lock current JSON behavior (`live/banks/ui` and output-array round trip).
+2. Implement `chronomaw_bank_spec.cpp` to lock save/load copy semantics for bpm and outputs.
+3. Implement the passive custom UI scaffold: overview, timeline/event strip, inspector chrome, selected-output highlighting, and density layouts.
+4. Replace placeholder gate engine with per-output phase/divider scaffold so outputs are no longer identical.
+5. Introduce minimal quantizer/cross ordering harness to start aligning with frozen DSP order.
+
 ## Module Identity
 
 Module display name: `Chronomaw`
@@ -95,7 +135,6 @@ enum ParamId {
     ACTIVE_BANK_PARAM,
     LOAD_BANK_PARAM,
     SAVE_BANK_PARAM,
-    RESET_ALL_PARAM,
     SELECTED_OUTPUT_PARAM,
     DENSITY_MODE_PARAM,
     PARAMS_LEN
@@ -141,7 +180,7 @@ enum LightId {
 
 The four `CV_*` inputs are built into the main module for Phase 1 assignable CV. AXON-style expansion remains deferred and adds more sources later through the source registry.
 
-`LOAD_BANK_PARAM`, `SAVE_BANK_PARAM`, and `RESET_ALL_PARAM` are momentary action params. `ACTIVE_BANK_PARAM`, `SELECTED_OUTPUT_PARAM`, and `DENSITY_MODE_PARAM` are UI-facing state selectors. Primary per-output editing is owned by the custom editor/state model rather than by hundreds of Rack params in Phase 1.
+`LOAD_BANK_PARAM` and `SAVE_BANK_PARAM` are momentary action params. `ACTIVE_BANK_PARAM`, `SELECTED_OUTPUT_PARAM`, and `DENSITY_MODE_PARAM` are UI-facing state selectors. Primary per-output editing is owned by the custom editor/state model rather than by hundreds of Rack params in Phase 1.
 
 ## Panel Layout V1
 
@@ -152,7 +191,7 @@ Physical component placement:
 - Left rail: vertically stack `CLK_INPUT`, `RUN_INPUT`, `RESET_INPUT`, then `CV_1_INPUT` through `CV_4_INPUT`.
 - Right rail: vertically stack `OUT_1_OUTPUT` through `OUT_8_OUTPUT`.
 - Output activity lights sit immediately inside the right output rail, one light per output.
-- The top center global bar holds run, BPM, active bank, load/save/reset, selected output, density mode, run light, and sync light.
+- The top center global bar holds run, BPM, active bank, load/save, selected output, density mode, run light, and sync light.
 - The center column below the global bar is reserved for custom UI widgets rather than jacks.
 
 SVG anchor rectangles:
@@ -165,6 +204,142 @@ INSPECTOR_RECT: lower-right-center selected-output editor.
 ```
 
 The `components` layer in `res/chronomaw.svg` is the source of truth for Phase 1 component anchors. It may be hidden visually; `ChronomawWidget` must continue to resolve positions by SVG element ID through `PanelSvgUtils` and use matching C++ fallback positions.
+
+## Baseline Custom Interface V1
+
+Chronomaw's primary interface is not a Pam-style one-knob menu. Phase 1 must establish a direct visual editor where the user can monitor all eight outputs and edit the selected output without long-presses, nested menus, or context-menu-only primary controls.
+
+The baseline interface has four persistent surfaces:
+
+- `ChronomawGlobalBarWidget`: transport, BPM, sync state, active bank, load/save/reset actions, selected output, and density mode.
+- `ChronomawOverviewWidget`: eight always-visible output rows for selection and status.
+- `ChronomawTimelineWidget`: shared all-output timing view or compact event strip, depending on density mode.
+- `ChronomawInspectorWidget`: selected-output editor with fixed tabs and exact value controls.
+
+These widgets may initially live in `ChronomawUiWidgets.hpp` / `ChronomawWidget.cpp`; split them into separate files only when the implementation becomes large enough to justify it.
+
+### Better-Than-Pam Contract
+
+The interface is considered baseline-usable only when these tasks do not require a context menu:
+
+- Select any of the eight outputs.
+- See whether every output is muted, simple, probabilistic, looped, quantized, cross-modulated, or CV-controlled.
+- Edit the selected output's mute, level, offset, phase, probability, invert, and seed/reset behavior.
+- Change BPM, run state, active bank, selected output, and density mode.
+- Save or load the active bank with clear visual feedback about the selected bank.
+- Switch between Monitor and Edit density without losing selected output, selected tab, or timeline position.
+
+Primary editing target: common edits should be reachable in at most two user actions after the module is visible:
+
+- Select output row, then edit visible inspector control.
+- Select output row, then select visible tab.
+- Select tab, then edit visible control.
+
+No Phase 1 primary workflow may depend on long-press, hidden encoder state, or a Rack context-menu item.
+
+### Output Overview V1
+
+The overview is an eight-row dashboard. It must remain visible in Monitor and Edit modes.
+
+Each row shows:
+
+- Output number and selected-row highlight.
+- Mute state.
+- Current modifier label or placeholder (`/1` until modifier registry is active).
+- Shape label or icon (`Gate` until shape registry is active).
+- Tiny live preview or simple activity trace.
+- Badges for probability, Euclidean, loop, quantizer, cross, and CV assignment.
+
+Badge rules:
+
+- Enabled badge: visible and high-contrast.
+- Disabled but available badge: dim.
+- Unsupported in current scaffold: hidden or marked as `--`; do not fake active features.
+- Conditional unavailable parameter: visible in the inspector but disabled with a short reason.
+
+Clicking any row updates `UiState.selectedOutput` and the `SELECTED_OUTPUT_PARAM` facing selector. The selected output must be highlighted consistently in the overview, timeline, and inspector.
+
+### Timeline V1
+
+The timeline is a timing/event surface, not a generic oscilloscope. It shows all outputs in a shared transport frame.
+
+Phase 1 minimum:
+
+- Eight lanes matching outputs `1-8`.
+- A clear `now` cursor.
+- Recent gate/activity trace for each lane from engine history buffers.
+- Selected-output emphasis without hiding other lanes.
+- Mute overlay showing the output is forced to `0 V` while internal phase continues.
+- Compact mode that remains visible in Edit density.
+
+Phase 1 may defer full future prediction, probability previews, Euclidean hit/rest rendering, and cross-dependency markers until the engine exposes stable snapshot data. When prediction is missing, the widget must present itself as history/current-state only rather than implying exact future knowledge.
+
+The timeline reads copied/snapshotted state. It must not advance transport, RNG state, event counters, bank state, or audio-thread-owned engine state.
+
+### Inspector V1
+
+The inspector edits the selected output through fixed tabs:
+
+- `Timing`
+- `Shape`
+- `Pattern`
+- `Cross`
+- `CV`
+- `Quant`
+- `Store`
+
+Initial scaffold controls are allowed to be concentrated in the tabs where they make sense using the fields already present in `OutputState`:
+
+- `Timing`: phase.
+- `Shape`: level, offset, invert.
+- `Pattern`: probability, random seed, output seed reset action.
+- `Store`: copy/paste/reset selected output, save/load bank actions if not already provided in the global bar.
+
+Tabs for unavailable registries still exist but render disabled controls with short reasons, for example `Cross registry not implemented yet` or `CV assignment not implemented yet`. Do not remove the tabs; visible disabled structure is better than hidden capability.
+
+### Custom Value Controls
+
+Every editable numeric custom control must support:
+
+- Vertical drag using Rack-style fine adjustment behavior where practical.
+- Mouse wheel or step adjustment.
+- Double-click reset to the documented default.
+- Exact value entry through a small inline editor or Rack-style right-click value action before public release.
+- Tooltip or local label containing units and range.
+
+Controls write through validated state-update functions. They must clamp ranges the same way serialization clamps ranges.
+
+### Density Modes V1
+
+`DENSITY_MODE_PARAM` selects layout density only. It must not alter engine state.
+
+Monitor mode:
+
+- Global bar visible.
+- Overview visible.
+- Timeline receives the largest center area.
+- Inspector collapses to a compact selected-output summary.
+
+Edit mode:
+
+- Global bar visible.
+- Overview visible.
+- Timeline remains as a compact event strip.
+- Inspector receives the largest center area.
+
+Focus mode is optional in Phase 1. If implemented, it is for deep selected-output editing or debugging and must remain reversible without changing engine state.
+
+### UI Implementation Order
+
+Implement the custom interface in this order:
+
+1. Passive draw: render global bar, overview rows, timeline lanes, inspector frame, and tabs from current state without editing behavior.
+2. Selection and density: wire output row selection, selected-output highlighting, and Monitor/Edit layout changes.
+3. Existing-state editing: add inspector controls for `mute`, `levelPct`, `offsetPct`, `phasePct`, `probabilityPct`, `invert`, and `randomSeed`.
+4. Timeline history: draw current/recent output activity from engine history buffers or a lightweight UI snapshot.
+5. Registry-driven editing: replace placeholders with modifier, shape, cross, CV, and quantizer controls as those registries become real.
+
+The first implementation milestone is not visual polish. It is proving that the module can be operated from the custom surface without falling back to a hidden menu model.
 
 ## State Representation Contract
 
@@ -419,5 +594,8 @@ Phase 1 is complete when:
 - Cross processing occurs before quantization.
 - `Level = 0` and `Offset > 0` produces constant voltage.
 - Utility and triggered modifiers expose reduced parameter sets through the registry.
-- UI shell supports global bar, overview, selected-output inspector, and basic timeline.
+- UI shell supports global bar, overview, selected-output inspector, and basic timeline/event strip.
+- Overview shows all eight outputs and supports direct selected-output changes.
+- Inspector edits the existing Phase 1 `OutputState` fields without context-menu-only workflows.
+- Timeline/event strip remains visible in both Monitor and Edit density modes.
 - Monitor/Edit density modes do not alter engine state.
