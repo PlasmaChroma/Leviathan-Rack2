@@ -229,6 +229,14 @@ The interface is considered baseline-usable only when these tasks do not require
 - Save or load the active bank with clear visual feedback about the selected bank.
 - Switch between Monitor and Edit density without losing selected output, selected tab, or timeline position.
 
+Global tempo visibility requirement:
+
+- The global bar must include a dedicated BPM readout text field, not just a BPM knob.
+- Readout format for Phase 1: `BPM xxx.x` (one decimal place).
+- Readout must update in real time when BPM changes from panel edits, bank load, or external sync state updates.
+- Readout should include a compact tempo-source badge: `INT` for internal tempo and `EXT` for externally clocked tempo.
+- When external clock is connected and driving transport, the BPM readout area must visibly indicate sync-locked vs unlocked state.
+
 Primary editing target: common edits should be reachable in at most two user actions after the module is visible:
 
 - Select output row, then edit visible inspector control.
@@ -595,6 +603,7 @@ Phase 1 is complete when:
 - `Level = 0` and `Offset > 0` produces constant voltage.
 - Utility and triggered modifiers expose reduced parameter sets through the registry.
 - UI shell supports global bar, overview, selected-output inspector, and basic timeline/event strip.
+- Global bar includes a dedicated BPM readout (`BPM xxx.x`) with source/status indication (`INT`/`EXT`, lock state).
 - Overview shows all eight outputs and supports direct selected-output changes.
 - Inspector edits the existing Phase 1 `OutputState` fields without context-menu-only workflows.
 - Timeline/event strip remains visible in both Monitor and Edit density modes.

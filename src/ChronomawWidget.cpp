@@ -42,8 +42,27 @@ static void drawLabel(const Widget::DrawArgs& args, float x, float y, int align,
 struct ChronomawSurfaceWidget : Widget {
 	Chronomaw* module = nullptr;
 	ChronomawUiRects uiRects;
+	int activeSliderId = -1;
+	float activeSliderX = 0.f;
 
 	static constexpr int kTabCount = 7;
+	static constexpr int kMaxInspectorControls = 8;
+	static constexpr int kControlNone = -1;
+	static constexpr int kControlPhase = 0;
+	static constexpr int kControlLevel = 1;
+	static constexpr int kControlOffset = 2;
+	static constexpr int kControlProbability = 3;
+	static constexpr int kControlMute = 4;
+	static constexpr int kControlInvert = 5;
+	static constexpr int kControlSeedDec = 6;
+	static constexpr int kControlSeedInc = 7;
+
+	struct InspectorControl {
+		int id = kControlNone;
+		math::Rect rect;
+	};
+	std::array<InspectorControl, kMaxInspectorControls> controls {};
+	int controlCount = 0;
 
 	static const char* tabName(int index) {
 		static const char* const kNames[kTabCount] = {"Timing", "Shape", "Pattern", "Cross", "CV", "Quant", "Store"};
@@ -123,8 +142,119 @@ struct ChronomawSurfaceWidget : Widget {
 		return clamp(int((p.x - inspectorRect.pos.x) / tabW), 0, kTabCount - 1);
 	}
 
+	chronomaw::OutputState* selectedOutputState() const {
+		if (!module) {
+			return nullptr;
+		}
+		const int out = selectedOutput();
+		return &module->state.live.outputs[size_t(out)];
+	}
+
+	void clearControls() {
+		controlCount = 0;
+		for (int i = 0; i < kMaxInspectorControls; ++i) {
+			controls[size_t(i)] = InspectorControl{};
+		}
+	}
+
+	void addControl(int id, const math::Rect& rect) {
+		if (controlCount >= kMaxInspectorControls) {
+			return;
+		}
+		controls[size_t(controlCount)].id = id;
+		controls[size_t(controlCount)].rect = rect;
+		++controlCount;
+	}
+
+	int controlAt(const Vec& p) const {
+		for (int i = 0; i < controlCount; ++i) {
+			if (controls[size_t(i)].rect.contains(p)) {
+				return controls[size_t(i)].id;
+			}
+		}
+		return kControlNone;
+	}
+
+	math::Rect controlRect(int id) const {
+		for (int i = 0; i < controlCount; ++i) {
+			if (controls[size_t(i)].id == id) {
+				return controls[size_t(i)].rect;
+			}
+		}
+		return math::Rect();
+	}
+
+	static float sliderValueFromPoint(const math::Rect& rect, float x, float minV, float maxV) {
+		if (rect.size.x <= 4.f) {
+			return minV;
+		}
+		const float t = clamp((x - rect.pos.x) / rect.size.x, 0.f, 1.f);
+		return minV + t * (maxV - minV);
+	}
+
+	void applySliderFromPointer(int id, const Vec& local) {
+		chronomaw::OutputState* out = selectedOutputState();
+		if (!out) {
+			return;
+		}
+		const math::Rect rect = controlRect(id);
+		if (rect.size.x <= 0.f || rect.size.y <= 0.f) {
+			return;
+		}
+		if (id == kControlPhase) {
+			out->phasePct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+			return;
+		}
+		if (id == kControlLevel) {
+			out->levelPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
+			return;
+		}
+		if (id == kControlOffset) {
+			out->offsetPct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
+			return;
+		}
+		if (id == kControlProbability) {
+			out->probabilityPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
+			return;
+		}
+	}
+
+	void applyControlClick(int id) {
+		chronomaw::OutputState* out = selectedOutputState();
+		if (!out) {
+			return;
+		}
+		if (id == kControlMute) {
+			out->muted = !out->muted;
+			return;
+		}
+		if (id == kControlInvert) {
+			out->invert = !out->invert;
+			return;
+		}
+		if (id == kControlSeedDec) {
+			if (out->randomSeed > 0u) {
+				--out->randomSeed;
+			}
+			return;
+		}
+		if (id == kControlSeedInc) {
+			++out->randomSeed;
+		}
+	}
+
+	Vec currentLocalMousePos() const {
+		if (!APP || !APP->scene || !APP->scene->rack || !parent) {
+			return Vec();
+		}
+		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
+	}
+
 	void onButton(const event::Button& e) override {
 		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+				activeSliderId = kControlNone;
+			}
 			return;
 		}
 
@@ -142,6 +272,211 @@ struct ChronomawSurfaceWidget : Widget {
 		if (tab >= 0) {
 			module->state.ui.selectedTab = tab;
 			e.consume(this);
+			return;
+		}
+
+		const int controlId = controlAt(local);
+		if (controlId == kControlNone) {
+			return;
+		}
+		if (controlId == kControlPhase || controlId == kControlLevel || controlId == kControlOffset || controlId == kControlProbability) {
+			activeSliderId = controlId;
+			activeSliderX = local.x;
+			applySliderFromPointer(controlId, local);
+			e.consume(this);
+			return;
+		}
+		applyControlClick(controlId);
+		e.consume(this);
+	}
+
+	void onDragMove(const event::DragMove& e) override {
+		if (!module || activeSliderId == kControlNone) {
+			return;
+		}
+		const math::Rect rect = controlRect(activeSliderId);
+		activeSliderX = clamp(currentLocalMousePos().x, rect.pos.x, rect.pos.x + rect.size.x);
+		applySliderFromPointer(activeSliderId, Vec(activeSliderX, rect.pos.y + 0.5f * rect.size.y));
+		e.consume(this);
+	}
+
+	void onHoverScroll(const event::HoverScroll& e) override {
+		if (!module) {
+			return;
+		}
+		const int controlId = controlAt(e.pos);
+		chronomaw::OutputState* out = selectedOutputState();
+		if (!out || controlId == kControlNone) {
+			return;
+		}
+		const float delta = e.scrollDelta.y;
+		if (controlId == kControlPhase) {
+			out->phasePct = clamp(out->phasePct + delta, -100.f, 100.f);
+			e.consume(this);
+			return;
+		}
+		if (controlId == kControlLevel) {
+			out->levelPct = clamp(out->levelPct + delta, 0.f, 100.f);
+			e.consume(this);
+			return;
+		}
+		if (controlId == kControlOffset) {
+			out->offsetPct = clamp(out->offsetPct + delta, -100.f, 100.f);
+			e.consume(this);
+			return;
+		}
+		if (controlId == kControlProbability) {
+			out->probabilityPct = clamp(out->probabilityPct + delta, 0.f, 100.f);
+			e.consume(this);
+			return;
+		}
+		if (controlId == kControlSeedInc || controlId == kControlSeedDec) {
+			const int step = (delta > 0.f) ? 1 : -1;
+			if (step < 0 && out->randomSeed > 0u) {
+				--out->randomSeed;
+			}
+			if (step > 0) {
+				++out->randomSeed;
+			}
+			e.consume(this);
+		}
+	}
+
+	void drawSlider(const DrawArgs& args, const math::Rect& rect, float value, float minV, float maxV, const std::string& label, int controlId) {
+		drawRectFilled(args, rect, chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
+		float t = (maxV <= minV) ? 0.f : clamp((value - minV) / (maxV - minV), 0.f, 1.f);
+		math::Rect fillRect(rect.pos, Vec(rect.size.x * t, rect.size.y));
+		drawRectFilled(args, fillRect, chronomawRgb(54, 112, 156, 220), chronomawRgb(54, 112, 156, 220));
+		drawLabel(args, rect.pos.x + 3.f, rect.pos.y - 1.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 7.8f, chronomawRgb(182, 220, 240, 232), label);
+		drawLabel(args, rect.pos.x + rect.size.x - 3.f, rect.pos.y + 0.5f * rect.size.y, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), string::f("%.1f", value));
+		addControl(controlId, rect);
+	}
+
+	void drawToggle(const DrawArgs& args, const math::Rect& rect, const std::string& label, bool on, int controlId) {
+		drawRectFilled(args, rect, on ? chronomawRgb(45, 97, 67, 220) : chronomawRgb(38, 34, 40, 210), on ? chronomawRgb(147, 228, 172, 204) : chronomawRgb(120, 112, 124, 184));
+		drawLabel(args, rect.pos.x + 4.f, rect.pos.y + 0.5f * rect.size.y, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, 8.0f, chronomawRgb(228, 240, 248, 242), label);
+		drawLabel(args, rect.pos.x + rect.size.x - 4.f, rect.pos.y + 0.5f * rect.size.y, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, 8.0f, chronomawRgb(236, 252, 255, 244), on ? "ON" : "OFF");
+		addControl(controlId, rect);
+	}
+
+	void drawTrace(const DrawArgs& args, const math::Rect& rect, int channel, bool internalTrace, NVGcolor color, bool useTimelineHistory) {
+		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 2.f || rect.size.y <= 2.f) {
+			return;
+		}
+		const int hist = useTimelineHistory ? Chronomaw::kTimelineHistorySize : Chronomaw::kPreviewHistorySize;
+		const int writePos = useTimelineHistory ? module->timelineWritePos.load(std::memory_order_relaxed) : module->previewWritePos.load(std::memory_order_relaxed);
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < hist; ++i) {
+			const int idx = (writePos + i) % hist;
+			float v = 0.f;
+			if (internalTrace && useTimelineHistory) {
+				v = module->timelineInternalHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+			}
+			else if (internalTrace) {
+				v = module->previewInternalHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+			}
+			else if (useTimelineHistory) {
+				v = module->timelineOutputHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+			}
+			else {
+				v = module->previewOutputHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+			}
+			v = clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV);
+			const float t = (hist <= 1) ? 0.f : (float(i) / float(hist - 1));
+			const float x = rect.pos.x + t * rect.size.x;
+			const float yNorm = (chronomaw::kOutputMaxV <= chronomaw::kOutputMinV) ? 0.f : ((v - chronomaw::kOutputMinV) / (chronomaw::kOutputMaxV - chronomaw::kOutputMinV));
+			const float y = rect.pos.y + (1.f - yNorm) * rect.size.y;
+			if (i == 0) {
+				nvgMoveTo(args.vg, x, y);
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+		}
+		nvgStrokeWidth(args.vg, internalTrace ? 0.9f : 1.15f);
+		nvgStrokeColor(args.vg, color);
+		nvgStroke(args.vg);
+	}
+
+	void drawTimelineLaneTrace(const DrawArgs& args, const math::Rect& rect, int channel, bool selected, float nowFrac) {
+		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 3.f || rect.size.y <= 2.f) {
+			return;
+		}
+		const int hist = Chronomaw::kTimelineHistorySize;
+		const int writePos = module->timelineWritePos.load(std::memory_order_relaxed);
+		const int latestIdx = (writePos - 1 + hist) % hist;
+		const float nowX = rect.pos.x + clamp(nowFrac, 0.05f, 0.95f) * rect.size.x;
+		const float historyWidth = std::max(4.f, nowX - rect.pos.x);
+		const float futureWidth = std::max(0.f, rect.pos.x + rect.size.x - nowX);
+		const float dtSec = Chronomaw::kTimelineCaptureIntervalSec;
+		const float historyCapSec = float(Chronomaw::kTimelineHistorySize - 1) * dtSec;
+		const float futureCapSec = float(Chronomaw::kTimelineFutureSize) * dtSec;
+		// Enforce one time scale (seconds-per-pixel) across the full lane.
+		const float secPerPixel = std::min(historyCapSec / historyWidth, (futureWidth > 0.f) ? (futureCapSec / futureWidth) : (historyCapSec / historyWidth));
+
+		auto voltsToY = [&](float v) {
+			const float vv = clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV);
+			const float yn = (chronomaw::kOutputMaxV <= chronomaw::kOutputMinV) ? 0.f : ((vv - chronomaw::kOutputMinV) / (chronomaw::kOutputMaxV - chronomaw::kOutputMinV));
+			return rect.pos.y + (1.f - yn) * rect.size.y;
+		};
+		auto historyValueAtAgeSteps = [&](float ageStepsFloat) {
+			const float clampedAge = clamp(ageStepsFloat, 0.f, float(Chronomaw::kTimelineHistorySize - 1));
+			const int age0 = int(std::floor(clampedAge));
+			const int age1 = std::min(age0 + 1, Chronomaw::kTimelineHistorySize - 1);
+			const float frac = clampedAge - float(age0);
+			const int idx0 = (latestIdx - age0 + hist) % hist;
+			const int idx1 = (latestIdx - age1 + hist) % hist;
+			const float v0 = module->timelineOutputHistory[size_t(channel)][size_t(idx0)].load(std::memory_order_relaxed);
+			const float v1 = module->timelineOutputHistory[size_t(channel)][size_t(idx1)].load(std::memory_order_relaxed);
+			return v0 + (v1 - v0) * frac;
+		};
+		auto futureValueAtSteps = [&](float futureStepsFloat) {
+			const float clampedStep = clamp(futureStepsFloat, 0.f, float(Chronomaw::kTimelineFutureSize - 1));
+			const int s0 = int(std::floor(clampedStep));
+			const int s1 = std::min(s0 + 1, Chronomaw::kTimelineFutureSize - 1);
+			const float frac = clampedStep - float(s0);
+			const float v0 = module->timelineFutureOutput[size_t(channel)][size_t(s0)].load(std::memory_order_relaxed);
+			const float v1 = module->timelineFutureOutput[size_t(channel)][size_t(s1)].load(std::memory_order_relaxed);
+			return v0 + (v1 - v0) * frac;
+		};
+
+		const int visibleCount = std::max(8, int(historyWidth));
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < visibleCount; ++i) {
+			const float t = (visibleCount <= 1) ? 0.f : (float(i) / float(visibleCount - 1));
+			const float x = rect.pos.x + t * historyWidth;
+			const float ageSec = (historyWidth - (x - rect.pos.x)) * secPerPixel;
+			const float ageStepsFloat = ageSec / dtSec;
+			const float v = historyValueAtAgeSteps(ageStepsFloat);
+			const float y = voltsToY(v);
+			if (i == 0) {
+				nvgMoveTo(args.vg, x, y);
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+		}
+		nvgStrokeWidth(args.vg, selected ? 1.35f : 1.0f);
+		nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+		nvgStroke(args.vg);
+
+		// Draw deterministic future projection to the right of "now".
+		if (futureWidth > 0.f) {
+			nvgBeginPath(args.vg);
+			const float latestV = module->timelineOutputHistory[size_t(channel)][size_t(latestIdx)].load(std::memory_order_relaxed);
+			nvgMoveTo(args.vg, nowX, voltsToY(latestV));
+			const int futureCount = std::max(8, int(futureWidth));
+			for (int i = 0; i < futureCount; ++i) {
+				const float t = (futureCount <= 1) ? 1.f : float(i + 1) / float(futureCount);
+				const float x = nowX + t * futureWidth;
+				const float futureSec = t * futureWidth * secPerPixel;
+				const float futureStepFloat = std::max(0.f, (futureSec / dtSec) - 1.f);
+				const float v = futureValueAtSteps(futureStepFloat);
+				nvgLineTo(args.vg, x, voltsToY(v));
+			}
+			nvgStrokeWidth(args.vg, selected ? 1.0f : 0.85f);
+			nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+			nvgStroke(args.vg);
 		}
 	}
 
@@ -194,6 +529,17 @@ struct ChronomawSurfaceWidget : Widget {
 	void drawTimeline(const DrawArgs& args, const math::Rect& timelineRect) {
 		drawRectFilled(args, timelineRect, chronomawRgb(9, 17, 28, 156), chronomawRgb(99, 139, 170, 186));
 		const float laneH = timelineRect.size.y / float(chronomaw::kNumOutputs);
+		const int selected = selectedOutput();
+		const float nowFrac = 0.28f;
+		for (int lane = 0; lane < chronomaw::kNumOutputs; ++lane) {
+			const float y0 = timelineRect.pos.y + laneH * float(lane);
+			const math::Rect laneRect(
+				Vec(timelineRect.pos.x + 2.f, y0 + 1.3f),
+				Vec(timelineRect.size.x - 4.f, std::max(2.f, laneH - 2.6f))
+			);
+			const bool isSelected = (lane == selected);
+			drawTimelineLaneTrace(args, laneRect, lane, isSelected, nowFrac);
+		}
 		for (int i = 1; i < chronomaw::kNumOutputs; ++i) {
 			const float y = timelineRect.pos.y + laneH * float(i);
 			nvgBeginPath(args.vg);
@@ -203,18 +549,25 @@ struct ChronomawSurfaceWidget : Widget {
 			nvgStrokeColor(args.vg, chronomawRgb(74, 102, 128, 156));
 			nvgStroke(args.vg);
 		}
-		const float nowX = timelineRect.pos.x + timelineRect.size.x * 0.28f;
+		const float nowX = timelineRect.pos.x + timelineRect.size.x * nowFrac;
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
 		nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
-		nvgStrokeWidth(args.vg, 1.7f);
-		nvgStrokeColor(args.vg, chronomawRgb(236, 252, 255, 238));
+		// Match Bifurx curve-line colors and two-pass stroke treatment.
+		nvgStrokeWidth(args.vg, 2.8f);
+		nvgStrokeColor(args.vg, chronomawRgb(6, 8, 12, 210));
 		nvgStroke(args.vg);
-		drawLabel(args, nowX + 2.6f, timelineRect.pos.y + 1.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, 8.0f, chronomawRgb(232, 247, 255, 220), "now");
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, nowX, timelineRect.pos.y + 1.2f);
+		nvgLineTo(args.vg, nowX, timelineRect.pos.y + timelineRect.size.y - 1.2f);
+		nvgStrokeWidth(args.vg, 1.5f);
+		nvgStrokeColor(args.vg, chronomawRgb(249, 236, 190, 248));
+		nvgStroke(args.vg);
 		drawLabel(args, timelineRect.pos.x + 4.f, timelineRect.pos.y - 2.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 9.4f, chronomawRgb(180, 226, 251, 236), "Timeline");
 	}
 
 	void drawInspector(const DrawArgs& args, const math::Rect& inspectorRect) {
+		clearControls();
 		drawRectFilled(args, inspectorRect, chronomawRgb(10, 16, 22, 170), chronomawRgb(96, 136, 160, 184));
 		const float tabStripH = 16.f;
 		const float tabW = inspectorRect.size.x / float(kTabCount);
@@ -241,34 +594,51 @@ struct ChronomawSurfaceWidget : Widget {
 				tabName(i)
 			);
 		}
-		const int out = selectedOutput() + 1;
-		drawLabel(
-			args,
-			inspectorRect.pos.x + 5.f,
-			inspectorRect.pos.y + tabStripH + 10.f,
-			NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-			10.2f,
-			chronomawRgb(230, 242, 255, 240),
-			"Output " + std::to_string(out)
-		);
-		drawLabel(
-			args,
-			inspectorRect.pos.x + 5.f,
-			inspectorRect.pos.y + tabStripH + 24.f,
-			NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-			8.6f,
-			chronomawRgb(176, 205, 228, 230),
-			"Phase 1 scaffold"
-		);
-		drawLabel(
-			args,
-			inspectorRect.pos.x + 5.f,
-			inspectorRect.pos.y + tabStripH + 36.f,
-			NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-			8.6f,
-			chronomawRgb(154, 186, 209, 225),
-			"Direct row+tab editing path"
-		);
+		chronomaw::OutputState* outState = selectedOutputState();
+
+		const float contentX = inspectorRect.pos.x + 4.f;
+		const float contentW = inspectorRect.size.x - 8.f;
+		const float rowH = 10.0f;
+		float y = inspectorRect.pos.y + tabStripH + 12.f;
+		if (outState) {
+			if (tabSel == 0) {
+				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->phasePct, -100.f, 100.f, "Phase %", kControlPhase);
+			}
+			else if (tabSel == 1) {
+				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->levelPct, 0.f, 100.f, "Level %", kControlLevel);
+				y += rowH + 3.f;
+				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->offsetPct, -100.f, 100.f, "Offset %", kControlOffset);
+				y += rowH + 3.f;
+				drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Invert", outState->invert, kControlInvert);
+				y += rowH + 3.f;
+				drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Mute", outState->muted, kControlMute);
+			}
+			else if (tabSel == 2) {
+				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->probabilityPct, 0.f, 100.f, "Probability %", kControlProbability);
+				y += rowH + 3.f;
+				drawRectFilled(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
+				drawLabel(args, contentX + 3.f, y - 1.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 7.8f, chronomawRgb(182, 220, 240, 232), "Seed");
+				drawLabel(args, contentX + contentW * 0.5f, y + 0.5f * rowH, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), std::to_string(outState->randomSeed));
+				const float btnW = 12.f;
+				const math::Rect decRect(Vec(contentX + contentW - 2.f * btnW - 3.f, y + 1.f), Vec(btnW, rowH - 2.f));
+				const math::Rect incRect(Vec(contentX + contentW - btnW - 1.5f, y + 1.f), Vec(btnW, rowH - 2.f));
+				drawToggle(args, decRect, "", false, kControlSeedDec);
+				drawToggle(args, incRect, "", false, kControlSeedInc);
+				drawLabel(args, decRect.pos.x + 0.5f * decRect.size.x, decRect.pos.y + 0.5f * decRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), "-");
+				drawLabel(args, incRect.pos.x + 0.5f * incRect.size.x, incRect.pos.y + 0.5f * incRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), "+");
+			}
+			else {
+				drawLabel(
+					args,
+					inspectorRect.pos.x + 5.f,
+					inspectorRect.pos.y + tabStripH + 24.f,
+					NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+					8.4f,
+					chronomawRgb(176, 205, 228, 230),
+					"Registry not implemented yet"
+				);
+			}
+		}
 		drawLabel(args, inspectorRect.pos.x + 4.f, inspectorRect.pos.y - 2.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 9.4f, chronomawRgb(180, 226, 251, 236), "Inspector");
 	}
 

@@ -2,8 +2,14 @@
 
 #include "ChronomawEngine.hpp"
 #include "plugin.hpp"
+#include <atomic>
 
 struct Chronomaw : Module {
+	static constexpr int kPreviewHistorySize = 96;
+	static constexpr int kTimelineHistorySize = 120;
+	static constexpr int kTimelineFutureSize = 120;
+	static constexpr float kTimelineCaptureIntervalSec = 0.05f;
+
 	enum ParamId {
 		RUN_PARAM,
 		BPM_PARAM,
@@ -55,6 +61,18 @@ struct Chronomaw : Module {
 	chronomaw::ModuleState state;
 	chronomaw::Engine engine;
 	chronomaw::FrameOutputs frameOut;
+	std::array<std::array<std::atomic<float>, kPreviewHistorySize>, chronomaw::kNumOutputs> previewInternalHistory {};
+	std::array<std::array<std::atomic<float>, kPreviewHistorySize>, chronomaw::kNumOutputs> previewOutputHistory {};
+	std::atomic<int> previewWritePos {0};
+	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineInternalHistory {};
+	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineOutputHistory {};
+	std::array<std::array<std::atomic<float>, kTimelineFutureSize>, chronomaw::kNumOutputs> timelineFutureOutput {};
+	std::atomic<int> timelineWritePos {0};
+	std::atomic<float> timelinePhaseBeats {0.f};
+	std::atomic<float> timelineBpm {chronomaw::kDefaultBpm};
+	std::atomic<bool> timelineRunning {false};
+	int previewWriteDecimator = 0;
+	float timelineCaptureElapsedSec = 0.f;
 	dsp::SchmittTrigger runButtonEdge;
 	dsp::SchmittTrigger loadBankEdge;
 	dsp::SchmittTrigger saveBankEdge;

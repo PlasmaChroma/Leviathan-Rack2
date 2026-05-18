@@ -15,6 +15,9 @@ struct FrameInputs {
 };
 
 struct FrameOutputs {
+	bool running = false;
+	float phaseBeats = 0.f;
+	std::array<float, kNumOutputs> internalVolts {};
 	std::array<float, kNumOutputs> outVolts {};
 };
 
@@ -29,4 +32,3 @@ private:
 };
 
 } // namespace chronomaw
-
