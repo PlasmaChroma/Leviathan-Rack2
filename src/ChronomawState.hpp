@@ -34,8 +34,23 @@ enum class DensityMode : int {
 	Focus = 2,
 };
 
+enum class WaveformMode : int {
+	Gate = 0,
+	RatchetX2 = 1,
+	RatchetX4 = 2,
+	Triangle = 3,
+	Trapezoid = 4,
+	Sine = 5,
+	Hump = 6,
+	ExpEnvelope = 7,
+	LogEnvelope = 8,
+	ClassicRandom = 9,
+	SmoothRandom = 10,
+};
+
 struct OutputState {
 	bool muted = false;
+	WaveformMode waveform = WaveformMode::Gate;
 	float levelPct = 100.f;
 	float offsetPct = 0.f;
 	float phasePct = 0.f;
@@ -73,4 +88,3 @@ struct ModuleState {
 };
 
 } // namespace chronomaw
-

@@ -28,34 +28,55 @@ static void drawRectFilled(const Widget::DrawArgs& args, const math::Rect& rect,
 	nvgStroke(args.vg);
 }
 
-static void drawLabel(const Widget::DrawArgs& args, float x, float y, int align, float size, NVGcolor color, const std::string& text) {
-	if (!APP || !APP->window || !APP->window->uiFont) {
-		return;
-	}
+	static void drawLabel(const Widget::DrawArgs& args, float x, float y, int align, float size, NVGcolor color, const std::string& text) {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
 	nvgFontSize(args.vg, size);
 	nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 	nvgTextAlign(args.vg, align);
-	nvgFillColor(args.vg, color);
-	nvgText(args.vg, x, y, text.c_str(), nullptr);
-}
+		nvgFillColor(args.vg, color);
+		nvgText(args.vg, x, y, text.c_str(), nullptr);
+	}
+
+	static void drawLabelOutlined(const Widget::DrawArgs& args, float x, float y, int align, float size, NVGcolor color, const std::string& text) {
+		const NVGcolor outline = chronomawRgb(0, 0, 0, 220);
+		drawLabel(args, x - 0.8f, y, align, size, outline, text);
+		drawLabel(args, x + 0.8f, y, align, size, outline, text);
+		drawLabel(args, x, y - 0.8f, align, size, outline, text);
+		drawLabel(args, x, y + 0.8f, align, size, outline, text);
+		drawLabel(args, x, y, align, size, color, text);
+	}
 
 struct ChronomawSurfaceWidget : Widget {
-	Chronomaw* module = nullptr;
-	ChronomawUiRects uiRects;
-	int activeSliderId = -1;
-	float activeSliderX = 0.f;
+		Chronomaw* module = nullptr;
+		ChronomawUiRects uiRects;
+		int activeSliderId = -1;
+		float activeSliderX = 0.f;
+		bool activeSliderDragging = false;
+		Vec activeSliderPressPos;
+		int lastSliderClickId = -1;
+		double lastSliderClickTime = -1.0;
+		int pendingSliderClickId = -1;
+		float pendingSliderClickX = 0.f;
+		double pendingSliderCommitTime = -1.0;
 
-	static constexpr int kTabCount = 7;
-	static constexpr int kMaxInspectorControls = 8;
+		static constexpr int kTabCount = 7;
+		static constexpr int kMaxInspectorControls = 12;
+		static constexpr int kWaveformCount = 11;
+		static constexpr double kCustomDoubleClickWindowSec = 0.24;
+		static constexpr double kSingleClickCommitDelaySec = 0.10;
 	static constexpr int kControlNone = -1;
 	static constexpr int kControlPhase = 0;
 	static constexpr int kControlLevel = 1;
 	static constexpr int kControlOffset = 2;
-	static constexpr int kControlProbability = 3;
-	static constexpr int kControlMute = 4;
-	static constexpr int kControlInvert = 5;
-	static constexpr int kControlSeedDec = 6;
-	static constexpr int kControlSeedInc = 7;
+		static constexpr int kControlProbability = 3;
+		static constexpr int kControlMute = 4;
+		static constexpr int kControlInvert = 5;
+		static constexpr int kControlSeedDec = 6;
+		static constexpr int kControlSeedInc = 7;
+		static constexpr int kControlWavePrev = 8;
+		static constexpr int kControlWaveNext = 9;
 
 	struct InspectorControl {
 		int id = kControlNone;
@@ -64,20 +85,37 @@ struct ChronomawSurfaceWidget : Widget {
 	std::array<InspectorControl, kMaxInspectorControls> controls {};
 	int controlCount = 0;
 
-	static const char* tabName(int index) {
-		static const char* const kNames[kTabCount] = {"Timing", "Shape", "Pattern", "Cross", "CV", "Quant", "Store"};
-		const int clamped = clamp(index, 0, kTabCount - 1);
-		return kNames[clamped];
-	}
+		static const char* tabName(int index) {
+			static const char* const kNames[kTabCount] = {"Timing", "Shape", "Pattern", "Cross", "CV", "Quant", "Store"};
+			const int clamped = clamp(index, 0, kTabCount - 1);
+			return kNames[clamped];
+		}
+
+		static const char* waveformName(chronomaw::WaveformMode wf) {
+			switch (wf) {
+			case chronomaw::WaveformMode::Gate: return "Gate/Pulse";
+			case chronomaw::WaveformMode::RatchetX2: return "Ratchet x2";
+			case chronomaw::WaveformMode::RatchetX4: return "Ratchet x4";
+			case chronomaw::WaveformMode::Triangle: return "Triangle";
+			case chronomaw::WaveformMode::Trapezoid: return "Trapezoid";
+			case chronomaw::WaveformMode::Sine: return "Sine";
+			case chronomaw::WaveformMode::Hump: return "Hump";
+			case chronomaw::WaveformMode::ExpEnvelope: return "Exp Envelope";
+			case chronomaw::WaveformMode::LogEnvelope: return "Log Envelope";
+			case chronomaw::WaveformMode::ClassicRandom: return "Classic Random";
+			case chronomaw::WaveformMode::SmoothRandom: return "Smooth Random";
+			default: return "Gate/Pulse";
+			}
+		}
 
 	explicit ChronomawSurfaceWidget(Chronomaw* module, const ChronomawUiRects& uiRects) : module(module), uiRects(uiRects) {}
 
-	int selectedOutput() const {
-		if (!module) {
-			return 0;
+		int selectedOutput() const {
+			if (!module) {
+				return 0;
+			}
+			return clamp(module->state.ui.selectedOutput, 0, chronomaw::kNumOutputs - 1);
 		}
-		return clamp(module->state.ui.selectedOutput, 0, chronomaw::kNumOutputs - 1);
-	}
 
 	int selectedTab() const {
 		if (!module) {
@@ -86,35 +124,12 @@ struct ChronomawSurfaceWidget : Widget {
 		return std::max(0, module->state.ui.selectedTab);
 	}
 
-	chronomaw::DensityMode densityMode() const {
-		if (!module) {
-			return chronomaw::DensityMode::Monitor;
-		}
-		return module->state.live.density;
-	}
-
 	math::Rect timelineRectForDensity() const {
-		const chronomaw::DensityMode density = densityMode();
-		if (density == chronomaw::DensityMode::Edit) {
-			return math::Rect(uiRects.timeline.pos, Vec(uiRects.timeline.size.x, std::max(24.f, uiRects.timeline.size.y * 0.38f)));
-		}
-		if (density == chronomaw::DensityMode::Focus) {
-			return math::Rect(uiRects.timeline.pos, Vec(uiRects.timeline.size.x, std::max(18.f, uiRects.timeline.size.y * 0.25f)));
-		}
 		return uiRects.timeline;
 	}
 
 	math::Rect inspectorRectForDensity() const {
-		const chronomaw::DensityMode density = densityMode();
-		if (density == chronomaw::DensityMode::Monitor) {
-			return math::Rect(uiRects.inspector.pos, Vec(uiRects.inspector.size.x, std::max(38.f, uiRects.inspector.size.y * 0.34f)));
-		}
-		if (density == chronomaw::DensityMode::Focus) {
-			const float y = uiRects.timeline.pos.y + std::max(24.f, uiRects.timeline.size.y * 0.25f) + 3.f;
-			const float h = std::max(44.f, uiRects.inspector.pos.y + uiRects.inspector.size.y - y);
-			return math::Rect(Vec(uiRects.inspector.pos.x, y), Vec(uiRects.inspector.size.x, h));
-		}
-		return uiRects.inspector;
+		return math::Rect(uiRects.inspector.pos, Vec(uiRects.inspector.size.x, std::max(38.f, uiRects.inspector.size.y * 0.34f)));
 	}
 
 	int outputRowAt(const Vec& p) const {
@@ -192,15 +207,15 @@ struct ChronomawSurfaceWidget : Widget {
 		return minV + t * (maxV - minV);
 	}
 
-	void applySliderFromPointer(int id, const Vec& local) {
-		chronomaw::OutputState* out = selectedOutputState();
-		if (!out) {
-			return;
-		}
-		const math::Rect rect = controlRect(id);
-		if (rect.size.x <= 0.f || rect.size.y <= 0.f) {
-			return;
-		}
+		void applySliderFromPointer(int id, const Vec& local) {
+			chronomaw::OutputState* out = selectedOutputState();
+			if (!out) {
+				return;
+			}
+			const math::Rect rect = controlRect(id);
+			if (rect.size.x <= 0.f || rect.size.y <= 0.f) {
+				return;
+			}
 		if (id == kControlPhase) {
 			out->phasePct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
 			return;
@@ -213,35 +228,85 @@ struct ChronomawSurfaceWidget : Widget {
 			out->offsetPct = sliderValueFromPoint(rect, local.x, -100.f, 100.f);
 			return;
 		}
-		if (id == kControlProbability) {
-			out->probabilityPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
-			return;
+			if (id == kControlProbability) {
+				out->probabilityPct = sliderValueFromPoint(rect, local.x, 0.f, 100.f);
+				return;
+			}
 		}
-	}
 
-	void applyControlClick(int id) {
-		chronomaw::OutputState* out = selectedOutputState();
-		if (!out) {
-			return;
+		void commitPendingSliderClickIfReady() {
+			if (pendingSliderClickId == kControlNone) {
+				return;
+			}
+			const double now = glfwGetTime();
+			if (now < pendingSliderCommitTime) {
+				return;
+			}
+			const math::Rect rect = controlRect(pendingSliderClickId);
+			if (rect.size.x <= 0.f || rect.size.y <= 0.f) {
+				pendingSliderClickId = kControlNone;
+				return;
+			}
+			const float x = clamp(pendingSliderClickX, rect.pos.x, rect.pos.x + rect.size.x);
+			applySliderFromPointer(pendingSliderClickId, Vec(x, rect.pos.y + 0.5f * rect.size.y));
+			pendingSliderClickId = kControlNone;
 		}
-		if (id == kControlMute) {
-			out->muted = !out->muted;
-			return;
+
+		void applyControlClick(int id) {
+			chronomaw::OutputState* out = selectedOutputState();
+			if (!out) {
+				return;
+			}
+			if (id == kControlMute) {
+				out->muted = !out->muted;
+				return;
 		}
 		if (id == kControlInvert) {
 			out->invert = !out->invert;
 			return;
 		}
-		if (id == kControlSeedDec) {
-			if (out->randomSeed > 0u) {
-				--out->randomSeed;
+			if (id == kControlSeedDec) {
+				if (out->randomSeed > 0u) {
+					--out->randomSeed;
+				}
+				return;
 			}
-			return;
+			if (id == kControlSeedInc) {
+				++out->randomSeed;
+				return;
+			}
+			if (id == kControlWavePrev) {
+				const int current = clamp(int(out->waveform), 0, kWaveformCount - 1);
+				out->waveform = chronomaw::WaveformMode((current + (kWaveformCount - 1)) % kWaveformCount);
+				return;
+			}
+			if (id == kControlWaveNext) {
+				const int current = clamp(int(out->waveform), 0, kWaveformCount - 1);
+				out->waveform = chronomaw::WaveformMode((current + 1) % kWaveformCount);
+			}
 		}
-		if (id == kControlSeedInc) {
-			++out->randomSeed;
+
+		void resetControlToDefault(int id) {
+			chronomaw::OutputState* out = selectedOutputState();
+			if (!out) {
+				return;
+			}
+			if (id == kControlPhase) {
+				out->phasePct = 0.f;
+				return;
+			}
+			if (id == kControlLevel) {
+				out->levelPct = 100.f;
+				return;
+			}
+			if (id == kControlOffset) {
+				out->offsetPct = 0.f;
+				return;
+			}
+			if (id == kControlProbability) {
+				out->probabilityPct = 100.f;
+			}
 		}
-	}
 
 	Vec currentLocalMousePos() const {
 		if (!APP || !APP->scene || !APP->scene->rack || !parent) {
@@ -250,13 +315,14 @@ struct ChronomawSurfaceWidget : Widget {
 		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 	}
 
-	void onButton(const event::Button& e) override {
-		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
-			if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-				activeSliderId = kControlNone;
+		void onButton(const event::Button& e) override {
+			if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+				if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+					activeSliderId = kControlNone;
+					activeSliderDragging = false;
+				}
+				return;
 			}
-			return;
-		}
 
 		const Vec local = e.pos;
 		const int row = outputRowAt(local);
@@ -279,78 +345,148 @@ struct ChronomawSurfaceWidget : Widget {
 		if (controlId == kControlNone) {
 			return;
 		}
-		if (controlId == kControlPhase || controlId == kControlLevel || controlId == kControlOffset || controlId == kControlProbability) {
-			activeSliderId = controlId;
-			activeSliderX = local.x;
-			applySliderFromPointer(controlId, local);
-			e.consume(this);
-			return;
-		}
+			if (controlId == kControlPhase || controlId == kControlLevel || controlId == kControlOffset || controlId == kControlProbability) {
+				const double now = glfwGetTime();
+				if (lastSliderClickId == controlId && lastSliderClickTime >= 0.0 && (now - lastSliderClickTime) <= kCustomDoubleClickWindowSec) {
+					pendingSliderClickId = kControlNone;
+					resetControlToDefault(controlId);
+					activeSliderId = kControlNone;
+					activeSliderDragging = false;
+					lastSliderClickId = kControlNone;
+					lastSliderClickTime = -1.0;
+					e.consume(this);
+					return;
+				}
+				activeSliderId = controlId;
+				activeSliderX = local.x;
+				activeSliderPressPos = local;
+				activeSliderDragging = false;
+				pendingSliderClickId = controlId;
+				pendingSliderClickX = local.x;
+				pendingSliderCommitTime = now + kSingleClickCommitDelaySec;
+				lastSliderClickId = controlId;
+				lastSliderClickTime = now;
+				e.consume(this);
+				return;
+			}
 		applyControlClick(controlId);
 		e.consume(this);
 	}
 
-	void onDragMove(const event::DragMove& e) override {
-		if (!module || activeSliderId == kControlNone) {
-			return;
+		void onDragMove(const event::DragMove& e) override {
+			if (!module || activeSliderId == kControlNone) {
+				return;
+			}
+			const math::Rect rect = controlRect(activeSliderId);
+			const Vec current = currentLocalMousePos();
+			const float dx = std::fabs(current.x - activeSliderPressPos.x);
+			const float dy = std::fabs(current.y - activeSliderPressPos.y);
+			if (!activeSliderDragging) {
+				if (dx < 1.5f && dy < 1.5f) {
+					return;
+				}
+				activeSliderDragging = true;
+				pendingSliderClickId = kControlNone;
+			}
+			activeSliderX = clamp(current.x, rect.pos.x, rect.pos.x + rect.size.x);
+			applySliderFromPointer(activeSliderId, Vec(activeSliderX, rect.pos.y + 0.5f * rect.size.y));
+			e.consume(this);
 		}
-		const math::Rect rect = controlRect(activeSliderId);
-		activeSliderX = clamp(currentLocalMousePos().x, rect.pos.x, rect.pos.x + rect.size.x);
-		applySliderFromPointer(activeSliderId, Vec(activeSliderX, rect.pos.y + 0.5f * rect.size.y));
-		e.consume(this);
-	}
 
-	void onHoverScroll(const event::HoverScroll& e) override {
-		if (!module) {
-			return;
-		}
-		const int controlId = controlAt(e.pos);
-		chronomaw::OutputState* out = selectedOutputState();
-		if (!out || controlId == kControlNone) {
+		void onHoverScroll(const event::HoverScroll& e) override {
+			if (!module) {
+				return;
+			}
+			const int controlId = controlAt(e.pos);
+			chronomaw::OutputState* out = selectedOutputState();
+			if (!out || controlId == kControlNone) {
 			return;
 		}
 		const float delta = e.scrollDelta.y;
+		if (delta == 0.f) {
+			return;
+		}
+		const float step = (delta > 0.f) ? 1.f : -1.f;
 		if (controlId == kControlPhase) {
-			out->phasePct = clamp(out->phasePct + delta, -100.f, 100.f);
+			const float snapped = std::round(out->phasePct);
+			out->phasePct = clamp(snapped + step, -100.f, 100.f);
 			e.consume(this);
 			return;
 		}
 		if (controlId == kControlLevel) {
-			out->levelPct = clamp(out->levelPct + delta, 0.f, 100.f);
+			const float snapped = std::round(out->levelPct);
+			out->levelPct = clamp(snapped + step, 0.f, 100.f);
 			e.consume(this);
 			return;
 		}
 		if (controlId == kControlOffset) {
-			out->offsetPct = clamp(out->offsetPct + delta, -100.f, 100.f);
+			const float snapped = std::round(out->offsetPct);
+			out->offsetPct = clamp(snapped + step, -100.f, 100.f);
 			e.consume(this);
 			return;
 		}
 		if (controlId == kControlProbability) {
-			out->probabilityPct = clamp(out->probabilityPct + delta, 0.f, 100.f);
+			const float snapped = std::round(out->probabilityPct);
+			out->probabilityPct = clamp(snapped + step, 0.f, 100.f);
 			e.consume(this);
 			return;
 		}
 		if (controlId == kControlSeedInc || controlId == kControlSeedDec) {
-			const int step = (delta > 0.f) ? 1 : -1;
-			if (step < 0 && out->randomSeed > 0u) {
+			const int seedStep = (delta > 0.f) ? 1 : -1;
+			if (seedStep < 0 && out->randomSeed > 0u) {
 				--out->randomSeed;
 			}
-			if (step > 0) {
+			if (seedStep > 0) {
 				++out->randomSeed;
 			}
-			e.consume(this);
+				e.consume(this);
+			}
 		}
-	}
+
+		void step() override {
+			commitPendingSliderClickIfReady();
+			Widget::step();
+		}
 
 	void drawSlider(const DrawArgs& args, const math::Rect& rect, float value, float minV, float maxV, const std::string& label, int controlId) {
 		drawRectFilled(args, rect, chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
 		float t = (maxV <= minV) ? 0.f : clamp((value - minV) / (maxV - minV), 0.f, 1.f);
 		math::Rect fillRect(rect.pos, Vec(rect.size.x * t, rect.size.y));
-		drawRectFilled(args, fillRect, chronomawRgb(54, 112, 156, 220), chronomawRgb(54, 112, 156, 220));
-		drawLabel(args, rect.pos.x + 3.f, rect.pos.y - 1.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 7.8f, chronomawRgb(182, 220, 240, 232), label);
-		drawLabel(args, rect.pos.x + rect.size.x - 3.f, rect.pos.y + 0.5f * rect.size.y, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), string::f("%.1f", value));
-		addControl(controlId, rect);
-	}
+		if (fillRect.size.x > 0.5f && fillRect.size.y > 0.5f) {
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, fillRect.pos.x, fillRect.pos.y, fillRect.size.x, fillRect.size.y, 4.0f);
+			NVGpaint activePaint = nvgLinearGradient(
+				args.vg,
+				fillRect.pos.x,
+				fillRect.pos.y,
+				fillRect.pos.x + fillRect.size.x,
+				fillRect.pos.y + fillRect.size.y,
+				chronomawRgb(186, 88, 255, 236),
+				chronomawRgb(88, 230, 255, 232)
+			);
+			nvgFillPaint(args.vg, activePaint);
+			nvgFill(args.vg);
+
+			const float sheenH = std::max(1.0f, fillRect.size.y * 0.33f);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, fillRect.pos.x + 0.7f, fillRect.pos.y + 0.4f, std::max(0.f, fillRect.size.x - 1.4f), sheenH, 3.0f);
+			NVGpaint sheenPaint = nvgLinearGradient(
+				args.vg,
+				fillRect.pos.x,
+				fillRect.pos.y,
+				fillRect.pos.x,
+				fillRect.pos.y + sheenH,
+				chronomawRgb(241, 220, 255, 116),
+				chronomawRgb(220, 252, 255, 14)
+			);
+			nvgFillPaint(args.vg, sheenPaint);
+			nvgFill(args.vg);
+		}
+			const float midY = rect.pos.y + 0.5f * rect.size.y;
+			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.25f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 7.8f, chronomawRgb(182, 220, 240, 236), label);
+			drawLabelOutlined(args, rect.pos.x + rect.size.x * 0.75f, midY, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 240), string::f("%.1f", value));
+			addControl(controlId, rect);
+		}
 
 	void drawToggle(const DrawArgs& args, const math::Rect& rect, const std::string& label, bool on, int controlId) {
 		drawRectFilled(args, rect, on ? chronomawRgb(45, 97, 67, 220) : chronomawRgb(38, 34, 40, 210), on ? chronomawRgb(147, 228, 172, 204) : chronomawRgb(120, 112, 124, 184));
@@ -604,10 +740,21 @@ struct ChronomawSurfaceWidget : Widget {
 			if (tabSel == 0) {
 				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->phasePct, -100.f, 100.f, "Phase %", kControlPhase);
 			}
-			else if (tabSel == 1) {
-				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->levelPct, 0.f, 100.f, "Level %", kControlLevel);
-				y += rowH + 3.f;
-				drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->offsetPct, -100.f, 100.f, "Offset %", kControlOffset);
+				else if (tabSel == 1) {
+					drawRectFilled(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), chronomawRgb(17, 26, 37, 210), chronomawRgb(90, 122, 148, 176));
+					drawLabel(args, contentX + 3.f, y - 1.5f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, 7.8f, chronomawRgb(182, 220, 240, 232), "Waveform");
+					drawLabel(args, contentX + contentW * 0.5f, y + 0.5f * rowH, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.2f, chronomawRgb(232, 246, 255, 238), waveformName(outState->waveform));
+					const float btnW = 12.f;
+					const math::Rect wavePrevRect(Vec(contentX + contentW - 2.f * btnW - 3.f, y + 1.f), Vec(btnW, rowH - 2.f));
+					const math::Rect waveNextRect(Vec(contentX + contentW - btnW - 1.5f, y + 1.f), Vec(btnW, rowH - 2.f));
+					drawToggle(args, wavePrevRect, "", false, kControlWavePrev);
+					drawToggle(args, waveNextRect, "", false, kControlWaveNext);
+					drawLabel(args, wavePrevRect.pos.x + 0.5f * wavePrevRect.size.x, wavePrevRect.pos.y + 0.5f * wavePrevRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), "<");
+					drawLabel(args, waveNextRect.pos.x + 0.5f * waveNextRect.size.x, waveNextRect.pos.y + 0.5f * waveNextRect.size.y, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, 8.f, chronomawRgb(232, 246, 255, 240), ">");
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->levelPct, 0.f, 100.f, "Level %", kControlLevel);
+					y += rowH + 3.f;
+					drawSlider(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), outState->offsetPct, -100.f, 100.f, "Offset %", kControlOffset);
 				y += rowH + 3.f;
 				drawToggle(args, math::Rect(Vec(contentX, y), Vec(contentW, rowH)), "Invert", outState->invert, kControlInvert);
 				y += rowH + 3.f;
@@ -653,14 +800,6 @@ struct ChronomawSurfaceWidget : Widget {
 		drawTimeline(args, timelineRect);
 		drawInspector(args, inspectorRect);
 
-		const char* densityLabel = "Monitor";
-		if (densityMode() == chronomaw::DensityMode::Edit) {
-			densityLabel = "Edit";
-		}
-		else if (densityMode() == chronomaw::DensityMode::Focus) {
-			densityLabel = "Focus";
-		}
-		drawLabel(args, uiRects.globalBar.pos.x + uiRects.globalBar.size.x - 3.f, uiRects.globalBar.pos.y + 2.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, 8.5f, chronomawRgb(179, 220, 244, 236), std::string("Density: ") + densityLabel);
 	}
 };
 
@@ -682,7 +821,6 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	Vec loadBankPos(88.0f, 16.0f);
 	Vec saveBankPos(98.0f, 16.0f);
 	Vec selectedOutputPos(133.0f, 16.0f);
-	Vec densityModePos(153.0f, 16.0f);
 	Vec clkInPos(9.5f, 22.0f);
 	Vec runInPos(9.5f, 35.5f);
 	Vec resetInPos(9.5f, 49.0f);
@@ -724,7 +862,6 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	applyPointOverride("LOAD_BANK", &loadBankPos);
 	applyPointOverride("SAVE_BANK", &saveBankPos);
 	applyPointOverride("SELECTED_OUTPUT", &selectedOutputPos);
-	applyPointOverride("DENSITY_MODE", &densityModePos);
 	applyPointOverride("CLK_INPUT", &clkInPos);
 	applyPointOverride("RUN_INPUT", &runInPos);
 	applyPointOverride("RESET_INPUT", &resetInPos);
@@ -761,7 +898,6 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(loadBankPos), module, Chronomaw::LOAD_BANK_PARAM));
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(saveBankPos), module, Chronomaw::SAVE_BANK_PARAM));
 	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
-	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(densityModePos), module, Chronomaw::DENSITY_MODE_PARAM));
 
 	addInput(createInputCentered<PJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
 	addInput(createInputCentered<PJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));

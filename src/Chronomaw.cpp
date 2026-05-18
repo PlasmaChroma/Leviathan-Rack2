@@ -22,6 +22,7 @@ static float jsonFloatOr(json_t* rootJ, const char* key, float fallback) {
 static json_t* outputStateToJson(const chronomaw::OutputState& out) {
 	json_t* outJ = json_object();
 	json_object_set_new(outJ, "muted", json_boolean(out.muted));
+	json_object_set_new(outJ, "waveform", json_integer(int(out.waveform)));
 	json_object_set_new(outJ, "levelPct", json_real(out.levelPct));
 	json_object_set_new(outJ, "offsetPct", json_real(out.offsetPct));
 	json_object_set_new(outJ, "phasePct", json_real(out.phasePct));
@@ -36,6 +37,7 @@ static void outputStateFromJson(json_t* outJ, chronomaw::OutputState* out) {
 		return;
 	}
 	out->muted = json_is_true(json_object_get(outJ, "muted"));
+	out->waveform = chronomaw::WaveformMode(clamp(jsonIntOr(outJ, "waveform", 0), 0, 10));
 	out->levelPct = clamp(jsonFloatOr(outJ, "levelPct", 100.f), 0.f, 100.f);
 	out->offsetPct = clamp(jsonFloatOr(outJ, "offsetPct", 0.f), -100.f, 100.f);
 	out->phasePct = clamp(jsonFloatOr(outJ, "phasePct", 0.f), -100.f, 100.f);
@@ -74,6 +76,7 @@ Chronomaw::Chronomaw() {
 	configParam(RUN_PARAM, 0.f, 1.f, 0.f, "Run");
 	configParam(BPM_PARAM, chronomaw::kMinBpm, chronomaw::kMaxBpm, chronomaw::kDefaultBpm, "BPM");
 	configParam(ACTIVE_BANK_PARAM, 0.f, float(chronomaw::kNumBanks - 1), 0.f, "Active bank");
+	paramQuantities[ACTIVE_BANK_PARAM]->snapEnabled = true;
 	configParam(LOAD_BANK_PARAM, 0.f, 1.f, 0.f, "Load bank");
 	configParam(SAVE_BANK_PARAM, 0.f, 1.f, 0.f, "Save bank");
 	configParam(SELECTED_OUTPUT_PARAM, 1.f, float(chronomaw::kNumOutputs), 1.f, "Selected output");
@@ -143,7 +146,8 @@ void Chronomaw::process(const ProcessArgs& args) {
 	state.live.bpm = params[BPM_PARAM].getValue();
 	state.live.activeBank = clamp(int(std::lround(params[ACTIVE_BANK_PARAM].getValue())), 0, chronomaw::kNumBanks - 1);
 	state.ui.selectedOutput = clamp(int(std::lround(params[SELECTED_OUTPUT_PARAM].getValue())) - 1, 0, chronomaw::kNumOutputs - 1);
-	state.live.density = chronomaw::DensityMode(clamp(int(std::lround(params[DENSITY_MODE_PARAM].getValue())), 0, 2));
+	state.live.density = chronomaw::DensityMode::Monitor;
+	params[DENSITY_MODE_PARAM].setValue(0.f);
 
 	const int bank = state.live.activeBank;
 	if (saveBankEdge.process(params[SAVE_BANK_PARAM].getValue())) {
@@ -203,10 +207,13 @@ void Chronomaw::process(const ProcessArgs& args) {
 			const float tSec = float(step + 1) * kTimelineCaptureIntervalSec;
 			float phase = phaseNow + beatsPerSec * tSec;
 			phase -= std::floor(phase);
-			const float internalV = (runningNow && phase < 0.5f) ? chronomaw::kOutputMaxV : chronomaw::kOutputMinV;
 			for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
 				const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
-				float v = internalV;
+				const float phaseOffset = clamp(outState.phasePct * 0.005f, -0.5f, 0.5f);
+				float phaseCh = phase + phaseOffset;
+				phaseCh -= std::floor(phaseCh);
+				const float internalVCh = (runningNow && phaseCh < 0.5f) ? chronomaw::kOutputMaxV : chronomaw::kOutputMinV;
+				float v = internalVCh;
 				if (outState.muted) {
 					v = 0.f;
 				}
@@ -268,7 +275,7 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 		state.live.bpm = clamp(jsonFloatOr(liveJ, "bpm", chronomaw::kDefaultBpm), chronomaw::kMinBpm, chronomaw::kMaxBpm);
 		state.live.running = json_is_true(json_object_get(liveJ, "running"));
 		state.live.activeBank = clamp(jsonIntOr(liveJ, "activeBank", 0), 0, chronomaw::kNumBanks - 1);
-		state.live.density = chronomaw::DensityMode(clamp(jsonIntOr(liveJ, "density", 0), 0, 2));
+			state.live.density = chronomaw::DensityMode::Monitor;
 		readOutputArray(liveJ, "outputs", &state.live.outputs);
 		// Backward compatibility with early scaffold JSON where ui lived under "live".
 		state.ui.selectedOutput = clamp(jsonIntOr(liveJ, "selectedOutput", state.ui.selectedOutput), 0, chronomaw::kNumOutputs - 1);
@@ -297,5 +304,5 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 	params[BPM_PARAM].setValue(state.live.bpm);
 	params[ACTIVE_BANK_PARAM].setValue(float(state.live.activeBank));
 	params[SELECTED_OUTPUT_PARAM].setValue(float(state.ui.selectedOutput + 1));
-	params[DENSITY_MODE_PARAM].setValue(float(int(state.live.density)));
+	params[DENSITY_MODE_PARAM].setValue(0.f);
 }

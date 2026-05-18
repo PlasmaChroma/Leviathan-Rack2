@@ -41,13 +41,17 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 	out->running = true;
 	out->phaseBeats = phaseBeats_;
 
-	// First-pass engine: generate a simple gate-like clock so wiring and UI
-	// scaffolding can be exercised before full per-output behavior exists.
+	// First-pass engine: generate a simple per-output gate clock.
+	// Phase control offsets each output by up to +/- half a cycle.
 	currentGate_ = (phaseBeats_ < 0.5f) ? kOutputMaxV : kOutputMinV;
 	for (int i = 0; i < kNumOutputs; ++i) {
 		const OutputState& ch = live.outputs[size_t(i)];
-		out->internalVolts[size_t(i)] = currentGate_;
-		float v = currentGate_;
+		const float phaseOffset = clamp(ch.phasePct * 0.005f, -0.5f, 0.5f);
+		float channelPhase = phaseBeats_ + phaseOffset;
+		channelPhase -= std::floor(channelPhase);
+		const float channelGate = (channelPhase < 0.5f) ? kOutputMaxV : kOutputMinV;
+		out->internalVolts[size_t(i)] = channelGate;
+		float v = channelGate;
 		if (ch.muted) {
 			v = 0.f;
 		}
