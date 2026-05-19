@@ -125,11 +125,16 @@ inline float unitRand(uint32_t seed, uint64_t cycle) {
 	return float(h) * (1.0f / 4294967295.0f);
 }
 
-inline float applyTimingPhase(const OutputState& outState, float basePhase01) {
-	float p = basePhase01;
-	p = p * clamp(outState.multiplier, 1.f / 16384.f, 192.f);
-	p += clamp(outState.phasePct * 0.005f, -0.5f, 0.5f);
-	p += clamp(outState.rotatePct * 0.005f, -0.5f, 0.5f);
+inline double rawTimingPhase(const OutputState& outState, double basePhase01) {
+	double p = basePhase01;
+	p *= double(clamp(outState.multiplier, 1.f / 16384.f, 192.f));
+	p += double(clamp(outState.phasePct * 0.005f, -0.5f, 0.5f));
+	p += double(clamp(outState.rotatePct * 0.005f, -0.5f, 0.5f));
+	return p;
+}
+
+inline float applyTimingPhase(const OutputState& outState, double basePhase01) {
+	double p = rawTimingPhase(outState, basePhase01);
 	p -= std::floor(p);
 
 	const float swing = clamp(outState.swingPct * 0.01f, -1.f, 1.f);
@@ -144,8 +149,8 @@ inline float applyTimingPhase(const OutputState& outState, float basePhase01) {
 
 	const float skew = clamp(outState.skewPct * 0.01f, -1.f, 1.f);
 	const float gamma = (skew >= 0.f) ? (1.f / (1.f + 1.8f * skew)) : (1.f - 0.65f * skew);
-	p = std::pow(clamp(p, 0.f, 1.f), clamp(gamma, 0.25f, 4.f));
-	return p - std::floor(p);
+	p = std::pow(double(clamp(float(p), 0.f, 1.f)), double(clamp(gamma, 0.25f, 4.f)));
+	return float(p - std::floor(p));
 }
 
 inline float waveformInternalVoltage(const OutputState& outState, float phase01, uint64_t cycle) {
@@ -206,7 +211,7 @@ inline float waveformInternalVoltage(const OutputState& outState, float phase01,
 	}
 }
 
-inline float renderOutputVoltage(const OutputState& outState, bool running, float basePhase01, uint64_t cycle) {
+inline float renderOutputVoltage(const OutputState& outState, bool running, double basePhase01, uint64_t cycle) {
 	const float phase01 = applyTimingPhase(outState, basePhase01);
 	const float internalV = running ? waveformInternalVoltage(outState, phase01, cycle) : kOutputMinV;
 	if (outState.muted) {

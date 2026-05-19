@@ -200,20 +200,13 @@ void Chronomaw::process(const ProcessArgs& args) {
 				for (int step = 0; step < kTimelineFutureSize; ++step) {
 					const float tSec = float(step) * kTimelineCaptureIntervalSec;
 					const float phaseRaw = phaseNow + beatsPerSec * tSec;
-					const int64_t baseCycleAdvance = int64_t(std::floor(phaseRaw));
-					float phase = phaseRaw - std::floor(phaseRaw);
+					const double basePosition = double(cycleNow) + double(phaseRaw);
 				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
 					const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
-					uint64_t chCycle = cycleNow;
-					const int64_t totalOffset = baseCycleAdvance;
-					if (totalOffset > 0) {
-						chCycle += uint64_t(totalOffset);
-					}
-					else if (totalOffset < 0) {
-						const uint64_t dec = uint64_t(-totalOffset);
-						chCycle = (chCycle >= dec) ? (chCycle - dec) : 0u;
-					}
-				const float v = renderOutputVoltage(outState, runningNow, phase, chCycle);
+					const double rawPhase = chronomaw::rawTimingPhase(outState, basePosition);
+					const double rawCycle = std::floor(rawPhase);
+					const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
+				const float v = renderOutputVoltage(outState, runningNow, basePosition, chCycle);
 					timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
 				}
 			}
