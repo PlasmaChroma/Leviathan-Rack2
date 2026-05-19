@@ -57,6 +57,21 @@ This is a static code review, not a runtime profiler pass.
    - Replaced realtime `std::pow()` in `slitherSpeedFactor()` with a 512-entry LUT + linear interpolation.
    - Keeps the same control curve while removing pow calls from the hot path.
 
+9. Wavetable mip smoothing for sharper shapes:
+   - Replaced the single oscillator table with an 8-level mip table chain.
+   - `rebuildWavetable()` now builds the base Catmull table and seven progressively smoothed periodic tables.
+   - `lookupWave()` selects/blends between levels from `phaseStep`, so higher pitches use smoother tables.
+   - Initial implementation used `std::log2()` per lookup and per-level peak renormalization; both were revised:
+     - LOD selection now uses cheap halving/threshold logic instead of `std::log2()`.
+     - Mip levels are no longer peak-renormalized independently, avoiding pitch-dependent level pumping.
+     - Mip blend is explicitly clamped.
+
+   Performance notes:
+   - Rebuild cost is higher than the old single table, but rebuilds are event-driven by waveform edits/loads, not continuous slither motion.
+   - Per-sample lookup cost is higher than the old single-table path because it reads/interpolates two mip levels, but it avoids oversampling and runtime BLEP correction.
+   - Slither does not force mip rebuilds; it remains runtime modulation on top of the stored waveform.
+   - This is best described as mip-smoothed wavetable playback, not a rigorous harmonic/FFT bandlimited oscillator.
+
 ### Remaining
 
 1. Broader fast-path coverage:
@@ -69,6 +84,13 @@ This is a static code review, not a runtime profiler pass.
 3. Shader-first body evaluation:
    - GL SHDR still depends on CPU-side sampled geometry.
    - A more shader-native path remains future work.
+
+4. Anti-aliasing validation:
+   - The mip-smoothed table path should reduce aliasing for sharp user shapes, but it still needs listening tests on:
+     - hard saw/square-like shapes
+     - stepped custom shapes
+     - high-pitch 1ch and 16ch patches
+     - pitch sweeps checking for brightness/level shifts between mip levels
 
 ## Current Position
 

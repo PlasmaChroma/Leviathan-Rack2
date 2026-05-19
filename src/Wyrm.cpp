@@ -165,16 +165,29 @@ void Wyrm::rebuildWavetable() {
 	for (int i = 0; i < kWyrmTableSize; ++i) {
 		const float ph = float(i) / float(kWyrmTableSize);
 		const float y = catmullPeriodic(local, pointCount, ph);
-		wavetable[i] = y;
+		wavetableMip[0][i] = y;
 		maxAbs = std::max(maxAbs, std::fabs(y));
 	}
 	const float inv = 1.f / maxAbs;
 	for (int i = 0; i < kWyrmTableSize; ++i) {
-		wavetable[i] = clamp(wavetable[i] * inv, -1.f, 1.f);
+		wavetableMip[0][i] = clamp(wavetableMip[0][i] * inv, -1.f, 1.f);
+	}
+
+	// Build progressively band-limited mip tables for high-frequency playback.
+	for (int level = 1; level < kWyrmTableMipLevels; ++level) {
+		for (int i = 0; i < kWyrmTableSize; ++i) {
+			const int im1 = (i - 1 + kWyrmTableSize) % kWyrmTableSize;
+			const int ip1 = (i + 1) % kWyrmTableSize;
+			wavetableMip[level][i] = clamp(
+				0.25f * wavetableMip[level - 1][im1] + 0.5f * wavetableMip[level - 1][i] + 0.25f * wavetableMip[level - 1][ip1],
+				-1.f,
+				1.f
+			);
+		}
 	}
 }
 
-float Wyrm::lookupWave(float ph) const {
+float Wyrm::lookupWave(float ph, float phaseStep) const {
 	float p = ph;
 	if (p >= 1.f) {
 		p -= 1.f;
@@ -182,11 +195,23 @@ float Wyrm::lookupWave(float ph) const {
 	else if (p < 0.f) {
 		p += 1.f;
 	}
+	const float stepIdx = std::fabs(phaseStep) * float(kWyrmTableSize);
+	float lod = 0.f;
+	float scale = stepIdx;
+	while (scale >= 2.f && lod < float(kWyrmTableMipLevels - 1)) {
+		scale *= 0.5f;
+		lod += 1.f;
+	}
+	const int level0 = clamp(int(lod), 0, kWyrmTableMipLevels - 1);
+	const int level1 = std::min(level0 + 1, kWyrmTableMipLevels - 1);
+	const float levelMix = clamp(scale - 1.f, 0.f, 1.f);
 	const float x = p * float(kWyrmTableSize);
 	const int i0 = int(x);
 	const int i1 = (i0 + 1 < kWyrmTableSize) ? (i0 + 1) : 0;
 	const float t = x - float(i0);
-	return std::fma((wavetable[i1] - wavetable[i0]), t, wavetable[i0]);
+	const float a0 = std::fma((wavetableMip[level0][i1] - wavetableMip[level0][i0]), t, wavetableMip[level0][i0]);
+	const float a1 = std::fma((wavetableMip[level1][i1] - wavetableMip[level1][i0]), t, wavetableMip[level1][i0]);
+	return std::fma((a1 - a0), levelMix, a0);
 }
 
 float Wyrm::rockDx(float ph, const WyrmRock& rock) const {
@@ -1042,7 +1067,7 @@ void Wyrm::process(const ProcessArgs& args) {
 				displaySlitherSpeedFactor.store(monoSlitherSpeed, std::memory_order_relaxed);
 				displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 			}
-			const float raw = clamp(finiteOr(lookupWave(phase[c])), -1.f, 1.f);
+			const float raw = clamp(finiteOr(lookupWave(phase[c], fastPathPhaseStep)), -1.f, 1.f);
 			outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 			outputs[OUT_OUTPUT].setVoltage(5.f * raw, c);
 			continue;
@@ -1068,7 +1093,7 @@ void Wyrm::process(const ProcessArgs& args) {
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
-		const float baseWave = finiteOr(lookupWave(phase[c]));
+		const float baseWave = finiteOr(lookupWave(phase[c], phaseStep));
 		const float base = hasRocks ? finiteOr(applyRockPush(activeRockStateNow, baseWave, phase[c])) : baseWave;
 		float slither = 0.f;
 		if (slitherAmount > 1e-5f) {

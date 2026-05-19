@@ -10,6 +10,7 @@
 constexpr int kWyrmPointCountDefault = 128;
 constexpr int kWyrmPointCountMax = 256;
 constexpr int kWyrmTableSize = 2048;
+constexpr int kWyrmTableMipLevels = 8;
 constexpr int kWyrmMaxChannels = 16;
 constexpr int kWyrmMaxRocks = 6;
 constexpr int kWyrmRockBoundarySamples = 64;
@@ -258,7 +259,7 @@ struct Wyrm : Module {
 	};
 
 	std::array<std::atomic<float>, kWyrmPointCountMax> wavePoints {};
-	std::array<float, kWyrmTableSize> wavetable {};
+	std::array<std::array<float, kWyrmTableSize>, kWyrmTableMipLevels> wavetableMip {};
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
@@ -312,7 +313,7 @@ struct Wyrm : Module {
 	void setFactoryShape(int shapeId);
 	void setPointCount(int newPointCount);
 	void rebuildWavetable();
-	float lookupWave(float ph) const;
+	float lookupWave(float ph, float phaseStep = 0.f) const;
 	float rockDx(float ph, const WyrmRock& rock) const;
 	float rockClearancePhase(const WyrmRock& rock) const;
 	float rockClearancePhase(const WyrmRock& rock, float clearanceValue) const;
