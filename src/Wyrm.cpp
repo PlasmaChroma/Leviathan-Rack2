@@ -260,6 +260,16 @@ void Wyrm::publishRockState() {
 	next.liftedRock = liftedRock;
 	next.rocks = rocks;
 	next.rockBoundaryCaches = rockBoundaryCaches;
+	for (int i = 0; i < kWyrmMaxRocks; ++i) {
+		const WyrmRock& rock = next.rocks[i];
+		const float clearancePhase = kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
+		const float rx = rock.radiusPhase + std::max(0.f, clearancePhase);
+		next.wrappedPhase[i] = wrap01(rock.phase);
+		next.defaultClearancePhase[i] = clearancePhase;
+		next.defaultRx[i] = rx;
+		next.defaultInvRx[i] = 1.f / std::max(rx, 1e-4f);
+		next.defaultRadiusValue[i] = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
+	}
 	activeRockStateIndex.store(nextIndex, std::memory_order_release);
 }
 
@@ -314,16 +324,16 @@ bool Wyrm::cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockI
 		cache.radiusPhase == rock.radiusPhase &&
 		cache.radiusValue == rock.radiusValue;
 	if (!cacheMatches) {
-		const float rx = rock.radiusPhase + kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
-		const float dxRaw = wrap01(ph) - wrap01(rock.phase);
+		const float rx = state.defaultRx[rockIndex];
+		const float dxRaw = wrap01(ph) - state.wrappedPhase[rockIndex];
 		float dx = dxRaw;
 		if (dx > 0.5f) dx -= 1.f;
 		else if (dx < -0.5f) dx += 1.f;
 		if (std::fabs(dx) >= rx) {
 			return false;
 		}
-		const float nx = dx / std::max(rx, 1e-4f);
-		const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + kWyrmRockClearance);
+		const float nx = dx * state.defaultInvRx[rockIndex];
+		const float radiusValue = state.defaultRadiusValue[rockIndex];
 		const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
 		if (edgeY <= 0.f) {
 			return false;
@@ -332,14 +342,14 @@ bool Wyrm::cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockI
 		if (upper) *upper = rock.value + edgeY;
 		return true;
 	}
-	const float rx = rock.radiusPhase + kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
-	float dx = wrap01(ph) - wrap01(rock.phase);
+	const float rx = state.defaultRx[rockIndex];
+	float dx = wrap01(ph) - state.wrappedPhase[rockIndex];
 	if (dx > 0.5f) dx -= 1.f;
 	else if (dx < -0.5f) dx += 1.f;
 	if (std::fabs(dx) >= rx) {
 		return false;
 	}
-	const float x = (0.5f + 0.5f * dx / std::max(rx, 1e-4f)) * float(kWyrmRockBoundarySamples - 1);
+	const float x = (0.5f + 0.5f * dx * state.defaultInvRx[rockIndex]) * float(kWyrmRockBoundarySamples - 1);
 	const int i0 = clamp(int(std::floor(x)), 0, kWyrmRockBoundarySamples - 1);
 	const int i1 = std::min(i0 + 1, kWyrmRockBoundarySamples - 1);
 	const float t = x - float(i0);
@@ -710,6 +720,7 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 		return clamp(desiredY, -1.f, 1.f);
 	}
 	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
+	const float phWrapped = wrap01(ph);
 	float y = clamp(desiredY, -1.f, 1.f);
 	for (int pass = 0; pass < 3; ++pass) {
 		bool changed = false;
@@ -718,9 +729,10 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 			const WyrmRock& rock = state.rocks[i];
 			const float effectiveClearancePhase = (clearancePhase >= 0.f)
 				? clearancePhase
-				: ((clearanceValue > 0.f) ? (clearanceValue * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f)) : 0.f);
-			const float rx = rock.radiusPhase + std::max(0.f, effectiveClearancePhase);
-			float dx = wrap01(ph) - wrap01(rock.phase);
+				: ((clearanceValue > 0.f) ? state.defaultClearancePhase[i] : 0.f);
+			const float rx = useCachedDefault ? state.defaultRx[i] : (rock.radiusPhase + std::max(0.f, effectiveClearancePhase));
+			const float invRx = useCachedDefault ? state.defaultInvRx[i] : (1.f / std::max(rx, 1e-4f));
+			float dx = phWrapped - state.wrappedPhase[i];
 			if (dx > 0.5f) dx -= 1.f;
 			else if (dx < -0.5f) dx += 1.f;
 			if (std::fabs(dx) >= rx) {
@@ -729,13 +741,12 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 			float lower = 0.f;
 			float upper = 0.f;
 			bool hasBounds = false;
-			if (useCachedDefault) {
-				hasBounds = cachedRockBoundsAtPhase(state, i, ph, &lower, &upper);
-			}
-			else {
-				const float invRx = 1.f / std::max(rx, 1e-4f);
-				const float nx = dx * invRx;
-				const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
+				if (useCachedDefault) {
+					hasBounds = cachedRockBoundsAtPhase(state, i, ph, &lower, &upper);
+				}
+				else {
+					const float nx = dx * invRx;
+					const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
 				const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
 				if (edgeY > 0.f) {
 					lower = rock.value - edgeY;
@@ -942,6 +953,7 @@ void Wyrm::process(const ProcessArgs& args) {
 	const bool foldCvPoly = inputs[FOLD_CV_INPUT].getChannels() > 1;
 	const bool voctConnected = inputs[VOCT_INPUT].isConnected();
 	const bool fmConnected = inputs[FM_INPUT].isConnected();
+	const bool syncConnected = inputs[SYNC_INPUT].isConnected();
 	const bool slitherAmountCvConnected = inputs[SLITHER_CV_INPUT].isConnected();
 	const bool slitherSpeedCvConnected = inputs[SLITHER_SPEED_CV_INPUT].isConnected();
 	const bool foldCvConnected = inputs[FOLD_CV_INPUT].isConnected();
@@ -982,9 +994,30 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float monoFoldAmt = effectiveFoldAmt(0);
 	const bool slitherActiveNow = slitherAmountCvConnected || slitherAmountKnob > 1e-5f;
 	const bool foldActiveNow = foldCvConnected || foldBase > 1e-5f;
+	const bool monoPitchModulation = !voctPoly && !fmPoly;
+	const bool canUsePlainFastPath =
+		!hasRocks &&
+		!slitherActiveNow &&
+		!foldActiveNow &&
+		monoPitchModulation &&
+		!slitherSpeedCvPoly;
+	float fastPathHz = 0.f;
+	float fastPathDisplayHzNoFm = 0.f;
+	float fastPathPhaseStep = 0.f;
+	float fastPathSlitherStep = 0.f;
+	if (canUsePlainFastPath) {
+		fastPathDisplayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(monoVoct + fine), 0.005f, 0.45f * args.sampleRate);
+		float hz = baseFreq * rack::dsp::exp2_taylor5(monoVoct + monoFmVoltage * fmAtten + fine);
+		hz = finiteOr(hz, baseFreq);
+		fastPathHz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
+		fastPathPhaseStep = fastPathHz * args.sampleTime;
+		const float slitherBaseHz = lfoModeNow ? clamp(fastPathHz, 0.01f, 8.f) : clamp(0.125f * fastPathHz, 0.15f, 8.f);
+		const float slitherHz = clamp(slitherBaseHz * monoSlitherSpeed, 0.01f, 16.f);
+		fastPathSlitherStep = slitherHz * args.sampleTime;
+	}
 
 	for (int c = 0; c < channels; ++c) {
-		if (inputs[SYNC_INPUT].isConnected()) {
+		if (syncConnected) {
 			const float s = inputs[SYNC_INPUT].getPolyVoltage(c);
 			if (syncTriggers[c].process(s)) {
 				if (softSyncModeNow) {
@@ -1000,15 +1033,29 @@ void Wyrm::process(const ProcessArgs& args) {
 				}
 			}
 		}
+		if (canUsePlainFastPath) {
+			phase[c] = wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * fastPathPhaseStep) : fastPathPhaseStep));
+			slitherPhase[c] = wrap01Fast(slitherPhase[c] + fastPathSlitherStep);
+			if (c == 0) {
+				displayFrequencyHz.store(fastPathDisplayHzNoFm, std::memory_order_relaxed);
+				displaySlitherAmount.store(monoSlitherAmount, std::memory_order_relaxed);
+				displaySlitherSpeedFactor.store(monoSlitherSpeed, std::memory_order_relaxed);
+				displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
+			}
+			const float raw = clamp(finiteOr(lookupWave(phase[c])), -1.f, 1.f);
+			outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
+			outputs[OUT_OUTPUT].setVoltage(5.f * raw, c);
+			continue;
+		}
 		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
 		const float fm = readPolyOrMonoVoltage(FM_INPUT, c, fmPoly, monoFmVoltage) * fmAtten;
 		const float slitherAmount = slitherAmountCvPoly ? effectiveSlitherAmount(c) : monoSlitherAmount;
 		const float slitherSpeed = slitherSpeedCvPoly ? effectiveSlitherSpeed(c) : monoSlitherSpeed;
-		const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
 		hz = finiteOr(hz, baseFreq);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
+			const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
 			displaySlitherAmount.store(slitherAmount, std::memory_order_relaxed);
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);

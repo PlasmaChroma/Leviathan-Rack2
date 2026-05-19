@@ -168,7 +168,20 @@ inline float slitherOffset(float phase, float travelPhase, float amount) {
 }
 
 inline float slitherSpeedFactor(float speedKnob) {
-	return std::pow(2.f, (clamp01(speedKnob) - 0.5f) * 4.f);
+	static std::array<float, 512> lut = []() {
+		std::array<float, 512> t {};
+		for (size_t i = 0; i < t.size(); ++i) {
+			const float knob = float(i) / float(t.size() - 1u);
+			const float expArg = (knob - 0.5f) * 4.f;
+			t[i] = std::pow(2.f, expArg);
+		}
+		return t;
+	}();
+	const float k = clamp01(speedKnob) * float(lut.size() - 1u);
+	const int i0 = clamp(int(std::floor(k)), 0, int(lut.size() - 1u));
+	const int i1 = std::min(i0 + 1, int(lut.size() - 1u));
+	const float t = k - float(i0);
+	return std::fma((lut[size_t(i1)] - lut[size_t(i0)]), t, lut[size_t(i0)]);
 }
 
 struct Wyrm;
@@ -203,6 +216,11 @@ struct WyrmRockStateSnapshot {
 	int liftedRock = -1;
 	std::array<WyrmRock, kWyrmMaxRocks> rocks {};
 	std::array<WyrmRockBoundaryCache, kWyrmMaxRocks> rockBoundaryCaches {};
+	std::array<float, kWyrmMaxRocks> wrappedPhase {};
+	std::array<float, kWyrmMaxRocks> defaultClearancePhase {};
+	std::array<float, kWyrmMaxRocks> defaultRx {};
+	std::array<float, kWyrmMaxRocks> defaultInvRx {};
+	std::array<float, kWyrmMaxRocks> defaultRadiusValue {};
 };
 
 struct Wyrm : Module {
@@ -280,6 +298,8 @@ struct Wyrm : Module {
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
 	std::atomic<float> perfSandGlUs {0.f};
+	std::atomic<uint64_t> perfBodySampleCacheHits {0};
+	std::atomic<uint64_t> perfBodySampleCacheMisses {0};
 	uint32_t debugInstanceId = 0;
 	double createdUnixTimeSec = 0.0;
 

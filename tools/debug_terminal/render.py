@@ -65,6 +65,8 @@ MODULE_COLUMNS = {
         ("audio_us", "Aud (us)"),
         ("ch", "Ch"),
         ("body", "Body"),
+        ("body_cache_hit", "BHit"),
+        ("body_cache_miss", "BMiss"),
     ),
     "IntegralFlux": (
         ("ui_ms", "UI (ms)"),

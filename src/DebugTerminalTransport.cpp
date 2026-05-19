@@ -416,11 +416,13 @@ void submitWyrmMetrics(uint32_t instanceId,
                        float sandGlUs,
                        float audioUs,
                        int channels,
-                       int bodySamples) {
-  char dataBuf[384];
+                       int bodySamples,
+                       uint64_t bodySampleCacheHits,
+                       uint64_t bodySampleCacheMisses) {
+  char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"body\":%d}",
+                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
                 std::max(0.f, uiMs),
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, sandUpdateUs),
@@ -428,7 +430,9 @@ void submitWyrmMetrics(uint32_t instanceId,
                 std::max(0.f, sandGlUs),
                 std::max(0.f, audioUs),
                 std::max(0, channels),
-                std::max(0, bodySamples));
+                std::max(0, bodySamples),
+                static_cast<unsigned long long>(bodySampleCacheHits),
+                static_cast<unsigned long long>(bodySampleCacheMisses));
   double ts = system::getTime();
   transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
 }

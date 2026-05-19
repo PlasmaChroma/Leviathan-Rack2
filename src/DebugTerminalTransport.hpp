@@ -42,7 +42,9 @@ void submitWyrmMetrics(uint32_t instanceId,
                        float sandGlUs,
                        float audioUs,
                        int channels,
-                       int bodySamples);
+                       int bodySamples,
+                       uint64_t bodySampleCacheHits,
+                       uint64_t bodySampleCacheMisses);
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                float uiMs,

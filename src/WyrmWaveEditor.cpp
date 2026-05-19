@@ -43,6 +43,25 @@ struct WyrmWaveEditor : TransparentWidget {
 	float lastSandUpdateUs = 0.f;
 	float lastSandDrawUs = 0.f;
 	int lastBodySampleCount = 0;
+	std::array<float, kWyrmPointCountMax> cachedDisplayWaveValues {};
+	int cachedDisplayWaveCount = 0;
+	bool cachedDisplayWaveValid = false;
+	uint32_t cachedDisplayWaveVersion = 0;
+	int cachedDisplayRockStateIndex = -1;
+	Vec cachedDisplaySize = Vec(-1.f, -1.f);
+	float cachedDisplaySlitherPhase = -1.f;
+	float cachedDisplaySlitherAmount = -1.f;
+	static constexpr int kBodySamplesMax = 768;
+	std::array<Vec, kBodySamplesMax> cachedBodyPathPoints {};
+	std::array<uint8_t, kBodySamplesMax> cachedBodyPathNearRock {};
+	int cachedBodySampleCount = 0;
+	bool cachedBodyPathValid = false;
+	uint32_t cachedBodyWaveVersion = 0;
+	int cachedBodyPointCount = -1;
+	int cachedBodyRockStateIndex = -1;
+	Vec cachedBodySize = Vec(-1.f, -1.f);
+	float cachedBodySlitherPhase = -1.f;
+	float cachedBodySlitherAmount = -1.f;
 
 	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
 		module = m;
@@ -481,26 +500,30 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (isDragonKingDebugEnabled()) {
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
-			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
-				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
-				const float totalUiUs = lastStepUsEma + lastEditorDrawUs + sandGlUs;
-				lastSubmitSec = nowSec;
-				debug_terminal::submitWyrmMetrics(
+				if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
+					const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+					const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
+					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
+					const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+					const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
+					const float totalUiUs = lastStepUsEma + lastEditorDrawUs + sandGlUs;
+					lastSubmitSec = nowSec;
+					debug_terminal::submitWyrmMetrics(
 					debugId,
 					totalUiUs * 0.001f,
 					lastEditorDrawUs,
 					lastSandUpdateUs,
 					lastSandDrawUs,
-					sandGlUs,
-					audioUs,
-					module->perfChannels.load(std::memory_order_relaxed),
-					lastBodySampleCount
-				);
+						sandGlUs,
+						audioUs,
+						module->perfChannels.load(std::memory_order_relaxed),
+						lastBodySampleCount,
+						bodySampleCacheHits,
+						bodySampleCacheMisses
+					);
+				}
 			}
-		}
 		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - stepStart).count()) * 0.001f;
 		lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
@@ -534,21 +557,48 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgLineTo(args.vg, box.size.x, 0.5f * box.size.y);
 		nvgStrokeWidth(args.vg, 1.f);
 		nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 120));
-		nvgStroke(args.vg);
+			nvgStroke(args.vg);
 
-		const bool hasModule = (module != nullptr);
-		nvgSave(args.vg);
-		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
-		const float dx = pointStep(count);
-		const float graphColumnWidth = std::min(2.0f, dx);
-		auto waveValueAt = [&](int i) {
+			const bool hasModule = (module != nullptr);
+			const uint32_t drawWaveVersion = hasModule ? module->waveVersion.load(std::memory_order_acquire) : 0u;
+			const int drawRockStateIndex = hasModule ? module->activeRockStateIndex.load(std::memory_order_acquire) : -1;
+			const float drawSlitherAmount = hasModule ? effectiveSlitherAmount() : 0.f;
+			const float drawSlitherPhase = renderedSlitherPhase;
+			nvgSave(args.vg);
+			nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
+			const float dx = pointStep(count);
+			const float graphColumnWidth = std::min(2.0f, dx);
 			if (hasModule) {
-				return displayWavePoint(i);
+				const bool displayCacheValid =
+					cachedDisplayWaveValid &&
+					cachedDisplayWaveCount == count &&
+					cachedDisplayWaveVersion == drawWaveVersion &&
+					cachedDisplayRockStateIndex == drawRockStateIndex &&
+					std::fabs(cachedDisplaySize.x - box.size.x) <= 1e-4f &&
+					std::fabs(cachedDisplaySize.y - box.size.y) <= 1e-4f &&
+					std::fabs(cachedDisplaySlitherPhase - drawSlitherPhase) <= 1e-6f &&
+					std::fabs(cachedDisplaySlitherAmount - drawSlitherAmount) <= 1e-6f;
+				if (!displayCacheValid) {
+					for (int i = 0; i < count; ++i) {
+						cachedDisplayWaveValues[i] = displayWavePoint(i);
+					}
+					cachedDisplayWaveCount = count;
+					cachedDisplayWaveVersion = drawWaveVersion;
+					cachedDisplayRockStateIndex = drawRockStateIndex;
+					cachedDisplaySize = box.size;
+					cachedDisplaySlitherPhase = drawSlitherPhase;
+					cachedDisplaySlitherAmount = drawSlitherAmount;
+					cachedDisplayWaveValid = true;
+				}
 			}
-			const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
-			return std::sin(2.f * float(M_PI) * phase);
-		};
+			auto waveValueAt = [&](int i) {
+				if (hasModule) {
+					return cachedDisplayWaveValues[i];
+				}
+				const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
+				return std::sin(2.f * float(M_PI) * phase);
+			};
 		std::array<float, kWyrmPointCountMax> bodyPoints {};
 		if (hasModule) {
 			for (int i = 0; i < module->pointCount; ++i) {
@@ -615,12 +665,13 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const float midY = 0.5f * box.size.y;
-		auto xAt = [&](int i) {
-			return pointX(i, count);
-		};
-		const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
-		const bool drawWaveColumns = (!sandEnabled()) && (!module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG);
-		if (drawWaveColumns) {
+			auto xAt = [&](int i) {
+				return pointX(i, count);
+			};
+			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
+			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
+			const bool drawWaveColumns = (!sandEnabled()) && (!module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG);
+			if (drawWaveColumns) {
 			nvgBeginPath(args.vg);
 			for (int i = 0; i < count; ++i) {
 				const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
@@ -650,69 +701,88 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
 				nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
 				nvgFill(args.vg);
-			}
-		}
-
-		static constexpr int kBodySamplesMax = 768;
-		std::array<Vec, kBodySamplesMax> bodyPathPoints {};
-		std::array<uint8_t, kBodySamplesMax> bodyPathNearRock {};
-		const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
-		for (int i = 0; i < cachedBodySamples; ++i) {
-			const float phase = (float(i) + 0.5f) / float(std::max(cachedBodySamples, 1));
-			bodyPathPoints[i] = Vec(
-				pointEdgeInset() + phase * pointDrawWidth(),
-				(0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y
-			);
-			bodyPathNearRock[i] = phaseNearAnyRock(phase, 1.5f / float(std::max(cachedBodySamples, 1))) ? 1u : 0u;
-		}
-
-		auto emitRoundedBodyPath = [&]() {
-			const float roundCosThreshold = -0.25f;
-			if (cachedBodySamples <= 0) {
-				return;
-			}
-			if (cachedBodySamples == 1) {
-				const Vec p = bodyPathPoints[0];
-				nvgMoveTo(args.vg, p.x, p.y);
-				return;
+				}
 			}
 
-			const Vec pStart = bodyPathPoints[0];
-			nvgMoveTo(args.vg, pStart.x, pStart.y);
+			const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
+			if (drawBodyNanoVG) {
+				const bool bodyCacheValid =
+					hasModule &&
+					cachedBodyPathValid &&
+					cachedBodySampleCount == cachedBodySamples &&
+					cachedBodyPointCount == count &&
+					cachedBodyWaveVersion == drawWaveVersion &&
+					cachedBodyRockStateIndex == drawRockStateIndex &&
+					std::fabs(cachedBodySize.x - box.size.x) <= 1e-4f &&
+					std::fabs(cachedBodySize.y - box.size.y) <= 1e-4f &&
+					std::fabs(cachedBodySlitherPhase - drawSlitherPhase) <= 1e-6f &&
+					std::fabs(cachedBodySlitherAmount - drawSlitherAmount) <= 1e-6f;
+				if (!bodyCacheValid) {
+					for (int i = 0; i < cachedBodySamples; ++i) {
+						const float phase = (float(i) + 0.5f) / float(std::max(cachedBodySamples, 1));
+						cachedBodyPathPoints[i] = Vec(
+							pointEdgeInset() + phase * pointDrawWidth(),
+							(0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y
+						);
+						cachedBodyPathNearRock[i] = phaseNearAnyRock(phase, 1.5f / float(std::max(cachedBodySamples, 1))) ? 1u : 0u;
+					}
+					cachedBodySampleCount = cachedBodySamples;
+					cachedBodyPointCount = count;
+					cachedBodyWaveVersion = drawWaveVersion;
+					cachedBodyRockStateIndex = drawRockStateIndex;
+					cachedBodySize = box.size;
+					cachedBodySlitherPhase = drawSlitherPhase;
+					cachedBodySlitherAmount = drawSlitherAmount;
+					cachedBodyPathValid = hasModule;
+				}
+			}
 
-			for (int i = 1; i < cachedBodySamples - 1; ++i) {
-				const Vec p0 = bodyPathPoints[i - 1];
-				const Vec p1 = bodyPathPoints[i];
-				const Vec p2 = bodyPathPoints[i + 1];
-				Vec vIn = p1.minus(p0);
-				Vec vOut = p2.minus(p1);
+			auto emitRoundedBodyPath = [&]() {
+				const float roundCosThreshold = -0.25f;
+				if (cachedBodySamples <= 0) {
+					return;
+				}
+				if (cachedBodySamples == 1) {
+					const Vec p = cachedBodyPathPoints[0];
+					nvgMoveTo(args.vg, p.x, p.y);
+					return;
+				}
+
+				const Vec pStart = cachedBodyPathPoints[0];
+				nvgMoveTo(args.vg, pStart.x, pStart.y);
+
+				for (int i = 1; i < cachedBodySamples - 1; ++i) {
+					const Vec p0 = cachedBodyPathPoints[i - 1];
+					const Vec p1 = cachedBodyPathPoints[i];
+					const Vec p2 = cachedBodyPathPoints[i + 1];
+					Vec vIn = p1.minus(p0);
+					Vec vOut = p2.minus(p1);
 				const float inLen = std::sqrt(vIn.x * vIn.x + vIn.y * vIn.y);
 				const float outLen = std::sqrt(vOut.x * vOut.x + vOut.y * vOut.y);
 				if (inLen < 1e-4f || outLen < 1e-4f) {
 					nvgLineTo(args.vg, p1.x, p1.y);
 					continue;
-				}
-				vIn = vIn.div(inLen);
-				vOut = vOut.div(outLen);
-				const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
-				if (bodyPathNearRock[i]) {
-					nvgLineTo(args.vg, p1.x, p1.y);
-				}
-				else if (cornerCos >= roundCosThreshold) {
+					}
+					vIn = vIn.div(inLen);
+					vOut = vOut.div(outLen);
+					const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
+					if (cachedBodyPathNearRock[i]) {
+						nvgLineTo(args.vg, p1.x, p1.y);
+					}
+					else if (cornerCos >= roundCosThreshold) {
 					const Vec midOut = p1.plus(p2).mult(0.5f);
 					nvgQuadTo(args.vg, p1.x, p1.y, midOut.x, midOut.y);
 				}
 				else {
 					nvgLineTo(args.vg, p1.x, p1.y);
+					}
 				}
-			}
 
-			const Vec pEnd = bodyPathPoints[cachedBodySamples - 1];
-			nvgLineTo(args.vg, pEnd.x, pEnd.y);
-		};
+				const Vec pEnd = cachedBodyPathPoints[cachedBodySamples - 1];
+				nvgLineTo(args.vg, pEnd.x, pEnd.y);
+			};
 
-		const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
-		if (drawBodyNanoVG) {
+			if (drawBodyNanoVG) {
 			nvgLineJoin(args.vg, NVG_ROUND);
 			nvgLineCap(args.vg, NVG_ROUND);
 			nvgBeginPath(args.vg);
