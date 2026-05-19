@@ -746,40 +746,52 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 	}
 	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
 	const float phWrapped = wrap01(ph);
+	std::array<uint8_t, kWyrmMaxRocks> rockHasBounds {};
+	std::array<float, kWyrmMaxRocks> rockLower {};
+	std::array<float, kWyrmMaxRocks> rockUpper {};
+	for (int i = 0; i < state.rockCount; ++i) {
+		if (i == state.liftedRock) continue;
+		const WyrmRock& rock = state.rocks[i];
+		const float effectiveClearancePhase = (clearancePhase >= 0.f)
+			? clearancePhase
+			: ((clearanceValue > 0.f) ? state.defaultClearancePhase[i] : 0.f);
+		const float rx = useCachedDefault ? state.defaultRx[i] : (rock.radiusPhase + std::max(0.f, effectiveClearancePhase));
+		const float invRx = useCachedDefault ? state.defaultInvRx[i] : (1.f / std::max(rx, 1e-4f));
+		float dx = phWrapped - state.wrappedPhase[i];
+		if (dx > 0.5f) dx -= 1.f;
+		else if (dx < -0.5f) dx += 1.f;
+		if (std::fabs(dx) >= rx) {
+			continue;
+		}
+		float lower = 0.f;
+		float upper = 0.f;
+		bool hasBounds = false;
+		if (useCachedDefault) {
+			hasBounds = cachedRockBoundsAtPhase(state, i, ph, &lower, &upper);
+		}
+		else {
+			const float nx = dx * invRx;
+			const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
+			const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
+			if (edgeY > 0.f) {
+				lower = rock.value - edgeY;
+				upper = rock.value + edgeY;
+				hasBounds = true;
+			}
+		}
+		if (hasBounds) {
+			rockHasBounds[i] = 1u;
+			rockLower[i] = lower;
+			rockUpper[i] = upper;
+		}
+	}
 	float y = clamp(desiredY, -1.f, 1.f);
 	for (int pass = 0; pass < 3; ++pass) {
 		bool changed = false;
 		for (int i = 0; i < state.rockCount; ++i) {
-			if (i == state.liftedRock) continue;
-			const WyrmRock& rock = state.rocks[i];
-			const float effectiveClearancePhase = (clearancePhase >= 0.f)
-				? clearancePhase
-				: ((clearanceValue > 0.f) ? state.defaultClearancePhase[i] : 0.f);
-			const float rx = useCachedDefault ? state.defaultRx[i] : (rock.radiusPhase + std::max(0.f, effectiveClearancePhase));
-			const float invRx = useCachedDefault ? state.defaultInvRx[i] : (1.f / std::max(rx, 1e-4f));
-			float dx = phWrapped - state.wrappedPhase[i];
-			if (dx > 0.5f) dx -= 1.f;
-			else if (dx < -0.5f) dx += 1.f;
-			if (std::fabs(dx) >= rx) {
-				continue;
-			}
-			float lower = 0.f;
-			float upper = 0.f;
-			bool hasBounds = false;
-				if (useCachedDefault) {
-					hasBounds = cachedRockBoundsAtPhase(state, i, ph, &lower, &upper);
-				}
-				else {
-					const float nx = dx * invRx;
-					const float radiusValue = kWyrmRockValueScale * (rock.radiusValue + clearanceValue);
-				const float edgeY = radiusValue * std::sqrt(std::max(0.f, 1.f - nx * nx));
-				if (edgeY > 0.f) {
-					lower = rock.value - edgeY;
-					upper = rock.value + edgeY;
-					hasBounds = true;
-				}
-			}
-			if (!hasBounds) continue;
+			if (!rockHasBounds[i]) continue;
+			const float lower = rockLower[i];
+			const float upper = rockUpper[i];
 			const bool anchorInside = (anchorY > lower && anchorY < upper);
 			const bool yInside = (y > lower && y < upper);
 			const bool crossesUp = (anchorY <= lower && y >= lower);
