@@ -16,6 +16,7 @@ Implemented:
 - Core constants are present in `ChronomawState.hpp`: `8` outputs, `64` banks, BPM `10-330`, output clamp `0-5 V`, external PPQN default `24`.
 - Rack surface v1 enums are present and wired (`ParamId`, `InputId`, `OutputId`, `LightId`).
 - Panel widget scaffold exists and reads SVG component anchors through `PanelSvgUtils` with fallback coordinates.
+- Dedicated panel `Reset All` action was removed; module reset is handled through Rack's standard module Initialize flow.
 - Bank save/load copies `bpm` and `outputs` between `LiveState` and selected `BankState`.
 - JSON schema root contains `schemaVersion`, `live`, `banks`, `ui`.
 - JSON now serializes and restores:
@@ -23,27 +24,41 @@ Implemented:
   - `banks`: bpm plus full per-bank `outputs`.
   - `ui`: selected output/tab.
 - Basic engine loop exists with run/reset behavior and per-output mute/level/offset/invert clamp.
+- Rack-linked serialization test exists and passes (`chronomaw_serialization_spec`).
+- Custom Phase 1 UI scaffold is now active:
+  - Click-to-select output rows.
+  - Inspector tab switching.
+  - Inspector editing for `phasePct`, `levelPct`, `offsetPct`, `probabilityPct`, `muted`, `invert`, and `randomSeed`.
+  - Density-aware timeline/inspector layout.
+- Timeline visualization is active with:
+  - Fixed `now` cursor.
+  - Multi-second history and deterministic future projection.
+  - Matched seconds-per-pixel scale across history and future regions.
+  - Smoothed interpolation to avoid jitter.
 
 Partial:
 
 - Engine timing is scaffold-level and does not yet implement the frozen Chronomaw DSP order.
 - External clock support is minimal (clock input connectivity currently drives sync light; no PPQN lock model yet).
 - Output generation is currently a shared gate-like placeholder, not per-output modifier/shape/probability/euclid/cross/quant behavior.
+- Pattern inspector controls (`probabilityPct`, `randomSeed`) are state-editable but not yet musically active in DSP.
+- Timeline future projection is currently accurate for the implemented placeholder gate/level/offset/invert/mute behavior, not final registry-driven behavior.
 
 Missing:
 
 - Modifier/shape/cross/quantizer registries beyond minimal enum stubs.
 - Deterministic random event boundary semantics and seed reset handling.
 - Full source registry and assignable CV plumbing into output parameters.
-- Baseline custom editor widgets: eight-output overview, timeline/event strip, selected-output inspector, tab bar, and custom value controls.
+- Dedicated BPM text readout (`BPM xxx.x` + `INT/EXT` + lock indication) in the global bar.
+- Overview badges for probability/Euclid/loop/cross/quant/CV status (currently row selection and base labels are implemented).
 - Phase-1 fixture tests listed in this plan (`chronomaw_*_spec.cpp` set).
 
 Immediate next steps:
 
-1. Implement `chronomaw_serialization_spec.cpp` to lock current JSON behavior (`live/banks/ui` and output-array round trip).
-2. Implement `chronomaw_bank_spec.cpp` to lock save/load copy semantics for bpm and outputs.
-3. Implement the passive custom UI scaffold: overview, timeline/event strip, inspector chrome, selected-output highlighting, and density layouts.
-4. Replace placeholder gate engine with per-output phase/divider scaffold so outputs are no longer identical.
+1. Implement `chronomaw_bank_spec.cpp` to lock save/load copy semantics for BPM and outputs.
+2. Add global BPM readout (`BPM xxx.x`) with `INT/EXT` source badge and sync lock indication.
+3. Replace placeholder shared gate engine with per-output phase/divider scaffold so outputs are no longer identical.
+4. Activate pattern semantics in DSP (probability decisions and seed-repeatable boundaries).
 5. Introduce minimal quantizer/cross ordering harness to start aligning with frozen DSP order.
 
 ## Module Identity
@@ -211,7 +226,7 @@ Chronomaw's primary interface is not a Pam-style one-knob menu. Phase 1 must est
 
 The baseline interface has four persistent surfaces:
 
-- `ChronomawGlobalBarWidget`: transport, BPM, sync state, active bank, load/save/reset actions, selected output, and density mode.
+- `ChronomawGlobalBarWidget`: transport, BPM, sync state, active bank, load/save actions, selected output, and density mode.
 - `ChronomawOverviewWidget`: eight always-visible output rows for selection and status.
 - `ChronomawTimelineWidget`: shared all-output timing view or compact event strip, depending on density mode.
 - `ChronomawInspectorWidget`: selected-output editor with fixed tabs and exact value controls.
@@ -255,7 +270,6 @@ Each row shows:
 - Mute state.
 - Current modifier label or placeholder (`/1` until modifier registry is active).
 - Shape label or icon (`Gate` until shape registry is active).
-- Tiny live preview or simple activity trace.
 - Badges for probability, Euclidean, loop, quantizer, cross, and CV assignment.
 
 Badge rules:
@@ -275,12 +289,14 @@ Phase 1 minimum:
 
 - Eight lanes matching outputs `1-8`.
 - A clear `now` cursor.
-- Recent gate/activity trace for each lane from engine history buffers.
+- Recent gate/activity trace for each lane from engine history buffers (left of `now`).
+- Deterministic short-horizon future projection for each lane (right of `now`) for currently implemented engine behavior.
 - Selected-output emphasis without hiding other lanes.
 - Mute overlay showing the output is forced to `0 V` while internal phase continues.
 - Compact mode that remains visible in Edit density.
+- One consistent time scale (seconds per pixel) across history and future regions.
 
-Phase 1 may defer full future prediction, probability previews, Euclidean hit/rest rendering, and cross-dependency markers until the engine exposes stable snapshot data. When prediction is missing, the widget must present itself as history/current-state only rather than implying exact future knowledge.
+Phase 1 may defer probability previews, Euclidean hit/rest rendering, and cross-dependency markers until the engine exposes stable registry-driven snapshot data.
 
 The timeline reads copied/snapshotted state. It must not advance transport, RNG state, event counters, bank state, or audio-thread-owned engine state.
 
