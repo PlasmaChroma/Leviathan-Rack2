@@ -1811,14 +1811,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  vec4 row0 = fetchRow(i0);\n"
         "  vec4 row1 = fetchRow(i1);\n"
         "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
+        "  vec4 rowBody = fetchRow(rowPos);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
         "  vec3 haloRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
         "  float haloAlphaMax = 0.0;\n"
-        "  accumulateRow(p, row0, i0, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateRow(p, row1, i1, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
-        "  accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
+        "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
+        "  if (uZoomInWidthComp > 1.05) {\n"
+        "    accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
+        "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
+        "  }\n"
         "  float effectKeepAlive = 1.0 + 0.000001 * uShdrEffect * sin(uTime);\n"
         "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
         "  if (haloOnly) {\n"
@@ -1957,13 +1959,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
 
       glBindTexture(GL_TEXTURE_2D, fieldRowTextureLeft);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glBindTexture(GL_TEXTURE_2D, fieldRowTextureRight);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
