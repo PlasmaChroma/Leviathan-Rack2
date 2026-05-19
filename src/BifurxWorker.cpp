@@ -47,6 +47,7 @@ struct BifurxUiRenderService::Impl {
 	std::thread thread;
 	bool running = false;
 	bool stopRequested = false;
+	bool joinInProgress = false;
 	uint64_t nextDisplayId = 1;
 
 	void run() {
@@ -128,7 +129,7 @@ BifurxUiRenderService::~BifurxUiRenderService() {
 
 void BifurxUiRenderService::start() {
 	std::lock_guard<std::mutex> lock(impl->mutex);
-	if (impl->running) {
+	if (gBifurxRenderServiceShuttingDown.load(std::memory_order_acquire) || impl->running || impl->joinInProgress) {
 		return;
 	}
 	impl->stopRequested = false;
@@ -137,20 +138,26 @@ void BifurxUiRenderService::start() {
 }
 
 void BifurxUiRenderService::stop() {
+	std::thread threadToJoin;
 	{
 		std::lock_guard<std::mutex> lock(impl->mutex);
-		if (!impl->running) {
+		if (!impl->running || impl->joinInProgress) {
 			return;
 		}
 		impl->stopRequested = true;
+		impl->joinInProgress = true;
+		threadToJoin = std::move(impl->thread);
 	}
 	impl->cv.notify_all();
-	if (impl->thread.joinable()) {
-		impl->thread.join();
+	if (threadToJoin.joinable()) {
+		threadToJoin.join();
 	}
 	std::lock_guard<std::mutex> lock(impl->mutex);
 	impl->running = false;
+	impl->joinInProgress = false;
 	impl->stopRequested = false;
+	impl->readyQueue.clear();
+	impl->slots.clear();
 }
 
 uint64_t BifurxUiRenderService::registerDisplay() {
@@ -158,36 +165,22 @@ uint64_t BifurxUiRenderService::registerDisplay() {
 		return 0;
 	}
 	std::lock_guard<std::mutex> lock(impl->mutex);
+	if (impl->stopRequested || impl->joinInProgress) {
+		return 0;
+	}
 	const uint64_t id = impl->nextDisplayId++;
 	impl->slots[id] = DisplaySlot {};
 	return id;
 }
 
 void BifurxUiRenderService::unregisterDisplay(uint64_t displayId) {
-	bool shouldStop = false;
-	{
-		std::lock_guard<std::mutex> lock(impl->mutex);
-		auto it = impl->slots.find(displayId);
-		if (it != impl->slots.end()) {
-			it->second.active = false;
-			it->second.queued = false;
-			impl->slots.erase(it);
-		}
-		if (impl->slots.empty() && impl->running) {
-			shouldStop = true;
-			impl->stopRequested = true;
-		}
+	std::lock_guard<std::mutex> lock(impl->mutex);
+	auto it = impl->slots.find(displayId);
+	if (it != impl->slots.end()) {
+		it->second.active = false;
+		it->second.queued = false;
+		impl->slots.erase(it);
 	}
-	if (!shouldStop) {
-		return;
-	}
-	impl->cv.notify_all();
-	if (impl->thread.joinable()) {
-		impl->thread.join();
-	}
-	std::lock_guard<std::mutex> relock(impl->mutex);
-	impl->running = false;
-	impl->stopRequested = false;
 }
 
 void BifurxUiRenderService::submitLatest(const BifurxUiRenderRequest& request) {
