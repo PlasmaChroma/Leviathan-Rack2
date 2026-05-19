@@ -673,47 +673,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       return true;
     };
 
-    auto sampleEnvelopeForFixedRowPair = [&](const temporaldeck_expander::ScopeBin *scopeData, int rowIndex,
-                                             float *minNormOut, float *maxNormOut) -> bool {
-      if (!scopeData || scopeBinCount < 2u) {
-        return false;
-      }
-      int row = clamp(rowIndex, 0, rowCount - 1);
-      int i0 = row * 2;
-      int i1 = i0 + 1;
-      if (i1 >= int(scopeBinCount)) {
-        return false;
-      }
-      const temporaldeck_expander::ScopeBin &b0 = scopeData[size_t(i0)];
-      const temporaldeck_expander::ScopeBin &b1 = scopeData[size_t(i1)];
-      bool v0 = temporaldeck_expander::isScopeBinValid(b0);
-      bool v1 = temporaldeck_expander::isScopeBinValid(b1);
-      if (!v0 && !v1) {
-        return false;
-      }
-      float min0 = 0.f, max0 = 0.f, min1 = 0.f, max1 = 0.f;
-      if (v0) decodeScopeBin(b0, &min0, &max0);
-      if (v1) decodeScopeBin(b1, &min1, &max1);
-      if (v0 && v1) {
-        *minNormOut = std::min(min0, min1);
-        *maxNormOut = std::max(max0, max1);
-      } else if (v0) {
-        *minNormOut = min0;
-        *maxNormOut = max0;
-      } else {
-        *minNormOut = min1;
-        *maxNormOut = max1;
-      }
-      return true;
-    };
-
     auto rebuildLaneFromScopeBins =
       [&](const temporaldeck_expander::ScopeBin *scopeData, float laneCenterXLocal, float laneHalfWidthLocal,
           std::vector<float> *x0Out, std::vector<float> *x1Out, std::vector<float> *visualOut, std::vector<uint8_t> *validOut,
           std::vector<uint8_t> *holdOut) {
         constexpr uint8_t kRowTailHoldFrames = 2u;
         constexpr float kRowTailIntensityDecay = 0.92f;
-        bool fixedPairing = module->debugFixedBinPairingEnabled.load(std::memory_order_relaxed);
         for (int iy = 0; iy < rowCount; ++iy) {
           size_t idx = size_t(iy);
           bool prevValid = (*validOut)[idx] != 0u;
@@ -727,13 +692,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float rowMinNorm = 0.f;
           float rowMaxNorm = 0.f;
           bool haveRow = false;
-          if (fixedPairing) {
-            haveRow = sampleEnvelopeForFixedRowPair(scopeData, sampleRow, &rowMinNorm, &rowMaxNorm);
-          } else {
-            float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
-            float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
-            haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
-          }
+          float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
+          float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
+          haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
           if (!haveRow) {
             if (prevValid && prevHold > 0u) {
               (*x0Out)[idx] = prevX0;

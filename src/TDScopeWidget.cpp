@@ -290,13 +290,6 @@ struct TDScopeWidget : ModuleWidget {
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
     }));
     addBrightnessSlider(menu);
-    menu->addChild(createCheckMenuItem(
-      "Fixed 2:1 bin mapping", "",
-      [=]() { return scopeModule->debugFixedBinPairingEnabled.load(std::memory_order_relaxed); },
-      [=]() {
-        bool enabled = scopeModule->debugFixedBinPairingEnabled.load(std::memory_order_relaxed);
-        scopeModule->debugFixedBinPairingEnabled.store(!enabled, std::memory_order_relaxed);
-      }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
