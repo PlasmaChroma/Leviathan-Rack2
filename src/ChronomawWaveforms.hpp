@@ -125,9 +125,21 @@ inline float unitRand(uint32_t seed, uint64_t cycle) {
 	return float(h) * (1.0f / 4294967295.0f);
 }
 
+inline double effectiveTimingMultiplier(const OutputState& outState) {
+	const double raw = double(clamp(outState.multiplier, 1.f / 16384.f, 192.f));
+	if (outState.modifierMode == ModifierMode::Div) {
+		const double divisor = double(clamp(std::round(float(1.0 / std::max(1.0 / 16384.0, raw))), 1.f, 16384.f));
+		return 1.0 / divisor;
+	}
+	if (outState.modifierMode == ModifierMode::Mult) {
+		return double(clamp(std::round(float(raw)), 1.f, 192.f));
+	}
+	return raw;
+}
+
 inline double rawTimingPhase(const OutputState& outState, double basePhase01) {
 	double p = basePhase01;
-	p *= double(clamp(outState.multiplier, 1.f / 16384.f, 192.f));
+	p *= effectiveTimingMultiplier(outState);
 	p += double(clamp(outState.phasePct * 0.005f, -0.5f, 0.5f));
 	p += double(clamp(outState.rotatePct * 0.005f, -0.5f, 0.5f));
 	return p;

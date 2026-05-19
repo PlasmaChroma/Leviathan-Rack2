@@ -20,6 +20,7 @@ struct FrameOutputs {
 	uint64_t cycleCount = 0u;
 	std::array<float, kNumOutputs> internalVolts {};
 	std::array<float, kNumOutputs> outVolts {};
+	std::array<double, kNumOutputs> timingPhaseOffsets {};
 };
 
 class Engine {
@@ -31,6 +32,9 @@ private:
 	float phaseBeats_ = 0.f;
 	uint64_t cycleCount_ = 0u;
 	float currentGate_ = 0.f;
+	std::array<double, kNumOutputs> timingPhaseOffsets_ {};
+	std::array<OutputState, kNumOutputs> prevOutputs_ {};
+	std::array<bool, kNumOutputs> prevOutputValid_ {};
 };
 
 } // namespace chronomaw

@@ -785,8 +785,11 @@ struct ChronomawSurfaceWidget : Widget {
 		const float dtSec = Chronomaw::kTimelineCaptureIntervalSec;
 		const float historyCapSec = float(Chronomaw::kTimelineHistorySize - 1) * dtSec;
 		const float futureCapSec = float(Chronomaw::kTimelineFutureSize) * dtSec;
+		const float zoomKnob = clamp(module->params[Chronomaw::TIMELINE_ZOOM_PARAM].getValue(), -1.f, 1.f);
+		const float zoomMul = (zoomKnob >= 0.f) ? std::pow(16.f, zoomKnob) : std::pow(8.f, zoomKnob);
 		// Enforce one time scale (seconds-per-pixel) across the full lane.
-		const float secPerPixel = std::min(historyCapSec / historyWidth, (futureWidth > 0.f) ? (futureCapSec / futureWidth) : (historyCapSec / historyWidth));
+		const float baseSecPerPixel = std::min(historyCapSec / historyWidth, (futureWidth > 0.f) ? (futureCapSec / futureWidth) : (historyCapSec / historyWidth));
+		const float secPerPixel = baseSecPerPixel / std::max(0.125f, zoomMul);
 
 		auto voltsToY = [&](float v) {
 			const float vv = clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV);
@@ -1133,6 +1136,7 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	Vec loadBankPos(88.0f, 16.0f);
 	Vec saveBankPos(98.0f, 16.0f);
 	Vec selectedOutputPos(133.0f, 16.0f);
+	Vec timelineZoomPos(152.0f, 16.0f);
 	Vec clkInPos(9.5f, 22.0f);
 	Vec runInPos(9.5f, 35.5f);
 	Vec resetInPos(9.5f, 49.0f);
@@ -1174,6 +1178,7 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	applyPointOverride("LOAD_BANK", &loadBankPos);
 	applyPointOverride("SAVE_BANK", &saveBankPos);
 	applyPointOverride("SELECTED_OUTPUT", &selectedOutputPos);
+	applyPointOverride("TIMELINE_ZOOM", &timelineZoomPos);
 	applyPointOverride("CLK_INPUT", &clkInPos);
 	applyPointOverride("RUN_INPUT", &runInPos);
 	applyPointOverride("RESET_INPUT", &resetInPos);
@@ -1210,6 +1215,7 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(loadBankPos), module, Chronomaw::LOAD_BANK_PARAM));
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(saveBankPos), module, Chronomaw::SAVE_BANK_PARAM));
 	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
+	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(timelineZoomPos), module, Chronomaw::TIMELINE_ZOOM_PARAM));
 
 	addInput(createInputCentered<PJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
 	addInput(createInputCentered<PJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));

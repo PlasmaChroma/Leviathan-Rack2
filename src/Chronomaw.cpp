@@ -94,6 +94,7 @@ Chronomaw::Chronomaw() {
 	configParam(LOAD_BANK_PARAM, 0.f, 1.f, 0.f, "Load bank");
 	configParam(SAVE_BANK_PARAM, 0.f, 1.f, 0.f, "Save bank");
 	configParam(SELECTED_OUTPUT_PARAM, 1.f, float(chronomaw::kNumOutputs), 1.f, "Selected output");
+	configParam(TIMELINE_ZOOM_PARAM, -1.f, 1.f, 0.f, "Timeline zoom");
 	configParam(DENSITY_MODE_PARAM, 0.f, 2.f, 0.f, "Density mode");
 
 	configInput(CLK_INPUT, "Clock");
@@ -203,10 +204,11 @@ void Chronomaw::process(const ProcessArgs& args) {
 					const double basePosition = double(cycleNow) + double(phaseRaw);
 				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
 					const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
-					const double rawPhase = chronomaw::rawTimingPhase(outState, basePosition);
+					const double phaseBase = basePosition + frameOut.timingPhaseOffsets[size_t(ch)];
+					const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
 					const double rawCycle = std::floor(rawPhase);
 					const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
-				const float v = renderOutputVoltage(outState, runningNow, basePosition, chCycle);
+				const float v = renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
 					timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
 				}
 			}
