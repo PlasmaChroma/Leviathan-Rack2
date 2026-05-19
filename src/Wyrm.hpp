@@ -216,6 +216,7 @@ struct Wyrm : Module {
 		WAVE_LEFT_PARAM,
 		WAVE_RIGHT_PARAM,
 		LFO_MODE_PARAM,
+		SYNC_MODE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -234,6 +235,7 @@ struct Wyrm : Module {
 	};
 	enum LightId {
 		LFO_MODE_LIGHT,
+		SYNC_MODE_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -248,6 +250,7 @@ struct Wyrm : Module {
 	std::atomic<float> displaySlitherSpeedFactor {1.f};
 	std::array<float, kWyrmMaxChannels> phase {};
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
+	std::array<float, kWyrmMaxChannels> phaseDir {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
 
 	std::atomic<bool> lfoMode {false};

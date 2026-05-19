@@ -321,8 +321,9 @@ struct WyrmWidget : ModuleWidget {
 		Vec voctPos(14.0f, 111.0f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
-		Vec lfoModePos(50.0f, 111.0f);
-		Vec foldCvPos(57.0f, 111.0f);
+		Vec syncModePos(50.0f, 111.0f);
+		Vec lfoModePos(57.0f, 111.0f);
+		Vec foldCvPos(64.0f, 111.0f);
 		Vec rawOutPos(24.0f, 122.0f);
 		Vec outPos(47.0f, 122.0f);
 		applyPt("WYRM_FREQ_PARAM", &freqPos);
@@ -339,6 +340,7 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
+		applyPt("WYRM_SYNC_MODE_PARAM", &syncModePos);
 		applyPt("WYRM_LFO_MODE_PARAM", &lfoModePos);
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
@@ -388,6 +390,9 @@ struct WyrmWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
+		));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
 		));

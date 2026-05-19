@@ -35,6 +35,7 @@ Wyrm::Wyrm() {
 	configButton(WAVE_LEFT_PARAM, "Waveform previous");
 	configButton(WAVE_RIGHT_PARAM, "Waveform next");
 	configSwitch(LFO_MODE_PARAM, 0.f, 1.f, 0.f, "LFO mode", {"Audio", "LFO"});
+	configSwitch(SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard", "Soft"});
 	configInput(VOCT_INPUT, "V/Oct");
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
@@ -47,6 +48,9 @@ Wyrm::Wyrm() {
 	setFactoryShape(SHAPE_SINE);
 	for (int i = 0; i < kWyrmMaxRocks; ++i) {
 		placeRock(i);
+	}
+	for (int c = 0; c < kWyrmMaxChannels; ++c) {
+		phaseDir[c] = 1.f;
 	}
 	publishRockState();
 }
@@ -919,8 +923,10 @@ void Wyrm::process(const ProcessArgs& args) {
 
 	const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
 	const bool lfoModeNow = params[LFO_MODE_PARAM].getValue() > 0.5f;
+	const bool softSyncModeNow = params[SYNC_MODE_PARAM].getValue() > 0.5f;
 	lfoMode.store(lfoModeNow, std::memory_order_relaxed);
 	lights[LFO_MODE_LIGHT].setBrightness(lfoModeNow ? 0.5f : 0.f);
+	lights[SYNC_MODE_LIGHT].setBrightness(softSyncModeNow ? 0.5f : 0.f);
 	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoModeNow);
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
@@ -981,8 +987,17 @@ void Wyrm::process(const ProcessArgs& args) {
 		if (inputs[SYNC_INPUT].isConnected()) {
 			const float s = inputs[SYNC_INPUT].getPolyVoltage(c);
 			if (syncTriggers[c].process(s)) {
-				phase[c] = 0.f;
-				slitherPhase[c] = 0.f;
+				if (softSyncModeNow) {
+					phaseDir[c] = -phaseDir[c];
+					if (std::fabs(phaseDir[c]) < 0.5f) {
+						phaseDir[c] = -1.f;
+					}
+				}
+				else {
+					phase[c] = 0.f;
+					slitherPhase[c] = 0.f;
+					phaseDir[c] = 1.f;
+				}
 			}
 		}
 		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
@@ -998,7 +1013,8 @@ void Wyrm::process(const ProcessArgs& args) {
 			displaySlitherAmount.store(slitherAmount, std::memory_order_relaxed);
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
 		}
-		phase[c] = wrap01Fast(phase[c] + hz * args.sampleTime);
+		const float phaseStep = hz * args.sampleTime;
+		phase[c] = wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
 		const float slitherBaseHz = lfoModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 		slitherPhase[c] = wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
