@@ -83,7 +83,8 @@ struct TDScope final : Module {
   std::atomic<int> scopeChannelMode {SCOPE_CHANNEL_MONO};
   std::atomic<int> scopeColorScheme {COLOR_SCHEME_DEFAULT};
   float scopeColorBrightness = 0.5f;
-  std::atomic<bool> scopeTransientHaloEnabled {true};
+  // Legacy field kept for backward patch compatibility; halo rendering is disabled.
+  std::atomic<bool> scopeTransientHaloEnabled {false};
   std::atomic<bool> debugFixedBinPairingEnabled {false};
   std::atomic<bool> debugRenderMainTraceEnabled {true};
   std::atomic<bool> debugRenderConnectorsEnabled {true};
@@ -228,7 +229,6 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
-    json_object_set_new(root, "scopeTransientHaloEnabled", json_boolean(scopeTransientHaloEnabled));
     json_object_set_new(root, "debugFixedBinPairingEnabled", json_boolean(debugFixedBinPairingEnabled));
     json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
     json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
@@ -272,10 +272,7 @@ struct TDScope final : Module {
     if (brightnessJ) {
       scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
-    json_t *haloJ = json_object_get(root, "scopeTransientHaloEnabled");
-    if (haloJ) {
-      scopeTransientHaloEnabled = json_boolean_value(haloJ);
-    }
+    scopeTransientHaloEnabled = false;
     json_t *fixedPairJ = json_object_get(root, "debugFixedBinPairingEnabled");
     if (fixedPairJ) {
       debugFixedBinPairingEnabled = json_boolean_value(fixedPairJ);

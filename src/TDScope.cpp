@@ -626,6 +626,7 @@ struct TDScopeDisplayWidget final : Widget {
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
     const bool silStandardStyle = module->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
+    const bool renderTransientHalo = false;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -1845,7 +1846,7 @@ struct TDScopeDisplayWidget final : Widget {
           int xMin = int(std::lround(std::min(x0[idx], x1[idx])));
           int xMax = int(std::lround(std::max(x0[idx], x1[idx])));
 
-          if (module->scopeTransientHaloEnabled) {
+          if (renderTransientHalo) {
             float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
             float haloT = haloLinear * haloLinear;
             uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
@@ -1963,7 +1964,7 @@ struct TDScopeDisplayWidget final : Widget {
         float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
         float haloT = haloLinear * haloLinear;
 
-        if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
+        if (renderTransientHalo && haloT > 1e-4f) {
           uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
           bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
           // The main trace already renders every supersampled row. For the

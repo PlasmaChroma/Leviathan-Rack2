@@ -292,7 +292,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     math::Vec fbSize = getFramebufferSize();
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
     glDisable(GL_SCISSOR_TEST);
-    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -308,26 +308,28 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
-    {
-      const float xInset = 0.75f;
-      const float fillX = xInset;
-      const float fillY = drawTop;
-      const float fillW = std::max(0.f, box.size.x - 2.f * xInset);
-      const float fillH = std::max(0.f, drawBottom - drawTop);
-      const float sx = (box.size.x > 1e-6f) ? (fbSize.x / box.size.x) : 1.f;
-      const float sy = (box.size.y > 1e-6f) ? (fbSize.y / box.size.y) : 1.f;
-      const int scX = std::max(0, int(std::floor(fillX * sx)));
-      const int scY = std::max(0, int(std::floor((box.size.y - (fillY + fillH)) * sy)));
-      const int scW = std::max(0, int(std::ceil(fillW * sx)));
-      const int scH = std::max(0, int(std::ceil(fillH * sy)));
-      if (scW > 0 && scH > 0) {
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(scX, scY, scW, scH);
-        glClearColor(0.f, 0.f, 0.f, 1.f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glDisable(GL_SCISSOR_TEST);
-      }
-    }
+    const float xInset = 0.75f;
+    const float fillX0 = xInset;
+    const float fillX1 = std::max(fillX0 + 1.f, box.size.x - xInset);
+    glDisable(GL_BLEND);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glColor4f(0.f, 0.f, 0.f, 1.f);
+    glBegin(GL_QUADS);
+    glVertex2f(fillX0, drawTop);
+    glVertex2f(fillX1, drawTop);
+    glVertex2f(fillX1, drawBottom);
+    glVertex2f(fillX0, drawBottom);
+    glEnd();
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 
     bool linkActive = module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module->uiPreviewValid.load(std::memory_order_relaxed);
@@ -1704,46 +1706,45 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float x1 = row.y;\n"
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
-        "  float tone = clamp(0.70 * visual + 0.30 * transientLift, 0.0, 1.0);\n"
+        "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
         "  float colorVisual = tone;\n"
-        "  float mainAlpha = clamp(((155.0 + 100.0 * colorVisual) / 255.0) * 1.25 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * 1.16 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
-        "  float mainHotT = clamp((colorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
-        "  float mainHotLift = (0.32 + 0.18 * uShdrEffect) * mainHotT * mainHotT;\n"
+        "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
+        "  float mainHotLift = 0.18 * mainHotT * mainHotT;\n"
         "  mainColor.rgb = clamp(mainColor.rgb * (1.0 + mainHotLift), 0.0, 1.0);\n"
-        "  mainColor = brightenColor(mainColor, clamp(transientLift * (0.66 + 0.06 * uShdrEffect), 0.0, 1.0));\n"
-        "  mainColor.rgb = saturate(mainColor.rgb, 1.28 + 0.45 * uShdrEffect);\n"
-        "  float mainW = (0.85 + 0.65 * tone) * uZoomThickness * 1.15 * uZoomInWidthComp;\n"
-        "  float lowVisualBoost = 1.0 + 0.35 * (1.0 - clamp(visual, 0.0, 1.0));\n"
+        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.72, 0.0, 1.0));\n"
+        "  mainColor.rgb = saturate(mainColor.rgb, 1.12);\n"
+        "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
+        "  float lowVisualBoost = 1.0 + 0.24 * (1.0 - clamp(visual, 0.0, 1.0));\n"
         "  mainW *= lowVisualBoost;\n"
-        "  float maxMainW = max(uRowStep * 0.95, 0.85);\n"
+        "  float maxMainW = max(uRowStep * 0.92, 0.78);\n"
         "  mainW = min(mainW, maxMainW);\n"
-        "  float mainRadius = max(mainW * 0.55, 0.45);\n"
-        "  float jitter = (hash(rowIdx + uTime) - 0.5) * transientLift * 3.0 * uShdrEffect;\n"
-        "  float dist = segmentDistance(p, vec2(x0 + jitter, y), vec2(x1 + jitter, y));\n"
-        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.80);\n"
-        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.35);\n"
-        "  float mainCov = clamp(0.75 * mainCovCore + 0.35 * mainCovSoft, 0.0, 1.0);\n"
+        "  float mainRadius = max(mainW * 0.55, 0.40);\n"
+        "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
+        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.82);\n"
+        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.28);\n"
+        "  float mainCov = clamp(0.74 * mainCovCore + 0.26 * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
-        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.28);\n"
+        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.30);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
-        "    float heatPriority = mix(0.24, 1.0, tone);\n"
+        "    float heatPriority = mix(0.42, 1.0, tone);\n"
         "    float coverAlpha = clamp(mainPremult * heatPriority, 0.0, 1.0);\n"
         "    baseRgb = baseRgb * (1.0 - coverAlpha) + mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
         "  }\n"
         "  if (uRenderHalo > 0.5) {\n"
-        "    float haloLinear = clamp((transientLift - 0.020) / 0.750, 0.0, 1.0);\n"
+        "    float haloLinear = clamp((transientLift - 0.080) / 0.920, 0.0, 1.0);\n"
         "    float haloT = haloLinear * haloLinear;\n"
-        "    float haloAlpha = ((110.0 + 145.0 * max(visual, 0.20)) / 255.0) * haloT;\n"
-        "    float boostedHaloAlpha = clamp(haloAlpha * 1.15 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
-        "    if (haloAlpha >= (20.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
-        "      float haloW = (mainW + (1.20 + 3.50 * haloT) * uZoomThickness) * 1.25 * uZoomInHaloWidthComp;\n"
-        "      float haloRadius = max(haloW * 0.52, mainRadius + 0.25);\n"
+        "    float haloAlpha = ((72.0 + 176.0 * max(visual, 0.24)) / 255.0) * haloT;\n"
+        "    float boostedHaloAlpha = clamp(haloAlpha * 1.02 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
+        "    if (haloAlpha >= (28.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
+        "      float haloW = (mainW + (1.10 + 2.20 * haloT) * uZoomThickness) * 1.10 * uZoomInHaloWidthComp;\n"
+        "      float haloRadius = max(haloW * 0.50, mainRadius + 0.18);\n"
         "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.52);\n"
         "      float haloPremult = boostedHaloAlpha * haloCov;\n"
         "      vec3 haloColor = vec3(1.0);\n"
-        "      float hueShift = sin(uTime * 3.0 + rowIdx * 0.1) * transientLift * 0.45 * uShdrEffect;\n"
+        "      float hueShift = sin(uTime * 3.0 + rowIdx * 0.1) * transientLift * 0.12 * uShdrEffect;\n"
         "      haloColor.r += hueShift;\n"
         "      haloColor.b -= hueShift;\n"
         "      haloColor = saturate(haloColor, 1.0 + 0.5 * uShdrEffect);\n"
@@ -1775,11 +1776,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
         "  float connectColorVisual = connectTone;\n"
         "  vec4 c = gradientColor(connectColorVisual,\n"
-        "                         clamp(((110.0 + 110.0 * connectColorVisual) / 255.0) * 1.15 * uZoomInAlphaComp, 0.0, 1.0));\n"
-        "  float connectHotT = clamp((connectColorVisual - 0.75) / 0.25, 0.0, 1.0);\n"
-        "  float connectHotLift = 0.30 * connectHotT * connectHotT;\n"
-        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
-        "  c = brightenColor(c, clamp(connectTransientLift * 0.62, 0.0, 1.0));\n"
+        "                         clamp(((88.0 + 92.0 * connectColorVisual) / 255.0) * 1.04 * uZoomInAlphaComp, 0.0, 1.0));\n"
+        "  float connectHotT = clamp((connectColorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
+        "  float connectHotLift = 0.16 * connectHotT * connectHotT;\n"
+        "  c.rgb = clamp(c.rgb * (1.0 + connectHotLift), 0.0, 1.0);\n"
+        "  c = brightenColor(c, clamp(connectTransientLift * 0.56, 0.0, 1.0));\n"
         "  float drift0 = abs(x0b - x0a);\n"
         "  float drift1 = abs(x1b - x1a);\n"
         "  float edgeDrift = max(drift0, drift1);\n"
@@ -1788,16 +1789,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "    return;\n"
         "  }\n"
         "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.65) / max(connectorMinDelta * 1.60, 1e-4), 0.0, 1.0);\n"
-        "  float continuityRadius = max((0.85 + 0.45 * connectTone) * uZoomThickness * 1.10 *\n"
-        "                               (1.02 + 0.10 * uZoomInWidthComp) * (1.01 + 0.08 * uDeepZoomEnergyFill) * 0.65,\n"
-        "                               0.48);\n"
+        "  float continuityRadius = max((0.68 + 0.44 * connectTone) * uZoomThickness * 1.05 *\n"
+        "                               (1.01 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.64,\n"
+        "                               0.44);\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
-        "  float contAlphaBase = clamp(c.a * (0.28 + 0.08 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
+        "  float contAlphaBase = clamp(c.a * (0.26 + 0.06 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
         "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
         "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
-        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.52;\n"
-        "  float contPriority = mix(0.28, 0.95, connectTone);\n"
+        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.50;\n"
+        "  float contPriority = mix(0.38, 0.92, connectTone);\n"
         "  float contCover = clamp(contAlpha * contPriority, 0.0, 1.0);\n"
         "  baseRgb = baseRgb * (1.0 - contCover) + c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
@@ -1805,42 +1806,27 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "void main() {\n"
         "  vec2 p = vLocalPos;\n"
         "  float rowPos = ((p.y - uDrawTop) / max(uRowStep, 1e-6)) - 0.5;\n"
-        "  float iMid = floor(rowPos);\n"
+        "  float i0 = floor(rowPos);\n"
+        "  float i1 = i0 + 1.0;\n"
+        "  vec4 row0 = fetchRow(i0);\n"
+        "  vec4 row1 = fetchRow(i1);\n"
+        "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
         "  vec3 haloRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
         "  float haloAlphaMax = 0.0;\n"
-        "  float scanline = mix(1.0, 0.96 + 0.04 * sin(p.y * 1.5 + uTime * 10.0), uShdrEffect);\n"
-        "  for (float di = -1.0; di <= 2.0; di += 1.0) {\n"
-        "    float i0 = iMid + di - 1.0;\n"
-        "    float i1 = iMid + di;\n"
-        "    vec4 row0 = fetchRow(i0);\n"
-        "    vec4 row1 = fetchRow(i1);\n"
-        "    float chroma = clamp(row1.w * 3.8, 0.0, 1.0) * uShdrEffect;\n"
-        "    vec2 pR = p + vec2(0.0, chroma * 1.6);\n"
-        "    vec2 pB = p - vec2(0.0, chroma * 1.6);\n"
-        "    vec3 rRgb = vec3(0.0), hRgb = vec3(0.0);\n"
-        "    float rA = 0.0, hA = 0.0;\n"
-        "    accumulateRow(pR, row1, i1, rRgb, rA, hRgb, hA);\n"
-        "    baseRgb.r += rRgb.r; baseAlphaMax = max(baseAlphaMax, rA);\n"
-        "    rRgb = vec3(0.0); rA = 0.0; hRgb = vec3(0.0); hA = 0.0;\n"
-        "    accumulateRow(p, row1, i1, rRgb, rA, hRgb, hA);\n"
-        "    baseRgb.g += rRgb.g; baseAlphaMax = max(baseAlphaMax, rA);\n"
-        "    haloRgb += hRgb; haloAlphaMax = max(haloAlphaMax, hA);\n"
-        "    rRgb = vec3(0.0); rA = 0.0; hRgb = vec3(0.0); hA = 0.0;\n"
-        "    accumulateRow(pB, row1, i1, rRgb, rA, hRgb, hA);\n"
-        "    baseRgb.b += rRgb.b; baseAlphaMax = max(baseAlphaMax, rA);\n"
-        "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
-        "  }\n"
-        "  float vignetteFx = clamp(1.0 - length((p / vec2(uRowCount * uRowStep, uRowCount * uRowStep)) - 0.5) * 0.72, 0.0, 1.0);\n"
-        "  float vignette = mix(1.0, vignetteFx, uShdrEffect);\n"
+        "  accumulateRow(p, row0, i0, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
+        "  accumulateRow(p, row1, i1, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
+        "  accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
+        "  accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
+        "  float effectKeepAlive = 1.0 + 0.000001 * uShdrEffect * sin(uTime);\n"
         "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
         "  if (haloOnly) {\n"
-        "    vec3 haloOut = clamp(haloRgb * scanline * vignette, 0.0, 1.0);\n"
+        "    vec3 haloOut = clamp(haloRgb * effectKeepAlive, 0.0, 1.0);\n"
         "    float haloAlpha = clamp(haloAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(haloOut, haloAlpha);\n"
         "  } else {\n"
-        "    vec3 baseOut = clamp(baseRgb * scanline * vignette, 0.0, 1.0);\n"
+        "    vec3 baseOut = clamp(baseRgb * effectKeepAlive, 0.0, 1.0);\n"
         "    float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(baseOut, baseAlpha);\n"
         "  }\n"
@@ -2174,11 +2160,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      const bool useGlShaderRenderer = module->debugUseGlShaderRenderer;
-      const bool renderHaloField = module->scopeTransientHaloEnabled;
+      const bool renderHaloField = false;
       const bool renderMainField = module->debugRenderMainTraceEnabled;
       const bool renderContinuityField = module->debugRenderConnectorsEnabled;
-      if (useGlShaderRenderer && (renderHaloField || renderMainField || renderContinuityField)) {
+      if (renderHaloField || renderMainField || renderContinuityField) {
         bool fieldDrawOk = uploadFieldLaneTextures();
         if (renderHaloField) {
           fieldDrawOk = drawFieldLanePass(0.f, 1.f, 0.f, GL_ONE, GL_ONE) && fieldDrawOk;
@@ -2254,7 +2239,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      if (useGlShaderRenderer && initSegmentShaderPipeline()) {
+      if (initSegmentShaderPipeline()) {
         haloSegmentVerts.clear();
         bodySegmentVerts.clear();
         fillSegmentVerts.clear();
@@ -2303,7 +2288,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                               mainR, mainG, mainB, fillAlpha);
           }
 
-          if (module->scopeTransientHaloEnabled) {
+          if (renderHaloField) {
             float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
             float haloT = haloLinear * haloLinear;
             uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
@@ -2383,7 +2368,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           return;
         }
         glLineWidth(width);
-        if (useGlShaderRenderer && initShaderPipeline()) {
+        if (module->debugUseGlShaderRenderer && initShaderPipeline()) {
           glUseProgram(shaderProgram);
           glUniform1f(shaderUniformColorScale, shaderParams.colorScale);
           glUniform1f(shaderUniformColorLift, shaderParams.colorLift);
@@ -2411,7 +2396,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glUseProgram(0);
         }
       };
-      if (module->scopeTransientHaloEnabled) {
+      if (renderHaloField) {
         const ShaderPassParams haloShaderParams = makeShaderPassParams(1.08f, 0.14f, 1.16f, 0.92f);
         for (auto &verts : haloBatchVerts) {
           verts.clear();
