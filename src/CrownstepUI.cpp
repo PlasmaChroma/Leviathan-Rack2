@@ -2384,6 +2384,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RightEdge,
 		MoveWindow,
 	};
+	enum class NudgeButton {
+		None,
+		Left,
+		Right,
+	};
 	TrimHandle activeTrimHandle = TrimHandle::None;
 	TrimHandle pendingTrimHandle = TrimHandle::None;
 	RangeDragMode activeRangeDragMode = RangeDragMode::None;
@@ -2391,6 +2396,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	int rangeDragAnchorIndex = 0;
 	int rangeDragStartIndex = 0;
 	int rangeDragEndIndex = 0;
+	float rangeDragMouseDownX = 0.f;
 
 	enum class VisualMode {
 		DISCRETE,
@@ -2534,6 +2540,50 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return clamp(layout.historyH * 0.9f, layout.compact ? 4.0f : 5.0f, layout.compact ? 6.0f : 7.4f);
 	}
 
+	float trimHandleInset(const RibbonLayout& layout) const {
+		(void) layout;
+		return 0.f;
+	}
+
+	float nudgeButtonWidth(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 1.05f, layout.compact ? 5.0f : 6.0f, layout.compact ? 7.0f : 8.5f);
+	}
+
+	float nudgeButtonGap(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 0.06f, layout.compact ? 0.18f : 0.24f, layout.compact ? 0.55f : 0.8f);
+	}
+
+	math::Rect nudgeButtonRect(NudgeButton button, const RibbonLayout& layout, const RibbonState& s) const {
+		if (button == NudgeButton::None || s.historySize <= 1 || s.activeLength <= 0) {
+			return math::Rect();
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		const float gap = nudgeButtonGap(layout);
+		const float buttonW = nudgeButtonWidth(layout);
+		const float buttonH = std::max(1.f, layout.historyH - 0.6f);
+		const float buttonY = layout.historyY + 0.3f;
+		if (button == NudgeButton::Left) {
+			return math::Rect(Vec(activeX - gap - buttonW, buttonY), Vec(buttonW, buttonH));
+		}
+		return math::Rect(Vec(activeX + activeW + gap, buttonY), Vec(buttonW, buttonH));
+	}
+
+	NudgeButton nudgeButtonAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 1 || s.activeLength <= 0) {
+			return NudgeButton::None;
+		}
+		const int length = clamp(s.activeLength, 1, s.historySize);
+		if (s.activeStart > 0 && nudgeButtonRect(NudgeButton::Left, layout, s).contains(localPos)) {
+			return NudgeButton::Left;
+		}
+		if (s.activeStart + length < s.historySize && nudgeButtonRect(NudgeButton::Right, layout, s).contains(localPos)) {
+			return NudgeButton::Right;
+		}
+		return NudgeButton::None;
+	}
+
 	TrimHandle trimHandleAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
 		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 1 || s.activeLength <= 0) {
 			return TrimHandle::None;
@@ -2544,8 +2594,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		const float handleW = trimHandleWidth(layout);
 		const float handleH = std::max(1.f, layout.historyH - 0.6f);
 		const float handleY = layout.historyY + 0.3f;
-		const math::Rect leftHandle(Vec(activeX - 0.5f * handleW, handleY), Vec(handleW, handleH));
-		const math::Rect rightHandle(Vec(activeX + activeW - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		const float inset = trimHandleInset(layout);
+		const float leftCx = activeX + 0.5f * handleW + inset;
+		const float rightCx = activeX + activeW - 0.5f * handleW - inset;
+		const math::Rect leftHandle(Vec(leftCx - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		const math::Rect rightHandle(Vec(rightCx - 0.5f * handleW, handleY), Vec(handleW, handleH));
 		if (leftHandle.contains(localPos)) {
 			return TrimHandle::Left;
 		}
@@ -2587,19 +2640,21 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return clamp(int(std::lround(t * float(historySize))), 0, historySize);
 	}
 
-	void applyTrimHandleDrag(TrimHandle handle, float localX, const RibbonState& s, const RibbonLayout& layout) {
-		if (!module || handle == TrimHandle::None || s.historySize <= 1 || s.activeLength <= 0) {
+	void applyTrimHandleDragDelta(TrimHandle handle, float localX, int historySize, const RibbonLayout& layout) {
+		if (!module || handle == TrimHandle::None || historySize <= 1 || rangeDragEndIndex <= rangeDragStartIndex) {
 			return;
 		}
-		const int currentStart = clamp(s.activeStart, 0, s.historySize - 1);
-		const int currentEnd = clamp(s.activeStart + s.activeLength, currentStart + 1, s.historySize);
-		const int draggedIndex = historyIndexForLocalX(localX, s.historySize, layout);
+		const float pixelsPerStep = std::max(1.f, layout.stripW / float(std::max(1, historySize)));
+		const float deltaPixels = localX - rangeDragMouseDownX;
+		const int delta = int(std::lround(deltaPixels / pixelsPerStep));
+		const int currentStart = clamp(rangeDragStartIndex, 0, historySize - 1);
+		const int currentEnd = clamp(rangeDragEndIndex, currentStart + 1, historySize);
 		if (handle == TrimHandle::Left) {
-			const int nextStart = clamp(draggedIndex, 0, currentEnd - 1);
+			const int nextStart = clamp(currentStart + delta, 0, currentEnd - 1);
 			module->setActiveRangeTrimWindow(nextStart, currentEnd);
 		}
 		else if (handle == TrimHandle::Right) {
-			const int nextEnd = clamp(draggedIndex, currentStart + 1, s.historySize);
+			const int nextEnd = clamp(currentEnd + delta, currentStart + 1, historySize);
 			module->setActiveRangeTrimWindow(currentStart, nextEnd);
 		}
 	}
@@ -2619,8 +2674,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			return;
 		}
 		const int length = rangeDragEndIndex - rangeDragStartIndex;
-		const int currentIndex = historyIndexForLocalX(localX, s.historySize, layout);
-		const int delta = currentIndex - rangeDragAnchorIndex;
+		const float pixelsPerStep = std::max(1.f, layout.stripW / float(std::max(1, s.historySize)));
+		const float deltaPixels = localX - rangeDragMouseDownX;
+		const int delta = int(std::lround(deltaPixels / pixelsPerStep));
 		const int maxStart = std::max(0, s.historySize - length);
 		const int start = clamp(rangeDragStartIndex + delta, 0, maxStart);
 		module->setActiveRangeTrimWindow(start, start + length);
@@ -2951,14 +3007,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			return;
 		}
 		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-			if (pendingRangeDragMode == RangeDragMode::LeftEdge || pendingRangeDragMode == RangeDragMode::RightEdge) {
-				RibbonState s = pullState();
-				shiftActiveRange((pendingRangeDragMode == RangeDragMode::LeftEdge) ? -1 : 1, s);
-				pendingRangeDragMode = RangeDragMode::None;
-				pendingTrimHandle = TrimHandle::None;
-				e.consume(this);
-				return;
-			}
 			pendingRangeDragMode = RangeDragMode::None;
 			pendingTrimHandle = TrimHandle::None;
 			Widget::onButton(e);
@@ -2973,6 +3021,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (pointInHistoryStrip(e.pos, layout)) {
+			const NudgeButton nudge = nudgeButtonAt(e.pos, layout, s);
+			if (nudge != NudgeButton::None) {
+				shiftActiveRange((nudge == NudgeButton::Left) ? -1 : 1, s);
+				pendingTrimHandle = TrimHandle::None;
+				pendingRangeDragMode = RangeDragMode::None;
+				e.consume(this);
+				return;
+			}
 			pendingTrimHandle = trimHandleAt(e.pos, layout, s);
 			pendingRangeDragMode = rangeDragModeAt(e.pos, layout, s);
 			e.consume(this);
@@ -3014,15 +3070,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		pendingTrimHandle = TrimHandle::None;
 		pendingRangeDragMode = RangeDragMode::None;
 		if (capDragTrimMode) {
+			rangeDragMouseDownX = capDragLocal.x;
 			rangeDragAnchorIndex = historyIndexForLocalX(capDragLocal.x, s.historySize, layout);
 			rangeDragStartIndex = clamp(s.activeStart, 0, std::max(0, s.historySize - 1));
 			rangeDragEndIndex = clamp(s.activeStart + s.activeLength, rangeDragStartIndex + 1, s.historySize);
-			if (activeRangeDragMode == RangeDragMode::LeftEdge || activeRangeDragMode == RangeDragMode::RightEdge) {
-				applyTrimHandleDrag(activeTrimHandle, capDragLocal.x, s, layout);
-			}
-			else if (activeRangeDragMode == RangeDragMode::MoveWindow) {
-				applyRangeWindowDrag(capDragLocal.x, s, layout);
-			}
 		}
 		else {
 			capDragActive = false;
@@ -3045,7 +3096,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonState s = pullState();
 		if (capDragTrimMode) {
 			if (activeRangeDragMode == RangeDragMode::LeftEdge || activeRangeDragMode == RangeDragMode::RightEdge) {
-				applyTrimHandleDrag(activeTrimHandle, capDragLocal.x, s, layout);
+				applyTrimHandleDragDelta(activeTrimHandle, capDragLocal.x, s.historySize, layout);
 			}
 			else if (activeRangeDragMode == RangeDragMode::MoveWindow) {
 				applyRangeWindowDrag(capDragLocal.x, s, layout);
@@ -3168,25 +3219,55 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 			if (s.historySize > 1 && s.activeLength > 0) {
 				TrimHandle hoveredHandle = trimHandleAt(drawMouseLocal, layout, s);
+				NudgeButton hoveredNudge = nudgeButtonAt(drawMouseLocal, layout, s);
 				const float handleW = trimHandleWidth(layout);
 				const float handleH = std::max(1.f, historyH - 0.6f);
 				const float handleY = historyY + 0.3f;
+				const float handleInset = trimHandleInset(layout);
+				auto drawNudge = [&](NudgeButton button, const char* glyph, bool active, bool enabled) {
+					const math::Rect r = nudgeButtonRect(button, layout, s);
+					if (r.size.x <= 0.f || r.size.y <= 0.f) {
+						return;
+					}
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 1.1f);
+					nvgFillColor(args.vg, active ? nvgRGBA(52, 72, 88, 224) : nvgRGBA(18, 28, 36, enabled ? 206 : 92));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 1.1f);
+					nvgStrokeColor(args.vg, active ? nvgRGBA(202, 236, 255, 210) : nvgRGBA(112, 148, 176, enabled ? 174 : 72));
+					nvgStrokeWidth(args.vg, 0.75f);
+					nvgStroke(args.vg);
+					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+					nvgFontSize(args.vg, compactLayout ? 6.4f : 7.4f);
+					nvgFillColor(args.vg, active ? nvgRGBA(238, 248, 255, 244) : nvgRGBA(184, 214, 234, enabled ? 224 : 90));
+					nvgText(args.vg, r.pos.x + r.size.x * 0.5f, r.pos.y + r.size.y * 0.52f, glyph, nullptr);
+				};
 				auto drawHandle = [&](float cx, bool active) {
 					const float hx = cx - 0.5f * handleW;
 					nvgBeginPath(args.vg);
 					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
-					nvgFillColor(args.vg, active ? nvgRGBA(222, 240, 255, 220) : nvgRGBA(170, 204, 232, 188));
+					nvgFillColor(args.vg, active ? nvgRGBA(222, 240, 255, 172) : nvgRGBA(170, 204, 232, 138));
 					nvgFill(args.vg);
 					nvgBeginPath(args.vg);
 					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
-					nvgStrokeColor(args.vg, active ? nvgRGBA(255, 255, 255, 232) : nvgRGBA(106, 136, 160, 196));
+					nvgStrokeColor(args.vg, active ? nvgRGBA(255, 255, 255, 176) : nvgRGBA(106, 136, 160, 142));
 					nvgStrokeWidth(args.vg, 0.8f);
 					nvgStroke(args.vg);
 				};
+				const int length = clamp(s.activeLength, 1, s.historySize);
+				const bool canShiftLeft = s.activeStart > 0;
+				const bool canShiftRight = s.activeStart + length < s.historySize;
+				if (canShiftLeft) {
+					drawNudge(NudgeButton::Left, "<", hoveredNudge == NudgeButton::Left, true);
+				}
+				if (canShiftRight) {
+					drawNudge(NudgeButton::Right, ">", hoveredNudge == NudgeButton::Right, true);
+				}
 				const bool leftActive = (hoveredHandle == TrimHandle::Left) || (capDragActive && activeTrimHandle == TrimHandle::Left);
 				const bool rightActive = (hoveredHandle == TrimHandle::Right) || (capDragActive && activeTrimHandle == TrimHandle::Right);
-				drawHandle(activeX, leftActive);
-				drawHandle(activeX + activeW, rightActive);
+				drawHandle(activeX + 0.5f * handleW + handleInset, leftActive);
+				drawHandle(activeX + activeW - 0.5f * handleW - handleInset, rightActive);
 			}
 		}
 
