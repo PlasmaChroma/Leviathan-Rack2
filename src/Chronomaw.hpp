@@ -67,6 +67,7 @@ struct Chronomaw : Module {
 	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineOutputHistory {};
 	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineOutputHistoryMin {};
 	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineOutputHistoryMax {};
+	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineOutputPhaseHistory {};
 	std::array<std::array<std::atomic<float>, kTimelineFutureSize>, chronomaw::kNumOutputs> timelineFutureOutput {};
 	std::array<float, chronomaw::kNumOutputs> timelineInternalAccum {};
 	std::array<float, chronomaw::kNumOutputs> timelineOutputAccum {};
@@ -96,6 +97,7 @@ struct Chronomaw : Module {
 
 struct ChronomawWidget : ModuleWidget {
 	explicit ChronomawWidget(Chronomaw* module);
+	void appendContextMenu(Menu* menu) override;
 };
 
 extern Model* modelChronomaw;

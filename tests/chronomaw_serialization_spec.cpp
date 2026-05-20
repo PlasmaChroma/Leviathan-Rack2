@@ -55,6 +55,7 @@ TestResult testRoundTripLiveBanksUi() {
 	src.state.live.density = chronomaw::DensityMode::Focus;
 	src.state.ui.selectedOutput = 5;
 	src.state.ui.selectedTab = 2;
+	src.state.ui.sampledFutureTimeline = true;
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		src.state.live.outputs[size_t(i)] = makeOutputState(float(i), 100u);
 	}
@@ -85,6 +86,7 @@ TestResult testRoundTripLiveBanksUi() {
 	pass = pass && (dst.state.live.density == src.state.live.density);
 	pass = pass && (dst.state.ui.selectedOutput == src.state.ui.selectedOutput);
 	pass = pass && (dst.state.ui.selectedTab == src.state.ui.selectedTab);
+	pass = pass && (dst.state.ui.sampledFutureTimeline == src.state.ui.sampledFutureTimeline);
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		pass = pass && outputStateEqual(dst.state.live.outputs[size_t(i)], src.state.live.outputs[size_t(i)]);
 		pass = pass && outputStateEqual(dst.state.banks[size_t(bankA)].outputs[size_t(i)], src.state.banks[size_t(bankA)].outputs[size_t(i)]);
@@ -99,7 +101,8 @@ TestResult testRoundTripLiveBanksUi() {
 		"liveBpm=" + std::to_string(dst.state.live.bpm) +
 		" activeBank=" + std::to_string(dst.state.live.activeBank) +
 		" uiOut=" + std::to_string(dst.state.ui.selectedOutput) +
-		" uiTab=" + std::to_string(dst.state.ui.selectedTab)
+		" uiTab=" + std::to_string(dst.state.ui.selectedTab) +
+		" sampledFutureTimeline=" + std::to_string(dst.state.ui.sampledFutureTimeline ? 1 : 0)
 	};
 }
 
@@ -146,6 +149,7 @@ TestResult testClampAndLegacyUiFallback() {
 	const bool bankClamped = dst.state.live.activeBank == (chronomaw::kNumBanks - 1);
 	const bool densityClamped = dst.state.live.density == chronomaw::DensityMode::Focus;
 	const bool uiLegacyRead = dst.state.ui.selectedOutput == (chronomaw::kNumOutputs - 1) && dst.state.ui.selectedTab == 4;
+	const bool sampledFutureDefault = dst.state.ui.sampledFutureTimeline == false;
 	const bool outClamp = nearlyEqual(dst.state.live.outputs[0].levelPct, 100.f) &&
 		nearlyEqual(dst.state.live.outputs[0].offsetPct, -100.f) &&
 		nearlyEqual(dst.state.live.outputs[0].phasePct, 100.f) &&
@@ -154,7 +158,7 @@ TestResult testClampAndLegacyUiFallback() {
 	const bool bankOutClamp = nearlyEqual(dst.state.banks[0].bpm, chronomaw::kMinBpm) &&
 		nearlyEqual(dst.state.banks[0].outputs[0].probabilityPct, 100.f);
 
-	const bool pass = bpmClamped && bankClamped && densityClamped && uiLegacyRead && outClamp && bankOutClamp;
+	const bool pass = bpmClamped && bankClamped && densityClamped && uiLegacyRead && sampledFutureDefault && outClamp && bankOutClamp;
 	return {
 		"Chronomaw deserialization clamps and legacy-ui fallback",
 		pass,

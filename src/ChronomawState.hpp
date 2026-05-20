@@ -90,6 +90,7 @@ struct BankState {
 struct UiState {
 	int selectedOutput = 0;
 	int selectedTab = 0;
+	bool sampledFutureTimeline = false;
 };
 
 struct ModuleState {

@@ -1,5 +1,6 @@
 #include "Chronomaw.hpp"
 #include "ChronomawWaveforms.hpp"
+#include <cmath>
 
 namespace {
 
@@ -18,6 +19,14 @@ static float jsonFloatOr(json_t* rootJ, const char* key, float fallback) {
 		return fallback;
 	}
 	return float(json_number_value(valueJ));
+}
+
+static float wrapPhase01(float phase) {
+	float p = std::fmod(phase, 1.f);
+	if (p < 0.f) {
+		p += 1.f;
+	}
+	return p;
 }
 
 static json_t* outputStateToJson(const chronomaw::OutputState& out) {
@@ -122,6 +131,7 @@ Chronomaw::Chronomaw() {
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputPhaseHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 		}
 		for (int i = 0; i < kTimelineFutureSize; ++i) {
 			timelineFutureOutput[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -154,6 +164,7 @@ void Chronomaw::onReset() {
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputPhaseHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 		}
 		for (int i = 0; i < kTimelineFutureSize; ++i) {
 			timelineFutureOutput[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -232,6 +243,8 @@ void Chronomaw::process(const ProcessArgs& args) {
 			timelineOutputHistory[size_t(i)][size_t(writePos)].store(timelineOutputAccum[size_t(i)] * invSamples, std::memory_order_relaxed);
 			timelineOutputHistoryMin[size_t(i)][size_t(writePos)].store(timelineOutputAccumMin[size_t(i)], std::memory_order_relaxed);
 			timelineOutputHistoryMax[size_t(i)][size_t(writePos)].store(timelineOutputAccumMax[size_t(i)], std::memory_order_relaxed);
+			const float phaseWithOffset = frameOut.phaseBeats + float(frameOut.timingPhaseOffsets[size_t(i)]);
+			timelineOutputPhaseHistory[size_t(i)][size_t(writePos)].store(wrapPhase01(phaseWithOffset), std::memory_order_relaxed);
 			timelineInternalAccum[size_t(i)] = 0.f;
 			timelineOutputAccum[size_t(i)] = 0.f;
 			timelineInternalAccumMin[size_t(i)] = 0.f;
@@ -266,6 +279,7 @@ json_t* Chronomaw::dataToJson() {
 	json_t* uiJ = json_object();
 	json_object_set_new(uiJ, "selectedOutput", json_integer(state.ui.selectedOutput));
 	json_object_set_new(uiJ, "selectedTab", json_integer(state.ui.selectedTab));
+	json_object_set_new(uiJ, "sampledFutureTimeline", json_boolean(state.ui.sampledFutureTimeline));
 	json_object_set_new(rootJ, "ui", uiJ);
 
 	json_t* banksJ = json_array();
@@ -299,6 +313,7 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 	if (uiJ && json_is_object(uiJ)) {
 		state.ui.selectedOutput = clamp(jsonIntOr(uiJ, "selectedOutput", state.ui.selectedOutput), 0, chronomaw::kNumOutputs - 1);
 		state.ui.selectedTab = std::max(0, int(jsonIntOr(uiJ, "selectedTab", state.ui.selectedTab)));
+		state.ui.sampledFutureTimeline = json_is_true(json_object_get(uiJ, "sampledFutureTimeline"));
 	}
 
 	json_t* banksJ = json_object_get(rootJ, "banks");
