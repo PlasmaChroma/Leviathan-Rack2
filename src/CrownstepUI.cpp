@@ -12,7 +12,7 @@ constexpr int CHESS_ATLAS_COLS = 6;
 constexpr int HIGHLIGHT_COLOR_COUNT = 3;
 constexpr bool CHESS_ATLAS_ENABLED = true;
 constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
-constexpr float CHESS_ATLAS_RASTER_SCALE = 3.f;
+constexpr float CHESS_ATLAS_RASTER_SCALE = 4.f;
 constexpr unsigned char CHESS_MASK_SOLID_ALPHA_THRESHOLD = 24u;
 // Keep alpha neutral to avoid edge over-brightening halos on thin contours.
 constexpr float CHESS_ATLAS_ALPHA_GAMMA = 1.f;
