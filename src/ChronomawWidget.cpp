@@ -2,7 +2,9 @@
 #include "ChronomawWaveforms.hpp"
 #include "PanelSvgUtils.hpp"
 #include <array>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -82,8 +84,17 @@ static void drawMenuGlyph(const Widget::DrawArgs& args, const Vec& center, float
 	}
 
 struct ChronomawSurfaceWidget : Widget {
+	struct FuturePeriodCache {
+		bool valid = false;
+		uint64_t signature = 0u;
+		double periodBeats = 1.0;
+		std::vector<float> values;
+	};
+
 		Chronomaw* module = nullptr;
 		ChronomawUiRects uiRects;
+		std::array<FuturePeriodCache, chronomaw::kNumOutputs> futureCaches {};
+		double lastFuturePreviewUpdateSec = -1.0;
 		int activeSliderId = -1;
 		float activeSliderX = 0.f;
 		bool activeSliderDragging = false;
@@ -123,6 +134,10 @@ struct ChronomawSurfaceWidget : Widget {
 		static constexpr float kRatioPivotT = 0.7f;
 		static constexpr float kMultiplierPivot = 16.f;
 		static constexpr float kDivisorPivot = 16.f;
+		static constexpr int kFuturePeriodSamplesDefault = 1024;
+		static constexpr int kFuturePeriodSamplesNarrow = 2048;
+		static constexpr double kFutureCacheMaxPeriodBeats = 8.0;
+		static constexpr double kFuturePreviewUpdateIntervalSec = 1.0 / 30.0;
 
 	struct InspectorControl {
 		int id = kControlNone;
@@ -305,6 +320,43 @@ struct ChronomawSurfaceWidget : Widget {
 		const float ratio = kMaxDivisor / kDivisorPivot;
 		const float rt = std::log(clampedV / kDivisorPivot) / std::log(ratio);
 		return kRatioPivotT + (1.f - kRatioPivotT) * clamp(rt, 0.f, 1.f);
+	}
+
+	static uint64_t hashMix64(uint64_t h, uint64_t v) {
+		h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		return h;
+	}
+
+	static uint64_t quantizeHash(float value, float scale) {
+		return uint64_t(std::llround(double(value) * double(scale)));
+	}
+
+	static uint64_t outputTimingSignature(const chronomaw::OutputState& out, bool running) {
+		uint64_t h = 0xcbf29ce484222325ULL;
+		h = hashMix64(h, uint64_t(int(out.waveform)));
+		h = hashMix64(h, uint64_t(int(out.modifierMode)));
+		h = hashMix64(h, quantizeHash(out.multiplier, 1000.f));
+		h = hashMix64(h, quantizeHash(out.widthPct, 100.f));
+		h = hashMix64(h, quantizeHash(out.levelPct, 100.f));
+		h = hashMix64(h, quantizeHash(out.offsetPct, 100.f));
+		h = hashMix64(h, quantizeHash(out.phasePct, 100.f));
+		h = hashMix64(h, quantizeHash(out.swingPct, 100.f));
+		h = hashMix64(h, quantizeHash(out.skewPct, 100.f));
+		h = hashMix64(h, quantizeHash(out.rotatePct, 100.f));
+		h = hashMix64(h, uint64_t(out.invert ? 1u : 0u));
+		h = hashMix64(h, uint64_t(out.muted ? 1u : 0u));
+		h = hashMix64(h, uint64_t(running ? 1u : 0u));
+		return h;
+	}
+
+	static bool canUsePeriodicCache(const chronomaw::OutputState& out, double periodBeats) {
+		if (periodBeats <= 0.0 || periodBeats > kFutureCacheMaxPeriodBeats) {
+			return false;
+		}
+		if (out.waveform == chronomaw::WaveformMode::ClassicRandom || out.waveform == chronomaw::WaveformMode::SmoothRandom) {
+			return false;
+		}
+		return true;
 	}
 
 		void applySliderFromPointer(int id, const Vec& local) {
@@ -694,17 +746,83 @@ struct ChronomawSurfaceWidget : Widget {
 			const float bpmNow = clamp(module->timelineBpm.load(std::memory_order_relaxed), chronomaw::kMinBpm, chronomaw::kMaxBpm);
 			const bool runningNow = module->timelineRunning.load(std::memory_order_relaxed);
 			const float beatsPerSec = bpmNow / 60.f;
-			for (int step = 0; step < Chronomaw::kTimelineFutureSize; ++step) {
-				const float tSec = float(step) * Chronomaw::kTimelineCaptureIntervalSec;
-				const float phaseRaw = phaseNow + beatsPerSec * tSec;
-				const double basePosition = double(cycleNow) + double(phaseRaw);
-				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
-					const chronomaw::OutputState& outState = module->state.live.outputs[size_t(ch)];
-					const double phaseBase = basePosition + double(module->timelineTimingPhaseOffsets[size_t(ch)].load(std::memory_order_relaxed));
-					const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
-					const double rawCycle = std::floor(rawPhase);
-					const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
-					const float v = chronomaw::renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
+			const double baseNow = double(cycleNow) + double(phaseNow);
+			const double dtBeats = double(beatsPerSec) * double(Chronomaw::kTimelineCaptureIntervalSec);
+			for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
+				const chronomaw::OutputState& outState = module->state.live.outputs[size_t(ch)];
+				const double timingOffset = double(module->timelineTimingPhaseOffsets[size_t(ch)].load(std::memory_order_relaxed));
+				const double effMul = std::max(chronomaw::effectiveTimingMultiplier(outState), 1.0 / 16384.0);
+				const double periodBeats = 1.0 / effMul;
+				const bool useCache = canUsePeriodicCache(outState, periodBeats);
+				FuturePeriodCache& cache = futureCaches[size_t(ch)];
+				if (useCache) {
+					const uint64_t sig = outputTimingSignature(outState, runningNow);
+					if (!cache.valid || cache.signature != sig || std::fabs(cache.periodBeats - periodBeats) > 1e-9) {
+						cache.valid = true;
+						cache.signature = sig;
+						cache.periodBeats = periodBeats;
+						const bool narrowWidth = (outState.widthPct <= 8.f || outState.widthPct >= 92.f);
+						const int sampleCount = narrowWidth ? kFuturePeriodSamplesNarrow : kFuturePeriodSamplesDefault;
+						cache.values.resize(size_t(sampleCount));
+						for (int i = 0; i < sampleCount; ++i) {
+							const double t = (double(i) + 0.5) / double(sampleCount);
+							const double basePhase = t * periodBeats;
+							const double phaseBase = basePhase + timingOffset;
+							const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
+							const double rawCycle = std::floor(rawPhase);
+							const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
+							const float v = chronomaw::renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
+							cache.values[size_t(i)] = clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV);
+						}
+					}
+				}
+				else {
+					cache.valid = false;
+					cache.values.clear();
+				}
+
+				int cacheSampleCount = 0;
+				double cachePos = 0.0;
+				double cacheStep = 0.0;
+				if (cache.valid && !cache.values.empty()) {
+					cacheSampleCount = int(cache.values.size());
+					const double scale = double(cacheSampleCount) / cache.periodBeats;
+					const double startPhase = baseNow + 0.5 * dtBeats + timingOffset;
+					cachePos = std::fmod(startPhase * scale, double(cacheSampleCount));
+					if (cachePos < 0.0) {
+						cachePos += double(cacheSampleCount);
+					}
+					cacheStep = dtBeats * scale;
+				}
+
+				for (int step = 0; step < Chronomaw::kTimelineFutureSize; ++step) {
+					// Store a single center sample per timeline slot; interval summarization happens in draw.
+					const double phase = baseNow + (double(step) + 0.5) * dtBeats;
+					float v = 0.f;
+					if (cache.valid) {
+						if (cacheSampleCount > 0) {
+							const int i0 = int(cachePos);
+							const int i1 = (i0 + 1 >= cacheSampleCount) ? 0 : (i0 + 1);
+							const float frac = float(cachePos - std::floor(cachePos));
+							const float v0 = cache.values[size_t(i0)];
+							const float v1 = cache.values[size_t(i1)];
+							v = v0 + (v1 - v0) * frac;
+							cachePos += cacheStep;
+							while (cachePos >= double(cacheSampleCount)) {
+								cachePos -= double(cacheSampleCount);
+							}
+							while (cachePos < 0.0) {
+								cachePos += double(cacheSampleCount);
+							}
+						}
+					}
+					else {
+						const double phaseBase = phase + timingOffset;
+						const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
+						const double rawCycle = std::floor(rawPhase);
+						const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
+						v = chronomaw::renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
+					}
 					module->timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
 				}
 			}
@@ -712,7 +830,11 @@ struct ChronomawSurfaceWidget : Widget {
 
 		void step() override {
 			commitPendingSliderClickIfReady();
-			updateTimelineFuturePreview();
+			const double now = glfwGetTime();
+			if (lastFuturePreviewUpdateSec < 0.0 || (now - lastFuturePreviewUpdateSec) >= kFuturePreviewUpdateIntervalSec) {
+				updateTimelineFuturePreview();
+				lastFuturePreviewUpdateSec = now;
+			}
 			Widget::step();
 		}
 
@@ -800,6 +922,11 @@ struct ChronomawSurfaceWidget : Widget {
 		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 3.f || rect.size.y <= 2.f) {
 			return;
 		}
+		struct IntervalSummary {
+			float avg = 0.f;
+			float min = 0.f;
+			float max = 0.f;
+		};
 		nvgSave(args.vg);
 		nvgScissor(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
 		const int hist = Chronomaw::kTimelineHistorySize;
@@ -833,6 +960,46 @@ struct ChronomawSurfaceWidget : Widget {
 			const float v1 = module->timelineOutputHistory[size_t(channel)][size_t(idx1)].load(std::memory_order_relaxed);
 			return v0 + (v1 - v0) * frac;
 		};
+		auto historySummaryAtAgeSteps = [&](float ageStepsFloat, float halfSpanSteps) {
+			IntervalSummary summary;
+			if (halfSpanSteps <= 0.f) {
+				const float v = historyValueAtAgeSteps(ageStepsFloat);
+				summary.avg = v;
+				summary.min = v;
+				summary.max = v;
+				return summary;
+			}
+			const float ageMin = clamp(ageStepsFloat - halfSpanSteps, 0.f, float(Chronomaw::kTimelineHistorySize - 1));
+			const float ageMax = clamp(ageStepsFloat + halfSpanSteps, 0.f, float(Chronomaw::kTimelineHistorySize - 1));
+			const int i0 = int(std::floor(ageMin));
+			const int i1 = int(std::ceil(ageMax));
+			float sum = 0.f;
+			int count = 0;
+			float minV = chronomaw::kOutputMaxV;
+			float maxV = chronomaw::kOutputMinV;
+			for (int age = i0; age <= i1; ++age) {
+				const int clampedAge = clamp(age, 0, Chronomaw::kTimelineHistorySize - 1);
+				const int idx = (latestIdx - clampedAge + hist) % hist;
+				const float avgV = module->timelineOutputHistory[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+				const float minSample = module->timelineOutputHistoryMin[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+				const float maxSample = module->timelineOutputHistoryMax[size_t(channel)][size_t(idx)].load(std::memory_order_relaxed);
+				sum += avgV;
+				minV = std::min(minV, minSample);
+				maxV = std::max(maxV, maxSample);
+				++count;
+			}
+			if (count <= 0) {
+				const float v = historyValueAtAgeSteps(ageStepsFloat);
+				summary.avg = v;
+				summary.min = v;
+				summary.max = v;
+				return summary;
+			}
+			summary.avg = sum / float(count);
+			summary.min = minV;
+			summary.max = maxV;
+			return summary;
+		};
 		auto futureValueAtSteps = [&](float futureStepsFloat) {
 			const float clampedStep = clamp(futureStepsFloat, 0.f, float(Chronomaw::kTimelineFutureSize - 1));
 			const int s0 = int(std::floor(clampedStep));
@@ -842,61 +1009,122 @@ struct ChronomawSurfaceWidget : Widget {
 			const float v1 = module->timelineFutureOutput[size_t(channel)][size_t(s1)].load(std::memory_order_relaxed);
 			return v0 + (v1 - v0) * frac;
 		};
+		auto futureSummaryAtSteps = [&](float centerSteps, float halfSpanSteps) {
+			IntervalSummary summary;
+			const float span = std::max(halfSpanSteps, 0.f);
+			const float lo = std::max(0.f, centerSteps - span);
+			const float hi = std::max(lo, centerSteps + span);
+			const int sampleCount = 4;
+			float sum = 0.f;
+			float minV = chronomaw::kOutputMaxV;
+			float maxV = chronomaw::kOutputMinV;
+			for (int i = 0; i < sampleCount; ++i) {
+				const float t = (sampleCount <= 1) ? 0.5f : (float(i) + 0.5f) / float(sampleCount);
+				const float step = lo + (hi - lo) * t;
+				const float v = futureValueAtSteps(step);
+				sum += v;
+				minV = std::min(minV, v);
+				maxV = std::max(maxV, v);
+			}
+			summary.avg = sum / float(sampleCount);
+			summary.min = minV;
+			summary.max = maxV;
+			return summary;
+		};
+		const float intervalHalfSteps = std::max(0.5f * secPerPixel / dtSec, 0.25f);
+		const float envelopeThresholdV = 0.25f;
 
-			const int visibleCount = std::max(8, int(historyWidth));
-			const float historyStopX = nowX;
-			const float futureStartX = nowX;
+		const int visibleCount = std::max(8, int(historyWidth));
+		const float historyStopX = nowX;
+		const float futureStartX = nowX;
+		std::vector<Vec> historyPoints;
+		std::vector<IntervalSummary> historySummaries;
+		historyPoints.reserve(size_t(visibleCount));
+		historySummaries.reserve(size_t(visibleCount));
+		nvgBeginPath(args.vg);
+		bool moved = false;
+		for (int i = 0; i < visibleCount; ++i) {
+			const float t = (visibleCount <= 1) ? 0.f : (float(i) / float(visibleCount - 1));
+			const float x = rect.pos.x + t * historyWidth;
+			if (x > historyStopX) {
+				break;
+			}
+			const float ageSec = (historyWidth - (x - rect.pos.x)) * secPerPixel;
+			const float ageStepsFloat = ageSec / dtSec;
+			const IntervalSummary s = historySummaryAtAgeSteps(ageStepsFloat, intervalHalfSteps);
+			const float y = voltsToY(s.avg);
+			if (!moved) {
+				nvgMoveTo(args.vg, x, y);
+				moved = true;
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+			historyPoints.emplace_back(x, y);
+			historySummaries.push_back(s);
+		}
+		if (moved) {
+			nvgStrokeWidth(args.vg, selected ? 1.35f : 1.0f);
+			nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+			nvgStroke(args.vg);
+		}
+		for (size_t i = 0; i < historyPoints.size(); ++i) {
+			const IntervalSummary& s = historySummaries[i];
+			if ((s.max - s.min) <= envelopeThresholdV) {
+				continue;
+			}
 			nvgBeginPath(args.vg);
-			bool moved = false;
-			for (int i = 0; i < visibleCount; ++i) {
-				const float t = (visibleCount <= 1) ? 0.f : (float(i) / float(visibleCount - 1));
-				const float x = rect.pos.x + t * historyWidth;
-				if (x > historyStopX) {
-					break;
-				}
-				const float ageSec = (historyWidth - (x - rect.pos.x)) * secPerPixel;
-				const float ageStepsFloat = ageSec / dtSec;
-				const float v = historyValueAtAgeSteps(ageStepsFloat);
-				const float y = voltsToY(v);
-				if (!moved) {
-					nvgMoveTo(args.vg, x, y);
-					moved = true;
-				}
-				else {
-					nvgLineTo(args.vg, x, y);
-				}
-			}
-			if (moved) {
-				nvgStrokeWidth(args.vg, selected ? 1.35f : 1.0f);
-				nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
-				nvgStroke(args.vg);
-			}
+			nvgMoveTo(args.vg, historyPoints[i].x, voltsToY(s.min));
+			nvgLineTo(args.vg, historyPoints[i].x, voltsToY(s.max));
+			nvgStrokeWidth(args.vg, selected ? 0.95f : 0.8f);
+			nvgStrokeColor(args.vg, selected ? chronomawRgb(220, 238, 255, 120) : chronomawRgb(186, 208, 230, 92));
+			nvgStroke(args.vg);
+		}
 
 		// Draw deterministic future projection to the right of "now".
-			if (futureWidth > 0.f) {
-				nvgBeginPath(args.vg);
-				const float latestV = module->timelineOutputHistory[size_t(channel)][size_t(latestIdx)].load(std::memory_order_relaxed);
-				const float futureStartT = (futureWidth <= 0.f) ? 0.f : clamp((futureStartX - nowX) / futureWidth, 0.f, 1.f);
-				const float futureStartSec = futureStartT * futureWidth * secPerPixel;
-				const float futureStartStep = std::max(0.f, (futureStartSec / dtSec));
-				const float startV = (futureStartT <= 0.f) ? latestV : futureValueAtSteps(futureStartStep);
-				nvgMoveTo(args.vg, futureStartX, voltsToY(startV));
-				const int futureCount = std::max(8, int(futureWidth));
-				for (int i = 0; i < futureCount; ++i) {
-					const float t = (futureCount <= 1) ? 1.f : float(i + 1) / float(futureCount);
-					const float x = nowX + t * futureWidth;
-					if (x <= futureStartX) {
-						continue;
-					}
-					const float futureSec = t * futureWidth * secPerPixel;
-					const float futureStepFloat = std::max(0.f, (futureSec / dtSec));
-					const float v = futureValueAtSteps(futureStepFloat);
+		if (futureWidth > 0.f) {
+			nvgBeginPath(args.vg);
+			const float latestV = module->timelineOutputHistory[size_t(channel)][size_t(latestIdx)].load(std::memory_order_relaxed);
+			const float futureStartT = (futureWidth <= 0.f) ? 0.f : clamp((futureStartX - nowX) / futureWidth, 0.f, 1.f);
+			const float futureStartSec = futureStartT * futureWidth * secPerPixel;
+			const float futureStartStep = std::max(0.f, (futureStartSec / dtSec));
+			const float startV = (futureStartT <= 0.f) ? latestV : futureValueAtSteps(futureStartStep);
+			nvgMoveTo(args.vg, futureStartX, voltsToY(startV));
+			const int futureCount = std::max(8, int(futureWidth));
+			std::vector<Vec> futurePoints;
+			std::vector<IntervalSummary> futureSummaries;
+			futurePoints.reserve(size_t(futureCount));
+			futureSummaries.reserve(size_t(futureCount));
+			for (int i = 0; i < futureCount; ++i) {
+				const float t = (futureCount <= 1) ? 1.f : float(i + 1) / float(futureCount);
+				const float x = nowX + t * futureWidth;
+				if (x <= futureStartX) {
+					continue;
+				}
+				const float futureSec = t * futureWidth * secPerPixel;
+				const float futureStepFloat = std::max(0.f, (futureSec / dtSec));
+				const IntervalSummary s = futureSummaryAtSteps(futureStepFloat, intervalHalfSteps);
+				const float v = s.avg;
 				nvgLineTo(args.vg, x, voltsToY(v));
+				futurePoints.emplace_back(x, voltsToY(v));
+				futureSummaries.push_back(s);
 			}
 			nvgStrokeWidth(args.vg, selected ? 1.0f : 0.85f);
-				nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+			nvgStrokeColor(args.vg, selected ? chronomawRgb(244, 249, 255, 238) : chronomawRgb(188, 206, 224, 182));
+			nvgStroke(args.vg);
+			for (size_t i = 0; i < futurePoints.size(); ++i) {
+				const IntervalSummary& s = futureSummaries[i];
+				if ((s.max - s.min) <= envelopeThresholdV) {
+					continue;
+				}
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, futurePoints[i].x, voltsToY(s.min));
+				nvgLineTo(args.vg, futurePoints[i].x, voltsToY(s.max));
+				nvgStrokeWidth(args.vg, selected ? 0.88f : 0.72f);
+				nvgStrokeColor(args.vg, selected ? chronomawRgb(220, 238, 255, 96) : chronomawRgb(186, 208, 230, 72));
 				nvgStroke(args.vg);
 			}
+		}
 		nvgRestore(args.vg);
 	}
 

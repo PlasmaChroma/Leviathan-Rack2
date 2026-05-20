@@ -117,7 +117,11 @@ Chronomaw::Chronomaw() {
 	for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
 		for (int i = 0; i < kTimelineHistorySize; ++i) {
 			timelineInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineInternalHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineInternalHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 		}
 		for (int i = 0; i < kTimelineFutureSize; ++i) {
 			timelineFutureOutput[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -134,11 +138,22 @@ void Chronomaw::onReset() {
 	timelineCycleCount.store(0u, std::memory_order_relaxed);
 	timelineRunning.store(false, std::memory_order_relaxed);
 	timelineCaptureElapsedSec = 0.f;
+	timelineAccumSamples = 0;
 	for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
+		timelineInternalAccum[size_t(ch)] = 0.f;
+		timelineOutputAccum[size_t(ch)] = 0.f;
+		timelineInternalAccumMin[size_t(ch)] = 0.f;
+		timelineInternalAccumMax[size_t(ch)] = 0.f;
+		timelineOutputAccumMin[size_t(ch)] = 0.f;
+		timelineOutputAccumMax[size_t(ch)] = 0.f;
 		timelineTimingPhaseOffsets[size_t(ch)].store(0.f, std::memory_order_relaxed);
 		for (int i = 0; i < kTimelineHistorySize; ++i) {
 			timelineInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineInternalHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineInternalHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputHistoryMin[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
+			timelineOutputHistoryMax[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 		}
 		for (int i = 0; i < kTimelineFutureSize; ++i) {
 			timelineFutureOutput[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -186,16 +201,45 @@ void Chronomaw::process(const ProcessArgs& args) {
 
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		outputs[OUT_1_OUTPUT + i].setVoltage(frameOut.outVolts[size_t(i)]);
+		const float internalV = frameOut.internalVolts[size_t(i)];
+		const float outputV = frameOut.outVolts[size_t(i)];
+		timelineInternalAccum[size_t(i)] += internalV;
+		timelineOutputAccum[size_t(i)] += outputV;
+		if (timelineAccumSamples == 0) {
+			timelineInternalAccumMin[size_t(i)] = internalV;
+			timelineInternalAccumMax[size_t(i)] = internalV;
+			timelineOutputAccumMin[size_t(i)] = outputV;
+			timelineOutputAccumMax[size_t(i)] = outputV;
+		}
+		else {
+			timelineInternalAccumMin[size_t(i)] = std::min(timelineInternalAccumMin[size_t(i)], internalV);
+			timelineInternalAccumMax[size_t(i)] = std::max(timelineInternalAccumMax[size_t(i)], internalV);
+			timelineOutputAccumMin[size_t(i)] = std::min(timelineOutputAccumMin[size_t(i)], outputV);
+			timelineOutputAccumMax[size_t(i)] = std::max(timelineOutputAccumMax[size_t(i)], outputV);
+		}
 	}
+	timelineAccumSamples++;
 
 	timelineCaptureElapsedSec += args.sampleTime;
 	if (timelineCaptureElapsedSec >= kTimelineCaptureIntervalSec) {
 		timelineCaptureElapsedSec -= kTimelineCaptureIntervalSec;
 		const int writePos = timelineWritePos.load(std::memory_order_relaxed);
+		const float invSamples = (timelineAccumSamples > 0) ? (1.f / float(timelineAccumSamples)) : 1.f;
 		for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
-			timelineInternalHistory[size_t(i)][size_t(writePos)].store(frameOut.internalVolts[size_t(i)], std::memory_order_relaxed);
-			timelineOutputHistory[size_t(i)][size_t(writePos)].store(frameOut.outVolts[size_t(i)], std::memory_order_relaxed);
+			timelineInternalHistory[size_t(i)][size_t(writePos)].store(timelineInternalAccum[size_t(i)] * invSamples, std::memory_order_relaxed);
+			timelineInternalHistoryMin[size_t(i)][size_t(writePos)].store(timelineInternalAccumMin[size_t(i)], std::memory_order_relaxed);
+			timelineInternalHistoryMax[size_t(i)][size_t(writePos)].store(timelineInternalAccumMax[size_t(i)], std::memory_order_relaxed);
+			timelineOutputHistory[size_t(i)][size_t(writePos)].store(timelineOutputAccum[size_t(i)] * invSamples, std::memory_order_relaxed);
+			timelineOutputHistoryMin[size_t(i)][size_t(writePos)].store(timelineOutputAccumMin[size_t(i)], std::memory_order_relaxed);
+			timelineOutputHistoryMax[size_t(i)][size_t(writePos)].store(timelineOutputAccumMax[size_t(i)], std::memory_order_relaxed);
+			timelineInternalAccum[size_t(i)] = 0.f;
+			timelineOutputAccum[size_t(i)] = 0.f;
+			timelineInternalAccumMin[size_t(i)] = 0.f;
+			timelineInternalAccumMax[size_t(i)] = 0.f;
+			timelineOutputAccumMin[size_t(i)] = 0.f;
+			timelineOutputAccumMax[size_t(i)] = 0.f;
 		}
+		timelineAccumSamples = 0;
 		timelineWritePos.store((writePos + 1) % kTimelineHistorySize, std::memory_order_relaxed);
 	}
 

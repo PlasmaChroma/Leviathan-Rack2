@@ -69,6 +69,24 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 	out->phaseBeats = phaseBeats_;
 	out->cycleCount = cycleCount_;
 	const double basePosition = double(cycleCount_) + double(phaseBeats_);
+	bool anyUnmuted = false;
+	for (int i = 0; i < kNumOutputs; ++i) {
+		if (!live.outputs[size_t(i)].muted) {
+			anyUnmuted = true;
+			break;
+		}
+	}
+	if (!anyUnmuted) {
+		for (int i = 0; i < kNumOutputs; ++i) {
+			const size_t idx = size_t(i);
+			out->internalVolts[idx] = 0.f;
+			out->outVolts[idx] = 0.f;
+			out->timingPhaseOffsets[idx] = timingPhaseOffsets_[idx];
+			prevOutputs_[idx] = live.outputs[idx];
+			prevOutputValid_[idx] = true;
+		}
+		return;
+	}
 
 	// First-pass engine: generate a simple per-output gate clock.
 	// Phase control offsets each output by up to +/- half a cycle.
@@ -89,13 +107,25 @@ void Engine::process(const FrameInputs& in, LiveState& live, FrameOutputs* out) 
 		}
 
 		const double phaseBase = basePosition + timingPhaseOffsets_[idx];
-		const double rawPhase = rawTimingPhase(ch, phaseBase);
-		const float channelPhase = applyTimingPhase(ch, phaseBase);
-		const double rawCycle = std::floor(rawPhase);
-		const uint64_t channelCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
-		const float internalV = live.running ? waveformInternalVoltage(ch, channelPhase, channelCycle) : kOutputMinV;
-		out->internalVolts[idx] = internalV;
-		out->outVolts[idx] = renderOutputVoltage(ch, live.running, phaseBase, channelCycle);
+		if (ch.muted) {
+			out->internalVolts[idx] = 0.f;
+			out->outVolts[idx] = 0.f;
+		}
+		else {
+			const double rawPhase = rawTimingPhase(ch, phaseBase);
+			const float channelPhase = applyTimingPhase(ch, phaseBase);
+			const double rawCycle = std::floor(rawPhase);
+			const uint64_t channelCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
+			const float internalV = live.running ? waveformInternalVoltage(ch, channelPhase, channelCycle) : kOutputMinV;
+			out->internalVolts[idx] = internalV;
+			const float level = clamp(ch.levelPct * 0.01f, 0.f, 1.f);
+			const float offset = clamp(ch.offsetPct * 0.01f, -1.f, 1.f);
+			float outV = internalV * level + offset * kOutputMaxV;
+			if (ch.invert) {
+				outV = kOutputMaxV - outV;
+			}
+			out->outVolts[idx] = clamp(outV, kOutputMinV, kOutputMaxV);
+		}
 		out->timingPhaseOffsets[idx] = timingPhaseOffsets_[idx];
 		prevOutputs_[idx] = ch;
 		prevOutputValid_[idx] = true;
