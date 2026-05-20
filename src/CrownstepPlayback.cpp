@@ -1,13 +1,73 @@
 #include "CrownstepShared.hpp"
 
+namespace {
+struct ActiveRange {
+	int start = 0;
+	int endExclusive = 0;
+	int length = 0;
+};
+
+static ActiveRange computeActiveRange(const Crownstep* module, int historySize, int sequenceCap) {
+	ActiveRange r;
+	if (historySize <= 0) {
+		return r;
+	}
+	if (module && module->sequenceRangeTrimEnabled) {
+		int leftTrim = clamp(module->sequenceTrimLeft, 0, historySize - 1);
+		int maxRightTrim = std::max(0, historySize - leftTrim - 1);
+		int rightTrim = clamp(module->sequenceTrimRight, 0, maxRightTrim);
+		r.start = leftTrim;
+		r.endExclusive = historySize - rightTrim;
+		r.length = std::max(1, r.endExclusive - r.start);
+		r.endExclusive = r.start + r.length;
+		return r;
+	}
+	r.length = crownstep::activeLength(historySize, sequenceCap);
+	r.start = crownstep::activeStartIndex(historySize, sequenceCap);
+	r.endExclusive = r.start + r.length;
+	return r;
+}
+}
+
 int Crownstep::activeLength() {
 	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	return crownstep::activeLength(int(history.size()), currentSequenceCap());
+	const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+	return range.length;
 }
 
 int Crownstep::activeStartIndex() {
 	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	return crownstep::activeStartIndex(int(history.size()), currentSequenceCap());
+	const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+	return range.start;
+}
+
+int Crownstep::activeEndIndexExclusive() {
+	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+	const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+	return range.endExclusive;
+}
+
+void Crownstep::setActiveRangeTrimWindow(int startInclusive, int endExclusive) {
+	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+	const int historySize = int(history.size());
+	if (historySize <= 0) {
+		sequenceRangeTrimEnabled = false;
+		sequenceTrimLeft = 0;
+		sequenceTrimRight = 0;
+		return;
+	}
+	int start = clamp(startInclusive, 0, historySize - 1);
+	int end = clamp(endExclusive, start + 1, historySize);
+	sequenceRangeTrimEnabled = true;
+	sequenceTrimLeft = start;
+	sequenceTrimRight = std::max(0, historySize - end);
+}
+
+void Crownstep::clearActiveRangeTrimWindow() {
+	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+	sequenceRangeTrimEnabled = false;
+	sequenceTrimLeft = 0;
+	sequenceTrimRight = 0;
 }
 
 float Crownstep::pitchForSequenceIndex(int sequenceIndex) {
@@ -41,7 +101,8 @@ void Crownstep::refreshHeldPitchForCurrentStep() {
 	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 	int historySize = int(history.size());
 	int sequenceCap = currentSequenceCap();
-	int length = crownstep::activeLength(historySize, sequenceCap);
+	const ActiveRange range = computeActiveRange(this, historySize, sequenceCap);
+	int length = range.length;
 	if (length <= 0) {
 		heldPitch = NO_SEQUENCE_PITCH_VOLTS;
 		return;
@@ -50,7 +111,7 @@ void Crownstep::refreshHeldPitchForCurrentStep() {
 		return;
 	}
 	int shownStep = clamp(displayedStep, 1, length);
-	int sequenceIndex = crownstep::activeStartIndex(historySize, sequenceCap) + (shownStep - 1);
+	int sequenceIndex = range.start + (shownStep - 1);
 	heldPitch = pitchForSequenceIndex(sequenceIndex);
 }
 

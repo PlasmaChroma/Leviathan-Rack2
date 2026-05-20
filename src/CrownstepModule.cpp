@@ -912,6 +912,10 @@ void Crownstep::appendDebugRandomMoves(int count) {
 		move.isKing = ((random::u32() & 7u) == 0u);
 		moveHistory.push_back(move);
 		history.push_back(makeStepFromMove(move));
+		// Keep a right-trimmed window anchored when new history is appended.
+		if (sequenceRangeTrimEnabled && sequenceTrimRight > 0) {
+			sequenceTrimRight += 1;
+		}
 	}
 }
 
@@ -1173,6 +1177,10 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		moveHistory.push_back(move);
 		history.push_back(step);
+		// Keep a right-trimmed window anchored when new history is appended.
+		if (sequenceRangeTrimEnabled && sequenceTrimRight > 0) {
+			sequenceTrimRight += 1;
+		}
 	}
 	if (currentSequenceCap() == 1) {
 		eocActivityPulseRequests.fetch_add(1, std::memory_order_relaxed);

@@ -22,6 +22,9 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "playerMode", json_integer(playerMode));
 	json_object_set_new(rootJ, "stepCounterStyle", json_integer(stepCounterStyle));
 	json_object_set_new(rootJ, "sequenceCapOverride", json_integer(sequenceCapOverride));
+	json_object_set_new(rootJ, "sequenceRangeTrimEnabled", json_boolean(sequenceRangeTrimEnabled));
+	json_object_set_new(rootJ, "sequenceTrimLeft", json_integer(sequenceTrimLeft));
+	json_object_set_new(rootJ, "sequenceTrimRight", json_integer(sequenceTrimRight));
 	json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
 	json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
 	json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
@@ -201,6 +204,18 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 		if (sequenceCapOverride < -1) {
 			sequenceCapOverride = -1;
 		}
+	}
+	json_t* sequenceRangeTrimEnabledJ = json_object_get(rootJ, "sequenceRangeTrimEnabled");
+	if (sequenceRangeTrimEnabledJ) {
+		sequenceRangeTrimEnabled = json_is_true(sequenceRangeTrimEnabledJ);
+	}
+	json_t* sequenceTrimLeftJ = json_object_get(rootJ, "sequenceTrimLeft");
+	if (sequenceTrimLeftJ) {
+		sequenceTrimLeft = std::max(0, int(json_integer_value(sequenceTrimLeftJ)));
+	}
+	json_t* sequenceTrimRightJ = json_object_get(rootJ, "sequenceTrimRight");
+	if (sequenceTrimRightJ) {
+		sequenceTrimRight = std::max(0, int(json_integer_value(sequenceTrimRightJ)));
 	}
 	json_t* playheadJ = json_object_get(rootJ, "playhead");
 	if (playheadJ) {

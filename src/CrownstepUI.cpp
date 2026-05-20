@@ -2373,6 +2373,24 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	bool capDragActive = false;
 	bool capDragTrimMode = false;
 	Vec capDragLocal = Vec(0.f, 0.f);
+	enum class TrimHandle {
+		None,
+		Left,
+		Right,
+	};
+	enum class RangeDragMode {
+		None,
+		LeftEdge,
+		RightEdge,
+		MoveWindow,
+	};
+	TrimHandle activeTrimHandle = TrimHandle::None;
+	TrimHandle pendingTrimHandle = TrimHandle::None;
+	RangeDragMode activeRangeDragMode = RangeDragMode::None;
+	RangeDragMode pendingRangeDragMode = RangeDragMode::None;
+	int rangeDragAnchorIndex = 0;
+	int rangeDragStartIndex = 0;
+	int rangeDragEndIndex = 0;
 
 	enum class VisualMode {
 		DISCRETE,
@@ -2498,6 +2516,116 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 	}
 
+	void activeWindowGeometry(const RibbonState& s, const RibbonLayout& layout, float* outX, float* outW) const {
+		if (!outX || !outW) {
+			return;
+		}
+		float startNorm = 0.f;
+		float endNorm = 1.f;
+		if (!s.fullMode && s.historySize > 0) {
+			startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
+			endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
+		}
+		*outX = layout.stripX + layout.stripW * startNorm;
+		*outW = std::max(1.4f, layout.stripW * std::max(0.f, endNorm - startNorm));
+	}
+
+	float trimHandleWidth(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 0.9f, layout.compact ? 4.0f : 5.0f, layout.compact ? 6.0f : 7.4f);
+	}
+
+	TrimHandle trimHandleAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 1 || s.activeLength <= 0) {
+			return TrimHandle::None;
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		const float handleW = trimHandleWidth(layout);
+		const float handleH = std::max(1.f, layout.historyH - 0.6f);
+		const float handleY = layout.historyY + 0.3f;
+		const math::Rect leftHandle(Vec(activeX - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		const math::Rect rightHandle(Vec(activeX + activeW - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		if (leftHandle.contains(localPos)) {
+			return TrimHandle::Left;
+		}
+		if (rightHandle.contains(localPos)) {
+			return TrimHandle::Right;
+		}
+		return TrimHandle::None;
+	}
+
+	bool pointInActiveWindow(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 0 || s.activeLength <= 0) {
+			return false;
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		return localPos.x >= activeX && localPos.x <= activeX + activeW;
+	}
+
+	RangeDragMode rangeDragModeAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		const TrimHandle handle = trimHandleAt(localPos, layout, s);
+		if (handle == TrimHandle::Left) {
+			return RangeDragMode::LeftEdge;
+		}
+		if (handle == TrimHandle::Right) {
+			return RangeDragMode::RightEdge;
+		}
+		if (pointInActiveWindow(localPos, layout, s)) {
+			return RangeDragMode::MoveWindow;
+		}
+		return RangeDragMode::None;
+	}
+
+	int historyIndexForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
+		if (historySize <= 0) {
+			return 0;
+		}
+		float t = clamp((localX - layout.stripX) / std::max(1.f, layout.stripW), 0.f, 1.f);
+		return clamp(int(std::lround(t * float(historySize))), 0, historySize);
+	}
+
+	void applyTrimHandleDrag(TrimHandle handle, float localX, const RibbonState& s, const RibbonLayout& layout) {
+		if (!module || handle == TrimHandle::None || s.historySize <= 1 || s.activeLength <= 0) {
+			return;
+		}
+		const int currentStart = clamp(s.activeStart, 0, s.historySize - 1);
+		const int currentEnd = clamp(s.activeStart + s.activeLength, currentStart + 1, s.historySize);
+		const int draggedIndex = historyIndexForLocalX(localX, s.historySize, layout);
+		if (handle == TrimHandle::Left) {
+			const int nextStart = clamp(draggedIndex, 0, currentEnd - 1);
+			module->setActiveRangeTrimWindow(nextStart, currentEnd);
+		}
+		else if (handle == TrimHandle::Right) {
+			const int nextEnd = clamp(draggedIndex, currentStart + 1, s.historySize);
+			module->setActiveRangeTrimWindow(currentStart, nextEnd);
+		}
+	}
+
+	void shiftActiveRange(int deltaSteps, const RibbonState& s) {
+		if (!module || deltaSteps == 0 || s.historySize <= 1 || s.activeLength <= 0) {
+			return;
+		}
+		const int length = clamp(s.activeLength, 1, s.historySize);
+		const int maxStart = std::max(0, s.historySize - length);
+		const int start = clamp(s.activeStart + deltaSteps, 0, maxStart);
+		module->setActiveRangeTrimWindow(start, start + length);
+	}
+
+	void applyRangeWindowDrag(float localX, const RibbonState& s, const RibbonLayout& layout) {
+		if (!module || s.historySize <= 1 || rangeDragEndIndex <= rangeDragStartIndex) {
+			return;
+		}
+		const int length = rangeDragEndIndex - rangeDragStartIndex;
+		const int currentIndex = historyIndexForLocalX(localX, s.historySize, layout);
+		const int delta = currentIndex - rangeDragAnchorIndex;
+		const int maxStart = std::max(0, s.historySize - length);
+		const int start = clamp(rangeDragStartIndex + delta, 0, maxStart);
+		module->setActiveRangeTrimWindow(start, start + length);
+	}
+
 	int clipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
 		if (historySize <= 0) {
 			return 0;
@@ -2560,10 +2688,34 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return clamp(next, 1, std::max(1, historySize - 1));
 	}
 
+	void nudgedTrimmedRangePreview(int dir, const RibbonState& s, int* outStart, int* outEnd) const {
+		if (!outStart || !outEnd) {
+			return;
+		}
+		int start = clamp(s.activeStart, 0, std::max(0, s.historySize - 1));
+		int end = clamp(s.activeStart + s.activeLength, start + 1, std::max(1, s.historySize));
+		if (dir < 0) {
+			if ((end - start) > 1) {
+				end -= 1;
+			}
+		}
+		else if (dir > 0) {
+			if (end < s.historySize) {
+				end += 1;
+			}
+			else if (start > 0) {
+				start -= 1;
+			}
+		}
+		*outStart = start;
+		*outEnd = end;
+	}
+
 	void applyClipCount(int clipCount) {
 		if (!module) {
 			return;
 		}
+		module->clearActiveRangeTrimWindow();
 		if (clipCount <= 0) {
 			module->sequenceCapOverride = 0;
 			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
@@ -2673,6 +2825,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (!module || historySize <= 0 || dir == 0) {
 			return;
 		}
+		if (module->sequenceRangeTrimEnabled) {
+			RibbonState s = pullState();
+			int start = 0;
+			int end = 0;
+			nudgedTrimmedRangePreview(dir, s, &start, &end);
+			module->setActiveRangeTrimWindow(start, end);
+			return;
+		}
 		int cap = capValueFromModule();
 		if (cap <= 0) {
 			// From FULL, decreasing moves to historySize-1; increasing stays FULL.
@@ -2713,7 +2873,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		s.activeLength = std::max(0, module->activeLength());
 		s.activeStart = std::max(0, module->activeStartIndex());
 		s.capValue = capValueFromModule();
-		s.fullMode = (s.capValue == 0);
+		s.fullMode = (s.capValue == 0) && !module->sequenceRangeTrimEnabled;
 		if (s.activeLength > 0) {
 			s.playbackIndex = clamp(module->displayedStep - 1, 0, s.activeLength - 1);
 		}
@@ -2790,6 +2950,20 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onButton(e);
 			return;
 		}
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+			if (pendingRangeDragMode == RangeDragMode::LeftEdge || pendingRangeDragMode == RangeDragMode::RightEdge) {
+				RibbonState s = pullState();
+				shiftActiveRange((pendingRangeDragMode == RangeDragMode::LeftEdge) ? -1 : 1, s);
+				pendingRangeDragMode = RangeDragMode::None;
+				pendingTrimHandle = TrimHandle::None;
+				e.consume(this);
+				return;
+			}
+			pendingRangeDragMode = RangeDragMode::None;
+			pendingTrimHandle = TrimHandle::None;
+			Widget::onButton(e);
+			return;
+		}
 		if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
 			Widget::onButton(e);
 			return;
@@ -2799,7 +2973,8 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (pointInHistoryStrip(e.pos, layout)) {
-			applyClipCountForLocalX(e.pos.x, s.historySize, layout);
+			pendingTrimHandle = trimHandleAt(e.pos, layout, s);
+			pendingRangeDragMode = rangeDragModeAt(e.pos, layout, s);
 			e.consume(this);
 			return;
 		}
@@ -2827,9 +3002,27 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		lastHoverPos = capDragLocal;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
-		capDragTrimMode = pointInHistoryStrip(capDragLocal, layout);
+		activeRangeDragMode = pendingRangeDragMode;
+		if (activeRangeDragMode == RangeDragMode::None) {
+			activeRangeDragMode = rangeDragModeAt(capDragLocal, layout, s);
+		}
+		activeTrimHandle = pendingTrimHandle;
+		if (activeTrimHandle == TrimHandle::None) {
+			activeTrimHandle = trimHandleAt(capDragLocal, layout, s);
+		}
+		capDragTrimMode = (activeRangeDragMode != RangeDragMode::None);
+		pendingTrimHandle = TrimHandle::None;
+		pendingRangeDragMode = RangeDragMode::None;
 		if (capDragTrimMode) {
-			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+			rangeDragAnchorIndex = historyIndexForLocalX(capDragLocal.x, s.historySize, layout);
+			rangeDragStartIndex = clamp(s.activeStart, 0, std::max(0, s.historySize - 1));
+			rangeDragEndIndex = clamp(s.activeStart + s.activeLength, rangeDragStartIndex + 1, s.historySize);
+			if (activeRangeDragMode == RangeDragMode::LeftEdge || activeRangeDragMode == RangeDragMode::RightEdge) {
+				applyTrimHandleDrag(activeTrimHandle, capDragLocal.x, s, layout);
+			}
+			else if (activeRangeDragMode == RangeDragMode::MoveWindow) {
+				applyRangeWindowDrag(capDragLocal.x, s, layout);
+			}
 		}
 		else {
 			capDragActive = false;
@@ -2851,7 +3044,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (capDragTrimMode) {
-			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+			if (activeRangeDragMode == RangeDragMode::LeftEdge || activeRangeDragMode == RangeDragMode::RightEdge) {
+				applyTrimHandleDrag(activeTrimHandle, capDragLocal.x, s, layout);
+			}
+			else if (activeRangeDragMode == RangeDragMode::MoveWindow) {
+				applyRangeWindowDrag(capDragLocal.x, s, layout);
+			}
 		}
 		e.consume(this);
 	}
@@ -2863,6 +3061,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		capDragActive = false;
 		capDragTrimMode = false;
+		activeTrimHandle = TrimHandle::None;
+		pendingTrimHandle = TrimHandle::None;
+		activeRangeDragMode = RangeDragMode::None;
+		pendingRangeDragMode = RangeDragMode::None;
 		e.consume(this);
 	}
 
@@ -2871,13 +3073,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onDoubleClick(e);
 			return;
 		}
-		RibbonLayout layout = computeLayout();
-		Vec localPos = currentLocalMousePos();
-		if (!pointInHistoryStrip(localPos, layout)) {
-			e.consume(this);
-			return;
-		}
-		toggleFullVsRecent();
 		e.consume(this);
 	}
 
@@ -2917,14 +3112,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
 			nvgFill(args.vg);
 				if (s.historySize > 0) {
-					float startNorm = 0.f;
-					float endNorm = 1.f;
-				if (!s.fullMode && s.historySize > 0) {
-					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
-					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
-				}
-				float activeX = stripX + stripW * startNorm;
-				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				float activeX = 0.f;
+				float activeW = 0.f;
+				activeWindowGeometry(s, layout, &activeX, &activeW);
 				auto makeBrandActivePaint = [&](int alphaA, int alphaB) {
 					return nvgLinearGradient(
 						args.vg,
@@ -2972,8 +3162,31 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgBeginPath(args.vg);
 				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
 				nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 198));
-				nvgStrokeWidth(args.vg, 0.85f);
-				nvgStroke(args.vg);
+					nvgStrokeWidth(args.vg, 0.85f);
+					nvgStroke(args.vg);
+			}
+
+			if (s.historySize > 1 && s.activeLength > 0) {
+				TrimHandle hoveredHandle = trimHandleAt(drawMouseLocal, layout, s);
+				const float handleW = trimHandleWidth(layout);
+				const float handleH = std::max(1.f, historyH - 0.6f);
+				const float handleY = historyY + 0.3f;
+				auto drawHandle = [&](float cx, bool active) {
+					const float hx = cx - 0.5f * handleW;
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
+					nvgFillColor(args.vg, active ? nvgRGBA(222, 240, 255, 220) : nvgRGBA(170, 204, 232, 188));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
+					nvgStrokeColor(args.vg, active ? nvgRGBA(255, 255, 255, 232) : nvgRGBA(106, 136, 160, 196));
+					nvgStrokeWidth(args.vg, 0.8f);
+					nvgStroke(args.vg);
+				};
+				const bool leftActive = (hoveredHandle == TrimHandle::Left) || (capDragActive && activeTrimHandle == TrimHandle::Left);
+				const bool rightActive = (hoveredHandle == TrimHandle::Right) || (capDragActive && activeTrimHandle == TrimHandle::Right);
+				drawHandle(activeX, leftActive);
+				drawHandle(activeX + activeW, rightActive);
 			}
 		}
 
@@ -3226,14 +3439,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
 				// Tie crown/line marker to local playback position within the
 				// currently highlighted (purple) active window.
-				float startNorm = 0.f;
-				float endNorm = 1.f;
-				if (!s.fullMode && s.historySize > 0) {
-					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
-					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
-				}
-				float activeX = stripX + stripW * startNorm;
-				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				float activeX = 0.f;
+				float activeW = 0.f;
+				activeWindowGeometry(s, layout, &activeX, &activeW);
 				float localNorm = (s.activeLength <= 1) ? 0.f : (float(s.playbackIndex) / float(s.activeLength - 1));
 				float mx = activeX + activeW * clamp(localNorm, 0.f, 1.f);
 				float markerCy = historyY - 0.1f;
@@ -3348,12 +3556,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				Vec hoverLocal = currentLocalMousePos();
 				bool hoverInRibbon = pointInHistoryStrip(hoverLocal, layout) || pointInLoopStrip(hoverLocal, layout);
 				Vec tooltipLocal = capDragActive ? capDragLocal : hoverLocal;
-				bool previewClip = (s.historySize > 0)
-					&& ((capDragActive && capDragTrimMode) || pointInHistoryStrip(tooltipLocal, layout));
+				bool previewClip = (s.historySize > 0) && (capDragActive && capDragTrimMode);
 				if (previewClip) {
-					int clipCount = clipCountForLocalX(tooltipLocal.x, s.historySize, layout);
-					char clipText[48];
-					formatWindowPreviewText(clipCount, s.historySize, clipText, sizeof(clipText));
+					char clipText[64];
+					int startOneBased = s.activeStart + 1;
+					int endOneBased = s.activeStart + s.activeLength;
+					std::snprintf(clipText, sizeof(clipText), "Window: %d-%d", startOneBased, endOneBased);
 					float fontSize = compactLayout ? 6.2f : 7.0f;
 					float textBounds[4];
 					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -3382,11 +3590,18 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				}
 				else if (s.historySize > 0 && hoverInRibbon
 					&& (pointInLoopMinusButton(tooltipLocal, layout) || pointInLoopPlusButton(tooltipLocal, layout))) {
-					int previewCount = pointInLoopMinusButton(tooltipLocal, layout)
-						? nudgedClipCountPreview(-1, s.historySize)
-						: nudgedClipCountPreview(1, s.historySize);
-					char clipText[48];
-					formatWindowPreviewText(previewCount, s.historySize, clipText, sizeof(clipText));
+					const int dir = pointInLoopMinusButton(tooltipLocal, layout) ? -1 : 1;
+					char clipText[64];
+					if (module && module->sequenceRangeTrimEnabled) {
+						int start = 0;
+						int end = 0;
+						nudgedTrimmedRangePreview(dir, s, &start, &end);
+						std::snprintf(clipText, sizeof(clipText), "Window: %d-%d", start + 1, end);
+					}
+					else {
+						int previewCount = nudgedClipCountPreview(dir, s.historySize);
+						formatWindowPreviewText(previewCount, s.historySize, clipText, sizeof(clipText));
+					}
 					float fontSize = compactLayout ? 6.2f : 7.0f;
 					float textBounds[4];
 					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);

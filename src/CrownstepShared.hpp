@@ -191,6 +191,9 @@ struct Crownstep : Module {
 	int playerMode = PLAYER_INIT;
 	int stepCounterStyle = STEP_COUNTER_RIBBON;
 	int sequenceCapOverride = -1; // -1: use knob, 0: full, >0: explicit recent-window cap
+	bool sequenceRangeTrimEnabled = false;
+	int sequenceTrimLeft = 0;
+	int sequenceTrimRight = 0;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -303,6 +306,9 @@ struct Crownstep : Module {
 
 	int activeLength();
 	int activeStartIndex();
+	int activeEndIndexExclusive();
+	void setActiveRangeTrimWindow(int startInclusive, int endExclusive);
+	void clearActiveRangeTrimWindow();
 	float pitchForSequenceIndex(int sequenceIndex);
 	void refreshHeldPitchForCurrentStep();
 	void randomizeBoardValueLayout();
