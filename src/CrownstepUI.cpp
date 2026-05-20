@@ -3129,8 +3129,6 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 	void draw(const DrawArgs& args) override {
 		RibbonState s = pullState();
-		int currentStep = (s.activeLength > 0 && s.playbackIndex >= 0) ? (s.playbackIndex + 1) : 0;
-		int totalSteps = s.activeLength;
 
 			const float x = 0.f;
 			const float y = 0.f;
@@ -3586,8 +3584,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			}
 
 			// Centered status text inside the top (history) strip.
-			char ribbonText[40];
-			std::snprintf(ribbonText, sizeof(ribbonText), "%d / %d", currentStep, totalSteps);
+			int firstSeqIndex = (s.historySize > 0 && s.activeLength > 0) ? (s.activeStart + 1) : 0;
+			int lastSeqIndex = (s.historySize > 0 && s.activeLength > 0) ? (s.activeStart + s.activeLength) : 0;
+			int currentSeqIndex = (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0)
+				? (s.activeStart + s.playbackIndex + 1)
+				: 0;
+			char ribbonText[64];
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d (%d - %d)", currentSeqIndex, firstSeqIndex, lastSeqIndex);
 			char fullText[24];
 			std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
 			float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
