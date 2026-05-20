@@ -936,6 +936,19 @@ struct BifurxWidget final : ModuleWidget {
 						bifurx->controlFastCacheValid = false;
 					}));
 			}));
+			menu->addChild(createSubmenuItem("Color Scheme", "", [=](Menu* submenu) {
+				auto addSchemeItem = [=](Bifurx::ColorScheme scheme, const std::string& label) {
+					submenu->addChild(createCheckMenuItem(
+						label, "",
+						[=]() { return bifurx->colorScheme == scheme; },
+						[=]() { bifurx->colorScheme = scheme; }
+					));
+				};
+				addSchemeItem(Bifurx::SCHEME_DEFAULT, "Default (Purple/Cyan)");
+				addSchemeItem(Bifurx::SCHEME_CLASSIC, "Classic (Green/Red)");
+				addSchemeItem(Bifurx::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
+				addSchemeItem(Bifurx::SCHEME_FIRE, "Fire (Red/Yellow)");
+			}));
 			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"NanoVG", "",
@@ -962,19 +975,6 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Show Module Response", "",
 				[=]() { return bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed); },
 				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
-			menu->addChild(createSubmenuItem("Color Scheme", "", [=](Menu* submenu) {
-				auto addSchemeItem = [=](Bifurx::ColorScheme scheme, const std::string& label) {
-					submenu->addChild(createCheckMenuItem(
-						label, "",
-						[=]() { return bifurx->colorScheme == scheme; },
-						[=]() { bifurx->colorScheme = scheme; }
-					));
-				};
-				addSchemeItem(Bifurx::SCHEME_DEFAULT, "Default (Purple/Cyan)");
-				addSchemeItem(Bifurx::SCHEME_CLASSIC, "Classic (Green/Red)");
-				addSchemeItem(Bifurx::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
-				addSchemeItem(Bifurx::SCHEME_FIRE, "Fire (Red/Yellow)");
-			}));
 			menu->addChild(createCheckMenuItem("Low Latency Offload", "",
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));

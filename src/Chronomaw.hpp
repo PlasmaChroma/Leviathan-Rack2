@@ -67,6 +67,8 @@ struct Chronomaw : Module {
 	std::atomic<int> timelineWritePos {0};
 	std::atomic<float> timelinePhaseBeats {0.f};
 	std::atomic<float> timelineBpm {chronomaw::kDefaultBpm};
+	std::atomic<uint64_t> timelineCycleCount {0u};
+	std::array<std::atomic<float>, chronomaw::kNumOutputs> timelineTimingPhaseOffsets {};
 	std::atomic<bool> timelineRunning {false};
 	float timelineCaptureElapsedSec = 0.f;
 	dsp::SchmittTrigger runButtonEdge;

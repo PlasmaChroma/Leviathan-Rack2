@@ -685,8 +685,34 @@ struct ChronomawSurfaceWidget : Widget {
 			}
 		}
 
+		void updateTimelineFuturePreview() {
+			if (!module) {
+				return;
+			}
+			const float phaseNow = module->timelinePhaseBeats.load(std::memory_order_relaxed);
+			const uint64_t cycleNow = module->timelineCycleCount.load(std::memory_order_relaxed);
+			const float bpmNow = clamp(module->timelineBpm.load(std::memory_order_relaxed), chronomaw::kMinBpm, chronomaw::kMaxBpm);
+			const bool runningNow = module->timelineRunning.load(std::memory_order_relaxed);
+			const float beatsPerSec = bpmNow / 60.f;
+			for (int step = 0; step < Chronomaw::kTimelineFutureSize; ++step) {
+				const float tSec = float(step) * Chronomaw::kTimelineCaptureIntervalSec;
+				const float phaseRaw = phaseNow + beatsPerSec * tSec;
+				const double basePosition = double(cycleNow) + double(phaseRaw);
+				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
+					const chronomaw::OutputState& outState = module->state.live.outputs[size_t(ch)];
+					const double phaseBase = basePosition + double(module->timelineTimingPhaseOffsets[size_t(ch)].load(std::memory_order_relaxed));
+					const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
+					const double rawCycle = std::floor(rawPhase);
+					const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
+					const float v = chronomaw::renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
+					module->timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
+				}
+			}
+		}
+
 		void step() override {
 			commitPendingSliderClickIfReady();
+			updateTimelineFuturePreview();
 			Widget::step();
 		}
 

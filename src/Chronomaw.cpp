@@ -131,9 +131,11 @@ void Chronomaw::onReset() {
 	timelineWritePos.store(0, std::memory_order_relaxed);
 	timelinePhaseBeats.store(0.f, std::memory_order_relaxed);
 	timelineBpm.store(chronomaw::kDefaultBpm, std::memory_order_relaxed);
+	timelineCycleCount.store(0u, std::memory_order_relaxed);
 	timelineRunning.store(false, std::memory_order_relaxed);
 	timelineCaptureElapsedSec = 0.f;
 	for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
+		timelineTimingPhaseOffsets[size_t(ch)].store(0.f, std::memory_order_relaxed);
 		for (int i = 0; i < kTimelineHistorySize; ++i) {
 			timelineInternalHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 			timelineOutputHistory[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
@@ -176,7 +178,11 @@ void Chronomaw::process(const ProcessArgs& args) {
 	engine.process(in, state.live, &frameOut);
 	timelinePhaseBeats.store(frameOut.phaseBeats, std::memory_order_relaxed);
 	timelineBpm.store(state.live.bpm, std::memory_order_relaxed);
+	timelineCycleCount.store(frameOut.cycleCount, std::memory_order_relaxed);
 	timelineRunning.store(frameOut.running, std::memory_order_relaxed);
+	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
+		timelineTimingPhaseOffsets[size_t(i)].store(float(frameOut.timingPhaseOffsets[size_t(i)]), std::memory_order_relaxed);
+	}
 
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		outputs[OUT_1_OUTPUT + i].setVoltage(frameOut.outVolts[size_t(i)]);
@@ -191,27 +197,6 @@ void Chronomaw::process(const ProcessArgs& args) {
 			timelineOutputHistory[size_t(i)][size_t(writePos)].store(frameOut.outVolts[size_t(i)], std::memory_order_relaxed);
 		}
 		timelineWritePos.store((writePos + 1) % kTimelineHistorySize, std::memory_order_relaxed);
-
-			// Deterministic preview horizon for the right-of-now timeline region.
-			const float phaseNow = frameOut.phaseBeats;
-			const uint64_t cycleNow = frameOut.cycleCount;
-			const float bpmNow = clamp(state.live.bpm, chronomaw::kMinBpm, chronomaw::kMaxBpm);
-				const bool runningNow = frameOut.running;
-				const float beatsPerSec = bpmNow / 60.f;
-				for (int step = 0; step < kTimelineFutureSize; ++step) {
-					const float tSec = float(step) * kTimelineCaptureIntervalSec;
-					const float phaseRaw = phaseNow + beatsPerSec * tSec;
-					const double basePosition = double(cycleNow) + double(phaseRaw);
-				for (int ch = 0; ch < chronomaw::kNumOutputs; ++ch) {
-					const chronomaw::OutputState& outState = state.live.outputs[size_t(ch)];
-					const double phaseBase = basePosition + frameOut.timingPhaseOffsets[size_t(ch)];
-					const double rawPhase = chronomaw::rawTimingPhase(outState, phaseBase);
-					const double rawCycle = std::floor(rawPhase);
-					const uint64_t chCycle = (rawCycle > 0.0) ? uint64_t(rawCycle) : 0u;
-				const float v = renderOutputVoltage(outState, runningNow, phaseBase, chCycle);
-					timelineFutureOutput[size_t(ch)][size_t(step)].store(clamp(v, chronomaw::kOutputMinV, chronomaw::kOutputMaxV), std::memory_order_relaxed);
-				}
-			}
 	}
 
 	lights[RUN_LIGHT].setBrightness(state.live.running ? 1.f : 0.f);
