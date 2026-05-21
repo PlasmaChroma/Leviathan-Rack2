@@ -223,7 +223,7 @@ Crownstep::Crownstep() {
 
 	configParam<CrownstepSeqLengthQuantity>(
 		SEQ_LENGTH_PARAM, float(SEQ_LENGTH_MIN), float(SEQ_LENGTH_MAX), float(SEQ_LENGTH_MAX), "Sequence length");
-	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Bias");
+	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
 	configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 	// RUN_PARAM intentionally left unconfigured; reserved for compatibility.
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
@@ -238,7 +238,7 @@ Crownstep::Crownstep() {
 	configInput(CLOCK_INPUT, "Clock");
 	configInput(RESET_INPUT, "Reset");
 	configInput(TRANSPOSE_INPUT, "Transpose");
-	configInput(ROOT_INPUT, "Bias");
+	configInput(ROOT_INPUT, "Root");
 
 	configOutput(PITCH_OUTPUT, "Pitch");
 	configOutput(ACCENT_OUTPUT, "Accent");
@@ -634,9 +634,9 @@ float Crownstep::transposeVolts() {
 
 int Crownstep::rootCvOffsetSemitone() {
 	float rootCv = clamp(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
-	// Semitone-domain mapping with direct CV anchors:
-	// -10V -> -10 semitones, 0V -> 0 semitones, +10V -> +10 semitones.
-	int cvOffsetSemitones = int(std::lround(rootCv / ROOT_CV_VOLTS_PER_SEMITONE));
+	// Pitch-CV mapping quantized to semitones:
+	// 0V -> 0 semitones, 1V -> 12 semitones, so 0V..1V spans one chromatic octave.
+	int cvOffsetSemitones = int(std::lround(rootCv * ROOT_CV_SEMITONES_PER_VOLT));
 	cvOffsetSemitones = clamp(cvOffsetSemitones, -ROOT_CV_MAX_OFFSET_SEMITONES, ROOT_CV_MAX_OFFSET_SEMITONES);
 	return cvOffsetSemitones;
 }
@@ -843,7 +843,7 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 		float center = 0.5f * crownstep::pitchRangeSemitoneSpan(params[RANGE_PARAM].getValue(), boardCellCount());
 		boardValueIndex -= center;
 	}
-	// Bias acts in semitone space after Range, so the displayed span remains literal.
+	// Root acts in semitone space after Range, so the displayed span remains literal.
 	boardValueIndex += float(rootSemitoneLinear());
 	return boardValueIndex;
 }

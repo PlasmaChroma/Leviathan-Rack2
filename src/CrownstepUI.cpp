@@ -3900,7 +3900,7 @@ struct CrownstepWidget final : ModuleWidget {
 		applyPointOverride("CLOCK_INPUT", &clockPos);
 		applyPointOverride("RESET_INPUT", &resetPos);
 		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
-		applyPointOverrideFallback("BIAS_INPUT", "ROOT_INPUT", &rootCvPos);
+		applyPointOverrideFallback("ROOT_INPUT", "BIAS_INPUT", &rootCvPos);
 		applyPointOverride("PITCH_OUTPUT", &pitchPos);
 		applyPointOverride("ACCENT_OUTPUT", &accentPos);
 		applyPointOverride("MOD_OUTPUT", &modPos);
@@ -4108,7 +4108,7 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 		));
 		menu->addChild(createCheckMenuItem(
-			"Melodic Bias",
+			"Smooth Melody",
 			"",
 			[=]() {
 				return module && module->melodicBiasEnabled;

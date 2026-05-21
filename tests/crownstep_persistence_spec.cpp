@@ -179,11 +179,61 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
 }
 
+TestResult testRootCvUsesOneVoltPerOctaveSemitoneQuantization() {
+  Crownstep module;
+  module.params[Crownstep::ROOT_PARAM].setValue(0.f);
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(0.f);
+  int zeroOffset = module.rootCvOffsetSemitone();
+  int zeroRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(1.f / 12.f);
+  int oneSemitoneOffset = module.rootCvOffsetSemitone();
+  int oneSemitoneRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(11.f / 12.f);
+  int elevenSemitoneOffset = module.rootCvOffsetSemitone();
+  int elevenSemitoneRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(1.f);
+  int octaveOffset = module.rootCvOffsetSemitone();
+  int octaveRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(-1.f / 12.f);
+  int negativeSemitoneOffset = module.rootCvOffsetSemitone();
+  int negativeSemitoneRoot = module.rootSemitone();
+
+  bool pass =
+    zeroOffset == 0 &&
+    zeroRoot == 0 &&
+    oneSemitoneOffset == 1 &&
+    oneSemitoneRoot == 1 &&
+    elevenSemitoneOffset == 11 &&
+    elevenSemitoneRoot == 11 &&
+    octaveOffset == 12 &&
+    octaveRoot == 0 &&
+    negativeSemitoneOffset == -1 &&
+    negativeSemitoneRoot == 11;
+
+  return {"Root CV uses 1V/oct semitone quantization", pass,
+          "offsets=" + std::to_string(zeroOffset) + "," +
+            std::to_string(oneSemitoneOffset) + "," +
+            std::to_string(elevenSemitoneOffset) + "," +
+            std::to_string(octaveOffset) + "," +
+            std::to_string(negativeSemitoneOffset) +
+            " roots=" + std::to_string(zeroRoot) + "," +
+            std::to_string(oneSemitoneRoot) + "," +
+            std::to_string(elevenSemitoneRoot) + "," +
+            std::to_string(octaveRoot) + "," +
+            std::to_string(negativeSemitoneRoot)};
+}
+
 } // namespace
 
 int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
+  tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
 
   int failed = 0;
   std::cout << "Crownstep Persistence Spec\n";
