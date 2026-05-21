@@ -505,4 +505,14 @@ bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId,
 	return false;
 }
 
+PanelAnchorAtlasStatus getPanelAnchorAtlasStatus(const std::string& svgPath) {
+	const int svgIndex = findSvgIndex(svgPath);
+	if (svgIndex < 0) {
+		return PanelAnchorAtlasStatus::Missing;
+	}
+	return atlasRecordIsCurrent(svgPath, svgIndex)
+		? PanelAnchorAtlasStatus::Valid
+		: PanelAnchorAtlasStatus::StaleOrUnreadable;
+}
+
 } // namespace panel_svg

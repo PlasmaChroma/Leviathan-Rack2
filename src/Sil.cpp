@@ -2512,8 +2512,10 @@ struct BananutBlack : app::SvgPort {
 struct SilWidget : ModuleWidget {
 	SilWidget(Sil* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Sil", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/sil.svg")));
+		previewBuildTimer.markPanelDone();
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
@@ -2588,6 +2590,8 @@ struct SilWidget : ModuleWidget {
 		applyPointOverride("MICROPEAK_LIGHT", &micropeakLightPos);
 		applyPointOverride("MASTERING_ENABLED_PARAM", &masteringButtonPos);
 		applyPointOverride("REPAIR_ENABLED_PARAM", &repairButtonPos);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));

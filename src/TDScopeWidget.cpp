@@ -86,8 +86,10 @@ struct TDScopeWidget : ModuleWidget {
 
   TDScopeWidget(TDScope *module) {
     setModule(module);
+    PreviewBuildLogTimer previewBuildTimer("TDScope", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
+    previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = tdscope::findPanelBorder(svgPanel->fb);
     }
@@ -99,6 +101,8 @@ struct TDScopeWidget : ModuleWidget {
     }
     scopeRectPx.pos = mm2px(scopeRectMm.pos);
     scopeRectPx.size = mm2px(scopeRectMm.size);
+    previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+    previewBuildTimer.markAnchorsDone();
 
     glDisplay = tdscope::createGlDisplay(module, scopeRectMm);
     glDisplay->setVisible(module && module->useOpenGlGeometryRenderMode());

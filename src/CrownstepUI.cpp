@@ -3762,6 +3762,7 @@ struct CrownstepAiThinkMsWidget final : TransparentWidget {
 struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/crownstep.svg");
 		try {
 			setPanel(createPanel(panelPath));
@@ -3770,24 +3771,17 @@ struct CrownstepWidget final : ModuleWidget {
 			WARN("Crownstep panel load failed (%s), using fallback: %s", panelPath.c_str(), e.what());
 			setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg")));
 		}
+		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 			addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 			addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-			CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
 			math::Rect boardRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
-				boardWidget->box.pos = mm2px(boardRectMm.pos);
-				boardWidget->box.size = mm2px(boardRectMm.size);
-			}
-			else {
+			if (!panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
 				boardRectMm = math::Rect(Vec(5.5f, 11.f), Vec(80.5f, 80.5f));
-				boardWidget->box.pos = mm2px(boardRectMm.pos);
-				boardWidget->box.size = mm2px(boardRectMm.size);
 			}
-			addChild(boardWidget);
 
 			// Crown ribbon: anchored by SVG rect (STEP_COUNTER).
 			math::Rect stepCounterRectMm;
@@ -3806,25 +3800,6 @@ struct CrownstepWidget final : ModuleWidget {
 				);
 			}
 
-			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
-			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
-			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
-			addChild(stepCounterWidget);
-
-		// Bottom control layout:
-		// left cluster = inputs, center = knobs/button, right cluster = outputs.
-		math::Rect inputsAreaMm;
-		math::Rect outputsAreaMm;
-		math::Rect controlsAreaMm;
-		bool hasInputsArea = panel_svg::loadRectFromSvgMm(panelPath, "INPUTS_AREA", &inputsAreaMm);
-		bool hasOutputsArea = panel_svg::loadRectFromSvgMm(panelPath, "OUTPUTS_AREA", &outputsAreaMm);
-		bool hasControlsArea = panel_svg::loadRectFromSvgMm(panelPath, "CONTROLS_AREA", &controlsAreaMm);
-		bool hasBottomAnchors = hasInputsArea || hasOutputsArea || hasControlsArea;
-
-		auto pointInRect = [](const math::Rect& rect, float u, float v) {
-			return Vec(rect.pos.x + rect.size.x * u, rect.pos.y + rect.size.y * v);
-		};
-
 			Vec newGamePos(43.f, 114.0f);
 		Vec debugAddMovesPos(5.08f, 5.08f);
 		Vec aiThinkMsPos(debugAddMovesPos.x + 4.2f, debugAddMovesPos.y);
@@ -3838,49 +3813,6 @@ struct CrownstepWidget final : ModuleWidget {
 		Vec eocPos(86.f, 121.0f);
 		Vec humanLightPos(82.5f, 93.f);
 		Vec aiLightPos(86.5f, 93.f);
-
-		if (hasInputsArea) {
-			clockPos = pointInRect(inputsAreaMm, 0.30f, 0.38f);
-			resetPos = pointInRect(inputsAreaMm, 0.70f, 0.38f);
-			transposePos = pointInRect(inputsAreaMm, 0.30f, 0.78f);
-			rootCvPos = pointInRect(inputsAreaMm, 0.70f, 0.78f);
-		}
-		if (hasOutputsArea) {
-			pitchPos = pointInRect(outputsAreaMm, 0.17f, 0.58f);
-			accentPos = pointInRect(outputsAreaMm, 0.39f, 0.58f);
-			modPos = pointInRect(outputsAreaMm, 0.61f, 0.58f);
-			eocPos = pointInRect(outputsAreaMm, 0.83f, 0.58f);
-		}
-		if (hasBottomAnchors) {
-			float controlX = 43.f;
-			float controlY = 98.f;
-			float controlH = 22.f;
-			if (hasControlsArea) {
-				controlX = controlsAreaMm.pos.x + controlsAreaMm.size.x * 0.5f;
-				controlY = controlsAreaMm.pos.y;
-				controlH = controlsAreaMm.size.y;
-			}
-			else {
-				if (hasInputsArea && hasOutputsArea) {
-					float leftX = inputsAreaMm.pos.x + inputsAreaMm.size.x;
-					float rightX = outputsAreaMm.pos.x;
-					controlX = (leftX + rightX) * 0.5f;
-					controlY = (inputsAreaMm.pos.y + outputsAreaMm.pos.y) * 0.5f;
-					controlH = (inputsAreaMm.size.y + outputsAreaMm.size.y) * 0.5f;
-				}
-				else if (hasInputsArea) {
-					controlX = inputsAreaMm.pos.x + inputsAreaMm.size.x + 8.f;
-					controlY = inputsAreaMm.pos.y;
-					controlH = inputsAreaMm.size.y;
-				}
-				else if (hasOutputsArea) {
-					controlX = outputsAreaMm.pos.x - 8.f;
-					controlY = outputsAreaMm.pos.y;
-					controlH = outputsAreaMm.size.y;
-				}
-			}
-				newGamePos = Vec(controlX, controlY + controlH * 0.76f);
-			}
 
 		// Prefer explicit component anchors from the SVG "components" layer.
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
@@ -3907,7 +3839,18 @@ struct CrownstepWidget final : ModuleWidget {
 		applyPointOverride("EOC_OUTPUT", &eocPos);
 		applyPointOverride("HUMAN_TURN_LIGHT", &humanLightPos);
 		applyPointOverride("AI_TURN_LIGHT", &aiLightPos);
-		applyPointOverride("AI_THINK_MS", &aiThinkMsPos);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
+
+			CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
+			boardWidget->box.pos = mm2px(boardRectMm.pos);
+			boardWidget->box.size = mm2px(boardRectMm.size);
+			addChild(boardWidget);
+
+			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
+			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
+			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
+			addChild(stepCounterWidget);
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.

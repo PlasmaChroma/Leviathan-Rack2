@@ -1521,8 +1521,10 @@ struct ChronomawSurfaceWidget : Widget {
 
 ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	setModule(module);
+	PreviewBuildLogTimer previewBuildTimer("Chronomaw", module);
 	const std::string panelPath = asset::plugin(pluginInstance, "res/chronomaw.svg");
 	setPanel(createPanel(panelPath));
+	previewBuildTimer.markPanelDone();
 
 	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 	addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0)));
@@ -1597,6 +1599,8 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 		applyPointOverride(outId.c_str(), &outPos[size_t(i)]);
 		applyPointOverride(lightId.c_str(), &outLightPos[size_t(i)]);
 	}
+	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+	previewBuildTimer.markAnchorsDone();
 
 	auto* surface = new ChronomawSurfaceWidget(module, ChronomawUiRects{
 		math::Rect(mm2px(uiRects.globalBar.pos), mm2px(uiRects.globalBar.size)),

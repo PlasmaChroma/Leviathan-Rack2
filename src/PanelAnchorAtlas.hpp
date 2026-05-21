@@ -20,6 +20,13 @@ struct PanelAnchorLookupResult {
 	float radius = 0.f;
 };
 
+enum class PanelAnchorAtlasStatus {
+	Missing,
+	StaleOrUnreadable,
+	Valid,
+};
+
 bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId, PanelAnchorLookupResult* out);
+PanelAnchorAtlasStatus getPanelAnchorAtlasStatus(const std::string& svgPath);
 
 } // namespace panel_svg

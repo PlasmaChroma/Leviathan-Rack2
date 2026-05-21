@@ -13,5 +13,6 @@ bool loadCircleFromSvg(
 	float* outRadius,
 	float unitScale = 1.f
 );
+const char* getAtlasStatusLabelForSvg(const std::string& svgPath);
 
 } // namespace panel_svg

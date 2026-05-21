@@ -3248,8 +3248,10 @@ struct TemporalDeckWidget : ModuleWidget {
 
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
+    PreviewBuildLogTimer previewBuildTimer("TemporalDeck", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
     setPanel(createPanel(panelPath));
+    previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
     }
@@ -3310,8 +3312,10 @@ struct TemporalDeckWidget : ModuleWidget {
     applyPointOverride("S_GATE_O", &sGateOutMm);
     applyPointOverride("S_POS_O", &sPosOutMm);
     applyPointOverride("FREEZE_LIGHT", &freezeLightMm);
-    applyPointOverride("REVERSE_LIGHT", &reverseLightMm);
+   applyPointOverride("REVERSE_LIGHT", &reverseLightMm);
     applyPointOverride("SLIP_LIGHT", &slipLightMm);
+    previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+    previewBuildTimer.markAnchorsDone();
 
     addParam(createParamCentered<RoundBlackKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
     addParam(createParamCentered<RoundBlackKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM));

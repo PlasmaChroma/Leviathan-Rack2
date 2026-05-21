@@ -772,9 +772,11 @@ struct BifurxWidget final : ModuleWidget {
 
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/bifurx.svg");
 		try { setPanel(createPanel(panelPath)); }
 		catch (const std::exception& e) { setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg"))); box.size = mm2px(Vec(kDefaultPanelWidthMm, kDefaultPanelHeightMm)); }
+		previewBuildTimer.markPanelDone();
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
@@ -806,6 +808,8 @@ struct BifurxWidget final : ModuleWidget {
 		applyPt("MODE_PARAM", &mP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
 		applyPt("MODE_MENU_BUTTON", &mmP);
 		applyPt("IN_INPUT", &iP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 		auto* modeMenuButton = createParamCentered<BifurxModeMenuButton>(mm2px(mmP), module, Bifurx::MODE_MENU_PARAM);
 		modeMenuButton->module = module;
 		addParam(modeMenuButton);

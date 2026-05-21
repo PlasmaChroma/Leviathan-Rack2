@@ -1368,8 +1368,10 @@ struct AmpVoltageReadoutWidget : Widget {
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Proc", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/proc.svg");
 		setPanel(createPanel(panelPath));
+		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -1404,6 +1406,8 @@ struct ProcWidget : ModuleWidget {
 			}
 			addChild(previewWidget);
 		}
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));

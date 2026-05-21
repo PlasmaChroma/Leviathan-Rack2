@@ -197,4 +197,16 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 	return false;
 }
 
+const char* getAtlasStatusLabelForSvg(const std::string& svgPath) {
+	switch (getPanelAnchorAtlasStatus(svgPath)) {
+	case PanelAnchorAtlasStatus::Valid:
+		return "valid";
+	case PanelAnchorAtlasStatus::StaleOrUnreadable:
+		return "stale";
+	case PanelAnchorAtlasStatus::Missing:
+	default:
+		return "missing";
+	}
+}
+
 } // namespace panel_svg

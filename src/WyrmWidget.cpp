@@ -282,8 +282,10 @@ struct WyrmWidget : ModuleWidget {
 
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.svg");
 		setPanel(createPanel(panelPath));
+		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/Vahdrim'Keth.svg"));
 		}
@@ -345,6 +347,8 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 
 		std::shared_ptr<WyrmSand> sandState = std::make_shared<WyrmSand>();
 		auto* sandGl = createWyrmSandGlWidget(module, sandState);

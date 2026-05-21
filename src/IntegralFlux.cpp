@@ -1479,8 +1479,10 @@ struct IntegralFluxWidget : ModuleWidget {
 
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
 		setPanel(createPanel(panelPath));
+		previewBuildTimer.markPanelDone();
 
         // use Rogan1PSBlue for the rise/fall knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
@@ -1591,6 +1593,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			applyPointOverride("Light_Unity_4", &unity4LightPos);
 			applyPointOverride("OR_LED", &orLightPos);
 			applyPointOverride("INV_LED", &invLightPos);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
