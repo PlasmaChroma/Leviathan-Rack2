@@ -5,9 +5,38 @@
 namespace {
 static std::atomic<uint32_t> gWyrmDebugInstanceCounter {1u};
 constexpr int kWyrmPerfMeasureDivision = 17;
+constexpr float kWyrmRockFoldReturn = 0.78f;
 
 inline float finiteOr(float x, float fallback = 0.f) {
 	return std::isfinite(x) ? x : fallback;
+}
+
+inline float foldedRockPenetration(float penetration, float rockWidth) {
+	const float width = std::max(rockWidth, 1e-5f);
+	const float period = 2.f * width;
+	float folded = std::fmod(std::max(0.f, penetration), period);
+	if (folded > width) {
+		folded = period - folded;
+	}
+	return folded * kWyrmRockFoldReturn;
+}
+
+inline float foldAwayFromRock(float anchorY, float desiredY, float lower, float upper) {
+	const float width = upper - lower;
+	if (width <= 1e-6f) {
+		return clamp(desiredY, -1.f, 1.f);
+	}
+	if (anchorY <= lower) {
+		return clamp(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
+	}
+	if (anchorY >= upper) {
+		return clamp(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
+	}
+	const float center = 0.5f * (lower + upper);
+	if (desiredY < center) {
+		return clamp(lower - foldedRockPenetration(desiredY - lower, width), -1.f, 1.f);
+	}
+	return clamp(upper + foldedRockPenetration(upper - desiredY, width), -1.f, 1.f);
 }
 }
 
@@ -716,17 +745,7 @@ float Wyrm::resolveAgainstRocks(float anchorY, float desiredY, float ph, float c
 			const bool crossesUp = (anchorY <= lower && y >= lower);
 			const bool crossesDown = (anchorY >= upper && y <= upper);
 			if (anchorInside || yInside || crossesUp || crossesDown) {
-				float projected = y;
-				if (anchorY <= lower) {
-					projected = lower;
-				}
-				else if (anchorY >= upper) {
-					projected = upper;
-				}
-				else {
-					projected = (std::fabs(y - lower) < std::fabs(upper - y)) ? lower : upper;
-				}
-				projected = clamp(projected, -1.f, 1.f);
+				const float projected = foldAwayFromRock(anchorY, y, lower, upper);
 				if (std::fabs(projected - y) > 1e-6f) {
 					y = projected;
 					changed = true;
@@ -797,17 +816,7 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 			const bool crossesUp = (anchorY <= lower && y >= lower);
 			const bool crossesDown = (anchorY >= upper && y <= upper);
 			if (anchorInside || yInside || crossesUp || crossesDown) {
-				float projected = y;
-				if (anchorY <= lower) {
-					projected = lower;
-				}
-				else if (anchorY >= upper) {
-					projected = upper;
-				}
-				else {
-					projected = (std::fabs(y - lower) < std::fabs(upper - y)) ? lower : upper;
-				}
-				projected = clamp(projected, -1.f, 1.f);
+				const float projected = foldAwayFromRock(anchorY, y, lower, upper);
 				if (std::fabs(projected - y) > 1e-6f) {
 					y = projected;
 					changed = true;
