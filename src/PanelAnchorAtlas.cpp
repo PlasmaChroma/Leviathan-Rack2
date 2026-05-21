@@ -8,6 +8,9 @@
 #include <sstream>
 #include <string>
 
+#include <unordered_map>
+#include <vector>
+
 namespace panel_svg {
 namespace {
 
@@ -30,7 +33,7 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/crownstep.svg", 80614ull, 0x276429bdb533ba55ull},
 	{"res/deck.svg", 137860ull, 0x8d5cf0b3c4012fbfull},
 	{"res/flux.svg", 212138ull, 0xfe868a129fe77474ull},
-	{"res/proc.svg", 96012ull, 0x5276a9a47a4b819eull},
+	{"res/proc.svg", 96061ull, 0xf17978516c5f9619ull},
 	{"res/reset-highlighted.svg", 594ull, 0x57adf192021590ccull},
 	{"res/reset-normal.svg", 594ull, 0x52562bb4abc5f6adull},
 	{"res/sil.svg", 137528ull, 0x1983fe15ab63ac72ull},
@@ -271,21 +274,21 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{9, "FALL_1", 1u, 3290.7402f, 5307.9067f, 0.f, 0.f, 0.f, 0.f, 0.f},
 	{9, "CYCLE_1", 1u, 3307.5281f, 2013.8008f, 0.f, 0.f, 0.f, 0.f, 0.f},
 	{9, "RISE_1", 1u, 3290.7441f, 3629.2629f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "EoR_LED", 1u, 1593.6866f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "OUT_LED", 1u, 1594.6865f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "EoR", 1u, 943.69867f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "OUT", 1u, 944.70752f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "INPUT_1_TRIG", 1u, 1994.2986f, 1665.4272f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "CH1_FALL_CV", 1u, 2360.3987f, 6326.3164f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "CH1_BOTH_CV", 1u, 1994.2986f, 4489.7715f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "CH1_RISE_CV", 1u, 1994.2986f, 3241.5713f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "CV_HALT", 1u, 720.69867f, 4036.6716f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "INPUT", 1u, 724.70056f, 1665.4274f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "CYCLE_LED", 1u, 3307.5261f, 1405.5314f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "OUT_NEG", 1u, 2655.1987f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "OUT_NEG_LED", 1u, 3357.8699f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "EoC_LED", 1u, 3364.5483f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
-	{9, "EoC", 1u, 2659.5144f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "EOR_LIGHT", 1u, 1593.6866f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "MAIN_LIGHT", 1u, 1594.6865f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "EOR_OUTPUT", 1u, 943.69867f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "MAIN_OUTPUT", 1u, 944.70752f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "TRIGGER_INPUT", 1u, 1994.2986f, 1665.4272f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "FALL_CV_INPUT", 1u, 2360.3987f, 6326.3164f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "BOTH_CV_INPUT", 1u, 1994.2986f, 4489.7715f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "RISE_CV_INPUT", 1u, 1994.2986f, 3241.5713f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "HALT_INPUT", 1u, 720.69867f, 4036.6716f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "SIGNAL_INPUT", 1u, 724.70056f, 1665.4274f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "CYCLE_LIGHT", 1u, 3307.5261f, 1405.5314f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "NEG_OUTPUT", 1u, 2655.1987f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "NEG_LIGHT", 1u, 3357.8699f, 11068.226f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "EOC_LIGHT", 1u, 3364.5483f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{9, "EOC_OUTPUT", 1u, 2659.5144f, 9694.5723f, 0.f, 0.f, 0.f, 0.f, 0.f},
 	{9, "CH1_PREVIEW", 3u, 2011.74998f, 7815.9582f, 197.65063f, 6991.6509f, 3628.1987f, 1648.6146f, 0.f},
 	{12, "black_background", 3u, 6082.81901f, 7441.0425f, 986.18201f, 997.229f, 10193.274f, 12887.627f, 0.f},
 	{12, "gray_outline", 3u, 6082.8187f, 7441.0425f, 1096.182f, 1107.229f, 9973.2734f, 12667.627f, 0.f},
@@ -439,6 +442,22 @@ bool atlasRecordIsCurrent(const std::string& svgPath, int svgIndex) {
 	return valid;
 }
 
+const std::vector<std::unordered_map<std::string, const AnchorAtlasRecord*>>& anchorIndexBySvg() {
+	static std::vector<std::unordered_map<std::string, const AnchorAtlasRecord*>> index;
+	if (!index.empty()) {
+		return index;
+	}
+	index.resize(sizeof(kSvgAtlas) / sizeof(kSvgAtlas[0]));
+	for (const AnchorAtlasRecord& rec : kAnchorAtlas) {
+		const size_t svgIndex = size_t(rec.svgIndex);
+		if (svgIndex >= index.size()) {
+			continue;
+		}
+		index[svgIndex].emplace(rec.id ? rec.id : "", &rec);
+	}
+	return index;
+}
+
 } // namespace
 
 bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId, PanelAnchorLookupResult* out) {
@@ -450,24 +469,29 @@ bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId,
 	if (svgIndex < 0 || !atlasRecordIsCurrent(svgPath, svgIndex)) {
 		return false;
 	}
-	for (const AnchorAtlasRecord& rec : kAnchorAtlas) {
-		if (rec.svgIndex != uint16_t(svgIndex) || elementId != rec.id) {
-			continue;
-		}
-		out->found = true;
-		out->hasCenter = (rec.flags & kAnchorHasCenter) != 0u;
-		out->hasRect = (rec.flags & kAnchorHasRect) != 0u;
-		out->hasRadius = (rec.flags & kAnchorHasRadius) != 0u;
-		out->cx = rec.cx;
-		out->cy = rec.cy;
-		out->x = rec.x;
-		out->y = rec.y;
-		out->width = rec.width;
-		out->height = rec.height;
-		out->radius = rec.radius;
-		return true;
+	const auto& index = anchorIndexBySvg();
+	const size_t indexPos = size_t(svgIndex);
+	if (indexPos >= index.size()) {
+		return false;
 	}
-	return false;
+	const auto& byId = index[indexPos];
+	const auto found = byId.find(elementId);
+	if (found == byId.end() || !found->second) {
+		return false;
+	}
+	const AnchorAtlasRecord& rec = *found->second;
+	out->found = true;
+	out->hasCenter = (rec.flags & kAnchorHasCenter) != 0u;
+	out->hasRect = (rec.flags & kAnchorHasRect) != 0u;
+	out->hasRadius = (rec.flags & kAnchorHasRadius) != 0u;
+	out->cx = rec.cx;
+	out->cy = rec.cy;
+	out->x = rec.x;
+	out->y = rec.y;
+	out->width = rec.width;
+	out->height = rec.height;
+	out->radius = rec.radius;
+	return true;
 }
 
 PanelAnchorAtlasStatus getPanelAnchorAtlasStatus(const std::string& svgPath) {

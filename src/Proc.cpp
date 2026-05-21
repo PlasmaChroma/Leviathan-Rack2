@@ -1378,16 +1378,65 @@ struct ProcWidget : ModuleWidget {
 		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(33.075, 20.138)), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(7.246, 28.71)), module, Proc::AMP_PARAM));
+		Vec cyclePos(33.075f, 20.138f);
+		Vec risePos(32.907f, 36.293f);
+		Vec fallPos(32.907f, 53.079f);
+		Vec shapePos(11.775f, 57.926f);
+		Vec ampPos(7.246f, 28.71f);
+		Vec signalInPos(7.247f, 16.654f);
+		Vec trigInPos(19.943f, 16.654f);
+		Vec haltInPos(7.207f, 40.367f);
+		Vec riseCvInPos(19.943f, 32.416f);
+		Vec bothCvInPos(19.943f, 44.898f);
+		Vec fallCvInPos(23.604f, 63.263f);
+		Vec eorOutPos(9.437f, 96.946f);
+		Vec eocOutPos(26.595f, 96.915f);
+		Vec outPos(9.447f, 110.682f);
+		Vec negOutPos(26.552f, 110.882f);
+		Vec cycleLightPos(33.075f, 14.055f);
+		Vec eorLightPos(15.937f, 96.76f);
+		Vec eocLightPos(33.645f, 96.952f);
+		Vec outLightPos(15.947f, 110.758f);
+		Vec negLightPos(33.579f, 110.941f);
+
+		auto applyPointOverride = [&](const char* elementId, Vec* outPosMm) {
+			Vec pointMm;
+			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+				*outPosMm = pointMm;
+			}
+		};
+
+		applyPointOverride("CYCLE_1", &cyclePos);
+		applyPointOverride("RISE_1", &risePos);
+		applyPointOverride("FALL_1", &fallPos);
+		applyPointOverride("LIN_LOG_1", &shapePos);
+		applyPointOverride("AMP", &ampPos);
+		applyPointOverride("SIGNAL_INPUT", &signalInPos);
+		applyPointOverride("TRIGGER_INPUT", &trigInPos);
+		applyPointOverride("HALT_INPUT", &haltInPos);
+		applyPointOverride("RISE_CV_INPUT", &riseCvInPos);
+		applyPointOverride("BOTH_CV_INPUT", &bothCvInPos);
+		applyPointOverride("FALL_CV_INPUT", &fallCvInPos);
+		applyPointOverride("EOR_OUTPUT", &eorOutPos);
+		applyPointOverride("EOC_OUTPUT", &eocOutPos);
+		applyPointOverride("MAIN_OUTPUT", &outPos);
+		applyPointOverride("NEG_OUTPUT", &negOutPos);
+		applyPointOverride("CYCLE_LIGHT", &cycleLightPos);
+		applyPointOverride("EOR_LIGHT", &eorLightPos);
+		applyPointOverride("EOC_LIGHT", &eocLightPos);
+		applyPointOverride("MAIN_LIGHT", &outLightPos);
+		applyPointOverride("NEG_LIGHT", &negLightPos);
+
+		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;
 			ampReadout->paramId = Proc::AMP_PARAM;
-			ampReadout->box.pos = mm2px(Vec(2.5, 32.15));
+			ampReadout->box.pos = mm2px(Vec(ampPos.x - 4.746f, ampPos.y + 3.44f));
 			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
 			addChild(ampReadout);
 		}
@@ -1409,24 +1458,24 @@ struct ProcWidget : ModuleWidget {
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 40.367)), module, Proc::HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(haltInPos), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.437, 96.946)), module, Proc::EOR_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.595, 96.915)), module, Proc::EOC_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::MAIN_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::NEG_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Proc::MAIN_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(33.075, 14.055)), module, Proc::CYCLE_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.947, 110.758)), module, Proc::MAIN_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.579, 110.941)), module, Proc::NEG_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

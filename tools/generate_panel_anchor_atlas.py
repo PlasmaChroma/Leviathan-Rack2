@@ -143,6 +143,8 @@ def generate(repo_root: pathlib.Path, output: pathlib.Path) -> None:
         f.write("#include <limits>\n")
         f.write("#include <sstream>\n")
         f.write("#include <string>\n\n")
+        f.write("#include <unordered_map>\n")
+        f.write("#include <vector>\n\n")
         f.write("namespace panel_svg {\nnamespace {\n\n")
         f.write("constexpr uint32_t kAnchorHasCenter = 1u << 0;\n")
         f.write("constexpr uint32_t kAnchorHasRect = 1u << 1;\n")
@@ -236,6 +238,22 @@ bool atlasRecordIsCurrent(const std::string& svgPath, int svgIndex) {
 	return valid;
 }
 
+const std::vector<std::unordered_map<std::string, const AnchorAtlasRecord*>>& anchorIndexBySvg() {
+	static std::vector<std::unordered_map<std::string, const AnchorAtlasRecord*>> index;
+	if (!index.empty()) {
+		return index;
+	}
+	index.resize(sizeof(kSvgAtlas) / sizeof(kSvgAtlas[0]));
+	for (const AnchorAtlasRecord& rec : kAnchorAtlas) {
+		const size_t svgIndex = size_t(rec.svgIndex);
+		if (svgIndex >= index.size()) {
+			continue;
+		}
+		index[svgIndex].emplace(rec.id ? rec.id : "", &rec);
+	}
+	return index;
+}
+
 } // namespace
 
 bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId, PanelAnchorLookupResult* out) {
@@ -247,24 +265,29 @@ bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId,
 	if (svgIndex < 0 || !atlasRecordIsCurrent(svgPath, svgIndex)) {
 		return false;
 	}
-	for (const AnchorAtlasRecord& rec : kAnchorAtlas) {
-		if (rec.svgIndex != uint16_t(svgIndex) || elementId != rec.id) {
-			continue;
-		}
-		out->found = true;
-		out->hasCenter = (rec.flags & kAnchorHasCenter) != 0u;
-		out->hasRect = (rec.flags & kAnchorHasRect) != 0u;
-		out->hasRadius = (rec.flags & kAnchorHasRadius) != 0u;
-		out->cx = rec.cx;
-		out->cy = rec.cy;
-		out->x = rec.x;
-		out->y = rec.y;
-		out->width = rec.width;
-		out->height = rec.height;
-		out->radius = rec.radius;
-		return true;
+	const auto& index = anchorIndexBySvg();
+	const size_t indexPos = size_t(svgIndex);
+	if (indexPos >= index.size()) {
+		return false;
 	}
-	return false;
+	const auto& byId = index[indexPos];
+	const auto found = byId.find(elementId);
+	if (found == byId.end() || !found->second) {
+		return false;
+	}
+	const AnchorAtlasRecord& rec = *found->second;
+	out->found = true;
+	out->hasCenter = (rec.flags & kAnchorHasCenter) != 0u;
+	out->hasRect = (rec.flags & kAnchorHasRect) != 0u;
+	out->hasRadius = (rec.flags & kAnchorHasRadius) != 0u;
+	out->cx = rec.cx;
+	out->cy = rec.cy;
+	out->x = rec.x;
+	out->y = rec.y;
+	out->width = rec.width;
+	out->height = rec.height;
+	out->radius = rec.radius;
+	return true;
 }
 
 PanelAnchorAtlasStatus getPanelAnchorAtlasStatus(const std::string& svgPath) {
