@@ -3590,7 +3590,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				? (s.activeStart + s.playbackIndex + 1)
 				: 0;
 			char ribbonText[64];
-			std::snprintf(ribbonText, sizeof(ribbonText), "%d (%d - %d)", currentSeqIndex, firstSeqIndex, lastSeqIndex);
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d (%d - %d) [%d]", currentSeqIndex, firstSeqIndex, lastSeqIndex, s.activeLength);
 			char fullText[24];
 			std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
 			float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
