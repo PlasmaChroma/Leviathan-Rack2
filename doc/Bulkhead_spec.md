@@ -23,14 +23,14 @@ The module's promise is spatial control first, reverb utility second, and physic
 - Stereo audio input and stereo audio output.
 - Mono-compatible behavior when only left input is patched.
 - One listener with position and yaw.
-- One mono source or linked stereo source pair.
+- One mono speaker or linked stereo speaker pair, with user-editable position and rotation.
 - Rectangular top-down room with four movable walls.
 - Direct path and first-order image-source reflections.
 - Optional second-order reflections in higher quality modes.
 - Per-wall material presets and global material macro control.
 - FDN late field with Eco, Studio, and HiFi quality modes.
 - Early/late balance, decay, diffusion, motion, air/brightness, and mix controls.
-- Cached custom room canvas with draggable source, listener, and wall handles.
+- Cached custom room canvas with draggable speaker, listener, and wall handles.
 - Parameter smoothing and state crossfades to avoid zipper noise.
 - Focused tests for geometry timing, decay stability, and interpolation safety.
 
@@ -42,6 +42,8 @@ The module's promise is spatial control first, reverb utility second, and physic
 - Independent per-polyphonic-channel room simulation.
 - Binaural/HRTF rendering.
 - User-editable octave-band material curves.
+- User-settable floor and ceiling materials.
+- Explicit floor/ceiling reflection paths.
 - Full ambisonic or surround output.
 
 ## Signal Flow
@@ -49,7 +51,7 @@ The module's promise is spatial control first, reverb utility second, and physic
 ```text
 Input L/R
   |
-  +--> Source model / mono-stereo placement
+  +--> Speaker model / mono-stereo placement
   |
   +--> Direct path delay + distance gain + stereo renderer
   |
@@ -78,8 +80,8 @@ Direct and early paths are geometric and intentionally readable. The late field 
 
 | Port | Type | Behavior |
 | --- | --- | --- |
-| `IN L` | Audio input | Left/mono input. If `IN R` is unpatched, duplicate to right source path. |
-| `IN R` | Audio input | Optional right input. Enables linked stereo source pair. |
+| `IN L` | Audio input | Left/mono input. If `IN R` is unpatched, duplicate to right speaker path. |
+| `IN R` | Audio input | Optional right input. Enables linked stereo speaker pair. |
 | `OUT L` | Audio output | Stereo left output. |
 | `OUT R` | Audio output | Stereo right output. |
 
@@ -100,8 +102,9 @@ Direct and early paths are geometric and intentionally readable. The late field 
 
 | Port | Target | Range Mapping |
 | --- | --- | --- |
-| `SRC X` | Source x position | -5V..+5V maps to room left..right. |
-| `SRC Y` | Source y position | -5V..+5V maps to room bottom..top. |
+| `SRC X` | Speaker x position | -5V..+5V maps to room left..right. |
+| `SRC Y` | Speaker y position | -5V..+5V maps to room bottom..top. |
+| `SRC ROT` | Speaker rotation | -5V..+5V maps to -180..+180 degrees. |
 | `LST X` | Listener x position | -5V..+5V maps to room left..right. |
 | `LST Y` | Listener y position | -5V..+5V maps to room bottom..top. |
 | `YAW CV` | Listener yaw | -5V..+5V maps to -180..+180 degrees. |
@@ -125,7 +128,8 @@ The room canvas is the primary interaction surface.
 ### Visual Elements
 
 - Rectangular room boundary with four wall handles.
-- Source node: one speaker for mono, linked L/R speaker pair for stereo input.
+- Speaker node: one speaker for mono input, linked L/R speaker pair for stereo input.
+- Speaker direction indicator showing rotation within the room.
 - Listener node: head/ear icon with yaw indicator.
 - Optional first-order ray overlay.
 - Material coloring or texture along walls.
@@ -134,13 +138,17 @@ The room canvas is the primary interaction surface.
 
 ### Interactions
 
-- Drag source to change source position.
+- Drag speaker body to change speaker position.
+- Drag speaker direction handle to rotate speaker aim.
+- In stereo mode, drag either speaker to move the linked pair while preserving spacing and relative rotation.
+- In stereo mode, rotate either speaker to rotate the linked pair around its midpoint unless unlinked.
 - Drag listener to change listener position.
 - Drag listener yaw handle to rotate listening direction.
 - Drag wall handles to resize room asymmetrically.
 - Shift-drag or context menu for precise values if needed.
-- Double-click source/listener/wall to reset that target.
+- Double-click speaker/listener/wall to reset that target.
 - Right-click wall to assign material override.
+- Right-click speaker to link/unlink stereo placement, reset rotation, or enter precise position/rotation values.
 - Right-click canvas to show quality, overlay, air, and advanced options.
 
 ### Rendering Policy
@@ -152,8 +160,8 @@ Use a custom Rack widget inside a cached framebuffer. Mark the framebuffer dirty
 Use normalized UI coordinates internally, then map to physical meters for DSP.
 
 ```text
-room.left   <= source.x/listener.x <= room.right
-room.bottom <= source.y/listener.y <= room.top
+room.left   <= speaker.x/listener.x <= room.right
+room.bottom <= speaker.y/listener.y <= room.top
 ```
 
 Recommended physical range:
@@ -162,10 +170,48 @@ Recommended physical range:
 - Maximum room dimension: 30.0 m.
 - Default room: 8.0 m wide, 5.0 m deep.
 - Listener default: center-right, facing source.
-- Source default: center-left.
+- Mono speaker default: center-left, aimed toward listener.
+- Stereo speaker pair default: left/front pair around the mono source default, aimed toward listener, linked.
 - Speed of sound: 343 m/s at default temperature.
 
-For safety, keep source and listener at least 0.1 m away from walls after smoothing/clamping.
+For safety, keep source/speaker and listener positions at least 0.1 m away from walls after smoothing/clamping.
+
+### Speaker Placement And Rotation
+
+Bulkhead should treat sources as visible speakers, not abstract dots. Position controls define where the speaker acoustic origin sits in the room. Rotation defines where the speaker faces. The speaker icon must remain fully inside the rectangular room bounds after placement, rotation, smoothing, and wall movement.
+
+Mono input uses one speaker:
+
+```text
+speaker.position = user/source position
+speaker.yaw = user/source rotation
+```
+
+Stereo input uses a linked L/R speaker pair by default:
+
+```text
+speakerPair.center = user/source position
+speakerPair.yaw = user/source rotation
+speakerL/R.position = center +/- rotatedPairOffset
+speakerL/R.yaw = pair yaw
+```
+
+The linked stereo pair preserves speaker spacing and relative orientation while dragging or rotating. A context-menu unlink mode may allow independent L/R placement later, but v1 should keep linked placement as the default and primary behavior.
+
+Bounding rules:
+
+- Clamp speaker acoustic origins inside the room using the same margin as the source/listener minimum wall distance.
+- Also account for a small icon footprint in the canvas so the drawn speaker body does not visually cross the wall.
+- Rotation is continuous and wraps at +/-180 degrees; it is not clamped by wall angle.
+- If a wall edit makes the current speaker placement invalid, move the speaker or linked pair minimally back inside the valid bounds.
+- If the linked stereo pair no longer fits in a very small room, reduce displayed pair spacing down to a minimum visual separation before collapsing to a mono-like pair center.
+
+DSP interpretation:
+
+- Direct/reflection timing still uses the speaker acoustic origin position.
+- Speaker yaw affects directional emission gain before the direct/early path sends.
+- V1 can use a simple cardioid-like forward bias rather than a physically exact loudspeaker model.
+- A rotation amount of 0 should face the default listener direction in the default patch.
 
 ## DSP Specification
 
@@ -253,6 +299,28 @@ V1 implementation can use low-order IIR filters per reflection path:
 
 Future implementation can fit minimum-phase IIR filters from octave-band material curves without changing the panel model.
 
+### Floor And Ceiling Materials
+
+V1 should keep the editable room as a top-down 2D model, but the material system should reserve room for floor and ceiling surfaces. Treat them as hidden/default surfaces in MVP rather than exposing them on the main panel.
+
+MVP policy:
+
+- Store floor and ceiling material slots internally with sensible defaults.
+- Default floor: wood or neutral hard floor.
+- Default ceiling: plaster or neutral ceiling.
+- Do not expose floor/ceiling controls on the main panel in v1.
+- Do not require explicit floor/ceiling image-source paths in v1 early reflections.
+- Let floor/ceiling materials influence the late field only as a coarse damping contribution if it is essentially free.
+
+Post-MVP option:
+
+- Add context-menu entries or an advanced material editor for `Floor Material` and `Ceiling Material`.
+- Optionally add first-order vertical reflections using fixed room height, listener height, and speaker height.
+- Fold floor/ceiling absorption into late-tail damping and mixing time more explicitly.
+- Keep this separate from wall material overrides so top-down room editing remains readable.
+
+This keeps the architecture from assuming "four walls only" while avoiding a main-panel UI burden before the audible value is proven.
+
 ### Air Absorption
 
 When enabled, air absorption applies distance-dependent high-frequency damping to direct/early paths and late-field damping. Keep it cheap:
@@ -314,7 +382,8 @@ Default smoothing targets:
 
 | Parameter Class | Smoothing |
 | --- | ---: |
-| Source/listener position | 10..20 ms |
+| Speaker/listener position | 10..20 ms |
+| Speaker rotation | 10..20 ms |
 | Listener yaw | 10..20 ms |
 | Wall position/size | 20..50 ms |
 | Material/absorb/diffuse | 20..100 ms depending on filter redesign cost |
@@ -332,8 +401,9 @@ For each direct/reflection path:
 
 1. Compute direction from listener to virtual source.
 2. Rotate by listener yaw.
-3. Convert horizontal angle to equal-power stereo pan.
-4. Optionally reduce high-frequency content for paths behind the listener using a subtle rear damping factor.
+3. Compute speaker emission bias from speaker yaw and path direction.
+4. Convert horizontal listener-relative angle to equal-power stereo pan.
+5. Optionally reduce high-frequency content for paths behind the listener using a subtle rear damping factor.
 
 This is not HRTF. It should be a stable stereo room cue that reads in Rack patches.
 
@@ -341,10 +411,11 @@ This is not HRTF. It should be a stable stereo room cue that reads in Rack patch
 
 Persist:
 
-- Geometry: room bounds, source position(s), listener position, listener yaw.
+- Geometry: room bounds, speaker position(s), speaker rotation, listener position, listener yaw.
 - Macro params: size, decay, material, absorb, diffuse, motion, early/late, mix, air enabled, quality mode.
 - Per-wall material overrides.
-- UI options: ray overlay, linked stereo source mode.
+- Floor and ceiling material slots once exposed or once they affect DSP state.
+- UI options: ray overlay, linked stereo speaker mode.
 - Schema version.
 
 Do not serialize transient DSP buffers, smoothing states, or FDN contents.
@@ -381,11 +452,33 @@ struct BulkheadRoom {
     float right = 4.f;
     float bottom = -2.5f;
     float top = 2.5f;
+    float height = 3.f;
+};
+
+struct BulkheadSurfaceMaterials {
+    int wallLeft = 0;
+    int wallRight = 0;
+    int wallBottom = 0;
+    int wallTop = 0;
+    int floor = 0;
+    int ceiling = 0;
 };
 
 struct BulkheadPose {
     BulkheadVec2 position;
     float yawRadians = 0.f;
+};
+
+struct BulkheadSpeaker {
+    BulkheadPose pose;
+    float directivity = 0.35f;
+};
+
+struct BulkheadSpeakerPair {
+    BulkheadSpeaker left;
+    BulkheadSpeaker right;
+    bool linked = true;
+    float spacingMeters = 0.8f;
 };
 
 struct BulkheadReflectionPath {
@@ -399,11 +492,101 @@ struct BulkheadReflectionPath {
 
 The process path should consume a smoothed immutable snapshot of geometry/material state rather than reading UI state directly.
 
+## Movement Performance Policy
+
+Movement is central to Bulkhead, but movement must not turn the audio thread into a geometry engine. Treat this section as an implementation constraint, not a tuning suggestion.
+
+### Required Runtime Split
+
+Separate the system into three layers:
+
+1. UI/CV target state: raw canvas edits, CV inputs, context-menu changes, and preset loads.
+2. Smoothed control state: speaker/listener/wall/material values after clamping, wrapping, smoothing, and crossfade policy.
+3. Audio path state: compact per-path targets consumed by the sample loop.
+
+The audio sample loop should consume already-prepared path targets:
+
+```cpp
+struct BulkheadPathTarget {
+    float delaySamples;
+    float gain;
+    float pan;
+    int materialIndex;
+    int order;
+};
+```
+
+The sample loop may interpolate delay, gain, pan, and filter coefficients toward these targets. It must not search room geometry, rebuild image sources, allocate memory, parse UI state, or redesign filters per sample.
+
+### Geometry Update Rate
+
+Image-source geometry and path target generation should run at control rate or event rate, not audio rate.
+
+Recommended policy:
+
+- Recompute direct/early path targets once per audio block, or less often if no smoothed geometry value changed beyond epsilon.
+- Use smaller epsilons for speaker/listener position and rotation; use larger epsilons for wall changes.
+- Wall movement should be smoothed more slowly than speaker/listener movement because it invalidates more path geometry.
+- Preset loads or large wall jumps should create a short crossfade between old and new path target sets instead of stepping all delays instantly.
+- Quality mode determines a hard maximum path count; no mode may generate unbounded reflection paths.
+
+Suggested hard caps:
+
+| Mode | Direct Paths | First Order | Second Order | Total Early Paths |
+| --- | ---: | ---: | ---: | ---: |
+| Eco | 1 mono or 2 stereo | 4 per speaker | 0 | <= 10 |
+| Studio | 1 mono or 2 stereo | 4 per speaker | selected 8 per speaker | <= 26 |
+| HiFi | 1 mono or 2 stereo | 4 per speaker | selected 12 per speaker | <= 34 |
+
+These caps are intentionally small. The late FDN is responsible for density; the geometric front end is responsible for readable spatial cues.
+
+### Material And Filter Updates
+
+Material changes should be target-based and rate-limited.
+
+- Material preset lookup and filter target computation may happen at control rate.
+- Filter coefficients should smooth or crossfade; do not redesign material filters every sample.
+- Per-wall, floor, and ceiling material changes should mark dependent path targets dirty.
+- If floor/ceiling materials only affect late damping in MVP, update that damping target at control rate.
+
+### Allocation And Threading Constraints
+
+- No heap allocation in `process()`.
+- No `std::vector` resizing in the audio thread after initialization.
+- Preallocate maximum path arrays for the active quality mode or for the maximum supported quality.
+- Use double-buffered or versioned snapshots for UI-to-DSP handoff.
+- Snapshot publication must be lock-free or use a non-blocking pattern already accepted elsewhere in the plugin.
+- UI redraws are independent from DSP geometry updates; the room canvas dirty flag must not control audio recomputation.
+
+### Movement Semantics
+
+Speaker/listener motion and wall motion have different costs and should feel different:
+
+- Speaker/listener position and speaker/listener rotation can feel responsive, with 10..20 ms smoothing.
+- Wall edits can feel heavier, with 20..50 ms smoothing and path-set crossfades for large changes.
+- Rotation changes should update directivity/pan targets without changing geometric delay unless speaker position also changes.
+- Linked stereo speaker movement should update both speaker path sets together from one linked-pair transform.
+
+### Performance Validation
+
+Performance tests should include moving-state cases, not only static impulse cases:
+
+- Continuous speaker drag for several seconds.
+- Continuous speaker rotation for several seconds.
+- Continuous listener yaw change for several seconds.
+- Slow wall resize while audio is running.
+- CV-rate modulation of `SRC X`, `SRC Y`, and `SRC ROT`.
+- Quality mode switch during active audio.
+
+No test should show NaN/Inf output, unbounded CPU growth, per-block allocation, or audible single-sample jumps.
+
 ## Implementation Phases
 
 ### Phase 1: Geometry And Early Reflection Core
 
 - Create geometry utilities for room bounds, source/listener pose, and first-order image sources.
+- Add speaker placement utilities for clamping position, linked stereo spacing, and rotation wrapping.
+- Implement block/control-rate path target generation, not per-sample image-source rebuilding.
 - Implement direct path and first-order reflection delay computation.
 - Implement dynamic delay line with 4-point interpolation.
 - Implement simple material gain/low-pass stage.
@@ -414,6 +597,7 @@ Exit criteria:
 
 - Impulse produces direct path plus four first-order reflections at expected sample positions.
 - Moving source/listener changes delay smoothly without clicks under smoothed modulation.
+- Rotating the speaker changes direct/early emphasis without changing geometric delay.
 - Mono input produces stable stereo output.
 
 ### Phase 2: Late FDN Core
@@ -435,6 +619,7 @@ Exit criteria:
 - Add material presets.
 - Add global Material and Absorb controls.
 - Add per-wall material overrides.
+- Add internal floor and ceiling material defaults, even if not exposed on the panel.
 - Add optional air absorption.
 
 Exit criteria:
@@ -448,6 +633,7 @@ Exit criteria:
 - Add module IDs, params, ports, lights if needed.
 - Create initial `res/bulkhead.svg` panel.
 - Implement room canvas widget with draggable nodes/walls.
+- Add speaker body drag, speaker rotation handle, and linked stereo pair movement/rotation.
 - Add context menu for quality, air, ray overlay, linked stereo source, and material overrides.
 - Persist state with schema version.
 
@@ -456,18 +642,21 @@ Exit criteria:
 - Room canvas controls actual DSP state.
 - CV and UI edits stay synchronized.
 - Framebuffer caching avoids excessive UI redraw cost.
+- UI redraw throttling does not affect audio geometry update correctness.
 
 ### Phase 5: Polish And Validation
 
 - Tune defaults and gain staging.
 - Add second-order reflections for Studio/HiFi.
 - Add stable motion modulation.
+- Decide whether floor/ceiling materials remain hidden defaults or move to an advanced context menu.
 - Add final tests and CPU profiling at 48/96/192 kHz.
 
 Exit criteria:
 
 - No runaway feedback at max decay/motion.
 - No obvious zipper noise under normal CV movement.
+- Moving speaker/listener/walls do not allocate or rebuild unbounded state in `process()`.
 - CPU is acceptable in Studio mode at 48 kHz.
 
 ## Testing Plan
@@ -478,7 +667,11 @@ Exit criteria:
 - Direct-path delay for known source/listener distances.
 - First-order reflection delay for known room geometry.
 - CV mapping clamps source/listener inside room.
+- Speaker placement clamps inside room after wall edits.
+- Speaker rotation wraps cleanly across +/-180 degrees.
+- Linked stereo pair preserves spacing while dragging and rotating when the room can contain it.
 - Material reflectance maps absorption to gain correctly.
+- Floor/ceiling material defaults serialize safely once included in state.
 - FDN feedback gain decreases as decay decreases.
 - Serialization round-trip preserves room state.
 
@@ -486,6 +679,8 @@ Exit criteria:
 
 - Static impulse response has finite output and expected early peaks.
 - Moving source with smoothed CV produces finite output and no extreme sample jumps.
+- Moving speaker/listener/wall scenarios do not allocate in the audio thread.
+- Geometry target recomputation stays bounded under continuous CV movement.
 - Max decay with silence input decays or remains bounded.
 - Material change crossfade avoids single-sample spikes.
 - Quality mode switch does not produce NaN/Inf.
@@ -495,6 +690,7 @@ Exit criteria:
 - Small concrete room: bright slap and short dense tail.
 - Large soft room: delayed, dark reflections and controlled decay.
 - Moving source: audible spatial change without zippering.
+- Rotating speaker: front-facing paths become stronger than rear-facing paths without obvious level jumps.
 - High motion: lively tail without seasick direct sound.
 - Percussive input: early reflections are clear but not ragged.
 
@@ -503,6 +699,7 @@ Exit criteria:
 On module load:
 
 - Stereo linked source pair enabled if both inputs are patched, mono source otherwise.
+- Speaker rotation: aimed toward listener.
 - Room size: 8 m x 5 m.
 - Source: left/front third.
 - Listener: right/back third, facing source.
@@ -523,7 +720,9 @@ On module load:
 - Whether `Freeze` ships in v1 or waits for v1.1.
 - Whether `WALL CV` is assignable only or whether individual wall CVs fit the panel.
 - Whether Material is a stepped selector, continuous morph, or both.
-- Whether source/listener positions also get knobs, or canvas + CV is enough.
+- Whether floor/ceiling materials remain post-MVP or ship as advanced context-menu options.
+- Whether speaker/listener positions also get knobs, or canvas + CV is enough.
+- Whether speaker rotation also gets a knob, or `SRC ROT` CV plus canvas rotation is enough.
 - Final naming for `Early/Late`: alternatives include `Shape`, `Field`, or `Focus`.
 
 ## V1 Non-Negotiables
