@@ -34,7 +34,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
 	build/tests/bifurx_filter_spec \
-	build/tests/sil_repair_spec
+	build/tests/sil_repair_spec \
+	build/tests/bulkhead_geometry_spec
 
 TEST_BINS_RACK := \
 	build/tests/bifurx_runtime_spec \
@@ -166,6 +167,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/crownstep_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
+	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -246,6 +248,9 @@ build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.c
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests

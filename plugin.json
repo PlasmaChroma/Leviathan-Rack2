@@ -108,6 +108,15 @@
         "Random"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Bulkhead",
+      "name": "Bulkhead",
+      "description": "Spatial room reverb with interactive wall and listener geometry.",
+      "tags": [
+        "Reverb"
+      ],
+      "hidden": false
     }
   ]
 }

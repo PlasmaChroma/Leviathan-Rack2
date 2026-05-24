@@ -1,0 +1,692 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.2"
+   width="81.279999mm"
+   height="128.5mm"
+   viewBox="0 0 8128 12850"
+   preserveAspectRatio="xMidYMid"
+   fill-rule="evenodd"
+   stroke-width="28.222"
+   stroke-linejoin="round"
+   xml:space="preserve"
+   id="svg488"
+   sodipodi:docname="bulkhead.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:label="Wave Art"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+   id="defs1"><linearGradient
+   id="linearGradient22"
+   inkscape:collect="always"><stop
+     style="stop-color:#7a5cff;stop-opacity:1;"
+     offset="0"
+     id="stop22" /><stop
+     style="stop-color:#1cccd9;stop-opacity:1;"
+     offset="1"
+     id="stop23" /></linearGradient><linearGradient
+   id="linearGradient20"
+   inkscape:collect="always"><stop
+     style="stop-color:#795cff;stop-opacity:1;"
+     offset="0"
+     id="stop20" /><stop
+     style="stop-color:#1cccd9;stop-opacity:1;"
+     offset="1"
+     id="stop21" /></linearGradient><linearGradient
+   id="linearGradient16"
+   x1="0"
+   y1="0"
+   x2="0"
+   y2="1">
+      <stop
+   offset="0"
+   stop-color="#1ccad8"
+   stop-opacity="0.65"
+   id="stop15"
+   style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop
+   offset="1"
+   stop-color="#7a5cff"
+   stop-opacity="0.65"
+   id="stop16"
+   style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient><linearGradient
+   id="linearGradient14"
+   x1="0"
+   y1="0"
+   x2="0"
+   y2="1">
+      <stop
+   offset="0"
+   stop-color="#1ccad8"
+   stop-opacity="0.65"
+   id="stop13"
+   style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop
+   offset="1"
+   stop-color="#7a5cff"
+   stop-opacity="0.65"
+   id="stop14"
+   style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient
+   id="linearGradient12"
+   x1="0"
+   y1="0"
+   x2="0"
+   y2="1">
+      <stop
+   offset="0"
+   stop-color="#1ccad8"
+   stop-opacity="0.65"
+   id="stop11"
+   style="stop-color:#6140bf;stop-opacity:1;" />
+      <stop
+   offset="1"
+   stop-color="#7a5cff"
+   stop-opacity="0.65"
+   id="stop12" />
+    </linearGradient>
+    <linearGradient
+   id="bgGrad"
+   x1="1108.8855"
+   y1="886.8808"
+   x2="1108.8855"
+   y2="12348.43"
+   gradientTransform="matrix(0.71147613,0,0,1.1244228,197.23642,0)"
+   gradientUnits="userSpaceOnUse">
+      <stop
+   offset="0%"
+   stop-color="#0b0d10"
+   id="stop1" />
+      <stop
+   offset="50%"
+   stop-color="#10141a"
+   id="stop2" />
+      <stop
+   offset="100%"
+   stop-color="#07080a"
+   id="stop3" />
+    </linearGradient>
+    <linearGradient
+   id="panelSheen"
+   x1="1258.4897"
+   y1="999.76398"
+   x2="1258.4897"
+   y2="12199.481"
+   gradientTransform="scale(0.88692179,1.1274951)"
+   gradientUnits="userSpaceOnUse">
+      <stop
+   offset="0%"
+   stop-color="#ffffff"
+   stop-opacity="0.1"
+   id="stop4" />
+      <stop
+   offset="15%"
+   stop-color="#ffffff"
+   stop-opacity="0.02"
+   id="stop5" />
+      <stop
+   offset="50%"
+   stop-color="#ffffff"
+   stop-opacity="0.0"
+   id="stop6" />
+      <stop
+   offset="85%"
+   stop-color="#ffffff"
+   stop-opacity="0.02"
+   id="stop7" />
+      <stop
+   offset="100%"
+   stop-color="#ffffff"
+   stop-opacity="0.1"
+   id="stop8" />
+    </linearGradient>
+    <linearGradient
+   id="accentGrad"
+   x1="0"
+   y1="0"
+   x2="0"
+   y2="1">
+      <stop
+   offset="0%"
+   stop-color="#1ccad8"
+   stop-opacity="0.65"
+   id="stop9" />
+      <stop
+   offset="100%"
+   stop-color="#7a5cff"
+   stop-opacity="0.65"
+   id="stop10" />
+    </linearGradient>
+    <linearGradient
+   id="oceanWaveGrad"
+   x1="0"
+   y1="0"
+   x2="1"
+   y2="1"
+   gradientUnits="objectBoundingBox">
+      <stop
+   offset="0%"
+   stop-color="#55dbff"
+   id="stop_wave_1" />
+      <stop
+   offset="55%"
+   stop-color="#1496df"
+   id="stop_wave_2" />
+      <stop
+   offset="100%"
+   stop-color="#182682"
+   id="stop_wave_3" />
+    </linearGradient>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  
+    
+    
+    
+    
+    
+    
+  <linearGradient
+   inkscape:collect="always"
+   xlink:href="#oceanWaveGrad"
+   id="linearGradient10"
+   gradientUnits="userSpaceOnUse"
+   x1="-323.57697"
+   y1="-103.93273"
+   x2="723.81177"
+   y2="943.45605"
+   gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" /><linearGradient
+   inkscape:collect="always"
+   xlink:href="#oceanWaveGrad"
+   id="linearGradient11"
+   gradientUnits="userSpaceOnUse"
+   x1="-323.57697"
+   y1="-103.93273"
+   x2="723.81177"
+   y2="943.45605"
+   gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" /><linearGradient
+   inkscape:collect="always"
+   xlink:href="#linearGradient22"
+   id="linearGradient500"
+   gradientUnits="userSpaceOnUse"
+   x1="4506.2949"
+   y1="1594.9027"
+   x2="7746.5298"
+   y2="1598.8362"
+   gradientTransform="matrix(0.99690805,0,0,0.99690805,-2034.8783,-888.26714)" /><linearGradient
+   inkscape:collect="always"
+   xlink:href="#linearGradient20"
+   id="linearGradient300"
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(1.3902179,0,0,1.3902178,-4682.4965,-5277.5491)"
+   x1="5486.8237"
+   y1="12735.478"
+   x2="7088.8071"
+   y2="12738.298"
+   spreadMethod="pad" /></defs>
+  <sodipodi:namedview
+   id="namedview488"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="true"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:document-units="mm"
+   inkscape:zoom="1.6868414"
+   inkscape:cx="21.341662"
+   inkscape:cy="210.74892"
+   inkscape:window-width="2560"
+   inkscape:window-height="1377"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg488"
+   showgrid="false"
+   inkscape:pageshadow="2" />
+  
+  <g
+   id="panel_art"
+   style="display:inline">
+    <g
+   id="Background_Rect"
+   style="display:inline"
+   transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <rect
+   x="986.18201"
+   y="997.229"
+   width="8154.6191"
+   height="12887.627"
+   rx="0"
+   ry="0"
+   fill="url(#bgGrad)"
+   id="black_background"
+   style="display:inline;fill:url(#bgGrad);stroke-width:25.2425"
+   sodipodi:insensitive="true" />
+      <g
+   id="waves_layer"
+   style="display:inline;opacity:0.5"
+   transform="matrix(1.0032752,0,0,1.0029283,-33.142975,1109.6544)"><g
+     id="branding_wave_left"
+     transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
+     style="display:inline">
+        <path
+   style="fill:#4995ec"
+   d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+   id="path149" />
+        <path
+   style="fill:#7a5cff"
+   d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+   id="path151" />
+        
+        <path
+   style="fill:#1cccd9"
+   d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+   id="path155" />
+      </g><g
+     id="branding_wave_right"
+     transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
+     style="display:inline">
+        <path
+   style="fill:#4995ec"
+   d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+   id="path158" />
+        <path
+   style="fill:#7a5cff"
+   d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+   id="path160" />
+        
+        <path
+   style="fill:#1cccd9"
+   d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+   id="path164" />
+      </g></g>
+      
+    </g>
+    
+    
+    
+    
+    
+    
+  </g>
+  <g
+   id="panel_labels_reworked"
+   inkscape:groupmode="layer"
+   inkscape:label="Labels Reworked"
+   style="display:inline"><text
+   id="reworked_module_title_text"
+   x="4061.354"
+   y="447.27814"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan1"
+     x="4061.354"
+     y="447.27814"
+     style="fill:url(#linearGradient500)">Bulkhead</tspan></text><text
+   id="reworked_LEVIATHAN_LOGO"
+   x="4062.0952"
+   y="12482.232"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+   xml:space="preserve"
+   inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <text
+   id="reworked_module_description"
+   x="4061.354"
+   y="815.19421"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan2"
+     x="4061.354"
+     y="815.19421">reverb</tspan></text>
+        
+      </g>
+<g
+   id="bulkhead_panel_mockup"
+   style="display:inline">
+  <rect
+   id="room_canvas_frame"
+   x="98.713165"
+   y="1043.8132"
+   width="7932.6733"
+   height="7050.2739"
+   rx="0"
+   ry="0"
+   style="display:inline;fill:#080b10;fill-opacity:0.95;stroke:#1cccd9;stroke-width:36.4263;stroke-opacity:0.65" />
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <g
+   id="knob_mockups"
+   style="fill:none;stroke:#ffffff;stroke-width:34;stroke-opacity:0.72"
+   transform="translate(-0.01821617,830.00035)">
+    <circle
+   id="decay_knob_art"
+   cx="700"
+   cy="8170"
+   r="205" />
+    <circle
+   id="diffuse_knob_art"
+   cx="2035"
+   cy="8170"
+   r="205" />
+    <circle
+   id="mix_knob_art"
+   cx="3370"
+   cy="8170"
+   r="205" />
+    <circle
+   id="absorb_knob_art"
+   cx="4705"
+   cy="8170"
+   r="205" />
+    <circle
+   id="early_late_knob_art"
+   cx="6040"
+   cy="8170"
+   r="205" />
+    <circle
+   id="motion_knob_art"
+   cx="7375"
+   cy="8170"
+   r="205" />
+  </g>
+  <g
+   id="knob_labels"
+   style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82"
+   transform="translate(-0.01821617,830.00035)">
+    <text
+   x="700"
+   y="8510"
+   id="text1">DECAY</text>
+    <text
+   x="2035"
+   y="8510"
+   id="text2">DIFF</text>
+    <text
+   x="3370"
+   y="8510"
+   id="text3">MIX</text>
+    <text
+   x="4705"
+   y="8510"
+   id="text4">ABS</text>
+    <text
+   x="6040"
+   y="8510"
+   id="text5">E/L</text>
+    <text
+   x="7375"
+   y="8510"
+   id="text6">MOTION</text>
+  </g>
+  <g
+   id="jack_mockups"
+   style="fill:none;stroke:#ffffff;stroke-opacity:0.72;stroke-width:30">
+    <circle
+   id="lst_x_jack_art"
+   cx="900"
+   cy="10350"
+   r="180" />
+    <circle
+   id="lst_y_jack_art"
+   cx="1940"
+   cy="10350"
+   r="180" />
+    <circle
+   id="wall_left_jack_art"
+   cx="2980"
+   cy="10350"
+   r="180" />
+    <circle
+   id="wall_right_jack_art"
+   cx="4020"
+   cy="10350"
+   r="180" />
+    <circle
+   id="wall_front_jack_art"
+   cx="5060"
+   cy="10350"
+   r="180" />
+    <circle
+   id="wall_back_jack_art"
+   cx="6100"
+   cy="10350"
+   r="180" />
+    <circle
+   id="in_l_jack_art"
+   cx="900"
+   cy="11350"
+   r="195" />
+    <circle
+   id="in_r_jack_art"
+   cx="1940"
+   cy="11350"
+   r="195" />
+    <circle
+   id="out_l_jack_art"
+   cx="6100"
+   cy="11350"
+   r="195" />
+    <circle
+   id="out_r_jack_art"
+   cx="7228"
+   cy="11350"
+   r="195" />
+  </g>
+  <g
+   id="jack_labels"
+   style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
+    <text
+   x="900"
+   y="10685"
+   id="text7">LST X</text>
+    <text
+   x="1940"
+   y="10685"
+   id="text8">LST Y</text>
+    <text
+   x="2980"
+   y="10685"
+   id="text9">LEFT</text>
+    <text
+   x="4020"
+   y="10685"
+   id="text10">RIGHT</text>
+    <text
+   x="5060"
+   y="10685"
+   id="text11">FRONT</text>
+    <text
+   x="6100"
+   y="10685"
+   id="text12">BACK</text>
+    <text
+   x="900"
+   y="11725"
+   id="text13">IN L</text>
+    <text
+   x="1940"
+   y="11725"
+   id="text14">IN R</text>
+    <text
+   x="6100"
+   y="11725"
+   id="text15">OUT L</text>
+    <text
+   x="7228"
+   y="11725"
+   id="text16">OUT R</text>
+  </g>
+</g>
+<g
+   id="components"
+   style="display:inline">
+  <rect
+   id="room_canvas"
+   x="116.75528"
+   y="1062.1451"
+   width="7896.4927"
+   height="7013.6758"
+   style="stroke-width:31.5586" />
+  <circle
+   id="decay_param"
+   cx="700"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="diffuse_param"
+   cx="2035"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="mix_param"
+   cx="3370"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="absorb_param"
+   cx="4705"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="early_late_param"
+   cx="6040"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="motion_param"
+   cx="7375"
+   cy="9000"
+   r="205"
+   style="fill:#a95555;fill-opacity:0.95" />
+  <circle
+   id="lst_x_input"
+   cx="900"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="lst_y_input"
+   cx="1940"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="wall_left_input"
+   cx="2980"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="wall_right_input"
+   cx="4020"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="wall_front_input"
+   cx="5060"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="wall_back_input"
+   cx="6100"
+   cy="10350"
+   r="180"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="in_l_input"
+   cx="900"
+   cy="11350"
+   r="195"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="in_r_input"
+   cx="1940"
+   cy="11350"
+   r="195"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="out_l_output"
+   cx="6100"
+   cy="11350"
+   r="195"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+  <circle
+   id="out_r_output"
+   cx="7228"
+   cy="11350"
+   r="195"
+   style="fill:#a95555;fill-opacity:0.94999987" />
+</g>
+<path
+   d="M 416.85524,952.22271 H 7711.1446"
+   stroke="url(#accentGrad)"
+   stroke-width="44.0903"
+   stroke-linecap="round"
+   opacity="0.55"
+   fill="none"
+   id="top_horizontal_line"
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" /></svg>

@@ -34,6 +34,143 @@ The module's promise is spatial control first, reverb utility second, and physic
 - Parameter smoothing and state crossfades to avoid zipper noise.
 - Focused tests for geometry timing, decay stability, and interpolation safety.
 
+## MVP Implementation Handoff
+
+This section is the authoritative starting point for an initial implementation/scaffolding pass. Later sections describe the broader v1 direction, but the MVP should stay inside this smaller contract until it compiles, appears in Rack, and has testable geometry/DSP utilities.
+
+### MVP Product Shape
+
+- Panel width: 16 HP.
+- Panel asset: `res/bulkhead.svg`.
+- Main visible feature: a large custom room widget occupying the upper panel.
+- Room widget shows a rectangular room, four movable walls, one listener with yaw, and either one mono speaker or a linked stereo speaker pair.
+- Mouse interaction is the primary editor for room layout, speaker placement/rotation, and listener placement/rotation.
+- CV modulation should initially target listener position and wall distance, not material selection.
+- Material selection is menu/dropdown based.
+- Floor and ceiling material slots exist in state from the start, even if they only affect late damping later.
+
+### MVP Panel Anchors
+
+Use the hidden `components` layer in `res/bulkhead.svg` through `PanelSvgUtils`. These IDs already exist in the panel mockup and should be treated as the initial UI contract:
+
+| SVG ID | Purpose |
+| --- | --- |
+| `room_canvas` | Custom room editor widget bounds. |
+| `decay_param` | Decay knob. |
+| `diffuse_param` | Diffusion/density knob. |
+| `mix_param` | Dry/wet mix knob. |
+| `absorb_param` | Global absorption macro knob. |
+| `early_late_param` | Early/late balance knob. |
+| `motion_param` | Late-field motion amount knob. |
+| `lst_x_input` | Listener X CV input. |
+| `lst_y_input` | Listener Y CV input. |
+| `wall_left_input` | Bipolar left-wall distance CV input. |
+| `wall_right_input` | Bipolar right-wall distance CV input. |
+| `wall_front_input` | Bipolar front-wall distance CV input. |
+| `wall_back_input` | Bipolar back-wall distance CV input. |
+| `in_l_input` | Left/mono audio input. |
+| `in_r_input` | Optional right audio input. |
+| `out_l_output` | Left audio output. |
+| `out_r_output` | Right audio output. |
+
+### MVP Params, Inputs, Outputs
+
+Use these exact enum names for the first pass unless there is a compelling local naming conflict:
+
+```cpp
+enum ParamId {
+    DECAY_PARAM,
+    DIFFUSE_PARAM,
+    MIX_PARAM,
+    ABSORB_PARAM,
+    EARLY_LATE_PARAM,
+    MOTION_PARAM,
+    PARAMS_LEN
+};
+
+enum InputId {
+    LST_X_INPUT,
+    LST_Y_INPUT,
+    WALL_LEFT_INPUT,
+    WALL_RIGHT_INPUT,
+    WALL_FRONT_INPUT,
+    WALL_BACK_INPUT,
+    IN_L_INPUT,
+    IN_R_INPUT,
+    INPUTS_LEN
+};
+
+enum OutputId {
+    OUT_L_OUTPUT,
+    OUT_R_OUTPUT,
+    OUTPUTS_LEN
+};
+
+enum LightId {
+    LIGHTS_LEN
+};
+```
+
+No `Material` knob, material CV, source CV, listener yaw CV, size CV, freeze button, or quality button is required for the initial panel scaffold. Those can be added later after the core module exists.
+
+Suggested parameter ranges:
+
+| Param | Range | Default | Notes |
+| --- | ---: | ---: | --- |
+| `DECAY_PARAM` | 0.1..30 s | 2.5 s | Configure logarithmic/display mapping if convenient. |
+| `DIFFUSE_PARAM` | 0..1 | 0.55 | Low is specular/roomy, high is smooth/dense. |
+| `MIX_PARAM` | 0..1 | 0.35 | Dry/wet. |
+| `ABSORB_PARAM` | 0..1 | 0.35 | Global absorption macro. |
+| `EARLY_LATE_PARAM` | -1..+1 | 0 | Negative favors early geometry, positive favors late tail. |
+| `MOTION_PARAM` | 0..1 | 0.15 | No-op until late FDN motion exists. |
+
+### MVP Geometry CV Mapping
+
+- `LST_X_INPUT`: -5V..+5V maps listener x to room left..right.
+- `LST_Y_INPUT`: -5V..+5V maps listener y to room bottom..top.
+- Wall CV inputs are bipolar offsets around the current/manual wall placement.
+- For wall CV, 0V means no modulation, +5V moves that wall farther from the listener, and -5V moves that wall nearer to the listener.
+- Wall CV must clamp so the room never inverts and the listener always keeps a minimum wall distance.
+- Use a conservative minimum listener-wall distance of 0.5 m for wall modulation.
+- Use a 0.1 m minimum source/listener-to-wall placement margin for direct placement.
+
+### MVP Code Setup Checklist
+
+The initial coding pass should create only enough Rack integration and testable support code to make Bulkhead real in the codebase:
+
+1. Add `extern Model* modelBulkhead;` to `src/plugin.hpp`.
+2. Add `p->addModel(modelBulkhead);` to `src/plugin.cpp`.
+3. Add a `Bulkhead` entry to `plugin.json` with slug/name `Bulkhead`.
+4. Add `src/Bulkhead.hpp` and `src/Bulkhead.cpp` with the module class, enums, constructor config, default state, and pass-through/silent-safe audio process.
+5. Add `src/BulkheadWidget.cpp` with `BulkheadWidget`, `createModel<Bulkhead, BulkheadWidget>("Bulkhead")`, panel loading from `res/bulkhead.svg`, anchor loading via `PanelSvgUtils`, and placeholder room widget placement.
+6. Add `src/BulkheadGeometry.hpp/.cpp` with Rack-free geometry structs and first-order reflection path target generation.
+7. Add a focused geometry unit test before implementing the full reverb tail.
+8. Do not add module source files to the Makefile unless the build has changed; the repo already uses `SOURCES += $(wildcard src/*.cpp)`.
+9. Update the Makefile only for a new focused geometry test target if needed.
+
+For the first scaffold, `process()` may output dry input, silence, or a simple safe wet placeholder. Do not block module setup on the final FDN.
+
+### MVP Scaffold Acceptance Criteria
+
+The initial handoff is successful when:
+
+- `plugin.json`, `src/plugin.hpp`, and `src/plugin.cpp` register `Bulkhead`.
+- Rack can instantiate the module and display `res/bulkhead.svg`.
+- The custom room widget occupies the `room_canvas` anchor and can draw placeholder walls/listener/speakers.
+- All six knob params and all ten ports are placed from SVG anchors.
+- `BulkheadGeometry` has Rack-free tests for direct distance and first-order image-source reflection positions.
+- `test-fast` still passes, or any failure is clearly unrelated to Bulkhead.
+- In WSL/WSL-like environments, full plugin link failures are not treated as authoritative regressions.
+
+### MVP Non-Goals
+
+- Do not implement full FDN before the module scaffold and geometry tests exist.
+- Do not implement arbitrary polygon rooms.
+- Do not implement source CVs, yaw CV, material CV, or freeze in the initial pass.
+- Do not add polyphonic per-channel room simulation.
+- Do not perform heap allocation or SVG parsing in `process()`.
+- Do not depend on UI frame rate for DSP state.
+
 ### Deferred
 
 - Full convolution or imported impulse responses.
@@ -42,7 +179,6 @@ The module's promise is spatial control first, reverb utility second, and physic
 - Independent per-polyphonic-channel room simulation.
 - Binaural/HRTF rendering.
 - User-editable octave-band material curves.
-- User-settable floor and ceiling materials.
 - Explicit floor/ceiling reflection paths.
 - Full ambisonic or surround output.
 
@@ -89,37 +225,36 @@ Direct and early paths are geometric and intentionally readable. The late field 
 
 | Control | Range | CV | Description |
 | --- | --- | --- | --- |
-| `Size` | 0..1 | `SIZE CV` | Uniformly scales the editable room around its center. Maintains wall proportions unless walls are manually edited. |
-| `Decay` | 0.1..30 s | `DECAY CV` | Target late-field RT60. Material absorption can shorten effective decay. |
-| `Material` | stepped or continuous | `MAT CV` | Selects/morphs global material family. Per-wall overrides are available from the canvas/context menu. |
-| `Absorb` | 0..1 | `ABSORB CV` | Scales wall absorption and late damping. Low is reflective, high is dry/damped. |
-| `Diffuse` | 0..1 | `DIFF CV` | Controls early-to-late scattering and FDN density character. Low is specular/roomy, high is smooth/dense. |
-| `Motion` | 0..1 | `MOTION CV` | Adds stable late-tail motion via feedback-matrix modulation and very slow delay modulation. |
-| `Early/Late` | -1..+1 | `E/L CV` | Crossfades emphasis between geometric early field and diffuse late tail. |
-| `Mix` | 0..1 | `MIX CV` | Dry/wet mix. |
+| `Decay` | 0.1..30 s | none in MVP | Target late-field RT60. Material absorption can shorten effective decay. |
+| `Absorb` | 0..1 | none in MVP | Scales wall absorption and late damping. Low is reflective, high is dry/damped. |
+| `Diffuse` | 0..1 | none in MVP | Controls early-to-late scattering and FDN density character. Low is specular/roomy, high is smooth/dense. |
+| `Motion` | 0..1 | none in MVP | Adds stable late-tail motion via feedback-matrix modulation and very slow delay modulation. |
+| `Early/Late` | -1..+1 | none in MVP | Crossfades emphasis between geometric early field and diffuse late tail. |
+| `Mix` | 0..1 | none in MVP | Dry/wet mix. |
+
+The MVP panel uses the six controls above as one compact macro row. `Decay`, `Diffuse`, `Mix`, `Absorb`, `Early/Late`, and `Motion` are the only required v1 panel knobs at initial scaffold time. Material selection is not a knob in the current panel mockup; it is handled through menus/dropdowns.
 
 ### Geometry CV
 
 | Port | Target | Range Mapping |
 | --- | --- | --- |
-| `SRC X` | Speaker x position | -5V..+5V maps to room left..right. |
-| `SRC Y` | Speaker y position | -5V..+5V maps to room bottom..top. |
-| `SRC ROT` | Speaker rotation | -5V..+5V maps to -180..+180 degrees. |
 | `LST X` | Listener x position | -5V..+5V maps to room left..right. |
 | `LST Y` | Listener y position | -5V..+5V maps to room bottom..top. |
-| `YAW CV` | Listener yaw | -5V..+5V maps to -180..+180 degrees. |
-| `WALL CV` | Assigned wall/size macro | Default maps to uniform room size; context menu can assign to left/right/top/bottom. |
+| `LEFT` | Left wall distance from listener | Bipolar offset around manual wall position; + moves farther, - moves nearer. |
+| `RIGHT` | Right wall distance from listener | Bipolar offset around manual wall position; + moves farther, - moves nearer. |
+| `FRONT` | Front wall distance from listener | Bipolar offset around manual wall position; + moves farther, - moves nearer. |
+| `BACK` | Back wall distance from listener | Bipolar offset around manual wall position; + moves farther, - moves nearer. |
 
-V1 should avoid exposing eight wall CV ports unless panel space supports it cleanly. A single assignable `WALL CV` is enough for the first implementation and keeps the faceplate focused.
+The MVP panel exposes listener X/Y and four wall-distance CVs. Speaker position, speaker rotation, and listener yaw are edited from the room canvas rather than dedicated CV ports in the initial panel.
 
 ### Buttons / Modes
 
 | Control | Behavior |
 | --- | --- |
-| `Quality` | Eco / Studio / HiFi. Context-menu item is acceptable for v1 if panel space is tight. |
-| `Air` | Enables distance-dependent high-frequency loss. Off in Eco by default. |
-| `Rays` | Toggles visual reflection rays. Display-only. |
-| `Freeze` | Optional v1. Freezes late FDN input and feedback state while leaving dry/direct path live. If omitted, leave space in architecture. |
+| `Quality` | Eco / Studio / HiFi. Context-menu item for MVP. |
+| `Air` | Enables distance-dependent high-frequency loss. Context-menu item for MVP. |
+| `Rays` | Toggles visual reflection rays. Display-only context-menu item for MVP. |
+| `Freeze` | Deferred. Leave room in architecture, but do not add it to the initial panel scaffold. |
 
 ## Room Canvas
 
@@ -147,7 +282,7 @@ The room canvas is the primary interaction surface.
 - Drag wall handles to resize room asymmetrically.
 - Shift-drag or context menu for precise values if needed.
 - Double-click speaker/listener/wall to reset that target.
-- Right-click wall to assign material override.
+- Right-click wall to assign material override from a menu/dropdown.
 - Right-click speaker to link/unlink stereo placement, reset rotation, or enter precise position/rotation values.
 - Right-click canvas to show quality, overlay, air, and advanced options.
 
@@ -301,7 +436,7 @@ Future implementation can fit minimum-phase IIR filters from octave-band materia
 
 ### Floor And Ceiling Materials
 
-V1 should keep the editable room as a top-down 2D model, but the material system should reserve room for floor and ceiling surfaces. Treat them as hidden/default surfaces in MVP rather than exposing them on the main panel.
+V1 should keep the editable room as a top-down 2D model, but the material system should include floor and ceiling material slots from the start. These surfaces may not receive explicit early-reflection modeling in v1, but users should be able to configure them so the room material model is not artificially limited to four walls.
 
 MVP policy:
 
@@ -310,16 +445,16 @@ MVP policy:
 - Default ceiling: plaster or neutral ceiling.
 - Do not expose floor/ceiling controls on the main panel in v1.
 - Do not require explicit floor/ceiling image-source paths in v1 early reflections.
-- Let floor/ceiling materials influence the late field only as a coarse damping contribution if it is essentially free.
+- Provide floor and ceiling material entries in an advanced/context menu.
+- Let floor/ceiling materials influence the late field as a coarse damping contribution when feasible.
 
 Post-MVP option:
 
-- Add context-menu entries or an advanced material editor for `Floor Material` and `Ceiling Material`.
 - Optionally add first-order vertical reflections using fixed room height, listener height, and speaker height.
 - Fold floor/ceiling absorption into late-tail damping and mixing time more explicitly.
 - Keep this separate from wall material overrides so top-down room editing remains readable.
 
-This keeps the architecture from assuming "four walls only" while avoiding a main-panel UI burden before the audible value is proven.
+This keeps the architecture from assuming "four walls only" while avoiding a main-panel UI burden before the audible value of explicit vertical modeling is proven.
 
 ### Air Absorption
 
@@ -412,9 +547,9 @@ This is not HRTF. It should be a stable stereo room cue that reads in Rack patch
 Persist:
 
 - Geometry: room bounds, speaker position(s), speaker rotation, listener position, listener yaw.
-- Macro params: size, decay, material, absorb, diffuse, motion, early/late, mix, air enabled, quality mode.
+- Macro params/menu state: decay, global material default, absorb, diffuse, motion, early/late, mix, air enabled, quality mode.
 - Per-wall material overrides.
-- Floor and ceiling material slots once exposed or once they affect DSP state.
+- Floor and ceiling material slots.
 - UI options: ray overlay, linked stereo speaker mode.
 - Schema version.
 
@@ -575,7 +710,7 @@ Performance tests should include moving-state cases, not only static impulse cas
 - Continuous speaker rotation for several seconds.
 - Continuous listener yaw change for several seconds.
 - Slow wall resize while audio is running.
-- CV-rate modulation of `SRC X`, `SRC Y`, and `SRC ROT`.
+- CV-rate modulation of `LST X`, `LST Y`, and the four wall-distance inputs.
 - Quality mode switch during active audio.
 
 No test should show NaN/Inf output, unbounded CPU growth, per-block allocation, or audible single-sample jumps.
@@ -610,16 +745,16 @@ Exit criteria:
 
 Exit criteria:
 
-- FDN decays monotonically within expected tolerance for static impulse tests.
+- FDN output remains finite and follows the expected decay envelope for static impulse tests.
 - Maximum decay remains finite and denormal-safe.
 - Quality modes produce increasing density without changing basic wet level radically.
 
 ### Phase 3: Material And Air Model
 
 - Add material presets.
-- Add global Material and Absorb controls.
-- Add per-wall material overrides.
-- Add internal floor and ceiling material defaults, even if not exposed on the panel.
+- Add global material default menu/state and the `Absorb` macro control.
+- Add per-wall material overrides through wall context menus/dropdowns.
+- Add floor and ceiling material defaults and advanced/context-menu selection.
 - Add optional air absorption.
 
 Exit criteria:
@@ -649,7 +784,7 @@ Exit criteria:
 - Tune defaults and gain staging.
 - Add second-order reflections for Studio/HiFi.
 - Add stable motion modulation.
-- Decide whether floor/ceiling materials remain hidden defaults or move to an advanced context menu.
+- Decide whether floor/ceiling materials affect only late damping in v1 or also receive explicit vertical reflection paths.
 - Add final tests and CPU profiling at 48/96/192 kHz.
 
 Exit criteria:
@@ -716,13 +851,8 @@ On module load:
 
 ## Open Decisions Before Coding
 
-- Exact panel width and port layout.
-- Whether `Freeze` ships in v1 or waits for v1.1.
-- Whether `WALL CV` is assignable only or whether individual wall CVs fit the panel.
-- Whether Material is a stepped selector, continuous morph, or both.
-- Whether floor/ceiling materials remain post-MVP or ship as advanced context-menu options.
-- Whether speaker/listener positions also get knobs, or canvas + CV is enough.
-- Whether speaker rotation also gets a knob, or `SRC ROT` CV plus canvas rotation is enough.
+- Exact final 16 HP artwork polish.
+- Whether floor/ceiling materials affect only late damping in v1 or also receive explicit vertical reflection paths.
 - Final naming for `Early/Late`: alternatives include `Shape`, `Field`, or `Focus`.
 
 ## V1 Non-Negotiables

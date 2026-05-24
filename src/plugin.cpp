@@ -37,6 +37,7 @@ void init(Plugin* p) {
 	p->addModel(modelWyrm);
 	p->addModel(modelSil);
 	p->addModel(modelChronomaw);
+	p->addModel(modelBulkhead);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
