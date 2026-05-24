@@ -112,8 +112,8 @@ struct WyrmEditorIconButton : TransparentWidget {
 		this->module = module;
 		this->kind = kind;
 		if (kind == RESET) {
-			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/reset-normal.svg"));
-			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/reset-highlighted.svg"));
+			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
+			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
 		}
 	}
 

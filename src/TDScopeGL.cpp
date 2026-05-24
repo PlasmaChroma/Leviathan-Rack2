@@ -60,9 +60,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   int redrawLastColorScheme = -1;
   float redrawLastColorBrightness = NAN;
   bool redrawLastHaloEnabled = false;
-  bool redrawLastMainTraceEnabled = false;
-  bool redrawLastConnectorsEnabled = false;
-  bool redrawLastStereoRightLaneEnabled = false;
   bool redrawLastUseGlShaderRenderer = false;
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
@@ -228,18 +225,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
       dirty = true;
       redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
-    }
-    if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
-      dirty = true;
-      redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
-    }
-    if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
-      dirty = true;
-      redrawLastConnectorsEnabled = module->debugRenderConnectorsEnabled;
-    }
-    if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
-      dirty = true;
-      redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
     }
     if (module->debugUseGlShaderRenderer != redrawLastUseGlShaderRenderer) {
       dirty = true;
@@ -2101,8 +2086,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
         glUniform1f(fieldUniformTime, (float)system::getTime());
-        // Temporarily force SHDR effect off while the option is disabled in UI.
-        glUniform1f(fieldUniformShdrEffect, 0.f);
+        glUniform1f(fieldUniformShdrEffect, module->debugShdrEffectEnabled.load(std::memory_order_relaxed) ? 1.f : 0.f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
         glActiveTexture(GL_TEXTURE1);
@@ -2124,8 +2108,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return true;
       };
       const bool renderHaloField = false;
-      const bool renderMainField = module->debugRenderMainTraceEnabled;
-      const bool renderContinuityField = module->debugRenderConnectorsEnabled;
+      const bool renderMainField = true;
+      const bool renderContinuityField = true;
       if (renderHaloField || renderMainField || renderContinuityField) {
         bool fieldDrawOk = uploadFieldLaneTextures();
         if (renderHaloField) {
@@ -2265,7 +2249,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             }
           }
 
-          if (module->debugRenderConnectorsEnabled && prevValid) {
+          if (prevValid) {
             if (!(std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx)) {
               float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
               float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
@@ -2313,7 +2297,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           drawSegmentBatch(haloSegmentVerts);
           glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
-        if (module->debugRenderMainTraceEnabled) {
+        {
           drawSegmentBatch(bodySegmentVerts);
           if (!fillSegmentVerts.empty()) {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -2395,7 +2379,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       }
-      if (module->debugRenderMainTraceEnabled) {
+      {
         const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
         const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
         for (auto &verts : mainBatchVerts) {
@@ -2451,7 +2435,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
       }
-      if (module->debugRenderConnectorsEnabled) {
+      {
         const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.74f, 1.10f);
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
         std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
@@ -2566,7 +2550,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
         [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, 0);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(
           [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
           [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
@@ -2578,7 +2562,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
         [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
         [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, 0);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(
           [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
           [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,

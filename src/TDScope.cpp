@@ -141,9 +141,6 @@ struct TDScopeDisplayWidget final : Widget {
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
   bool redrawLastHaloEnabled = false;
-  bool redrawLastMainTraceEnabled = false;
-  bool redrawLastConnectorsEnabled = false;
-  bool redrawLastStereoRightLaneEnabled = false;
   int redrawLastRenderMode = -1;
   int tailRasterImage = -1;
   int tailRasterW = 0;
@@ -487,18 +484,6 @@ struct TDScopeDisplayWidget final : Widget {
         dirty = true;
         redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
       }
-      if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
-        dirty = true;
-        redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
-      }
-      if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
-        dirty = true;
-        redrawLastConnectorsEnabled = module->debugRenderConnectorsEnabled;
-      }
-      if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
-        dirty = true;
-        redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
-      }
       if (module->debugRenderMode != redrawLastRenderMode) {
         dirty = true;
         redrawLastRenderMode = module->debugRenderMode;
@@ -671,7 +656,7 @@ struct TDScopeDisplayWidget final : Widget {
       nvgFill(args.vg);
     }
     if (silStandardStyle) {
-      drawSilWaveformBackground(args.vg, renderStereo && module->debugRenderStereoRightLaneEnabled, laneWidth, laneGap, drawTop, drawBottom);
+      drawSilWaveformBackground(args.vg, renderStereo, laneWidth, laneGap, drawTop, drawBottom);
     }
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
     const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
@@ -844,7 +829,7 @@ struct TDScopeDisplayWidget final : Widget {
       readHeadDrawY = 0.5f * (drawTop + drawBottom);
     }
     if (module->useOpenGlGeometryRenderMode()) {
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         float dividerX = laneWidth + laneGap * 0.5f;
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, dividerX, drawTop);
@@ -1820,14 +1805,12 @@ struct TDScopeDisplayWidget final : Widget {
             }
           }
 
-          if (module->debugRenderMainTraceEnabled) {
-            int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
-            for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
-              fillTailRasterSpan(yy, xMin, xMax, r, g, b, a);
-            }
+          int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
+          for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
+            fillTailRasterSpan(yy, xMin, xMax, r, g, b, a);
           }
 
-          if (module->debugRenderConnectorsEnabled && prevValid) {
+          if (prevValid) {
             int y0i = prevY;
             int y1i = yPx;
             int dy = std::abs(y1i - y0i);
@@ -1947,111 +1930,107 @@ struct TDScopeDisplayWidget final : Widget {
         }
       }
 
-      if (module->debugRenderMainTraceEnabled) {
-        for (int bin = 0; bin < kMainStrokeBins; ++bin) {
-          bool hasPath = false;
-          nvgBeginPath(args.vg);
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              continue;
-            }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
-            if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
-              continue;
-            }
-            nvgMoveTo(args.vg, x0[idx], rowY[idx]);
-            nvgLineTo(args.vg, x1[idx], rowY[idx]);
-            hasPath = true;
-          }
-          if (!hasPath) {
+      for (int bin = 0; bin < kMainStrokeBins; ++bin) {
+        bool hasPath = false;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
             continue;
           }
-          float toneCenter = strokeBinCenter(bin, kMainStrokeBins);
-          float visualCenter = toneCenter;
-          float transientCenter = toneCenter;
-          NVGcolor mainC = brightenColor(
-            gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
-            transientCenter * 0.62f);
-          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
-          nvgStrokeColor(args.vg, mainC);
-          nvgStrokeWidth(args.vg, mainW);
-          nvgStroke(args.vg);
+          float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
+          if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
+            continue;
+          }
+          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+          nvgLineTo(args.vg, x1[idx], rowY[idx]);
+          hasPath = true;
         }
+        if (!hasPath) {
+          continue;
+        }
+        float toneCenter = strokeBinCenter(bin, kMainStrokeBins);
+        float visualCenter = toneCenter;
+        float transientCenter = toneCenter;
+        NVGcolor mainC = brightenColor(
+          gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
+          transientCenter * 0.62f);
+        float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
+        nvgStrokeColor(args.vg, mainC);
+        nvgStrokeWidth(args.vg, mainW);
+        nvgStroke(args.vg);
       }
 
-      if (module->debugRenderConnectorsEnabled) {
-        const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
-        for (int bin = 0; bin < kConnectorStrokeBins; ++bin) {
-          bool hasPath = false;
-          bool prevValid = false;
-          float prevX0 = laneCenterXForConnectors;
-          float prevX1 = laneCenterXForConnectors;
-          float prevY = drawTop + 0.5f;
-          float prevVisual = 0.f;
-          float prevColorDrive = 0.f;
-          nvgBeginPath(args.vg);
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              prevValid = false;
-              continue;
-            }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            if (prevValid) {
-              float leftDeltaPx = std::fabs(x0[idx] - prevX0);
-              float rightDeltaPx = std::fabs(x1[idx] - prevX1);
-              if (leftDeltaPx < connectorMinDeltaPx && rightDeltaPx < connectorMinDeltaPx) {
-                prevX0 = x0[idx];
-                prevX1 = x1[idx];
-                prevY = rowY[idx];
-                prevVisual = visual;
-                prevColorDrive = transientLift;
-                prevValid = true;
-                continue;
-              }
-              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
-              float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
-              if (quantizeStrokeBin(tone, kConnectorStrokeBins) == bin) {
-                nvgMoveTo(args.vg, prevX0, prevY);
-                nvgLineTo(args.vg, x0[idx], rowY[idx]);
-                nvgMoveTo(args.vg, prevX1, prevY);
-                nvgLineTo(args.vg, x1[idx], rowY[idx]);
-                hasPath = true;
-              }
-            }
-            prevX0 = x0[idx];
-            prevX1 = x1[idx];
-            prevY = rowY[idx];
-            prevVisual = visual;
-            prevColorDrive = transientLift;
-            prevValid = true;
-          }
-          if (!hasPath) {
+      const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
+      for (int bin = 0; bin < kConnectorStrokeBins; ++bin) {
+        bool hasPath = false;
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        float prevY = drawTop + 0.5f;
+        float prevVisual = 0.f;
+        float prevColorDrive = 0.f;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
+            prevValid = false;
             continue;
           }
-          float toneCenter = strokeBinCenter(bin, kConnectorStrokeBins);
-          float connectVisual = toneCenter;
-          float connectTransientLift = toneCenter;
-          NVGcolor connectC = brightenColor(
-            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
-            connectTransientLift * 0.58f);
-          float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
-          nvgStrokeColor(args.vg, connectC);
-          nvgStrokeWidth(args.vg, connectW);
-          nvgStroke(args.vg);
+          float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          if (prevValid) {
+            float leftDeltaPx = std::fabs(x0[idx] - prevX0);
+            float rightDeltaPx = std::fabs(x1[idx] - prevX1);
+            if (leftDeltaPx < connectorMinDeltaPx && rightDeltaPx < connectorMinDeltaPx) {
+              prevX0 = x0[idx];
+              prevX1 = x1[idx];
+              prevY = rowY[idx];
+              prevVisual = visual;
+              prevColorDrive = transientLift;
+              prevValid = true;
+              continue;
+            }
+            float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+            float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+            float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+            if (quantizeStrokeBin(tone, kConnectorStrokeBins) == bin) {
+              nvgMoveTo(args.vg, prevX0, prevY);
+              nvgLineTo(args.vg, x0[idx], rowY[idx]);
+              nvgMoveTo(args.vg, prevX1, prevY);
+              nvgLineTo(args.vg, x1[idx], rowY[idx]);
+              hasPath = true;
+            }
+          }
+          prevX0 = x0[idx];
+          prevX1 = x1[idx];
+          prevY = rowY[idx];
+          prevVisual = visual;
+          prevColorDrive = transientLift;
+          prevValid = true;
         }
+        if (!hasPath) {
+          continue;
+        }
+        float toneCenter = strokeBinCenter(bin, kConnectorStrokeBins);
+        float connectVisual = toneCenter;
+        float connectTransientLift = toneCenter;
+        NVGcolor connectC = brightenColor(
+          gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
+          connectTransientLift * 0.58f);
+        float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
+        nvgStrokeColor(args.vg, connectC);
+        nvgStrokeWidth(args.vg, connectW);
+        nvgStroke(args.vg);
       }
     };
 
     bool useTailRaster = module->useTailRasterRenderMode();
     if (!useTailRaster) {
       drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
 
         // Draw subtle lane divider for stereo side-by-side view.
@@ -2131,7 +2110,7 @@ struct TDScopeDisplayWidget final : Widget {
         }
 
         drawTailRasterLaneRows(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX, iyMin, iyMax);
-        if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+        if (renderStereo) {
           drawTailRasterLaneRows(
             rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX, iyMin, iyMax);
         }
@@ -2154,7 +2133,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float lineX0 = 2.f;
     float lineX1 = box.size.x - 2.f;
-    if (renderStereo && module->debugRenderStereoRightLaneEnabled && !silStandardStyle) {
+    if (renderStereo && !silStandardStyle) {
       float dividerX = laneWidth + laneGap * 0.5f;
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, dividerX, drawTop);

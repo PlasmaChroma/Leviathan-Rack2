@@ -85,9 +85,6 @@ struct TDScope final : Module {
   float scopeColorBrightness = 0.5f;
   // Legacy field kept for backward patch compatibility; halo rendering is disabled.
   std::atomic<bool> scopeTransientHaloEnabled {false};
-  std::atomic<bool> debugRenderMainTraceEnabled {true};
-  std::atomic<bool> debugRenderConnectorsEnabled {true};
-  std::atomic<bool> debugRenderStereoRightLaneEnabled {true};
   std::atomic<bool> debugUseGlShaderRenderer {true};
   std::atomic<bool> debugShdrEffectEnabled {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
@@ -228,9 +225,6 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
-    json_object_set_new(root, "debugRenderMainTraceEnabled", json_boolean(debugRenderMainTraceEnabled));
-    json_object_set_new(root, "debugRenderConnectorsEnabled", json_boolean(debugRenderConnectorsEnabled));
-    json_object_set_new(root, "debugRenderStereoRightLaneEnabled", json_boolean(debugRenderStereoRightLaneEnabled));
     json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer));
     json_object_set_new(root, "debugShdrEffectEnabled", json_boolean(debugShdrEffectEnabled));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
@@ -271,18 +265,6 @@ struct TDScope final : Module {
       scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
     scopeTransientHaloEnabled = false;
-    json_t *mainTraceJ = json_object_get(root, "debugRenderMainTraceEnabled");
-    if (mainTraceJ) {
-      debugRenderMainTraceEnabled = json_boolean_value(mainTraceJ);
-    }
-    json_t *connectorsJ = json_object_get(root, "debugRenderConnectorsEnabled");
-    if (connectorsJ) {
-      debugRenderConnectorsEnabled = json_boolean_value(connectorsJ);
-    }
-    json_t *stereoRightLaneJ = json_object_get(root, "debugRenderStereoRightLaneEnabled");
-    if (stereoRightLaneJ) {
-      debugRenderStereoRightLaneEnabled = json_boolean_value(stereoRightLaneJ);
-    }
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
     if (glShaderRendererJ) {
       debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
