@@ -78,7 +78,7 @@ struct TDScope final : Module {
   uint64_t lastPublishSeq = 0;
   int staleFrames = 0;
   bool previewValid = false;
-  std::atomic<int> scopeDisplayRangeMode {SCOPE_RANGE_5V};
+  std::atomic<int> scopeDisplayRangeMode {SCOPE_RANGE_AUTO};
   std::atomic<bool> scopeVerticalInverted {false};
   std::atomic<int> scopeChannelMode {SCOPE_CHANNEL_MONO};
   std::atomic<int> scopeColorScheme {COLOR_SCHEME_DEFAULT};

@@ -670,7 +670,6 @@ struct TDScopeDisplayWidget final : Widget {
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-      bool sampleLoaded = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
       auto computeLivePeakStats = [&]() -> std::pair<float, float> {
         // Returns {windowPeakVolts, p99Volts} over per-bin absolute peaks.
         std::vector<float> peaks;
@@ -710,66 +709,51 @@ struct TDScopeDisplayWidget final : Widget {
       if (msgChanged || rangeModeChanged || !autoDisplayScaleInitialized) {
         bool modeChanged = !autoDisplayScaleInitialized || sampleMode != autoLastSampleMode;
         float targetFullScaleVolts = 5.f;
-        if (sampleMode) {
-          float peakVolts = 0.f;
-          bool haveTrustedSamplePeak = sampleLoaded && std::isfinite(msg.sampleAbsolutePeakVolts);
-          if (haveTrustedSamplePeak) {
-            // In sample mode with loaded sample, treat 0V as a valid true peak
-            // (e.g., fully silent sample) instead of falling back to bin scanning.
-            peakVolts = std::max(msg.sampleAbsolutePeakVolts, 0.f);
-          } else {
-            auto liveStats = computeLivePeakStats();
-            peakVolts = liveStats.first;
-          }
-          targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+        auto liveStats = computeLivePeakStats();
+        float windowPeakVolts = liveStats.first;
+        float p99Volts = liveStats.second;
+        if (p99Volts <= 0.f) {
+          p99Volts = windowPeakVolts;
+        }
+        float truePeakVolts = windowPeakVolts;
+
+        // Standard auto behavior for both sample and live:
+        // hold true peaks, then decay slowly so transients don't immediately
+        // collapse display width.
+        if (modeChanged || !std::isfinite(autoLivePeakHoldVolts)) {
+          autoLivePeakHoldVolts = truePeakVolts;
+          autoLivePeakHoldFrames = 0;
+        } else if (truePeakVolts > autoLivePeakHoldVolts) {
+          autoLivePeakHoldVolts = truePeakVolts;
+          autoLivePeakHoldFrames = 36; // ~600ms @ 60Hz
+        } else if (autoLivePeakHoldFrames > 0) {
+          autoLivePeakHoldFrames--;
         } else {
-          auto liveStats = computeLivePeakStats();
-          float windowPeakVolts = liveStats.first;
-          float p99Volts = liveStats.second;
-          if (p99Volts <= 0.f) {
-            p99Volts = windowPeakVolts;
-          }
-          float hostPeakVolts =
-            (std::isfinite(msg.sampleAbsolutePeakVolts) && msg.sampleAbsolutePeakVolts > 0.f) ? msg.sampleAbsolutePeakVolts : 0.f;
-          float truePeakVolts = std::max(windowPeakVolts, hostPeakVolts);
+          autoLivePeakHoldVolts += (truePeakVolts - autoLivePeakHoldVolts) * 0.015f;
+        }
 
-          // Guardrail: hold true peaks, then decay slowly so transients don't
-          // immediately collapse display width.
-          if (modeChanged || !std::isfinite(autoLivePeakHoldVolts)) {
-            autoLivePeakHoldVolts = truePeakVolts;
-            autoLivePeakHoldFrames = 0;
-          } else if (truePeakVolts > autoLivePeakHoldVolts) {
-            autoLivePeakHoldVolts = truePeakVolts;
-            autoLivePeakHoldFrames = 24; // ~400ms @ 60Hz
-          } else if (autoLivePeakHoldFrames > 0) {
-            autoLivePeakHoldFrames--;
-          } else {
-            autoLivePeakHoldVolts += (truePeakVolts - autoLivePeakHoldVolts) * 0.03f;
-          }
+        targetFullScaleVolts = std::max(p99Volts * 1.10f, autoLivePeakHoldVolts * 1.02f);
+        targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
 
-          targetFullScaleVolts = std::max(p99Volts * 1.10f, autoLivePeakHoldVolts * 1.02f);
-          targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
-
-          // Hysteresis: ignore small retargeting around current full-scale.
-          if (!modeChanged) {
-            float hysteresisFrac = 0.03f;
-            float lowBand = autoDisplayFullScaleVolts * (1.f - hysteresisFrac);
-            float highBand = autoDisplayFullScaleVolts * (1.f + hysteresisFrac);
-            if (targetFullScaleVolts >= lowBand && targetFullScaleVolts <= highBand) {
-              targetFullScaleVolts = autoDisplayFullScaleVolts;
-            }
+        // Hysteresis: ignore small retargeting around current full-scale.
+        if (!modeChanged) {
+          float hysteresisFrac = 0.03f;
+          float lowBand = autoDisplayFullScaleVolts * (1.f - hysteresisFrac);
+          float highBand = autoDisplayFullScaleVolts * (1.f + hysteresisFrac);
+          if (targetFullScaleVolts >= lowBand && targetFullScaleVolts <= highBand) {
+            targetFullScaleVolts = autoDisplayFullScaleVolts;
           }
         }
         if (!autoDisplayScaleInitialized) {
           autoDisplayFullScaleVolts = targetFullScaleVolts;
           autoDisplayScaleInitialized = true;
         } else {
-          // Smooth autoscale transitions.
-          // In live mode keep slower motion to minimize flicker.
+          // Smooth autoscale transitions with the same response profile in
+          // sample and live modes for consistent feel.
           float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
           if (std::fabs(delta) > 0.01f) {
-            float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
-            float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
+            float kAutoScaleAttackAlpha = 0.08f;
+            float kAutoScaleReleaseAlpha = 0.008f;
             float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
             autoDisplayFullScaleVolts += delta * alpha;
           }

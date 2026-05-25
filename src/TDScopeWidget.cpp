@@ -169,7 +169,7 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    if (scopeModule && APP && APP->window && APP->window->uiFont) {
+    if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
       const float modeX = scopeRectPx.pos.x + scopeRectPx.size.x - 1.2f;
       const float modeY = std::max(1.5f, mm2px(9.522227f) - mm2px(0.75f));
       const char *modeLabel = debugRenderModeLabel(scopeModule);
@@ -295,50 +295,52 @@ struct TDScopeWidget : ModuleWidget {
     }));
     addBrightnessSlider(menu);
 
-    menu->addChild(new MenuSeparator());
-    menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
-      submenu->addChild(createMenuLabel("Scope Rate"));
-      submenu->addChild(createCheckMenuItem(
-        "90 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_90HZ; },
-        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_90HZ; }));
-      submenu->addChild(createCheckMenuItem(
-        "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
-        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
-      submenu->addChild(createCheckMenuItem(
-        "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
-        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
-      submenu->addChild(new MenuSeparator());
-      submenu->addChild(createCheckMenuItem(
-        "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed); },
-        [=]() { scopeModule->debugFramebufferCacheEnabled.store(!scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
-      submenu->addChild(createMenuLabel("Render Mode"));
-      submenu->addChild(createCheckMenuItem(
-        "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
-        [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_STANDARD; }));
-      submenu->addChild(createCheckMenuItem(
-        "Tail raster", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER; },
-        [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
-      submenu->addChild(createCheckMenuItem(
-        "OpenGL", "",
-        [=]() {
-          return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                 !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-        },
-        [=]() {
-          scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-          scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
-        }));
-      submenu->addChild(createCheckMenuItem(
-        "OpenGL SHDR", "",
-        [=]() {
-          return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                 scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-        },
-        [=]() {
-          scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-          scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
-        }));
-    }));
+    if (isDragonKingDebugEnabled()) {
+      menu->addChild(new MenuSeparator());
+      menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
+        submenu->addChild(createMenuLabel("Scope Rate"));
+        submenu->addChild(createCheckMenuItem(
+          "90 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_90HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_90HZ; }));
+        submenu->addChild(createCheckMenuItem(
+          "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
+        submenu->addChild(createCheckMenuItem(
+          "30 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_30HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
+        submenu->addChild(new MenuSeparator());
+        submenu->addChild(createCheckMenuItem(
+          "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed); },
+          [=]() { scopeModule->debugFramebufferCacheEnabled.store(!scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+        submenu->addChild(createMenuLabel("Render Mode"));
+        submenu->addChild(createCheckMenuItem(
+          "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
+          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_STANDARD; }));
+        submenu->addChild(createCheckMenuItem(
+          "Tail raster", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_TAIL_RASTER; },
+          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
+        submenu->addChild(createCheckMenuItem(
+          "OpenGL", "",
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
+          }));
+        submenu->addChild(createCheckMenuItem(
+          "OpenGL SHDR", "",
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
+          }));
+      }));
+    }
   }
 };
 
