@@ -352,7 +352,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
     validateGlResourcesForCurrentContext();
     glDisable(GL_SCISSOR_TEST);
-    glClearColor(0.f, 0.f, 0.f, 1.f);
+    const bool canRenderScope =
+      module && module->useOpenGlGeometryRenderMode() && tdscope::isTemporalDeckModule(module->leftExpander.module);
+    // Keep the GL widget transparent when disconnected so panel artwork shows through.
+    glClearColor(0.f, 0.f, 0.f, canRenderScope ? 1.f : 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -1301,47 +1304,33 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return;
       }
       float lowR = 122.f, lowG = 92.f, lowB = 255.f;
-      float midR = 81.f, midG = 157.f, midB = 244.f;
       float highR = 28.f, highG = 204.f, highB = 217.f;
-      float midPoint = 0.5f;
+      float curve = 0.90f;
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:
           lowR = 0.f; lowG = 255.f; lowB = 65.f;
-          midR = 255.f; midG = 232.f; midB = 32.f;
           highR = 255.f; highG = 15.f; highB = 5.f;
-          midPoint = 0.5f;
+          curve = 0.86f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f; lowG = 92.f; lowB = 92.f;
-          midR = 168.f; midG = 168.f; midB = 168.f;
           highR = 242.f; highG = 242.f; highB = 242.f;
-          midPoint = 0.52f;
+          curve = 0.94f;
           break;
         case TDScope::COLOR_SCHEME_FIRE:
           lowR = 140.f; lowG = 0.f; lowB = 0.f;
-          midR = 255.f; midG = 120.f; midB = 0.f;
           highR = 255.f; highG = 255.f; highB = 30.f;
-          midPoint = 0.5f;
+          curve = 0.82f;
           break;
         default:
           break;
       }
       for (int i = 0; i < 256; ++i) {
         float intensity = float(i) / 255.f;
-        float r = 0.f;
-        float g = 0.f;
-        float b = 0.f;
-        if (intensity <= midPoint) {
-          float t = (midPoint > 1e-6f) ? (intensity / midPoint) : 0.f;
-          r = lowR + (midR - lowR) * t;
-          g = lowG + (midG - lowG) * t;
-          b = lowB + (midB - lowB) * t;
-        } else {
-          float t = (1.f - midPoint > 1e-6f) ? ((intensity - midPoint) / (1.f - midPoint)) : 1.f;
-          r = midR + (highR - midR) * t;
-          g = midG + (highG - midG) * t;
-          b = midB + (highB - midB) * t;
-        }
+        float t = std::pow(clamp(intensity, 0.f, 1.f), curve);
+        float r = lowR + (highR - lowR) * t;
+        float g = lowG + (highG - lowG) * t;
+        float b = lowB + (highB - lowB) * t;
         colorLut[size_t(scheme)][size_t(i)] = nvgRGBA(uint8_t(std::lround(clamp(r, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(g, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(b, 0.f, 255.f))), 255);

@@ -299,8 +299,8 @@ struct TDScopeWidget : ModuleWidget {
     menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
       submenu->addChild(createMenuLabel("Scope Rate"));
       submenu->addChild(createCheckMenuItem(
-        "120 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_120HZ; },
-        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_120HZ; }));
+        "90 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_90HZ; },
+        [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_90HZ; }));
       submenu->addChild(createCheckMenuItem(
         "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
         [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));

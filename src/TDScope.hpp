@@ -33,7 +33,7 @@ struct TDScope final : Module {
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
   enum ScopeChannelMode { SCOPE_CHANNEL_MONO = 0, SCOPE_CHANNEL_STEREO, SCOPE_CHANNEL_COUNT };
   enum DebugUiPublishRateMode {
-    DEBUG_UI_PUBLISH_120HZ = 0,
+    DEBUG_UI_PUBLISH_90HZ = 0,
     DEBUG_UI_PUBLISH_60HZ,
     DEBUG_UI_PUBLISH_30HZ,
     DEBUG_UI_PUBLISH_COUNT
@@ -88,7 +88,7 @@ struct TDScope final : Module {
   std::atomic<bool> debugUseGlShaderRenderer {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
   std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
-  std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_120HZ};
+  std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_90HZ};
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
@@ -101,7 +101,7 @@ struct TDScope final : Module {
   std::atomic<float> uiLagDragSamples {0.f};
   std::atomic<float> uiLagDragVelocity {0.f};
 
-  static constexpr float kUiPublishIntervalSec = 1.f / 120.f;
+  static constexpr float kUiPublishIntervalSec = 1.f / 90.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
   static constexpr float kRequestPublishIntervalDragSec = 1.f / 120.f;
   static constexpr float kLinkDropGraceSec = 1.f / 45.f;
@@ -166,7 +166,7 @@ struct TDScope final : Module {
         return 1.f / 30.f;
       case DEBUG_UI_PUBLISH_60HZ:
         return 1.f / 60.f;
-      case DEBUG_UI_PUBLISH_120HZ:
+      case DEBUG_UI_PUBLISH_90HZ:
       default:
         return kUiPublishIntervalSec;
     }
@@ -327,7 +327,7 @@ struct TDScope final : Module {
     json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
     if (publishRateJ) {
       debugUiPublishRateMode =
-        clamp(int(json_integer_value(publishRateJ)), DEBUG_UI_PUBLISH_120HZ, DEBUG_UI_PUBLISH_COUNT - 1);
+        clamp(int(json_integer_value(publishRateJ)), DEBUG_UI_PUBLISH_90HZ, DEBUG_UI_PUBLISH_COUNT - 1);
     }
   }
 
