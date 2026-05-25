@@ -163,8 +163,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint fieldUniformRenderMain = -1;
   GLint fieldUniformRenderHalo = -1;
   GLint fieldUniformRenderContinuity = -1;
-  GLint fieldUniformTime = -1;
-  GLint fieldUniformShdrEffect = -1;
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
@@ -226,8 +224,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldUniformRenderMain = -1;
     fieldUniformRenderHalo = -1;
     fieldUniformRenderContinuity = -1;
-    fieldUniformTime = -1;
-    fieldUniformShdrEffect = -1;
     fieldRowTextureWidth = 0;
     fieldColorLutScheme = -1;
     fieldColorLutBrightness = NAN;
@@ -372,9 +368,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
-    const float xInset = 0.75f;
-    const float fillX0 = xInset;
-    const float fillX1 = std::max(fillX0 + 1.f, box.size.x - xInset);
     glDisable(GL_BLEND);
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -385,10 +378,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glLoadIdentity();
     glColor4f(0.f, 0.f, 0.f, 1.f);
     glBegin(GL_QUADS);
-    glVertex2f(fillX0, drawTop);
-    glVertex2f(fillX1, drawTop);
-    glVertex2f(fillX1, drawBottom);
-    glVertex2f(fillX0, drawBottom);
+    glVertex2f(0.f, 0.f);
+    glVertex2f(box.size.x, 0.f);
+    glVertex2f(box.size.x, box.size.y);
+    glVertex2f(0.f, box.size.y);
     glEnd();
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
@@ -1675,8 +1668,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRenderMain;\n"
         "uniform float uRenderHalo;\n"
         "uniform float uRenderContinuity;\n"
-        "uniform float uTime;\n"
-        "uniform float uShdrEffect;\n"
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
         "  float t = (clamp(idx, 0.0, uRowCount - 1.0) + 0.5) / max(uRowCount, 1.0);\n"
@@ -1769,10 +1760,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.52);\n"
         "      float haloPremult = boostedHaloAlpha * haloCov;\n"
         "      vec3 haloColor = vec3(1.0);\n"
-        "      float hueShift = sin(uTime * 3.0 + rowIdx * 0.1) * transientLift * 0.12 * uShdrEffect;\n"
-        "      haloColor.r += hueShift;\n"
-        "      haloColor.b -= hueShift;\n"
-        "      haloColor = saturate(haloColor, 1.0 + 0.5 * uShdrEffect);\n"
         "      haloRgb += haloColor * haloPremult;\n"
         "      haloAlphaMax = max(haloAlphaMax, haloPremult);\n"
         "    }\n"
@@ -1846,14 +1833,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "    accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
         "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
         "  }\n"
-        "  float effectKeepAlive = 1.0 + 0.000001 * uShdrEffect * sin(uTime);\n"
         "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
         "  if (haloOnly) {\n"
-        "    vec3 haloOut = clamp(haloRgb * effectKeepAlive, 0.0, 1.0);\n"
+        "    vec3 haloOut = clamp(haloRgb, 0.0, 1.0);\n"
         "    float haloAlpha = clamp(haloAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(haloOut, haloAlpha);\n"
         "  } else {\n"
-        "    vec3 baseOut = clamp(baseRgb * effectKeepAlive, 0.0, 1.0);\n"
+        "    vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
         "    float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
         "    gl_FragColor = vec4(baseOut, baseAlpha);\n"
         "  }\n"
@@ -1964,22 +1950,20 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderHalo = glGetUniformLocation(fieldShaderProgram, "uRenderHalo");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
-      fieldUniformTime = glGetUniformLocation(fieldShaderProgram, "uTime");
-      fieldUniformShdrEffect = glGetUniformLocation(fieldShaderProgram, "uShdrEffect");
       if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 ||
           fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformZoomInHaloAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
-          fieldUniformRenderContinuity < 0 || fieldUniformTime < 0 || fieldUniformShdrEffect < 0) {
+          fieldUniformRenderContinuity < 0) {
         WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
              "zoomInWidth=%d zoomInHaloWidth=%d zoomInAlpha=%d zoomInLift=%d zoomInHaloAlpha=%d deepZoomFill=%d renderMain=%d "
-             "renderHalo=%d renderContinuity=%d time=%d shdrEffect=%d",
+             "renderHalo=%d renderContinuity=%d",
              fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
              fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInHaloWidthComp,
              fieldUniformZoomInAlphaComp, fieldUniformZoomInLiftComp, fieldUniformZoomInHaloAlphaComp,
-             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity, fieldUniformTime, fieldUniformShdrEffect);
+             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity);
         return false;
       }
 
@@ -2164,8 +2148,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRenderMain, renderMain);
         glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
-        glUniform1f(fieldUniformTime, (float)system::getTime());
-        glUniform1f(fieldUniformShdrEffect, module->debugShdrEffectEnabled.load(std::memory_order_relaxed) ? 1.f : 0.f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
         glActiveTexture(GL_TEXTURE1);

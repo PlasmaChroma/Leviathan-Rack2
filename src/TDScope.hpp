@@ -86,7 +86,6 @@ struct TDScope final : Module {
   // Legacy field kept for backward patch compatibility; halo rendering is disabled.
   std::atomic<bool> scopeTransientHaloEnabled {false};
   std::atomic<bool> debugUseGlShaderRenderer {true};
-  std::atomic<bool> debugShdrEffectEnabled {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
   std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
   std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_120HZ};
@@ -226,7 +225,6 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
     json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer));
-    json_object_set_new(root, "debugShdrEffectEnabled", json_boolean(debugShdrEffectEnabled));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
     json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
@@ -268,10 +266,6 @@ struct TDScope final : Module {
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
     if (glShaderRendererJ) {
       debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
-    }
-    json_t *shdrEffectJ = json_object_get(root, "debugShdrEffectEnabled");
-    if (shdrEffectJ) {
-      debugShdrEffectEnabled = json_boolean_value(shdrEffectJ);
     }
     json_t *framebufferCacheJ = json_object_get(root, "debugFramebufferCacheEnabled");
     if (framebufferCacheJ) {

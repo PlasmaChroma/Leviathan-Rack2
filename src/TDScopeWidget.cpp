@@ -338,14 +338,6 @@ struct TDScopeWidget : ModuleWidget {
           scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
           scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
         }));
-      submenu->addChild(createCheckMenuItem(
-        "SHDR Effect", "",
-        [=]() { return scopeModule->debugShdrEffectEnabled.load(std::memory_order_relaxed); },
-        [=]() {
-          scopeModule->debugShdrEffectEnabled.store(
-            !scopeModule->debugShdrEffectEnabled.load(std::memory_order_relaxed),
-            std::memory_order_relaxed);
-        }));
     }));
   }
 };
