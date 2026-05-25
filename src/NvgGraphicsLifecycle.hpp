@@ -2,7 +2,7 @@
 
 struct NVGcontext;
 
-namespace ui_gfx_lifecycle {
+namespace nvg_gfx_lifecycle {
 
 bool resetOwnedNvgImage(NVGcontext*& ownerVg,
                         int& handle,
@@ -15,5 +15,4 @@ bool ownedNvgImageSizeMatches(NVGcontext* currentVg, int handle, int expectedWid
 
 bool clearCacheOnContextSwitch(NVGcontext* currentVg, NVGcontext*& activeVg, unsigned long long* useCounter);
 
-}  // namespace ui_gfx_lifecycle
-
+}  // namespace nvg_gfx_lifecycle

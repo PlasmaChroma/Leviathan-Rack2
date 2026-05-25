@@ -1,4 +1,5 @@
 #include "Bifurx.hpp"
+#include "GlLifecycleUtils.hpp"
 #include "DebugTerminalTransport.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>
@@ -561,7 +562,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void validateShaderResourcesForCurrentContext() {
-		if (shaderReady && (!shaderProgram || !shaderVbo || !glIsProgram(shaderProgram) || !glIsBuffer(shaderVbo))) {
+		if (shaderReady && !gl_lifecycle::isValidProgramBufferPair(shaderProgram, shaderVbo)) {
 			shaderProgram = 0;
 			shaderVbo = 0;
 			shaderVertex = 0;
@@ -572,7 +573,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			shaderInitAttempted = false;
 		}
 		if (strokeShaderReady &&
-			(!strokeShaderProgram || !strokeShaderVbo || !glIsProgram(strokeShaderProgram) || !glIsBuffer(strokeShaderVbo))) {
+			!gl_lifecycle::isValidProgramBufferPair(strokeShaderProgram, strokeShaderVbo)) {
 			strokeShaderProgram = 0;
 			strokeShaderVbo = 0;
 			strokeShaderVertex = 0;

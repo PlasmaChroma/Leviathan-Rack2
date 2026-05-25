@@ -1,5 +1,5 @@
 #include "TDScope.hpp"
-#include "UiGraphicsLifecycle.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include <nanovg_gl.h>
 
 #include <chrono>
@@ -157,7 +157,7 @@ struct TDScopeDisplayWidget final : Widget {
   uint64_t tailRasterPublishSeq = 0;
 
   void resetTailRasterImage(NVGcontext* vg, bool deleteCurrentHandle) {
-    ui_gfx_lifecycle::resetOwnedNvgImage(
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
       tailRasterImageVg,
       tailRasterImage,
       tailRasterW,
@@ -1706,7 +1706,7 @@ struct TDScopeDisplayWidget final : Widget {
         resetTailRasterImage(args.vg, false);
       }
       if (tailRasterImage >= 0) {
-        if (!ui_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, tailRasterImage, tailRasterW, tailRasterH)) {
+        if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, tailRasterImage, tailRasterW, tailRasterH)) {
           resetTailRasterImage(args.vg, true);
         }
       }

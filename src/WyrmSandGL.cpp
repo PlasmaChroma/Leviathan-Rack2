@@ -1,5 +1,6 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
+#include "GlLifecycleUtils.hpp"
 
 #include <array>
 #include <chrono>
@@ -60,7 +61,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
 			resetBodyShaderState();
 		}
-		if ((bodyRtTex != 0 && !glIsTexture(bodyRtTex)) || (bodyRtFbo != 0 && !glIsFramebuffer(bodyRtFbo))) {
+		if ((bodyRtTex != 0 || bodyRtFbo != 0) &&
+			!gl_lifecycle::isValidTextureFramebufferPair(bodyRtTex, bodyRtFbo)) {
 			resetBodyRenderTargetState();
 		}
 	}

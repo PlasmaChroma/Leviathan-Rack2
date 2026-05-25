@@ -1,5 +1,5 @@
 #include "WyrmSand.hpp"
-#include "UiGraphicsLifecycle.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 namespace {
 int resolveSandDetail(int detailSetting, Vec size) {
@@ -51,7 +51,7 @@ void WyrmSand::markImageDirty() {
 }
 
 void WyrmSand::resetImageHandle(NVGcontext* vg, bool deleteCurrentHandle) {
-	ui_gfx_lifecycle::resetOwnedNvgImage(
+	nvg_gfx_lifecycle::resetOwnedNvgImage(
 		imageContext,
 		imageHandle,
 		imageUploadedW,
@@ -414,7 +414,7 @@ void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
 		imageContext = vg;
 	}
 	if (imageHandle >= 0) {
-		if (!ui_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, imageUploadedW, imageUploadedH)) {
+		if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, imageUploadedW, imageUploadedH)) {
 			resetImageHandle(vg, true);
 			imageContext = vg;
 		}

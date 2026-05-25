@@ -1,7 +1,7 @@
 #include "plugin.hpp"
-#include "UiGraphicsLifecycle.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
-namespace ui_gfx_lifecycle {
+namespace nvg_gfx_lifecycle {
 
 bool resetOwnedNvgImage(NVGcontext*& ownerVg,
                         int& handle,
@@ -40,5 +40,4 @@ bool clearCacheOnContextSwitch(NVGcontext* currentVg, NVGcontext*& activeVg, uns
   return true;
 }
 
-}  // namespace ui_gfx_lifecycle
-
+}  // namespace nvg_gfx_lifecycle

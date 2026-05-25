@@ -1,6 +1,6 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
-#include "UiGraphicsLifecycle.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -493,7 +493,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		auto clearHandle = [&](NVGcontext*& owner, int& handle) {
 			int ignoredWidth = 0;
 			int ignoredHeight = 0;
-			ui_gfx_lifecycle::resetOwnedNvgImage(
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
 				owner,
 				handle,
 				ignoredWidth,

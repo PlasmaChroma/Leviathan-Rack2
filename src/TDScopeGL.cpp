@@ -1,4 +1,5 @@
 #include "TDScope.hpp"
+#include "GlLifecycleUtils.hpp"
 #include <nanovg_gl.h>
 
 #include <array>
@@ -241,19 +242,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   }
 
   void validateGlResourcesForCurrentContext() {
-    if (shaderReady && (!shaderProgram || !shaderVbo || !glIsProgram(shaderProgram) || !glIsBuffer(shaderVbo))) {
+    if (shaderReady && !gl_lifecycle::isValidProgramBufferPair(shaderProgram, shaderVbo)) {
       resetLineShaderState();
     }
     if (segmentShaderReady &&
-        (!segmentShaderProgram || !segmentShaderVbo || !glIsProgram(segmentShaderProgram) ||
-         !glIsBuffer(segmentShaderVbo))) {
+        !gl_lifecycle::isValidProgramBufferPair(segmentShaderProgram, segmentShaderVbo)) {
       resetSegmentShaderState();
     }
     if (fieldShaderReady &&
-        (!fieldShaderProgram || !fieldShaderVbo || !fieldRowTextureLeft || !fieldRowTextureRight ||
-         !fieldColorLutTexture || !glIsProgram(fieldShaderProgram) || !glIsBuffer(fieldShaderVbo) ||
-         !glIsTexture(fieldRowTextureLeft) || !glIsTexture(fieldRowTextureRight) ||
-         !glIsTexture(fieldColorLutTexture))) {
+        (!gl_lifecycle::isValidProgramBufferPair(fieldShaderProgram, fieldShaderVbo) ||
+         !gl_lifecycle::areValidTextures({fieldRowTextureLeft, fieldRowTextureRight, fieldColorLutTexture}))) {
       resetFieldShaderState();
     }
   }
