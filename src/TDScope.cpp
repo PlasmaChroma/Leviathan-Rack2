@@ -18,7 +18,7 @@ float computeScopeDisplayVerticalSupersample(float rackZoom) {
   (void) rackZoom;
   return 0.55f;
   // Zoomed out: reduce total row density to save draw calls when several
-  // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
+  // scopes are visible. Zoomed in: restore the full supersampled trace.
   float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
   float zoomInT = clamp((rackZoom - 1.0f) / 1.0f, 0.f, 1.f);
   float supersample = 1.10f + (1.35f - 1.10f) * (1.f - zoomOutT);
@@ -141,7 +141,6 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
-  bool redrawLastHaloEnabled = false;
   int redrawLastRenderMode = -1;
   int tailRasterImage = -1;
   NVGcontext* tailRasterImageVg = nullptr;
@@ -493,10 +492,6 @@ struct TDScopeDisplayWidget final : Widget {
         dirty = true;
         redrawLastColorScheme = module->scopeColorScheme;
       }
-      if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
-        dirty = true;
-        redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
-      }
       if (module->debugRenderMode != redrawLastRenderMode) {
         dirty = true;
         redrawLastRenderMode = module->debugRenderMode;
@@ -624,7 +619,6 @@ struct TDScopeDisplayWidget final : Widget {
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
     const bool silStandardStyle = module->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
-    const bool renderTransientHalo = false;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -1778,7 +1772,6 @@ struct TDScopeDisplayWidget final : Widget {
       [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
           const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid, float laneCenterXForConnectors,
           int iyMin, int iyMax) {
-        constexpr uint8_t kHaloMinAlphaToDraw = 28u;
         iyMin = clamp(iyMin, 0, rowCount - 1);
         iyMax = clamp(iyMax, 0, rowCount - 1);
         if (iyMax < iyMin) {
@@ -1808,19 +1801,6 @@ struct TDScopeDisplayWidget final : Widget {
           uint8_t a = uint8_t(std::lround(clamp(c.a, 0.f, 1.f) * 255.f));
           int xMin = int(std::lround(std::min(x0[idx], x1[idx])));
           int xMax = int(std::lround(std::max(x0[idx], x1[idx])));
-
-          if (renderTransientHalo) {
-            float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
-            float haloT = haloLinear * haloLinear;
-            uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-            if (haloAlpha >= kHaloMinAlphaToDraw) {
-              int haloExtend = int(std::lround((1.35f + 5.20f * haloT) * zoomThicknessMul));
-              int haloHalfW = std::max(1, int(std::lround((0.50f + 1.20f * haloT) * zoomThicknessMul)));
-              for (int yy = yPx - haloHalfW; yy <= yPx + haloHalfW; ++yy) {
-                fillTailRasterSpan(yy, xMin - haloExtend, xMax + haloExtend, 255u, 255u, 255u, haloAlpha);
-              }
-            }
-          }
 
           int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
           for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
@@ -1861,12 +1841,8 @@ struct TDScopeDisplayWidget final : Widget {
       // Batch trace rendering into ordered intensity bins so NanoVG receives
       // far fewer stroke submissions while preserving a low->high gradient
       // progression across the scope.
-      constexpr uint8_t kHaloMinAlphaToDraw = 28u;
-      constexpr float kHaloFullDensityThreshold = 0.72f;
       constexpr int kMainStrokeBins = 10;
       constexpr int kConnectorStrokeBins = 8;
-      const bool denseHaloRows = rowStep <= 0.75f;
-      const bool fullHaloDensity = rackZoom >= 2.0f;
 
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
@@ -1907,44 +1883,6 @@ struct TDScopeDisplayWidget final : Widget {
           nvgStroke(args.vg);
         }
         return;
-      }
-
-      // Keep halo as a separate diffuse layer so stronger transients can still
-      // bloom independently of the quantized main-trace bins.
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t idx = size_t(iy);
-        if (!valid[idx]) {
-          continue;
-        }
-
-        float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-        float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-        float mainW = (0.78f + 0.62f * visual) * zoomThicknessMul;
-        // Bias toward faster fade-out for lower-transient content while
-        // preserving strong halo response for high-transient peaks.
-        float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
-        float haloT = haloLinear * haloLinear;
-
-        if (renderTransientHalo && haloT > 1e-4f) {
-          uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-          bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
-          // The main trace already renders every supersampled row. For the
-          // diffuse halo, decimating lower-energy rows in dense layouts keeps
-          // the look while materially cutting UI-thread stroke count.
-          if (drawHaloRow && !fullHaloDensity && denseHaloRows && haloT < kHaloFullDensityThreshold && (iy & 1)) {
-            drawHaloRow = false;
-          }
-          if (drawHaloRow) {
-            float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-            float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
-            nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
-            nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
-            nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, haloAlpha));
-            nvgStrokeWidth(args.vg, haloW);
-            nvgStroke(args.vg);
-          }
-        }
       }
 
       for (int bin = 0; bin < kMainStrokeBins; ++bin) {
@@ -2215,6 +2153,7 @@ struct TDScopeInputWidget final : Widget {
   float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
+  bool lagDragStationaryHoldActive = false;
 
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
@@ -2292,6 +2231,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragging = true;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
+    lagDragStationaryHoldActive = false;
     float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
     lagDragAnchorLagSamples = anchorLagSamples;
     lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
@@ -2308,6 +2248,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragReferenceHeight = 1.f;
     lagDragTravelSamples = 0.f;
     lagDragNormalizedOffset = 0.f;
+    lagDragStationaryHoldActive = false;
     if (module) {
       module->setLagDragRequest(false, 0.f, 0.f, false);
     }
@@ -2356,6 +2297,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      lagDragStationaryHoldActive = true;
       e.consume(this);
       return;
     }
@@ -2365,6 +2307,13 @@ struct TDScopeInputWidget final : Widget {
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (lagDragStationaryHoldActive) {
+      ScopeWindowMap holdMap = buildScopeWindowMap(lastGoodMsg);
+      lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, holdMap.accessibleLag);
+      lagDragLocalLagSamples = lagDragAnchorLagSamples;
+      lagDragNormalizedOffset = 0.f;
+      lagDragStationaryHoldActive = false;
+    }
     if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
       lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
     }
@@ -2418,6 +2367,7 @@ struct TDScopeInputWidget final : Widget {
     double nowSec = system::getTime();
     if ((nowSec - lagDragLastMoveSec) >= kLagDragHoldDetectSec) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      lagDragStationaryHoldActive = true;
     }
   }
 };

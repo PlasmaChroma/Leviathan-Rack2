@@ -28,6 +28,14 @@ enum HostFlags : uint32_t {
   FLAG_PREVIEW_VALID = 1u << 7,
   FLAG_MONO_BUFFER = 1u << 8,
   FLAG_SCOPE_STEREO = 1u << 9,
+  // One-shot pulse from host when audio input connectivity transitions from
+  // exactly one connected channel to both channels connected.
+  FLAG_SCOPE_AUTO_PROMOTE_STEREO = 1u << 10,
+  // One-shot pulse from host on TD.Scope attach so scope channel mode can be
+  // initialized from current input connectivity.
+  FLAG_SCOPE_ATTACH_CHANNEL_SYNC = 1u << 11,
+  // Attach-sync helper bit indicating both L+R inputs are currently connected.
+  FLAG_SCOPE_INPUTS_DUAL_CONNECTED = 1u << 12,
 };
 
 enum ScopeFormat : uint32_t {

@@ -83,8 +83,6 @@ struct TDScope final : Module {
   std::atomic<int> scopeChannelMode {SCOPE_CHANNEL_MONO};
   std::atomic<int> scopeColorScheme {COLOR_SCHEME_DEFAULT};
   float scopeColorBrightness = 0.5f;
-  // Legacy field kept for backward patch compatibility; halo rendering is disabled.
-  std::atomic<bool> scopeTransientHaloEnabled {false};
   std::atomic<bool> debugUseGlShaderRenderer {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
   std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
@@ -262,7 +260,6 @@ struct TDScope final : Module {
     if (brightnessJ) {
       scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
-    scopeTransientHaloEnabled = false;
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
     if (glShaderRendererJ) {
       debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
@@ -376,6 +373,14 @@ struct TDScope final : Module {
           msg->size == sizeof(temporaldeck_expander::HostToDisplay)) {
         validMessage = true;
         latestMsg = msg;
+        if ((msg->flags & temporaldeck_expander::FLAG_SCOPE_ATTACH_CHANNEL_SYNC) != 0u) {
+          bool dualConnected = (msg->flags & temporaldeck_expander::FLAG_SCOPE_INPUTS_DUAL_CONNECTED) != 0u;
+          scopeChannelMode.store(dualConnected ? SCOPE_CHANNEL_STEREO : SCOPE_CHANNEL_MONO, std::memory_order_relaxed);
+        }
+        if ((msg->flags & temporaldeck_expander::FLAG_SCOPE_AUTO_PROMOTE_STEREO) != 0u &&
+            scopeChannelMode.load(std::memory_order_relaxed) == SCOPE_CHANNEL_MONO) {
+          scopeChannelMode.store(SCOPE_CHANNEL_STEREO, std::memory_order_relaxed);
+        }
         previewValidNow = (msg->flags & temporaldeck_expander::FLAG_PREVIEW_VALID) != 0u;
         if (msg->publishSeq != lastPublishSeq) {
           lastPublishSeq = msg->publishSeq;

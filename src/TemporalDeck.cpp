@@ -678,6 +678,11 @@ struct TemporalDeck::Impl {
   bool expanderWasConnected = false;
   bool expanderPreviewValid = false;
   uint64_t expanderLastPublishedGeneration = 0;
+  bool expanderInputLWasConnected = false;
+  bool expanderInputRWasConnected = false;
+  bool expanderStereoAutoPromotePending = false;
+  bool expanderAttachChannelSyncPending = false;
+  bool expanderAttachChannelSyncStereo = false;
   ScopeWindowCache expanderScopeCacheMono;
   ScopeWindowCache expanderScopeCacheRight;
   bool expanderScopeLagHoldActive = false;
@@ -1223,6 +1228,28 @@ void TemporalDeck::process(const ProcessArgs &args) {
   Module* right = rightExpander.module;
   bool expanderConnected =
     isTDScopeModule(right) && right->leftExpander.producerMessage;
+  if (expanderConnected) {
+    bool inputLConnected = inputs[INPUT_L_INPUT].isConnected();
+    bool inputRConnected = inputs[INPUT_R_INPUT].isConnected();
+    int prevConnectedCount = int(impl->expanderInputLWasConnected) + int(impl->expanderInputRWasConnected);
+    int nowConnectedCount = int(inputLConnected) + int(inputRConnected);
+    bool justConnected = !impl->expanderWasConnected;
+    if (justConnected) {
+      impl->expanderAttachChannelSyncPending = true;
+      impl->expanderAttachChannelSyncStereo = (nowConnectedCount == 2);
+    }
+    if (prevConnectedCount == 1 && nowConnectedCount == 2) {
+      impl->expanderStereoAutoPromotePending = true;
+    }
+    impl->expanderInputLWasConnected = inputLConnected;
+    impl->expanderInputRWasConnected = inputRConnected;
+  } else {
+    impl->expanderInputLWasConnected = false;
+    impl->expanderInputRWasConnected = false;
+    impl->expanderStereoAutoPromotePending = false;
+    impl->expanderAttachChannelSyncPending = false;
+    impl->expanderAttachChannelSyncStereo = false;
+  }
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
   bool haveLagDragRequest = false;
   bool lagDragRequestActive = false;
@@ -1571,6 +1598,17 @@ void TemporalDeck::process(const ProcessArgs &args) {
           if (wantStereoScope) {
             flags |= temporaldeck_expander::FLAG_SCOPE_STEREO;
           }
+        }
+        if (impl->expanderStereoAutoPromotePending) {
+          flags |= temporaldeck_expander::FLAG_SCOPE_AUTO_PROMOTE_STEREO;
+          impl->expanderStereoAutoPromotePending = false;
+        }
+        if (impl->expanderAttachChannelSyncPending) {
+          flags |= temporaldeck_expander::FLAG_SCOPE_ATTACH_CHANNEL_SYNC;
+          if (impl->expanderAttachChannelSyncStereo) {
+            flags |= temporaldeck_expander::FLAG_SCOPE_INPUTS_DUAL_CONNECTED;
+          }
+          impl->expanderAttachChannelSyncPending = false;
         }
         if (impl->engine.buffer.monoStorage) {
           flags |= temporaldeck_expander::FLAG_MONO_BUFFER;

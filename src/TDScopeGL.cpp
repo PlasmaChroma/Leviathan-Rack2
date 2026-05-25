@@ -60,7 +60,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
   float redrawLastColorBrightness = NAN;
-  bool redrawLastHaloEnabled = false;
   bool redrawLastUseGlShaderRenderer = false;
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
@@ -116,10 +115,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   float historyNewestPosSamples = 0.f;
   float historyShiftResidualRows = 0.f;
   int historyHeadRow = 0;
-  std::array<std::vector<GlLineVertex>, 8> haloBatchVerts;
   std::array<std::vector<GlLineVertex>, 10> mainBatchVerts;
   std::array<std::vector<GlLineVertex>, 8> connectorBatchVerts;
-  std::vector<GlSegmentQuadVertex> haloSegmentVerts;
   std::vector<GlSegmentQuadVertex> bodySegmentVerts;
   std::vector<GlSegmentQuadVertex> fillSegmentVerts;
   std::vector<GlSegmentQuadVertex> continuitySegmentVerts;
@@ -155,13 +152,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint fieldUniformRowStep = -1;
   GLint fieldUniformZoomThickness = -1;
   GLint fieldUniformZoomInWidthComp = -1;
-  GLint fieldUniformZoomInHaloWidthComp = -1;
   GLint fieldUniformZoomInAlphaComp = -1;
   GLint fieldUniformZoomInLiftComp = -1;
-  GLint fieldUniformZoomInHaloAlphaComp = -1;
   GLint fieldUniformDeepZoomEnergyFill = -1;
   GLint fieldUniformRenderMain = -1;
-  GLint fieldUniformRenderHalo = -1;
   GLint fieldUniformRenderContinuity = -1;
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
@@ -216,13 +210,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldUniformRowStep = -1;
     fieldUniformZoomThickness = -1;
     fieldUniformZoomInWidthComp = -1;
-    fieldUniformZoomInHaloWidthComp = -1;
     fieldUniformZoomInAlphaComp = -1;
     fieldUniformZoomInLiftComp = -1;
-    fieldUniformZoomInHaloAlphaComp = -1;
     fieldUniformDeepZoomEnergyFill = -1;
     fieldUniformRenderMain = -1;
-    fieldUniformRenderHalo = -1;
     fieldUniformRenderContinuity = -1;
     fieldRowTextureWidth = 0;
     fieldColorLutScheme = -1;
@@ -296,10 +287,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       dirty = true;
       redrawLastColorBrightness = module->scopeColorBrightness;
     }
-    if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
-      dirty = true;
-      redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
-    }
     if (module->debugUseGlShaderRenderer != redrawLastUseGlShaderRenderer) {
       dirty = true;
       redrawLastUseGlShaderRenderer = module->debugUseGlShaderRenderer;
@@ -371,6 +358,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float drawTop = yInset;
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
+    const float xInset = 0.75f;
+
+    // Match NanoVG clipping behavior so wide GL strokes cannot bleed
+    // past the intended scope drawable region.
+    const float scaleX = (box.size.x > 1e-6f) ? (fbSize.x / box.size.x) : 1.f;
+    const float scaleY = (box.size.y > 1e-6f) ? (fbSize.y / box.size.y) : 1.f;
+    const int scissorX = std::max(0, int(std::lround(xInset * scaleX)));
+    const int scissorW = std::max(1, int(std::lround(std::max(1.f, box.size.x - 2.f * xInset) * scaleX)));
+    const int scissorY = std::max(0, int(std::lround((box.size.y - drawBottom) * scaleY)));
+    const int scissorH = std::max(1, int(std::lround(drawHeight * scaleY)));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(scissorX, scissorY, scissorW, scissorH);
+    struct ScissorGuard final {
+      ~ScissorGuard() {
+        glDisable(GL_SCISSOR_TEST);
+      }
+    } scissorGuard;
     glDisable(GL_BLEND);
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -443,9 +447,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
     }
-    float peakWindowVolts = (float(peakQAbs) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-    bool lowSignalWindow = peakWindowVolts < 0.03f;
-
     const float laneGap = renderStereo ? 2.f : 0.f;
     const float laneWidth =
       renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);
@@ -458,54 +459,113 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
-      float targetFullScaleVolts = 5.f;
-      if (!lowSignalWindow) {
-        float basePeakVolts = std::max(peakWindowVolts * 1.22f, 0.25f);
-        if (basePeakVolts <= 2.5f) {
-          targetFullScaleVolts = 2.5f;
-        } else if (basePeakVolts <= 5.f) {
-          targetFullScaleVolts = 5.f;
-        } else if (basePeakVolts <= 10.f) {
-          targetFullScaleVolts = 10.f;
-        } else {
-          targetFullScaleVolts = basePeakVolts;
-        }
-      }
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-      if (!autoDisplayScaleInitialized || autoLastSampleMode != sampleMode) {
-        autoDisplayFullScaleVolts = targetFullScaleVolts;
-        autoDisplayScaleInitialized = true;
-      } else {
-        if (!sampleMode) {
-          if (peakWindowVolts > autoLivePeakHoldVolts) {
-            autoLivePeakHoldVolts = peakWindowVolts;
-            autoLivePeakHoldFrames = 8;
+      bool sampleLoaded = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
+      auto computeLivePeakStats = [&]() -> std::pair<float, float> {
+        // Returns {windowPeakVolts, p99Volts} over per-bin absolute peaks.
+        std::vector<float> peaks;
+        peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
+        for (uint32_t i = 0; i < scopeBinCount; ++i) {
+          const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
+          if (!temporaldeck_expander::isScopeBinValid(bin)) {
+            // fall through to right channel in stereo mode
+          } else {
+            int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
+            float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+            peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+          }
+          if (renderStereo) {
+            const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
+            if (temporaldeck_expander::isScopeBinValid(binR)) {
+              int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
+              float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
+              peaks.push_back(clamp(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
+            }
+          }
+        }
+        if (peaks.empty()) {
+          return std::make_pair(0.f, 0.f);
+        }
+        float windowPeakVolts = *std::max_element(peaks.begin(), peaks.end());
+        size_t n = peaks.size();
+        size_t rank = size_t(std::ceil(0.99f * float(n)));
+        rank = std::max<size_t>(1, std::min(rank, n));
+        size_t p99Index = rank - 1;
+        std::nth_element(peaks.begin(), peaks.begin() + ptrdiff_t(p99Index), peaks.end());
+        float p99Volts = peaks[p99Index];
+        return std::make_pair(windowPeakVolts, p99Volts);
+      };
+
+      // Recompute auto-scale state only when snapshot updates (or mode changes).
+      if (msgChanged || rangeModeChanged || !autoDisplayScaleInitialized) {
+        bool modeChanged = !autoDisplayScaleInitialized || sampleMode != autoLastSampleMode;
+        float targetFullScaleVolts = 5.f;
+        if (sampleMode) {
+          float peakVolts = 0.f;
+          bool haveTrustedSamplePeak = sampleLoaded && std::isfinite(msg.sampleAbsolutePeakVolts);
+          if (haveTrustedSamplePeak) {
+            // In sample mode with loaded sample, treat 0V as a valid true peak
+            // (e.g., fully silent sample) instead of falling back to bin scanning.
+            peakVolts = std::max(msg.sampleAbsolutePeakVolts, 0.f);
+          } else {
+            auto liveStats = computeLivePeakStats();
+            peakVolts = liveStats.first;
+          }
+          targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+        } else {
+          auto liveStats = computeLivePeakStats();
+          float windowPeakVolts = liveStats.first;
+          float p99Volts = liveStats.second;
+          if (p99Volts <= 0.f) {
+            p99Volts = windowPeakVolts;
+          }
+          float hostPeakVolts =
+            (std::isfinite(msg.sampleAbsolutePeakVolts) && msg.sampleAbsolutePeakVolts > 0.f) ? msg.sampleAbsolutePeakVolts : 0.f;
+          float truePeakVolts = std::max(windowPeakVolts, hostPeakVolts);
+
+          // Guardrail: hold true peaks, then decay slowly so transients don't
+          // immediately collapse display width.
+          if (modeChanged || !std::isfinite(autoLivePeakHoldVolts)) {
+            autoLivePeakHoldVolts = truePeakVolts;
+            autoLivePeakHoldFrames = 0;
+          } else if (truePeakVolts > autoLivePeakHoldVolts) {
+            autoLivePeakHoldVolts = truePeakVolts;
+            autoLivePeakHoldFrames = 24; // ~400ms @ 60Hz
           } else if (autoLivePeakHoldFrames > 0) {
-            autoLivePeakHoldFrames -= 1;
+            autoLivePeakHoldFrames--;
           } else {
-            autoLivePeakHoldVolts *= 0.94f;
+            autoLivePeakHoldVolts += (truePeakVolts - autoLivePeakHoldVolts) * 0.03f;
           }
-          float heldPeakVolts = std::max(peakWindowVolts, autoLivePeakHoldVolts);
-          float heldTarget = std::max(heldPeakVolts * 1.22f, 0.25f);
-          if (heldTarget <= 2.5f) {
-            targetFullScaleVolts = 2.5f;
-          } else if (heldTarget <= 5.f) {
-            targetFullScaleVolts = 5.f;
-          } else if (heldTarget <= 10.f) {
-            targetFullScaleVolts = 10.f;
-          } else {
-            targetFullScaleVolts = heldTarget;
+
+          targetFullScaleVolts = std::max(p99Volts * 1.10f, autoLivePeakHoldVolts * 1.02f);
+          targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
+
+          // Hysteresis: ignore small retargeting around current full-scale.
+          if (!modeChanged) {
+            float hysteresisFrac = 0.03f;
+            float lowBand = autoDisplayFullScaleVolts * (1.f - hysteresisFrac);
+            float highBand = autoDisplayFullScaleVolts * (1.f + hysteresisFrac);
+            if (targetFullScaleVolts >= lowBand && targetFullScaleVolts <= highBand) {
+              targetFullScaleVolts = autoDisplayFullScaleVolts;
+            }
           }
         }
-        float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-        if (std::fabs(delta) > 0.01f) {
-          float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
-          float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
-          float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
-          autoDisplayFullScaleVolts += delta * alpha;
+        if (!autoDisplayScaleInitialized) {
+          autoDisplayFullScaleVolts = targetFullScaleVolts;
+          autoDisplayScaleInitialized = true;
+        } else {
+          // Smooth autoscale transitions.
+          // In live mode keep slower motion to minimize flicker.
+          float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
+          if (std::fabs(delta) > 0.01f) {
+            float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
+            float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
+            float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
+            autoDisplayFullScaleVolts += delta * alpha;
+          }
         }
+        autoLastSampleMode = sampleMode;
       }
-      autoLastSampleMode = sampleMode;
       displayFullScaleVolts = autoDisplayFullScaleVolts;
     } else {
       autoDisplayScaleInitialized = false;
@@ -559,10 +619,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       rowValidRight.assign(rowCountU, 0u);
       rowHoldFrames.assign(rowCountU, 0u);
       rowHoldFramesRight.assign(rowCountU, 0u);
-      for (auto &verts : haloBatchVerts) {
-        verts.clear();
-        verts.reserve(size_t(rowCount / 2 + 8) * 2u);
-      }
       for (auto &verts : mainBatchVerts) {
         verts.clear();
         verts.reserve(size_t(rowCount / 2 + 8) * 2u);
@@ -1305,22 +1361,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       float lowR = 122.f, lowG = 92.f, lowB = 255.f;
       float highR = 28.f, highG = 204.f, highB = 217.f;
-      float curve = 0.90f;
+      float curve = 1.75f;
       switch (scheme) {
         case TDScope::COLOR_SCHEME_CLASSIC:
           lowR = 0.f; lowG = 255.f; lowB = 65.f;
           highR = 255.f; highG = 15.f; highB = 5.f;
-          curve = 0.86f;
+          curve = 1.95f;
           break;
         case TDScope::COLOR_SCHEME_MONOCHROME:
           lowR = 92.f; lowG = 92.f; lowB = 92.f;
           highR = 242.f; highG = 242.f; highB = 242.f;
-          curve = 0.94f;
+          curve = 1.45f;
           break;
         case TDScope::COLOR_SCHEME_FIRE:
           lowR = 140.f; lowG = 0.f; lowB = 0.f;
           highR = 255.f; highG = 255.f; highB = 30.f;
-          curve = 0.82f;
+          curve = 2.15f;
           break;
         default:
           break;
@@ -1649,13 +1705,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRowStep;\n"
         "uniform float uZoomThickness;\n"
         "uniform float uZoomInWidthComp;\n"
-        "uniform float uZoomInHaloWidthComp;\n"
         "uniform float uZoomInAlphaComp;\n"
         "uniform float uZoomInLiftComp;\n"
-        "uniform float uZoomInHaloAlphaComp;\n"
         "uniform float uDeepZoomEnergyFill;\n"
         "uniform float uRenderMain;\n"
-        "uniform float uRenderHalo;\n"
         "uniform float uRenderContinuity;\n"
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
@@ -1696,13 +1749,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float sigma = max(radius * 0.70, 0.001);\n"
         "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
         "}\n"
-        "float gaussianAlphaTight(float dist, float radius, float sigmaScale) {\n"
-        "  float sigma = max(radius * sigmaScale, 0.001);\n"
-        "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
-        "}\n"
         "float hash(float n) { return fract(sin(n) * 43758.5453123); }\n"
-        "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax,\n"
-        "                   inout vec3 haloRgb, inout float haloAlphaMax) {\n"
+        "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax) {\n"
         "  if (!rowValid(row)) {\n"
         "    return;\n"
         "  }\n"
@@ -1737,21 +1785,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "    float coverAlpha = clamp(mainPremult * heatPriority, 0.0, 1.0);\n"
         "    baseRgb = baseRgb * (1.0 - coverAlpha) + mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
-        "  }\n"
-        "  if (uRenderHalo > 0.5) {\n"
-        "    float haloLinear = clamp((transientLift - 0.080) / 0.920, 0.0, 1.0);\n"
-        "    float haloT = haloLinear * haloLinear;\n"
-        "    float haloAlpha = ((72.0 + 176.0 * max(visual, 0.24)) / 255.0) * haloT;\n"
-        "    float boostedHaloAlpha = clamp(haloAlpha * 1.02 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
-        "    if (haloAlpha >= (28.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
-        "      float haloW = (mainW + (1.10 + 2.20 * haloT) * uZoomThickness) * 1.10 * uZoomInHaloWidthComp;\n"
-        "      float haloRadius = max(haloW * 0.50, mainRadius + 0.18);\n"
-        "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.52);\n"
-        "      float haloPremult = boostedHaloAlpha * haloCov;\n"
-        "      vec3 haloColor = vec3(1.0);\n"
-        "      haloRgb += haloColor * haloPremult;\n"
-        "      haloAlphaMax = max(haloAlphaMax, haloPremult);\n"
-        "    }\n"
         "  }\n"
         "}\n"
         "void accumulateContinuity(vec2 p, vec4 rowA, float idxA, vec4 rowB, float idxB, inout vec3 baseRgb,\n"
@@ -1814,24 +1847,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
         "  vec4 rowBody = fetchRow(rowPos);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
-        "  vec3 haloRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
-        "  float haloAlphaMax = 0.0;\n"
-        "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
+        "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax);\n"
         "  if (uZoomInWidthComp > 1.05) {\n"
         "    accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
         "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
         "  }\n"
-        "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
-        "  if (haloOnly) {\n"
-        "    vec3 haloOut = clamp(haloRgb, 0.0, 1.0);\n"
-        "    float haloAlpha = clamp(haloAlphaMax, 0.0, 1.0);\n"
-        "    gl_FragColor = vec4(haloOut, haloAlpha);\n"
-        "  } else {\n"
-        "    vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
-        "    float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
-        "    gl_FragColor = vec4(baseOut, baseAlpha);\n"
-        "  }\n"
+        "  vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
+        "  float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
+        "  gl_FragColor = vec4(baseOut, baseAlpha);\n"
         "}\n";
 
       auto compileShader = [](GLenum type, const char *src) -> GLuint {
@@ -1931,28 +1955,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRowStep = glGetUniformLocation(fieldShaderProgram, "uRowStep");
       fieldUniformZoomThickness = glGetUniformLocation(fieldShaderProgram, "uZoomThickness");
       fieldUniformZoomInWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInWidthComp");
-      fieldUniformZoomInHaloWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloWidthComp");
       fieldUniformZoomInAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInAlphaComp");
       fieldUniformZoomInLiftComp = glGetUniformLocation(fieldShaderProgram, "uZoomInLiftComp");
-      fieldUniformZoomInHaloAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloAlphaComp");
       fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
-      fieldUniformRenderHalo = glGetUniformLocation(fieldShaderProgram, "uRenderHalo");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
       if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
-          fieldUniformZoomInWidthComp < 0 ||
-          fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
-          fieldUniformZoomInHaloAlphaComp < 0 ||
-          fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
+          fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
+          fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
           fieldUniformRenderContinuity < 0) {
         WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
-             "zoomInWidth=%d zoomInHaloWidth=%d zoomInAlpha=%d zoomInLift=%d zoomInHaloAlpha=%d deepZoomFill=%d renderMain=%d "
-             "renderHalo=%d renderContinuity=%d",
+             "zoomInWidth=%d zoomInAlpha=%d zoomInLift=%d deepZoomFill=%d renderMain=%d renderContinuity=%d",
              fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
-             fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInHaloWidthComp,
-             fieldUniformZoomInAlphaComp, fieldUniformZoomInLiftComp, fieldUniformZoomInHaloAlphaComp,
-             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity);
+             fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInAlphaComp,
+             fieldUniformZoomInLiftComp, fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain,
+             fieldUniformRenderContinuity);
         return false;
       }
 
@@ -1994,22 +2012,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldShaderReady = true;
       return true;
     };
-    constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
     constexpr float kGlMainAlphaGain = 1.26f;
     constexpr float kGlMainLiftGain = 1.16f;
     constexpr float kGlConnectorAlphaGain = 1.14f;
     constexpr float kGlConnectorLiftGain = 1.12f;
-    constexpr float kGlHaloAlphaGain = 1.34f;
-    constexpr float kGlHaloWidthGain = 1.10f;
     constexpr float kGlMainWidthGain = 1.10f;
     constexpr float kGlConnectorWidthGain = 1.08f;
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
-      constexpr uint8_t kHaloMinAlphaToDraw = 28u;
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
         return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
@@ -2022,10 +2036,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glDeepZoomT = clamp((rackZoom - 2.f) / 1.4f, 0.f, 1.f);
       float glDeepZoomEase = std::pow(glDeepZoomT, 0.82f);
       float glZoomInWidthComp = 1.f + 0.16f * glZoomInEase + 0.05f * glDeepZoomEase;
-      float glZoomInHaloWidthComp = 1.f + 0.22f * glZoomInEase + 0.06f * glDeepZoomEase;
       float glZoomInAlphaComp = 1.f + 0.14f * glZoomInEase + 0.18f * glDeepZoomEase;
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
-      float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
       auto uploadFieldLaneTextures = [&]() -> bool {
         if (!initFieldShaderPipeline()) {
@@ -2114,7 +2126,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
         return true;
       };
-      auto drawFieldLanePass = [&](float renderMain, float renderHalo, float renderContinuity, GLenum srcBlend,
+      auto drawFieldLanePass = [&](float renderMain, float renderContinuity, GLenum srcBlend,
                                    GLenum dstBlend) -> bool {
         static const GLuint kAttrPos = 0;
         GLuint rowTex = (fieldLaneSlot != 0) ? fieldRowTextureRight : fieldRowTextureLeft;
@@ -2129,13 +2141,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRowStep, rowStep);
         glUniform1f(fieldUniformZoomThickness, zoomThicknessMul);
         glUniform1f(fieldUniformZoomInWidthComp, glZoomInWidthComp);
-        glUniform1f(fieldUniformZoomInHaloWidthComp, glZoomInHaloWidthComp);
         glUniform1f(fieldUniformZoomInAlphaComp, glZoomInAlphaComp);
         glUniform1f(fieldUniformZoomInLiftComp, glZoomInLiftComp);
-        glUniform1f(fieldUniformZoomInHaloAlphaComp, glZoomInHaloAlphaComp);
         glUniform1f(fieldUniformDeepZoomEnergyFill, glDeepZoomEnergyFill);
         glUniform1f(fieldUniformRenderMain, renderMain);
-        glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
@@ -2157,16 +2166,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      const bool renderHaloField = false;
       const bool renderMainField = true;
       const bool renderContinuityField = true;
-      if (renderHaloField || renderMainField || renderContinuityField) {
+      if (renderMainField || renderContinuityField) {
         bool fieldDrawOk = uploadFieldLaneTextures();
-        if (renderHaloField) {
-          fieldDrawOk = drawFieldLanePass(0.f, 1.f, 0.f, GL_ONE, GL_ONE) && fieldDrawOk;
-        }
         if (fieldDrawOk && (renderMainField || renderContinuityField)) {
-          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, 0.f, renderContinuityField ? 1.f : 0.f,
+          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
                                          GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
                         fieldDrawOk;
         }
@@ -2237,11 +2242,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return true;
       };
       if (initSegmentShaderPipeline()) {
-        haloSegmentVerts.clear();
         bodySegmentVerts.clear();
         fillSegmentVerts.clear();
         continuitySegmentVerts.clear();
-        haloSegmentVerts.reserve(size_t(rowCount) * 6u);
         bodySegmentVerts.reserve(size_t(rowCount) * 6u);
         fillSegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
         continuitySegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
@@ -2283,20 +2286,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
               GLubyte(std::lround(clamp(255.f * kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, 0.f, 255.f)));
             appendSegmentQuad(&fillSegmentVerts, x0, y, x1, y, mainRadius * (1.08f + 0.04f * glDeepZoomEnergyFill),
                               mainR, mainG, mainB, fillAlpha);
-          }
-
-          if (renderHaloField) {
-            float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
-            float haloT = haloLinear * haloLinear;
-            uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
-            if (haloAlpha >= kHaloMinAlphaToDraw) {
-              float haloW =
-                (mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
-              float haloRadius = std::max(haloW * 0.58f, mainRadius + 0.30f);
-              uint8_t boostedHaloAlpha = uint8_t(std::lround(
-                clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
-              appendSegmentQuad(&haloSegmentVerts, x0, y, x1, y, haloRadius, 255, 255, 255, boostedHaloAlpha);
-            }
           }
 
           if (prevValid) {
@@ -2342,11 +2331,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           prevValid = true;
         }
 
-        if (!haloSegmentVerts.empty()) {
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-          drawSegmentBatch(haloSegmentVerts);
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        }
         {
           drawSegmentBatch(bodySegmentVerts);
           if (!fillSegmentVerts.empty()) {
@@ -2393,42 +2377,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glUseProgram(0);
         }
       };
-      if (renderHaloField) {
-        const ShaderPassParams haloShaderParams = makeShaderPassParams(1.08f, 0.14f, 1.16f, 0.92f);
-        for (auto &verts : haloBatchVerts) {
-          verts.clear();
-        }
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!isValid(idx)) {
-            continue;
-          }
-          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
-          float haloT = haloLinear * haloLinear;
-          uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
-          if (haloAlpha < kHaloMinAlphaToDraw) {
-            continue;
-          }
-          int rowBin = quantizeStrokeBin(haloT, kGlHaloStrokeBins);
-          float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-          uint8_t boostedHaloAlpha = uint8_t(std::lround(
-            clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
-          haloBatchVerts[size_t(rowBin)].push_back({getX0(idx) - haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
-          haloBatchVerts[size_t(rowBin)].push_back({getX1(idx) + haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
-        }
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-        for (int widthBin = 0; widthBin < kGlHaloStrokeBins; ++widthBin) {
-          float haloCenter = strokeBinCenter(widthBin, kGlHaloStrokeBins);
-          float visualCenter = haloCenter;
-          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
-          float haloW =
-            (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
-          drawBatch(haloBatchVerts[size_t(widthBin)], haloW, haloShaderParams);
-        }
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      }
       {
         const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
         const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
