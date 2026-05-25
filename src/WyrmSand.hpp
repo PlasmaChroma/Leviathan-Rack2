@@ -16,6 +16,7 @@ struct WyrmSand {
 	std::vector<float> baseNoise;
 	std::vector<uint8_t> activeMask;
 	std::vector<int> activeIndices;
+	NVGcontext* imageContext = nullptr;
 	int imageHandle = -1;
 	int imageW = 0;
 	int imageH = 0;
@@ -31,6 +32,7 @@ struct WyrmSand {
 
 	void resetHistory();
 	void ensureField(Vec size, int detailSetting);
+	void resetImageHandle(NVGcontext* vg, bool deleteCurrentHandle);
 	void markImageDirty();
 	void markCellActive(int idx);
 	void ensureImageRaster(Vec size, int detailSetting);

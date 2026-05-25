@@ -49,6 +49,17 @@ void WyrmSand::markImageDirty() {
 	imageRevision++;
 }
 
+void WyrmSand::resetImageHandle(NVGcontext* vg, bool deleteCurrentHandle) {
+	if (deleteCurrentHandle && vg && imageContext == vg && imageHandle >= 0) {
+		nvgDeleteImage(vg, imageHandle);
+	}
+	imageContext = nullptr;
+	imageHandle = -1;
+	imageUploadedW = 0;
+	imageUploadedH = 0;
+	imageUploadedRevision = 0;
+}
+
 void WyrmSand::markCellActive(int idx) {
 	if (idx < 0 || idx >= int(activeMask.size()) || activeMask[idx]) {
 		return;
@@ -394,15 +405,30 @@ void WyrmSand::drawNanoVGImage(NVGcontext* vg, Vec size, int detailSetting) {
 		drawFlatBackground(vg, size);
 		return;
 	}
+	if (imageContext != vg) {
+		resetImageHandle(vg, false);
+		imageContext = vg;
+	}
+	if (imageHandle >= 0) {
+		int currentW = 0;
+		int currentH = 0;
+		nvgImageSize(vg, imageHandle, &currentW, &currentH);
+		if (currentW != imageUploadedW || currentH != imageUploadedH) {
+			resetImageHandle(vg, true);
+			imageContext = vg;
+		}
+	}
 	if (imageHandle < 0) {
 		imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED, imagePixels.data());
+		imageContext = vg;
 		imageUploadedW = imageW;
 		imageUploadedH = imageH;
 		imageUploadedRevision = imageRevision;
 	}
 	else if (imageUploadedW != imageW || imageUploadedH != imageH) {
-		nvgDeleteImage(vg, imageHandle);
+		resetImageHandle(vg, true);
 		imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED, imagePixels.data());
+		imageContext = vg;
 		imageUploadedW = imageW;
 		imageUploadedH = imageH;
 		imageUploadedRevision = imageRevision;

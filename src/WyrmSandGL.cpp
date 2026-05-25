@@ -32,6 +32,39 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	float cachedBodySlitherAmount = -1.f;
 	bool cachedBodySamplesValid = false;
 
+	void resetTextureState() {
+		texture = 0;
+		textureW = 0;
+		textureH = 0;
+		uploadedRevision = 0;
+	}
+
+	void resetBodyShaderState() {
+		bodyShaderProgram = 0;
+		bodyShaderSoftnessLoc = -1;
+		bodyShaderInitAttempted = false;
+		bodyShaderReady = false;
+	}
+
+	void resetBodyRenderTargetState() {
+		bodyRtFbo = 0;
+		bodyRtTex = 0;
+		bodyRtW = 0;
+		bodyRtH = 0;
+	}
+
+	void validateGlResourcesForCurrentContext() {
+		if (texture != 0 && !glIsTexture(texture)) {
+			resetTextureState();
+		}
+		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
+			resetBodyShaderState();
+		}
+		if ((bodyRtTex != 0 && !glIsTexture(bodyRtTex)) || (bodyRtFbo != 0 && !glIsFramebuffer(bodyRtFbo))) {
+			resetBodyRenderTargetState();
+		}
+	}
+
 	static GLuint compileShader(GLenum type, const char* src) {
 		GLuint shader = glCreateShader(type);
 		if (!shader) return 0;
@@ -626,22 +659,12 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	~WyrmSandGlWidget() override {
-		if (bodyRtFbo != 0) {
-			glDeleteFramebuffers(1, &bodyRtFbo);
-			bodyRtFbo = 0;
-		}
-		if (bodyRtTex != 0) {
-			glDeleteTextures(1, &bodyRtTex);
-			bodyRtTex = 0;
-		}
-		if (bodyShaderProgram != 0) {
-			glDeleteProgram(bodyShaderProgram);
-			bodyShaderProgram = 0;
-		}
-		if (texture != 0) {
-			glDeleteTextures(1, &texture);
-			texture = 0;
-		}
+		// DAW plugin editors can destroy/recreate their GL context around the
+		// Rack UI. Avoid driver calls from widget teardown; resources are
+		// reclaimed by the editor/context owner.
+		resetBodyRenderTargetState();
+		resetBodyShaderState();
+		resetTextureState();
 	}
 
 	void step() override {
@@ -665,6 +688,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const PerfClock::time_point perfStart = PerfClock::now();
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+		validateGlResourcesForCurrentContext();
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 

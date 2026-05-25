@@ -24,6 +24,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	// Persistent buffers to avoid per-frame allocations
 	std::vector<GlVertex> fillVertices;
 	std::vector<GlVertex> fillSoftCapVertices;
+	std::vector<GlVertex> fillCrestLineVertices;
 	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
 	std::vector<GlVertex> cyanVertices;
 	std::vector<GlVertex> cyanHaloVertices;
@@ -67,6 +68,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const size_t refinedPointReserve = size_t(kCurvePointCount) + 8;
 		fillVertices.reserve(overlaySegmentCount * 6);
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
+		fillCrestLineVertices.reserve(overlaySegmentCount * 2);
 		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
 		cyanVertices.reserve(size_t(kCurvePointCount));
 		cyanHaloVertices.reserve(size_t(kCurvePointCount));
@@ -74,39 +76,39 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		overlayCurvePoints.reserve(refinedPointReserve);
 	}
 
-	void releaseShaderResources() {
-		if (shaderVbo) {
+	void releaseShaderResources(bool deleteGlObjects) {
+		if (deleteGlObjects && shaderVbo) {
 			glDeleteBuffers(1, &shaderVbo);
-			shaderVbo = 0;
 		}
-		if (shaderProgram) {
+		shaderVbo = 0;
+		if (deleteGlObjects && shaderProgram) {
 			glDeleteProgram(shaderProgram);
-			shaderProgram = 0;
 		}
-		if (strokeShaderVbo) {
+		shaderProgram = 0;
+		if (deleteGlObjects && strokeShaderVbo) {
 			glDeleteBuffers(1, &strokeShaderVbo);
-			strokeShaderVbo = 0;
 		}
-		if (strokeShaderProgram) {
+		strokeShaderVbo = 0;
+		if (deleteGlObjects && strokeShaderProgram) {
 			glDeleteProgram(strokeShaderProgram);
-			strokeShaderProgram = 0;
 		}
-		if (shaderVertex) {
+		strokeShaderProgram = 0;
+		if (deleteGlObjects && shaderVertex) {
 			glDeleteShader(shaderVertex);
-			shaderVertex = 0;
 		}
-		if (shaderFragment) {
+		shaderVertex = 0;
+		if (deleteGlObjects && shaderFragment) {
 			glDeleteShader(shaderFragment);
-			shaderFragment = 0;
 		}
-		if (strokeShaderVertex) {
+		shaderFragment = 0;
+		if (deleteGlObjects && strokeShaderVertex) {
 			glDeleteShader(strokeShaderVertex);
-			strokeShaderVertex = 0;
 		}
-		if (strokeShaderFragment) {
+		strokeShaderVertex = 0;
+		if (deleteGlObjects && strokeShaderFragment) {
 			glDeleteShader(strokeShaderFragment);
-			strokeShaderFragment = 0;
 		}
+		strokeShaderFragment = 0;
 		shaderUniformViewport = -1;
 		shaderVboCapacityBytes = 0;
 		shaderReady = false;
@@ -118,8 +120,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	~BifurxSpectrumGLWidget() {
-		if (vbo) glDeleteBuffers(1, &vbo);
-		releaseShaderResources();
+		// DAW plugin editors can destroy/recreate their GL context around the
+		// Rack UI. Avoid driver calls from widget teardown; the context owner
+		// reclaims these resources when the editor context is destroyed.
+		vbo = 0;
+		releaseShaderResources(false);
 	}
 
 	bool ensureShaderReady() {
@@ -555,6 +560,30 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glUseProgram(0);
 	}
 
+	void validateShaderResourcesForCurrentContext() {
+		if (shaderReady && (!shaderProgram || !shaderVbo || !glIsProgram(shaderProgram) || !glIsBuffer(shaderVbo))) {
+			shaderProgram = 0;
+			shaderVbo = 0;
+			shaderVertex = 0;
+			shaderFragment = 0;
+			shaderUniformViewport = -1;
+			shaderVboCapacityBytes = 0;
+			shaderReady = false;
+			shaderInitAttempted = false;
+		}
+		if (strokeShaderReady &&
+			(!strokeShaderProgram || !strokeShaderVbo || !glIsProgram(strokeShaderProgram) || !glIsBuffer(strokeShaderVbo))) {
+			strokeShaderProgram = 0;
+			strokeShaderVbo = 0;
+			strokeShaderVertex = 0;
+			strokeShaderFragment = 0;
+			strokeUniformViewport = -1;
+			strokeShaderVboCapacityBytes = 0;
+			strokeShaderReady = false;
+			strokeShaderInitAttempted = false;
+		}
+	}
+
 	float getTopLabelReservedWidth(const DrawArgs& args, float fontSize) {
 		const int fontHandle = (APP && APP->window && APP->window->uiFont) ? APP->window->uiFont->handle : -1;
 		if (fontHandle == cachedTopLabelFontHandle &&
@@ -669,6 +698,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
 		if (!vbo) glGenBuffers(1, &vbo);
+		validateShaderResourcesForCurrentContext();
 
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
@@ -699,6 +729,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 			fillVertices.clear();
 			fillSoftCapVertices.clear();
+			fillCrestLineVertices.clear();
 			fillCrestStrokeVertices.clear();
 			cyanVertices.clear();
 			cyanHaloVertices.clear();
@@ -764,6 +795,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				const float crestAlpha = clamp(0.16f + 0.18f * energy, 0.f, 0.34f);
 				const float crestRadius = 1.05f + 0.45f * energy;
 				const NVGcolor crest = mixColor(fill, nvgRGB(236, 244, 250), 0.18f);
+				fillCrestLineVertices.push_back({x0, y0, crest.r, crest.g, crest.b, crestAlpha});
+				fillCrestLineVertices.push_back({x1, y1, crest.r, crest.g, crest.b, crestAlpha});
 				appendStrokeSegment(
 					{x0, y0, crest.r, crest.g, crest.b, crestAlpha},
 					{x1, y1, crest.r, crest.g, crest.b, crestAlpha},
@@ -815,14 +848,21 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillSoftCapVertices[0].r);
 				glDrawArrays(GL_TRIANGLES, 0, fillSoftCapVertices.size());
 			}
+			if (!fillCrestLineVertices.empty()) {
+				glLineWidth(1.25f);
+				glVertexPointer(2, GL_FLOAT, sizeof(GlVertex), &fillCrestLineVertices[0].x);
+				glColorPointer(4, GL_FLOAT, sizeof(GlVertex), &fillCrestLineVertices[0].r);
+				glDrawArrays(GL_LINES, 0, fillCrestLineVertices.size());
+				glLineWidth(1.f);
+			}
 
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_VERTEX_ARRAY);
 		}
-		if (ensureStrokeShaderReady()) {
+		if (useShaderRenderer && ensureStrokeShaderReady()) {
 			drawStrokeQuadsShader(fillCrestStrokeVertices, w, h);
 		}
-			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestStrokeVertices.size() + cyanVertices.size());
+			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size() + cyanVertices.size());
 
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		{

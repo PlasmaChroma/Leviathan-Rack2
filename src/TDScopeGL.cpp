@@ -178,6 +178,86 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
 
+  void resetLineShaderState() {
+    shaderProgram = 0;
+    shaderVertex = 0;
+    shaderFragment = 0;
+    shaderVbo = 0;
+    shaderUniformColorScale = -1;
+    shaderUniformColorLift = -1;
+    shaderUniformAlphaScale = -1;
+    shaderUniformAlphaGamma = -1;
+    shaderVboCapacityBytes = 0;
+    shaderReady = false;
+    shaderInitAttempted = false;
+  }
+
+  void resetSegmentShaderState() {
+    segmentShaderProgram = 0;
+    segmentShaderVertex = 0;
+    segmentShaderFragment = 0;
+    segmentShaderVbo = 0;
+    segmentShaderVboCapacityBytes = 0;
+    segmentShaderReady = false;
+    segmentShaderInitAttempted = false;
+  }
+
+  void resetFieldShaderState() {
+    fieldShaderProgram = 0;
+    fieldShaderVertex = 0;
+    fieldShaderFragment = 0;
+    fieldShaderVbo = 0;
+    fieldRowTextureLeft = 0;
+    fieldRowTextureRight = 0;
+    fieldColorLutTexture = 0;
+    fieldUniformRowTex = -1;
+    fieldUniformColorLutTex = -1;
+    fieldUniformRowCount = -1;
+    fieldUniformDrawTop = -1;
+    fieldUniformRowStep = -1;
+    fieldUniformZoomThickness = -1;
+    fieldUniformZoomInWidthComp = -1;
+    fieldUniformZoomInHaloWidthComp = -1;
+    fieldUniformZoomInAlphaComp = -1;
+    fieldUniformZoomInLiftComp = -1;
+    fieldUniformZoomInHaloAlphaComp = -1;
+    fieldUniformDeepZoomEnergyFill = -1;
+    fieldUniformRenderMain = -1;
+    fieldUniformRenderHalo = -1;
+    fieldUniformRenderContinuity = -1;
+    fieldUniformTime = -1;
+    fieldUniformShdrEffect = -1;
+    fieldRowTextureWidth = 0;
+    fieldColorLutScheme = -1;
+    fieldColorLutBrightness = NAN;
+    fieldRowTexturePublishSeqLeft = 0;
+    fieldRowTexturePublishSeqRight = 0;
+    fieldRowTextureValidLeft = false;
+    fieldRowTextureValidRight = false;
+    fieldQuadW = -1.f;
+    fieldQuadH = -1.f;
+    fieldShaderReady = false;
+    fieldShaderInitAttempted = false;
+  }
+
+  void validateGlResourcesForCurrentContext() {
+    if (shaderReady && (!shaderProgram || !shaderVbo || !glIsProgram(shaderProgram) || !glIsBuffer(shaderVbo))) {
+      resetLineShaderState();
+    }
+    if (segmentShaderReady &&
+        (!segmentShaderProgram || !segmentShaderVbo || !glIsProgram(segmentShaderProgram) ||
+         !glIsBuffer(segmentShaderVbo))) {
+      resetSegmentShaderState();
+    }
+    if (fieldShaderReady &&
+        (!fieldShaderProgram || !fieldShaderVbo || !fieldRowTextureLeft || !fieldRowTextureRight ||
+         !fieldColorLutTexture || !glIsProgram(fieldShaderProgram) || !glIsBuffer(fieldShaderVbo) ||
+         !glIsTexture(fieldRowTextureLeft) || !glIsTexture(fieldRowTextureRight) ||
+         !glIsTexture(fieldColorLutTexture))) {
+      resetFieldShaderState();
+    }
+  }
+
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
       setDirty();
@@ -276,6 +356,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     math::Vec fbSize = getFramebufferSize();
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    validateGlResourcesForCurrentContext();
     glDisable(GL_SCISSOR_TEST);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
