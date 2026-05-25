@@ -29,7 +29,7 @@ The module's promise is spatial control first, reverb utility second, and physic
 - Optional second-order reflections in higher quality modes.
 - Per-wall material presets and global material macro control.
 - FDN late field with Eco, Studio, and HiFi quality modes.
-- Early/late balance, decay, diffusion, motion, air/brightness, and mix controls.
+- Room-derived early/late balance, decay/liveliness, diffusion, motion, air/brightness, and mix controls.
 - Cached custom room canvas with draggable speaker, listener, and wall handles.
 - Parameter smoothing and state crossfades to avoid zipper noise.
 - Focused tests for geometry timing, decay stability, and interpolation safety.
@@ -37,6 +37,88 @@ The module's promise is spatial control first, reverb utility second, and physic
 ## MVP Implementation Handoff
 
 This section is the authoritative starting point for an initial implementation/scaffolding pass. Later sections describe the broader v1 direction, but the MVP should stay inside this smaller contract until it compiles, appears in Rack, and has testable geometry/DSP utilities.
+
+## Implementation-Level Direction: Room-First Reverb
+
+Bulkhead should not drift into a conventional knob-first reverb. The defining design principle is:
+
+```text
+draw the space -> hear the space
+```
+
+The room widget is the primary control surface. Knobs and menu items should support the physical model rather than duplicate controls already implied by the room.
+
+### Rack-Native UI Philosophy
+
+VCV Rack allows plugin UI to go beyond a hardware-style grid of knobs. Bulkhead should take advantage of that:
+
+- The editable room is not a visualization of hidden parameters; it is the main parameter surface.
+- Dragging walls changes the acoustic space.
+- Dragging speakers changes source placement, stereo direction, and reflection structure.
+- Dragging the listener changes perspective, direct-path balance, and reflection arrival field.
+- Wall/floor/ceiling material selection should happen through compact menu/dropdown interactions, not large knob rows.
+- Context-menu toggles are preferred for workflow switches that do not need live CV performance.
+
+This justifies the 16 HP footprint: the large widget is the instrument surface.
+
+### Geometry-Derived Behavior
+
+Where a behavior can be derived from room geometry and material, prefer derivation over an explicit generic reverb knob.
+
+Early reflections should be mostly geometric:
+
+- Reflection delay comes from image-source path distance.
+- Reflection gain comes from distance attenuation and wall material reflectance.
+- Reflection tone comes from material absorption and air loss.
+- Reflection pan/direction comes from arrival direction relative to the listener.
+
+The late tail is statistical rather than exact physical simulation, but it should still be informed by the room:
+
+- Room area/volume scales late delay lengths, mixing time, and broad decay character.
+- Average wall/floor/ceiling absorption drives damping and effective RT60.
+- Material reflectivity controls how much energy reaches the late field.
+- Diffusion remains a musical macro for density/scattering rather than a literal wall count.
+- Motion affects only the late field unless actual geometry changes.
+
+### Early/Late Balance Policy
+
+Do not treat explicit `Early/Late` as a long-term primary control. The balance between early reflections and late field should be derived from:
+
+- room size,
+- average material absorption,
+- source/listener placement,
+- global decay/liveliness,
+- diffusion/scattering amount.
+
+An explicit early/late knob is acceptable only as a temporary scaffold while the room-derived model is being implemented. Before MVP freeze, either remove it from the panel or repurpose the slot to a control that cannot be reasonably inferred from geometry/material.
+
+### Dry Signal Spatialization
+
+Bulkhead supports two dry-path workflows:
+
+- `Spatial Dry` on: dry signal is shaped by speaker/listener geometry.
+- `Spatial Dry` off: dry signal is direct passthrough into the dry/wet mix.
+
+`Spatial Dry` should default on. This makes the room editor audible even at low wet mix and supports direct-in-audio-path use. It should be a context-menu item rather than a panel control.
+
+The first-pass spatial dry model can be conservative:
+
+- distance attenuation from speaker to listener,
+- equal-power pan based on speaker position relative to listener,
+- optional tiny interaural delay or high-frequency distance loss later,
+- bounded gain so moving speakers cannot create large level spikes.
+
+### Minimal Primary Controls
+
+The desired MVP/v1 control direction is fewer, broader controls:
+
+- `Mix`: total dry/wet.
+- `Decay` or later `Liveliness`: macro late energy/RT60 target.
+- `Diffuse`: tail density/scattering.
+- `Absorb` or material system: damping/reflectivity macro until per-surface material is complete.
+- `Motion`: late-field motion only.
+
+Avoid adding separate `Size`, `Pre-delay`, `Early/Late`, `Width`, or similar conventional reverb controls unless the room model cannot express the needed behavior clearly.
 
 ### MVP Product Shape
 
@@ -60,7 +142,6 @@ Use the hidden `components` layer in `res/bulkhead.svg` through `PanelSvgUtils`.
 | `diffuse_param` | Diffusion/density knob. |
 | `mix_param` | Dry/wet mix knob. |
 | `absorb_param` | Global absorption macro knob. |
-| `early_late_param` | Early/late balance knob. |
 | `motion_param` | Late-field motion amount knob. |
 | `lst_x_input` | Listener X CV input. |
 | `lst_y_input` | Listener Y CV input. |
@@ -83,7 +164,6 @@ enum ParamId {
     DIFFUSE_PARAM,
     MIX_PARAM,
     ABSORB_PARAM,
-    EARLY_LATE_PARAM,
     MOTION_PARAM,
     PARAMS_LEN
 };
@@ -121,7 +201,6 @@ Suggested parameter ranges:
 | `DIFFUSE_PARAM` | 0..1 | 0.55 | Low is specular/roomy, high is smooth/dense. |
 | `MIX_PARAM` | 0..1 | 0.35 | Dry/wet. |
 | `ABSORB_PARAM` | 0..1 | 0.35 | Global absorption macro. |
-| `EARLY_LATE_PARAM` | -1..+1 | 0 | Negative favors early geometry, positive favors late tail. |
 | `MOTION_PARAM` | 0..1 | 0.15 | No-op until late FDN motion exists. |
 
 ### MVP Geometry CV Mapping
@@ -157,7 +236,7 @@ The initial handoff is successful when:
 - `plugin.json`, `src/plugin.hpp`, and `src/plugin.cpp` register `Bulkhead`.
 - Rack can instantiate the module and display `res/bulkhead.svg`.
 - The custom room widget occupies the `room_canvas` anchor and can draw placeholder walls/listener/speakers.
-- All six knob params and all ten ports are placed from SVG anchors.
+- All current scaffold knob params and all ten ports are placed from SVG anchors.
 - `BulkheadGeometry` has Rack-free tests for direct distance and first-order image-source reflection positions.
 - `test-fast` still passes, or any failure is clearly unrelated to Bulkhead.
 - In WSL/WSL-like environments, full plugin link failures are not treated as authoritative regressions.
@@ -203,7 +282,7 @@ Input L/R
          + motion modulation
          + stereo decorrelation
   |
-Dry/Wet + Early/Late mix
+Dry/Wet mix + room-derived early/late energy balance
   |
 Output L/R
 ```
@@ -229,10 +308,9 @@ Direct and early paths are geometric and intentionally readable. The late field 
 | `Absorb` | 0..1 | none in MVP | Scales wall absorption and late damping. Low is reflective, high is dry/damped. |
 | `Diffuse` | 0..1 | none in MVP | Controls early-to-late scattering and FDN density character. Low is specular/roomy, high is smooth/dense. |
 | `Motion` | 0..1 | none in MVP | Adds stable late-tail motion via feedback-matrix modulation and very slow delay modulation. |
-| `Early/Late` | -1..+1 | none in MVP | Crossfades emphasis between geometric early field and diffuse late tail. |
 | `Mix` | 0..1 | none in MVP | Dry/wet mix. |
 
-The MVP panel uses the six controls above as one compact macro row. `Decay`, `Diffuse`, `Mix`, `Absorb`, `Early/Late`, and `Motion` are the only required v1 panel knobs at initial scaffold time. Material selection is not a knob in the current panel mockup; it is handled through menus/dropdowns.
+The MVP panel currently uses a compact macro row. `Decay`, `Diffuse`, `Mix`, `Absorb`, and `Motion` are the primary knobs. Material selection is not a knob in the current panel mockup; it is handled through menus/dropdowns.
 
 ### Geometry CV
 
@@ -547,7 +625,7 @@ This is not HRTF. It should be a stable stereo room cue that reads in Rack patch
 Persist:
 
 - Geometry: room bounds, speaker position(s), speaker rotation, listener position, listener yaw.
-- Macro params/menu state: decay, global material default, absorb, diffuse, motion, early/late, mix, air enabled, quality mode.
+- Macro params/menu state: decay/liveliness, global material default, absorb, diffuse, motion, mix, `Spatial Dry`, air enabled, quality mode, and any temporary scaffold controls still present.
 - Per-wall material overrides.
 - Floor and ceiling material slots.
 - UI options: ray overlay, linked stereo speaker mode.
@@ -843,8 +921,8 @@ On module load:
 - Diffuse: 0.55.
 - Decay: 2.5 s.
 - Motion: 0.15.
-- Early/Late: 0.0.
 - Mix: 0.35.
+- Spatial Dry: enabled.
 - Quality: Studio.
 - Air: enabled in Studio/HiFi, disabled in Eco.
 - Ray overlay: off.
@@ -853,7 +931,7 @@ On module load:
 
 - Exact final 16 HP artwork polish.
 - Whether floor/ceiling materials affect only late damping in v1 or also receive explicit vertical reflection paths.
-- Final naming for `Early/Late`: alternatives include `Shape`, `Field`, or `Focus`.
+- Whether an additional room-first macro (not directly derivable from geometry/material) is needed beyond `Decay`, `Diffuse`, `Absorb`, `Motion`, and `Mix`.
 
 ## V1 Non-Negotiables
 

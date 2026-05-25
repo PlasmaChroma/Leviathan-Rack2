@@ -11,7 +11,6 @@ struct Bulkhead : Module {
 		DIFFUSE_PARAM,
 		MIX_PARAM,
 		ABSORB_PARAM,
-		EARLY_LATE_PARAM,
 		MOTION_PARAM,
 		PARAMS_LEN
 	};
@@ -43,6 +42,9 @@ struct Bulkhead : Module {
 	bulkhead::geometry::Vec2 speakerLeft;
 	bulkhead::geometry::Vec2 speakerRight;
 	float listenerYawRadians = 0.f;
+	float speakerLeftYawRadians = 0.f;
+	float speakerRightYawRadians = 0.f;
+	bool directGeoDryEnabled = true;
 	float sampleRate = 44100.f;
 
 	struct DelayLine {
@@ -91,6 +93,7 @@ struct Bulkhead : Module {
 
 struct BulkheadWidget : ModuleWidget {
 	explicit BulkheadWidget(Bulkhead* module);
+	void appendContextMenu(Menu* menu) override;
 };
 
 extern Model* modelBulkhead;

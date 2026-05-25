@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="1.6868414"
-   inkscape:cx="21.341662"
-   inkscape:cy="210.74892"
+   inkscape:zoom="3.3736828"
+   inkscape:cx="80.624058"
+   inkscape:cy="148.94702"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -435,11 +435,7 @@
    cx="4705"
    cy="8170"
    r="205" />
-    <circle
-   id="early_late_knob_art"
-   cx="6040"
-   cy="8170"
-   r="205" />
+    
     <circle
    id="motion_knob_art"
    cx="7375"
@@ -466,10 +462,7 @@
    x="4705"
    y="8510"
    id="text4">ABS</text>
-    <text
-   x="6040"
-   y="8510"
-   id="text5">E/L</text>
+    
     <text
    x="7375"
    y="8510"
@@ -579,10 +572,10 @@
    style="display:inline">
   <rect
    id="room_canvas"
-   x="116.75528"
-   y="1062.1451"
-   width="7896.4927"
-   height="7013.6758"
+   x="77.542442"
+   y="1015.0897"
+   width="7974.9185"
+   height="7107.7866"
    style="stroke-width:31.5586" />
   <circle
    id="decay_param"
@@ -608,12 +601,7 @@
    cy="9000"
    r="205"
    style="fill:#a95555;fill-opacity:0.95" />
-  <circle
-   id="early_late_param"
-   cx="6040"
-   cy="9000"
-   r="205"
-   style="fill:#a95555;fill-opacity:0.95" />
+  
   <circle
    id="motion_param"
    cx="7375"

@@ -22,7 +22,9 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - We have an established pattern that allows placement of Rack components dynamically using the components layer in the SVG and helper functions.  See PanelSvgUtils for information.
 
-- Performance is king, for expensive math functions we prefer to use optimized less CPU intense versions for transcendental functions
+- Performance is king. In hot audio/UI paths, prefer fast math approximations, lookup tables, cached values, and perceptually stable approximations over absolute numerical precision. Expensive transcendental functions (`sin`, `cos`, `sqrt`, `pow`, `exp`, etc.) should be avoided per sample unless there is a clear audible or correctness reason.
+
+- When precision and speed trade off, assume speed is the priority for this project unless the code is offline tooling, tests, serialization, or a one-time setup path.
 
 - We have a pattern of isDragonKingDebugEnabled to gate debug and developer functionality across the entire codebase
 
@@ -48,4 +50,3 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
   - parameter/input/output/light IDs and ordering
   - user-visible behavior that existing patches may rely on
 - `Crownstep` and `TD.Scope` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.
-

@@ -3,15 +3,21 @@
 
 namespace {
 
-constexpr float CANVAS_PAD = 6.f;
+constexpr float CANVAS_PAD = 3.f;
 constexpr float ROOM_MIN_GAP = 0.5f;
+constexpr float ROTATE_ICON_OFFSET = 20.f;
+constexpr float ROTATE_ICON_RADIUS = 8.f;
+constexpr float ROTATE_ICON_HIT = 12.f;
 
-bulkhead::geometry::RoomBounds worldBounds() {
+bulkhead::geometry::RoomBounds worldBounds(const Vec& size) {
+	const float maxWidthMeters = 12.f;
+	const float aspect = size.x > 1.f ? size.y / size.x : 1.f;
+	const float maxHeightMeters = maxWidthMeters * aspect;
 	bulkhead::geometry::RoomBounds b;
-	b.left = -10.f;
-	b.right = 10.f;
-	b.bottom = -6.f;
-	b.top = 6.f;
+	b.left = -0.5f * maxWidthMeters;
+	b.right = 0.5f * maxWidthMeters;
+	b.bottom = -0.5f * maxHeightMeters;
+	b.top = 0.5f * maxHeightMeters;
 	return b;
 }
 
@@ -44,6 +50,36 @@ inline void clampPointToRoom(const bulkhead::geometry::RoomBounds& room, bulkhea
 	point->y = clamp(point->y, room.bottom + margin, room.top - margin);
 }
 
+inline Vec directionFromYaw(float yawRadians) {
+	return Vec(std::cos(yawRadians), -std::sin(yawRadians));
+}
+
+inline float yawFromCenterToPoint(const Vec& center, const Vec& point) {
+	const Vec delta = point.minus(center);
+	return std::atan2(-delta.y, delta.x);
+}
+
+inline Vec rotateHandlePos(const Vec& center, const Vec& size) {
+	const float margin = ROTATE_ICON_RADIUS + 2.f;
+	const Vec offsets[] = {
+		Vec(ROTATE_ICON_OFFSET, -ROTATE_ICON_OFFSET),
+		Vec(-ROTATE_ICON_OFFSET, -ROTATE_ICON_OFFSET),
+		Vec(ROTATE_ICON_OFFSET, ROTATE_ICON_OFFSET),
+		Vec(-ROTATE_ICON_OFFSET, ROTATE_ICON_OFFSET),
+		Vec(0.f, -ROTATE_ICON_OFFSET - 4.f),
+		Vec(ROTATE_ICON_OFFSET + 4.f, 0.f),
+		Vec(0.f, ROTATE_ICON_OFFSET + 4.f),
+		Vec(-ROTATE_ICON_OFFSET - 4.f, 0.f)
+	};
+	for (const Vec& offset : offsets) {
+		const Vec p = center.plus(offset);
+		if (p.x >= margin && p.x <= size.x - margin && p.y >= margin && p.y <= size.y - margin) {
+			return p;
+		}
+	}
+	return Vec(clamp(center.x, margin, size.x - margin), clamp(center.y, margin, size.y - margin));
+}
+
 struct BulkheadRoomCanvasWidget : TransparentWidget {
 	enum DragTarget {
 		DRAG_NONE = 0,
@@ -53,22 +89,38 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		DRAG_WALL_LEFT = 4,
 		DRAG_WALL_RIGHT = 5,
 		DRAG_WALL_TOP = 6,
-		DRAG_WALL_BOTTOM = 7
+		DRAG_WALL_BOTTOM = 7,
+		DRAG_ROTATE_LISTENER = 8,
+		DRAG_ROTATE_SPEAKER_LEFT = 9,
+		DRAG_ROTATE_SPEAKER_RIGHT = 10
 	};
 
 	Bulkhead* module = nullptr;
 	DragTarget dragTarget = DRAG_NONE;
 	DragTarget hoverTarget = DRAG_NONE;
+	DragTarget selectedTarget = DRAG_NONE;
 	Vec lastDragPos;
+	std::shared_ptr<Svg> rotateIconNormal;
+	std::shared_ptr<Svg> rotateIconHighlighted;
 
 	explicit BulkheadRoomCanvasWidget(Bulkhead* module) : module(module) {
+		rotateIconNormal = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
+		rotateIconHighlighted = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
+	}
+
+	Vec rackMouseToLocal() const {
+		Vec localPos = APP->scene->rack->getMousePos().minus(box.pos);
+		if (parent) {
+			localPos = localPos.minus(parent->box.pos);
+		}
+		return localPos;
 	}
 
 	DragTarget pickTarget(Vec localPos) const {
 		if (!module) {
 			return DRAG_NONE;
 		}
-		const auto world = worldBounds();
+		const auto world = worldBounds(box.size);
 		const Vec listenerPx = roomToCanvas(world, module->listener, box.size);
 		const Vec leftPx = roomToCanvas(world, module->speakerLeft, box.size);
 		const Vec rightPx = roomToCanvas(world, module->speakerRight, box.size);
@@ -80,6 +132,28 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		const Vec roomBL = roomToCanvas(world, rBL, box.size);
 		const float hitRadius = 16.f;
 		const float wallHit = 10.f;
+		auto pickRotation = [&](const Vec& center, DragTarget target) {
+			if (rotateHandlePos(center, box.size).minus(localPos).norm() <= ROTATE_ICON_HIT) {
+				return target;
+			}
+			return DRAG_NONE;
+		};
+		if (selectedTarget == DRAG_LISTENER) {
+			const DragTarget rotate = pickRotation(listenerPx, DRAG_ROTATE_LISTENER);
+			if (rotate != DRAG_NONE) {
+				return rotate;
+			}
+		} else if (selectedTarget == DRAG_SPEAKER_LEFT) {
+			const DragTarget rotate = pickRotation(leftPx, DRAG_ROTATE_SPEAKER_LEFT);
+			if (rotate != DRAG_NONE) {
+				return rotate;
+			}
+		} else if (selectedTarget == DRAG_SPEAKER_RIGHT) {
+			const DragTarget rotate = pickRotation(rightPx, DRAG_ROTATE_SPEAKER_RIGHT);
+			if (rotate != DRAG_NONE) {
+				return rotate;
+			}
+		}
 		if (listenerPx.minus(localPos).norm() <= hitRadius) {
 			return DRAG_LISTENER;
 		}
@@ -108,8 +182,23 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		if (!module || dragTarget == DRAG_NONE) {
 			return;
 		}
-		const auto world = worldBounds();
+		const auto world = worldBounds(box.size);
 		bulkhead::geometry::Vec2 point = canvasToRoom(world, localPos, box.size);
+		const Vec listenerPx = roomToCanvas(world, module->listener, box.size);
+		const Vec leftPx = roomToCanvas(world, module->speakerLeft, box.size);
+		const Vec rightPx = roomToCanvas(world, module->speakerRight, box.size);
+		if (dragTarget == DRAG_ROTATE_LISTENER) {
+			module->listenerYawRadians = yawFromCenterToPoint(listenerPx, localPos);
+			return;
+		}
+		if (dragTarget == DRAG_ROTATE_SPEAKER_LEFT) {
+			module->speakerLeftYawRadians = yawFromCenterToPoint(leftPx, localPos);
+			return;
+		}
+		if (dragTarget == DRAG_ROTATE_SPEAKER_RIGHT) {
+			module->speakerRightYawRadians = yawFromCenterToPoint(rightPx, localPos);
+			return;
+		}
 		if (dragTarget == DRAG_WALL_LEFT) {
 			module->room.left = clamp(point.x, world.left, module->listener.x - ROOM_MIN_GAP);
 			clampPointToRoom(module->room, &module->speakerLeft);
@@ -148,6 +237,15 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
 			dragTarget = pickTarget(e.pos);
 			if (dragTarget != DRAG_NONE) {
+				if (dragTarget == DRAG_LISTENER || dragTarget == DRAG_SPEAKER_LEFT || dragTarget == DRAG_SPEAKER_RIGHT) {
+					selectedTarget = dragTarget;
+				} else if (dragTarget == DRAG_ROTATE_LISTENER) {
+					selectedTarget = DRAG_LISTENER;
+				} else if (dragTarget == DRAG_ROTATE_SPEAKER_LEFT) {
+					selectedTarget = DRAG_SPEAKER_LEFT;
+				} else if (dragTarget == DRAG_ROTATE_SPEAKER_RIGHT) {
+					selectedTarget = DRAG_SPEAKER_RIGHT;
+				}
 				lastDragPos = e.pos;
 				applyDragAt(e.pos);
 				e.consume(this);
@@ -177,7 +275,7 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 			Widget::onDragMove(e);
 			return;
 		}
-		lastDragPos = lastDragPos.plus(e.mouseDelta);
+		lastDragPos = rackMouseToLocal();
 		applyDragAt(lastDragPos);
 		e.consume(this);
 	}
@@ -185,6 +283,18 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 	void onDragEnd(const event::DragEnd& e) override {
 		dragTarget = DRAG_NONE;
 		Widget::onDragEnd(e);
+	}
+
+	void step() override {
+		if (dragTarget == DRAG_NONE) {
+			Vec localPos = rackMouseToLocal();
+			if (math::Rect(Vec(), box.size).contains(localPos)) {
+				hoverTarget = pickTarget(localPos);
+			} else {
+				hoverTarget = DRAG_NONE;
+			}
+		}
+		Widget::step();
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -195,14 +305,14 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 
 		const float cx = box.size.x * 0.5f;
 		const float cy = box.size.y * 0.5f;
-		const auto world = worldBounds();
+		const auto world = worldBounds(box.size);
 		Vec leftSpeakerPx(box.size.x * 0.22f, box.size.y * 0.24f);
 		Vec rightSpeakerPx(box.size.x * 0.78f, box.size.y * 0.24f);
 		Vec listenerPx(box.size.x * 0.5f, box.size.y * 0.5f);
-		Vec roomTL(CANVAS_PAD, CANVAS_PAD);
-		Vec roomTR(box.size.x - CANVAS_PAD, CANVAS_PAD);
-		Vec roomBL(CANVAS_PAD, box.size.y - CANVAS_PAD);
-		Vec roomBR(box.size.x - CANVAS_PAD, box.size.y - CANVAS_PAD);
+		Vec roomTL = roomToCanvas(world, makeVec2(-4.f, 2.5f), box.size);
+		Vec roomTR = roomToCanvas(world, makeVec2(4.f, 2.5f), box.size);
+		Vec roomBL = roomToCanvas(world, makeVec2(-4.f, -2.5f), box.size);
+		Vec roomBR = roomToCanvas(world, makeVec2(4.f, -2.5f), box.size);
 
 		if (module) {
 			leftSpeakerPx = roomToCanvas(world, module->speakerLeft, box.size);
@@ -250,6 +360,34 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		drawWallHighlight(roomTL, roomTR, hlTop);
 		drawWallHighlight(roomBL, roomBR, hlBottom);
 
+		auto drawRotationIcon = [&](const Vec& center, bool active, bool hovered) {
+			if (!active) {
+				return;
+			}
+			const Vec pos = rotateHandlePos(center, box.size);
+			const bool lit = hovered;
+			const std::shared_ptr<Svg>& icon = lit ? rotateIconHighlighted : rotateIconNormal;
+			if (!icon) {
+				return;
+			}
+			const Vec iconSize = icon->getSize();
+			const float iconExtent = std::max(iconSize.x, iconSize.y);
+			if (iconExtent <= 0.f) {
+				return;
+			}
+			const float targetSize = ROTATE_ICON_RADIUS * 2.f;
+			const float scale = targetSize / iconExtent;
+
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, pos.x - 0.5f * iconSize.x * scale, pos.y - 0.5f * iconSize.y * scale);
+			nvgScale(args.vg, scale, scale);
+			icon->draw(args.vg);
+			nvgRestore(args.vg);
+		};
+		drawRotationIcon(listenerPx, selectedTarget == DRAG_LISTENER, hoverTarget == DRAG_ROTATE_LISTENER || dragTarget == DRAG_ROTATE_LISTENER);
+		drawRotationIcon(leftSpeakerPx, selectedTarget == DRAG_SPEAKER_LEFT, hoverTarget == DRAG_ROTATE_SPEAKER_LEFT || dragTarget == DRAG_ROTATE_SPEAKER_LEFT);
+		drawRotationIcon(rightSpeakerPx, selectedTarget == DRAG_SPEAKER_RIGHT, hoverTarget == DRAG_ROTATE_SPEAKER_RIGHT || dragTarget == DRAG_ROTATE_SPEAKER_RIGHT);
+
 		auto drawSpeaker = [&](const Vec& pos, const Vec& toward) {
 			const Vec dir = toward.minus(pos).normalize();
 			const Vec right(-dir.y, dir.x);
@@ -261,21 +399,30 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 			nvgLineTo(args.vg, baseA.x, baseA.y);
 			nvgLineTo(args.vg, baseB.x, baseB.y);
 			nvgClosePath(args.vg);
-			nvgFillColor(args.vg, nvgRGBA(132, 104, 255, 240));
+			nvgFillColor(args.vg, nvgRGBA(33, 208, 219, 240));
 			nvgFill(args.vg);
 		};
-		drawSpeaker(leftSpeakerPx, listenerPx);
-		drawSpeaker(rightSpeakerPx, listenerPx);
+		auto drawSpeakerYaw = [&](const Vec& pos, float yawRadians) {
+			drawSpeaker(pos, pos.plus(directionFromYaw(yawRadians)));
+		};
+		if (module) {
+			drawSpeakerYaw(leftSpeakerPx, module->speakerLeftYawRadians);
+			drawSpeakerYaw(rightSpeakerPx, module->speakerRightYawRadians);
+		} else {
+			drawSpeaker(leftSpeakerPx, listenerPx);
+			drawSpeaker(rightSpeakerPx, listenerPx);
+		}
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, listenerPx.x, listenerPx.y, 8.f);
-		nvgFillColor(args.vg, nvgRGBA(33, 208, 219, 240));
+		nvgFillColor(args.vg, nvgRGBA(132, 104, 255, 240));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, listenerPx.x, listenerPx.y);
-		nvgLineTo(args.vg, listenerPx.x, listenerPx.y - 14.f);
-		nvgStrokeColor(args.vg, nvgRGBA(33, 208, 219, 220));
+		const Vec listenerDir = module ? directionFromYaw(module->listenerYawRadians) : Vec(0.f, -1.f);
+		nvgLineTo(args.vg, listenerPx.x + listenerDir.x * 14.f, listenerPx.y + listenerDir.y * 14.f);
+		nvgStrokeColor(args.vg, nvgRGBA(132, 104, 255, 220));
 		nvgStrokeWidth(args.vg, 1.5f);
 		nvgStroke(args.vg);
 
@@ -321,7 +468,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	auto addKnob = [&](int paramId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;
 		loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(posMm), module, paramId));
+		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(posMm), module, paramId));
 	};
 	auto addInputPort = [&](int inputId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;
@@ -338,7 +485,6 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	addKnob(Bulkhead::DIFFUSE_PARAM, "diffuse_param", Vec(20.35f, 81.7f));
 	addKnob(Bulkhead::MIX_PARAM, "mix_param", Vec(33.7f, 81.7f));
 	addKnob(Bulkhead::ABSORB_PARAM, "absorb_param", Vec(47.05f, 81.7f));
-	addKnob(Bulkhead::EARLY_LATE_PARAM, "early_late_param", Vec(60.4f, 81.7f));
 	addKnob(Bulkhead::MOTION_PARAM, "motion_param", Vec(73.75f, 81.7f));
 
 	addInputPort(Bulkhead::LST_X_INPUT, "lst_x_input", Vec(9.f, 103.5f));
@@ -354,6 +500,25 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	addOutputPort(Bulkhead::OUT_R_OUTPUT, "out_r_output", Vec(72.28f, 113.5f));
 
 	previewBuildTimer.markAnchorsDone();
+}
+
+void BulkheadWidget::appendContextMenu(Menu* menu) {
+	ModuleWidget::appendContextMenu(menu);
+	auto* bulkhead = dynamic_cast<Bulkhead*>(module);
+	if (!bulkhead) {
+		return;
+	}
+	menu->addChild(new MenuSeparator());
+	menu->addChild(createCheckMenuItem(
+		"Spatial Dry",
+		"",
+		[bulkhead]() {
+			return bulkhead->directGeoDryEnabled;
+		},
+		[bulkhead]() {
+			bulkhead->directGeoDryEnabled = !bulkhead->directGeoDryEnabled;
+		}
+	));
 }
 
 Model* modelBulkhead = createModel<Bulkhead, BulkheadWidget>("Bulkhead");

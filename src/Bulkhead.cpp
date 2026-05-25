@@ -23,12 +23,76 @@ inline float jsonFloatOr(json_t* rootJ, const char* key, float fallback) {
 	return float(json_number_value(valueJ));
 }
 
+inline bool jsonBoolOr(json_t* rootJ, const char* key, bool fallback) {
+	if (!rootJ) {
+		return fallback;
+	}
+	json_t* valueJ = json_object_get(rootJ, key);
+	if (!valueJ || !json_is_boolean(valueJ)) {
+		return fallback;
+	}
+	return json_boolean_value(valueJ);
+}
+
 inline int clampDelaySamples(int delaySamples, int maxDelaySamples) {
 	return clamp(delaySamples, 1, maxDelaySamples);
 }
 
 inline float softClip(float x) {
 	return x / (1.f + std::fabs(x) * 0.35f);
+}
+
+inline bulkhead::geometry::Vec2 subVec2(const bulkhead::geometry::Vec2& a, const bulkhead::geometry::Vec2& b) {
+	bulkhead::geometry::Vec2 out;
+	out.x = a.x - b.x;
+	out.y = a.y - b.y;
+	return out;
+}
+
+inline float vec2Length(const bulkhead::geometry::Vec2& v) {
+	return std::sqrt(v.x * v.x + v.y * v.y);
+}
+
+inline bulkhead::geometry::Vec2 normalizeOrUp(const bulkhead::geometry::Vec2& v) {
+	const float len = vec2Length(v);
+	if (len < 1.0e-6f) {
+		bulkhead::geometry::Vec2 up;
+		up.x = 0.f;
+		up.y = 1.f;
+		return up;
+	}
+	bulkhead::geometry::Vec2 out;
+	out.x = v.x / len;
+	out.y = v.y / len;
+	return out;
+}
+
+inline bulkhead::geometry::Vec2 forwardFromYaw(float yawRadians) {
+	bulkhead::geometry::Vec2 v;
+	v.x = std::cos(yawRadians);
+	v.y = std::sin(yawRadians);
+	return v;
+}
+
+inline float dotVec2(const bulkhead::geometry::Vec2& a, const bulkhead::geometry::Vec2& b) {
+	return a.x * b.x + a.y * b.y;
+}
+
+inline float directionalEmission(float speakerYawRadians, const bulkhead::geometry::Vec2& fromSpeakerToTarget) {
+	const float front = clamp(dotVec2(forwardFromYaw(speakerYawRadians), normalizeOrUp(fromSpeakerToTarget)), -1.f, 1.f);
+	return 0.35f + 0.65f * std::max(0.f, front);
+}
+
+inline float dryDistanceAttenuation(float dist) {
+	return 1.f / (1.f + 0.35f * dist);
+}
+
+inline float roomAreaNorm(const bulkhead::geometry::RoomBounds& room) {
+	const float w = std::max(0.5f, room.right - room.left);
+	const float h = std::max(0.5f, room.top - room.bottom);
+	// 8m x 5m (default) ~= neutral midpoint around 0.5.
+	const float a = w * h;
+	return clamp((a - 8.f) / 64.f, 0.f, 1.f);
 }
 
 } // namespace
@@ -85,7 +149,6 @@ Bulkhead::Bulkhead() {
 	configParam(DIFFUSE_PARAM, 0.f, 1.f, 0.55f, "Diffuse");
 	configParam(MIX_PARAM, 0.f, 1.f, 0.35f, "Mix");
 	configParam(ABSORB_PARAM, 0.f, 1.f, 0.35f, "Absorb");
-	configParam(EARLY_LATE_PARAM, -1.f, 1.f, 0.f, "Early/Late");
 	configParam(MOTION_PARAM, 0.f, 1.f, 0.15f, "Motion");
 
 	configInput(LST_X_INPUT, "Listener X");
@@ -116,6 +179,8 @@ void Bulkhead::resetSceneDefaults() {
 	listener.x = 0.5f * (room.left + room.right);
 	listener.y = 0.5f * (room.bottom + room.top);
 	listenerYawRadians = 0.5f * M_PI;
+	speakerLeftYawRadians = std::atan2(listener.y - speakerLeft.y, listener.x - speakerLeft.x);
+	speakerRightYawRadians = std::atan2(listener.y - speakerRight.y, listener.x - speakerRight.x);
 }
 
 void Bulkhead::initDsp() {
@@ -154,7 +219,6 @@ void Bulkhead::onReset() {
 }
 
 void Bulkhead::process(const ProcessArgs&) {
-	listenerYawRadians = 0.5f * M_PI;
 	const float inL = inputs[IN_L_INPUT].getVoltage();
 	const float inR = inputs[IN_R_INPUT].isConnected() ? inputs[IN_R_INPUT].getVoltage() : inL;
 
@@ -181,10 +245,11 @@ void Bulkhead::process(const ProcessArgs&) {
 	const float diffuse = params[DIFFUSE_PARAM].getValue();
 	const float mix = params[MIX_PARAM].getValue();
 	const float absorb = params[ABSORB_PARAM].getValue();
-	const float earlyLate = params[EARLY_LATE_PARAM].getValue();
 	const float motion = params[MOTION_PARAM].getValue();
 
-	const float monoIn = 0.5f * (inL + inR);
+	const float directEmitL = directionalEmission(speakerLeftYawRadians, subVec2(listener, speakerLeft));
+	const float directEmitR = directionalEmission(speakerRightYawRadians, subVec2(listener, speakerRight));
+	const float monoIn = 0.5f * (inL * directEmitL + inR * directEmitR);
 	const auto reflL = bulkhead::geometry::firstOrderReflectionDistances(room, speakerLeft, listener);
 	const auto reflR = bulkhead::geometry::firstOrderReflectionDistances(room, speakerRight, listener);
 	const float roomExtentX = std::max(1.f, room.right - room.left);
@@ -195,14 +260,19 @@ void Bulkhead::process(const ProcessArgs&) {
 	float earlyL = 0.f;
 	float earlyR = 0.f;
 	for (int i = 0; i < bulkhead::geometry::WALL_COUNT; ++i) {
+		const bulkhead::geometry::WallId wall = static_cast<bulkhead::geometry::WallId>(i);
+		const bulkhead::geometry::Vec2 imageL = bulkhead::geometry::mirrorSourceAcrossWall(room, speakerLeft, wall);
+		const bulkhead::geometry::Vec2 imageR = bulkhead::geometry::mirrorSourceAcrossWall(room, speakerRight, wall);
+		const float emitL = directionalEmission(speakerLeftYawRadians, subVec2(imageL, speakerLeft));
+		const float emitR = directionalEmission(speakerRightYawRadians, subVec2(imageR, speakerRight));
 		const float distL = std::max(0.1f, reflL[static_cast<size_t>(i)] * roomScale);
 		const float distR = std::max(0.1f, reflR[static_cast<size_t>(i)] * roomScale);
 		const float delaySecL = distL / SPEED_OF_SOUND_MPS;
 		const float delaySecR = distR / SPEED_OF_SOUND_MPS;
 		const int dL = clampDelaySamples(static_cast<int>(delaySecL * sampleRate), static_cast<int>(combL[0].line.buffer.size()) - 1);
 		const int dR = clampDelaySamples(static_cast<int>(delaySecR * sampleRate), static_cast<int>(combR[0].line.buffer.size()) - 1);
-		const float gL = absorbGain / (1.f + 0.22f * distL);
-		const float gR = absorbGain / (1.f + 0.22f * distR);
+		const float gL = emitL * absorbGain / (1.f + 0.22f * distL);
+		const float gR = emitR * absorbGain / (1.f + 0.22f * distR);
 		earlyL += combL[0].line.readDelay(dL) * gL;
 		earlyR += combR[0].line.readDelay(dR) * gR;
 	}
@@ -213,7 +283,7 @@ void Bulkhead::process(const ProcessArgs&) {
 	combR[0].line.writeSample(monoIn);
 
 	const float decayNorm = clamp((decaySec - 0.1f) / 29.9f, 0.f, 1.f);
-	const float feedbackBase = 0.58f + 0.30f * decayNorm;
+	const float feedbackBase = 0.64f + 0.30f * decayNorm;
 	const float dampBase = 0.12f + 0.55f * absorb;
 	const float motionDepth = 1.f + motion * 0.08f;
 
@@ -232,8 +302,8 @@ void Bulkhead::process(const ProcessArgs&) {
 		lateL += combL[static_cast<size_t>(i)].process(monoIn + 0.15f * earlyL, delayL);
 		lateR += combR[static_cast<size_t>(i)].process(monoIn + 0.15f * earlyR, delayR);
 	}
-	lateL *= 0.24f;
-	lateR *= 0.24f;
+	lateL *= 0.34f;
+	lateR *= 0.34f;
 
 	const int ap0 = clampDelaySamples(static_cast<int>(225 * (1.f + 0.10f * diffuse)), static_cast<int>(allpassL[0].line.buffer.size()) - 1);
 	const int ap1 = clampDelaySamples(static_cast<int>(556 * (1.f + 0.08f * diffuse)), static_cast<int>(allpassL[1].line.buffer.size()) - 1);
@@ -242,8 +312,14 @@ void Bulkhead::process(const ProcessArgs&) {
 	lateR = allpassR[0].process(lateR, ap0 + 17);
 	lateR = allpassR[1].process(lateR, ap1 + 19);
 
-	const float earlyWeight = clamp(0.5f - 0.5f * earlyLate, 0.f, 1.f);
-	const float lateWeight = clamp(0.5f + 0.5f * earlyLate, 0.f, 1.f);
+	// Room-first policy: early/late balance is derived from geometry + material.
+	const float areaN = roomAreaNorm(room);
+	const float distToLeft = std::max(0.05f, vec2Length(subVec2(listener, speakerLeft)));
+	const float distToRight = std::max(0.05f, vec2Length(subVec2(listener, speakerRight)));
+	const float listenerSourceDistN = clamp(0.5f * (distToLeft + distToRight) / 6.f, 0.f, 1.f);
+	const float absorbLateBias = clamp(absorb * 0.35f, 0.f, 0.35f);
+	const float lateWeight = clamp(0.28f + 0.52f * areaN + 0.20f * listenerSourceDistN - absorbLateBias, 0.15f, 0.92f);
+	const float earlyWeight = 1.f - lateWeight;
 	float wetL = earlyL * earlyWeight + lateL * lateWeight;
 	float wetR = earlyR * earlyWeight + lateR * lateWeight;
 
@@ -256,7 +332,7 @@ void Bulkhead::process(const ProcessArgs&) {
 	wetR = crossfade(wetR, wetPostLpR, toneBlend);
 
 	// Keep wet energy controlled when decay and diffusion are high.
-	const float wetTrim = 0.72f - 0.16f * decayNorm - 0.08f * diffuse;
+	const float wetTrim = 0.92f - 0.12f * decayNorm - 0.05f * diffuse;
 	wetL *= wetTrim;
 	wetR *= wetTrim;
 
@@ -264,8 +340,29 @@ void Bulkhead::process(const ProcessArgs&) {
 	const float mixAngle = mix * 0.5f * M_PI;
 	const float dryGain = std::cos(mixAngle);
 	const float wetGain = std::sin(mixAngle);
-	float outL = dryGain * inL + wetGain * wetL;
-	float outR = dryGain * inR + wetGain * wetR;
+	float dryL = inL;
+	float dryR = inR;
+	if (directGeoDryEnabled) {
+		const float roomScaleForDirect = 0.65f * roomScale;
+		const bulkhead::geometry::Vec2 listenerToLeft = subVec2(speakerLeft, listener);
+		const bulkhead::geometry::Vec2 listenerToRight = subVec2(speakerRight, listener);
+		const bulkhead::geometry::Vec2 dirLeft = normalizeOrUp(listenerToLeft);
+		const bulkhead::geometry::Vec2 dirRight = normalizeOrUp(listenerToRight);
+		const float panLeft = clamp(dirLeft.x, -1.f, 1.f);
+		const float panRight = clamp(dirRight.x, -1.f, 1.f);
+		const float distLeft = std::max(0.08f, vec2Length(listenerToLeft) * roomScaleForDirect);
+		const float distRight = std::max(0.08f, vec2Length(listenerToRight) * roomScaleForDirect);
+		const float attLeft = dryDistanceAttenuation(distLeft);
+		const float attRight = dryDistanceAttenuation(distRight);
+		const float srcL_toL = std::sqrt(0.5f * (1.f - panLeft));
+		const float srcL_toR = std::sqrt(0.5f * (1.f + panLeft));
+		const float srcR_toL = std::sqrt(0.5f * (1.f - panRight));
+		const float srcR_toR = std::sqrt(0.5f * (1.f + panRight));
+		dryL = inL * directEmitL * srcL_toL * attLeft + inR * directEmitR * srcR_toL * attRight;
+		dryR = inL * directEmitL * srcL_toR * attLeft + inR * directEmitR * srcR_toR * attRight;
+	}
+	float outL = dryGain * dryL + wetGain * wetL * 1.18f;
+	float outR = dryGain * dryR + wetGain * wetR * 1.18f;
 
 	outL = softClip(outL);
 	outR = softClip(outR);
@@ -286,6 +383,9 @@ json_t* Bulkhead::dataToJson() {
 	json_object_set_new(rootJ, "speakerRightX", json_real(speakerRight.x));
 	json_object_set_new(rootJ, "speakerRightY", json_real(speakerRight.y));
 	json_object_set_new(rootJ, "listenerYawRadians", json_real(listenerYawRadians));
+	json_object_set_new(rootJ, "speakerLeftYawRadians", json_real(speakerLeftYawRadians));
+	json_object_set_new(rootJ, "speakerRightYawRadians", json_real(speakerRightYawRadians));
+	json_object_set_new(rootJ, "directGeoDryEnabled", json_boolean(directGeoDryEnabled));
 	return rootJ;
 }
 
@@ -300,5 +400,8 @@ void Bulkhead::dataFromJson(json_t* rootJ) {
 	speakerLeft.y = jsonFloatOr(rootJ, "speakerLeftY", speakerLeft.y);
 	speakerRight.x = jsonFloatOr(rootJ, "speakerRightX", speakerRight.x);
 	speakerRight.y = jsonFloatOr(rootJ, "speakerRightY", speakerRight.y);
-	listenerYawRadians = 0.5f * M_PI;
+	listenerYawRadians = jsonFloatOr(rootJ, "listenerYawRadians", listenerYawRadians);
+	speakerLeftYawRadians = jsonFloatOr(rootJ, "speakerLeftYawRadians", speakerLeftYawRadians);
+	speakerRightYawRadians = jsonFloatOr(rootJ, "speakerRightYawRadians", speakerRightYawRadians);
+	directGeoDryEnabled = jsonBoolOr(rootJ, "directGeoDryEnabled", true);
 }
