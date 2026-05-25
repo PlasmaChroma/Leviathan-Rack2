@@ -1,4 +1,5 @@
 #include "TDScope.hpp"
+#include "UiGraphicsLifecycle.hpp"
 #include <nanovg_gl.h>
 
 #include <chrono>
@@ -143,6 +144,7 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastHaloEnabled = false;
   int redrawLastRenderMode = -1;
   int tailRasterImage = -1;
+  NVGcontext* tailRasterImageVg = nullptr;
   int tailRasterW = 0;
   int tailRasterH = 0;
   std::vector<uint8_t> tailRasterPixels;
@@ -154,15 +156,26 @@ struct TDScopeDisplayWidget final : Widget {
   float tailRasterShiftResidualPx = 0.f;
   uint64_t tailRasterPublishSeq = 0;
 
+  void resetTailRasterImage(NVGcontext* vg, bool deleteCurrentHandle) {
+    ui_gfx_lifecycle::resetOwnedNvgImage(
+      tailRasterImageVg,
+      tailRasterImage,
+      tailRasterW,
+      tailRasterH,
+      vg,
+      deleteCurrentHandle
+    );
+    tailRasterPixels.clear();
+    tailRasterValid = false;
+    tailRasterShiftResidualPx = 0.f;
+  }
+
   ~TDScopeDisplayWidget() override {
-    if (APP && APP->window) {
-      NVGcontext *vg = APP->window->vg;
-      if (vg) {
-        if (tailRasterImage >= 0) {
-          nvgDeleteImage(vg, tailRasterImage);
-        }
-      }
+    if (APP && APP->window && APP->window->vg) {
+      resetTailRasterImage(APP->window->vg, true);
+      return;
     }
+    resetTailRasterImage(nullptr, false);
   }
 
   bool isWithinDisplay(Vec pos) const {
@@ -1689,20 +1702,24 @@ struct TDScopeDisplayWidget final : Widget {
     auto ensureTailRasterImage = [&]() {
       int targetW = std::max(1, int(std::ceil(box.size.x)));
       int targetH = std::max(1, int(std::ceil(box.size.y)));
+      if (tailRasterImageVg != args.vg) {
+        resetTailRasterImage(args.vg, false);
+      }
+      if (tailRasterImage >= 0) {
+        if (!ui_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, tailRasterImage, tailRasterW, tailRasterH)) {
+          resetTailRasterImage(args.vg, true);
+        }
+      }
       bool recreate = (tailRasterImage < 0) || (tailRasterW != targetW) || (tailRasterH != targetH);
       if (!recreate) {
         return;
       }
-      if (tailRasterImage >= 0) {
-        nvgDeleteImage(args.vg, tailRasterImage);
-        tailRasterImage = -1;
-      }
+      resetTailRasterImage(args.vg, true);
       tailRasterW = targetW;
       tailRasterH = targetH;
       tailRasterPixels.assign(size_t(tailRasterW * tailRasterH * 4), 0u);
       tailRasterImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
-      tailRasterValid = false;
-      tailRasterShiftResidualPx = 0.f;
+      tailRasterImageVg = args.vg;
       if (tailRasterImage >= 0) {
         nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
       }

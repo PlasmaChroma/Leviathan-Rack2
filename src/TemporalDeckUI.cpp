@@ -2,6 +2,7 @@
 #include "DebugTerminalTransport.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
+#include "UiGraphicsLifecycle.hpp"
 
 #include <algorithm>
 #include <array>
@@ -2284,12 +2285,19 @@ static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path,
     };
     std::unordered_map<std::string, Entry> entries;
     uint64_t useCounter = 0;
+    NVGcontext *activeVg = nullptr;
   };
   static MipmapCache cache;
   constexpr size_t kMaxMipmapImageCacheEntries = 16;
 
   if (!vg || path.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
     return -1;
+  }
+  if (ui_gfx_lifecycle::clearCacheOnContextSwitch(
+        vg, cache.activeVg, reinterpret_cast<unsigned long long*>(&cache.useCounter))) {
+    // Do not cross-delete image handles from a previous NanoVG context.
+    // Drop stale cache entries and rebuild lazily for this context.
+    cache.entries.clear();
   }
 
   auto it = cache.entries.find(path);

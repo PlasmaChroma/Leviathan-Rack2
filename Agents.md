@@ -26,6 +26,13 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - When precision and speed trade off, assume speed is the priority for this project unless the code is offline tooling, tests, serialization, or a one-time setup path.
 
+- UI graphics lifecycle standard:
+  - Use shared helpers in `src/UiGraphicsLifecycle.hpp` for NanoVG image ownership and context lifecycle behavior.
+  - Treat NanoVG image handles as context-owned resources: never delete a handle from a different `NVGcontext*`.
+  - On graphics context change (common in DAW window close/reopen), invalidate or clear context-bound caches and lazily rebuild.
+  - For persistent/cached image handles, validate state before reuse (for example `nvgImageSize`) and recreate on mismatch.
+  - Prefer these shared helper patterns over module-specific ad hoc lifecycle logic.
+
 - We have a pattern of isDragonKingDebugEnabled to gate debug and developer functionality across the entire codebase
 
 - We have a debug terminal seen in tools/debug_terminal/server.py that allows us to get small debug data packets over a socket to be viewed outside of rack.  This type of debug should be gated by isDragonKingDebugEnabled.

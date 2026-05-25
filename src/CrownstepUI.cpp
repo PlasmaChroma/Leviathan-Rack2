@@ -1,5 +1,6 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
+#include "UiGraphicsLifecycle.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -488,6 +489,30 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (!vg || !cache || !cache->available || !cache->svg || !cache->svg->handle) {
 		return false;
 	}
+	auto resetRasterHandles = [&](bool deleteCurrentContextHandles) {
+		auto clearHandle = [&](NVGcontext*& owner, int& handle) {
+			int ignoredWidth = 0;
+			int ignoredHeight = 0;
+			ui_gfx_lifecycle::resetOwnedNvgImage(
+				owner,
+				handle,
+				ignoredWidth,
+				ignoredHeight,
+				vg,
+				deleteCurrentContextHandles
+			);
+		};
+		clearHandle(cache->rasterImageVg, cache->rasterImageHandle);
+		clearHandle(cache->rasterMaskImageVg, cache->rasterMaskImageHandle);
+		clearHandle(cache->rasterMaskGreenImageVg, cache->rasterMaskGreenImageHandle);
+		clearHandle(cache->rasterMaskGreenDarkImageVg, cache->rasterMaskGreenDarkImageHandle);
+		clearHandle(cache->rasterMaskSilhouetteGreenImageVg, cache->rasterMaskSilhouetteGreenImageHandle);
+		clearHandle(cache->rasterMaskSilhouetteGreenDarkImageVg, cache->rasterMaskSilhouetteGreenDarkImageHandle);
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			clearHandle(cache->rasterRingBandImageVg[size_t(colorIndex)], cache->rasterRingBandImageHandle[size_t(colorIndex)]);
+			clearHandle(cache->rasterRingShellImageVg[size_t(colorIndex)], cache->rasterRingShellImageHandle[size_t(colorIndex)]);
+		}
+	};
 	if (cache->rasterImageHandle >= 0
 		&& cache->rasterImageVg == vg
 		&& cache->rasterMaskImageHandle >= 0
@@ -508,10 +533,11 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 				&& cache->rasterRingShellImageHandle[size_t(colorIndex)] >= 0
 				&& cache->rasterRingShellImageVg[size_t(colorIndex)] == vg;
 		}
-		if (haveAllRingVariants) {
-			return true;
+			if (haveAllRingVariants) {
+				return true;
+			}
 		}
-	}
+	resetRasterHandles(true);
 
 	NSVGimage* image = cache->svg->handle;
 	int rasterWidth = std::max(1, int(std::ceil(image->width * CHESS_ATLAS_RASTER_SCALE)));
@@ -549,6 +575,42 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 
 	// Keep mipmaps on the base piece atlas for smoother perceived edges at panel scale.
 	int imageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_IMAGE_FLAGS, pixels.data());
+	auto cleanupCreatedHandles = [&](int maskHandle,
+	                                 int greenHandle,
+	                                 int greenDarkHandle,
+	                                 int silhouetteGreenHandle,
+	                                 int silhouetteGreenDarkHandle,
+	                                 const std::array<int, HIGHLIGHT_COLOR_COUNT>& ringBandHandles,
+	                                 const std::array<int, HIGHLIGHT_COLOR_COUNT>& ringShellHandles) {
+		if (imageHandle >= 0) {
+			nvgDeleteImage(vg, imageHandle);
+		}
+		if (maskHandle >= 0) {
+			nvgDeleteImage(vg, maskHandle);
+		}
+		if (greenHandle >= 0) {
+			nvgDeleteImage(vg, greenHandle);
+		}
+		if (greenDarkHandle >= 0) {
+			nvgDeleteImage(vg, greenDarkHandle);
+		}
+		if (silhouetteGreenHandle >= 0) {
+			nvgDeleteImage(vg, silhouetteGreenHandle);
+		}
+		if (silhouetteGreenDarkHandle >= 0) {
+			nvgDeleteImage(vg, silhouetteGreenDarkHandle);
+		}
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			int band = ringBandHandles[size_t(colorIndex)];
+			if (band >= 0) {
+				nvgDeleteImage(vg, band);
+			}
+			int shell = ringShellHandles[size_t(colorIndex)];
+			if (shell >= 0) {
+				nvgDeleteImage(vg, shell);
+			}
+		}
+	};
 	if (imageHandle < 0) {
 		return false;
 	}
@@ -561,7 +623,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		maskPixels[i * 4 + 3] = a;
 	}
 	int maskImageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_MASK_FLAGS, maskPixels.data());
+	std::array<int, HIGHLIGHT_COLOR_COUNT> ringBandImageHandles {};
+	std::array<int, HIGHLIGHT_COLOR_COUNT> ringShellImageHandles {};
+	ringBandImageHandles.fill(-1);
+	ringShellImageHandles.fill(-1);
 	if (maskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, -1, -1, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	std::vector<unsigned char> greenMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
@@ -580,6 +647,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		greenMaskPixels.data()
 	);
 	if (greenMaskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, greenMaskImageHandle, -1, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	std::vector<unsigned char> greenDarkMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
@@ -598,6 +666,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		greenDarkMaskPixels.data()
 	);
 	if (greenDarkMaskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, greenMaskImageHandle, greenDarkMaskImageHandle, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	// Build a silhouette alpha mask where internal transparent "holes" are filled,
@@ -666,6 +735,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		silhouetteGreenMaskPixels.data()
 	);
 	if (silhouetteGreenMaskImageHandle < 0) {
+		cleanupCreatedHandles(
+			maskImageHandle,
+			greenMaskImageHandle,
+			greenDarkMaskImageHandle,
+			silhouetteGreenMaskImageHandle,
+			-1,
+			ringBandImageHandles,
+			ringShellImageHandles
+		);
 		return false;
 	}
 	int silhouetteGreenDarkMaskImageHandle = nvgCreateImageRGBA(
@@ -676,6 +754,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		silhouetteGreenDarkMaskPixels.data()
 	);
 	if (silhouetteGreenDarkMaskImageHandle < 0) {
+		cleanupCreatedHandles(
+			maskImageHandle,
+			greenMaskImageHandle,
+			greenDarkMaskImageHandle,
+			silhouetteGreenMaskImageHandle,
+			silhouetteGreenDarkMaskImageHandle,
+			ringBandImageHandles,
+			ringShellImageHandles
+		);
 		return false;
 	}
 	// Build distance-based external contour bands (offset from silhouette).
@@ -779,6 +866,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			ringBandPixels[size_t(colorIndex)].data()
 		);
 		if (ringBandImageHandle < 0) {
+			cleanupCreatedHandles(
+				maskImageHandle,
+				greenMaskImageHandle,
+				greenDarkMaskImageHandle,
+				silhouetteGreenMaskImageHandle,
+				silhouetteGreenDarkMaskImageHandle,
+				ringBandImageHandles,
+				ringShellImageHandles
+			);
 			return false;
 		}
 		int ringShellImageHandle = nvgCreateImageRGBA(
@@ -789,12 +885,20 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			ringShellPixels[size_t(colorIndex)].data()
 		);
 		if (ringShellImageHandle < 0) {
+			ringBandImageHandles[size_t(colorIndex)] = ringBandImageHandle;
+			cleanupCreatedHandles(
+				maskImageHandle,
+				greenMaskImageHandle,
+				greenDarkMaskImageHandle,
+				silhouetteGreenMaskImageHandle,
+				silhouetteGreenDarkMaskImageHandle,
+				ringBandImageHandles,
+				ringShellImageHandles
+			);
 			return false;
 		}
-		cache->rasterRingBandImageVg[size_t(colorIndex)] = vg;
-		cache->rasterRingBandImageHandle[size_t(colorIndex)] = ringBandImageHandle;
-		cache->rasterRingShellImageVg[size_t(colorIndex)] = vg;
-		cache->rasterRingShellImageHandle[size_t(colorIndex)] = ringShellImageHandle;
+		ringBandImageHandles[size_t(colorIndex)] = ringBandImageHandle;
+		ringShellImageHandles[size_t(colorIndex)] = ringShellImageHandle;
 	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
@@ -808,6 +912,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	cache->rasterMaskSilhouetteGreenImageHandle = silhouetteGreenMaskImageHandle;
 	cache->rasterMaskSilhouetteGreenDarkImageVg = vg;
 	cache->rasterMaskSilhouetteGreenDarkImageHandle = silhouetteGreenDarkMaskImageHandle;
+	for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+		cache->rasterRingBandImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingBandImageHandle[size_t(colorIndex)] = ringBandImageHandles[size_t(colorIndex)];
+		cache->rasterRingShellImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingShellImageHandle[size_t(colorIndex)] = ringShellImageHandles[size_t(colorIndex)];
+	}
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
