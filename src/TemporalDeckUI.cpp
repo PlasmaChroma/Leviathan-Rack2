@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <limits>
 #include <regex>
@@ -2232,14 +2233,25 @@ static bool drawPlatterSvg(const Widget::DrawArgs &args, std::shared_ptr<window:
   return true;
 }
 
+static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle, Vec center, float platterRadiusPx,
+                                   float rotation);
+
 static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<window::Image> image, Vec center,
                              float platterRadiusPx, float rotation) {
   if (!image || image->handle < 0) {
     return false;
   }
+  return drawPlatterImageHandle(args, image->handle, center, platterRadiusPx, rotation);
+}
+
+static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle, Vec center, float platterRadiusPx,
+                                   float rotation) {
+  if (imageHandle < 0) {
+    return false;
+  }
   int imageW = 0;
   int imageH = 0;
-  nvgImageSize(args.vg, image->handle, &imageW, &imageH);
+  nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
   if (imageW <= 0 || imageH <= 0) {
     return false;
   }
@@ -2251,7 +2263,7 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   nvgSave(args.vg);
   nvgTranslate(args.vg, center.x, center.y);
   nvgRotate(args.vg, rotation);
-  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, image->handle, 1.0f);
+  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, imageHandle, 1.0f);
   nvgBeginPath(args.vg);
   nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
   nvgFillPaint(args.vg, imgPaint);
@@ -2260,83 +2272,84 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   return true;
 }
 
-static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path) {
+static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path,
+                                        std::shared_ptr<window::Image> lifecycleImage) {
   struct MipmapCache {
     struct Entry {
+      NVGcontext *vg = nullptr;
       int handle = -1;
+      int lifecycleHandle = -1;
+      std::weak_ptr<window::Image> lifecycleImage;
       uint64_t lastUse = 0;
     };
-    NVGcontext *vg = nullptr;
     std::unordered_map<std::string, Entry> entries;
     uint64_t useCounter = 0;
   };
   static MipmapCache cache;
   constexpr size_t kMaxMipmapImageCacheEntries = 16;
 
-  if (!vg || path.empty()) {
+  if (!vg || path.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
     return -1;
   }
-  if (cache.vg != vg) {
-    cache.vg = vg;
-    cache.entries.clear();
-    cache.useCounter = 0;
-  }
+
   auto it = cache.entries.find(path);
   if (it != cache.entries.end()) {
-    it->second.lastUse = ++cache.useCounter;
-    return it->second.handle;
+    std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
+    if (it->second.vg == vg && it->second.handle >= 0 &&
+        it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
+      it->second.lastUse = ++cache.useCounter;
+      return it->second.handle;
+    }
+    if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
+      nvgDeleteImage(vg, it->second.handle);
+    }
+    cache.entries.erase(it);
   }
 
   int handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-  if (handle >= 0) {
-    MipmapCache::Entry entry;
-    entry.handle = handle;
-    entry.lastUse = ++cache.useCounter;
-    cache.entries[path] = entry;
-    if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
-      auto evictIt = cache.entries.begin();
-      for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
-        if (iter->second.lastUse < evictIt->second.lastUse) {
-          evictIt = iter;
-        }
-      }
-      if (evictIt != cache.entries.end()) {
-        nvgDeleteImage(vg, evictIt->second.handle);
-        cache.entries.erase(evictIt);
+  if (handle < 0) {
+    return -1;
+  }
+
+  MipmapCache::Entry entry;
+  entry.vg = vg;
+  entry.handle = handle;
+  entry.lifecycleHandle = lifecycleImage->handle;
+  entry.lifecycleImage = lifecycleImage;
+  entry.lastUse = ++cache.useCounter;
+  cache.entries[path] = entry;
+
+  if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
+    auto evictIt = cache.entries.begin();
+    for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
+      if (iter->second.lastUse < evictIt->second.lastUse) {
+        evictIt = iter;
       }
     }
+    std::shared_ptr<window::Image> evictLifecycleImage = evictIt->second.lifecycleImage.lock();
+    if (evictIt->second.vg == vg && evictIt->second.handle >= 0 && evictLifecycleImage) {
+      nvgDeleteImage(vg, evictIt->second.handle);
+    }
+    cache.entries.erase(evictIt);
   }
+
   return handle;
 }
 
 static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string &path, Vec center,
                                  float platterRadiusPx, float rotation) {
-  int handle = loadPlatterMipmapImageHandle(args.vg, path);
-  if (handle < 0) {
+  if (path.empty()) {
     return false;
   }
-  int imageW = 0;
-  int imageH = 0;
-  nvgImageSize(args.vg, handle, &imageW, &imageH);
-  if (imageW <= 0 || imageH <= 0) {
+  std::shared_ptr<window::Image> image = APP->window->loadImage(path);
+  if (!image) {
     return false;
   }
-
-  float diameter = platterRadiusPx * 2.f;
-  float scale = diameter / std::max(1.f, float(std::min(imageW, imageH)));
-  float drawW = float(imageW) * scale;
-  float drawH = float(imageH) * scale;
-
-  nvgSave(args.vg);
-  nvgTranslate(args.vg, center.x, center.y);
-  nvgRotate(args.vg, rotation);
-  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, handle, 1.0f);
-  nvgBeginPath(args.vg);
-  nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
-  nvgFillPaint(args.vg, imgPaint);
-  nvgFill(args.vg);
-  nvgRestore(args.vg);
-  return true;
+  int mipmapHandle = loadPlatterMipmapImageHandle(args.vg, path, image);
+  if (mipmapHandle >= 0 && drawPlatterImageHandle(args, mipmapHandle, center, platterRadiusPx, rotation)) {
+    return true;
+  }
+  return drawPlatterImage(args, image, center, platterRadiusPx, rotation);
 }
 
 static void drawPlatterDimmingOverlay(const Widget::DrawArgs &args, Vec center, float platterRadiusPx, float overlayAlpha) {
@@ -2765,10 +2778,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
           drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt =
-              drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx, rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load default preview platter art '%s': %s", cachedRenderAbsolutePath.c_str(),
@@ -2780,10 +2789,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
           drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx,
-                                       rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
@@ -2796,10 +2801,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
                                    rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderAbsolutePath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt =
-              drawPlatterImage(args, APP->window->loadImage(cachedRenderAbsolutePath), center, platterRadiusPx, rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load platter art '%s': %s", cachedRenderAbsolutePath.c_str(), e.what());
