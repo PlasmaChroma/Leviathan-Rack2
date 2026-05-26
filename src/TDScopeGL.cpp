@@ -451,8 +451,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
     }
     tdscope::ScopeLaneGeometry laneGeo = tdscope::computeScopeLaneGeometry(box.size.x, renderStereo);
-    const float laneGap = laneGeo.laneGap;
-    const float laneWidth = laneGeo.laneWidth;
     const float lane0CenterX = laneGeo.lane0CenterX;
     const float lane1CenterX = laneGeo.lane1CenterX;
     const float laneAmpHalfWidth = laneGeo.laneAmpHalfWidth;
