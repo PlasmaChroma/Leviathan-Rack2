@@ -171,15 +171,15 @@ struct TDScope final : Module {
   }
 
   bool useTailRasterRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_TAIL_RASTER;
+    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_TAIL_RASTER;
   }
 
   bool useGeometryHistoryRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_OPENGL;
+    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
   }
 
   bool useOpenGlGeometryRenderMode() const {
-    return debugRenderMode == DEBUG_RENDER_OPENGL;
+    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
   }
 
   float scopeColorBrightnessClamped() const {
@@ -216,16 +216,16 @@ struct TDScope final : Module {
 
   json_t *dataToJson() override {
     json_t *root = json_object();
-    json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode));
-    json_object_set_new(root, "scopeVerticalInverted", json_boolean(scopeVerticalInverted));
-    json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode));
+    json_object_set_new(root, "scopeDisplayRangeMode", json_integer(scopeDisplayRangeMode.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "scopeVerticalInverted", json_boolean(scopeVerticalInverted.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "scopeChannelMode", json_integer(scopeChannelMode.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
-    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer));
-    json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled));
-    json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode));
-    json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode));
+    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode.load(std::memory_order_relaxed)));
     return root;
   }
 
@@ -307,9 +307,7 @@ struct TDScope final : Module {
       if (glGeometryJ) {
         legacyGlGeometry = json_boolean_value(glGeometryJ);
       }
-      if (legacyGlGeometry && legacyGeometryHistory) {
-        debugRenderMode = DEBUG_RENDER_OPENGL;
-      } else if (legacyGlGeometry) {
+      if (legacyGlGeometry) {
         debugRenderMode = DEBUG_RENDER_OPENGL;
       } else if (legacyGeometryHistory) {
         debugRenderMode = DEBUG_RENDER_STANDARD;
@@ -341,6 +339,8 @@ struct TDScope final : Module {
     if (!out) {
       return false;
     }
+    // Bounded retries reduce chance of tearing between front-index and payload
+    // under concurrent publish, while keeping UI reads deterministic and cheap.
     for (int i = 0; i < 3; ++i) {
       uint64_t gen0 = uiSnapshotPublishGen.load(std::memory_order_acquire);
       uint32_t frontIndex0 = uiSnapshotFrontIndex.load(std::memory_order_acquire) & 1u;

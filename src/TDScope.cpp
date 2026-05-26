@@ -1,4 +1,5 @@
 #include "TDScope.hpp"
+#include "TDScopeShared.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include <nanovg_gl.h>
 
@@ -16,14 +17,9 @@ std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 float computeScopeDisplayVerticalSupersample(float rackZoom) {
   rackZoom = std::max(rackZoom, 1e-4f);
   (void) rackZoom;
+  // Fixed-density path: keep row count stable across zoom levels for now.
+  // We can reintroduce adaptive supersampling later if profiling justifies it.
   return 0.55f;
-  // Zoomed out: reduce total row density to save draw calls when several
-  // scopes are visible. Zoomed in: restore the full supersampled trace.
-  float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
-  float zoomInT = clamp((rackZoom - 1.0f) / 1.0f, 0.f, 1.f);
-  float supersample = 1.10f + (1.35f - 1.10f) * (1.f - zoomOutT);
-  supersample += (kScopeDisplayVerticalSupersampleMax - 1.35f) * zoomInT;
-  return clamp(supersample, 1.10f, kScopeDisplayVerticalSupersampleMax);
 }
 
 PanelBorder *findPanelBorder(Widget *widget) {
@@ -42,6 +38,8 @@ bool isTemporalDeckModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
     return false;
   }
+  // Legacy fallback for older host states where pointer identity may miss
+  // but stable slug matching still identifies Temporal Deck.
   return (neighbor->model == modelTemporalDeck) || (neighbor->model->slug == "TemporalDeck");
 }
 
@@ -67,11 +65,7 @@ struct TDScopeDisplayWidget final : Widget {
 
   TDScope *module = nullptr;
   widget::FramebufferWidget *framebuffer = nullptr;
-  float autoDisplayFullScaleVolts = 5.f;
-  bool autoDisplayScaleInitialized = false;
-  bool autoLastSampleMode = true;
-  float autoLivePeakHoldVolts = 0.f;
-  int autoLivePeakHoldFrames = 0;
+  tdscope::ScopeAutoScaleState autoScaleState;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
   std::vector<float> rowX0Right;
@@ -196,18 +190,9 @@ struct TDScopeDisplayWidget final : Widget {
 
   ScopeWindowMap buildScopeWindowMap(const temporaldeck_expander::HostToDisplay &msg) const {
     ScopeWindowMap map;
-    float sampleRate = std::max(msg.sampleRate, 1.f);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * sampleRate);
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
-    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    map.windowTopLag = msg.lagSamples + backwardWindowSamples;
-    map.windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    tdscope::ScopeWindowLagSpan span = tdscope::computeScopeWindowLagSpan(msg);
+    map.windowTopLag = span.windowTopLag;
+    map.windowBottomLag = span.windowBottomLag;
     map.accessibleLag = std::max(0.f, msg.accessibleLagSamples);
     float yInset = 0.75f;
     map.drawTop = yInset;
@@ -406,36 +391,24 @@ struct TDScopeDisplayWidget final : Widget {
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
-      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(map.accessibleLag) + 1.0;
-      }
-      lagDragLocalLagSamples = float(wrappedLag);
-    } else {
-      // CONTAINMENT NOTE
-      // This extra headroom is another live-mode workaround. Fresh host
-      // snapshots arrive at UI cadence, not audio cadence, so a strict clamp to
-      // the last advertised accessible lag can create a false local ceiling
-      // during live drag. The host still remains authoritative; this just keeps
-      // the UI-side request from getting artificially pinned too early.
-      // Live (non-sample) streaming advances the write head between UI updates.
-      // Add dynamic headroom so scope-side clamping doesn't create a false
-      // downward barrier while dragging away from NOW.
-      float effectiveAccessibleLag = map.accessibleLag;
-      if (!sampleMode && !freezeActive && lastGoodMsgTimeSec >= 0.0) {
-        double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
-        effectiveAccessibleLag += std::max(lastGoodMsg.sampleRate, 1.f) * float(msgAgeSec);
-      }
-      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
-    }
+    // CONTAINMENT NOTE
+    // solveLagDragPlaybackLag() preserves the existing live-mode dynamic
+    // headroom behavior and sample-loop wrapping behavior.
+    lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
+      desiredPlaybackLag,
+      sampleMode,
+      sampleLoaded,
+      sampleLoop,
+      freezeActive,
+      map.accessibleLag,
+      lastGoodMsgTimeSec,
+      nowSec,
+      lastGoodMsg.sampleRate);
     // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
     // positive velocity means toward NOW (lag decreasing), hence
     // (previousLag - currentLag) / dt.
-    float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
-    float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
-    float maxAbsGestureVelocity = sampleRate * 3.0f;
-    velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+    float velocitySamples = tdscope::computeLagDragVelocity(
+      previousLag, lagDragLocalLagSamples, dtSec, lastGoodMsg.sampleRate);
     module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
     e.consume(this);
   }
@@ -476,25 +449,30 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     if (module) {
-      if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
+      const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+      const bool scopeVerticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
+      const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+      const int scopeColorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+      if (scopeDisplayRangeMode != redrawLastRangeMode) {
         dirty = true;
-        redrawLastRangeMode = module->scopeDisplayRangeMode;
+        redrawLastRangeMode = scopeDisplayRangeMode;
       }
-      if (module->scopeVerticalInverted != redrawLastVerticalInverted) {
+      if (scopeVerticalInverted != redrawLastVerticalInverted) {
         dirty = true;
-        redrawLastVerticalInverted = module->scopeVerticalInverted;
+        redrawLastVerticalInverted = scopeVerticalInverted;
       }
-      if (module->scopeChannelMode != redrawLastChannelMode) {
+      if (scopeChannelMode != redrawLastChannelMode) {
         dirty = true;
-        redrawLastChannelMode = module->scopeChannelMode;
+        redrawLastChannelMode = scopeChannelMode;
       }
-      if (module->scopeColorScheme != redrawLastColorScheme) {
+      if (scopeColorScheme != redrawLastColorScheme) {
         dirty = true;
-        redrawLastColorScheme = module->scopeColorScheme;
+        redrawLastColorScheme = scopeColorScheme;
       }
-      if (module->debugRenderMode != redrawLastRenderMode) {
+      if (debugRenderMode != redrawLastRenderMode) {
         dirty = true;
-        redrawLastRenderMode = module->debugRenderMode;
+        redrawLastRenderMode = debugRenderMode;
         tailRasterValid = false;
         tailRasterShiftResidualPx = 0.f;
         historyValidState = false;
@@ -550,29 +528,29 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep stale-frame reuse short so we prefer freshest scope state.
     constexpr double kUiSnapshotGraceSec = 0.02;
 
-	    auto drawStatusMessage = [&](const char* line1, const char* line2) {
-	      if (!APP || !APP->window || !APP->window->uiFont) {
-	        return;
-	      }
-	      const float centerX = box.size.x * 0.5f;
-	      const float bottomY = box.size.y - 7.f;
-	      const float fontSize1 = 12.f;
-	      const float fontSize2 = 14.f;
-	      const float lineGap = 9.f;
+    auto drawStatusMessage = [&](const char* line1, const char* line2) {
+      if (!APP || !APP->window || !APP->window->uiFont) {
+        return;
+      }
+      const float centerX = box.size.x * 0.5f;
+      const float bottomY = box.size.y - 7.f;
+      const float fontSize1 = 12.f;
+      const float fontSize2 = 14.f;
+      const float lineGap = 9.f;
 
       nvgSave(args.vg);
       nvgFontFaceId(args.vg, APP->window->uiFont->handle);
       nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 
-	      nvgFontSize(args.vg, fontSize1);
-	      nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
-	      nvgText(args.vg, centerX, bottomY - 2.f * lineGap, line1, nullptr);
+      nvgFontSize(args.vg, fontSize1);
+      nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
+      nvgText(args.vg, centerX, bottomY - 2.f * lineGap, line1, nullptr);
 
-	      nvgFontSize(args.vg, fontSize2);
-	      nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
-	      nvgText(args.vg, centerX, bottomY - lineGap + 2.f, line2, nullptr);
-	      nvgRestore(args.vg);
-	    };
+      nvgFontSize(args.vg, fontSize2);
+      nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
+      nvgText(args.vg, centerX, bottomY - lineGap + 2.f, line2, nullptr);
+      nvgRestore(args.vg);
+    };
 
     if (!module) {
       drawStatusMessage("Attach to", "Temporal Deck");
@@ -615,10 +593,12 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
-    bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+    const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+    bool renderStereo = (scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
-    const bool silStandardStyle = module->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
+    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    const bool silStandardStyle = debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -644,12 +624,12 @@ struct TDScopeDisplayWidget final : Widget {
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
 
-    const float laneGap = renderStereo ? 2.f : 0.f;
-    const float laneWidth =
-      renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);
-    const float lane0CenterX = renderStereo ? (laneWidth * 0.5f) : (box.size.x * 0.5f);
-    const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
-    const float laneAmpHalfWidth = laneWidth * 0.46f;
+    tdscope::ScopeLaneGeometry laneGeo = tdscope::computeScopeLaneGeometry(box.size.x, renderStereo);
+    const float laneGap = laneGeo.laneGap;
+    const float laneWidth = laneGeo.laneWidth;
+    const float lane0CenterX = laneGeo.lane0CenterX;
+    const float lane1CenterX = laneGeo.lane1CenterX;
+    const float laneAmpHalfWidth = laneGeo.laneAmpHalfWidth;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
     if (!module->useOpenGlGeometryRenderMode()) {
       const float xInset = 0.75f;
@@ -666,106 +646,24 @@ struct TDScopeDisplayWidget final : Widget {
       drawSilWaveformBackground(args.vg, renderStereo, laneWidth, laneGap, drawTop, drawBottom);
     }
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
-    const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
+    const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+    const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
-    if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
+    if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-      auto computeLivePeakStats = [&]() -> std::pair<float, float> {
-        // Returns {windowPeakVolts, p99Volts} over per-bin absolute peaks.
-        std::vector<float> peaks;
-        peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
-        for (uint32_t i = 0; i < scopeBinCount; ++i) {
-          const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
-          if (!temporaldeck_expander::isScopeBinValid(bin)) {
-            // fall through to right channel in stereo mode
-          } else {
-            int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
-            float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-            peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
-          }
-          if (renderStereo) {
-            const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
-            if (temporaldeck_expander::isScopeBinValid(binR)) {
-              int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
-              float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-              peaks.push_back(clamp(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
-            }
-          }
-        }
-        if (peaks.empty()) {
-          return std::make_pair(0.f, 0.f);
-        }
-        float windowPeakVolts = *std::max_element(peaks.begin(), peaks.end());
-        size_t n = peaks.size();
-        size_t rank = size_t(std::ceil(0.99f * float(n)));
-        rank = std::max<size_t>(1, std::min(rank, n));
-        size_t p99Index = rank - 1;
-        std::nth_element(peaks.begin(), peaks.begin() + ptrdiff_t(p99Index), peaks.end());
-        float p99Volts = peaks[p99Index];
-        return std::make_pair(windowPeakVolts, p99Volts);
-      };
-
-      // Recompute auto-scale state only when snapshot updates (or mode changes).
-      if (msgChanged || rangeModeChanged || !autoDisplayScaleInitialized) {
-        bool modeChanged = !autoDisplayScaleInitialized || sampleMode != autoLastSampleMode;
-        float targetFullScaleVolts = 5.f;
-        auto liveStats = computeLivePeakStats();
-        float windowPeakVolts = liveStats.first;
-        float p99Volts = liveStats.second;
-        if (p99Volts <= 0.f) {
-          p99Volts = windowPeakVolts;
-        }
-        float truePeakVolts = windowPeakVolts;
-
-        // Standard auto behavior for both sample and live:
-        // hold true peaks, then decay slowly so transients don't immediately
-        // collapse display width.
-        if (modeChanged || !std::isfinite(autoLivePeakHoldVolts)) {
-          autoLivePeakHoldVolts = truePeakVolts;
-          autoLivePeakHoldFrames = 0;
-        } else if (truePeakVolts > autoLivePeakHoldVolts) {
-          autoLivePeakHoldVolts = truePeakVolts;
-          autoLivePeakHoldFrames = 36; // ~600ms @ 60Hz
-        } else if (autoLivePeakHoldFrames > 0) {
-          autoLivePeakHoldFrames--;
-        } else {
-          autoLivePeakHoldVolts += (truePeakVolts - autoLivePeakHoldVolts) * 0.015f;
-        }
-
-        targetFullScaleVolts = std::max(p99Volts * 1.10f, autoLivePeakHoldVolts * 1.02f);
-        targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
-
-        // Hysteresis: ignore small retargeting around current full-scale.
-        if (!modeChanged) {
-          float hysteresisFrac = 0.03f;
-          float lowBand = autoDisplayFullScaleVolts * (1.f - hysteresisFrac);
-          float highBand = autoDisplayFullScaleVolts * (1.f + hysteresisFrac);
-          if (targetFullScaleVolts >= lowBand && targetFullScaleVolts <= highBand) {
-            targetFullScaleVolts = autoDisplayFullScaleVolts;
-          }
-        }
-        if (!autoDisplayScaleInitialized) {
-          autoDisplayFullScaleVolts = targetFullScaleVolts;
-          autoDisplayScaleInitialized = true;
-        } else {
-          // Smooth autoscale transitions with the same response profile in
-          // sample and live modes for consistent feel.
-          float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-          if (std::fabs(delta) > 0.01f) {
-            float kAutoScaleAttackAlpha = 0.08f;
-            float kAutoScaleReleaseAlpha = 0.008f;
-            float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
-            autoDisplayFullScaleVolts += delta * alpha;
-          }
-        }
-        autoLastSampleMode = sampleMode;
-      }
-      displayFullScaleVolts = autoDisplayFullScaleVolts;
+      const std::pair<float, float> liveStats = tdscope::computeScopePeakStatsFromBins(
+        leftScopeBins, rightScopeBins, scopeBinCount, renderStereo);
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState,
+        true,
+        msgChanged || rangeModeChanged || !autoScaleState.initialized,
+        sampleMode,
+        liveStats.first,
+        liveStats.second,
+        displayFullScaleVolts);
     } else {
-      autoDisplayScaleInitialized = false;
-      autoLastSampleMode = true;
-      autoLivePeakHoldVolts = 0.f;
-      autoLivePeakHoldFrames = 0;
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState, false, false, true, 0.f, 0.f, displayFullScaleVolts);
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float rackZoom = 1.f;
@@ -777,20 +675,12 @@ struct TDScopeDisplayWidget final : Widget {
     float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.70f, 1.42f);
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+    tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
+    float totalWindowSamples = lagSpan.totalWindowSamples;
     bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      // Live mode viewport bias near NOW:
-      // lag=0 => read-head at bottom, lag=halfWindow => read-head centered.
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    float windowTopLag = msg.lagSamples + backwardWindowSamples;
-    float windowBottomLag = msg.lagSamples - forwardWindowSamples;
-    bool verticalInverted = module->scopeVerticalInverted;
+    float windowTopLag = lagSpan.windowTopLag;
+    float windowBottomLag = lagSpan.windowBottomLag;
+    bool verticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
     float readHeadT = 0.5f;
     if (windowTopLag != windowBottomLag) {
       readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
@@ -1473,7 +1363,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1517,7 +1407,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1971,17 +1861,6 @@ struct TDScopeDisplayWidget final : Widget {
       drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
       if (renderStereo) {
         drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
-
-        // Draw subtle lane divider for stereo side-by-side view.
-        if (!silStandardStyle) {
-          float dividerX = laneWidth + laneGap * 0.5f;
-          nvgBeginPath(args.vg);
-          nvgMoveTo(args.vg, dividerX, drawTop);
-          nvgLineTo(args.vg, dividerX, drawBottom);
-          nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
-          nvgStrokeWidth(args.vg, 1.f);
-          nvgStroke(args.vg);
-        }
       }
       tailRasterValid = false;
     } else {
@@ -2158,18 +2037,9 @@ struct TDScopeInputWidget final : Widget {
 
   ScopeWindowMap buildScopeWindowMap(const temporaldeck_expander::HostToDisplay &msg) const {
     ScopeWindowMap map;
-    float sampleRate = std::max(msg.sampleRate, 1.f);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * sampleRate);
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
-    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    map.windowTopLag = msg.lagSamples + backwardWindowSamples;
-    map.windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    tdscope::ScopeWindowLagSpan span = tdscope::computeScopeWindowLagSpan(msg);
+    map.windowTopLag = span.windowTopLag;
+    map.windowBottomLag = span.windowBottomLag;
     map.accessibleLag = std::max(0.f, msg.accessibleLagSamples);
     float yInset = 0.75f;
     map.drawTop = yInset;
@@ -2312,24 +2182,18 @@ struct TDScopeInputWidget final : Widget {
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
-      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(map.accessibleLag) + 1.0;
-      }
-      lagDragLocalLagSamples = float(wrappedLag);
-    } else {
-      float effectiveAccessibleLag = map.accessibleLag;
-      if (!sampleMode && !freezeActive && lastGoodMsgTimeSec >= 0.0) {
-        double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
-        effectiveAccessibleLag += std::max(lastGoodMsg.sampleRate, 1.f) * float(msgAgeSec);
-      }
-      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
-    }
-    float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
-    float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
-    float maxAbsGestureVelocity = sampleRate * 3.0f;
-    velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
+    lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
+      desiredPlaybackLag,
+      sampleMode,
+      sampleLoaded,
+      sampleLoop,
+      freezeActive,
+      map.accessibleLag,
+      lastGoodMsgTimeSec,
+      nowSec,
+      lastGoodMsg.sampleRate);
+    float velocitySamples = tdscope::computeLagDragVelocity(
+      previousLag, lagDragLocalLagSamples, dtSec, lastGoodMsg.sampleRate);
     module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples, false);
     e.consume(this);
   }
