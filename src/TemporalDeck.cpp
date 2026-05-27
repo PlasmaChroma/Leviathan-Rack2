@@ -697,6 +697,8 @@ struct TemporalDeck::Impl {
   uint64_t expanderLagDragLastRequestSeq = 0u;
   float expanderLagDragLastLagSamples = 0.f;
   int expanderLagDragFramesSinceUpdate = 0;
+  bool expanderLagDragHasLastRequestTime = false;
+  double expanderLagDragLastRequestTimeSec = 0.0;
   int scratchInterpolationMode = TemporalDeck::SCRATCH_INTERP_LAGRANGE6;
   bool highQualityRateInterpolation = false;
   std::atomic<bool> platterTraceLoggingEnabled{false};
@@ -1261,6 +1263,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool scopeTraceDragJustStarted = false;
   float scopeTraceLagTarget = 0.f;
   float scopeTraceVelocityApplied = 0.f;
+  double processNowSec = system::getTime();
   if (isTDScopeModule(right) && rightExpander.consumerMessage) {
     // Request direction contract:
     // this is the TD.Scope -> TemporalDeck path. TD.Scope writes requests into
@@ -1302,6 +1305,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
       scopeTraceNewRequest = true;
       scopeTraceLagTarget = lagTarget;
       if (lagDragRequestActive) {
+        float requestDtSec = 0.f;
+        if (impl->expanderLagDragHasLastRequestTime) {
+          double rawDtSec = processNowSec - impl->expanderLagDragLastRequestTimeSec;
+          if (std::isfinite(rawDtSec) && rawDtSec > 0.0) {
+            constexpr float kMinRequestDtSec = 1.0f / 240.0f;
+            constexpr float kMaxRequestDtSec = 1.0f / 20.0f;
+            requestDtSec = clamp(float(rawDtSec), kMinRequestDtSec, kMaxRequestDtSec);
+          }
+        }
         bool dragJustStarted = !impl->expanderLagDragWasActive;
         scopeTraceDragJustStarted = dragJustStarted;
         auto applyScopeStationaryHold = [&](float lagTarget) {
@@ -1339,8 +1351,11 @@ void TemporalDeck::process(const ProcessArgs &args) {
           applyScopeStationaryHold(lagTarget);
         } else {
           float velocitySamples = 0.f;
-          int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
-          float dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
+          float dtSec = requestDtSec;
+          if (dtSec <= 0.f) {
+            int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
+            dtSec = std::max(args.sampleTime, float(frames) * args.sampleTime);
+          }
           // WARNING: Keep derived velocity in the same convention as
           // incoming scope velocity before blending.
           // positive velocity => toward NOW (decreasing lag).
@@ -1373,8 +1388,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
           motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
           impl->platterInput.setMotionFreshSamples(motionFreshSamples);
         }
-          impl->expanderLagDragLastLagSamples = lagTarget;
-          impl->expanderLagDragFramesSinceUpdate = 0;
+        impl->expanderLagDragLastLagSamples = lagTarget;
+        impl->expanderLagDragFramesSinceUpdate = 0;
+        impl->expanderLagDragLastRequestTimeSec = processNowSec;
+        impl->expanderLagDragHasLastRequestTime = true;
         impl->expanderLagDragWasActive = true;
       } else {
         if (impl->expanderLagDragWasActive) {
@@ -1383,6 +1400,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         }
         impl->expanderLagDragWasActive = false;
         impl->expanderLagDragFramesSinceUpdate = 0;
+        impl->expanderLagDragHasLastRequestTime = false;
       }
     } else if (impl->expanderLagDragWasActive) {
       impl->expanderLagDragFramesSinceUpdate = std::min(impl->expanderLagDragFramesSinceUpdate + 1, 1 << 20);
@@ -1398,6 +1416,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->expanderLagDragWasActive = false;
     impl->expanderLagDragFramesSinceUpdate = 0;
     impl->expanderLagDragRequestSeen = false;
+    impl->expanderLagDragHasLastRequestTime = false;
   }
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
@@ -1671,6 +1690,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->expanderLagDragLastRequestSeq = 0u;
     impl->expanderLagDragLastLagSamples = 0.f;
     impl->expanderLagDragFramesSinceUpdate = 0;
+    impl->expanderLagDragHasLastRequestTime = false;
+    impl->expanderLagDragLastRequestTimeSec = 0.0;
     impl->expanderScopeCacheMono.valid = false;
     impl->expanderScopeCacheRight.valid = false;
     impl->expanderScopeLagHoldActive = false;

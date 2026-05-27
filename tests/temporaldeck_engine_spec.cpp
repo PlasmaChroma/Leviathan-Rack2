@@ -399,6 +399,21 @@ TestResult testLiveTouchWriteHeadCompensationPolicyOnlyNearNow() {
             " idle=" + std::to_string(int(idle))};
 }
 
+TestResult testDeepLiveManualTouchPolicyOnlyBeyondWindow() {
+  const float sr = 48000.f;
+  bool near = Engine::isDeepLiveManualTouchMotion(false, true, true, sr, sr);
+  bool edge = Engine::isDeepLiveManualTouchMotion(false, true, true, sr + 0.0, sr);
+  bool deep = Engine::isDeepLiveManualTouchMotion(false, true, true, sr + 1.0, sr);
+  bool sampleMode = Engine::isDeepLiveManualTouchMotion(true, true, true, sr * 2.0, sr);
+  bool notTouch = Engine::isDeepLiveManualTouchMotion(false, false, true, sr * 2.0, sr);
+  bool idle = Engine::isDeepLiveManualTouchMotion(false, true, false, sr * 2.0, sr);
+  bool pass = !near && !edge && deep && !sampleMode && !notTouch && !idle;
+  return {"Deep live manual touch policy is depth-gated", pass,
+          "near=" + std::to_string(int(near)) + " edge=" + std::to_string(int(edge)) +
+            " deep=" + std::to_string(int(deep)) + " sampleMode=" + std::to_string(int(sampleMode)) +
+            " notTouch=" + std::to_string(int(notTouch)) + " idle=" + std::to_string(int(idle))};
+}
+
 TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
   const float sr = 1000.f;
   Engine engine;
@@ -497,6 +512,7 @@ int main() {
   tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
   tests.push_back(testLiveTouchDirectionalCompensationBalance());
   tests.push_back(testLiveTouchWriteHeadCompensationPolicyOnlyNearNow());
+  tests.push_back(testDeepLiveManualTouchPolicyOnlyBeyondWindow());
   tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
   tests.push_back(testSincLutMatchesDirectWindowedSincReference());
   tests.push_back(testSampleBoundedSincLutMatchesDirectReference());

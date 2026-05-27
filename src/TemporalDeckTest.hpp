@@ -49,4 +49,3 @@ inline bool shouldApplyWriteHeadCompensation(bool freezeState, bool hasFreshGest
 }
 
 } // namespace platter_interaction
-

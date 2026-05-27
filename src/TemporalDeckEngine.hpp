@@ -404,6 +404,15 @@ struct TemporalDeckEngine {
            scratchLagSamples <= double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
   }
 
+  static bool isDeepLiveManualTouchMotion(bool sampleModeActive,
+                                          bool manualTouchScratch,
+                                          bool manualMotionActive,
+                                          double scratchLagSamples,
+                                          float sampleRate) {
+    return !sampleModeActive && manualTouchScratch && manualMotionActive &&
+           scratchLagSamples > double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
+  }
+
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
     CARTRIDGE_M44_7,
@@ -2514,8 +2523,8 @@ struct TemporalDeckEngine {
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool allowNowSnap = !manualTouchScratch;
           double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
-          bool deepLiveManualMotion =
-            !sampleModeActive && manualTouchScratch && manualMotionActive && !writeHeadCompensationActive;
+          bool deepLiveManualMotion = isDeepLiveManualTouchMotion(
+            sampleModeActive, manualTouchScratch, manualMotionActive, scratchLagSamples, sampleRate);
           // TD.Scope direct drags still need some target correction to avoid
           // steppy motion between gesture packets, but full correction deep in
           // the live buffer can feel like a forward pull toward stale targets.
