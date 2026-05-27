@@ -418,6 +418,17 @@ struct TemporalDeckEngine {
            scratchLagSamples > double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
   }
 
+  static bool shouldAllowManualTouchNowSnap(bool sampleModeActive,
+                                            bool scratchModelTreatsAsFreeze,
+                                            bool manualTouchScratch,
+                                            bool manualMotionActive,
+                                            float gestureDirection,
+                                            double scratchLagTargetSamples,
+                                            float nowSnapThresholdSamples) {
+    return !sampleModeActive && !scratchModelTreatsAsFreeze && manualTouchScratch && manualMotionActive &&
+           gestureDirection > 0.f && scratchLagTargetSamples <= nowSnapThresholdSamples;
+  }
+
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
     CARTRIDGE_M44_7,
@@ -2509,7 +2520,10 @@ struct TemporalDeckEngine {
             targetReadVelocity -= sampleRate;
           }
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
-          bool allowNowSnap = !manualTouchScratch;
+          bool touchForwardNearNow = shouldAllowManualTouchNowSnap(
+            sampleModeActive, scratchModelTreatsAsFreeze, manualTouchScratch, manualMotionActive, gestureDirection,
+            scratchLagTargetSamples, nowSnapThresholdSamples);
+          bool allowNowSnap = !manualTouchScratch || touchForwardNearNow;
           double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
           bool deepLiveManualMotion = isDeepLiveManualTouchMotion(
             sampleModeActive, manualTouchScratch, manualMotionActive, scratchLagSamples, sampleRate);

@@ -118,7 +118,6 @@ struct TDScopeDisplayWidget final : Widget {
   uint64_t liveBucketLastPublishSeq = 0;
   bool lagDragging = false;
   Vec lagDragCursorPos;
-  float lagDragAnchorCursorY = 0.f;
   float lagDragAnchorLagSamples = 0.f;
   float lagDragReferenceHeight = 1.f;
   float lagDragTravelSamples = 0.f;
@@ -277,7 +276,6 @@ struct TDScopeDisplayWidget final : Widget {
     }
     lagDragging = true;
     lagDragCursorPos = pos;
-    lagDragAnchorCursorY = pos.y;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
     float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
@@ -344,11 +342,9 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep this close to platter drag sensitivity so rapid short reversals
     // feel immediate instead of waiting on accumulated cursor motion.
     constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    // DragMoveEvent mouseDelta is reported in screen pixels, but the anchor
-    // cursor position and widget box size live in rack-local coordinates
-    // under ZoomWidget. Normalize delta back into local scope space so drag
-    // travel stays consistent across rack zoom levels.
-    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
+    // Keep pointer motion direct here; extra zoom scaling makes scope drags
+    // feel disconnected from cursor travel.
+    float localMouseDeltaY = e.mouseDelta.y;
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
@@ -361,6 +357,19 @@ struct TDScopeDisplayWidget final : Widget {
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (!sampleMode && !freezeActive && signedDeltaY < 0.f) {
+      // Scope-only near-NOW assist so the last ~1s can settle back to NOW
+      // without over-driving deeper buffer movement.
+      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
+      if (nearNowGateSamples > 0.f && lagDragLocalLagSamples < nearNowGateSamples) {
+        const float depthT = clamp(lagDragLocalLagSamples / nearNowGateSamples, 0.f, 1.f);
+        const float assistMul = 1.0f + (1.0f - depthT) * 0.5f;
+        signedDeltaY *= assistMul;
+        // While dragging toward NOW in the near-NOW window, gently cancel part
+        // of live write-head drift so this region doesn't feel uphill.
+        lagDragAnchorLagSamples -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * 0.33f;
+      }
+    }
     if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
       // CONTAINMENT NOTE
       // This is not architecturally "clean". Scope is compensating for live
@@ -2149,7 +2158,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragLastMoveSec = nowSec;
 
     constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
+    float localMouseDeltaY = e.mouseDelta.y;
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
@@ -2163,6 +2172,19 @@ struct TDScopeInputWidget final : Widget {
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
+    if (!sampleMode && !freezeActive && signedDeltaY < 0.f) {
+      // Scope-only near-NOW assist so the last ~1s can settle back to NOW
+      // without over-driving deeper buffer movement.
+      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
+      if (nearNowGateSamples > 0.f && lagDragLocalLagSamples < nearNowGateSamples) {
+        const float depthT = clamp(lagDragLocalLagSamples / nearNowGateSamples, 0.f, 1.f);
+        const float assistMul = 1.0f + (1.0f - depthT) * 0.5f;
+        signedDeltaY *= assistMul;
+        // While dragging toward NOW in the near-NOW window, gently cancel part
+        // of live write-head drift so this region doesn't feel uphill.
+        lagDragAnchorLagSamples -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * 0.33f;
+      }
+    }
     if (lagDragStationaryHoldActive) {
       ScopeWindowMap holdMap = buildScopeWindowMap(lastGoodMsg);
       lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, holdMap.accessibleLag);
