@@ -648,6 +648,7 @@ struct TDScopeDisplayWidget final : Widget {
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
     const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
     const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
+    const bool dragActive = module->uiLagDragActive.load(std::memory_order_relaxed);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
@@ -657,13 +658,14 @@ struct TDScopeDisplayWidget final : Widget {
         &autoScaleState,
         true,
         msgChanged || rangeModeChanged || !autoScaleState.initialized,
+        dragActive,
         sampleMode,
         liveStats.first,
         liveStats.second,
         displayFullScaleVolts);
     } else {
       displayFullScaleVolts = tdscope::updateScopeAutoScale(
-        &autoScaleState, false, false, true, 0.f, 0.f, displayFullScaleVolts);
+        &autoScaleState, false, false, dragActive, true, 0.f, 0.f, displayFullScaleVolts);
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float rackZoom = 1.f;

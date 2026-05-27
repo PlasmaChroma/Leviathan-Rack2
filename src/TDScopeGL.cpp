@@ -458,6 +458,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
     const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
     const bool verticalInversionChanged = cachedVerticalInverted != verticalInverted;
+    const bool dragActive = module->uiLagDragActive.load(std::memory_order_relaxed);
 
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
@@ -468,13 +469,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         &autoScaleState,
         true,
         msgChanged || rangeModeChanged || !autoScaleState.initialized,
+        dragActive,
         sampleMode,
         liveStats.first,
         liveStats.second,
         displayFullScaleVolts);
     } else {
       displayFullScaleVolts = tdscope::updateScopeAutoScale(
-        &autoScaleState, false, false, true, 0.f, 0.f, displayFullScaleVolts);
+        &autoScaleState, false, false, dragActive, true, 0.f, 0.f, displayFullScaleVolts);
     }
 
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;

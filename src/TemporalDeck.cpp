@@ -1304,6 +1304,28 @@ void TemporalDeck::process(const ProcessArgs &args) {
       if (lagDragRequestActive) {
         bool dragJustStarted = !impl->expanderLagDragWasActive;
         scopeTraceDragJustStarted = dragJustStarted;
+        auto applyScopeStationaryHold = [&](float lagTarget) {
+          // Scope is a direct-position surface, but switching from scratch
+          // motion into exact hold can visibly snap if the engine has not yet
+          // converged to the requested lag. Keep the hand in direct-hold mode
+          // while walking the held lag toward the target in small steps; that
+          // avoids both the snap and the "starts playing again" behavior that
+          // occurs if this briefly falls back into ordinary scratch motion.
+          float currentLag = float(impl->engine.currentLagFromNewest(impl->engine.newestReadablePos()));
+          if (!std::isfinite(currentLag) || currentLag < 0.f) {
+            currentLag = lagTarget;
+          }
+          float holdSnapThresholdSamples = std::max(args.sampleRate * 0.0025f, 24.f);
+          float heldLag = lagTarget;
+          if (std::fabs(currentLag - lagTarget) > holdSnapThresholdSamples) {
+            float holdSettleStepSamples = std::max(args.sampleRate * 0.010f, holdSnapThresholdSamples * 2.f);
+            float lagDelta = lagTarget - currentLag;
+            heldLag = currentLag + clamp(lagDelta, -holdSettleStepSamples, holdSettleStepSamples);
+          }
+          impl->platterInput.setTouchHold(true, heldLag);
+          impl->platterInput.setMotionFreshSamples(0);
+          scopeTraceVelocityApplied = 0.f;
+        };
         if (dragJustStarted) {
           // Scope touch-down should latch a stationary hold without creating
           // a fresh gesture that invokes write-head compensation motion.
@@ -1314,9 +1336,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // TD.Scope now reports explicit stationary-hold intent. Keep the
           // behavior decision here on the host side instead of inferring it
           // from stale velocity or request timing.
-          impl->platterInput.setTouchHold(true, lagTarget);
-          impl->platterInput.setMotionFreshSamples(0);
-          scopeTraceVelocityApplied = 0.f;
+          applyScopeStationaryHold(lagTarget);
         } else {
           float velocitySamples = 0.f;
           int frames = std::max(1, impl->expanderLagDragFramesSinceUpdate);
@@ -1325,13 +1345,21 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // incoming scope velocity before blending.
           // positive velocity => toward NOW (decreasing lag).
           float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
+          velocitySamples = derivedVelocity;
           if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
-            // Scope drag should feel equivalent to direct platter motion:
-            // trust scope-provided gesture velocity when available so
-            // reversals are immediate instead of inertia-smoothed by host.
-            velocitySamples = lagDragRequestVelocity;
-          } else {
-            velocitySamples = derivedVelocity;
+            // Keep scope as a thin interface: lag target remains authoritative
+            // and scope-reported velocity is only advisory. Preserve immediate
+            // reversals from the scope path, but otherwise let host-derived
+            // target motion define the gesture velocity that the engine sees.
+            bool derivedHasDirection = std::fabs(derivedVelocity) > 1e-3f;
+            bool requestHasDirection = std::fabs(lagDragRequestVelocity) > 1e-3f;
+            bool directionDisagrees =
+              derivedHasDirection && requestHasDirection && ((derivedVelocity > 0.f) != (lagDragRequestVelocity > 0.f));
+            if (!derivedHasDirection || directionDisagrees) {
+              velocitySamples = lagDragRequestVelocity;
+            } else {
+              velocitySamples = 0.75f * derivedVelocity + 0.25f * lagDragRequestVelocity;
+            }
           }
           // Safety clamp: Scope is an external input path, so guard against
           // sender-side timing spikes producing unrealistic multi-turn motion.

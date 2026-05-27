@@ -362,6 +362,7 @@ struct TemporalDeckEngine {
   static constexpr float kReverseBiteMaxBoost = 1.55f;
   static constexpr float kNowSnapThresholdMs = 33.0f;
   static constexpr float kNowCatchTime = 0.004f;
+  static constexpr float kLiveManualWriteHeadCompensationWindowSec = 1.0f;
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
   static constexpr float kManualVelocityPredictScale = 0.95f;
@@ -390,6 +391,18 @@ struct TemporalDeckEngine {
   static constexpr float kNominalPlatterRpm = 33.333333f;
   static constexpr float kLofiModControlRateHz = 3000.f;
   static constexpr int kLiveScopeEnvelopeBlockSamples = 32;
+
+  static bool shouldApplyLiveManualWriteHeadCompensation(bool sampleModeActive,
+                                                         bool freezeForScratchModel,
+                                                         bool hasFreshPlatterGesture,
+                                                         bool platterMotionActive,
+                                                         double scratchLagSamples,
+                                                         float sampleRate) {
+    return !sampleModeActive &&
+           platter_interaction::shouldApplyWriteHeadCompensation(freezeForScratchModel, hasFreshPlatterGesture,
+                                                                 platterMotionActive) &&
+           scratchLagSamples <= double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
+  }
 
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
@@ -2445,13 +2458,18 @@ struct TemporalDeckEngine {
         } else {
           bool manualMotionActive = platter_interaction::hasActiveManualMotion(hasFreshPlatterGesture, platterMotionActive);
           float targetReadVelocity = 0.f;
+          bool writeHeadCompensationActive = false;
           if (manualMotionActive) {
             // While motion is fresh, gesture velocity is relative to the write
             // head. Convert it into absolute read velocity by adding the write
-            // baseline (except in freeze, where write head is stationary).
+            // baseline near NOW (except in freeze, where write head is
+            // stationary). Deeper in the live buffer, do not add this hidden
+            // forward assist; it makes backward/deeper drags feel resistant.
             targetReadVelocity = platterGestureVelocity;
-            if (platter_interaction::shouldApplyWriteHeadCompensation(freezeForScratchModel, hasFreshPlatterGesture,
-                                                                      platterMotionActive)) {
+            writeHeadCompensationActive = shouldApplyLiveManualWriteHeadCompensation(
+              sampleModeActive, freezeForScratchModel, hasFreshPlatterGesture, platterMotionActive, scratchLagSamples,
+              sampleRate);
+            if (writeHeadCompensationActive) {
               targetReadVelocity += sampleRate;
             }
           }
@@ -2486,17 +2504,25 @@ struct TemporalDeckEngine {
             // platter velocity avoids sign flips caused by write compensation.
             reverseGestureIntent = true;
           }
-          if (!sampleModeActive && !freezeForScratchModel && reverseGestureIntent) {
+          if (!sampleModeActive && !freezeForScratchModel && reverseGestureIntent && writeHeadCompensationActive) {
             // In live touch scratch, reverse gestures should not need to
             // overcome write-head baseline speed before audible/visual motion
-            // appears. Keep compensation for forward motion only.
+            // appears. Cancel only the near-NOW baseline that was actually
+            // added above.
             targetReadVelocity -= sampleRate;
           }
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool allowNowSnap = !manualTouchScratch;
           double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
+          bool deepLiveManualMotion =
+            !sampleModeActive && manualTouchScratch && manualMotionActive && !writeHeadCompensationActive;
+          // TD.Scope direct drags still need some target correction to avoid
+          // steppy motion between gesture packets, but full correction deep in
+          // the live buffer can feel like a forward pull toward stale targets.
+          float correctionScale = deepLiveManualMotion ? 0.33f : 0.68f;
           integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
-                                 0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples, false, allowNowSnap);
+                                 0.72f - 0.12f * motionNorm, correctionScale, nowSnapThresholdSamples, false,
+                                 allowNowSnap);
           if (!sampleModeActive && manualMotionActive && gestureDirection != 0.f) {
             double postIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
             double deltaRead = postIntegrateReadHead - preIntegrateReadHead;

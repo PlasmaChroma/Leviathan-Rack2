@@ -1,5 +1,4 @@
 #include "../src/TemporalDeckEngine.hpp"
-
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -385,6 +384,21 @@ TestResult testLiveTouchDirectionalCompensationBalance() {
             " imbalance=" + std::to_string(imbalance)};
 }
 
+TestResult testLiveTouchWriteHeadCompensationPolicyOnlyNearNow() {
+  const float sr = 48000.f;
+  bool near = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr, sr);
+  bool deep = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr + 1.0, sr);
+  bool sampleMode = Engine::shouldApplyLiveManualWriteHeadCompensation(true, false, true, true, sr * 0.5, sr);
+  bool freeze = Engine::shouldApplyLiveManualWriteHeadCompensation(false, true, true, true, sr * 0.5, sr);
+  bool idle = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, false, sr * 0.5, sr);
+
+  bool pass = near && !deep && !sampleMode && !freeze && !idle;
+  return {"Live touch write-head compensation policy is near-NOW only", pass,
+          "near=" + std::to_string(int(near)) + " deep=" + std::to_string(int(deep)) +
+            " sampleMode=" + std::to_string(int(sampleMode)) + " freeze=" + std::to_string(int(freeze)) +
+            " idle=" + std::to_string(int(idle))};
+}
+
 TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
   const float sr = 1000.f;
   Engine engine;
@@ -482,6 +496,7 @@ int main() {
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
   tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
   tests.push_back(testLiveTouchDirectionalCompensationBalance());
+  tests.push_back(testLiveTouchWriteHeadCompensationPolicyOnlyNearNow());
   tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
   tests.push_back(testSincLutMatchesDirectWindowedSincReference());
   tests.push_back(testSampleBoundedSincLutMatchesDirectReference());

@@ -134,6 +134,7 @@ inline std::pair<float, float> computeScopePeakStatsFromBins(const temporaldeck_
 inline float updateScopeAutoScale(ScopeAutoScaleState* state,
                                   bool autoRangeEnabled,
                                   bool stateTickNeeded,
+                                  bool dragActive,
                                   bool sampleMode,
                                   float windowPeakVolts,
                                   float p99Volts,
@@ -187,7 +188,11 @@ inline float updateScopeAutoScale(ScopeAutoScaleState* state,
       if (std::fabs(delta) > 0.01f) {
         const float kAutoScaleAttackAlpha = 0.08f;
         const float kAutoScaleReleaseAlpha = 0.008f;
-        const float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
+        const float kAutoScaleAttackAlphaDrag = 0.033f;
+        const float kAutoScaleReleaseAlphaDrag = 0.0033f;
+        const float alpha = delta > 0.f
+                              ? (dragActive ? kAutoScaleAttackAlphaDrag : kAutoScaleAttackAlpha)
+                              : (dragActive ? kAutoScaleReleaseAlphaDrag : kAutoScaleReleaseAlpha);
         state->displayFullScaleVolts += delta * alpha;
       }
     }
