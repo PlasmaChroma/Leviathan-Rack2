@@ -3015,7 +3015,11 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
                                                           TemporalDeck::kMouseScratchTravelScale,
                                                           TemporalDeck::kNominalPlatterRpm);
   if (!freezeLikeDrag) {
-    localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+    float rebasedLag = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+    // Deep in the buffer, taper (do not remove) UI-side live-lag rebasing so
+    // platter motion keeps backward authority without over-eager forward catch-up.
+    float rebaseStrength = platter_interaction::liveUiRebaseStrength(liveLag, module->getUiSampleRate());
+    localLagSamples = crossfade(localLagSamples, rebasedLag, rebaseStrength);
   }
   int substeps = clamp(1 + int(std::round(lowFpsComp * 6.f)), 1, 7);
   float lagDeltaStep = lagDelta / float(substeps);

@@ -533,13 +533,11 @@ struct TemporalDeckEngine {
   double scratchLagSamples = 0.0;
   double scratchLagTargetSamples = 0.0;
   double liveManualScratchAnchorNewestPos = 0.0;
-  double liveManualScratchAnchorLagSamples = 0.0;
   float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
   float scratch3LagVelocity = 0.f;
   float scratch3GestureAgeSec = 0.f;
   float scratchWheelVelocityBurst = 0.f;
-  double filteredManualLagTargetSamples = 0.0;
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
   bool platterTouchHoldLatched = false;
@@ -780,13 +778,11 @@ struct TemporalDeckEngine {
     scratchLagSamples = 0.f;
     scratchLagTargetSamples = 0.f;
     liveManualScratchAnchorNewestPos = 0.0;
-    liveManualScratchAnchorLagSamples = 0.0;
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratch3LagVelocity = 0.f;
     scratch3GestureAgeSec = 0.f;
     scratchWheelVelocityBurst = 0.f;
-    filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
     lastPlatterGestureRevision = 0;
     platterTouchHoldLatched = false;
@@ -2238,12 +2234,10 @@ struct TemporalDeckEngine {
     if (!wasScratchActive && anyScratch) {
       scratchLagSamples = currentLagFromNewest(newestPos);
       scratchLagTargetSamples = scratchLagSamples;
-      filteredManualLagTargetSamples = scratchLagSamples;
       lastPlatterLagTarget = platterLagTarget;
       lastPlatterGestureRevision = platterGestureRevision;
       if (!sampleModeActive && manualTouchScratch) {
         liveManualScratchAnchorNewestPos = newestPos;
-        liveManualScratchAnchorLagSamples = scratchLagSamples;
       }
       if (sampleModeActive) {
         sampleSlipAnchorPos = normalizeSamplePosition(readHead, sampleWindowEndPos);
