@@ -357,19 +357,6 @@ struct TDScopeDisplayWidget final : Widget {
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && signedDeltaY < 0.f) {
-      // Scope-only near-NOW assist so the last ~1s can settle back to NOW
-      // without over-driving deeper buffer movement.
-      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
-      if (nearNowGateSamples > 0.f && lagDragLocalLagSamples < nearNowGateSamples) {
-        const float depthT = clamp(lagDragLocalLagSamples / nearNowGateSamples, 0.f, 1.f);
-        const float assistMul = 1.0f + (1.0f - depthT) * 0.5f;
-        signedDeltaY *= assistMul;
-        // While dragging toward NOW in the near-NOW window, gently cancel part
-        // of live write-head drift so this region doesn't feel uphill.
-        lagDragAnchorLagSamples -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * 0.33f;
-      }
-    }
     if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
       // CONTAINMENT NOTE
       // This is not architecturally "clean". Scope is compensating for live
@@ -398,6 +385,14 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep scope drag in normalized local travel space so behavior is tied to
     // the visible scope window rather than raw rendered pixel density.
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
+    if (!sampleMode && !freezeActive) {
+      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
+      if (nearNowGateSamples > 0.f && previousLag < nearNowGateSamples && desiredPlaybackLag < previousLag) {
+        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
+        const float towardNowBoost = (1.0f - depthT) * 1.6f;
+        desiredPlaybackLag -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * towardNowBoost;
+      }
+    }
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     // CONTAINMENT NOTE
@@ -2172,19 +2167,6 @@ struct TDScopeInputWidget final : Widget {
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
     bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && signedDeltaY < 0.f) {
-      // Scope-only near-NOW assist so the last ~1s can settle back to NOW
-      // without over-driving deeper buffer movement.
-      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
-      if (nearNowGateSamples > 0.f && lagDragLocalLagSamples < nearNowGateSamples) {
-        const float depthT = clamp(lagDragLocalLagSamples / nearNowGateSamples, 0.f, 1.f);
-        const float assistMul = 1.0f + (1.0f - depthT) * 0.5f;
-        signedDeltaY *= assistMul;
-        // While dragging toward NOW in the near-NOW window, gently cancel part
-        // of live write-head drift so this region doesn't feel uphill.
-        lagDragAnchorLagSamples -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * 0.33f;
-      }
-    }
     if (lagDragStationaryHoldActive) {
       ScopeWindowMap holdMap = buildScopeWindowMap(lastGoodMsg);
       lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, holdMap.accessibleLag);
@@ -2204,6 +2186,14 @@ struct TDScopeInputWidget final : Widget {
 
     float previousLag = lagDragLocalLagSamples;
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
+    if (!sampleMode && !freezeActive) {
+      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
+      if (nearNowGateSamples > 0.f && previousLag < nearNowGateSamples && desiredPlaybackLag < previousLag) {
+        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
+        const float towardNowBoost = (1.0f - depthT) * 1.6f;
+        desiredPlaybackLag -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * towardNowBoost;
+      }
+    }
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
