@@ -429,6 +429,28 @@ struct TemporalDeckEngine {
            gestureDirection > 0.f && scratchLagTargetSamples <= nowSnapThresholdSamples;
   }
 
+  static float liveManualTowardNowAssistSamplesPerSec(bool sampleModeActive,
+                                                      bool scratchModelTreatsAsFreeze,
+                                                      bool manualTouchScratch,
+                                                      bool manualMotionActive,
+                                                      float gestureDirection,
+                                                      double scratchLagSamples,
+                                                      float sampleRate) {
+    if (sampleModeActive || scratchModelTreatsAsFreeze || !manualTouchScratch || !manualMotionActive ||
+        gestureDirection <= 0.f) {
+      return 0.f;
+    }
+    const float liveDriftCancel = std::max(sampleRate, 1.f) * 0.55f;
+    const float nearNowWindowSamples = std::max(sampleRate, 1.f);
+    if (scratchLagSamples >= double(nearNowWindowSamples)) {
+      return liveDriftCancel;
+    }
+    const float depthT = clamp(float(scratchLagSamples) / nearNowWindowSamples, 0.f, 1.f);
+    // Keep this gentle and depth-tapered so it helps final settle near NOW
+    // without changing deep-buffer drag character beyond drift cancellation.
+    return liveDriftCancel + sampleRate * (1.0f - depthT) * 0.85f;
+  }
+
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
     CARTRIDGE_M44_7,
@@ -2519,6 +2541,9 @@ struct TemporalDeckEngine {
             // added above.
             targetReadVelocity -= sampleRate;
           }
+          targetReadVelocity += liveManualTowardNowAssistSamplesPerSec(
+            sampleModeActive, scratchModelTreatsAsFreeze, manualTouchScratch, manualMotionActive, gestureDirection,
+            scratchLagSamples, sampleRate);
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
           bool touchForwardNearNow = shouldAllowManualTouchNowSnap(
             sampleModeActive, scratchModelTreatsAsFreeze, manualTouchScratch, manualMotionActive, gestureDirection,

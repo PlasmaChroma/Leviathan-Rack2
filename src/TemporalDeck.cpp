@@ -1382,11 +1382,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
           velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
           scopeTraceVelocityApplied = velocitySamples;
           impl->platterInput.setScratch(true, lagTarget, velocitySamples);
-          int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 2.0f));
-          // Scope packets arrive discretely; keep gesture freshness alive a bit
-          // longer so live near-NOW touch paths match platter continuity.
-          int minHoldSamples = int(std::round(args.sampleRate * 0.045f));
-          int maxHoldSamples = int(std::round(args.sampleRate * 0.120f));
+          int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
+          int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
+          int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
           motionFreshSamples = clamp(motionFreshSamples, minHoldSamples, maxHoldSamples);
           impl->platterInput.setMotionFreshSamples(motionFreshSamples);
         }

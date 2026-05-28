@@ -342,9 +342,10 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep this close to platter drag sensitivity so rapid short reversals
     // feel immediate instead of waiting on accumulated cursor motion.
     constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    // Keep pointer motion direct here; extra zoom scaling makes scope drags
-    // feel disconnected from cursor travel.
-    float localMouseDeltaY = e.mouseDelta.y;
+    // DragMove has no local position, and Rack event recursion does not
+    // localize mouseDelta. Convert screen/rack-scroll pixels into scope-local
+    // pixels before normalizing by the visible widget height.
+    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
@@ -385,14 +386,6 @@ struct TDScopeDisplayWidget final : Widget {
     // Keep scope drag in normalized local travel space so behavior is tied to
     // the visible scope window rather than raw rendered pixel density.
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    if (!sampleMode && !freezeActive) {
-      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
-      if (nearNowGateSamples > 0.f && previousLag < nearNowGateSamples && desiredPlaybackLag < previousLag) {
-        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
-        const float towardNowBoost = (1.0f - depthT) * 1.6f;
-        desiredPlaybackLag -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * towardNowBoost;
-      }
-    }
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     // CONTAINMENT NOTE
@@ -2153,7 +2146,10 @@ struct TDScopeInputWidget final : Widget {
     lagDragLastMoveSec = nowSec;
 
     constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    float localMouseDeltaY = e.mouseDelta.y;
+    // DragMove has no local position, and Rack event recursion does not
+    // localize mouseDelta. Convert screen/rack-scroll pixels into scope-local
+    // pixels before normalizing by the visible widget height.
+    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
       module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
@@ -2186,14 +2182,6 @@ struct TDScopeInputWidget final : Widget {
 
     float previousLag = lagDragLocalLagSamples;
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    if (!sampleMode && !freezeActive) {
-      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
-      if (nearNowGateSamples > 0.f && previousLag < nearNowGateSamples && desiredPlaybackLag < previousLag) {
-        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
-        const float towardNowBoost = (1.0f - depthT) * 1.6f;
-        desiredPlaybackLag -= std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec) * towardNowBoost;
-      }
-    }
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
