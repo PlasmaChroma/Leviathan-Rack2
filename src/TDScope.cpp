@@ -2013,6 +2013,15 @@ struct TDScopeInputWidget final : Widget {
 
     float previousLag = lagDragLocalLagSamples;
     float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
+    if (!sampleMode && !freezeActive) {
+      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
+      if (previousLag < nearNowGateSamples && signedDeltaY < 0.f) {
+        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
+        const float nearNowT = 1.f - depthT;
+        const float towardNowBoost = 0.25f + nearNowT * nearNowT * 2.4f;
+        desiredPlaybackLag -= nearNowGateSamples * float(dtSec) * towardNowBoost;
+      }
+    }
     bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
     bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
     lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
