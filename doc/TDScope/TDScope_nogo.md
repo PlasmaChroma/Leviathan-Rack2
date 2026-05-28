@@ -4,6 +4,21 @@ Current decision: **No, TD.Scope is not ready to release.**
 
 The module is compiling at the object level and the fast test suite passes, but the current release risk is behavioral and architectural rather than a basic build failure. The Live-mode drag interaction is still not settled enough for a first public release, and the drag code still has duplicated paths that make future tuning harder than it needs to be.
 
+## Progress Status
+
+Completed since this review was written:
+
+- Removed legacy lag-drag handling from `TDScopeDisplayWidget`.
+- `TDScopeInputWidget` is now the only drag interaction path.
+- Added coherent UI->process lag-drag snapshot sequencing in `TDScope::setLagDragRequest()` / `TDScope::process()` to reduce mixed-field request reads.
+
+Still open for release:
+
+- Final Live non-freeze drag policy tuning and ownership split (Scope vs Temporal Deck/shared helper).
+- Renderer fallback product decision for non-debug users.
+- GL field shader failure cleanup/retry hygiene.
+- Focused TD.Scope tests covering drag and request behavior.
+
 ## Implementation Notes for Follow-Up Work
 
 These details matter if this review is handed to a smaller model or split into implementation tasks.
@@ -169,29 +184,19 @@ Release should wait until Live-mode Scope drags feel consistently acceptable in 
 - dragging while still holding the mouse down after movement slows or stops
 - comparing equivalent Scope and platter movements
 
-### 2. Scope Has Two Separate Drag Implementations
+### 2. Scope Has Two Separate Drag Implementations (**Completed**)
 
-There are currently two drag models in `src/TDScope.cpp`:
+This was true when the review started, but has now been addressed.
 
-- `TDScopeDisplayWidget`
-- `TDScopeInputWidget`
+- `TDScopeInputWidget` is now the authoritative and only drag interaction path.
 
-The normal widget stack places `TDScopeInputWidget` above the display widgets, so it is probably the active pointer-event path in normal use. However, the older display-widget drag path still exists and differs from the input-widget path.
-
-Key differences:
-
-- the display-widget path does not refresh the expander snapshot on every drag move
-- the display-widget path does not implement the newer stationary-hold behavior
-- the display-widget path has its own Live compensation logic
-- the input-widget path has the current rack-zoom pixel correction
-
-This is a release risk because the next person editing the drag behavior can easily fix one path and miss the other. Before release, Scope should have one drag implementation, or both widgets should call shared drag-solving helpers with no duplicated policy.
+The duplicate display-widget drag state and handlers were removed after manual parity testing.
 
 ## High-Value Cleanup Before Release
 
-### 3. Drag Request Publication Is Not a Coherent Snapshot
+### 3. Drag Request Publication Is Not a Coherent Snapshot (**Completed**)
 
-`TDScope::setLagDragRequest()` writes the drag request across several independent atomics:
+This was true when the review started. The handoff now uses a sequence-guarded snapshot so process-side reads can detect in-flight writes and retry.
 
 - active flag
 - stationary-hold flag
@@ -200,13 +205,7 @@ This is a release risk because the next person editing the drag behavior can eas
 
 `TDScope::process()` reads those fields separately when publishing the expander request to Temporal Deck.
 
-This can produce mixed-frame requests, for example:
-
-- new active flag with old lag samples
-- new lag samples with old velocity
-- stationary-hold state from a different UI event
-
-This is probably rare, but drag feel is sensitive to small discontinuities. A release-ready request path should publish one coherent request snapshot, ideally with a sequence number or small lock-free double-buffer pattern.
+The request fields are still atomics, but are now published/read under a coherent sequencing contract.
 
 ### 4. Scope Still Owns Too Much Live Drag Policy
 
@@ -272,12 +271,10 @@ This repo is being reviewed from a WSL-like environment, so final Windows/MSYS2 
 
 TD.Scope should become a release candidate only after:
 
-1. Scope has a single drag implementation or shared drag helper path.
-2. Live-mode drag compensation is owned by Temporal Deck or a shared interaction helper, not duplicated inside Scope.
-3. Drag requests are published as coherent snapshots.
-4. The renderer fallback decision is made deliberately.
-5. The shader failure path is cleaned up.
-6. Focused TD.Scope fast tests cover the drag/request behavior.
-7. Manual validation confirms Scope and platter drags feel consistent enough in Live mode.
+1. Live-mode drag compensation is owned by Temporal Deck or a shared interaction helper, not duplicated inside Scope.
+2. The renderer fallback decision is made deliberately.
+3. The shader failure path is cleaned up.
+4. Focused TD.Scope fast tests cover the drag/request behavior.
+5. Manual validation confirms Scope and platter drags feel consistent enough in Live mode.
 
 Until then, the release answer is **no-go**.

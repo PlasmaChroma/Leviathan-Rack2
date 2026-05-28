@@ -98,6 +98,7 @@ struct TDScope final : Module {
   std::atomic<bool> uiLagDragStationaryHold {false};
   std::atomic<float> uiLagDragSamples {0.f};
   std::atomic<float> uiLagDragVelocity {0.f};
+  std::atomic<uint32_t> uiLagDragSeq {0u};
 
   static constexpr float kUiPublishIntervalSec = 1.f / 90.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
@@ -357,10 +358,13 @@ struct TDScope final : Module {
   }
 
   void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f, bool stationaryHold = false) {
+    // Publish drag request as a coherent snapshot for process-thread reads.
+    uiLagDragSeq.fetch_add(1u, std::memory_order_release); // begin write (odd)
     uiLagDragActive.store(active, std::memory_order_relaxed);
     uiLagDragStationaryHold.store(active && stationaryHold, std::memory_order_relaxed);
     uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
     uiLagDragVelocity.store(velocity, std::memory_order_relaxed);
+    uiLagDragSeq.fetch_add(1u, std::memory_order_release); // end write (even)
   }
 
   void process(const ProcessArgs &args) override {
@@ -415,10 +419,39 @@ struct TDScope final : Module {
       uint32_t requestedScopeFormat = (scopeChannelMode == SCOPE_CHANNEL_STEREO)
                                         ? temporaldeck_expander::SCOPE_FORMAT_STEREO
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
-      bool lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
-      bool lagDragStationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
-      float lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
-      float lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
+      bool lagDragActive = false;
+      bool lagDragStationaryHold = false;
+      float lagDragSamples = 0.f;
+      float lagDragVelocity = 0.f;
+      bool lagDragSnapshotRead = false;
+      // Bounded retries keep read cheap while avoiding mixed-frame field reads.
+      for (int i = 0; i < 3; ++i) {
+        uint32_t seq0 = uiLagDragSeq.load(std::memory_order_acquire);
+        if ((seq0 & 1u) != 0u) {
+          continue;
+        }
+        bool active = uiLagDragActive.load(std::memory_order_relaxed);
+        bool stationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
+        float samples = uiLagDragSamples.load(std::memory_order_relaxed);
+        float velocity = uiLagDragVelocity.load(std::memory_order_relaxed);
+        uint32_t seq1 = uiLagDragSeq.load(std::memory_order_acquire);
+        if (seq0 == seq1 && (seq1 & 1u) == 0u) {
+          lagDragActive = active;
+          lagDragStationaryHold = stationaryHold;
+          lagDragSamples = samples;
+          lagDragVelocity = velocity;
+          lagDragSnapshotRead = true;
+          break;
+        }
+      }
+      // Fallback preserves prior behavior if write contention prevents a stable
+      // sequence snapshot in this sample.
+      if (!lagDragSnapshotRead) {
+        lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
+        lagDragStationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
+        lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
+        lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
+      }
       if (!std::isfinite(lagDragSamples) || lagDragSamples < 0.f) {
         lagDragSamples = 0.f;
       }
