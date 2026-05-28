@@ -254,8 +254,8 @@ inline void collectCapturesRecursive(
 	int originIndex,
 	int currentIndex,
 	int currentPiece,
-	std::vector<int> path,
-	std::vector<int> captured,
+	std::vector<int>& path,
+	std::vector<int>& captured,
 	std::vector<Move>* outMoves
 ) {
 	if (!outMoves) {
@@ -291,25 +291,25 @@ inline void collectCapturesRecursive(
 			}
 			nextBoard[size_t(destIndex)] = movedPiece;
 
-			std::vector<int> nextPath = path;
-			nextPath.push_back(destIndex);
-			std::vector<int> nextCaptured = captured;
-			nextCaptured.push_back(jumpedIndex);
+			path.push_back(destIndex);
+			captured.push_back(jumpedIndex);
 
 			if (promoted) {
 				Move move;
 				move.originIndex = originIndex;
 				move.destinationIndex = destIndex;
-				move.path = nextPath;
-				move.captured = nextCaptured;
+				move.path = path;
+				move.captured = captured;
 				move.isCapture = true;
-				move.isMultiCapture = nextCaptured.size() > 1;
+				move.isMultiCapture = captured.size() > 1;
 				move.isKing = true;
 				outMoves->push_back(move);
 			}
 			else {
-				collectCapturesRecursive(nextBoard, originIndex, destIndex, movedPiece, nextPath, nextCaptured, outMoves);
+				collectCapturesRecursive(nextBoard, originIndex, destIndex, movedPiece, path, captured, outMoves);
 			}
+			captured.pop_back();
+			path.pop_back();
 		}
 	}
 
@@ -335,7 +335,9 @@ inline std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard
 		if (piece == 0 || pieceSide(piece) != side) {
 			continue;
 		}
-		collectCapturesRecursive(sourceBoard, i, i, piece, {}, {}, &captures);
+		std::vector<int> path;
+		std::vector<int> captured;
+		collectCapturesRecursive(sourceBoard, i, i, piece, path, captured, &captures);
 	}
 	if (!captures.empty()) {
 		return captures;
