@@ -116,15 +116,6 @@ struct TDScopeDisplayWidget final : Widget {
   int liveBucketCount = 0;
   float liveBucketSpanSamples = 0.f;
   uint64_t liveBucketLastPublishSeq = 0;
-  bool lagDragging = false;
-  Vec lagDragCursorPos;
-  float lagDragAnchorLagSamples = 0.f;
-  float lagDragReferenceHeight = 1.f;
-  float lagDragTravelSamples = 0.f;
-  float lagDragNormalizedOffset = 0.f;
-  float lagDragLocalLagSamples = 0.f;
-  float lagDragResidualY = 0.f;
-  double lagDragLastMoveSec = 0.0;
   uint64_t redrawLastPublishSeq = 0;
   bool redrawHasFreshFrame = false;
   bool redrawLastLinkActive = false;
@@ -168,13 +159,6 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     resetTailRasterImage(nullptr, false);
-  }
-
-  bool isWithinDisplay(Vec pos) const {
-    return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
-  }
-  bool isPhysicallyAttachedToTemporalDeck() const {
-    return module && tdscope::isTemporalDeckModule(module->leftExpander.module);
   }
 
   struct ScopeWindowMap {
@@ -264,159 +248,6 @@ struct TDScopeDisplayWidget final : Widget {
       nvgStrokeWidth(vg, 0.5f);
       nvgStroke(vg);
     }
-  }
-
-  bool beginLagDragAt(Vec pos) {
-    if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
-      return false;
-    }
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      return false;
-    }
-    lagDragging = true;
-    lagDragCursorPos = pos;
-    lagDragResidualY = 0.f;
-    lagDragLastMoveSec = system::getTime();
-    float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    lagDragAnchorLagSamples = anchorLagSamples;
-    lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
-    lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
-    lagDragNormalizedOffset = 0.f;
-    lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
-    return true;
-  }
-
-  void endLagDrag() {
-    lagDragging = false;
-    lagDragResidualY = 0.f;
-    lagDragReferenceHeight = 1.f;
-    lagDragTravelSamples = 0.f;
-    lagDragNormalizedOffset = 0.f;
-    if (module) {
-      module->setLagDragRequest(false, 0.f);
-    }
-  }
-
-  void onButton(const event::Button &e) override {
-    if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
-      if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        if (!isPhysicallyAttachedToTemporalDeck()) {
-          Widget::onButton(e);
-          return;
-        }
-        if (beginLagDragAt(e.pos)) {
-          e.consume(this);
-        }
-        return;
-      }
-      if (e.action == GLFW_RELEASE && lagDragging) {
-        endLagDrag();
-        e.consume(this);
-        return;
-      }
-    }
-    Widget::onButton(e);
-  }
-
-  void onDragStart(const event::DragStart &e) override {
-    Widget::onDragStart(e);
-  }
-
-  void onDragMove(const event::DragMove &e) override {
-    if (!lagDragging || e.button != GLFW_MOUSE_BUTTON_LEFT || !module || !hasLastGoodMsg) {
-      Widget::onDragMove(e);
-      return;
-    }
-    double nowSec = system::getTime();
-    // Match platter gesture timing bounds to avoid tiny-dt velocity spikes
-    // that can over-drive scratch motion.
-    constexpr double kMinGestureDtSec = 1.0 / 240.0;
-    constexpr double kMaxGestureDtSec = 1.0 / 20.0;
-    double dtSec = std::max(kMinGestureDtSec, std::min(kMaxGestureDtSec, nowSec - lagDragLastMoveSec));
-    lagDragLastMoveSec = nowSec;
-
-    // Full-window time mapping is intentionally high resolution; suppress
-    // tiny hand jitter so stationary holds stay truly pinned.
-    // Keep this close to platter drag sensitivity so rapid short reversals
-    // feel immediate instead of waiting on accumulated cursor motion.
-    constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    // DragMove has no local position, and Rack event recursion does not
-    // localize mouseDelta. Convert screen/rack-scroll pixels into scope-local
-    // pixels before normalizing by the visible widget height.
-    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
-    lagDragResidualY += localMouseDeltaY;
-    if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
-      e.consume(this);
-      return;
-    }
-    float appliedDeltaY = lagDragResidualY;
-    lagDragResidualY = 0.f;
-    float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
-    float signedDeltaY = appliedDeltaY * lagDragDirection;
-    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
-      // CONTAINMENT NOTE
-      // This is not architecturally "clean". Scope is compensating for live
-      // write-head advance here because, without it, slow downward drags in
-      // live mode can fall behind the moving lag reference and feel like they
-      // hit a false barrier. The matching trace that exposed this looked like:
-      // target lag going stale while frame lag kept advancing.
-      //
-      // This compensation is intentionally one-sided. Applying it during
-      // upward drags created visible/audible stutter because it fought reversal
-      // intent. If future work removes or moves this logic, re-test both:
-      // 1. slow downward live drags for the "barrier" symptom
-      // 2. upward drags for reversal stutter
-      // In live mode, compensate write-head advance only while dragging away
-      // from NOW (downward). Applying this during upward drags can feel like
-      // stutter because compensation fights reversal intent.
-      lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
-    }
-    lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      return;
-    }
-
-    float previousLag = lagDragLocalLagSamples;
-    // Keep scope drag in normalized local travel space so behavior is tied to
-    // the visible scope window rather than raw rendered pixel density.
-    float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
-    bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    // CONTAINMENT NOTE
-    // solveLagDragPlaybackLag() preserves the existing live-mode dynamic
-    // headroom behavior and sample-loop wrapping behavior.
-    lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
-      desiredPlaybackLag,
-      sampleMode,
-      sampleLoaded,
-      sampleLoop,
-      freezeActive,
-      map.accessibleLag,
-      lastGoodMsgTimeSec,
-      nowSec,
-      lastGoodMsg.sampleRate);
-    // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
-    // positive velocity means toward NOW (lag decreasing), hence
-    // (previousLag - currentLag) / dt.
-    float velocitySamples = tdscope::computeLagDragVelocity(
-      previousLag, lagDragLocalLagSamples, dtSec, lastGoodMsg.sampleRate);
-    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
-    e.consume(this);
-  }
-
-  void onDragEnd(const event::DragEnd &e) override {
-    if (lagDragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-      endLagDrag();
-      e.consume(this);
-      return;
-    }
-    Widget::onDragEnd(e);
   }
 
   void step() override {
