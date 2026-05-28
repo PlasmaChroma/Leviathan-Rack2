@@ -13,6 +13,32 @@ The findings below are grouped by severity.
 
 ---
 
+## Implementation Brief for Follow-Up Agent
+
+Treat this review as an implementation queue, not just commentary. The highest-value pass is:
+
+1. Fix JSON restoration for `stepCounterStyle`.
+2. Fix duplicate diagonal board-value layouts in both checkers/shared code and chess-specific code.
+3. Remove recursive re-locking from `emitStepAtClockEdge()` and nearby locked playback paths where practical.
+4. Add focused regression tests for the first two fixes.
+5. Apply small low-risk cleanups only after the behavioral fixes are covered.
+
+Do not add or reorder module params/inputs/outputs/lights casually. Crownstep already has compatibility
+reservations (`RUN_PARAM`, `RUN_LIGHT`), and changing enum order can break existing patches. If adding a
+`GATE_OUTPUT`, treat it as a product/API decision, not a drive-by cleanup.
+
+Useful validation commands in this repo:
+
+```sh
+make test-fast
+make -j4 build/src/CrownstepModule.cpp.o build/src/CrownstepPlayback.cpp.o build/src/CrownstepSerialization.cpp.o build/src/CrownstepUI.cpp.o
+```
+
+If full plugin linking fails in this environment, do not assume it is caused by Crownstep. Object-level
+builds plus `make test-fast` are the useful local checks here.
+
+---
+
 ## Bugs
 
 ### 1. `stepCounterStyle` Is Never Restored from JSON
@@ -34,6 +60,25 @@ save/load round-trip. The correct line:
 stepCounterStyle = clamp(int(json_integer_value(stepCounterStyleJ)), 0, STEP_COUNTER_STYLE_COUNT - 1);
 ```
 
+Implementation notes:
+
+- The broken read is in `Crownstep::dataFromJson()` near the existing `highlightMode` restore.
+- `dataToJson()` already writes `"stepCounterStyle"` correctly, so this is a read-side-only fix.
+- Add coverage to `tests/crownstep_persistence_spec.cpp` by setting:
+
+```cpp
+source.stepCounterStyle = Crownstep::STEP_COUNTER_BASIC;
+```
+
+Then assert:
+
+```cpp
+bool stepCounterStyleOk = loaded.stepCounterStyle == source.stepCounterStyle;
+```
+
+Include that boolean in `scalarOk` and in the failure detail string. Without the test change, this bug can
+silently regress again because the current round-trip test does not exercise the field.
+
 ---
 
 ### 2. Duplicate Layout Cases in `boardValueIndexForMove`
@@ -50,9 +95,61 @@ case 6:
 
 Cases `3` (Linear Diagonal) and `6` (Serpentine Diagonal) call the exact same function with the
 same arguments. One of them is likely calling the wrong function — either `linearDiagonalRank` was
-intended for case 3, or serpentine is correct for one but not both. This only affects Chess mode,
-where the full 8×8 layout path is taken; for checkers, the path delegates to `CrownstepCore.hpp`'s
-`sampledBoardValueForMove`. Worth verifying the intended distinction between the two.
+intended for case 3, or serpentine is correct for one but not both.
+
+Important correction: this is not chess-only. The same duplicate exists in the shared checkers layout
+path in `CrownstepCore.hpp`:
+
+```cpp
+case 3:
+    return serpentineDiagonalRank(row, posInRow, 8, 4);  // "Linear (Diagonal)"
+// ...
+case 6:
+    return serpentineDiagonalRank(row, posInRow, 8, 4);  // "Serpentine (Diagonal)"
+```
+
+The expected behavior is:
+
+- `Linear (Diagonal)` should traverse diagonals in a stable one-direction order.
+- `Serpentine (Diagonal)` should alternate direction per diagonal.
+
+Add a helper alongside `serpentineDiagonalRank()` in `CrownstepCore.hpp`, for example:
+
+```cpp
+inline int linearDiagonalRank(int row, int col, int rowCount, int colCount) {
+    int diagonal = row + col;
+    int rank = 0;
+    for (int d = 0; d < diagonal; ++d) {
+        int rowMin = std::max(0, d - (colCount - 1));
+        int rowMax = std::min(rowCount - 1, d);
+        rank += rowMax - rowMin + 1;
+    }
+    int rowMin = std::max(0, diagonal - (colCount - 1));
+    return rank + (row - rowMin);
+}
+```
+
+Then use it for case `3` in both places:
+
+- `CrownstepCore.hpp::boardValueForIndex()` for checkers/dark-square board indexing (`8 x 4`)
+- `CrownstepModule.cpp::boardValueIndexForMove()` chess lambda (`8 x 8`)
+
+Do not change case `6`; it should continue to use `serpentineDiagonalRank()`.
+
+Suggested tests:
+
+- Add a focused test near the Crownstep persistence/spec tests or a small Crownstep core spec.
+- Assert that layout `3` and layout `6` differ for at least one cell on both board sizes.
+- Assert a few exact values for early diagonals so the intended ordering is pinned down:
+
+```cpp
+// 8x8 example
+linearDiagonalRank(0, 0, 8, 8) == 0
+linearDiagonalRank(0, 1, 8, 8) == 1
+linearDiagonalRank(1, 0, 8, 8) == 2
+serpentineDiagonalRank(0, 1, 8, 8) == 2
+serpentineDiagonalRank(1, 0, 8, 8) == 1
+```
 
 ---
 
@@ -75,6 +172,34 @@ will deadlock immediately. The fix is to call the private `computeActiveRange` h
 within `emitStepAtClockEdge`, which is already factored out in the anonymous namespace of the same
 file. The public `activeLength()` / `activeStartIndex()` wrappers are then reserved for callers
 that don't already hold the lock.
+
+Implementation notes:
+
+- `computeActiveRange()` is already in the anonymous namespace in `CrownstepPlayback.cpp`.
+- Inside `emitStepAtClockEdge()`, replace calls to `activeLength()` and `activeStartIndex()` with one
+  direct call:
+
+```cpp
+const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+int length = range.length;
+```
+
+Then compute:
+
+```cpp
+int sequenceIndex = range.start + playhead;
+```
+
+- Be careful: `pitchForSequenceIndex()` also locks `sequenceMutex`. Because `emitStepAtClockEdge()`
+  already holds the lock, this is another recursive-lock dependency. A complete cleanup should avoid
+  calling the public locking wrapper from this locked section.
+- The clean shape is to extract a small internal helper for the unlocked pitch calculation, or inline
+  the existing logic while the lock is already held. Keep behavior identical:
+  - prefer `moveHistory` when present so pitch interpretation and quantization update live
+  - fall back to stored `history[sequenceIndex].pitch` for older saves
+  - return `0.f` for invalid indices
+- Do not add locks in the audio path beyond the existing sequence lock. The goal is fewer nested locks,
+  not broader locking.
 
 ---
 
@@ -124,6 +249,10 @@ bool Crownstep::isOthelloMode() const { return gameMode == GAME_MODE_OTHELLO; }
 The string indirection buys nothing here and is more fragile (a typo in a `gameId()` override
 would silently mis-dispatch).
 
+This is a low-risk cleanup. After changing these helpers, scan call sites that might depend on
+`gameRules` being non-null. Current construction calls `setGameMode()` during module setup, so `gameMode`
+is the authoritative state.
+
 ---
 
 ### 7. `aiSide` Sign Normalisation in `chooseAiMoveForSnapshot` Is Confusing
@@ -138,6 +267,14 @@ int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
 and `AI_SIDE (-1)` → `AI_SIDE`, so the transformation is an identity. The round-trip through an
 inequality test is misleading to readers; `requestAiSide = request.aiSide` would be equivalent and
 clear. If there is a defensive intent (guarding against zero), a comment would help.
+
+Recommended implementation:
+
+```cpp
+int requestAiSide = (request.aiSide < 0) ? AI_SIDE : HUMAN_SIDE;
+```
+
+This preserves the existing zero-handling behavior while making the normalization intent explicit.
 
 ---
 
@@ -154,6 +291,14 @@ moveAnimationQueue.erase(moveAnimationQueue.begin());
 bounded in practice (one entry per multi-jump hop), but this is the wrong container for the
 pattern. `std::deque` would make both front-access and front-erasure O(1) with no other changes
 required.
+
+Implementation notes:
+
+- Change `moveAnimationQueue` in `CrownstepShared.hpp` from `std::vector<MoveVisualAnimation>` to
+  `std::deque<MoveVisualAnimation>`.
+- Add `#include <deque>` if it is not already available through existing includes.
+- Replace `erase(moveAnimationQueue.begin())` with `pop_front()` in `advanceUiAnimationClock()`.
+- Existing range-for rendering code should continue to work with `std::deque`.
 
 ---
 
@@ -216,6 +361,13 @@ if (moves.empty()) {
 
 …would halve opponent-move generation work at every non-pass interior node.
 
+Implementation notes:
+
+- Preserve negamax sign behavior exactly.
+- Evaluate immediately when `depth <= 0`; no legal move generation is needed at depth zero.
+- Only generate opponent moves if `moves.empty()`.
+- If both sides have no moves, evaluate the terminal board from `maximizingSide`.
+
 ---
 
 ## Minor / Style
@@ -255,6 +407,10 @@ not the active game's cell count. If a future game mode had `boardCellCount() > 
 silently truncate. The cap could just be removed since `gameRules->boardCellCount()` already
 returns the correct value and the `board` array is always large enough.
 
+Revised assessment: this is not a release blocker and may be defensively useful. Since the backing board
+storage is fixed at `MAX_BOARD_SIZE`, the cap prevents a future game rule from accidentally exposing more
+cells than storage supports. Leave this alone unless the board storage model changes.
+
 ---
 
 ### 13. `CHESS_ATLAS_ENABLED` Dead-Code Branch
@@ -267,6 +423,10 @@ constexpr bool CHESS_ATLAS_ENABLED = true;
 
 The `false` path (if it exists in the body) is permanently dead. If the non-atlas code path still
 exists in the file, it should either be removed or gated with `#if` to avoid maintenance drift.
+
+Do not remove the fallback contour/piece drawing unless atlas rendering has a separate runtime failure
+fallback. The current code still falls back when atlas drawing returns false, so the issue is specifically
+the compile-time `CHESS_ATLAS_ENABLED` branch, not all fallback drawing.
 
 ---
 
@@ -281,6 +441,37 @@ rangeSlider->quantity = new CrownstepRangeMenuQuantity(module);
 VCV Rack's `ui::Slider` owns and deletes its `quantity` pointer, so this is safe. However, the
 pattern is easy to get wrong — a comment or `std::unique_ptr` handoff would document the intent.
 
+Lowest-risk fix is a one-line comment at the assignment site. Do not convert this to `unique_ptr` unless
+Rack's `Slider` API is checked first; it expects a raw `Quantity*`.
+
+---
+
+## Suggested Work Order
+
+### Pass 1: Behavioral Bugs
+
+1. Fix `stepCounterStyle` deserialization.
+2. Add persistence coverage for `stepCounterStyle`.
+3. Add `linearDiagonalRank()` and route layout case `3` to it in both checkers/shared and chess paths.
+4. Add a layout regression test.
+5. Run `make test-fast` and Crownstep object builds.
+
+### Pass 2: Playback Lock Hygiene
+
+1. Update `emitStepAtClockEdge()` to compute active range directly while holding the sequence lock.
+2. Remove nested calls to public locking helpers from inside that locked section.
+3. Keep pitch fallback behavior identical for old saves.
+4. Run `make test-fast` and `build/src/CrownstepPlayback.cpp.o`.
+
+### Pass 3: Small Cleanups
+
+1. Replace string-mode checks with `gameMode` comparisons.
+2. Clarify `requestAiSide` normalization.
+3. Optimize Othello pass handling.
+4. Optionally switch `moveAnimationQueue` to `std::deque`.
+
+Do not combine Pass 1 with product/API changes such as adding a gate output.
+
 ---
 
 ## Summary Table
@@ -288,7 +479,7 @@ pattern is easy to get wrong — a comment or `std::unique_ptr` handoff would do
 | # | Severity | File | Description |
 |---|----------|------|-------------|
 | 1 | **Bug** | Serialization.cpp | `stepCounterStyle` always written as `RIBBON`, never restored |
-| 2 | **Bug** | Module.cpp | Chess layout cases 3 and 6 call the same function |
+| 2 | **Bug** | Module.cpp/Core.hpp | Diagonal layout cases 3 and 6 call the same function |
 | 3 | **Bug/Fragile** | Playback.cpp | Re-locking `recursive_mutex` inside `emitStepAtClockEdge` |
 | 4 | Design | Shared.hpp | `Step::gate` populated and serialized but never output |
 | 5 | Design | Core.hpp | 1600-line header; `static const SCALES` duplicated per TU |

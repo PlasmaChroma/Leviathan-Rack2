@@ -34,6 +34,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
   source.pitchInterpretationMode = 2;
   source.boardValueLayoutMode = 1;
   source.pitchDividerMode = 3;
+  source.stepCounterStyle = Crownstep::STEP_COUNTER_BASIC;
   source.params[Crownstep::RANGE_PARAM].setValue(0.75f);
   source.boardTextureMode = Crownstep::BOARD_TEXTURE_MARBLE;
   source.playhead = 7;
@@ -101,6 +102,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
     loaded.params[Crownstep::RANGE_PARAM].getValue(),
     source.params[Crownstep::RANGE_PARAM].getValue());
   bool boardTextureOk = loaded.boardTextureMode == source.boardTextureMode;
+  bool stepCounterStyleOk = loaded.stepCounterStyle == source.stepCounterStyle;
   bool playheadOk = loaded.playhead == source.playhead;
   bool gameOverOk = loaded.gameOver == source.gameOver;
   bool lastMoveSideOk = loaded.lastMoveSide == loaded.aiSide();
@@ -118,6 +120,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
     pitchDividerOk &&
     pitchRangeOk &&
     boardTextureOk &&
+    stepCounterStyleOk &&
     playheadOk &&
     gameOverOk &&
     lastMoveSideOk;
@@ -170,6 +173,7 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " pitchDividerOk=" + std::to_string(pitchDividerOk ? 1 : 0) +
             " pitchRangeOk=" + std::to_string(pitchRangeOk ? 1 : 0) +
             " boardTextureOk=" + std::to_string(boardTextureOk ? 1 : 0) +
+            " stepCounterStyleOk=" + std::to_string(stepCounterStyleOk ? 1 : 0) +
             " playheadOk=" + std::to_string(playheadOk ? 1 : 0) +
             " gameOverOk=" + std::to_string(gameOverOk ? 1 : 0) +
             " lastMoveSideOk=" + std::to_string(lastMoveSideOk ? 1 : 0) +
@@ -177,6 +181,55 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " chessStateOk=" + std::to_string(chessStateOk ? 1 : 0) +
             " moveHistoryOk=" + std::to_string(moveHistoryOk ? 1 : 0) +
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
+}
+
+TestResult testDiagonalLayoutModesAreDistinct() {
+  bool pass = true;
+  std::string detail;
+
+  int cLinear01 = crownstep::linearDiagonalRank(0, 1, 8, 8);
+  int cLinear10 = crownstep::linearDiagonalRank(1, 0, 8, 8);
+  int cSerp01 = crownstep::serpentineDiagonalRank(0, 1, 8, 8);
+  int cSerp10 = crownstep::serpentineDiagonalRank(1, 0, 8, 8);
+
+  pass = pass && (crownstep::linearDiagonalRank(0, 0, 8, 8) == 0);
+  pass = pass && (cLinear01 == 1);
+  pass = pass && (cLinear10 == 2);
+  pass = pass && (cSerp01 == 2);
+  pass = pass && (cSerp10 == 1);
+
+  bool checkersDiffers = false;
+  for (int i = 0; i < crownstep::BOARD_SIZE; ++i) {
+    int row = i / 4;
+    int col = i % 4;
+    int linear = crownstep::linearDiagonalRank(row, col, 8, 4);
+    int serp = crownstep::serpentineDiagonalRank(row, col, 8, 4);
+    if (linear != serp) {
+      checkersDiffers = true;
+      break;
+    }
+  }
+
+  bool chessDiffers = false;
+  for (int i = 0; i < crownstep::CHESS_BOARD_SIZE; ++i) {
+    int row = i / 8;
+    int col = i % 8;
+    int linear = crownstep::linearDiagonalRank(row, col, 8, 8);
+    int serp = crownstep::serpentineDiagonalRank(row, col, 8, 8);
+    if (linear != serp) {
+      chessDiffers = true;
+      break;
+    }
+  }
+
+  pass = pass && checkersDiffers && chessDiffers;
+  detail = "checkersDiffers=" + std::to_string(checkersDiffers ? 1 : 0)
+    + " chessDiffers=" + std::to_string(chessDiffers ? 1 : 0)
+    + " linear01=" + std::to_string(cLinear01)
+    + " linear10=" + std::to_string(cLinear10)
+    + " serp01=" + std::to_string(cSerp01)
+    + " serp10=" + std::to_string(cSerp10);
+  return {"Diagonal layout linear/serpentine are distinct", pass, detail};
 }
 
 TestResult testRootCvUsesOneVoltPerOctaveSemitoneQuantization() {
@@ -234,6 +287,7 @@ int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
   tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
+  tests.push_back(testDiagonalLayoutModesAreDistinct());
 
   int failed = 0;
   std::cout << "Crownstep Persistence Spec\n";

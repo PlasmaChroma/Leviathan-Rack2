@@ -27,6 +27,32 @@ static ActiveRange computeActiveRange(const Crownstep* module, int historySize, 
 	r.endExclusive = r.start + r.length;
 	return r;
 }
+
+static float pitchForSequenceIndexLocked(Crownstep* module, int sequenceIndex) {
+	if (!module || sequenceIndex < 0) {
+		return 0.f;
+	}
+
+	// Preferred path: derive pitch from move sequence so interpretation
+	// and quantization settings are applied live at playback time.
+	if (sequenceIndex < int(module->moveHistory.size())) {
+		const Move& move = module->moveHistory[size_t(sequenceIndex)];
+		float boardValueIndex = module->boardValueIndexForMove(move);
+		if (module->melodicBiasEnabled && sequenceIndex > 0) {
+			const Move& previousMove = module->moveHistory[size_t(sequenceIndex - 1)];
+			float previousBoardValueIndex = module->boardValueIndexForMove(previousMove);
+			boardValueIndex = module->applyMelodicBiasToBoardValueIndex(previousBoardValueIndex, boardValueIndex, move);
+		}
+		return module->mapPitchFromBoardValueIndex(boardValueIndex, move.isKing);
+	}
+
+	// Backward compatibility for older saves that may not contain moveHistory.
+	if (sequenceIndex < int(module->history.size())) {
+		return module->history[size_t(sequenceIndex)].pitch;
+	}
+
+	return 0.f;
+}
 }
 
 int Crownstep::activeLength() {
@@ -72,29 +98,7 @@ void Crownstep::clearActiveRangeTrimWindow() {
 
 float Crownstep::pitchForSequenceIndex(int sequenceIndex) {
 	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	if (sequenceIndex < 0) {
-		return 0.f;
-	}
-
-	// Preferred path: derive pitch from move sequence so interpretation
-	// and quantization settings are applied live at playback time.
-	if (sequenceIndex < int(moveHistory.size())) {
-		const Move& move = moveHistory[size_t(sequenceIndex)];
-		float boardValueIndex = boardValueIndexForMove(move);
-		if (melodicBiasEnabled && sequenceIndex > 0) {
-			const Move& previousMove = moveHistory[size_t(sequenceIndex - 1)];
-			float previousBoardValueIndex = boardValueIndexForMove(previousMove);
-			boardValueIndex = applyMelodicBiasToBoardValueIndex(previousBoardValueIndex, boardValueIndex, move);
-		}
-		return mapPitchFromBoardValueIndex(boardValueIndex, move.isKing);
-	}
-
-	// Backward compatibility for older saves that may not contain moveHistory.
-	if (sequenceIndex < int(history.size())) {
-		return history[size_t(sequenceIndex)].pitch;
-	}
-
-	return 0.f;
+	return pitchForSequenceIndexLocked(this, sequenceIndex);
 }
 
 void Crownstep::refreshHeldPitchForCurrentStep() {
@@ -112,12 +116,13 @@ void Crownstep::refreshHeldPitchForCurrentStep() {
 	}
 	int shownStep = clamp(displayedStep, 1, length);
 	int sequenceIndex = range.start + (shownStep - 1);
-	heldPitch = pitchForSequenceIndex(sequenceIndex);
+	heldPitch = pitchForSequenceIndexLocked(this, sequenceIndex);
 }
 
 void Crownstep::emitStepAtClockEdge() {
 	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	int length = activeLength();
+	const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+	int length = range.length;
 	if (length <= 0) {
 		displayedStep = 0;
 		heldPitch = NO_SEQUENCE_PITCH_VOLTS;
@@ -131,9 +136,9 @@ void Crownstep::emitStepAtClockEdge() {
 
 	playhead = clamp(playhead, 0, std::max(length - 1, 0));
 	displayedStep = playhead + 1;
-	int sequenceIndex = activeStartIndex() + playhead;
+	int sequenceIndex = range.start + playhead;
 	const Step& step = history[size_t(sequenceIndex)];
-	heldPitch = pitchForSequenceIndex(sequenceIndex);
+	heldPitch = pitchForSequenceIndexLocked(this, sequenceIndex);
 	heldAccent = step.accent;
 	heldMod = step.mod * 10.f;
 	modOutputVolts = heldMod;

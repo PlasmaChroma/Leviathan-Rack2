@@ -10,6 +10,7 @@
 #include <exception>
 #include <atomic>
 #include <array>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -153,7 +154,7 @@ struct Crownstep : Module {
 		bool active = false;
 	};
 	MoveVisualAnimation moveAnimation;
-	std::vector<MoveVisualAnimation> moveAnimationQueue;
+	std::deque<MoveVisualAnimation> moveAnimationQueue;
 
 	dsp::SchmittTrigger clockTrigger;
 	dsp::SchmittTrigger resetTrigger;

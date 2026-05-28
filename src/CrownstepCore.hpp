@@ -1516,6 +1516,18 @@ inline int serpentineDiagonalRank(int row, int col, int rowCount, int colCount) 
 	return rank + pos;
 }
 
+inline int linearDiagonalRank(int row, int col, int rowCount, int colCount) {
+	int diagonal = row + col;
+	int rank = 0;
+	for (int d = 0; d < diagonal; ++d) {
+		int rowMin = std::max(0, d - (colCount - 1));
+		int rowMax = std::min(rowCount - 1, d);
+		rank += rowMax - rowMin + 1;
+	}
+	int rowMin = std::max(0, diagonal - (colCount - 1));
+	return rank + (row - rowMin);
+}
+
 inline int boardValueForIndex(int boardIndex, int layoutMode) {
 	int index = std::max(0, std::min(boardIndex, BOARD_SIZE - 1));
 	int mode = std::max(0, std::min(layoutMode, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1));
@@ -1535,7 +1547,7 @@ inline int boardValueForIndex(int boardIndex, int layoutMode) {
 		case 2:
 			return posInRow * 8 + row;
 		case 3:
-			return serpentineDiagonalRank(row, posInRow, 8, 4);
+			return linearDiagonalRank(row, posInRow, 8, 4);
 		case 4: {
 			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
 			return row * 4 + serpentinePos;

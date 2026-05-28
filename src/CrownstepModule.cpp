@@ -167,12 +167,16 @@ int othelloEvaluateForSide(const BoardState& board, int maximizingSide) {
 
 int othelloSearchForSide(const BoardState& board, int sideToMove, int maximizingSide, int depth, int alpha, int beta) {
 	std::vector<Move> moves = crownstep::othelloGenerateLegalMovesForSide(board, sideToMove);
-	std::vector<Move> opponentMoves = crownstep::othelloGenerateLegalMovesForSide(board, -sideToMove);
-	if (depth <= 0 || (moves.empty() && opponentMoves.empty())) {
+	if (depth <= 0) {
 		int eval = othelloEvaluateForSide(board, maximizingSide);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
 	if (moves.empty()) {
+		std::vector<Move> opponentMoves = crownstep::othelloGenerateLegalMovesForSide(board, -sideToMove);
+		if (opponentMoves.empty()) {
+			int eval = othelloEvaluateForSide(board, maximizingSide);
+			return (sideToMove == maximizingSide) ? eval : -eval;
+		}
 		return -othelloSearchForSide(board, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
 	}
 
@@ -255,15 +259,15 @@ Crownstep::~Crownstep() {
 }
 
 bool Crownstep::isChessMode() const {
-	return gameRules && std::strcmp(gameRules->gameId(), "chess") == 0;
+	return gameMode == GAME_MODE_CHESS;
 }
 
 bool Crownstep::isOthelloMode() const {
-	return gameRules && std::strcmp(gameRules->gameId(), "othello") == 0;
+	return gameMode == GAME_MODE_OTHELLO;
 }
 
 Move Crownstep::chooseAiMoveForSnapshot(const AiWorkerRequest& request) {
-	int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
+	int requestAiSide = (request.aiSide < 0) ? AI_SIDE : HUMAN_SIDE;
 	switch (request.gameMode) {
 		case GAME_MODE_CHESS:
 			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide, nullptr);
@@ -589,17 +593,17 @@ void Crownstep::advanceUiAnimationClock(double nowSeconds) {
 	if (moveAnimation.active) {
 		moveAnimation.elapsedSeconds += dt;
 		if (moveAnimation.elapsedSeconds >= moveAnimation.durationSeconds) {
-			moveAnimation.active = false;
-			if (!moveAnimationQueue.empty()) {
-				moveAnimation = moveAnimationQueue.front();
-				moveAnimationQueue.erase(moveAnimationQueue.begin());
+				moveAnimation.active = false;
+				if (!moveAnimationQueue.empty()) {
+					moveAnimation = moveAnimationQueue.front();
+					moveAnimationQueue.pop_front();
+				}
 			}
 		}
-	}
-	else if (!moveAnimationQueue.empty()) {
-		moveAnimation = moveAnimationQueue.front();
-		moveAnimationQueue.erase(moveAnimationQueue.begin());
-	}
+		else if (!moveAnimationQueue.empty()) {
+			moveAnimation = moveAnimationQueue.front();
+			moveAnimationQueue.pop_front();
+		}
 }
 
 int Crownstep::currentSequenceCap() {
@@ -775,7 +779,7 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 			case 2:
 				return col * 8 + row;
 			case 3:
-				return crownstep::serpentineDiagonalRank(row, col, 8, 8);
+				return crownstep::linearDiagonalRank(row, col, 8, 8);
 			case 4: {
 				int serpentineCol = (row & 1) ? (7 - col) : col;
 				return row * 8 + serpentineCol;
