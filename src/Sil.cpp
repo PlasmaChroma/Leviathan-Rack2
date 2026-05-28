@@ -929,23 +929,26 @@ struct Sil : Module {
 		return isDragonKingDebugEnabled();
 	}
 
-	void initializeLimiterFastPathStorage() {
-		const int delayBufferLength = kMaxLimiterLookaheadSamples;
-		limiterLookaheadSamples = 1;
-		limiterLatencySamples = limiterLookaheadSamples;
-		limiterDelayL.assign(size_t(delayBufferLength), 0.f);
-		limiterDelayR.assign(size_t(delayBufferLength), 0.f);
+		void initializeLimiterFastPathStorage() {
+			const int delayBufferLength = kMaxLimiterLookaheadSamples;
+			limiterLookaheadSamples = 1;
+			limiterLatencySamples = limiterLookaheadSamples;
+			limiterDelayL.assign(size_t(delayBufferLength), 0.f);
+			limiterDelayR.assign(size_t(delayBufferLength), 0.f);
 		limiterDelayWrite = 0;
 		limiterGain = 1.f;
 		limiterPrevSatL1 = 0.f;
 		limiterPrevSatL2 = 0.f;
 		limiterPrevSatR1 = 0.f;
-		limiterPrevSatR2 = 0.f;
-		limiterTruePeakUpsamplerL.reset();
-		limiterTruePeakUpsamplerR.reset();
-		limiterPeakWindow.clear();
-		limiterDetectorSampleIndex = 0;
-	}
+			limiterPrevSatR2 = 0.f;
+			limiterTruePeakUpsamplerL.reset();
+			limiterTruePeakUpsamplerR.reset();
+			// Pre-grow deque storage so per-sample limiter window updates avoid
+			// runtime growth allocations up to max lookahead.
+			limiterPeakWindow.resize(size_t(kMaxLimiterLookaheadSamples));
+			limiterPeakWindow.clear();
+			limiterDetectorSampleIndex = 0;
+		}
 
 	int saturatorPeakToHistIndex(float peak) const {
 		const float normalized = clamp(peak / kAudioFullScaleV, 0.f, 2.f);

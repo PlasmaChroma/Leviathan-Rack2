@@ -212,6 +212,7 @@ inline bool isPromotionSquare(int side, int index) {
 
 inline std::vector<int> movementDirectionsForPiece(int piece, bool capture) {
 	std::vector<int> directions;
+	directions.reserve(2);
 	int side = pieceSide(piece);
 	if (pieceIsKing(piece) || side == HUMAN_SIDE) {
 		directions.push_back(capture ? -2 : -1);
@@ -329,6 +330,8 @@ inline void collectCapturesRecursive(
 inline std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) {
 	std::vector<Move> captures;
 	std::vector<Move> simpleMoves;
+	captures.reserve(24);
+	simpleMoves.reserve(24);
 
 	for (int i = 0; i < BOARD_SIZE; ++i) {
 		int piece = sourceBoard[size_t(i)];
@@ -337,6 +340,8 @@ inline std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard
 		}
 		std::vector<int> path;
 		std::vector<int> captured;
+		path.reserve(8);
+		captured.reserve(8);
 		collectCapturesRecursive(sourceBoard, i, i, piece, path, captured, &captures);
 	}
 	if (!captures.empty()) {
@@ -976,6 +981,7 @@ inline BoardState chessApplyMoveToBoard(const BoardState& sourceBoard, const Mov
 
 inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side, const ChessState& state) {
 	std::vector<Move> pseudo;
+	pseudo.reserve(64);
 	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
 		int piece = sourceBoard[size_t(i)];
 		if (piece == 0 || pieceSide(piece) != side) {
@@ -1131,23 +1137,17 @@ inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* 
 	if (!moves || moves->size() < 2) {
 		return;
 	}
-	std::vector<std::pair<Move, int>> scoredMoves;
-	scoredMoves.reserve(moves->size());
-	for (const Move& move : *moves) {
-		scoredMoves.push_back({move, chessMoveOrderingScore(board, move)});
-	}
-	std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<Move, int>& a, const std::pair<Move, int>& b) {
-		if (a.second != b.second) {
-			return a.second > b.second;
+	std::sort(moves->begin(), moves->end(), [&board](const Move& a, const Move& b) {
+		int scoreA = chessMoveOrderingScore(board, a);
+		int scoreB = chessMoveOrderingScore(board, b);
+		if (scoreA != scoreB) {
+			return scoreA > scoreB;
 		}
-		if (a.first.originIndex != b.first.originIndex) {
-			return a.first.originIndex < b.first.originIndex;
+		if (a.originIndex != b.originIndex) {
+			return a.originIndex < b.originIndex;
 		}
-		return a.first.destinationIndex < b.first.destinationIndex;
+		return a.destinationIndex < b.destinationIndex;
 	});
-	for (size_t i = 0; i < scoredMoves.size(); ++i) {
-		(*moves)[i] = scoredMoves[i].first;
-	}
 }
 
 inline int chessSearchDepthForDifficulty(int difficulty) {
@@ -1266,7 +1266,8 @@ inline bool othelloCollectDirectionFlips(
 	if (!flips) {
 		return false;
 	}
-	std::vector<int> local;
+	int local[7];
+	int localCount = 0;
 	int r = row + dr;
 	int c = col + dc;
 	while (true) {
@@ -1279,13 +1280,16 @@ inline bool othelloCollectDirectionFlips(
 			return false;
 		}
 		if (piece == side) {
-			if (local.empty()) {
+			if (localCount == 0) {
 				return false;
 			}
-			flips->insert(flips->end(), local.begin(), local.end());
+			flips->insert(flips->end(), local, local + localCount);
 			return true;
 		}
-		local.push_back(idx);
+		if (localCount >= 7) {
+			return false;
+		}
+		local[localCount++] = idx;
 		r += dr;
 		c += dc;
 	}
@@ -1293,6 +1297,7 @@ inline bool othelloCollectDirectionFlips(
 
 inline std::vector<Move> othelloGenerateLegalMovesForSide(const BoardState& board, int side) {
 	std::vector<Move> moves;
+	moves.reserve(24);
 	for (int row = 0; row < 8; ++row) {
 		for (int col = 0; col < 8; ++col) {
 			int destination = othelloCoordToIndex(row, col);
@@ -1300,6 +1305,7 @@ inline std::vector<Move> othelloGenerateLegalMovesForSide(const BoardState& boar
 				continue;
 			}
 			std::vector<int> flips;
+			flips.reserve(16);
 			for (int dr = -1; dr <= 1; ++dr) {
 				for (int dc = -1; dc <= 1; ++dc) {
 					if (dr == 0 && dc == 0) {

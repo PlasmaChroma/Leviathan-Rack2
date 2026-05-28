@@ -979,15 +979,15 @@ void Crownstep::refreshLegalMoves() {
 	opponentHighlightedDestinations.clear();
 	opponentHintsPreviewActive = false;
 	if (isOthelloMode() && turnSide == humanSide()) {
-		std::vector<uint8_t> seen(size_t(boardCellCount()), 0u);
+		destinationSeenScratch.assign(size_t(boardCellCount()), 0u);
 		for (const Move& move : humanMoves) {
 			if (move.destinationIndex < 0 || move.destinationIndex >= boardCellCount()) {
 				continue;
 			}
-			if (seen[size_t(move.destinationIndex)] != 0u) {
+			if (destinationSeenScratch[size_t(move.destinationIndex)] != 0u) {
 				continue;
 			}
-			seen[size_t(move.destinationIndex)] = 1u;
+			destinationSeenScratch[size_t(move.destinationIndex)] = 1u;
 			highlightedDestinations.push_back(move.destinationIndex);
 		}
 	}
@@ -1003,7 +1003,7 @@ void Crownstep::refreshLegalMoves() {
 	}
 	bool showOpponentTips = (selectedSquare >= 0) || (turnSide == aiSide());
 	const std::vector<Move>* opponentMoveSource = &aiMoves;
-	std::vector<Move> previewAiMoves;
+	previewAiMovesScratch.clear();
 	if (selectedSquare >= 0 && hoveredSquare >= 0) {
 		for (const Move& move : humanMoves) {
 			if (move.originIndex == selectedSquare && move.destinationIndex == hoveredSquare) {
@@ -1011,14 +1011,14 @@ void Crownstep::refreshLegalMoves() {
 				if (isChessMode()) {
 					ChessState previewState;
 					previewBoard = crownstep::chessApplyMoveToBoard(board, move, chessState, &previewState);
-					previewAiMoves = crownstep::chessGenerateLegalMovesForSide(previewBoard, aiSide(), previewState);
+					previewAiMovesScratch = crownstep::chessGenerateLegalMovesForSide(previewBoard, aiSide(), previewState);
 				}
 				else {
 					previewBoard = gameRules ? gameRules->applyMoveToBoard(board, move) : crownstep::applyMoveToBoard(board, move);
-					previewAiMoves = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
-					                           : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
+					previewAiMovesScratch = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
+					                                  : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
 				}
-				opponentMoveSource = &previewAiMoves;
+				opponentMoveSource = &previewAiMovesScratch;
 				opponentHintsPreviewActive = true;
 				break;
 			}
@@ -1026,13 +1026,13 @@ void Crownstep::refreshLegalMoves() {
 	}
 	if (showOpponentTips) {
 		int cellCount = boardCellCount();
-		std::vector<uint8_t> seen(size_t(cellCount), 0u);
+		destinationSeenScratch.assign(size_t(cellCount), 0u);
 		for (const Move& move : *opponentMoveSource) {
 			int destination = move.destinationIndex;
-			if (destination < 0 || destination >= cellCount || seen[size_t(destination)] != 0u) {
+			if (destination < 0 || destination >= cellCount || destinationSeenScratch[size_t(destination)] != 0u) {
 				continue;
 			}
-			seen[size_t(destination)] = 1u;
+			destinationSeenScratch[size_t(destination)] = 1u;
 			opponentHighlightedDestinations.push_back(destination);
 		}
 	}

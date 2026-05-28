@@ -140,6 +140,8 @@ struct Crownstep : Module {
 	std::vector<Move> moveHistory;
 	std::vector<Move> humanMoves;
 	std::vector<Move> aiMoves;
+	std::vector<Move> previewAiMovesScratch;
+	std::vector<uint8_t> destinationSeenScratch;
 	std::vector<int> highlightedDestinations;
 	std::vector<int> opponentHighlightedDestinations;
 	Move lastMove;

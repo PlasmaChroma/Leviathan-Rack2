@@ -37,6 +37,16 @@ make -j4 build/src/CrownstepModule.cpp.o build/src/CrownstepPlayback.cpp.o build
 If full plugin linking fails in this environment, do not assume it is caused by Crownstep. Object-level
 builds plus `make test-fast` are the useful local checks here.
 
+Lifecycle caution for DAW hosts:
+
+- In some DAW integrations, the UI/GL layer can be destroyed and relaunched while the audio module
+  instance continues processing.
+- Treat all widget-side GL/NanoVG resources (buffers, textures, caches, framebuffers) as disposable:
+  validate handles on draw and rebuild lazily after context/UI restart.
+- Do not store long-lived assumptions that widget lifetime == module/audio lifetime.
+- Keep audio state ownership independent from UI resource lifecycle so a UI restart cannot perturb
+  DSP behavior.
+
 ---
 
 ## Bugs
