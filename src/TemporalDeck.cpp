@@ -1416,6 +1416,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
       bool dragJustStarted = lagDragRequestActive && !impl->expanderLagDragWasActive;
       bool scopeRequestStationary = lagDragRequestStationaryHold;
+      bool scopeLiveReverseTargetCompensated = false;
       float requestDtSec = 0.f;
       if (lagDragRequestActive && impl->expanderLagDragHasLastRequestTime) {
         double rawDtSec = processNowSec - impl->expanderLagDragLastRequestTimeSec;
@@ -1462,6 +1463,22 @@ void TemporalDeck::process(const ProcessArgs &args) {
           lagDragRequestVelocity =
             clamp(lagDragRequestVelocity + assistVelocity, -std::max(args.sampleRate * 3.0f, 1.0f),
                   std::max(args.sampleRate * 3.0f, 1.0f));
+        } else if (scopeLiveDrag && !scopeRequestStationary && lagDragRequestNormalizedVelocity < 0.f &&
+                   !dragJustStarted) {
+          const float sampleRate = std::max(args.sampleRate, 1.f);
+          const float assistDt = requestDtSec > 0.f ? requestDtSec : args.sampleTime;
+          const float reverseHandVelocitySamples = std::max(0.f, -lagDragRequestVelocity);
+          const float reverseTargetFloor =
+            clamp(impl->expanderLagDragLastLagSamples + (sampleRate + reverseHandVelocitySamples) * assistDt, 0.f, maxLag);
+          lagTarget = std::max(lagTarget, reverseTargetFloor);
+          scopeLiveReverseTargetCompensated = lagTarget >= reverseTargetFloor;
+        }
+        if (scopeRequestStationary && impl->expanderLagDragWasActive) {
+          if (impl->expanderLagDragHoldAnchorActive) {
+            lagTarget = clamp(impl->expanderLagDragHoldAnchorSamples, 0.f, maxLag);
+          } else if (!impl->expanderLagDragLastStationaryHold && std::isfinite(impl->expanderLagDragLastLagSamples)) {
+            lagTarget = clamp(impl->expanderLagDragLastLagSamples, 0.f, maxLag);
+          }
         }
       }
       scopeTraceNewRequest = true;
@@ -1478,7 +1495,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
             currentLag = lagTarget;
           }
           if (!impl->expanderLagDragHoldAnchorActive || !impl->expanderLagDragLastStationaryHold) {
-            impl->expanderLagDragHoldAnchorSamples = currentLag;
+            impl->expanderLagDragHoldAnchorSamples =
+              (impl->expanderLagDragWasActive && !impl->expanderLagDragLastStationaryHold) ? lagTarget : currentLag;
             impl->expanderLagDragHoldAnchorActive = true;
           }
           impl->platterInput.setTouchHold(true, impl->expanderLagDragHoldAnchorSamples);
@@ -1502,6 +1520,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // incoming scope velocity before blending.
           // positive velocity => toward NOW (decreasing lag).
           float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
+          if (scopeLiveReverseTargetCompensated) {
+            derivedVelocity += std::max(args.sampleRate, 1.f);
+          }
           velocitySamples = derivedVelocity;
           if (std::fabs(lagDragRequestVelocity) > 1e-6f) {
             // Keep scope as a thin interface: lag target remains authoritative
