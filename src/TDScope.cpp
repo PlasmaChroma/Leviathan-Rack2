@@ -1833,7 +1833,7 @@ Widget *createDisplay(TDScope *module, math::Rect scopeRectMm) {
 } // namespace tdscope
 
 struct TDScopeInputWidget final : Widget {
-  static constexpr double kLagDragHoldDetectSec = 1.0 / 180.0;
+  static constexpr double kLagDragHoldDetectSec = 0.090;
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
   bool hasLastGoodMsg = false;
@@ -1922,7 +1922,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
     lagDragNormalizedOffset = 0.f;
     lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
     return true;
   }
 
@@ -1966,7 +1966,7 @@ struct TDScopeInputWidget final : Widget {
     }
     refreshLastGoodMsg();
     if (!hasLastGoodMsg) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
       e.consume(this);
       return;
     }
@@ -1983,8 +1983,7 @@ struct TDScopeInputWidget final : Widget {
     float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
-      lagDragStationaryHoldActive = true;
+      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
       e.consume(this);
       return;
     }

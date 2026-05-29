@@ -1296,6 +1296,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
     //     positive => toward NOW (decreasing lag)
     //     negative => away from NOW (increasing lag)
     // Any receive-side derivation or blending must preserve this convention.
+    const bool scopeStationaryUsesDirectHold =
+      (desiredSampleModeEnabled && impl->engine.sampleLoaded) || impl->transportControl.freezeLatched || freezeGateHigh;
     bool isNewLagRequest = !impl->expanderLagDragRequestSeen || lagDragRequestSeq != impl->expanderLagDragLastRequestSeq;
     if (isNewLagRequest) {
       impl->expanderLagDragRequestSeen = true;
@@ -1317,12 +1319,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
         bool dragJustStarted = !impl->expanderLagDragWasActive;
         scopeTraceDragJustStarted = dragJustStarted;
         auto applyScopeStationaryHold = [&](float lagTarget) {
-          // Scope is a direct-position surface, but switching from scratch
-          // motion into exact hold can visibly snap if the engine has not yet
-          // converged to the requested lag. Keep the hand in direct-hold mode
-          // while walking the held lag toward the target in small steps; that
-          // avoids both the snap and the "starts playing again" behavior that
-          // occurs if this briefly falls back into ordinary scratch motion.
+          // Keep a stationary scope hand co-moving with live NOW. Walk the
+          // held lag toward the requested target in small steps so switching
+          // out of active motion does not visibly snap.
           float currentLag = float(impl->engine.currentLagFromNewest(impl->engine.newestReadablePos()));
           if (!std::isfinite(currentLag) || currentLag < 0.f) {
             currentLag = lagTarget;
@@ -1334,14 +1333,23 @@ void TemporalDeck::process(const ProcessArgs &args) {
             float lagDelta = lagTarget - currentLag;
             heldLag = currentLag + clamp(lagDelta, -holdSettleStepSamples, holdSettleStepSamples);
           }
-          impl->platterInput.setTouchHold(true, heldLag);
+          if (scopeStationaryUsesDirectHold) {
+            impl->platterInput.setTouchHold(true, heldLag);
+          } else {
+            impl->platterInput.setScopeLagDrag(true, heldLag, 0.f, true);
+          }
           impl->platterInput.setMotionFreshSamples(0);
           scopeTraceVelocityApplied = 0.f;
         };
         if (dragJustStarted) {
-          // Scope touch-down should latch a stationary hold without creating
-          // a fresh gesture that invokes write-head compensation motion.
-          impl->platterInput.setTouchHold(true, lagTarget);
+          // In live mode, stationary scope control should hold lag relative to
+          // NOW. In sample/freeze contexts, preserve the older direct grab
+          // behavior because there is no live write-head tax to compensate.
+          if (scopeStationaryUsesDirectHold) {
+            impl->platterInput.setTouchHold(true, lagTarget);
+          } else {
+            impl->platterInput.setScopeLagDrag(true, lagTarget, 0.f, true);
+          }
           impl->platterInput.setMotionFreshSamples(0);
           scopeTraceVelocityApplied = 0.f;
         } else if (lagDragRequestStationaryHold) {
@@ -1381,7 +1389,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float maxAbsGestureVelocity = std::max(args.sampleRate * 3.0f, 1.0f);
           velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
           scopeTraceVelocityApplied = velocitySamples;
-          impl->platterInput.setScratch(true, lagTarget, velocitySamples);
+          impl->platterInput.setScopeLagDrag(true, lagTarget, velocitySamples, false);
           int motionFreshSamples = int(std::round(args.sampleRate * std::max(args.sampleTime, dtSec) * 1.5f));
           int minHoldSamples = int(std::round(args.sampleRate * 0.025f));
           int maxHoldSamples = int(std::round(args.sampleRate * 0.090f));
@@ -1395,7 +1403,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         impl->expanderLagDragWasActive = true;
       } else {
         if (impl->expanderLagDragWasActive) {
-          impl->platterInput.setScratch(false, impl->expanderLagDragLastLagSamples, 0.f);
+          impl->platterInput.setScopeLagDrag(false, impl->expanderLagDragLastLagSamples, 0.f, false);
           impl->platterInput.setMotionFreshSamples(0);
         }
         impl->expanderLagDragWasActive = false;
@@ -1410,7 +1418,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       // Scope can disappear while a drag request is active (module deleted or
       // detached). Force-release host scratch state so lag does not keep
       // climbing from a stale touched/gesture condition.
-      impl->platterInput.setScratch(false, impl->expanderLagDragLastLagSamples, 0.f);
+      impl->platterInput.setScopeLagDrag(false, impl->expanderLagDragLastLagSamples, 0.f, false);
       impl->platterInput.setMotionFreshSamples(0);
     }
     impl->expanderLagDragWasActive = false;

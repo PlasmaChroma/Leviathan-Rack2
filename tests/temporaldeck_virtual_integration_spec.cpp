@@ -43,6 +43,8 @@ Engine::FrameInput makeDefaultInput(float sampleRate) {
   in.rateCv = 0.f;
   in.rateCvConnected = false;
   in.platterTouched = false;
+  in.scopeLagDragActive = false;
+  in.scopeLagDragSoftHold = false;
   in.wheelScratchHeld = false;
   in.platterMotionActive = false;
   in.platterGestureRevision = 0;
@@ -88,6 +90,10 @@ struct VirtualRig {
 
   void setScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0) {
     platter.setScratch(touched, lagSamples, velocitySamples, holdSamples);
+  }
+
+  void setScopeLagDrag(bool active, float lagSamples, float velocitySamples, bool softHold) {
+    platter.setScopeLagDrag(active, lagSamples, velocitySamples, softHold);
   }
 
   void setMotionFreshSamples(int samples) {
@@ -158,6 +164,8 @@ struct VirtualRig {
     in.rateCv = rateCv;
     in.rateCvConnected = rateCvConnected;
     in.platterTouched = snapshot.platterTouched;
+    in.scopeLagDragActive = snapshot.scopeLagDragActive;
+    in.scopeLagDragSoftHold = snapshot.scopeLagDragSoftHold;
     in.wheelScratchHeld = snapshot.wheelScratchHeld;
     in.platterMotionActive = snapshot.platterMotionActive;
     in.platterGestureRevision = snapshot.platterGestureRevision;
@@ -203,6 +211,26 @@ TestResult testWheelScratchPath() {
   return {"Wheel scratch drives scratch state", pass,
           "activeA=" + std::to_string(int(activeA)) + " activeB=" + std::to_string(int(activeB)) +
             " activeC=" + std::to_string(int(activeC))};
+}
+
+TestResult testScopeLagSoftHoldTracksLiveNow() {
+  VirtualRig rig;
+  rig.fillLive(4096);
+  double newest = rig.engine.newestReadablePos();
+  rig.engine.readHead = rig.engine.buffer.wrapPosition(newest - 2400.0);
+  double lagBefore = rig.engine.currentLagFromNewest(newest);
+
+  rig.setScopeLagDrag(true, float(lagBefore), 0.f, true);
+  Engine::FrameResult first = rig.step();
+  Engine::FrameResult last = first;
+  for (int i = 0; i < 64; ++i) {
+    last = rig.step();
+  }
+
+  bool pass = rig.engine.scratchActive && std::fabs(last.lag - lagBefore) < 80.0;
+  return {"Scope lag soft hold tracks live NOW", pass,
+          "before=" + std::to_string(lagBefore) + " first=" + std::to_string(first.lag) +
+            " last=" + std::to_string(last.lag)};
 }
 
 TestResult testQuickSlipTriggerPath() {
@@ -403,6 +431,7 @@ int main() {
   std::vector<TestResult> tests;
   tests.push_back(testDragGesturePath());
   tests.push_back(testWheelScratchPath());
+  tests.push_back(testScopeLagSoftHoldTracksLiveNow());
   tests.push_back(testQuickSlipTriggerPath());
   tests.push_back(testFreezeReverseInteractionPath());
   tests.push_back(testSampleModeTransitionAndSeekPath());

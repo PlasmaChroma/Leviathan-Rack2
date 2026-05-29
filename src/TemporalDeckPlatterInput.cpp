@@ -8,6 +8,8 @@ namespace temporaldeck {
 void PlatterInputState::setScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples) {
   platterTouched.store(touched, std::memory_order_relaxed);
   platterTouchHoldDirect.store(false, std::memory_order_relaxed);
+  scopeLagDragActive.store(false, std::memory_order_relaxed);
+  scopeLagDragSoftHold.store(false, std::memory_order_relaxed);
   platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
   platterLagTarget.store(lagSamples, std::memory_order_relaxed);
   platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
@@ -17,9 +19,25 @@ void PlatterInputState::setScratch(bool touched, float lagSamples, float velocit
   }
 }
 
+void PlatterInputState::setScopeLagDrag(bool active, float lagSamples, float velocitySamples, bool softHold) {
+  platterTouched.store(active, std::memory_order_relaxed);
+  platterTouchHoldDirect.store(false, std::memory_order_relaxed);
+  scopeLagDragActive.store(active, std::memory_order_relaxed);
+  scopeLagDragSoftHold.store(active && softHold, std::memory_order_relaxed);
+  platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
+  platterLagTarget.store(lagSamples, std::memory_order_relaxed);
+  platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
+  platterScratchHoldSamples.store(0, std::memory_order_relaxed);
+  if (active) {
+    platterWheelDelta.store(0.f, std::memory_order_relaxed);
+  }
+}
+
 void PlatterInputState::setDirectScratch(bool touched, float lagSamples, float velocitySamples) {
   platterTouched.store(touched, std::memory_order_relaxed);
   platterTouchHoldDirect.store(touched, std::memory_order_relaxed);
+  scopeLagDragActive.store(false, std::memory_order_relaxed);
+  scopeLagDragSoftHold.store(false, std::memory_order_relaxed);
   platterGestureRevision.fetch_add(1, std::memory_order_relaxed);
   platterLagTarget.store(lagSamples, std::memory_order_relaxed);
   platterGestureVelocity.store(velocitySamples, std::memory_order_relaxed);
@@ -33,6 +51,8 @@ void PlatterInputState::setDirectScratch(bool touched, float lagSamples, float v
 void PlatterInputState::setTouchHold(bool touched, float lagSamples) {
   platterTouched.store(touched, std::memory_order_relaxed);
   platterTouchHoldDirect.store(touched, std::memory_order_relaxed);
+  scopeLagDragActive.store(false, std::memory_order_relaxed);
+  scopeLagDragSoftHold.store(false, std::memory_order_relaxed);
   platterLagTarget.store(lagSamples, std::memory_order_relaxed);
   platterGestureVelocity.store(0.f, std::memory_order_relaxed);
   platterMotionFreshSamples.store(0, std::memory_order_relaxed);
@@ -87,7 +107,9 @@ PlatterInputSnapshot PlatterInputState::consumeForFrame() {
 
   snapshot.platterTouched = platterTouched.load(std::memory_order_relaxed);
   snapshot.platterTouchHoldDirect = platterTouchHoldDirect.load(std::memory_order_relaxed);
-  if (snapshot.platterTouched || snapshot.wheelScratchHeld || snapshot.platterMotionActive) {
+  snapshot.scopeLagDragActive = scopeLagDragActive.load(std::memory_order_relaxed);
+  snapshot.scopeLagDragSoftHold = scopeLagDragSoftHold.load(std::memory_order_relaxed);
+  if (snapshot.platterTouched || snapshot.wheelScratchHeld || snapshot.platterMotionActive || snapshot.scopeLagDragActive) {
     snapshot.platterGestureRevision = platterGestureRevision.load(std::memory_order_relaxed);
     snapshot.platterLagTarget = platterLagTarget.load(std::memory_order_relaxed);
     snapshot.platterGestureVelocity = platterGestureVelocity.load(std::memory_order_relaxed);
