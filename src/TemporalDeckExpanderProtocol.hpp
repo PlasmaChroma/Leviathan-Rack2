@@ -12,7 +12,7 @@ namespace temporaldeck_expander {
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
 constexpr uint16_t VERSION = 5u;
 constexpr uint32_t DISPLAY_MAGIC = 0x54445844u; // "TDXD"
-constexpr uint16_t DISPLAY_VERSION = 3u;
+constexpr uint16_t DISPLAY_VERSION = 4u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
 constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
@@ -41,6 +41,12 @@ enum HostFlags : uint32_t {
 enum ScopeFormat : uint32_t {
   SCOPE_FORMAT_MONO = 0u,
   SCOPE_FORMAT_STEREO = 1u,
+};
+
+enum LagDragPhase : uint32_t {
+  LAG_DRAG_PHASE_INACTIVE = 0u,
+  LAG_DRAG_PHASE_HOLD = 1u,
+  LAG_DRAG_PHASE_DRAG = 2u,
 };
 
 struct ScopeBin {
@@ -107,6 +113,7 @@ struct DisplayToHost {
   float lagDragVelocity = 0.f;
   float lagDragNormalizedOffset = 0.f;
   float lagDragNormalizedVelocity = 0.f;
+  uint32_t lagDragPhase = LAG_DRAG_PHASE_INACTIVE;
 };
 
 static_assert(std::is_standard_layout<DisplayToHost>::value, "DisplayToHost must stay POD-like");
@@ -148,6 +155,29 @@ inline bool decodeLagDragRequest(uint32_t reserved, float *lagSamplesOut, bool *
     *stationaryHoldOut = (reserved & kStationaryHoldBit) != 0u;
   }
   return (reserved & kActiveBit) != 0u;
+}
+
+inline uint32_t normalizeLagDragPhase(uint32_t phase) {
+  switch (phase) {
+    case LAG_DRAG_PHASE_HOLD:
+    case LAG_DRAG_PHASE_DRAG:
+      return phase;
+    case LAG_DRAG_PHASE_INACTIVE:
+    default:
+      return LAG_DRAG_PHASE_INACTIVE;
+  }
+}
+
+inline uint32_t lagDragPhaseFromFlags(bool active, bool stationaryHold) {
+  if (!active) {
+    return LAG_DRAG_PHASE_INACTIVE;
+  }
+  return stationaryHold ? LAG_DRAG_PHASE_HOLD : LAG_DRAG_PHASE_DRAG;
+}
+
+inline bool isLagDragPhaseActive(uint32_t phase) {
+  phase = normalizeLagDragPhase(phase);
+  return phase == LAG_DRAG_PHASE_HOLD || phase == LAG_DRAG_PHASE_DRAG;
 }
 
 inline int16_t quantizePreviewSample(float monoVolts) {
@@ -312,10 +342,18 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
 inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat,
                                    bool lagDragActive = false, bool stationaryHold = false, float lagDragSamples = 0.f,
                                    float lagDragVelocity = 0.f, float lagDragNormalizedOffset = 0.f,
-                                   float lagDragNormalizedVelocity = 0.f) {
+                                   float lagDragNormalizedVelocity = 0.f,
+                                   uint32_t lagDragPhase = LAG_DRAG_PHASE_INACTIVE) {
   if (!out) {
     return;
   }
+  lagDragPhase = normalizeLagDragPhase(lagDragPhase);
+  if (!lagDragActive) {
+    lagDragPhase = LAG_DRAG_PHASE_INACTIVE;
+  } else if (lagDragPhase == LAG_DRAG_PHASE_INACTIVE) {
+    lagDragPhase = lagDragPhaseFromFlags(lagDragActive, stationaryHold);
+  }
+  stationaryHold = lagDragPhase == LAG_DRAG_PHASE_HOLD;
   out->magic = DISPLAY_MAGIC;
   out->version = DISPLAY_VERSION;
   out->size = uint16_t(sizeof(DisplayToHost));
@@ -325,6 +363,7 @@ inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint
   out->lagDragVelocity = lagDragVelocity;
   out->lagDragNormalizedOffset = lagDragNormalizedOffset;
   out->lagDragNormalizedVelocity = lagDragNormalizedVelocity;
+  out->lagDragPhase = lagDragPhase;
 }
 
 } // namespace temporaldeck_expander

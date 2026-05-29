@@ -104,6 +104,31 @@ TestResult testPopulateHostMessageCopiesPreviewAndScalars() {
             " scopeBinCount=" + std::to_string(msg.scopeBinCount)};
 }
 
+TestResult testDisplayRequestCarriesLagDragPhase() {
+  temporaldeck_expander::DisplayToHost hold;
+  temporaldeck_expander::populateDisplayRequest(&hold, 9u, temporaldeck_expander::SCOPE_FORMAT_MONO, true, true,
+                                                128.f, 0.f, 0.25f, 0.f,
+                                                temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
+  float decodedLag = 0.f;
+  bool decodedHold = false;
+  bool decodedActive = temporaldeck_expander::decodeLagDragRequest(hold.reserved, &decodedLag, &decodedHold);
+
+  temporaldeck_expander::DisplayToHost drag;
+  temporaldeck_expander::populateDisplayRequest(&drag, 10u, temporaldeck_expander::SCOPE_FORMAT_MONO, true, false,
+                                                0.f, 0.f, -0.125f, 12.f,
+                                                temporaldeck_expander::LAG_DRAG_PHASE_DRAG);
+
+  bool pass = hold.version == temporaldeck_expander::DISPLAY_VERSION &&
+              hold.lagDragPhase == temporaldeck_expander::LAG_DRAG_PHASE_HOLD &&
+              decodedActive && decodedHold && std::fabs(decodedLag - 128.f) < 0.1f &&
+              drag.lagDragPhase == temporaldeck_expander::LAG_DRAG_PHASE_DRAG &&
+              temporaldeck_expander::isLagDragPhaseActive(drag.lagDragPhase);
+  return {"Display request carries explicit lag-drag phase", pass,
+          "holdPhase=" + std::to_string(hold.lagDragPhase) +
+            " dragPhase=" + std::to_string(drag.lagDragPhase) +
+            " decodedHold=" + std::to_string(int(decodedHold))};
+}
+
 TestResult testEnginePreviewUpdatesOnlyWhenLiveWritesAdvance() {
   const float sr = 48000.f;
   Engine engine;
@@ -191,6 +216,7 @@ int main() {
   tests.push_back(testPreviewQuantizeClamp());
   tests.push_back(testPreviewAccumulatorFinalizeAndWrap());
   tests.push_back(testPopulateHostMessageCopiesPreviewAndScalars());
+  tests.push_back(testDisplayRequestCarriesLagDragPhase());
   tests.push_back(testEnginePreviewUpdatesOnlyWhenLiveWritesAdvance());
   tests.push_back(testSampleInstallPopulatesPreviewBins());
   tests.push_back(testLiveToSampleConversionBumpsGenerationAndPreservesStaticSamplePreview());

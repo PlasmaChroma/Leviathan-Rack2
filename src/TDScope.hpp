@@ -92,10 +92,12 @@ struct TDScope final : Module {
   uint32_t lastRequestedScopeFormat = uint32_t(-1);
   bool lastLagDragActive = false;
   bool lastLagDragStationaryHold = false;
+  uint32_t lastLagDragPhase = temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE;
   float lastLagDragSamples = 0.f;
   float lastLagDragVelocity = 0.f;
   std::atomic<bool> uiLagDragActive {false};
   std::atomic<bool> uiLagDragStationaryHold {false};
+  std::atomic<uint32_t> uiLagDragPhase {temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE};
   std::atomic<float> uiLagDragSamples {0.f};
   std::atomic<float> uiLagDragVelocity {0.f};
   std::atomic<uint32_t> uiLagDragSeq {0u};
@@ -357,11 +359,20 @@ struct TDScope final : Module {
     return false;
   }
 
-  void setLagDragRequest(bool active, float normalizedOffset, float normalizedVelocity = 0.f, bool stationaryHold = false) {
+  void setLagDragRequest(bool active, float normalizedOffset, float normalizedVelocity = 0.f, bool stationaryHold = false,
+                         uint32_t phase = temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE) {
+    phase = temporaldeck_expander::normalizeLagDragPhase(phase);
+    if (!active) {
+      phase = temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE;
+    } else if (phase == temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE) {
+      phase = temporaldeck_expander::lagDragPhaseFromFlags(active, stationaryHold);
+    }
+    stationaryHold = phase == temporaldeck_expander::LAG_DRAG_PHASE_HOLD;
     // Publish drag request as a coherent snapshot for process-thread reads.
     uiLagDragSeq.fetch_add(1u, std::memory_order_release); // begin write (odd)
     uiLagDragActive.store(active, std::memory_order_relaxed);
     uiLagDragStationaryHold.store(active && stationaryHold, std::memory_order_relaxed);
+    uiLagDragPhase.store(phase, std::memory_order_relaxed);
     uiLagDragSamples.store(normalizedOffset, std::memory_order_relaxed);
     uiLagDragVelocity.store(normalizedVelocity, std::memory_order_relaxed);
     uiLagDragSeq.fetch_add(1u, std::memory_order_release); // end write (even)
@@ -421,6 +432,7 @@ struct TDScope final : Module {
                                         : temporaldeck_expander::SCOPE_FORMAT_MONO;
       bool lagDragActive = false;
       bool lagDragStationaryHold = false;
+      uint32_t lagDragPhase = temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE;
       float lagDragSamples = 0.f;
       float lagDragVelocity = 0.f;
       bool lagDragSnapshotRead = false;
@@ -432,12 +444,14 @@ struct TDScope final : Module {
         }
         bool active = uiLagDragActive.load(std::memory_order_relaxed);
         bool stationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
+        uint32_t phase = uiLagDragPhase.load(std::memory_order_relaxed);
         float samples = uiLagDragSamples.load(std::memory_order_relaxed);
         float velocity = uiLagDragVelocity.load(std::memory_order_relaxed);
         uint32_t seq1 = uiLagDragSeq.load(std::memory_order_acquire);
         if (seq0 == seq1 && (seq1 & 1u) == 0u) {
           lagDragActive = active;
           lagDragStationaryHold = stationaryHold;
+          lagDragPhase = phase;
           lagDragSamples = samples;
           lagDragVelocity = velocity;
           lagDragSnapshotRead = true;
@@ -449,9 +463,17 @@ struct TDScope final : Module {
       if (!lagDragSnapshotRead) {
         lagDragActive = uiLagDragActive.load(std::memory_order_relaxed);
         lagDragStationaryHold = uiLagDragStationaryHold.load(std::memory_order_relaxed);
+        lagDragPhase = uiLagDragPhase.load(std::memory_order_relaxed);
         lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
         lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
       }
+      lagDragPhase = temporaldeck_expander::normalizeLagDragPhase(lagDragPhase);
+      if (!lagDragActive) {
+        lagDragPhase = temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE;
+      } else if (!temporaldeck_expander::isLagDragPhaseActive(lagDragPhase)) {
+        lagDragPhase = temporaldeck_expander::lagDragPhaseFromFlags(lagDragActive, lagDragStationaryHold);
+      }
+      lagDragStationaryHold = lagDragPhase == temporaldeck_expander::LAG_DRAG_PHASE_HOLD;
       if (!std::isfinite(lagDragSamples)) {
         lagDragSamples = 0.f;
       }
@@ -463,10 +485,11 @@ struct TDScope final : Module {
       bool formatChanged = requestedScopeFormat != lastRequestedScopeFormat;
       bool lagStateChanged = lagDragActive != lastLagDragActive;
       bool lagHoldChanged = lagDragStationaryHold != lastLagDragStationaryHold;
+      bool lagPhaseChanged = lagDragPhase != lastLagDragPhase;
       bool lagValueChanged = lagDragActive && (std::fabs(lagDragSamples - lastLagDragSamples) >= (1.f / 16.f) ||
                                                std::fabs(lagDragVelocity - lastLagDragVelocity) >= 0.1f);
       bool timerElapsed = requestPublishTimerSec >= requestIntervalSec;
-      if (formatChanged || lagStateChanged || lagHoldChanged || lagValueChanged || timerElapsed) {
+      if (formatChanged || lagStateChanged || lagHoldChanged || lagPhaseChanged || lagValueChanged || timerElapsed) {
         if (timerElapsed) {
           requestPublishTimerSec = std::fmod(requestPublishTimerSec, requestIntervalSec);
         } else {
@@ -481,11 +504,13 @@ struct TDScope final : Module {
           // reads it from rightExpander.consumerMessage in its next process().
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
-                                                        lagDragStationaryHold, 0.f, 0.f, lagDragSamples, lagDragVelocity);
+                                                        lagDragStationaryHold, 0.f, 0.f, lagDragSamples, lagDragVelocity,
+                                                        lagDragPhase);
           left->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
           lastLagDragActive = lagDragActive;
           lastLagDragStationaryHold = lagDragStationaryHold;
+          lastLagDragPhase = lagDragPhase;
           lastLagDragSamples = lagDragSamples;
           lastLagDragVelocity = lagDragVelocity;
         }

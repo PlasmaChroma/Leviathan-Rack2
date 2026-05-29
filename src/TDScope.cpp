@@ -503,16 +503,13 @@ struct TDScopeDisplayWidget final : Widget {
     tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
     float totalWindowSamples = lagSpan.totalWindowSamples;
     bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    bool lagDragActive = module && module->uiLagDragActive.load(std::memory_order_relaxed);
     float windowTopLag = lagSpan.windowTopLag;
     float windowBottomLag = lagSpan.windowBottomLag;
     bool verticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
-    float readHeadT = 0.5f;
-    if (windowTopLag != windowBottomLag) {
-      readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
-    }
-    if (verticalInverted) {
-      readHeadT = 1.f - readHeadT;
-    }
+    float readHeadT = tdscope::computeReadHeadMarkerT(lagSpan, msg.lagSamples);
+    readHeadT =
+      tdscope::applyLiveReadHeadPolicy(readHeadT, msg.lagSamples, lagSpan.halfWindowSamples, sampleMode, verticalInverted);
     float readHeadY = drawTop + readHeadT * yDen + 0.5f;
     if (lowSignalWindow && sampleMode) {
       readHeadY = drawTop + 0.5f * yDen + 0.5f;
@@ -523,7 +520,7 @@ struct TDScopeDisplayWidget final : Widget {
     constexpr float kReadHeadNowNudgePx = 0.45f;
     float readHeadDrawY = readHeadY;
     if (!sampleMode) {
-      float nowProximity = clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
+      float nowProximity = lagDragActive ? 0.f : clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
       readHeadDrawY += (verticalInverted ? -kReadHeadNowNudgePx : kReadHeadNowNudgePx) * nowProximity;
     }
     float minReadHeadY = drawTop + kReadHeadHalfBandPx + 0.5f;
@@ -1828,7 +1825,7 @@ Widget *createDisplay(TDScope *module, math::Rect scopeRectMm) {
 } // namespace tdscope
 
 struct TDScopeInputWidget final : Widget {
-  static constexpr double kLagDragHoldDetectSec = 0.090;
+  static constexpr double kLagDragHoldDetectSec = 0.025;
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
   bool hasLastGoodMsg = false;
@@ -1907,10 +1904,11 @@ struct TDScopeInputWidget final : Widget {
     lagDragging = true;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
-    lagDragStationaryHoldActive = false;
+    lagDragStationaryHoldActive = true;
     lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
     lagDragNormalizedOffset = 0.f;
-    module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                              temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
     return true;
   }
 
@@ -1921,7 +1919,7 @@ struct TDScopeInputWidget final : Widget {
     lagDragNormalizedOffset = 0.f;
     lagDragStationaryHoldActive = false;
     if (module) {
-      module->setLagDragRequest(false, 0.f, 0.f, false);
+      module->setLagDragRequest(false, 0.f, 0.f, false, temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE);
     }
   }
 
@@ -1953,7 +1951,9 @@ struct TDScopeInputWidget final : Widget {
     }
     refreshLastGoodMsg();
     if (!hasLastGoodMsg) {
-      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, lagDragStationaryHoldActive,
+                                lagDragStationaryHoldActive ? temporaldeck_expander::LAG_DRAG_PHASE_HOLD
+                                                            : temporaldeck_expander::LAG_DRAG_PHASE_DRAG);
       e.consume(this);
       return;
     }
@@ -1961,31 +1961,37 @@ struct TDScopeInputWidget final : Widget {
     constexpr double kMinGestureDtSec = 1.0 / 240.0;
     constexpr double kMaxGestureDtSec = 1.0 / 20.0;
     double dtSec = std::max(kMinGestureDtSec, std::min(kMaxGestureDtSec, nowSec - lagDragLastMoveSec));
-    lagDragLastMoveSec = nowSec;
 
-    constexpr float kLagDragJitterDeadzonePx = 0.05f;
+    constexpr float kLagDragJitterDeadzonePx = 0.10f;
+    constexpr float kLagDragHoldExitThresholdPx = 0.85f;
     // DragMove has no local position, and Rack event recursion does not
     // localize mouseDelta. Convert screen/rack-scroll pixels into scope-local
     // pixels before normalizing by the visible widget height.
     float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
-    if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
+    float movementThreshold = lagDragStationaryHoldActive ? kLagDragHoldExitThresholdPx : kLagDragJitterDeadzonePx;
+    if (std::fabs(lagDragResidualY) < movementThreshold) {
+      if (lagDragStationaryHoldActive) {
+        module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                                  temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
+      }
       e.consume(this);
       return;
     }
+    lagDragLastMoveSec = nowSec;
     float appliedDeltaY = lagDragResidualY;
     lagDragResidualY = 0.f;
     float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
     float signedDeltaY = appliedDeltaY * lagDragDirection;
     if (lagDragStationaryHoldActive) {
       lagDragNormalizedOffset = 0.f;
-      lagDragStationaryHoldActive = false;
     }
+    lagDragStationaryHoldActive = false;
     float previousNormalizedOffset = lagDragNormalizedOffset;
     lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
     float normalizedVelocity = (previousNormalizedOffset - lagDragNormalizedOffset) / std::max(float(dtSec), 1e-6f);
-    module->setLagDragRequest(true, lagDragNormalizedOffset, normalizedVelocity, false);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, normalizedVelocity, false,
+                              temporaldeck_expander::LAG_DRAG_PHASE_DRAG);
     e.consume(this);
   }
 
@@ -2005,7 +2011,8 @@ struct TDScopeInputWidget final : Widget {
     }
     double nowSec = system::getTime();
     if ((nowSec - lagDragLastMoveSec) >= kLagDragHoldDetectSec) {
-      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                                temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
       lagDragStationaryHoldActive = true;
     }
   }

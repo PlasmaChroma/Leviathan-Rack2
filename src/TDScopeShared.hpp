@@ -53,7 +53,43 @@ inline ScopeWindowLagSpan computeScopeWindowLagSpan(const temporaldeck_expander:
   }
   span.windowTopLag = msg.lagSamples + span.backwardWindowSamples;
   span.windowBottomLag = msg.lagSamples - span.forwardWindowSamples;
+  if (msg.scopeBinCount > 0u && std::isfinite(msg.scopeStartLagSamples) && std::isfinite(msg.scopeBinSpanSamples) &&
+      msg.scopeBinSpanSamples > 0.f) {
+    span.windowTopLag = msg.scopeStartLagSamples;
+    span.windowBottomLag = msg.scopeStartLagSamples - span.totalWindowSamples;
+    if (!sampleMode) {
+      span.backwardWindowSamples = span.windowTopLag - msg.lagSamples;
+      span.forwardWindowSamples = msg.lagSamples - span.windowBottomLag;
+    }
+  }
   return span;
+}
+
+inline float computeReadHeadMarkerT(const ScopeWindowLagSpan& span, float markerLagSamples) {
+  if (!std::isfinite(markerLagSamples) || !std::isfinite(span.windowTopLag) || !std::isfinite(span.windowBottomLag) ||
+      span.windowTopLag == span.windowBottomLag) {
+    return 0.5f;
+  }
+  return clamp((markerLagSamples - span.windowTopLag) / (span.windowBottomLag - span.windowTopLag), 0.f, 1.f);
+}
+
+inline float applyLiveReadHeadPolicy(float markerT, float markerLagSamples, float halfWindowSamples, bool sampleMode,
+                                     bool verticalInverted) {
+  float t = clamp(markerT, 0.f, 1.f);
+  if (!sampleMode) {
+    // Live scope policy:
+    // - if lag reaches/exceeds half-window (900ms default), pin marker to center
+    // - otherwise keep marker in the NOW-side half.
+    if (std::isfinite(markerLagSamples) && std::isfinite(halfWindowSamples) && markerLagSamples >= halfWindowSamples) {
+      t = 0.5f;
+    } else {
+      t = std::max(t, 0.5f);
+    }
+  }
+  if (verticalInverted) {
+    t = 1.f - t;
+  }
+  return t;
 }
 
 struct ScopeAutoScaleState {
