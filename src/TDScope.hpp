@@ -357,13 +357,13 @@ struct TDScope final : Module {
     return false;
   }
 
-  void setLagDragRequest(bool active, float lagSamples, float velocity = 0.f, bool stationaryHold = false) {
+  void setLagDragRequest(bool active, float normalizedOffset, float normalizedVelocity = 0.f, bool stationaryHold = false) {
     // Publish drag request as a coherent snapshot for process-thread reads.
     uiLagDragSeq.fetch_add(1u, std::memory_order_release); // begin write (odd)
     uiLagDragActive.store(active, std::memory_order_relaxed);
     uiLagDragStationaryHold.store(active && stationaryHold, std::memory_order_relaxed);
-    uiLagDragSamples.store(std::max(0.f, lagSamples), std::memory_order_relaxed);
-    uiLagDragVelocity.store(velocity, std::memory_order_relaxed);
+    uiLagDragSamples.store(normalizedOffset, std::memory_order_relaxed);
+    uiLagDragVelocity.store(normalizedVelocity, std::memory_order_relaxed);
     uiLagDragSeq.fetch_add(1u, std::memory_order_release); // end write (even)
   }
 
@@ -452,7 +452,7 @@ struct TDScope final : Module {
         lagDragSamples = uiLagDragSamples.load(std::memory_order_relaxed);
         lagDragVelocity = uiLagDragVelocity.load(std::memory_order_relaxed);
       }
-      if (!std::isfinite(lagDragSamples) || lagDragSamples < 0.f) {
+      if (!std::isfinite(lagDragSamples)) {
         lagDragSamples = 0.f;
       }
       if (!std::isfinite(lagDragVelocity)) {
@@ -481,7 +481,7 @@ struct TDScope final : Module {
           // reads it from rightExpander.consumerMessage in its next process().
           requestSeq++;
           temporaldeck_expander::populateDisplayRequest(request, requestSeq, requestedScopeFormat, lagDragActive,
-                                                        lagDragStationaryHold, lagDragSamples, lagDragVelocity);
+                                                        lagDragStationaryHold, 0.f, 0.f, lagDragSamples, lagDragVelocity);
           left->rightExpander.messageFlipRequested = true;
           lastRequestedScopeFormat = requestedScopeFormat;
           lastLagDragActive = lagDragActive;

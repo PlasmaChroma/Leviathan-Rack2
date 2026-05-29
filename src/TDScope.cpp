@@ -46,11 +46,6 @@ bool isTemporalDeckModule(const engine::Module *neighbor) {
 } // namespace tdscope
 
 struct TDScopeDisplayWidget final : Widget {
-  // Scope is an input proxy for platter drag. Define drag travel directly in
-  // platter turns so full-height swipes have stable, deck-equivalent meaning.
-  // Scale factor applied to nominal 1-turn-per-full-height scope drag.
-  // 1.0 = one nominal platter turn across full scope height.
-  static constexpr float kScopeDragNominalTurnScale = 0.30f;
   static constexpr float kNominalPlatterRpm = 33.3333f;
 
   struct LiveScopeBucket {
@@ -1839,11 +1834,8 @@ struct TDScopeInputWidget final : Widget {
   bool hasLastGoodMsg = false;
   double lastGoodMsgTimeSec = -1.0;
   bool lagDragging = false;
-  float lagDragAnchorLagSamples = 0.f;
   float lagDragReferenceHeight = 1.f;
-  float lagDragTravelSamples = 0.f;
   float lagDragNormalizedOffset = 0.f;
-  float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
   bool lagDragStationaryHoldActive = false;
@@ -1916,13 +1908,9 @@ struct TDScopeInputWidget final : Widget {
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
     lagDragStationaryHoldActive = false;
-    float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    lagDragAnchorLagSamples = anchorLagSamples;
     lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
-    lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
     lagDragNormalizedOffset = 0.f;
-    lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
     return true;
   }
 
@@ -1930,7 +1918,6 @@ struct TDScopeInputWidget final : Widget {
     lagDragging = false;
     lagDragResidualY = 0.f;
     lagDragReferenceHeight = 1.f;
-    lagDragTravelSamples = 0.f;
     lagDragNormalizedOffset = 0.f;
     lagDragStationaryHoldActive = false;
     if (module) {
@@ -1966,7 +1953,7 @@ struct TDScopeInputWidget final : Widget {
     }
     refreshLastGoodMsg();
     if (!hasLastGoodMsg) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
       e.consume(this);
       return;
     }
@@ -1983,7 +1970,7 @@ struct TDScopeInputWidget final : Widget {
     float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
     if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, false);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, false);
       e.consume(this);
       return;
     }
@@ -1991,51 +1978,14 @@ struct TDScopeInputWidget final : Widget {
     lagDragResidualY = 0.f;
     float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
     float signedDeltaY = appliedDeltaY * lagDragDirection;
-    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
     if (lagDragStationaryHoldActive) {
-      ScopeWindowMap holdMap = buildScopeWindowMap(lastGoodMsg);
-      lagDragAnchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, holdMap.accessibleLag);
-      lagDragLocalLagSamples = lagDragAnchorLagSamples;
       lagDragNormalizedOffset = 0.f;
       lagDragStationaryHoldActive = false;
     }
-    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
-      lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
-    }
+    float previousNormalizedOffset = lagDragNormalizedOffset;
     lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      e.consume(this);
-      return;
-    }
-
-    float previousLag = lagDragLocalLagSamples;
-    float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    if (!sampleMode && !freezeActive) {
-      const float nearNowGateSamples = std::max(lastGoodMsg.sampleRate, 1.f);
-      if (previousLag < nearNowGateSamples && signedDeltaY < 0.f) {
-        const float depthT = clamp(previousLag / nearNowGateSamples, 0.f, 1.f);
-        const float nearNowT = 1.f - depthT;
-        const float towardNowBoost = 0.25f + nearNowT * nearNowT * 2.4f;
-        desiredPlaybackLag -= nearNowGateSamples * float(dtSec) * towardNowBoost;
-      }
-    }
-    bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
-    bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    lagDragLocalLagSamples = tdscope::solveLagDragPlaybackLag(
-      desiredPlaybackLag,
-      sampleMode,
-      sampleLoaded,
-      sampleLoop,
-      freezeActive,
-      map.accessibleLag,
-      lastGoodMsgTimeSec,
-      nowSec,
-      lastGoodMsg.sampleRate);
-    float velocitySamples = tdscope::computeLagDragVelocity(
-      previousLag, lagDragLocalLagSamples, dtSec, lastGoodMsg.sampleRate);
-    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples, false);
+    float normalizedVelocity = (previousNormalizedOffset - lagDragNormalizedOffset) / std::max(float(dtSec), 1e-6f);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, normalizedVelocity, false);
     e.consume(this);
   }
 
@@ -2055,7 +2005,7 @@ struct TDScopeInputWidget final : Widget {
     }
     double nowSec = system::getTime();
     if ((nowSec - lagDragLastMoveSec) >= kLagDragHoldDetectSec) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true);
       lagDragStationaryHoldActive = true;
     }
   }

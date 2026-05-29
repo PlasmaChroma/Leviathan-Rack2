@@ -12,7 +12,7 @@ namespace temporaldeck_expander {
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
 constexpr uint16_t VERSION = 5u;
 constexpr uint32_t DISPLAY_MAGIC = 0x54445844u; // "TDXD"
-constexpr uint16_t DISPLAY_VERSION = 2u;
+constexpr uint16_t DISPLAY_VERSION = 3u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
 constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
 constexpr float kPreviewQuantizeVolts = 10.f;
@@ -105,6 +105,8 @@ struct DisplayToHost {
   uint32_t requestedScopeFormat = SCOPE_FORMAT_MONO;
   uint32_t reserved = 0;
   float lagDragVelocity = 0.f;
+  float lagDragNormalizedOffset = 0.f;
+  float lagDragNormalizedVelocity = 0.f;
 };
 
 static_assert(std::is_standard_layout<DisplayToHost>::value, "DisplayToHost must stay POD-like");
@@ -309,7 +311,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
 
 inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint32_t requestedScopeFormat,
                                    bool lagDragActive = false, bool stationaryHold = false, float lagDragSamples = 0.f,
-                                   float lagDragVelocity = 0.f) {
+                                   float lagDragVelocity = 0.f, float lagDragNormalizedOffset = 0.f,
+                                   float lagDragNormalizedVelocity = 0.f) {
   if (!out) {
     return;
   }
@@ -320,6 +323,8 @@ inline void populateDisplayRequest(DisplayToHost *out, uint64_t requestSeq, uint
   out->requestedScopeFormat = (requestedScopeFormat == SCOPE_FORMAT_STEREO) ? SCOPE_FORMAT_STEREO : SCOPE_FORMAT_MONO;
   out->reserved = encodeLagDragRequest(lagDragActive, stationaryHold, lagDragSamples);
   out->lagDragVelocity = lagDragVelocity;
+  out->lagDragNormalizedOffset = lagDragNormalizedOffset;
+  out->lagDragNormalizedVelocity = lagDragNormalizedVelocity;
 }
 
 } // namespace temporaldeck_expander
