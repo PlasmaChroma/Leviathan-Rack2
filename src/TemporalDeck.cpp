@@ -100,6 +100,8 @@ static std::atomic<uint32_t> gTemporalDeckDebugInstanceCounter {1u};
 // not spend time preparing preview payloads faster than the UI can consume.
 static constexpr float kExpanderPublishRateHz = 90.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
+static constexpr float kExpanderPublishRateHzLiveIdle = 60.f;
+static constexpr float kExpanderPublishIntervalSecLiveIdle = 1.f / kExpanderPublishRateHzLiveIdle;
 static constexpr float kExpanderPublishRateHzFrozenLive = 20.f;
 static constexpr float kExpanderPublishIntervalSecFrozenLive = 1.f / kExpanderPublishRateHzFrozenLive;
 static constexpr float kScopeHalfWindowMs = 900.f;
@@ -1718,8 +1720,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
     const bool scopeInteractionActive =
       platterInput.platterMotionActive || platterInput.scopeLagDragActive || impl->expanderLagDragWasActive;
     const bool frozenLiveScopeIdle = freezeActive && !frame.sampleMode && !scopeInteractionActive;
+    const bool liveScopeIdle = !freezeActive && !frame.sampleMode && !scopeInteractionActive;
     const float expanderPublishIntervalSec =
-      frozenLiveScopeIdle ? kExpanderPublishIntervalSecFrozenLive : kExpanderPublishIntervalSec;
+      frozenLiveScopeIdle ? kExpanderPublishIntervalSecFrozenLive
+                          : (liveScopeIdle ? kExpanderPublishIntervalSecLiveIdle : kExpanderPublishIntervalSec);
 
     bool justConnected = !impl->expanderWasConnected;
     bool generationChanged = impl->engine.bufferGeneration != impl->expanderLastPublishedGeneration;

@@ -2673,6 +2673,20 @@ struct TemporalDeckEngine {
       readHead = buffer.wrapPosition(newestPos - targetLag);
     }
 
+    constexpr float kSteadyUnitRateSnapEps = 1e-4f;
+    const bool steadyUnitRatePlayback =
+      !anyScratch && !slipReturning && !slipBlendActive && !nowCatchActive && !externalCvGateHigh &&
+      !scopeLagDragActive && !platterMotionActive && !rateCvConnected && !reverseState &&
+      std::fabs(baseSpeed - 1.f) <= kSteadyUnitRateSnapEps;
+    if (steadyUnitRatePlayback) {
+      // Return to exact sample centers during stable 1.0x transport playback
+      // so the buffer readers can take their integral-position fast paths.
+      readHead = snapReadHeadToSampleCenter(readHead);
+      if (sampleModeActive) {
+        samplePlayhead = readHead;
+      }
+    }
+
     bool holdAtReverseEdge = reverseAtOldestEdge;
     bool holdAtBufferEdge = holdAtReverseEdge;
 
