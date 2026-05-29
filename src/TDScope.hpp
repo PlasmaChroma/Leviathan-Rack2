@@ -42,7 +42,8 @@ struct TDScope final : Module {
     DEBUG_RENDER_STANDARD = 0,
     DEBUG_RENDER_TAIL_RASTER,
     DEBUG_RENDER_OPENGL,
-    DEBUG_RENDER_COUNT
+    DEBUG_RENDER_OPENGL_SHDR = 7,
+    DEBUG_RENDER_COUNT = 8
   };
   enum ColorScheme {
     COLOR_SCHEME_DEFAULT = 0,
@@ -85,7 +86,7 @@ struct TDScope final : Module {
   float scopeColorBrightness = 0.5f;
   std::atomic<bool> debugUseGlShaderRenderer {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
-  std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
+  std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL_SHDR};
   std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_90HZ};
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
@@ -178,11 +179,17 @@ struct TDScope final : Module {
   }
 
   bool useGeometryHistoryRenderMode() const {
-    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
+    int mode = debugRenderMode.load(std::memory_order_relaxed);
+    return mode == DEBUG_RENDER_OPENGL || mode == DEBUG_RENDER_OPENGL_SHDR;
   }
 
   bool useOpenGlGeometryRenderMode() const {
-    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
+    int mode = debugRenderMode.load(std::memory_order_relaxed);
+    return mode == DEBUG_RENDER_OPENGL || mode == DEBUG_RENDER_OPENGL_SHDR;
+  }
+
+  bool useOpenGlShaderRenderMode() const {
+    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL_SHDR;
   }
 
   float scopeColorBrightnessClamped() const {
@@ -225,7 +232,7 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
-    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(useOpenGlShaderRenderMode()));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled.load(std::memory_order_relaxed)));
     json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode.load(std::memory_order_relaxed)));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode.load(std::memory_order_relaxed)));
@@ -263,9 +270,10 @@ struct TDScope final : Module {
     if (brightnessJ) {
       scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
+    bool legacyShaderRenderer = true;
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
     if (glShaderRendererJ) {
-      debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
+      legacyShaderRenderer = json_boolean_value(glShaderRendererJ);
     }
     json_t *framebufferCacheJ = json_object_get(root, "debugFramebufferCacheEnabled");
     if (framebufferCacheJ) {
@@ -282,12 +290,21 @@ struct TDScope final : Module {
         case 3: debugRenderMode = DEBUG_RENDER_STANDARD; break;
         case 4: debugRenderMode = DEBUG_RENDER_TAIL_RASTER; break;
         case 5: debugRenderMode = DEBUG_RENDER_OPENGL; break;
-        case 6: debugRenderMode = DEBUG_RENDER_OPENGL; break;
+        case 6: debugRenderMode = DEBUG_RENDER_OPENGL_SHDR; break;
+        case 7: debugRenderMode = DEBUG_RENDER_OPENGL_SHDR; break;
         default:
-          debugRenderMode = clamp(rawRenderMode, DEBUG_RENDER_STANDARD, DEBUG_RENDER_COUNT - 1);
+          debugRenderMode =
+            (rawRenderMode >= DEBUG_RENDER_STANDARD && rawRenderMode <= DEBUG_RENDER_OPENGL_SHDR)
+              ? rawRenderMode
+              : DEBUG_RENDER_STANDARD;
           break;
       }
       loadedRenderMode = true;
+      // Legacy serialized mode `2` represented OpenGL with a separate shader
+      // boolean flag; preserve that intent when present.
+      if (rawRenderMode == 2 && glShaderRendererJ) {
+        debugRenderMode = legacyShaderRenderer ? DEBUG_RENDER_OPENGL_SHDR : DEBUG_RENDER_OPENGL;
+      }
     }
     if (!loadedRenderMode) {
       bool legacyTailRaster = false;
@@ -311,7 +328,7 @@ struct TDScope final : Module {
         legacyGlGeometry = json_boolean_value(glGeometryJ);
       }
       if (legacyGlGeometry) {
-        debugRenderMode = DEBUG_RENDER_OPENGL;
+        debugRenderMode = legacyShaderRenderer ? DEBUG_RENDER_OPENGL_SHDR : DEBUG_RENDER_OPENGL;
       } else if (legacyGeometryHistory) {
         debugRenderMode = DEBUG_RENDER_STANDARD;
       } else if (legacyTailRasterGpuShift) {
@@ -322,6 +339,7 @@ struct TDScope final : Module {
         debugRenderMode = DEBUG_RENDER_STANDARD;
       }
     }
+    debugUseGlShaderRenderer.store(useOpenGlShaderRenderMode(), std::memory_order_relaxed);
     json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
     if (publishRateJ) {
       debugUiPublishRateMode =

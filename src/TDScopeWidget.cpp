@@ -61,7 +61,9 @@ const char *debugRenderModeLabel(const TDScope *scopeModule) {
     case TDScope::DEBUG_RENDER_TAIL_RASTER:
       return "RASTER";
     case TDScope::DEBUG_RENDER_OPENGL:
-      return scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed) ? "GL SHDR" : "GL";
+      return "GL";
+    case TDScope::DEBUG_RENDER_OPENGL_SHDR:
+      return "GL SHDR";
     default:
       return "STD";
   }
@@ -321,23 +323,15 @@ struct TDScopeWidget : ModuleWidget {
           [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL", "",
-          [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-          },
+          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL; },
           [=]() {
             scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
           }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL SHDR", "",
+          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR; },
           [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-          },
-          [=]() {
-            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL_SHDR;
           }));
       }));
     }

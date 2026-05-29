@@ -268,7 +268,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const bool scopeVerticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
     const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
     const int scopeColorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
-    const bool debugUseGlShaderRenderer = module->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+    const bool debugUseGlShaderRenderer = module->useOpenGlShaderRenderMode();
     const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
     if (scopeDisplayRangeMode != redrawLastRangeMode) {
       dirty = true;
@@ -378,24 +378,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
     } scissorGuard;
     glDisable(GL_BLEND);
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-    glColor4f(0.f, 0.f, 0.f, 1.f);
-    glBegin(GL_QUADS);
-    glVertex2f(xInset, drawTop);
-    glVertex2f(box.size.x - xInset, drawTop);
-    glVertex2f(box.size.x - xInset, drawBottom);
-    glVertex2f(xInset, drawBottom);
-    glEnd();
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0.f, 0.f, 0.f, 0.f);
 
     bool linkActive = module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module->uiPreviewValid.load(std::memory_order_relaxed);
@@ -1342,6 +1328,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       params.alphaGamma = alphaGamma;
       return params;
     };
+    auto applyFixedFunctionPassParams = [&](NVGcolor c, const ShaderPassParams &params) {
+      c.r = clamp(c.r * params.colorScale, 0.f, 1.f);
+      c.g = clamp(c.g * params.colorScale, 0.f, 1.f);
+      c.b = clamp(c.b * params.colorScale, 0.f, 1.f);
+      c.r = c.r + (1.f - c.r) * clamp(params.colorLift, 0.f, 1.f);
+      c.g = c.g + (1.f - c.g) * clamp(params.colorLift, 0.f, 1.f);
+      c.b = c.b + (1.f - c.b) * clamp(params.colorLift, 0.f, 1.f);
+      float alpha = clamp(c.a, 0.f, 1.f);
+      alpha = std::pow(alpha, std::max(params.alphaGamma, 0.05f));
+      c.a = clamp(alpha * params.alphaScale, 0.f, 1.f);
+      return c;
+    };
+    auto applyFixedFunctionAlphaParams = [&](float alpha, const ShaderPassParams &params) {
+      alpha = clamp(alpha, 0.f, 1.f);
+      alpha = std::pow(alpha, std::max(params.alphaGamma, 0.05f));
+      return clamp(alpha * params.alphaScale, 0.f, 1.f);
+    };
     auto initShaderPipeline = [&]() {
       if (shaderInitAttempted) {
         return shaderReady;
@@ -1646,7 +1649,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  return length(pa - ba * h);\n"
         "}\n"
         "float gaussianAlpha(float dist, float radius) {\n"
-        "  float sigma = max(radius * 0.70, 0.001);\n"
+        "  float sigma = max(radius * 0.78, 0.001);\n"
         "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
         "}\n"
         "float hash(float n) { return fract(sin(n) * 43758.5453123); }\n"
@@ -1673,11 +1676,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  mainW *= lowVisualBoost;\n"
         "  float maxMainW = max(uRowStep * 0.92, 0.78);\n"
         "  mainW = min(mainW, maxMainW);\n"
-        "  float mainRadius = max(mainW * 0.55, 0.40);\n"
+        "  float mainRadius = max(mainW * 0.58, 0.46);\n"
         "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
-        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.82);\n"
-        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.28);\n"
-        "  float mainCov = clamp(0.74 * mainCovCore + 0.26 * mainCovSoft, 0.0, 1.0);\n"
+        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.86);\n"
+        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.34);\n"
+        "  float mainCov = clamp(0.66 * mainCovCore + 0.34 * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
         "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.30);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
@@ -1725,7 +1728,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.65) / max(connectorMinDelta * 1.60, 1e-4), 0.0, 1.0);\n"
         "  float continuityRadius = max((0.68 + 0.44 * connectTone) * uZoomThickness * 1.05 *\n"
         "                               (1.01 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.64,\n"
-        "                               0.44);\n"
+        "                               0.48);\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
         "  float contAlphaBase = clamp(c.a * (0.26 + 0.06 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
@@ -1924,6 +1927,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
+      const bool useShaderRenderMode = module->useOpenGlShaderRenderMode();
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
         return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
@@ -2066,23 +2070,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      const bool renderMainField = true;
-      const bool renderContinuityField = true;
-      if (renderMainField || renderContinuityField) {
-        bool fieldDrawOk = uploadFieldLaneTextures();
-        if (fieldDrawOk && (renderMainField || renderContinuityField)) {
-          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
-                                         GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
-                        fieldDrawOk;
-        }
-        if (fieldDrawOk) {
-          fallbackRendererActive = false;
-          return;
-        }
-        fallbackRendererActive = true;
-      } else {
-        fallbackRendererActive = false;
-      }
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
         if (!verts) {
@@ -2104,6 +2091,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         push(xMin, yMax);
       };
       auto drawSegmentBatch = [&](std::vector<GlSegmentQuadVertex> &verts) {
+        if (!useShaderRenderMode) {
+          return false;
+        }
         if (verts.empty() || !initSegmentShaderPipeline()) {
           return false;
         }
@@ -2141,7 +2131,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      if (initSegmentShaderPipeline()) {
+      auto renderLaneShaderBackend = [&]() -> bool {
+        const bool renderMainField = true;
+        const bool renderContinuityField = true;
+        bool fieldDrawOk = uploadFieldLaneTextures();
+        if (fieldDrawOk) {
+          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
+                                         GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
+                        fieldDrawOk;
+        }
+        if (fieldDrawOk) {
+          return true;
+        }
+        if (!initSegmentShaderPipeline()) {
+          return false;
+        }
+
         bodySegmentVerts.clear();
         fillSegmentVerts.clear();
         continuitySegmentVerts.clear();
@@ -2242,14 +2247,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (!continuitySegmentVerts.empty()) {
           drawSegmentBatch(continuitySegmentVerts);
         }
-        return;
-      }
+        return true;
+      };
       auto drawBatch = [&](std::vector<GlLineVertex> &verts, float width, const ShaderPassParams &shaderParams) {
         if (verts.empty()) {
           return;
         }
         glLineWidth(width);
-        if (module->debugUseGlShaderRenderer && initShaderPipeline()) {
+        if (useShaderRenderMode && initShaderPipeline()) {
           glUseProgram(shaderProgram);
           glUniform1f(shaderUniformColorScale, shaderParams.colorScale);
           glUniform1f(shaderUniformColorLift, shaderParams.colorLift);
@@ -2277,6 +2282,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glUseProgram(0);
         }
       };
+      auto renderLaneGlBackend = [&]() {
       {
         const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
         const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
@@ -2297,6 +2303,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
               tone,
               uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
             clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+          c = applyFixedFunctionPassParams(c, mainShaderParams);
           GLubyte r = encodeColorByte(c.r);
           GLubyte g = encodeColorByte(c.g);
           GLubyte b = encodeColorByte(c.b);
@@ -2319,8 +2326,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             }
             float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
             float fillW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * (1.01f + 0.04f * glDeepZoomEnergyFill);
-            GLubyte fillAlpha =
-              GLubyte(std::lround(clamp(255.f * kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, 0.f, 255.f)));
+            float fillAlphaNorm = applyFixedFunctionAlphaParams(
+              kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, fillShaderParams);
+            GLubyte fillAlpha = GLubyte(std::lround(clamp(255.f * fillAlphaNorm, 0.f, 255.f)));
             if (fillAlpha == 0u) {
               continue;
             }
@@ -2375,6 +2383,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                 uint8_t(std::lround(clamp(
                   (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
               clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            c = applyFixedFunctionPassParams(c, connectorBodyShaderParams);
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
@@ -2412,6 +2421,19 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
         }
       }
+      };
+
+      // Shared lane preparation happens above; backend choice is isolated here.
+      if (useShaderRenderMode) {
+        if (renderLaneShaderBackend()) {
+          fallbackRendererActive = false;
+          return;
+        }
+        fallbackRendererActive = true;
+      } else {
+        fallbackRendererActive = false;
+      }
+      renderLaneGlBackend();
     };
 
     glMatrixMode(GL_PROJECTION);
@@ -2428,6 +2450,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // The scope region is cleared opaque black above. Preserve that alpha so
+    // translucent fixed-function line draws cannot punch panel art back through.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glEnableClientState(GL_VERTEX_ARRAY);
@@ -2470,6 +2495,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
     glPopMatrix();
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDisable(GL_LINE_SMOOTH);
     if (fallbackRendererActive) {
       glDisable(GL_BLEND);
