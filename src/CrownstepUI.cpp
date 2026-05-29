@@ -1,5 +1,6 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -12,7 +13,7 @@ constexpr int CHESS_ATLAS_COLS = 6;
 constexpr int HIGHLIGHT_COLOR_COUNT = 3;
 constexpr bool CHESS_ATLAS_ENABLED = true;
 constexpr float CHESS_HORIZONTAL_SCALE = 1.08f;
-constexpr float CHESS_ATLAS_RASTER_SCALE = 3.f;
+constexpr float CHESS_ATLAS_RASTER_SCALE = 4.f;
 constexpr unsigned char CHESS_MASK_SOLID_ALPHA_THRESHOLD = 24u;
 // Keep alpha neutral to avoid edge over-brightening halos on thin contours.
 constexpr float CHESS_ATLAS_ALPHA_GAMMA = 1.f;
@@ -37,6 +38,61 @@ constexpr HighlightPalette HIGHLIGHT_PALETTES[HIGHLIGHT_COLOR_COUNT] = {
 	{112u, 72u, 184u, 198u, 150u, 255u, 184u, 132u, 255u},
 	{26u, 178u, 214u, 110u, 232u, 255u, 96u, 222u, 248u},
 	{40u, 168u, 104u, 98u, 235u, 154u, 88u, 240u, 154u},
+};
+
+struct CrownstepRangeMenuQuantity final : Quantity {
+	Crownstep* module = nullptr;
+
+	explicit CrownstepRangeMenuQuantity(Crownstep* module) : module(module) {}
+
+	void setValue(float value) override {
+		if (!module) {
+			return;
+		}
+		module->params[Crownstep::RANGE_PARAM].setValue(clamp(value, 0.f, 1.f));
+		module->refreshHeldPitchForCurrentStep();
+	}
+
+	float getValue() override {
+		return module ? module->params[Crownstep::RANGE_PARAM].getValue() : crownstep::PITCH_RANGE_PARAM_DEFAULT;
+	}
+
+	float getDefaultValue() override {
+		return crownstep::PITCH_RANGE_PARAM_DEFAULT;
+	}
+
+	float getMinValue() override {
+		return 0.f;
+	}
+
+	float getMaxValue() override {
+		return 1.f;
+	}
+
+	std::string getLabel() override {
+		return "Range";
+	}
+
+	std::string getUnit() override {
+		return "st";
+	}
+
+	float getDisplayValue() override {
+		const int cellCount = module ? module->boardCellCount() : crownstep::BOARD_SIZE;
+		return crownstep::pitchRangeSemitoneSpan(getValue(), cellCount);
+	}
+
+	void setDisplayValue(float displayValue) override {
+		if (!module) {
+			return;
+		}
+		const float denominator = std::max(1.f, float(std::max(0, module->boardCellCount() - 1)));
+		setValue(crownstep::pitchRangeParamFromMultiplier(displayValue / denominator));
+	}
+
+	std::string getDisplayValueString() override {
+		return string::f("%.1f", getDisplayValue());
+	}
 };
 
 inline int highlightPaletteIndexForMode(int highlightMode) {
@@ -433,6 +489,30 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	if (!vg || !cache || !cache->available || !cache->svg || !cache->svg->handle) {
 		return false;
 	}
+	auto resetRasterHandles = [&](bool deleteCurrentContextHandles) {
+		auto clearHandle = [&](NVGcontext*& owner, int& handle) {
+			int ignoredWidth = 0;
+			int ignoredHeight = 0;
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				owner,
+				handle,
+				ignoredWidth,
+				ignoredHeight,
+				vg,
+				deleteCurrentContextHandles
+			);
+		};
+		clearHandle(cache->rasterImageVg, cache->rasterImageHandle);
+		clearHandle(cache->rasterMaskImageVg, cache->rasterMaskImageHandle);
+		clearHandle(cache->rasterMaskGreenImageVg, cache->rasterMaskGreenImageHandle);
+		clearHandle(cache->rasterMaskGreenDarkImageVg, cache->rasterMaskGreenDarkImageHandle);
+		clearHandle(cache->rasterMaskSilhouetteGreenImageVg, cache->rasterMaskSilhouetteGreenImageHandle);
+		clearHandle(cache->rasterMaskSilhouetteGreenDarkImageVg, cache->rasterMaskSilhouetteGreenDarkImageHandle);
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			clearHandle(cache->rasterRingBandImageVg[size_t(colorIndex)], cache->rasterRingBandImageHandle[size_t(colorIndex)]);
+			clearHandle(cache->rasterRingShellImageVg[size_t(colorIndex)], cache->rasterRingShellImageHandle[size_t(colorIndex)]);
+		}
+	};
 	if (cache->rasterImageHandle >= 0
 		&& cache->rasterImageVg == vg
 		&& cache->rasterMaskImageHandle >= 0
@@ -453,10 +533,11 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 				&& cache->rasterRingShellImageHandle[size_t(colorIndex)] >= 0
 				&& cache->rasterRingShellImageVg[size_t(colorIndex)] == vg;
 		}
-		if (haveAllRingVariants) {
-			return true;
+			if (haveAllRingVariants) {
+				return true;
+			}
 		}
-	}
+	resetRasterHandles(true);
 
 	NSVGimage* image = cache->svg->handle;
 	int rasterWidth = std::max(1, int(std::ceil(image->width * CHESS_ATLAS_RASTER_SCALE)));
@@ -494,6 +575,42 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 
 	// Keep mipmaps on the base piece atlas for smoother perceived edges at panel scale.
 	int imageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_IMAGE_FLAGS, pixels.data());
+	auto cleanupCreatedHandles = [&](int maskHandle,
+	                                 int greenHandle,
+	                                 int greenDarkHandle,
+	                                 int silhouetteGreenHandle,
+	                                 int silhouetteGreenDarkHandle,
+	                                 const std::array<int, HIGHLIGHT_COLOR_COUNT>& ringBandHandles,
+	                                 const std::array<int, HIGHLIGHT_COLOR_COUNT>& ringShellHandles) {
+		if (imageHandle >= 0) {
+			nvgDeleteImage(vg, imageHandle);
+		}
+		if (maskHandle >= 0) {
+			nvgDeleteImage(vg, maskHandle);
+		}
+		if (greenHandle >= 0) {
+			nvgDeleteImage(vg, greenHandle);
+		}
+		if (greenDarkHandle >= 0) {
+			nvgDeleteImage(vg, greenDarkHandle);
+		}
+		if (silhouetteGreenHandle >= 0) {
+			nvgDeleteImage(vg, silhouetteGreenHandle);
+		}
+		if (silhouetteGreenDarkHandle >= 0) {
+			nvgDeleteImage(vg, silhouetteGreenDarkHandle);
+		}
+		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+			int band = ringBandHandles[size_t(colorIndex)];
+			if (band >= 0) {
+				nvgDeleteImage(vg, band);
+			}
+			int shell = ringShellHandles[size_t(colorIndex)];
+			if (shell >= 0) {
+				nvgDeleteImage(vg, shell);
+			}
+		}
+	};
 	if (imageHandle < 0) {
 		return false;
 	}
@@ -506,7 +623,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		maskPixels[i * 4 + 3] = a;
 	}
 	int maskImageHandle = nvgCreateImageRGBA(vg, rasterWidth, rasterHeight, CHESS_ATLAS_MASK_FLAGS, maskPixels.data());
+	std::array<int, HIGHLIGHT_COLOR_COUNT> ringBandImageHandles {};
+	std::array<int, HIGHLIGHT_COLOR_COUNT> ringShellImageHandles {};
+	ringBandImageHandles.fill(-1);
+	ringShellImageHandles.fill(-1);
 	if (maskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, -1, -1, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	std::vector<unsigned char> greenMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
@@ -525,6 +647,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		greenMaskPixels.data()
 	);
 	if (greenMaskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, greenMaskImageHandle, -1, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	std::vector<unsigned char> greenDarkMaskPixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
@@ -543,6 +666,7 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		greenDarkMaskPixels.data()
 	);
 	if (greenDarkMaskImageHandle < 0) {
+		cleanupCreatedHandles(maskImageHandle, greenMaskImageHandle, greenDarkMaskImageHandle, -1, -1, ringBandImageHandles, ringShellImageHandles);
 		return false;
 	}
 	// Build a silhouette alpha mask where internal transparent "holes" are filled,
@@ -611,6 +735,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		silhouetteGreenMaskPixels.data()
 	);
 	if (silhouetteGreenMaskImageHandle < 0) {
+		cleanupCreatedHandles(
+			maskImageHandle,
+			greenMaskImageHandle,
+			greenDarkMaskImageHandle,
+			silhouetteGreenMaskImageHandle,
+			-1,
+			ringBandImageHandles,
+			ringShellImageHandles
+		);
 		return false;
 	}
 	int silhouetteGreenDarkMaskImageHandle = nvgCreateImageRGBA(
@@ -621,6 +754,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 		silhouetteGreenDarkMaskPixels.data()
 	);
 	if (silhouetteGreenDarkMaskImageHandle < 0) {
+		cleanupCreatedHandles(
+			maskImageHandle,
+			greenMaskImageHandle,
+			greenDarkMaskImageHandle,
+			silhouetteGreenMaskImageHandle,
+			silhouetteGreenDarkMaskImageHandle,
+			ringBandImageHandles,
+			ringShellImageHandles
+		);
 		return false;
 	}
 	// Build distance-based external contour bands (offset from silhouette).
@@ -724,6 +866,15 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			ringBandPixels[size_t(colorIndex)].data()
 		);
 		if (ringBandImageHandle < 0) {
+			cleanupCreatedHandles(
+				maskImageHandle,
+				greenMaskImageHandle,
+				greenDarkMaskImageHandle,
+				silhouetteGreenMaskImageHandle,
+				silhouetteGreenDarkMaskImageHandle,
+				ringBandImageHandles,
+				ringShellImageHandles
+			);
 			return false;
 		}
 		int ringShellImageHandle = nvgCreateImageRGBA(
@@ -734,12 +885,20 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			ringShellPixels[size_t(colorIndex)].data()
 		);
 		if (ringShellImageHandle < 0) {
+			ringBandImageHandles[size_t(colorIndex)] = ringBandImageHandle;
+			cleanupCreatedHandles(
+				maskImageHandle,
+				greenMaskImageHandle,
+				greenDarkMaskImageHandle,
+				silhouetteGreenMaskImageHandle,
+				silhouetteGreenDarkMaskImageHandle,
+				ringBandImageHandles,
+				ringShellImageHandles
+			);
 			return false;
 		}
-		cache->rasterRingBandImageVg[size_t(colorIndex)] = vg;
-		cache->rasterRingBandImageHandle[size_t(colorIndex)] = ringBandImageHandle;
-		cache->rasterRingShellImageVg[size_t(colorIndex)] = vg;
-		cache->rasterRingShellImageHandle[size_t(colorIndex)] = ringShellImageHandle;
+		ringBandImageHandles[size_t(colorIndex)] = ringBandImageHandle;
+		ringShellImageHandles[size_t(colorIndex)] = ringShellImageHandle;
 	}
 	cache->rasterImageVg = vg;
 	cache->rasterImageHandle = imageHandle;
@@ -753,6 +912,12 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 	cache->rasterMaskSilhouetteGreenImageHandle = silhouetteGreenMaskImageHandle;
 	cache->rasterMaskSilhouetteGreenDarkImageVg = vg;
 	cache->rasterMaskSilhouetteGreenDarkImageHandle = silhouetteGreenDarkMaskImageHandle;
+	for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+		cache->rasterRingBandImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingBandImageHandle[size_t(colorIndex)] = ringBandImageHandles[size_t(colorIndex)];
+		cache->rasterRingShellImageVg[size_t(colorIndex)] = vg;
+		cache->rasterRingShellImageHandle[size_t(colorIndex)] = ringShellImageHandles[size_t(colorIndex)];
+	}
 	cache->rasterImageWidth = rasterWidth;
 	cache->rasterImageHeight = rasterHeight;
 	cache->rasterScale = CHESS_ATLAS_RASTER_SCALE;
@@ -1046,6 +1211,11 @@ struct CrownstepBoardWidget final : Widget {
 			return true;
 		};
 		bool othelloBoard = module && module->isOthelloMode();
+		auto darkenHighlightOnLightSquare = [&](NVGcolor color, int row, int col) {
+			(void)row;
+			(void)col;
+			return color;
+		};
 		const bool woodTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_WOOD;
 		const bool marbleTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_MARBLE;
 		const bool redBlackTexture = effectiveBoardTextureMode == Crownstep::BOARD_TEXTURE_RED_BLACK;
@@ -1321,7 +1491,15 @@ struct CrownstepBoardWidget final : Widget {
 								}
 								float valueVolts = module->pitchPreviewForBoardIndex(boardIndex);
 								char valueText[24];
-								std::snprintf(valueText, sizeof(valueText), "%.2f", valueVolts);
+								if (module->quantizationEnabled) {
+									const int semitone = int(std::round(valueVolts * 12.f));
+									const int noteIndex = crownstep::wrapSemitone12(semitone);
+									const int octave = int(std::floor(float(semitone) / 12.f)) + 4;
+									std::snprintf(valueText, sizeof(valueText), "%s%d", KEY_NAMES[size_t(noteIndex)], octave);
+								}
+								else {
+									std::snprintf(valueText, sizeof(valueText), "%.2f", valueVolts);
+								}
 								float textX = col * cellWidth + 1.6f;
 								float textY = row * cellHeight + 1.8f;
 								bool darkSquare = othelloBoard || (((row + col) & 1) == 1);
@@ -1347,11 +1525,17 @@ struct CrownstepBoardWidget final : Widget {
 						float pulse = 0.5f + 0.5f * std::sin(animTime * 4.6f + 0.8f);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 1.f, row * cellHeight - 1.f, cellWidth + 2.f, cellHeight + 2.f);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(24.f + 48.f * pulse)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(24.f + 48.f * pulse)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(188.f + 54.f * pulse)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(188.f + 54.f * pulse)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 2.15f);
 						nvgStroke(args.vg);
 					}
@@ -1370,11 +1554,17 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.17f + 0.06f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(44.f + 50.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(44.f + 50.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.105f);
-						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, 255),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 						if (renderOpponentMoveHints) for (int destinationIndex : module->opponentHighlightedDestinations) {
@@ -1403,11 +1593,17 @@ struct CrownstepBoardWidget final : Widget {
 						float glowRadius = std::min(cellWidth, cellHeight) * (0.16f + 0.055f * breath);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, glowRadius);
-						nvgFillColor(args.vg, highlightShellColor(module->highlightMode, int(36.f + 48.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightShellColor(module->highlightMode, int(36.f + 48.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.092f);
-						nvgFillColor(args.vg, highlightBandColor(module->highlightMode, 255));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, 255),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 				}
@@ -1423,7 +1619,10 @@ struct CrownstepBoardWidget final : Widget {
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth - 0.5f, row * cellHeight - 0.5f, cellWidth + 1.f, cellHeight + 1.f);
 						if (module->lastMoveSide == module->humanSide()) {
-							nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(20.f + 38.f * pulse)));
+							nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+								highlightGlowColor(module->highlightMode, int(20.f + 38.f * pulse)),
+								row,
+								col));
 						}
 						else {
 							nvgFillColor(args.vg, nvgRGBA(255, 216, 114, int(18.f + 34.f * pulse)));
@@ -1432,7 +1631,10 @@ struct CrownstepBoardWidget final : Widget {
 						nvgBeginPath(args.vg);
 						nvgRect(args.vg, col * cellWidth + 1.f, row * cellHeight + 1.f, cellWidth - 2.f, cellHeight - 2.f);
 						if (module->lastMoveSide == module->humanSide()) {
-							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(192.f + 48.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightBandColor(module->highlightMode, int(192.f + 48.f * pulse)),
+								row,
+								col));
 						}
 						else {
 							nvgStrokeColor(args.vg, nvgRGB(255, 213, 79));
@@ -2092,7 +2294,10 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.21f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(186.f + 62.f * breath)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(186.f + 62.f * breath)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 1.9f);
 						nvgStroke(args.vg);
 					}
@@ -2131,12 +2336,18 @@ struct CrownstepBoardWidget final : Widget {
 							float ringRadius = std::min(cellWidth, cellHeight) * (0.205f + 0.05f * breath);
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-						nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(180.f + 68.f * breath)));
+						nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+							highlightBandColor(module->highlightMode, int(180.f + 68.f * breath)),
+							row,
+							col));
 						nvgStrokeWidth(args.vg, 1.85f);
 						nvgStroke(args.vg);
 						nvgBeginPath(args.vg);
 						nvgCircle(args.vg, centerX, centerY, std::min(cellWidth, cellHeight) * 0.062f);
-						nvgFillColor(args.vg, highlightGlowColor(module->highlightMode, int(190.f + 56.f * breath)));
+						nvgFillColor(args.vg, darkenHighlightOnLightSquare(
+							highlightGlowColor(module->highlightMode, int(190.f + 56.f * breath)),
+							row,
+							col));
 						nvgFill(args.vg);
 					}
 				}
@@ -2201,13 +2412,19 @@ struct CrownstepBoardWidget final : Widget {
 									// Fixed contour shell.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, highlightShellColor(module->highlightMode, 172));
+									nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+										highlightShellColor(module->highlightMode, 172),
+										row,
+										col));
 									nvgStrokeWidth(args.vg, outerStroke);
 									nvgStroke(args.vg);
 									// Fixed bright band keeps contour solid at all pulse phases.
 									nvgBeginPath(args.vg);
 									nvgRoundedRect(args.vg, ringX, ringY, ringW, ringH, corner);
-									nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, 244));
+									nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+										highlightBandColor(module->highlightMode, 244),
+										row,
+										col));
 									nvgStrokeWidth(args.vg, innerStroke);
 									nvgStroke(args.vg);
 									continue;
@@ -2216,13 +2433,19 @@ struct CrownstepBoardWidget final : Widget {
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, highlightGlowColor(module->highlightMode, int(38.f + 44.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightGlowColor(module->highlightMode, int(38.f + 44.f * pulse)),
+								row,
+								col));
 							nvgStrokeWidth(args.vg, 3.6f);
 							nvgStroke(args.vg);
 
 							nvgBeginPath(args.vg);
 							nvgCircle(args.vg, centerX, centerY, ringRadius);
-							nvgStrokeColor(args.vg, highlightBandColor(module->highlightMode, int(182.f + 58.f * pulse)));
+							nvgStrokeColor(args.vg, darkenHighlightOnLightSquare(
+								highlightBandColor(module->highlightMode, int(182.f + 58.f * pulse)),
+								row,
+								col));
 							nvgStrokeWidth(args.vg, 1.85f);
 							nvgStroke(args.vg);
 						}
@@ -2260,6 +2483,30 @@ struct CrownRibbonWidget final : OpaqueWidget {
 	bool capDragActive = false;
 	bool capDragTrimMode = false;
 	Vec capDragLocal = Vec(0.f, 0.f);
+	enum class TrimHandle {
+		None,
+		Left,
+		Right,
+	};
+	enum class RangeDragMode {
+		None,
+		LeftEdge,
+		RightEdge,
+		MoveWindow,
+	};
+	enum class NudgeButton {
+		None,
+		Left,
+		Right,
+	};
+	TrimHandle activeTrimHandle = TrimHandle::None;
+	TrimHandle pendingTrimHandle = TrimHandle::None;
+	RangeDragMode activeRangeDragMode = RangeDragMode::None;
+	RangeDragMode pendingRangeDragMode = RangeDragMode::None;
+	int rangeDragAnchorIndex = 0;
+	int rangeDragStartIndex = 0;
+	int rangeDragEndIndex = 0;
+	float rangeDragMouseDownX = 0.f;
 
 	enum class VisualMode {
 		DISCRETE,
@@ -2385,6 +2632,166 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
 	}
 
+	void activeWindowGeometry(const RibbonState& s, const RibbonLayout& layout, float* outX, float* outW) const {
+		if (!outX || !outW) {
+			return;
+		}
+		float startNorm = 0.f;
+		float endNorm = 1.f;
+		if (!s.fullMode && s.historySize > 0) {
+			startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
+			endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
+		}
+		*outX = layout.stripX + layout.stripW * startNorm;
+		*outW = std::max(1.4f, layout.stripW * std::max(0.f, endNorm - startNorm));
+	}
+
+	float trimHandleWidth(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 0.9f, layout.compact ? 4.0f : 5.0f, layout.compact ? 6.0f : 7.4f);
+	}
+
+	float trimHandleInset(const RibbonLayout& layout) const {
+		(void) layout;
+		return 0.f;
+	}
+
+	float nudgeButtonWidth(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 1.05f, layout.compact ? 5.0f : 6.0f, layout.compact ? 7.0f : 8.5f);
+	}
+
+	float nudgeButtonGap(const RibbonLayout& layout) const {
+		return clamp(layout.historyH * 0.06f, layout.compact ? 0.18f : 0.24f, layout.compact ? 0.55f : 0.8f);
+	}
+
+	math::Rect nudgeButtonRect(NudgeButton button, const RibbonLayout& layout, const RibbonState& s) const {
+		if (button == NudgeButton::None || s.historySize <= 1 || s.activeLength <= 0) {
+			return math::Rect();
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		const float gap = nudgeButtonGap(layout);
+		const float buttonW = nudgeButtonWidth(layout);
+		const float buttonH = std::max(1.f, layout.historyH - 0.6f);
+		const float buttonY = layout.historyY + 0.3f;
+		if (button == NudgeButton::Left) {
+			return math::Rect(Vec(activeX - gap - buttonW, buttonY), Vec(buttonW, buttonH));
+		}
+		return math::Rect(Vec(activeX + activeW + gap, buttonY), Vec(buttonW, buttonH));
+	}
+
+	NudgeButton nudgeButtonAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 1 || s.activeLength <= 0) {
+			return NudgeButton::None;
+		}
+		const int length = clamp(s.activeLength, 1, s.historySize);
+		if (s.activeStart > 0 && nudgeButtonRect(NudgeButton::Left, layout, s).contains(localPos)) {
+			return NudgeButton::Left;
+		}
+		if (s.activeStart + length < s.historySize && nudgeButtonRect(NudgeButton::Right, layout, s).contains(localPos)) {
+			return NudgeButton::Right;
+		}
+		return NudgeButton::None;
+	}
+
+	TrimHandle trimHandleAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 1 || s.activeLength <= 0) {
+			return TrimHandle::None;
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		const float handleW = trimHandleWidth(layout);
+		const float handleH = std::max(1.f, layout.historyH - 0.6f);
+		const float handleY = layout.historyY + 0.3f;
+		const float inset = trimHandleInset(layout);
+		const float leftCx = activeX + 0.5f * handleW + inset;
+		const float rightCx = activeX + activeW - 0.5f * handleW - inset;
+		const math::Rect leftHandle(Vec(leftCx - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		const math::Rect rightHandle(Vec(rightCx - 0.5f * handleW, handleY), Vec(handleW, handleH));
+		if (leftHandle.contains(localPos)) {
+			return TrimHandle::Left;
+		}
+		if (rightHandle.contains(localPos)) {
+			return TrimHandle::Right;
+		}
+		return TrimHandle::None;
+	}
+
+	bool pointInActiveWindow(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		if (!pointInHistoryStrip(localPos, layout) || s.historySize <= 0 || s.activeLength <= 0) {
+			return false;
+		}
+		float activeX = 0.f;
+		float activeW = 0.f;
+		activeWindowGeometry(s, layout, &activeX, &activeW);
+		return localPos.x >= activeX && localPos.x <= activeX + activeW;
+	}
+
+	RangeDragMode rangeDragModeAt(Vec localPos, const RibbonLayout& layout, const RibbonState& s) const {
+		const TrimHandle handle = trimHandleAt(localPos, layout, s);
+		if (handle == TrimHandle::Left) {
+			return RangeDragMode::LeftEdge;
+		}
+		if (handle == TrimHandle::Right) {
+			return RangeDragMode::RightEdge;
+		}
+		if (pointInActiveWindow(localPos, layout, s)) {
+			return RangeDragMode::MoveWindow;
+		}
+		return RangeDragMode::None;
+	}
+
+	int historyIndexForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
+		if (historySize <= 0) {
+			return 0;
+		}
+		float t = clamp((localX - layout.stripX) / std::max(1.f, layout.stripW), 0.f, 1.f);
+		return clamp(int(std::lround(t * float(historySize))), 0, historySize);
+	}
+
+	void applyTrimHandleDragDelta(TrimHandle handle, float localX, int historySize, const RibbonLayout& layout) {
+		if (!module || handle == TrimHandle::None || historySize <= 1 || rangeDragEndIndex <= rangeDragStartIndex) {
+			return;
+		}
+		const float pixelsPerStep = std::max(1.f, layout.stripW / float(std::max(1, historySize)));
+		const float deltaPixels = localX - rangeDragMouseDownX;
+		const int delta = int(std::lround(deltaPixels / pixelsPerStep));
+		const int currentStart = clamp(rangeDragStartIndex, 0, historySize - 1);
+		const int currentEnd = clamp(rangeDragEndIndex, currentStart + 1, historySize);
+		if (handle == TrimHandle::Left) {
+			const int nextStart = clamp(currentStart + delta, 0, currentEnd - 1);
+			module->setActiveRangeTrimWindow(nextStart, currentEnd);
+		}
+		else if (handle == TrimHandle::Right) {
+			const int nextEnd = clamp(currentEnd + delta, currentStart + 1, historySize);
+			module->setActiveRangeTrimWindow(currentStart, nextEnd);
+		}
+	}
+
+	void shiftActiveRange(int deltaSteps, const RibbonState& s) {
+		if (!module || deltaSteps == 0 || s.historySize <= 1 || s.activeLength <= 0) {
+			return;
+		}
+		const int length = clamp(s.activeLength, 1, s.historySize);
+		const int maxStart = std::max(0, s.historySize - length);
+		const int start = clamp(s.activeStart + deltaSteps, 0, maxStart);
+		module->setActiveRangeTrimWindow(start, start + length);
+	}
+
+	void applyRangeWindowDrag(float localX, const RibbonState& s, const RibbonLayout& layout) {
+		if (!module || s.historySize <= 1 || rangeDragEndIndex <= rangeDragStartIndex) {
+			return;
+		}
+		const int length = rangeDragEndIndex - rangeDragStartIndex;
+		const float pixelsPerStep = std::max(1.f, layout.stripW / float(std::max(1, s.historySize)));
+		const float deltaPixels = localX - rangeDragMouseDownX;
+		const int delta = int(std::lround(deltaPixels / pixelsPerStep));
+		const int maxStart = std::max(0, s.historySize - length);
+		const int start = clamp(rangeDragStartIndex + delta, 0, maxStart);
+		module->setActiveRangeTrimWindow(start, start + length);
+	}
+
 	int clipCountForLocalX(float localX, int historySize, const RibbonLayout& layout) const {
 		if (historySize <= 0) {
 			return 0;
@@ -2447,10 +2854,34 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		return clamp(next, 1, std::max(1, historySize - 1));
 	}
 
+	void nudgedTrimmedRangePreview(int dir, const RibbonState& s, int* outStart, int* outEnd) const {
+		if (!outStart || !outEnd) {
+			return;
+		}
+		int start = clamp(s.activeStart, 0, std::max(0, s.historySize - 1));
+		int end = clamp(s.activeStart + s.activeLength, start + 1, std::max(1, s.historySize));
+		if (dir < 0) {
+			if ((end - start) > 1) {
+				end -= 1;
+			}
+		}
+		else if (dir > 0) {
+			if (end < s.historySize) {
+				end += 1;
+			}
+			else if (start > 0) {
+				start -= 1;
+			}
+		}
+		*outStart = start;
+		*outEnd = end;
+	}
+
 	void applyClipCount(int clipCount) {
 		if (!module) {
 			return;
 		}
+		module->clearActiveRangeTrimWindow();
 		if (clipCount <= 0) {
 			module->sequenceCapOverride = 0;
 			module->params[Crownstep::SEQ_LENGTH_PARAM].setValue(float(SEQ_LENGTH_MAX));
@@ -2560,6 +2991,14 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		if (!module || historySize <= 0 || dir == 0) {
 			return;
 		}
+		if (module->sequenceRangeTrimEnabled) {
+			RibbonState s = pullState();
+			int start = 0;
+			int end = 0;
+			nudgedTrimmedRangePreview(dir, s, &start, &end);
+			module->setActiveRangeTrimWindow(start, end);
+			return;
+		}
 		int cap = capValueFromModule();
 		if (cap <= 0) {
 			// From FULL, decreasing moves to historySize-1; increasing stays FULL.
@@ -2600,7 +3039,7 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		s.activeLength = std::max(0, module->activeLength());
 		s.activeStart = std::max(0, module->activeStartIndex());
 		s.capValue = capValueFromModule();
-		s.fullMode = (s.capValue == 0);
+		s.fullMode = (s.capValue == 0) && !module->sequenceRangeTrimEnabled;
 		if (s.activeLength > 0) {
 			s.playbackIndex = clamp(module->displayedStep - 1, 0, s.activeLength - 1);
 		}
@@ -2677,6 +3116,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onButton(e);
 			return;
 		}
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+			pendingRangeDragMode = RangeDragMode::None;
+			pendingTrimHandle = TrimHandle::None;
+			Widget::onButton(e);
+			return;
+		}
 		if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
 			Widget::onButton(e);
 			return;
@@ -2686,7 +3131,16 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (pointInHistoryStrip(e.pos, layout)) {
-			applyClipCountForLocalX(e.pos.x, s.historySize, layout);
+			const NudgeButton nudge = nudgeButtonAt(e.pos, layout, s);
+			if (nudge != NudgeButton::None) {
+				shiftActiveRange((nudge == NudgeButton::Left) ? -1 : 1, s);
+				pendingTrimHandle = TrimHandle::None;
+				pendingRangeDragMode = RangeDragMode::None;
+				e.consume(this);
+				return;
+			}
+			pendingTrimHandle = trimHandleAt(e.pos, layout, s);
+			pendingRangeDragMode = rangeDragModeAt(e.pos, layout, s);
 			e.consume(this);
 			return;
 		}
@@ -2714,9 +3168,22 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		lastHoverPos = capDragLocal;
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
-		capDragTrimMode = pointInHistoryStrip(capDragLocal, layout);
+		activeRangeDragMode = pendingRangeDragMode;
+		if (activeRangeDragMode == RangeDragMode::None) {
+			activeRangeDragMode = rangeDragModeAt(capDragLocal, layout, s);
+		}
+		activeTrimHandle = pendingTrimHandle;
+		if (activeTrimHandle == TrimHandle::None) {
+			activeTrimHandle = trimHandleAt(capDragLocal, layout, s);
+		}
+		capDragTrimMode = (activeRangeDragMode != RangeDragMode::None);
+		pendingTrimHandle = TrimHandle::None;
+		pendingRangeDragMode = RangeDragMode::None;
 		if (capDragTrimMode) {
-			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+			rangeDragMouseDownX = capDragLocal.x;
+			rangeDragAnchorIndex = historyIndexForLocalX(capDragLocal.x, s.historySize, layout);
+			rangeDragStartIndex = clamp(s.activeStart, 0, std::max(0, s.historySize - 1));
+			rangeDragEndIndex = clamp(s.activeStart + s.activeLength, rangeDragStartIndex + 1, s.historySize);
 		}
 		else {
 			capDragActive = false;
@@ -2738,7 +3205,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		RibbonLayout layout = computeLayout();
 		RibbonState s = pullState();
 		if (capDragTrimMode) {
-			applyClipCountForLocalX(capDragLocal.x, s.historySize, layout);
+			if (activeRangeDragMode == RangeDragMode::LeftEdge || activeRangeDragMode == RangeDragMode::RightEdge) {
+				applyTrimHandleDragDelta(activeTrimHandle, capDragLocal.x, s.historySize, layout);
+			}
+			else if (activeRangeDragMode == RangeDragMode::MoveWindow) {
+				applyRangeWindowDrag(capDragLocal.x, s, layout);
+			}
 		}
 		e.consume(this);
 	}
@@ -2750,6 +3222,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 		}
 		capDragActive = false;
 		capDragTrimMode = false;
+		activeTrimHandle = TrimHandle::None;
+		pendingTrimHandle = TrimHandle::None;
+		activeRangeDragMode = RangeDragMode::None;
+		pendingRangeDragMode = RangeDragMode::None;
 		e.consume(this);
 	}
 
@@ -2758,20 +3234,11 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			Widget::onDoubleClick(e);
 			return;
 		}
-		RibbonLayout layout = computeLayout();
-		Vec localPos = currentLocalMousePos();
-		if (!pointInHistoryStrip(localPos, layout)) {
-			e.consume(this);
-			return;
-		}
-		toggleFullVsRecent();
 		e.consume(this);
 	}
 
 	void draw(const DrawArgs& args) override {
 		RibbonState s = pullState();
-		int currentStep = (s.activeLength > 0 && s.playbackIndex >= 0) ? (s.playbackIndex + 1) : 0;
-		int totalSteps = s.activeLength;
 
 			const float x = 0.f;
 			const float y = 0.f;
@@ -2804,14 +3271,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			nvgFillColor(args.vg, nvgRGBA(32, 40, 46, 146));
 			nvgFill(args.vg);
 				if (s.historySize > 0) {
-					float startNorm = 0.f;
-					float endNorm = 1.f;
-				if (!s.fullMode && s.historySize > 0) {
-					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
-					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
-				}
-				float activeX = stripX + stripW * startNorm;
-				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				float activeX = 0.f;
+				float activeW = 0.f;
+				activeWindowGeometry(s, layout, &activeX, &activeW);
 				auto makeBrandActivePaint = [&](int alphaA, int alphaB) {
 					return nvgLinearGradient(
 						args.vg,
@@ -2859,8 +3321,61 @@ struct CrownRibbonWidget final : OpaqueWidget {
 					nvgBeginPath(args.vg);
 				nvgRoundedRect(args.vg, activeX, historyY + 0.2f, activeW, std::max(1.f, historyH - 0.4f), 1.2f);
 				nvgStrokeColor(args.vg, nvgRGBA(202, 236, 255, 198));
-				nvgStrokeWidth(args.vg, 0.85f);
-				nvgStroke(args.vg);
+					nvgStrokeWidth(args.vg, 0.85f);
+					nvgStroke(args.vg);
+			}
+
+			if (s.historySize > 1 && s.activeLength > 0) {
+				TrimHandle hoveredHandle = trimHandleAt(drawMouseLocal, layout, s);
+				NudgeButton hoveredNudge = nudgeButtonAt(drawMouseLocal, layout, s);
+				const float handleW = trimHandleWidth(layout);
+				const float handleH = std::max(1.f, historyH - 0.6f);
+				const float handleY = historyY + 0.3f;
+				const float handleInset = trimHandleInset(layout);
+				auto drawNudge = [&](NudgeButton button, const char* glyph, bool active, bool enabled) {
+					const math::Rect r = nudgeButtonRect(button, layout, s);
+					if (r.size.x <= 0.f || r.size.y <= 0.f) {
+						return;
+					}
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 1.1f);
+					nvgFillColor(args.vg, active ? nvgRGBA(52, 72, 88, 224) : nvgRGBA(18, 28, 36, enabled ? 206 : 92));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 1.1f);
+					nvgStrokeColor(args.vg, active ? nvgRGBA(202, 236, 255, 210) : nvgRGBA(112, 148, 176, enabled ? 174 : 72));
+					nvgStrokeWidth(args.vg, 0.75f);
+					nvgStroke(args.vg);
+					nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+					nvgFontSize(args.vg, compactLayout ? 6.4f : 7.4f);
+					nvgFillColor(args.vg, active ? nvgRGBA(238, 248, 255, 244) : nvgRGBA(184, 214, 234, enabled ? 224 : 90));
+					nvgText(args.vg, r.pos.x + r.size.x * 0.5f, r.pos.y + r.size.y * 0.52f, glyph, nullptr);
+				};
+				auto drawHandle = [&](float cx, bool active) {
+					const float hx = cx - 0.5f * handleW;
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
+					nvgFillColor(args.vg, active ? nvgRGBA(222, 240, 255, 172) : nvgRGBA(170, 204, 232, 138));
+					nvgFill(args.vg);
+					nvgBeginPath(args.vg);
+					nvgRoundedRect(args.vg, hx, handleY, handleW, handleH, 1.1f);
+					nvgStrokeColor(args.vg, active ? nvgRGBA(255, 255, 255, 176) : nvgRGBA(106, 136, 160, 142));
+					nvgStrokeWidth(args.vg, 0.8f);
+					nvgStroke(args.vg);
+				};
+				const int length = clamp(s.activeLength, 1, s.historySize);
+				const bool canShiftLeft = s.activeStart > 0;
+				const bool canShiftRight = s.activeStart + length < s.historySize;
+				if (canShiftLeft) {
+					drawNudge(NudgeButton::Left, "<", hoveredNudge == NudgeButton::Left, true);
+				}
+				if (canShiftRight) {
+					drawNudge(NudgeButton::Right, ">", hoveredNudge == NudgeButton::Right, true);
+				}
+				const bool leftActive = (hoveredHandle == TrimHandle::Left) || (capDragActive && activeTrimHandle == TrimHandle::Left);
+				const bool rightActive = (hoveredHandle == TrimHandle::Right) || (capDragActive && activeTrimHandle == TrimHandle::Right);
+				drawHandle(activeX + 0.5f * handleW + handleInset, leftActive);
+				drawHandle(activeX + activeW - 0.5f * handleW - handleInset, rightActive);
 			}
 		}
 
@@ -3113,14 +3628,9 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				if (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0) {
 				// Tie crown/line marker to local playback position within the
 				// currently highlighted (purple) active window.
-				float startNorm = 0.f;
-				float endNorm = 1.f;
-				if (!s.fullMode && s.historySize > 0) {
-					startNorm = clamp(float(s.activeStart) / float(std::max(1, s.historySize)), 0.f, 1.f);
-					endNorm = clamp(float(s.activeStart + s.activeLength) / float(std::max(1, s.historySize)), 0.f, 1.f);
-				}
-				float activeX = stripX + stripW * startNorm;
-				float activeW = std::max(1.4f, stripW * std::max(0.f, endNorm - startNorm));
+				float activeX = 0.f;
+				float activeW = 0.f;
+				activeWindowGeometry(s, layout, &activeX, &activeW);
 				float localNorm = (s.activeLength <= 1) ? 0.f : (float(s.playbackIndex) / float(s.activeLength - 1));
 				float mx = activeX + activeW * clamp(localNorm, 0.f, 1.f);
 				float markerCy = historyY - 0.1f;
@@ -3184,8 +3694,13 @@ struct CrownRibbonWidget final : OpaqueWidget {
 			}
 
 			// Centered status text inside the top (history) strip.
-			char ribbonText[40];
-			std::snprintf(ribbonText, sizeof(ribbonText), "%d / %d", currentStep, totalSteps);
+			int firstSeqIndex = (s.historySize > 0 && s.activeLength > 0) ? (s.activeStart + 1) : 0;
+			int lastSeqIndex = (s.historySize > 0 && s.activeLength > 0) ? (s.activeStart + s.activeLength) : 0;
+			int currentSeqIndex = (s.historySize > 0 && s.activeLength > 0 && s.playbackIndex >= 0)
+				? (s.activeStart + s.playbackIndex + 1)
+				: 0;
+			char ribbonText[64];
+			std::snprintf(ribbonText, sizeof(ribbonText), "%d (%d - %d) [%d]", currentSeqIndex, firstSeqIndex, lastSeqIndex, s.activeLength);
 			char fullText[24];
 			std::snprintf(fullText, sizeof(fullText), "%d", s.historySize);
 			float fullX = stripX + (compactLayout ? 3.1f : 4.0f);
@@ -3235,12 +3750,12 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				Vec hoverLocal = currentLocalMousePos();
 				bool hoverInRibbon = pointInHistoryStrip(hoverLocal, layout) || pointInLoopStrip(hoverLocal, layout);
 				Vec tooltipLocal = capDragActive ? capDragLocal : hoverLocal;
-				bool previewClip = (s.historySize > 0)
-					&& ((capDragActive && capDragTrimMode) || pointInHistoryStrip(tooltipLocal, layout));
+				bool previewClip = (s.historySize > 0) && (capDragActive && capDragTrimMode);
 				if (previewClip) {
-					int clipCount = clipCountForLocalX(tooltipLocal.x, s.historySize, layout);
-					char clipText[48];
-					formatWindowPreviewText(clipCount, s.historySize, clipText, sizeof(clipText));
+					char clipText[64];
+					int startOneBased = s.activeStart + 1;
+					int endOneBased = s.activeStart + s.activeLength;
+					std::snprintf(clipText, sizeof(clipText), "Window: %d-%d", startOneBased, endOneBased);
 					float fontSize = compactLayout ? 6.2f : 7.0f;
 					float textBounds[4];
 					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -3269,11 +3784,18 @@ struct CrownRibbonWidget final : OpaqueWidget {
 				}
 				else if (s.historySize > 0 && hoverInRibbon
 					&& (pointInLoopMinusButton(tooltipLocal, layout) || pointInLoopPlusButton(tooltipLocal, layout))) {
-					int previewCount = pointInLoopMinusButton(tooltipLocal, layout)
-						? nudgedClipCountPreview(-1, s.historySize)
-						: nudgedClipCountPreview(1, s.historySize);
-					char clipText[48];
-					formatWindowPreviewText(previewCount, s.historySize, clipText, sizeof(clipText));
+					const int dir = pointInLoopMinusButton(tooltipLocal, layout) ? -1 : 1;
+					char clipText[64];
+					if (module && module->sequenceRangeTrimEnabled) {
+						int start = 0;
+						int end = 0;
+						nudgedTrimmedRangePreview(dir, s, &start, &end);
+						std::snprintf(clipText, sizeof(clipText), "Window: %d-%d", start + 1, end);
+					}
+					else {
+						int previewCount = nudgedClipCountPreview(dir, s.historySize);
+						formatWindowPreviewText(previewCount, s.historySize, clipText, sizeof(clipText));
+					}
 					float fontSize = compactLayout ? 6.2f : 7.0f;
 					float textBounds[4];
 					nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -3350,6 +3872,7 @@ struct CrownstepAiThinkMsWidget final : TransparentWidget {
 struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/crownstep.svg");
 		try {
 			setPanel(createPanel(panelPath));
@@ -3358,24 +3881,17 @@ struct CrownstepWidget final : ModuleWidget {
 			WARN("Crownstep panel load failed (%s), using fallback: %s", panelPath.c_str(), e.what());
 			setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg")));
 		}
+		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 			addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 			addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-			CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
 			math::Rect boardRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
-				boardWidget->box.pos = mm2px(boardRectMm.pos);
-				boardWidget->box.size = mm2px(boardRectMm.size);
-			}
-			else {
+			if (!panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
 				boardRectMm = math::Rect(Vec(5.5f, 11.f), Vec(80.5f, 80.5f));
-				boardWidget->box.pos = mm2px(boardRectMm.pos);
-				boardWidget->box.size = mm2px(boardRectMm.size);
 			}
-			addChild(boardWidget);
 
 			// Crown ribbon: anchored by SVG rect (STEP_COUNTER).
 			math::Rect stepCounterRectMm;
@@ -3394,25 +3910,6 @@ struct CrownstepWidget final : ModuleWidget {
 				);
 			}
 
-			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
-			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
-			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
-			addChild(stepCounterWidget);
-
-		// Bottom control layout:
-		// left cluster = inputs, center = knobs/button, right cluster = outputs.
-		math::Rect inputsAreaMm;
-		math::Rect outputsAreaMm;
-		math::Rect controlsAreaMm;
-		bool hasInputsArea = panel_svg::loadRectFromSvgMm(panelPath, "INPUTS_AREA", &inputsAreaMm);
-		bool hasOutputsArea = panel_svg::loadRectFromSvgMm(panelPath, "OUTPUTS_AREA", &outputsAreaMm);
-		bool hasControlsArea = panel_svg::loadRectFromSvgMm(panelPath, "CONTROLS_AREA", &controlsAreaMm);
-		bool hasBottomAnchors = hasInputsArea || hasOutputsArea || hasControlsArea;
-
-		auto pointInRect = [](const math::Rect& rect, float u, float v) {
-			return Vec(rect.pos.x + rect.size.x * u, rect.pos.y + rect.size.y * v);
-		};
-
 			Vec newGamePos(43.f, 114.0f);
 		Vec debugAddMovesPos(5.08f, 5.08f);
 		Vec aiThinkMsPos(debugAddMovesPos.x + 4.2f, debugAddMovesPos.y);
@@ -3426,49 +3923,6 @@ struct CrownstepWidget final : ModuleWidget {
 		Vec eocPos(86.f, 121.0f);
 		Vec humanLightPos(82.5f, 93.f);
 		Vec aiLightPos(86.5f, 93.f);
-
-		if (hasInputsArea) {
-			clockPos = pointInRect(inputsAreaMm, 0.30f, 0.38f);
-			resetPos = pointInRect(inputsAreaMm, 0.70f, 0.38f);
-			transposePos = pointInRect(inputsAreaMm, 0.30f, 0.78f);
-			rootCvPos = pointInRect(inputsAreaMm, 0.70f, 0.78f);
-		}
-		if (hasOutputsArea) {
-			pitchPos = pointInRect(outputsAreaMm, 0.17f, 0.58f);
-			accentPos = pointInRect(outputsAreaMm, 0.39f, 0.58f);
-			modPos = pointInRect(outputsAreaMm, 0.61f, 0.58f);
-			eocPos = pointInRect(outputsAreaMm, 0.83f, 0.58f);
-		}
-		if (hasBottomAnchors) {
-			float controlX = 43.f;
-			float controlY = 98.f;
-			float controlH = 22.f;
-			if (hasControlsArea) {
-				controlX = controlsAreaMm.pos.x + controlsAreaMm.size.x * 0.5f;
-				controlY = controlsAreaMm.pos.y;
-				controlH = controlsAreaMm.size.y;
-			}
-			else {
-				if (hasInputsArea && hasOutputsArea) {
-					float leftX = inputsAreaMm.pos.x + inputsAreaMm.size.x;
-					float rightX = outputsAreaMm.pos.x;
-					controlX = (leftX + rightX) * 0.5f;
-					controlY = (inputsAreaMm.pos.y + outputsAreaMm.pos.y) * 0.5f;
-					controlH = (inputsAreaMm.size.y + outputsAreaMm.size.y) * 0.5f;
-				}
-				else if (hasInputsArea) {
-					controlX = inputsAreaMm.pos.x + inputsAreaMm.size.x + 8.f;
-					controlY = inputsAreaMm.pos.y;
-					controlH = inputsAreaMm.size.y;
-				}
-				else if (hasOutputsArea) {
-					controlX = outputsAreaMm.pos.x - 8.f;
-					controlY = outputsAreaMm.pos.y;
-					controlH = outputsAreaMm.size.y;
-				}
-			}
-				newGamePos = Vec(controlX, controlY + controlH * 0.76f);
-			}
 
 		// Prefer explicit component anchors from the SVG "components" layer.
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
@@ -3488,14 +3942,25 @@ struct CrownstepWidget final : ModuleWidget {
 		applyPointOverride("CLOCK_INPUT", &clockPos);
 		applyPointOverride("RESET_INPUT", &resetPos);
 		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
-		applyPointOverrideFallback("BIAS_INPUT", "ROOT_INPUT", &rootCvPos);
+		applyPointOverrideFallback("ROOT_INPUT", "BIAS_INPUT", &rootCvPos);
 		applyPointOverride("PITCH_OUTPUT", &pitchPos);
 		applyPointOverride("ACCENT_OUTPUT", &accentPos);
 		applyPointOverride("MOD_OUTPUT", &modPos);
 		applyPointOverride("EOC_OUTPUT", &eocPos);
 		applyPointOverride("HUMAN_TURN_LIGHT", &humanLightPos);
 		applyPointOverride("AI_TURN_LIGHT", &aiLightPos);
-		applyPointOverride("AI_THINK_MS", &aiThinkMsPos);
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
+
+			CrownstepBoardWidget* boardWidget = new CrownstepBoardWidget(module);
+			boardWidget->box.pos = mm2px(boardRectMm.pos);
+			boardWidget->box.size = mm2px(boardRectMm.size);
+			addChild(boardWidget);
+
+			CrownRibbonWidget* stepCounterWidget = new CrownRibbonWidget(module);
+			stepCounterWidget->box.pos = mm2px(stepCounterRectMm.pos);
+			stepCounterWidget->box.size = mm2px(stepCounterRectMm.size);
+			addChild(stepCounterWidget);
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
@@ -3667,6 +4132,10 @@ struct CrownstepWidget final : ModuleWidget {
 		MenuLabel* pitchLabel = new MenuLabel();
 		pitchLabel->text = "Pitch";
 		menu->addChild(pitchLabel);
+		auto* rangeSlider = new ui::Slider();
+		rangeSlider->box.size = Vec(180.f, 24.f);
+		rangeSlider->quantity = new CrownstepRangeMenuQuantity(module);
+		menu->addChild(rangeSlider);
 		menu->addChild(createCheckMenuItem(
 			"Show Cell Pitch Values",
 			"",
@@ -3692,7 +4161,7 @@ struct CrownstepWidget final : ModuleWidget {
 			}
 		));
 		menu->addChild(createCheckMenuItem(
-			"Melodic Bias",
+			"Smooth Melody",
 			"",
 			[=]() {
 				return module && module->melodicBiasEnabled;
@@ -3798,53 +4267,6 @@ struct CrownstepWidget final : ModuleWidget {
 					[=]() {
 						if (module) {
 							module->pitchInterpretationMode = i;
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("Scalar", "", [=](Menu* dividerMenu) {
-			dividerMenu->addChild(createCheckMenuItem(
-				crownstep::PITCH_DIVIDER_NAMES[size_t(0)],
-				"",
-				[=]() {
-					return module && module->pitchDividerMode == 0;
-				},
-				[=]() {
-					if (module) {
-						module->pitchDividerMode = 0;
-						module->refreshHeldPitchForCurrentStep();
-					}
-				}
-			));
-			dividerMenu->addChild(new MenuSeparator());
-			for (int mode = 1; mode < 4; ++mode) {
-				dividerMenu->addChild(createCheckMenuItem(
-					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
-					"",
-					[=]() {
-						return module && module->pitchDividerMode == mode;
-					},
-					[=]() {
-						if (module) {
-							module->pitchDividerMode = mode;
-							module->refreshHeldPitchForCurrentStep();
-						}
-					}
-				));
-			}
-			dividerMenu->addChild(new MenuSeparator());
-			for (int mode = 4; mode < int(crownstep::PITCH_DIVIDER_NAMES.size()); ++mode) {
-				dividerMenu->addChild(createCheckMenuItem(
-					crownstep::PITCH_DIVIDER_NAMES[size_t(mode)],
-					"",
-					[=]() {
-						return module && module->pitchDividerMode == mode;
-					},
-					[=]() {
-						if (module) {
-							module->pitchDividerMode = mode;
-							module->refreshHeldPitchForCurrentStep();
 						}
 					}
 				));

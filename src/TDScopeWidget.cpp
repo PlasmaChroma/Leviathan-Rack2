@@ -1,14 +1,77 @@
 #include "TDScope.hpp"
 
+#include <chrono>
 #include <cstdio>
 
 namespace {
 constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+
+struct TDScopeBrightnessQuantity final : Quantity {
+  TDScope *module = nullptr;
+
+  explicit TDScopeBrightnessQuantity(TDScope *module) : module(module) {}
+
+  void setValue(float value) override {
+    if (module) {
+      module->scopeColorBrightness = clamp(value, 0.f, 1.f);
+    }
+  }
+
+  float getValue() override {
+    return module ? module->scopeColorBrightnessClamped() : 0.5f;
+  }
+
+  float getDefaultValue() override {
+    return 0.5f;
+  }
+
+  float getMinValue() override {
+    return 0.f;
+  }
+
+  float getMaxValue() override {
+    return 1.f;
+  }
+
+  std::string getLabel() override {
+    return "Brightness";
+  }
+
+  std::string getUnit() override {
+    return "%";
+  }
+
+  float getDisplayValue() override {
+    return getValue() * 100.f;
+  }
+
+  void setDisplayValue(float displayValue) override {
+    setValue(displayValue / 100.f);
+  }
+};
+
+const char *debugRenderModeLabel(const TDScope *scopeModule) {
+  if (!scopeModule) {
+    return "STD";
+  }
+  const int renderMode = scopeModule->debugRenderMode.load(std::memory_order_relaxed);
+  switch (renderMode) {
+    case TDScope::DEBUG_RENDER_STANDARD:
+      return "STD";
+    case TDScope::DEBUG_RENDER_TAIL_RASTER:
+      return "RASTER";
+    case TDScope::DEBUG_RENDER_OPENGL:
+      return scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed) ? "GL SHDR" : "GL";
+    default:
+      return "STD";
+  }
+}
 }
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
+  math::Rect scopeRectPx;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarLeftStartMm = 2.2491839f;
 
@@ -23,8 +86,10 @@ struct TDScopeWidget : ModuleWidget {
 
   TDScopeWidget(TDScope *module) {
     setModule(module);
+    PreviewBuildLogTimer previewBuildTimer("TDScope", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
+    previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = tdscope::findPanelBorder(svgPanel->fb);
     }
@@ -34,6 +99,10 @@ struct TDScopeWidget : ModuleWidget {
       scopeRectMm.pos = Vec(1.1138f, 10.9404f);
       scopeRectMm.size = Vec(38.5563f, 109.4206f);
     }
+    scopeRectPx.pos = mm2px(scopeRectMm.pos);
+    scopeRectPx.size = mm2px(scopeRectMm.size);
+    previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+    previewBuildTimer.markAnchorsDone();
 
     glDisplay = tdscope::createGlDisplay(module, scopeRectMm);
     glDisplay->setVisible(module && module->useOpenGlGeometryRenderMode());
@@ -47,6 +116,8 @@ struct TDScopeWidget : ModuleWidget {
   }
 
   void step() override {
+    using PerfClock = std::chrono::steady_clock;
+    const PerfClock::time_point stepStart = PerfClock::now();
     bool linkedToDeck = shouldRenderDockBridge();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
@@ -61,9 +132,19 @@ struct TDScopeWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
+    if (scopeModule) {
+      const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   PerfClock::now() - stepStart).count()) *
+                           0.001f;
+      const float prevStepUs = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
+      const float emaStepUs = (prevStepUs > 0.f) ? (prevStepUs + (stepUs - prevStepUs) * 0.18f) : stepUs;
+      scopeModule->uiDebugModuleUiStepUsEma.store(std::max(0.f, emaStepUs), std::memory_order_relaxed);
+    }
   }
 
   void draw(const DrawArgs &args) override {
+    using PerfClock = std::chrono::steady_clock;
+    const PerfClock::time_point moduleDrawStart = PerfClock::now();
     bool linkedToDeck = shouldRenderDockBridge();
     if (linkedToDeck) {
       DrawArgs adjusted = args;
@@ -88,12 +169,37 @@ struct TDScopeWidget : ModuleWidget {
     }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
+    if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+      const float modeX = scopeRectPx.pos.x + scopeRectPx.size.x - 1.2f;
+      const float modeY = std::max(1.5f, mm2px(9.522227f) - mm2px(0.75f));
+      const char *modeLabel = debugRenderModeLabel(scopeModule);
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 6.8f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
+      nvgText(args.vg, modeX + 0.45f, modeY + 0.45f, modeLabel, nullptr);
+      nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
+      nvgText(args.vg, modeX, modeY, modeLabel, nullptr);
+      nvgRestore(args.vg);
+    }
+
+    if (scopeModule) {
+      const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   PerfClock::now() - moduleDrawStart).count()) *
+                           0.001f;
+      const float prevUs = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
+      const float emaUs = (prevUs > 0.f) ? (prevUs + (drawUs - prevUs) * 0.18f) : drawUs;
+      scopeModule->uiDebugModuleUiDrawUsEma.store(std::max(0.f, emaUs), std::memory_order_relaxed);
+    }
+
     if (scopeModule && isDragonKingDebugEnabled()) {
       double nowSec = system::getTime();
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
-        float uiDrawUsEma = scopeModule->uiDebugScopeUiDrawUsEma.load(std::memory_order_relaxed);
+        float uiDrawUsEma = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
+        float uiStepUsEma = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
@@ -102,7 +208,7 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                               uiDrawUsEma * 0.001f,
+                                               (uiStepUsEma + uiDrawUsEma) * 0.001f,
                                                densityRows,
                                                densityPct,
                                                rackZoom,
@@ -136,7 +242,25 @@ struct TDScopeWidget : ModuleWidget {
       return;
     }
 
+    auto addBrightnessSlider = [=](Menu *targetMenu) {
+      auto *brightnessSlider = new ui::Slider();
+      brightnessSlider->box.size = Vec(180.f, 24.f);
+      brightnessSlider->quantity = new TDScopeBrightnessQuantity(scopeModule);
+      targetMenu->addChild(brightnessSlider);
+    };
+
     menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Channel View"));
+    menu->addChild(createCheckMenuItem(
+      "Mono", "", [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_MONO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_MONO; }));
+    menu->addChild(createCheckMenuItem(
+      "Stereo (side-by-side)", "",
+      [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
+      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
+	menu->addChild(createCheckMenuItem(
+      "Inverted Vertical", "", [=]() { return scopeModule->scopeVerticalInverted.load(std::memory_order_relaxed); },
+      [=]() { scopeModule->scopeVerticalInverted.store(!scopeModule->scopeVerticalInverted.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
     menu->addChild(createSubmenuItem("Scope Range", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
         "Auto (window peak)", "",
@@ -152,61 +276,32 @@ struct TDScopeWidget : ModuleWidget {
         "+/-10V full width", "", [=]() { return scopeModule->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_10V; },
         [=]() { scopeModule->scopeDisplayRangeMode = TDScope::SCOPE_RANGE_10V; }));
     }));
-    menu->addChild(createCheckMenuItem(
-      "Inverted Verical", "", [=]() { return scopeModule->scopeVerticalInverted; },
-      [=]() { scopeModule->scopeVerticalInverted = !scopeModule->scopeVerticalInverted; }));
-
-    menu->addChild(new MenuSeparator());
-    menu->addChild(createMenuLabel("Channel View"));
-    menu->addChild(createCheckMenuItem(
-      "Mono", "", [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_MONO; },
-      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_MONO; }));
-    menu->addChild(createCheckMenuItem(
-      "Stereo (side-by-side)", "",
-      [=]() { return scopeModule->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO; },
-      [=]() { scopeModule->scopeChannelMode = TDScope::SCOPE_CHANNEL_STEREO; }));
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createSubmenuItem("Colors", "", [=](Menu *submenu) {
       submenu->addChild(createCheckMenuItem(
-        "Temporal Deck", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_TEMPORAL_DECK; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_TEMPORAL_DECK; }));
+        "Default (Purple/Cyan)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_DEFAULT; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_DEFAULT; }));
       submenu->addChild(createCheckMenuItem(
-        "Leviathan", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_LEVIATHAN; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_LEVIATHAN; }));
+        "Classic (Green/Red)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_CLASSIC; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_CLASSIC; }));
       submenu->addChild(createCheckMenuItem(
-        "Pickle", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PICKLE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PICKLE; }));
+        "Monochrome (Gray/White)", "",
+        [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_MONOCHROME; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_MONOCHROME; }));
       submenu->addChild(createCheckMenuItem(
-        "Hellfire", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_HELLFIRE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_HELLFIRE; }));
-      submenu->addChild(createCheckMenuItem(
-        "Angelic", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_ANGELIC; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_ANGELIC; }));
-      submenu->addChild(createCheckMenuItem(
-        "Violet Flame", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_VIOLET_FLAME; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_VIOLET_FLAME; }));
-      submenu->addChild(createCheckMenuItem(
-        "Pixie", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_PIXIE; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_PIXIE; }));
-      submenu->addChild(createCheckMenuItem(
-        "Wasp", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_WASP; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_WASP; }));
-      submenu->addChild(createCheckMenuItem(
-        "Emerald", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_EMERALD; },
-        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_EMERALD; }));
+        "Fire (Red/Yellow)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
     }));
-    menu->addChild(createCheckMenuItem(
-      "Transient halo", "", [=]() { return scopeModule->scopeTransientHaloEnabled; },
-      [=]() { scopeModule->scopeTransientHaloEnabled = !scopeModule->scopeTransientHaloEnabled; }));
+    addBrightnessSlider(menu);
 
     if (isDragonKingDebugEnabled()) {
       menu->addChild(new MenuSeparator());
       menu->addChild(createSubmenuItem("Debug Render", "", [=](Menu *submenu) {
         submenu->addChild(createMenuLabel("Scope Rate"));
         submenu->addChild(createCheckMenuItem(
-          "120 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_120HZ; },
-          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_120HZ; }));
+          "90 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_90HZ; },
+          [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_90HZ; }));
         submenu->addChild(createCheckMenuItem(
           "60 Hz", "", [=]() { return scopeModule->debugUiPublishRateMode == TDScope::DEBUG_UI_PUBLISH_60HZ; },
           [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_60HZ; }));
@@ -215,8 +310,8 @@ struct TDScopeWidget : ModuleWidget {
           [=]() { scopeModule->debugUiPublishRateMode = TDScope::DEBUG_UI_PUBLISH_30HZ; }));
         submenu->addChild(new MenuSeparator());
         submenu->addChild(createCheckMenuItem(
-          "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled; },
-          [=]() { scopeModule->debugFramebufferCacheEnabled = !scopeModule->debugFramebufferCacheEnabled; }));
+          "Framebuffer cache", "", [=]() { return scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed); },
+          [=]() { scopeModule->debugFramebufferCacheEnabled.store(!scopeModule->debugFramebufferCacheEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
         submenu->addChild(createMenuLabel("Render Mode"));
         submenu->addChild(createCheckMenuItem(
           "Standard", "", [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_STANDARD; },
@@ -226,18 +321,24 @@ struct TDScopeWidget : ModuleWidget {
           [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL", "",
-          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL; },
-          [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL; }));
-        submenu->addChild(new MenuSeparator());
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
+          }));
         submenu->addChild(createCheckMenuItem(
-          "Main trace", "", [=]() { return scopeModule->debugRenderMainTraceEnabled; },
-          [=]() { scopeModule->debugRenderMainTraceEnabled = !scopeModule->debugRenderMainTraceEnabled; }));
-        submenu->addChild(createCheckMenuItem(
-          "Connectors", "", [=]() { return scopeModule->debugRenderConnectorsEnabled; },
-          [=]() { scopeModule->debugRenderConnectorsEnabled = !scopeModule->debugRenderConnectorsEnabled; }));
-        submenu->addChild(createCheckMenuItem(
-          "Stereo right lane", "", [=]() { return scopeModule->debugRenderStereoRightLaneEnabled; },
-          [=]() { scopeModule->debugRenderStereoRightLaneEnabled = !scopeModule->debugRenderStereoRightLaneEnabled; }));
+          "OpenGL SHDR", "",
+          [=]() {
+            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
+                   scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+          },
+          [=]() {
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
+            scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
+          }));
       }));
     }
   }

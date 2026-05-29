@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "BifurxWorker.hpp"
 
 #include <atomic>
 #include <fstream>
@@ -33,6 +34,15 @@ void init(Plugin* p) {
 	p->addModel(modelTDScope);
 	p->addModel(modelCrownstep);
 	p->addModel(modelBifurx);
+	p->addModel(modelWyrm);
+	p->addModel(modelSil);
+	p->addModel(modelChronomaw);
+	p->addModel(modelBulkhead);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
+}
+
+void destroy() {
+	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	bifurx::shutdownBifurxRenderService();
 }

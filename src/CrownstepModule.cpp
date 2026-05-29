@@ -3,6 +3,13 @@
 
 namespace {
 
+struct ChessSearchStats {
+	uint64_t nodes = 0;
+	uint64_t evals = 0;
+	uint64_t legalMoveGenerations = 0;
+	uint64_t cutoffs = 0;
+};
+
 int sideAwareScoreForSide(int scoreFromNegativePerspective, int maximizingSide) {
 	return (maximizingSide == AI_SIDE) ? scoreFromNegativePerspective : -scoreFromNegativePerspective;
 }
@@ -56,8 +63,23 @@ Move chooseCheckersMoveForSide(const BoardState& board, int difficulty, int aiSi
 	return moves[size_t(bestIndex)];
 }
 
-int chessEvaluateForSide(const BoardState& board, const ChessState& state, int maximizingSide) {
-	return sideAwareScoreForSide(crownstep::chessEvaluatePosition(board, state), maximizingSide);
+int chessEvaluateForSide(const BoardState& board, const ChessState& state, int maximizingSide, ChessSearchStats* stats) {
+	(void) state;
+	if (stats) {
+		stats->evals++;
+	}
+	return sideAwareScoreForSide(crownstep::chessEvaluatePositionFast(board), maximizingSide);
+}
+
+int chessTerminalEvaluateForSide(const BoardState& board, int sideToMove, int maximizingSide, ChessSearchStats* stats) {
+	if (stats) {
+		stats->evals++;
+	}
+	int score = crownstep::chessEvaluateBoardMaterial(board);
+	if (crownstep::chessIsKingInCheck(board, sideToMove)) {
+		score += (sideToMove == HUMAN_SIDE) ? 100000 : -100000;
+	}
+	return sideAwareScoreForSide(score, maximizingSide);
 }
 
 int chessSearchForSide(
@@ -67,15 +89,22 @@ int chessSearchForSide(
 	int maximizingSide,
 	int depth,
 	int alpha,
-	int beta
+	int beta,
+	ChessSearchStats* stats
 ) {
+	if (stats) {
+		stats->nodes++;
+	}
 	if (depth <= 0) {
-		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		int eval = chessEvaluateForSide(board, state, maximizingSide, stats);
 		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	if (stats) {
+		stats->legalMoveGenerations++;
 	}
 	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, sideToMove, state);
 	if (moves.empty()) {
-		int eval = chessEvaluateForSide(board, state, maximizingSide);
+		int eval = chessTerminalEvaluateForSide(board, sideToMove, maximizingSide, stats);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
 	crownstep::chessSortMovesForSearch(board, &moves);
@@ -83,17 +112,23 @@ int chessSearchForSide(
 	for (const Move& move : moves) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, move, state, &nextState);
-		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
+		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha, stats);
 		best = std::max(best, value);
 		alpha = std::max(alpha, value);
 		if (alpha >= beta) {
+			if (stats) {
+				stats->cutoffs++;
+			}
 			break;
 		}
 	}
 	return best;
 }
 
-Move chooseChessMoveForSide(const BoardState& board, int difficulty, const ChessState& state, int aiSide) {
+Move chooseChessMoveForSide(const BoardState& board, int difficulty, const ChessState& state, int aiSide, ChessSearchStats* stats) {
+	if (stats) {
+		stats->legalMoveGenerations++;
+	}
 	std::vector<Move> moves = crownstep::chessGenerateLegalMovesForSide(board, aiSide, state);
 	if (moves.empty()) {
 		return Move();
@@ -102,6 +137,8 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 	int depth = crownstep::chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
@@ -111,12 +148,14 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 			-aiSide,
 			aiSide,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha,
+			stats
 		);
 		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];
@@ -128,12 +167,16 @@ int othelloEvaluateForSide(const BoardState& board, int maximizingSide) {
 
 int othelloSearchForSide(const BoardState& board, int sideToMove, int maximizingSide, int depth, int alpha, int beta) {
 	std::vector<Move> moves = crownstep::othelloGenerateLegalMovesForSide(board, sideToMove);
-	std::vector<Move> opponentMoves = crownstep::othelloGenerateLegalMovesForSide(board, -sideToMove);
-	if (depth <= 0 || (moves.empty() && opponentMoves.empty())) {
+	if (depth <= 0) {
 		int eval = othelloEvaluateForSide(board, maximizingSide);
 		return (sideToMove == maximizingSide) ? eval : -eval;
 	}
 	if (moves.empty()) {
+		std::vector<Move> opponentMoves = crownstep::othelloGenerateLegalMovesForSide(board, -sideToMove);
+		if (opponentMoves.empty()) {
+			int eval = othelloEvaluateForSide(board, maximizingSide);
+			return (sideToMove == maximizingSide) ? eval : -eval;
+		}
 		return -othelloSearchForSide(board, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
 	}
 
@@ -184,11 +227,13 @@ Crownstep::Crownstep() {
 
 	configParam<CrownstepSeqLengthQuantity>(
 		SEQ_LENGTH_PARAM, float(SEQ_LENGTH_MIN), float(SEQ_LENGTH_MAX), float(SEQ_LENGTH_MAX), "Sequence length");
-	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Bias");
+	configParam<CrownstepRootQuantity>(ROOT_PARAM, 0.f, 11.f, 0.f, "Root");
 	configParam<CrownstepScaleQuantity>(SCALE_PARAM, 0.f, float(SCALES.size() - 1), 0.f, "Scale");
 	// RUN_PARAM intentionally left unconfigured; reserved for compatibility.
 	configParam(NEW_GAME_PARAM, 0.f, 1.f, 0.f, "New game");
 	configParam(DEBUG_ADD_MOVES_PARAM, 0.f, 1.f, 0.f, "Add 10 random moves");
+	configParam<CrownstepRangeQuantity>(
+		RANGE_PARAM, 0.f, 1.f, crownstep::PITCH_RANGE_PARAM_DEFAULT, "Range");
 
 	paramQuantities[SEQ_LENGTH_PARAM]->snapEnabled = true;
 	paramQuantities[ROOT_PARAM]->snapEnabled = true;
@@ -197,7 +242,7 @@ Crownstep::Crownstep() {
 	configInput(CLOCK_INPUT, "Clock");
 	configInput(RESET_INPUT, "Reset");
 	configInput(TRANSPOSE_INPUT, "Transpose");
-	configInput(ROOT_INPUT, "Bias");
+	configInput(ROOT_INPUT, "Root");
 
 	configOutput(PITCH_OUTPUT, "Pitch");
 	configOutput(ACCENT_OUTPUT, "Accent");
@@ -214,18 +259,18 @@ Crownstep::~Crownstep() {
 }
 
 bool Crownstep::isChessMode() const {
-	return gameRules && std::strcmp(gameRules->gameId(), "chess") == 0;
+	return gameMode == GAME_MODE_CHESS;
 }
 
 bool Crownstep::isOthelloMode() const {
-	return gameRules && std::strcmp(gameRules->gameId(), "othello") == 0;
+	return gameMode == GAME_MODE_OTHELLO;
 }
 
 Move Crownstep::chooseAiMoveForSnapshot(const AiWorkerRequest& request) {
-	int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
+	int requestAiSide = (request.aiSide < 0) ? AI_SIDE : HUMAN_SIDE;
 	switch (request.gameMode) {
 		case GAME_MODE_CHESS:
-			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide);
+			return chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide, nullptr);
 		case GAME_MODE_OTHELLO:
 			return chooseOthelloMoveForSide(request.board, request.difficulty, requestAiSide);
 		case GAME_MODE_CHECKERS:
@@ -252,7 +297,18 @@ void Crownstep::runAiWorkerLoop() {
 		AiWorkerResult result;
 		result.id = request.id;
 		const auto thinkStart = std::chrono::steady_clock::now();
-		result.move = chooseAiMoveForSnapshot(request);
+		if (request.gameMode == GAME_MODE_CHESS) {
+			ChessSearchStats stats;
+			int requestAiSide = (request.aiSide >= 0) ? HUMAN_SIDE : AI_SIDE;
+			result.move = chooseChessMoveForSide(request.board, request.difficulty, request.chessState, requestAiSide, &stats);
+			result.searchNodes = stats.nodes;
+			result.searchEvals = stats.evals;
+			result.searchLegalMoveGenerations = stats.legalMoveGenerations;
+			result.searchCutoffs = stats.cutoffs;
+		}
+		else {
+			result.move = chooseAiMoveForSnapshot(request);
+		}
 		const auto thinkEnd = std::chrono::steady_clock::now();
 		result.thinkMs = int(std::chrono::duration_cast<std::chrono::milliseconds>(thinkEnd - thinkStart).count());
 
@@ -320,6 +376,10 @@ bool Crownstep::consumeReadyAiResult(Move* outMove, int* outThinkMs) {
 	aiWorkerHasResult = false;
 	if (aiWorkerInFlightRequestId != 0 && resultId == aiWorkerInFlightRequestId) {
 		aiWorkerInFlightRequestId = 0;
+		lastAiSearchNodes = aiWorkerResult.searchNodes;
+		lastAiSearchEvals = aiWorkerResult.searchEvals;
+		lastAiSearchLegalMoveGenerations = aiWorkerResult.searchLegalMoveGenerations;
+		lastAiSearchCutoffs = aiWorkerResult.searchCutoffs;
 		return true;
 	}
 	return false;
@@ -351,6 +411,7 @@ void Crownstep::setGameMode(int mode, bool startFreshGame) {
 	switch (gameMode) {
 		case GAME_MODE_CHESS:
 			gameRules = &crownstep::chessRules();
+			boardTextureMode = BOARD_TEXTURE_WOOD;
 			break;
 		case GAME_MODE_OTHELLO:
 			gameRules = &crownstep::othelloRules();
@@ -532,17 +593,17 @@ void Crownstep::advanceUiAnimationClock(double nowSeconds) {
 	if (moveAnimation.active) {
 		moveAnimation.elapsedSeconds += dt;
 		if (moveAnimation.elapsedSeconds >= moveAnimation.durationSeconds) {
-			moveAnimation.active = false;
-			if (!moveAnimationQueue.empty()) {
-				moveAnimation = moveAnimationQueue.front();
-				moveAnimationQueue.erase(moveAnimationQueue.begin());
+				moveAnimation.active = false;
+				if (!moveAnimationQueue.empty()) {
+					moveAnimation = moveAnimationQueue.front();
+					moveAnimationQueue.pop_front();
+				}
 			}
 		}
-	}
-	else if (!moveAnimationQueue.empty()) {
-		moveAnimation = moveAnimationQueue.front();
-		moveAnimationQueue.erase(moveAnimationQueue.begin());
-	}
+		else if (!moveAnimationQueue.empty()) {
+			moveAnimation = moveAnimationQueue.front();
+			moveAnimationQueue.pop_front();
+		}
 }
 
 int Crownstep::currentSequenceCap() {
@@ -577,9 +638,9 @@ float Crownstep::transposeVolts() {
 
 int Crownstep::rootCvOffsetSemitone() {
 	float rootCv = clamp(inputs[ROOT_INPUT].getVoltage(), -10.f, 10.f);
-	// Semitone-domain mapping with direct CV anchors:
-	// -10V -> -10 semitones, 0V -> 0 semitones, +10V -> +10 semitones.
-	int cvOffsetSemitones = int(std::lround(rootCv / ROOT_CV_VOLTS_PER_SEMITONE));
+	// Pitch-CV mapping quantized to semitones:
+	// 0V -> 0 semitones, 1V -> 12 semitones, so 0V..1V spans one chromatic octave.
+	int cvOffsetSemitones = int(std::lround(rootCv * ROOT_CV_SEMITONES_PER_VOLT));
 	cvOffsetSemitones = clamp(cvOffsetSemitones, -ROOT_CV_MAX_OFFSET_SEMITONES, ROOT_CV_MAX_OFFSET_SEMITONES);
 	return cvOffsetSemitones;
 }
@@ -718,7 +779,7 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 			case 2:
 				return col * 8 + row;
 			case 3:
-				return crownstep::serpentineDiagonalRank(row, col, 8, 8);
+				return crownstep::linearDiagonalRank(row, col, 8, 8);
 			case 4: {
 				int serpentineCol = (row & 1) ? (7 - col) : col;
 				return row * 8 + serpentineCol;
@@ -781,25 +842,22 @@ float Crownstep::boardValueIndexForMove(const Move& move) {
 	if (boardValueLayoutInverted) {
 		boardValueIndex = float(boardCellCount() - 1) - boardValueIndex;
 	}
-	// Bias acts as a raw index-domain offset on the board-derived value.
-	boardValueIndex += float(rootSemitoneLinear());
-	boardValueIndex = crownstep::applyPitchDividerToBoardValue(boardValueIndex, pitchDividerMode);
+	boardValueIndex *= crownstep::pitchRangeMultiplierFromParam(params[RANGE_PARAM].getValue());
 	if (pitchBipolarEnabled) {
-		float center = crownstep::pitchBipolarCenterOffset(pitchDividerMode, boardCellCount());
+		float center = 0.5f * crownstep::pitchRangeSemitoneSpan(params[RANGE_PARAM].getValue(), boardCellCount());
 		boardValueIndex -= center;
 	}
+	// Root acts in semitone space after Range, so the displayed span remains literal.
+	boardValueIndex += float(rootSemitoneLinear());
 	return boardValueIndex;
 }
 
 float Crownstep::mapPitchFromBoardValueIndex(float boardValueIndex, bool isKing) {
 	if (quantizationEnabled) {
-		return clamp(crownstep::mapPitchFromIndex(
-			boardValueIndex,
-			isKing,
-			currentScaleIndex(),
-			0,
-			transposeVolts()
-		), -10.f, 10.f);
+		const int transposeSemitones = int(std::lround(transposeVolts() * 12.f));
+		float semitone = boardValueIndex + (isKing ? 12.f : 0.f);
+		int quantizedSemitone = crownstep::quantizeSemitoneToScale(semitone, currentScaleIndex(), rootSemitone());
+		return clamp((float(quantizedSemitone + transposeSemitones) / 12.f), -10.f, 10.f);
 	}
 	return clamp(crownstep::mapRawPitchFromIndex(boardValueIndex, isKing, transposeVolts()), -10.f, 10.f);
 }
@@ -858,6 +916,10 @@ void Crownstep::appendDebugRandomMoves(int count) {
 		move.isKing = ((random::u32() & 7u) == 0u);
 		moveHistory.push_back(move);
 		history.push_back(makeStepFromMove(move));
+		// Keep a right-trimmed window anchored when new history is appended.
+		if (sequenceRangeTrimEnabled && sequenceTrimRight > 0) {
+			sequenceTrimRight += 1;
+		}
 	}
 }
 
@@ -917,15 +979,15 @@ void Crownstep::refreshLegalMoves() {
 	opponentHighlightedDestinations.clear();
 	opponentHintsPreviewActive = false;
 	if (isOthelloMode() && turnSide == humanSide()) {
-		std::vector<uint8_t> seen(size_t(boardCellCount()), 0u);
+		destinationSeenScratch.assign(size_t(boardCellCount()), 0u);
 		for (const Move& move : humanMoves) {
 			if (move.destinationIndex < 0 || move.destinationIndex >= boardCellCount()) {
 				continue;
 			}
-			if (seen[size_t(move.destinationIndex)] != 0u) {
+			if (destinationSeenScratch[size_t(move.destinationIndex)] != 0u) {
 				continue;
 			}
-			seen[size_t(move.destinationIndex)] = 1u;
+			destinationSeenScratch[size_t(move.destinationIndex)] = 1u;
 			highlightedDestinations.push_back(move.destinationIndex);
 		}
 	}
@@ -941,7 +1003,7 @@ void Crownstep::refreshLegalMoves() {
 	}
 	bool showOpponentTips = (selectedSquare >= 0) || (turnSide == aiSide());
 	const std::vector<Move>* opponentMoveSource = &aiMoves;
-	std::vector<Move> previewAiMoves;
+	previewAiMovesScratch.clear();
 	if (selectedSquare >= 0 && hoveredSquare >= 0) {
 		for (const Move& move : humanMoves) {
 			if (move.originIndex == selectedSquare && move.destinationIndex == hoveredSquare) {
@@ -949,14 +1011,14 @@ void Crownstep::refreshLegalMoves() {
 				if (isChessMode()) {
 					ChessState previewState;
 					previewBoard = crownstep::chessApplyMoveToBoard(board, move, chessState, &previewState);
-					previewAiMoves = crownstep::chessGenerateLegalMovesForSide(previewBoard, aiSide(), previewState);
+					previewAiMovesScratch = crownstep::chessGenerateLegalMovesForSide(previewBoard, aiSide(), previewState);
 				}
 				else {
 					previewBoard = gameRules ? gameRules->applyMoveToBoard(board, move) : crownstep::applyMoveToBoard(board, move);
-					previewAiMoves = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
-					                           : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
+					previewAiMovesScratch = gameRules ? gameRules->generateLegalMovesForSide(previewBoard, aiSide())
+					                                  : crownstep::generateLegalMovesForSide(previewBoard, aiSide());
 				}
-				opponentMoveSource = &previewAiMoves;
+				opponentMoveSource = &previewAiMovesScratch;
 				opponentHintsPreviewActive = true;
 				break;
 			}
@@ -964,13 +1026,13 @@ void Crownstep::refreshLegalMoves() {
 	}
 	if (showOpponentTips) {
 		int cellCount = boardCellCount();
-		std::vector<uint8_t> seen(size_t(cellCount), 0u);
+		destinationSeenScratch.assign(size_t(cellCount), 0u);
 		for (const Move& move : *opponentMoveSource) {
 			int destination = move.destinationIndex;
-			if (destination < 0 || destination >= cellCount || seen[size_t(destination)] != 0u) {
+			if (destination < 0 || destination >= cellCount || destinationSeenScratch[size_t(destination)] != 0u) {
 				continue;
 			}
-			seen[size_t(destination)] = 1u;
+			destinationSeenScratch[size_t(destination)] = 1u;
 			opponentHighlightedDestinations.push_back(destination);
 		}
 	}
@@ -1119,6 +1181,10 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 		std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
 		moveHistory.push_back(move);
 		history.push_back(step);
+		// Keep a right-trimmed window anchored when new history is appended.
+		if (sequenceRangeTrimEnabled && sequenceTrimRight > 0) {
+			sequenceTrimRight += 1;
+		}
 	}
 	if (currentSequenceCap() == 1) {
 		eocActivityPulseRequests.fetch_add(1, std::memory_order_relaxed);

@@ -72,6 +72,8 @@ TestResult testPlatterSnapshotAndButtonsMapping() {
   PlatterInputSnapshot snapshot;
   snapshot.quickSlipTrigger = true;
   snapshot.platterTouched = true;
+  snapshot.scopeLagDragActive = true;
+  snapshot.scopeLagDragSoftHold = true;
   snapshot.wheelScratchHeld = true;
   snapshot.platterMotionActive = true;
   snapshot.platterGestureRevision = 42;
@@ -85,6 +87,8 @@ TestResult testPlatterSnapshotAndButtonsMapping() {
               nearlyEqual(frame.feedbackKnob, controls.feedbackKnob) && frame.freezeButton == controls.freezeButton &&
               frame.reverseButton == controls.reverseButton && frame.slipButton == controls.slipButton &&
               frame.quickSlipTrigger == snapshot.quickSlipTrigger && frame.platterTouched == snapshot.platterTouched &&
+              frame.scopeLagDragActive == snapshot.scopeLagDragActive &&
+              frame.scopeLagDragSoftHold == snapshot.scopeLagDragSoftHold &&
               frame.wheelScratchHeld == snapshot.wheelScratchHeld &&
               frame.platterMotionActive == snapshot.platterMotionActive &&
               frame.platterGestureRevision == snapshot.platterGestureRevision &&

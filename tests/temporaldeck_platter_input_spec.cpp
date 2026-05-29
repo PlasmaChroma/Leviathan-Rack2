@@ -57,10 +57,29 @@ TestResult testIdleStateHidesGestureFields() {
   PlatterInputSnapshot snapshot = state.consumeForFrame();
 
   bool pass = !snapshot.platterTouched && !snapshot.wheelScratchHeld && !snapshot.platterMotionActive &&
+              !snapshot.scopeLagDragActive && !snapshot.scopeLagDragSoftHold &&
               snapshot.platterGestureRevision == 0 && nearlyEqual(snapshot.platterLagTarget, 0.f) &&
               nearlyEqual(snapshot.platterGestureVelocity, 0.f);
   return {"Idle state hides gesture payload", pass,
           "rev=" + std::to_string(snapshot.platterGestureRevision) + " lag=" + std::to_string(snapshot.platterLagTarget)};
+}
+
+TestResult testScopeLagDragPayloadAndRelease() {
+  PlatterInputState state;
+  state.setScopeLagDrag(true, 512.f, 24.f, true);
+  PlatterInputSnapshot active = state.consumeForFrame();
+  state.setScopeLagDrag(false, 512.f, 0.f, false);
+  PlatterInputSnapshot released = state.consumeForFrame();
+
+  bool pass = active.platterTouched && active.scopeLagDragActive && active.scopeLagDragSoftHold &&
+              !active.platterTouchHoldDirect && active.platterGestureRevision == 1 &&
+              nearlyEqual(active.platterLagTarget, 512.f) && nearlyEqual(active.platterGestureVelocity, 24.f) &&
+              !released.platterTouched && !released.scopeLagDragActive && !released.scopeLagDragSoftHold &&
+              released.platterGestureRevision == 0;
+  return {"Scope lag drag payload + release", pass,
+          "active=" + std::to_string(int(active.scopeLagDragActive)) +
+            " soft=" + std::to_string(int(active.scopeLagDragSoftHold)) +
+            " releasedRev=" + std::to_string(released.platterGestureRevision)};
 }
 
 TestResult testMotionFreshCountdown() {
@@ -95,6 +114,7 @@ int main() {
   tests.push_back(testScratchHoldCountdownAndGestureVisibility());
   tests.push_back(testWheelDeltaAccumulatesAndClearsOnConsume());
   tests.push_back(testIdleStateHidesGestureFields());
+  tests.push_back(testScopeLagDragPayloadAndRelease());
   tests.push_back(testMotionFreshCountdown());
   tests.push_back(testQuickSlipTriggerIsOneShot());
 

@@ -1,5 +1,4 @@
 #include "../src/TemporalDeckEngine.hpp"
-
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -385,6 +384,51 @@ TestResult testLiveTouchDirectionalCompensationBalance() {
             " imbalance=" + std::to_string(imbalance)};
 }
 
+TestResult testLiveTouchWriteHeadCompensationPolicyOnlyNearNow() {
+  const float sr = 48000.f;
+  bool near = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr, sr);
+  bool deep = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr + 1.0, sr);
+  bool sampleMode = Engine::shouldApplyLiveManualWriteHeadCompensation(true, false, true, true, sr * 0.5, sr);
+  bool freeze = Engine::shouldApplyLiveManualWriteHeadCompensation(false, true, true, true, sr * 0.5, sr);
+  bool idle = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, false, sr * 0.5, sr);
+
+  bool pass = near && !deep && !sampleMode && !freeze && !idle;
+  return {"Live touch write-head compensation policy is near-NOW only", pass,
+          "near=" + std::to_string(int(near)) + " deep=" + std::to_string(int(deep)) +
+            " sampleMode=" + std::to_string(int(sampleMode)) + " freeze=" + std::to_string(int(freeze)) +
+            " idle=" + std::to_string(int(idle))};
+}
+
+TestResult testDeepLiveManualTouchPolicyOnlyBeyondWindow() {
+  const float sr = 48000.f;
+  bool near = Engine::isDeepLiveManualTouchMotion(false, true, true, sr, sr);
+  bool edge = Engine::isDeepLiveManualTouchMotion(false, true, true, sr + 0.0, sr);
+  bool deep = Engine::isDeepLiveManualTouchMotion(false, true, true, sr + 1.0, sr);
+  bool sampleMode = Engine::isDeepLiveManualTouchMotion(true, true, true, sr * 2.0, sr);
+  bool notTouch = Engine::isDeepLiveManualTouchMotion(false, false, true, sr * 2.0, sr);
+  bool idle = Engine::isDeepLiveManualTouchMotion(false, true, false, sr * 2.0, sr);
+  bool pass = !near && !edge && deep && !sampleMode && !notTouch && !idle;
+  return {"Deep live manual touch policy is depth-gated", pass,
+          "near=" + std::to_string(int(near)) + " edge=" + std::to_string(int(edge)) +
+            " deep=" + std::to_string(int(deep)) + " sampleMode=" + std::to_string(int(sampleMode)) +
+            " notTouch=" + std::to_string(int(notTouch)) + " idle=" + std::to_string(int(idle))};
+}
+
+TestResult testManualTouchNowSnapPolicy() {
+  const float sr = 48000.f;
+  const float nowThreshold = sr * 0.033f;
+  bool nearForward = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, 1.f, 200.0, nowThreshold);
+  bool deep = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, 1.f, sr * 2.0, nowThreshold);
+  bool reverse = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, -1.f, 200.0, nowThreshold);
+  bool freezeLike = Engine::shouldAllowManualTouchNowSnap(false, true, true, true, 1.f, 200.0, nowThreshold);
+  bool sampleMode = Engine::shouldAllowManualTouchNowSnap(true, false, true, true, 1.f, 200.0, nowThreshold);
+  bool pass = nearForward && !deep && !reverse && !freezeLike && !sampleMode;
+  return {"Manual touch near-NOW snap policy", pass,
+          "nearForward=" + std::to_string(int(nearForward)) + " deep=" + std::to_string(int(deep)) +
+            " reverse=" + std::to_string(int(reverse)) + " freezeLike=" + std::to_string(int(freezeLike)) +
+            " sampleMode=" + std::to_string(int(sampleMode))};
+}
+
 TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
   const float sr = 1000.f;
   Engine engine;
@@ -482,6 +526,9 @@ int main() {
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());
   tests.push_back(testLiveTouchUiLikeAlternatingScratchRegressionGuard());
   tests.push_back(testLiveTouchDirectionalCompensationBalance());
+  tests.push_back(testLiveTouchWriteHeadCompensationPolicyOnlyNearNow());
+  tests.push_back(testDeepLiveManualTouchPolicyOnlyBeyondWindow());
+  tests.push_back(testManualTouchNowSnapPolicy());
   tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
   tests.push_back(testSincLutMatchesDirectWindowedSincReference());
   tests.push_back(testSampleBoundedSincLutMatchesDirectReference());

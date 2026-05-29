@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.6.0",
+  "version": "2.8.1",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -72,6 +72,49 @@
         "Filter",
         "Distortion",
         "Visualizer"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Wyrm",
+      "name": "Wyrm",
+      "description": "Custom drawable wavetable oscillator with FM, sync, and fold.",
+      "tags": [
+        "Oscillator",
+        "Waveshaper",
+        "LFO"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Sil",
+      "name": "Sil",
+      "description": "Automatic mastering module.",
+      "tags": [
+        "Dynamics",
+        "Distortion",
+        "EQ"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Chronomaw",
+      "name": "Chronomaw",
+      "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
+      "tags": [
+        "Clock generator",
+        "Function Generator",
+        "Sequencer",
+        "Random"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Bulkhead",
+      "name": "Bulkhead",
+      "description": "Spatial room reverb with interactive wall and listener geometry.",
+      "tags": [
+        "Reverb"
       ],
       "hidden": false
     }

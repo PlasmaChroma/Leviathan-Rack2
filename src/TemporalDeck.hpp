@@ -2,6 +2,7 @@
 
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -34,11 +35,21 @@ struct TemporalDeck final : Module {
   static constexpr int BUFFER_DURATION_20S = 1;
   static constexpr int BUFFER_DURATION_10M_STEREO = 2;
   static constexpr int BUFFER_DURATION_10M_MONO = 3;
-  static constexpr int BUFFER_DURATION_COUNT = 4;
+  static constexpr int BUFFER_DURATION_1M_STEREO = 4;
+  static constexpr int BUFFER_DURATION_2M_STEREO = 5;
+  static constexpr int BUFFER_DURATION_COUNT = 6;
 
   static constexpr int EXTERNAL_GATE_POS_GLIDE = 0;
   static constexpr int EXTERNAL_GATE_POS_MODULE_SYNC = 1;
   static constexpr int EXTERNAL_GATE_POS_COUNT = 2;
+
+  static constexpr int REVERSE_CV_MODE_PULSED = 0;
+  static constexpr int REVERSE_CV_MODE_GATE = 1;
+  static constexpr int REVERSE_CV_MODE_COUNT = 2;
+
+  static constexpr int FREEZE_CV_MODE_PULSED = 0;
+  static constexpr int FREEZE_CV_MODE_GATE = 1;
+  static constexpr int FREEZE_CV_MODE_COUNT = 2;
 
   static constexpr int SAMPLE_SOURCE_LIVE = 0;
   static constexpr int SAMPLE_SOURCE_FILE = 1;
@@ -72,6 +83,7 @@ struct TemporalDeck final : Module {
     REVERSE_PARAM,
     SLIP_PARAM,
     CARTRIDGE_CYCLE_PARAM,
+    ADD_SCOPE_PARAM,
     PARAMS_LEN
   };
   enum InputId {
@@ -81,6 +93,7 @@ struct TemporalDeck final : Module {
     INPUT_R_INPUT,
     SCRATCH_GATE_INPUT,
     FREEZE_GATE_INPUT,
+    REVERSE_CV_INPUT,
     INPUTS_LEN
   };
   enum OutputId { OUTPUT_L_OUTPUT, S_GATE_O_OUTPUT, OUTPUT_R_OUTPUT, S_POS_O_OUTPUT, OUTPUTS_LEN };
@@ -106,6 +119,8 @@ struct TemporalDeck final : Module {
   static const char *slipReturnLabelFor(int index);
   static const char *bufferDurationLabelFor(int index);
   static const char *externalGatePosLabelFor(int index);
+  static const char *freezeCvModeLabelFor(int index);
+  static const char *reverseCvModeLabelFor(int index);
   static const char *platterArtModeLabelFor(int index);
   static const char *platterBrightnessLabelFor(int index);
 
@@ -125,6 +140,7 @@ struct TemporalDeck final : Module {
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
   float getUiSampleRate() const;
+  float consumeAudioProcessUs();
   uint32_t getDebugInstanceId() const;
   float getUiDrawCostUs() const;
   void setUiDrawCostUs(float costUs);
@@ -172,6 +188,32 @@ struct TemporalDeck final : Module {
   void setPlatterTraceLoggingEnabled(bool enabled);
   bool isScopeDragTraceLoggingEnabled() const;
   void setScopeDragTraceLoggingEnabled(bool enabled);
+  struct ScopeDragTraceEvent {
+    enum Type : uint8_t {
+      EVENT_CAPTURE_STARTED = 1,
+      EVENT_SCOPE_DRAG = 2,
+      EVENT_SCOPE_DRAG_END = 3,
+      EVENT_CAPTURE_STOPPED = 4
+    };
+    uint8_t type = 0;
+    uint64_t eventSeq = 0;
+    uint64_t requestSeq = 0;
+    float tSec = 0.f;
+    float frameLag = 0.f;
+    float targetLag = 0.f;
+    float targetDelta = 0.f;
+    float requestVelocity = 0.f;
+    float appliedVelocity = 0.f;
+    float frameLagDelta = 0.f;
+    int32_t stallFrames = 0;
+    bool scopeActive = false;
+    bool newRequest = false;
+    bool justStarted = false;
+    bool freeze = false;
+    bool sampleMode = false;
+  };
+  bool popScopeDragTraceEvent(ScopeDragTraceEvent *outEvent);
+  uint32_t consumeScopeDragTraceDroppedCount();
 
   bool isHighQualityRateInterpolationEnabled() const;
   void setHighQualityRateInterpolationEnabled(bool enabled);
@@ -184,6 +226,10 @@ struct TemporalDeck final : Module {
   void setSlipReturnMode(int mode);
   int getExternalGatePosMode() const;
   void setExternalGatePosMode(int mode);
+  int getFreezeCvMode() const;
+  void setFreezeCvMode(int mode);
+  int getReverseCvMode() const;
+  void setReverseCvMode(int mode);
 
 private:
   void applySampleRateChange(float sampleRate);

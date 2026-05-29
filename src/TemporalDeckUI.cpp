@@ -2,8 +2,10 @@
 #include "DebugTerminalTransport.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -12,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <limits>
 #include <regex>
@@ -29,8 +32,10 @@ static std::string expandedVinylSyncLabel();
 static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
+static bool isTDScopeModule(const engine::Module *neighbor);
 static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
+struct TemporalDeckWidget;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
@@ -64,6 +69,39 @@ struct TemporalDeckTonearmWidget : Widget {
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 
   void draw(const DrawArgs &args) override;
+};
+
+static void drawTemporalDeckStepTriangle(const Widget::DrawArgs &args, const Vec &size, bool pointRight) {
+  const float cx = 0.5f * size.x;
+  const float cy = 0.5f * size.y;
+  const float halfW = 2.8f;
+  const float halfH = 3.3f;
+  const float offset = pointRight ? (halfW / 3.f) : (-halfW / 3.f);
+  nvgBeginPath(args.vg);
+  if (pointRight) {
+    nvgMoveTo(args.vg, cx - halfW + offset, cy - halfH);
+    nvgLineTo(args.vg, cx + halfW + offset, cy);
+    nvgLineTo(args.vg, cx - halfW + offset, cy + halfH);
+  } else {
+    nvgMoveTo(args.vg, cx + halfW + offset, cy - halfH);
+    nvgLineTo(args.vg, cx - halfW + offset, cy);
+    nvgLineTo(args.vg, cx + halfW + offset, cy + halfH);
+  }
+  nvgClosePath(args.vg);
+  nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244));
+  nvgFill(args.vg);
+}
+
+struct TemporalDeckScopeSpawnButton : TL1105 {
+  TemporalDeck *module = nullptr;
+  TemporalDeckWidget *owner = nullptr;
+
+  void draw(const DrawArgs &args) override {
+    TL1105::draw(args);
+    drawTemporalDeckStepTriangle(args, box.size, true);
+  }
+
+  void onButton(const event::Button &e) override;
 };
 
 struct TemporalDeckPlatterWidget : OpaqueWidget {
@@ -2196,14 +2234,25 @@ static bool drawPlatterSvg(const Widget::DrawArgs &args, std::shared_ptr<window:
   return true;
 }
 
+static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle, Vec center, float platterRadiusPx,
+                                   float rotation);
+
 static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<window::Image> image, Vec center,
                              float platterRadiusPx, float rotation) {
   if (!image || image->handle < 0) {
     return false;
   }
+  return drawPlatterImageHandle(args, image->handle, center, platterRadiusPx, rotation);
+}
+
+static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle, Vec center, float platterRadiusPx,
+                                   float rotation) {
+  if (imageHandle < 0) {
+    return false;
+  }
   int imageW = 0;
   int imageH = 0;
-  nvgImageSize(args.vg, image->handle, &imageW, &imageH);
+  nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
   if (imageW <= 0 || imageH <= 0) {
     return false;
   }
@@ -2215,7 +2264,7 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   nvgSave(args.vg);
   nvgTranslate(args.vg, center.x, center.y);
   nvgRotate(args.vg, rotation);
-  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, image->handle, 1.0f);
+  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, imageHandle, 1.0f);
   nvgBeginPath(args.vg);
   nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
   nvgFillPaint(args.vg, imgPaint);
@@ -2224,83 +2273,91 @@ static bool drawPlatterImage(const Widget::DrawArgs &args, std::shared_ptr<windo
   return true;
 }
 
-static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path) {
+static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path,
+                                        std::shared_ptr<window::Image> lifecycleImage) {
   struct MipmapCache {
     struct Entry {
+      NVGcontext *vg = nullptr;
       int handle = -1;
+      int lifecycleHandle = -1;
+      std::weak_ptr<window::Image> lifecycleImage;
       uint64_t lastUse = 0;
     };
-    NVGcontext *vg = nullptr;
     std::unordered_map<std::string, Entry> entries;
     uint64_t useCounter = 0;
+    NVGcontext *activeVg = nullptr;
   };
   static MipmapCache cache;
   constexpr size_t kMaxMipmapImageCacheEntries = 16;
 
-  if (!vg || path.empty()) {
+  if (!vg || path.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
     return -1;
   }
-  if (cache.vg != vg) {
-    cache.vg = vg;
+  if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(
+        vg, cache.activeVg, reinterpret_cast<unsigned long long*>(&cache.useCounter))) {
+    // Do not cross-delete image handles from a previous NanoVG context.
+    // Drop stale cache entries and rebuild lazily for this context.
     cache.entries.clear();
-    cache.useCounter = 0;
   }
+
   auto it = cache.entries.find(path);
   if (it != cache.entries.end()) {
-    it->second.lastUse = ++cache.useCounter;
-    return it->second.handle;
+    std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
+    if (it->second.vg == vg && it->second.handle >= 0 &&
+        it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
+      it->second.lastUse = ++cache.useCounter;
+      return it->second.handle;
+    }
+    if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
+      nvgDeleteImage(vg, it->second.handle);
+    }
+    cache.entries.erase(it);
   }
 
   int handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-  if (handle >= 0) {
-    MipmapCache::Entry entry;
-    entry.handle = handle;
-    entry.lastUse = ++cache.useCounter;
-    cache.entries[path] = entry;
-    if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
-      auto evictIt = cache.entries.begin();
-      for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
-        if (iter->second.lastUse < evictIt->second.lastUse) {
-          evictIt = iter;
-        }
-      }
-      if (evictIt != cache.entries.end()) {
-        nvgDeleteImage(vg, evictIt->second.handle);
-        cache.entries.erase(evictIt);
+  if (handle < 0) {
+    return -1;
+  }
+
+  MipmapCache::Entry entry;
+  entry.vg = vg;
+  entry.handle = handle;
+  entry.lifecycleHandle = lifecycleImage->handle;
+  entry.lifecycleImage = lifecycleImage;
+  entry.lastUse = ++cache.useCounter;
+  cache.entries[path] = entry;
+
+  if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
+    auto evictIt = cache.entries.begin();
+    for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
+      if (iter->second.lastUse < evictIt->second.lastUse) {
+        evictIt = iter;
       }
     }
+    std::shared_ptr<window::Image> evictLifecycleImage = evictIt->second.lifecycleImage.lock();
+    if (evictIt->second.vg == vg && evictIt->second.handle >= 0 && evictLifecycleImage) {
+      nvgDeleteImage(vg, evictIt->second.handle);
+    }
+    cache.entries.erase(evictIt);
   }
+
   return handle;
 }
 
 static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string &path, Vec center,
                                  float platterRadiusPx, float rotation) {
-  int handle = loadPlatterMipmapImageHandle(args.vg, path);
-  if (handle < 0) {
+  if (path.empty()) {
     return false;
   }
-  int imageW = 0;
-  int imageH = 0;
-  nvgImageSize(args.vg, handle, &imageW, &imageH);
-  if (imageW <= 0 || imageH <= 0) {
+  std::shared_ptr<window::Image> image = APP->window->loadImage(path);
+  if (!image) {
     return false;
   }
-
-  float diameter = platterRadiusPx * 2.f;
-  float scale = diameter / std::max(1.f, float(std::min(imageW, imageH)));
-  float drawW = float(imageW) * scale;
-  float drawH = float(imageH) * scale;
-
-  nvgSave(args.vg);
-  nvgTranslate(args.vg, center.x, center.y);
-  nvgRotate(args.vg, rotation);
-  NVGpaint imgPaint = nvgImagePattern(args.vg, -drawW * 0.5f, -drawH * 0.5f, drawW, drawH, 0.f, handle, 1.0f);
-  nvgBeginPath(args.vg);
-  nvgCircle(args.vg, 0.f, 0.f, platterRadiusPx);
-  nvgFillPaint(args.vg, imgPaint);
-  nvgFill(args.vg);
-  nvgRestore(args.vg);
-  return true;
+  int mipmapHandle = loadPlatterMipmapImageHandle(args.vg, path, image);
+  if (mipmapHandle >= 0 && drawPlatterImageHandle(args, mipmapHandle, center, platterRadiusPx, rotation)) {
+    return true;
+  }
+  return drawPlatterImage(args, image, center, platterRadiusPx, rotation);
 }
 
 static void drawPlatterDimmingOverlay(const Widget::DrawArgs &args, Vec center, float platterRadiusPx, float overlayAlpha) {
@@ -2729,10 +2786,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
           drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt =
-              drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx, rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load default preview platter art '%s': %s", cachedRenderAbsolutePath.c_str(),
@@ -2744,10 +2797,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
           drewArt = drawPlatterSvg(args, APP->window->loadSvg(cachedRenderLoadPath), center, platterRadiusPx, rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderLoadPath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt = drawPlatterImage(args, APP->window->loadImage(cachedRenderLoadPath), center, platterRadiusPx,
-                                       rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load custom platter art '%s' (load path '%s'): %s",
@@ -2760,10 +2809,6 @@ void TemporalDeckPlatterWidget::draw(const DrawArgs &args) {
                                    rotation);
         } else {
           drewArt = drawPlatterImagePath(args, cachedRenderAbsolutePath, center, platterRadiusPx, rotation);
-          if (!drewArt) {
-            drewArt =
-              drawPlatterImage(args, APP->window->loadImage(cachedRenderAbsolutePath), center, platterRadiusPx, rotation);
-          }
         }
       } catch (const std::exception &e) {
         WARN("TemporalDeck: failed to load platter art '%s': %s", cachedRenderAbsolutePath.c_str(), e.what());
@@ -2970,7 +3015,11 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
                                                           TemporalDeck::kMouseScratchTravelScale,
                                                           TemporalDeck::kNominalPlatterRpm);
   if (!freezeLikeDrag) {
-    localLagSamples = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+    float rebasedLag = platter_interaction::rebaseLagTarget(localLagSamples, liveLag, lagDelta);
+    // Deep in the buffer, taper (do not remove) UI-side live-lag rebasing so
+    // platter motion keeps backward authority without over-eager forward catch-up.
+    float rebaseStrength = platter_interaction::liveUiRebaseStrength(liveLag, module->getUiSampleRate());
+    localLagSamples = crossfade(localLagSamples, rebasedLag, rebaseStrength);
   }
   int substeps = clamp(1 + int(std::round(lowFpsComp * 6.f)), 1, 7);
   float lagDeltaStep = lagDelta / float(substeps);
@@ -3189,13 +3238,33 @@ static bool isTDScopeModule(const engine::Module *neighbor) {
 }
 
 struct TemporalDeckWidget : ModuleWidget {
+  struct ScopeDragTraceRecorder {
+    bool active = false;
+    std::ofstream file;
+    std::string path;
+    uint64_t rowsWritten = 0;
+  };
+
   PanelBorder *panelBorder = nullptr;
+  TemporalDeckScopeSpawnButton *scopeSpawnButton = nullptr;
+  ScopeDragTraceRecorder scopeDragTraceRecorder;
+  float uiStepUsEma = 0.f;
+  float uiDrawUsEma = 0.f;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarRightEndMm = 97.413935f;
 
+  void spawnTDScopeRight();
+  void startScopeDragTraceCapture();
+  void stopScopeDragTraceCapture();
+  void syncScopeDragTraceCaptureState();
+  void drainScopeDragTraceEvents(TemporalDeck *deckModule);
+
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
-    setPanel(createPanel(asset::plugin(pluginInstance, "res/deck.svg")));
+    PreviewBuildLogTimer previewBuildTimer("TemporalDeck", module);
+    const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
+    setPanel(createPanel(panelPath));
+    previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
     }
@@ -3205,50 +3274,116 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-    Vec bufferKnobPos = mm2px(Vec(8.408f, 17.086f));
-    addParam(createParamCentered<RoundBlackKnob>(bufferKnobPos, module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(20.889, 99.226)), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 98.872)), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.982, 112.996)), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(9.459, 84.07)), module,
+    auto applyPointOverride = [&](const char *elementId, Vec *outPos) {
+      Vec pointMm;
+      if (panel_svg::loadCircleFromSvg(panelPath, elementId, &pointMm, nullptr, 1.f)) {
+        *outPos = pointMm;
+      }
+    };
+
+    Vec bufferKnobMm(8.408f, 17.086f);
+    Vec rateKnobMm(20.889f, 99.226f);
+    Vec mixKnobMm(70.982f, 98.872f);
+    Vec feedbackKnobMm(70.982f, 112.996f);
+    Vec sensitivityKnobMm(9.459f, 84.07f);
+    Vec freezeButtonMm(57.5f, 101.1f);
+    Vec reverseButtonMm(45.6f, 101.1f);
+    Vec slipButtonMm(33.2f, 101.1f);
+    Vec positionCvMm(45.665f, 112.9f);
+    Vec rateCvMm(20.905f, 112.9f);
+    Vec inputLMm(8.437f, 99.012f);
+    Vec inputRMm(8.478f, 112.9f);
+    Vec scratchGateMm(33.403f, 112.9f);
+    Vec freezeGateMm(57.5f, 112.9f);
+    Vec reverseCvMm(39.5f, 112.9f);
+    Vec outputLMm(94.241f, 99.012f);
+    Vec outputRMm(94.2f, 113.146f);
+    Vec sGateOutMm(83.037f, 99.135f);
+    Vec sPosOutMm(82.996f, 113.269f);
+    Vec freezeLightMm(57.5f, 95.3f);
+    Vec reverseLightMm(45.6f, 95.3f);
+    Vec slipLightMm(33.2f, 95.3f);
+    Vec expanderLightMm(98.4f, 5.8f);
+
+    applyPointOverride("BUFFER", &bufferKnobMm);
+    applyPointOverride("RATE", &rateKnobMm);
+    applyPointOverride("MIX", &mixKnobMm);
+    applyPointOverride("FEEDBACK", &feedbackKnobMm);
+    applyPointOverride("SENSITIVITY", &sensitivityKnobMm);
+    applyPointOverride("FREEZE", &freezeButtonMm);
+    applyPointOverride("REVERSE", &reverseButtonMm);
+    applyPointOverride("SLIP", &slipButtonMm);
+    applyPointOverride("POSITION_CV", &positionCvMm);
+    applyPointOverride("RATE_CV", &rateCvMm);
+    applyPointOverride("INPUT_L", &inputLMm);
+    applyPointOverride("INPUT_R", &inputRMm);
+    applyPointOverride("SCRATCH_GATE", &scratchGateMm);
+    applyPointOverride("FREEZE_GATE", &freezeGateMm);
+    applyPointOverride("REV_CV", &reverseCvMm);
+    applyPointOverride("OUTPUT_L", &outputLMm);
+    applyPointOverride("OUTPUT_R", &outputRMm);
+    applyPointOverride("S_GATE_O", &sGateOutMm);
+    applyPointOverride("S_POS_O", &sPosOutMm);
+    applyPointOverride("FREEZE_LIGHT", &freezeLightMm);
+   applyPointOverride("REVERSE_LIGHT", &reverseLightMm);
+    applyPointOverride("SLIP_LIGHT", &slipLightMm);
+    previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+    previewBuildTimer.markAnchorsDone();
+
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
+    addParam(createParamCentered<RoundBlackKnob>(mm2px(sensitivityKnobMm), module,
                                                  TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(57.5, 101.1)), module, TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(45.6, 101.1)), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(Vec(33.2, 101.1)), module, TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(45.665, 112.9)), module, TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.905, 112.9)), module, TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.437, 99.012)), module, TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.478, 112.9)), module, TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(33.403, 112.9)), module, TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(Vec(57.5, 112.9)), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<PJ301MPort>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
 
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.241, 99.012)), module, TemporalDeck::OUTPUT_L_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(83.037, 99.135)), module, TemporalDeck::S_GATE_O_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(94.2, 113.146)), module, TemporalDeck::OUTPUT_R_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(82.996, 113.269)), module, TemporalDeck::S_POS_O_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(outputRMm), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<BananutBlack>(mm2px(sPosOutMm), module, TemporalDeck::S_POS_O_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(57.5, 95.3)), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(45.6, 95.3)), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(30.8, 95.3)), module, TemporalDeck::SLIP_SLOW_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(33.2, 95.3)), module, TemporalDeck::SLIP_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(Vec(35.6, 95.3)), module, TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(freezeLightMm), module, TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(reverseLightMm), module, TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
+                                                       TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm), module, TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
+                                                       TemporalDeck::SLIP_FAST_LIGHT));
     addChild(
-      createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_LINK_LIGHT));
+      createLightCentered<SmallLight<YellowLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
     addChild(
-      createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(98.4f, 5.8f)), module, TemporalDeck::EXPANDER_READY_LIGHT));
+      createLightCentered<SmallLight<GreenLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_READY_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
     bufferMode->box.pos = Vec(0.f, 0.f);
     bufferMode->box.size = box.size;
-    bufferMode->labelPosPx = bufferKnobPos.plus(Vec(mm2px(Vec(10.4f, 0.f)).x, 0.f));
+    bufferMode->labelPosPx = mm2px(bufferKnobMm).plus(Vec(mm2px(Vec(10.4f, 0.f)).x, 0.f));
     addChild(bufferMode);
 
     Vec platterCenter = mm2px(Vec(50.8f, 72.f));
     float platterRadius = mm2px(Vec(29.5f, 0.f)).x;
     loadPlatterAnchor(platterCenter, platterRadius);
-    Vec tonearmPivot = platterCenter.plus(Vec(platterRadius * 1.12f, platterRadius * 0.34f));
+    Vec cartridgeCycleMm;
+    Vec platterAnchorMm;
+    float platterAnchorRadiusMm = 0.f;
+    if (panel_svg::loadCircleFromSvg(panelPath, "PLATTER_AREA", &platterAnchorMm, &platterAnchorRadiusMm, 1.f)) {
+      cartridgeCycleMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm * 1.12f, platterAnchorRadiusMm * 0.34f));
+    } else {
+      cartridgeCycleMm = Vec(50.8f, 72.f).plus(Vec(29.5f * 1.12f, 29.5f * 0.34f));
+    }
+    applyPointOverride("CARTRIDGE_CYCLE", &cartridgeCycleMm);
 
     float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
@@ -3284,7 +3419,19 @@ struct TemporalDeckWidget : ModuleWidget {
     addChild(tonearm);
 
     // Add after platter/tonearm so this control is visible on top.
-    addParam(createParamCentered<LEDButton>(tonearmPivot, module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
+    addParam(createParamCentered<LEDButton>(mm2px(cartridgeCycleMm), module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
+
+    Vec scopeSpawnPosMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm + 3.5f, 0.f));
+    if (platterAnchorRadiusMm <= 0.f) {
+      scopeSpawnPosMm = Vec(50.8f, 72.f).plus(Vec(29.5f + 3.5f, 0.f));
+    }
+    applyPointOverride("TD_SCOPE_SPAWN", &scopeSpawnPosMm);
+    auto *scopeSpawn =
+      createParamCentered<TemporalDeckScopeSpawnButton>(mm2px(scopeSpawnPosMm), module, TemporalDeck::ADD_SCOPE_PARAM);
+    scopeSpawn->module = module;
+    scopeSpawn->owner = this;
+    scopeSpawnButton = scopeSpawn;
+    addParam(scopeSpawn);
   }
 
   void draw(const DrawArgs &args) override {
@@ -3296,6 +3443,7 @@ struct TemporalDeckWidget : ModuleWidget {
       auto drawEnd = std::chrono::steady_clock::now();
       float drawUs =
         std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
+      uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
       deckModule->setUiDrawCostUs(drawUs);
     };
 
@@ -3322,8 +3470,6 @@ struct TemporalDeckWidget : ModuleWidget {
     } else {
       ModuleWidget::draw(args);
     }
-    publishUiDrawMetric(deckModule);
-
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
@@ -3332,8 +3478,10 @@ struct TemporalDeckWidget : ModuleWidget {
         double &lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
         if (lastSubmitSec < 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
           lastSubmitSec = nowSec;
+          const float uiTotalMs = (uiStepUsEma + uiDrawUsEma) * 0.001f;
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
-                                                      deckModule->getUiDrawCostUs() * 0.001f,
+                                                      uiTotalMs,
+                                                      deckModule->consumeAudioProcessUs(),
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);
@@ -3353,11 +3501,23 @@ struct TemporalDeckWidget : ModuleWidget {
         nvgRestore(args.vg);
       }
     }
+
+    publishUiDrawMetric(deckModule);
   }
 
   void step() override {
+    auto stepStart = std::chrono::steady_clock::now();
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    if (deckModule) {
+      syncScopeDragTraceCaptureState();
+      drainScopeDragTraceEvents(deckModule);
+    } else {
+      stopScopeDragTraceCapture();
+    }
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    if (scopeSpawnButton) {
+      scopeSpawnButton->setVisible(!linkedToScope);
+    }
     const float borderGrowPx = linkedToScope ? 3.f : 0.f;
     if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
       panelBorder->box.size.x = box.size.x + borderGrowPx;
@@ -3366,7 +3526,12 @@ struct TemporalDeckWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
+    float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
+                     std::chrono::steady_clock::now() - stepStart).count();
+    uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
   }
+
+  ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
@@ -3574,24 +3739,57 @@ struct TemporalDeckWidget : ModuleWidget {
             [=]() { module->setExternalGatePosMode(i); }));
         }
       }));
+      menu->addChild(createSubmenuItem("Reverse CV", "", [=](Menu *submenu) {
+        std::array<int, TemporalDeck::REVERSE_CV_MODE_COUNT> modeOrder = {
+          TemporalDeck::REVERSE_CV_MODE_GATE, TemporalDeck::REVERSE_CV_MODE_PULSED};
+        for (int i : modeOrder) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::reverseCvModeLabelFor(i), "",
+            [=]() { return module->getReverseCvMode() == i; },
+            [=]() { module->setReverseCvMode(i); }));
+        }
+      }));
+      menu->addChild(createSubmenuItem("Freeze CV", "", [=](Menu *submenu) {
+        std::array<int, TemporalDeck::FREEZE_CV_MODE_COUNT> modeOrder = {
+          TemporalDeck::FREEZE_CV_MODE_GATE, TemporalDeck::FREEZE_CV_MODE_PULSED};
+        for (int i : modeOrder) {
+          submenu->addChild(createCheckMenuItem(
+            TemporalDeck::freezeCvModeLabelFor(i), "",
+            [=]() { return module->getFreezeCvMode() == i; },
+            [=]() { module->setFreezeCvMode(i); }));
+        }
+      }));
       if (!module->isSampleModeEnabled()) {
         menu->addChild(createSubmenuItem("Buffer range", "", [=](Menu *submenu) {
           auto bufferModeMenuLabel = [=](int mode) {
             std::string label = TemporalDeck::bufferDurationLabelFor(mode);
-            if (mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
+            if (mode != TemporalDeck::BUFFER_DURATION_1M_STEREO && mode != TemporalDeck::BUFFER_DURATION_2M_STEREO &&
+                mode != TemporalDeck::BUFFER_DURATION_10M_STEREO && mode != TemporalDeck::BUFFER_DURATION_10M_MONO) {
               return label;
             }
-            // 10-minute modes use 601s internal allocation (extra 1s headroom).
+            // Long-duration modes include +1s internal headroom.
             float sr = std::max(module->getUiSampleRate(), 1.f);
             float channels = (mode == TemporalDeck::BUFFER_DURATION_10M_MONO) ? 1.f : 2.f;
-            double bytes = double(sr) * 601.0 * double(channels) * double(sizeof(float));
+            double seconds = 11.0;
+            if (mode == TemporalDeck::BUFFER_DURATION_1M_STEREO) {
+              seconds = 61.0;
+            } else if (mode == TemporalDeck::BUFFER_DURATION_2M_STEREO) {
+              seconds = 121.0;
+            } else if (mode == TemporalDeck::BUFFER_DURATION_10M_STEREO || mode == TemporalDeck::BUFFER_DURATION_10M_MONO) {
+              seconds = 601.0;
+            }
+            double bytes = double(sr) * seconds * double(channels) * double(sizeof(float));
             double mib = bytes / (1024.0 * 1024.0);
             return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
           };
-          for (int i = 0; i < TemporalDeck::BUFFER_DURATION_COUNT; ++i) {
-            submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(i), "",
-                                                  [=]() { return module->getBufferDurationMode() == i; },
-                                                  [=]() { module->applyBufferDurationMode(i); }));
+          std::array<int, TemporalDeck::BUFFER_DURATION_COUNT> menuOrder = {
+            TemporalDeck::BUFFER_DURATION_10S,       TemporalDeck::BUFFER_DURATION_20S,
+            TemporalDeck::BUFFER_DURATION_1M_STEREO, TemporalDeck::BUFFER_DURATION_2M_STEREO,
+            TemporalDeck::BUFFER_DURATION_10M_STEREO, TemporalDeck::BUFFER_DURATION_10M_MONO};
+          for (int mode : menuOrder) {
+            submenu->addChild(createCheckMenuItem(bufferModeMenuLabel(mode), "",
+                                                  [=]() { return module->getBufferDurationMode() == mode; },
+                                                  [=]() { module->applyBufferDurationMode(mode); }));
           }
         }));
       }
@@ -3765,5 +3963,136 @@ struct TemporalDeckWidget : ModuleWidget {
     }
   }
 };
+
+void TemporalDeckWidget::startScopeDragTraceCapture() {
+  if (scopeDragTraceRecorder.active) {
+    return;
+  }
+  std::string traceDir = system::join(temporalDeckUserRootPath(), "scope_traces");
+  system::createDirectories(traceDir);
+  long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+  std::string filename = "scope_drag_trace_" + std::to_string(stampMs) + ".csv";
+  scopeDragTraceRecorder.path = system::join(traceDir, filename);
+  scopeDragTraceRecorder.file.open(scopeDragTraceRecorder.path.c_str(), std::ios::out | std::ios::trunc);
+  if (!scopeDragTraceRecorder.file.good()) {
+    WARN("TemporalDeck: failed to open scope drag trace file: %s", scopeDragTraceRecorder.path.c_str());
+    scopeDragTraceRecorder.path.clear();
+    return;
+  }
+  scopeDragTraceRecorder.file.setf(std::ios::fixed);
+  scopeDragTraceRecorder.file << std::setprecision(6);
+  scopeDragTraceRecorder.file << "# TemporalDeck scope drag trace v2\n";
+  scopeDragTraceRecorder.file << "# Audio thread emits events, UI thread persists CSV\n";
+  scopeDragTraceRecorder.file
+    << "seq,t_sec,event,request_seq,scope_active,new_request,just_started,stall_frames,target_lag,target_delta,"
+       "request_velocity,applied_velocity,frame_lag,frame_lag_delta,freeze,sample_mode\n";
+  scopeDragTraceRecorder.rowsWritten = 0;
+  scopeDragTraceRecorder.active = true;
+  INFO("TemporalDeck: scope drag trace capture started: %s", scopeDragTraceRecorder.path.c_str());
+}
+
+void TemporalDeckWidget::stopScopeDragTraceCapture() {
+  if (!scopeDragTraceRecorder.active) {
+    return;
+  }
+  if (scopeDragTraceRecorder.file.good()) {
+    scopeDragTraceRecorder.file.flush();
+    scopeDragTraceRecorder.file.close();
+  }
+  INFO("TemporalDeck: scope drag trace capture saved: %s", scopeDragTraceRecorder.path.c_str());
+  scopeDragTraceRecorder.active = false;
+  scopeDragTraceRecorder.rowsWritten = 0;
+  scopeDragTraceRecorder.path.clear();
+}
+
+void TemporalDeckWidget::syncScopeDragTraceCaptureState() {
+  TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+  if (!deckModule) {
+    stopScopeDragTraceCapture();
+    return;
+  }
+  if (deckModule->isScopeDragTraceLoggingEnabled() && isDragonKingDebugEnabled()) {
+    startScopeDragTraceCapture();
+  } else {
+    stopScopeDragTraceCapture();
+  }
+}
+
+void TemporalDeckWidget::drainScopeDragTraceEvents(TemporalDeck *deckModule) {
+  if (!deckModule || !scopeDragTraceRecorder.active || !scopeDragTraceRecorder.file.good()) {
+    return;
+  }
+  uint32_t dropped = deckModule->consumeScopeDragTraceDroppedCount();
+  if (dropped > 0u) {
+    WARN("TemporalDeck: scope drag trace dropped %u events (queue full)", dropped);
+  }
+  TemporalDeck::ScopeDragTraceEvent event;
+  while (deckModule->popScopeDragTraceEvent(&event)) {
+    const char *eventName = "UNKNOWN";
+    if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_CAPTURE_STARTED) {
+      eventName = "CAPTURE_STARTED";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_SCOPE_DRAG) {
+      eventName = "SCOPE_DRAG";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_SCOPE_DRAG_END) {
+      eventName = "SCOPE_DRAG_END";
+    } else if (event.type == TemporalDeck::ScopeDragTraceEvent::EVENT_CAPTURE_STOPPED) {
+      eventName = "CAPTURE_STOPPED";
+    }
+    scopeDragTraceRecorder.file << event.eventSeq << "," << event.tSec << "," << eventName << "," << event.requestSeq << ","
+                                << (event.scopeActive ? 1 : 0) << "," << (event.newRequest ? 1 : 0) << ","
+                                << (event.justStarted ? 1 : 0) << "," << event.stallFrames << "," << event.targetLag
+                                << "," << event.targetDelta << "," << event.requestVelocity << ","
+                                << event.appliedVelocity << "," << event.frameLag << "," << event.frameLagDelta << ","
+                                << (event.freeze ? 1 : 0) << "," << (event.sampleMode ? 1 : 0) << "\n";
+    scopeDragTraceRecorder.rowsWritten++;
+  }
+}
+
+void TemporalDeckWidget::spawnTDScopeRight() {
+  TemporalDeck *deckModule = dynamic_cast<TemporalDeck *>(module);
+  if (!deckModule || !APP || !APP->scene || !APP->scene->rack || !modelTDScope) {
+    return;
+  }
+
+  Module* right = deckModule->rightExpander.module;
+  if (isTDScopeModule(right)) {
+    return;
+  }
+
+  engine::Module *scopeModule = modelTDScope->createModule();
+  if (!scopeModule) {
+    return;
+  }
+  app::ModuleWidget *scopeWidget = modelTDScope->createModuleWidget(scopeModule);
+  if (!scopeWidget) {
+    delete scopeModule;
+    return;
+  }
+
+  app::RackWidget *rack = APP->scene->rack;
+  const Vec scopePos = box.pos.plus(Vec(box.size.x, 0.f));
+
+  APP->engine->addModule(scopeModule);
+  rack->setModulePosForce(scopeWidget, scopePos);
+  rack->addModule(scopeWidget);
+
+  if (APP->history) {
+    history::ModuleAdd *h = new history::ModuleAdd;
+    h->name = "add TD.Scope";
+    h->setModule(scopeWidget);
+    APP->history->push(h);
+  }
+}
+
+void TemporalDeckScopeSpawnButton::onButton(const event::Button &e) {
+  TL1105::onButton(e);
+  if (e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+    return;
+  }
+  if (owner) {
+    owner->spawnTDScopeRight();
+  }
+  e.consume(this);
+}
 
 Model *modelTemporalDeck = createModel<TemporalDeck, TemporalDeckWidget>("TemporalDeck");

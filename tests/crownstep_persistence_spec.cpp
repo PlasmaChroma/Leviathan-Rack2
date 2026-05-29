@@ -34,6 +34,8 @@ TestResult testCrownstepStateJsonRoundTrip() {
   source.pitchInterpretationMode = 2;
   source.boardValueLayoutMode = 1;
   source.pitchDividerMode = 3;
+  source.stepCounterStyle = Crownstep::STEP_COUNTER_BASIC;
+  source.params[Crownstep::RANGE_PARAM].setValue(0.75f);
   source.boardTextureMode = Crownstep::BOARD_TEXTURE_MARBLE;
   source.playhead = 7;
   source.gameOver = false;
@@ -96,7 +98,11 @@ TestResult testCrownstepStateJsonRoundTrip() {
   bool pitchInterpretationOk = loaded.pitchInterpretationMode == source.pitchInterpretationMode;
   bool boardValueLayoutOk = loaded.boardValueLayoutMode == source.boardValueLayoutMode;
   bool pitchDividerOk = loaded.pitchDividerMode == source.pitchDividerMode;
+  bool pitchRangeOk = nearlyEqual(
+    loaded.params[Crownstep::RANGE_PARAM].getValue(),
+    source.params[Crownstep::RANGE_PARAM].getValue());
   bool boardTextureOk = loaded.boardTextureMode == source.boardTextureMode;
+  bool stepCounterStyleOk = loaded.stepCounterStyle == source.stepCounterStyle;
   bool playheadOk = loaded.playhead == source.playhead;
   bool gameOverOk = loaded.gameOver == source.gameOver;
   bool lastMoveSideOk = loaded.lastMoveSide == loaded.aiSide();
@@ -112,7 +118,9 @@ TestResult testCrownstepStateJsonRoundTrip() {
     pitchInterpretationOk &&
     boardValueLayoutOk &&
     pitchDividerOk &&
+    pitchRangeOk &&
     boardTextureOk &&
+    stepCounterStyleOk &&
     playheadOk &&
     gameOverOk &&
     lastMoveSideOk;
@@ -163,7 +171,9 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " pitchInterpretationOk=" + std::to_string(pitchInterpretationOk ? 1 : 0) +
             " boardValueLayoutOk=" + std::to_string(boardValueLayoutOk ? 1 : 0) +
             " pitchDividerOk=" + std::to_string(pitchDividerOk ? 1 : 0) +
+            " pitchRangeOk=" + std::to_string(pitchRangeOk ? 1 : 0) +
             " boardTextureOk=" + std::to_string(boardTextureOk ? 1 : 0) +
+            " stepCounterStyleOk=" + std::to_string(stepCounterStyleOk ? 1 : 0) +
             " playheadOk=" + std::to_string(playheadOk ? 1 : 0) +
             " gameOverOk=" + std::to_string(gameOverOk ? 1 : 0) +
             " lastMoveSideOk=" + std::to_string(lastMoveSideOk ? 1 : 0) +
@@ -173,11 +183,111 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
 }
 
+TestResult testDiagonalLayoutModesAreDistinct() {
+  bool pass = true;
+  std::string detail;
+
+  int cLinear01 = crownstep::linearDiagonalRank(0, 1, 8, 8);
+  int cLinear10 = crownstep::linearDiagonalRank(1, 0, 8, 8);
+  int cSerp01 = crownstep::serpentineDiagonalRank(0, 1, 8, 8);
+  int cSerp10 = crownstep::serpentineDiagonalRank(1, 0, 8, 8);
+
+  pass = pass && (crownstep::linearDiagonalRank(0, 0, 8, 8) == 0);
+  pass = pass && (cLinear01 == 1);
+  pass = pass && (cLinear10 == 2);
+  pass = pass && (cSerp01 == 2);
+  pass = pass && (cSerp10 == 1);
+
+  bool checkersDiffers = false;
+  for (int i = 0; i < crownstep::BOARD_SIZE; ++i) {
+    int row = i / 4;
+    int col = i % 4;
+    int linear = crownstep::linearDiagonalRank(row, col, 8, 4);
+    int serp = crownstep::serpentineDiagonalRank(row, col, 8, 4);
+    if (linear != serp) {
+      checkersDiffers = true;
+      break;
+    }
+  }
+
+  bool chessDiffers = false;
+  for (int i = 0; i < crownstep::CHESS_BOARD_SIZE; ++i) {
+    int row = i / 8;
+    int col = i % 8;
+    int linear = crownstep::linearDiagonalRank(row, col, 8, 8);
+    int serp = crownstep::serpentineDiagonalRank(row, col, 8, 8);
+    if (linear != serp) {
+      chessDiffers = true;
+      break;
+    }
+  }
+
+  pass = pass && checkersDiffers && chessDiffers;
+  detail = "checkersDiffers=" + std::to_string(checkersDiffers ? 1 : 0)
+    + " chessDiffers=" + std::to_string(chessDiffers ? 1 : 0)
+    + " linear01=" + std::to_string(cLinear01)
+    + " linear10=" + std::to_string(cLinear10)
+    + " serp01=" + std::to_string(cSerp01)
+    + " serp10=" + std::to_string(cSerp10);
+  return {"Diagonal layout linear/serpentine are distinct", pass, detail};
+}
+
+TestResult testRootCvUsesOneVoltPerOctaveSemitoneQuantization() {
+  Crownstep module;
+  module.params[Crownstep::ROOT_PARAM].setValue(0.f);
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(0.f);
+  int zeroOffset = module.rootCvOffsetSemitone();
+  int zeroRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(1.f / 12.f);
+  int oneSemitoneOffset = module.rootCvOffsetSemitone();
+  int oneSemitoneRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(11.f / 12.f);
+  int elevenSemitoneOffset = module.rootCvOffsetSemitone();
+  int elevenSemitoneRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(1.f);
+  int octaveOffset = module.rootCvOffsetSemitone();
+  int octaveRoot = module.rootSemitone();
+
+  module.inputs[Crownstep::ROOT_INPUT].setVoltage(-1.f / 12.f);
+  int negativeSemitoneOffset = module.rootCvOffsetSemitone();
+  int negativeSemitoneRoot = module.rootSemitone();
+
+  bool pass =
+    zeroOffset == 0 &&
+    zeroRoot == 0 &&
+    oneSemitoneOffset == 1 &&
+    oneSemitoneRoot == 1 &&
+    elevenSemitoneOffset == 11 &&
+    elevenSemitoneRoot == 11 &&
+    octaveOffset == 12 &&
+    octaveRoot == 0 &&
+    negativeSemitoneOffset == -1 &&
+    negativeSemitoneRoot == 11;
+
+  return {"Root CV uses 1V/oct semitone quantization", pass,
+          "offsets=" + std::to_string(zeroOffset) + "," +
+            std::to_string(oneSemitoneOffset) + "," +
+            std::to_string(elevenSemitoneOffset) + "," +
+            std::to_string(octaveOffset) + "," +
+            std::to_string(negativeSemitoneOffset) +
+            " roots=" + std::to_string(zeroRoot) + "," +
+            std::to_string(oneSemitoneRoot) + "," +
+            std::to_string(elevenSemitoneRoot) + "," +
+            std::to_string(octaveRoot) + "," +
+            std::to_string(negativeSemitoneRoot)};
+}
+
 } // namespace
 
 int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
+  tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
+  tests.push_back(testDiagonalLayoutModesAreDistinct());
 
   int failed = 0;
   std::cout << "Crownstep Persistence Spec\n";

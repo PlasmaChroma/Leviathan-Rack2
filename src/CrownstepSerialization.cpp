@@ -14,6 +14,7 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "boardValueRandomSeed", json_integer(json_int_t(boardValueRandomSeed)));
 	json_object_set_new(rootJ, "boardValueLayoutInverted", json_boolean(boardValueLayoutInverted));
 	json_object_set_new(rootJ, "pitchDividerMode", json_integer(pitchDividerMode));
+	json_object_set_new(rootJ, "pitchRangeParam", json_real(params[RANGE_PARAM].getValue()));
 	json_object_set_new(rootJ, "showCellPitchOverlay", json_boolean(showCellPitchOverlay));
 	json_object_set_new(rootJ, "boardTextureMode", json_integer(boardTextureMode));
 	json_object_set_new(rootJ, "gameMode", json_integer(gameMode));
@@ -21,6 +22,9 @@ json_t* Crownstep::dataToJson() {
 	json_object_set_new(rootJ, "playerMode", json_integer(playerMode));
 	json_object_set_new(rootJ, "stepCounterStyle", json_integer(stepCounterStyle));
 	json_object_set_new(rootJ, "sequenceCapOverride", json_integer(sequenceCapOverride));
+	json_object_set_new(rootJ, "sequenceRangeTrimEnabled", json_boolean(sequenceRangeTrimEnabled));
+	json_object_set_new(rootJ, "sequenceTrimLeft", json_integer(sequenceTrimLeft));
+	json_object_set_new(rootJ, "sequenceTrimRight", json_integer(sequenceTrimRight));
 	json_object_set_new(rootJ, "chessCastleWK", json_boolean(chessState.whiteCanCastleKingSide));
 	json_object_set_new(rootJ, "chessCastleWQ", json_boolean(chessState.whiteCanCastleQueenSide));
 	json_object_set_new(rootJ, "chessCastleBK", json_boolean(chessState.blackCanCastleKingSide));
@@ -138,6 +142,16 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			clamp(int(json_integer_value(pitchDividerModeJ)), 0, int(crownstep::PITCH_DIVIDER_NAMES.size()) - 1);
 		loadedPitchDividerMode = true;
 	}
+	bool loadedPitchRangeParam = false;
+	json_t* pitchRangeParamJ = json_object_get(rootJ, "pitchRangeParam");
+	if (pitchRangeParamJ && json_is_number(pitchRangeParamJ)) {
+		params[RANGE_PARAM].setValue(clamp(float(json_number_value(pitchRangeParamJ)), 0.f, 1.f));
+		loadedPitchRangeParam = true;
+	}
+	else if (loadedPitchDividerMode) {
+		params[RANGE_PARAM].setValue(crownstep::pitchRangeParamFromMultiplier(
+			crownstep::pitchDividerForMode(pitchDividerMode)));
+	}
 	json_t* showCellPitchOverlayJ = json_object_get(rootJ, "showCellPitchOverlay");
 	if (showCellPitchOverlayJ) {
 		showCellPitchOverlay = json_is_true(showCellPitchOverlayJ);
@@ -152,6 +166,10 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			storedLayoutMode < crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT * 2) {
 			boardValueLayoutMode = storedLayoutMode - crownstep::LEGACY_BOARD_VALUE_LAYOUT_COUNT;
 			pitchDividerMode = 1;
+			if (!loadedPitchRangeParam) {
+				params[RANGE_PARAM].setValue(crownstep::pitchRangeParamFromMultiplier(
+					crownstep::pitchDividerForMode(pitchDividerMode)));
+			}
 		}
 		else {
 			boardValueLayoutMode = clamp(storedLayoutMode, 0, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1);
@@ -178,7 +196,7 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	}
 	json_t* stepCounterStyleJ = json_object_get(rootJ, "stepCounterStyle");
 	if (stepCounterStyleJ) {
-		stepCounterStyle = STEP_COUNTER_RIBBON;
+		stepCounterStyle = clamp(int(json_integer_value(stepCounterStyleJ)), 0, STEP_COUNTER_STYLE_COUNT - 1);
 	}
 	json_t* sequenceCapOverrideJ = json_object_get(rootJ, "sequenceCapOverride");
 	if (sequenceCapOverrideJ) {
@@ -186,6 +204,18 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 		if (sequenceCapOverride < -1) {
 			sequenceCapOverride = -1;
 		}
+	}
+	json_t* sequenceRangeTrimEnabledJ = json_object_get(rootJ, "sequenceRangeTrimEnabled");
+	if (sequenceRangeTrimEnabledJ) {
+		sequenceRangeTrimEnabled = json_is_true(sequenceRangeTrimEnabledJ);
+	}
+	json_t* sequenceTrimLeftJ = json_object_get(rootJ, "sequenceTrimLeft");
+	if (sequenceTrimLeftJ) {
+		sequenceTrimLeft = std::max(0, int(json_integer_value(sequenceTrimLeftJ)));
+	}
+	json_t* sequenceTrimRightJ = json_object_get(rootJ, "sequenceTrimRight");
+	if (sequenceTrimRightJ) {
+		sequenceTrimRight = std::max(0, int(json_integer_value(sequenceTrimRightJ)));
 	}
 	json_t* playheadJ = json_object_get(rootJ, "playhead");
 	if (playheadJ) {

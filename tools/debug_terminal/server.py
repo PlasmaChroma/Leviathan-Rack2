@@ -76,7 +76,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Live debug terminal for Rack telemetry")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--refresh-hz", type=float, default=8.0)
+    parser.add_argument("--refresh-hz", type=float, default=0.5)
     return parser.parse_args()
 
 

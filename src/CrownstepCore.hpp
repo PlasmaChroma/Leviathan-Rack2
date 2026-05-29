@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace crownstep {
@@ -83,6 +84,10 @@ static constexpr std::array<const char*, 7> PITCH_DIVIDER_NAMES = {
 static constexpr std::array<float, 7> PITCH_DIVIDER_VALUES = {
 	{1.f, 0.5f, 1.f / 3.f, 0.25f, 1.5f, 2.f, 3.f}
 };
+static constexpr float PITCH_RANGE_PARAM_MIN_MULTIPLIER = 0.25f;
+static constexpr float PITCH_RANGE_PARAM_FULL_MULTIPLIER = 1.f;
+static constexpr float PITCH_RANGE_PARAM_MAX_MULTIPLIER = 3.f;
+static constexpr float PITCH_RANGE_PARAM_DEFAULT = 0.5f;
 
 struct Move {
 	int originIndex = -1;
@@ -207,6 +212,7 @@ inline bool isPromotionSquare(int side, int index) {
 
 inline std::vector<int> movementDirectionsForPiece(int piece, bool capture) {
 	std::vector<int> directions;
+	directions.reserve(2);
 	int side = pieceSide(piece);
 	if (pieceIsKing(piece) || side == HUMAN_SIDE) {
 		directions.push_back(capture ? -2 : -1);
@@ -249,8 +255,8 @@ inline void collectCapturesRecursive(
 	int originIndex,
 	int currentIndex,
 	int currentPiece,
-	std::vector<int> path,
-	std::vector<int> captured,
+	std::vector<int>& path,
+	std::vector<int>& captured,
 	std::vector<Move>* outMoves
 ) {
 	if (!outMoves) {
@@ -286,25 +292,25 @@ inline void collectCapturesRecursive(
 			}
 			nextBoard[size_t(destIndex)] = movedPiece;
 
-			std::vector<int> nextPath = path;
-			nextPath.push_back(destIndex);
-			std::vector<int> nextCaptured = captured;
-			nextCaptured.push_back(jumpedIndex);
+			path.push_back(destIndex);
+			captured.push_back(jumpedIndex);
 
 			if (promoted) {
 				Move move;
 				move.originIndex = originIndex;
 				move.destinationIndex = destIndex;
-				move.path = nextPath;
-				move.captured = nextCaptured;
+				move.path = path;
+				move.captured = captured;
 				move.isCapture = true;
-				move.isMultiCapture = nextCaptured.size() > 1;
+				move.isMultiCapture = captured.size() > 1;
 				move.isKing = true;
 				outMoves->push_back(move);
 			}
 			else {
-				collectCapturesRecursive(nextBoard, originIndex, destIndex, movedPiece, nextPath, nextCaptured, outMoves);
+				collectCapturesRecursive(nextBoard, originIndex, destIndex, movedPiece, path, captured, outMoves);
 			}
+			captured.pop_back();
+			path.pop_back();
 		}
 	}
 
@@ -324,13 +330,19 @@ inline void collectCapturesRecursive(
 inline std::vector<Move> generateLegalMovesForSide(const BoardState& sourceBoard, int side) {
 	std::vector<Move> captures;
 	std::vector<Move> simpleMoves;
+	captures.reserve(24);
+	simpleMoves.reserve(24);
 
 	for (int i = 0; i < BOARD_SIZE; ++i) {
 		int piece = sourceBoard[size_t(i)];
 		if (piece == 0 || pieceSide(piece) != side) {
 			continue;
 		}
-		collectCapturesRecursive(sourceBoard, i, i, piece, {}, {}, &captures);
+		std::vector<int> path;
+		std::vector<int> captured;
+		path.reserve(8);
+		captured.reserve(8);
+		collectCapturesRecursive(sourceBoard, i, i, piece, path, captured, &captures);
 	}
 	if (!captures.empty()) {
 		return captures;
@@ -969,6 +981,7 @@ inline BoardState chessApplyMoveToBoard(const BoardState& sourceBoard, const Mov
 
 inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side, const ChessState& state) {
 	std::vector<Move> pseudo;
+	pseudo.reserve(64);
 	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
 		int piece = sourceBoard[size_t(i)];
 		if (piece == 0 || pieceSide(piece) != side) {
@@ -992,6 +1005,19 @@ inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& source
 inline std::vector<Move> chessGenerateLegalMovesForSide(const BoardState& sourceBoard, int side) {
 	ChessState inferred = chessInferStateFromBoard(sourceBoard);
 	return chessGenerateLegalMovesForSide(sourceBoard, side, inferred);
+}
+
+inline int chessCountPseudoMovesForSide(const BoardState& sourceBoard, int side) {
+	std::vector<Move> pseudo;
+	pseudo.reserve(64);
+	for (int i = 0; i < CHESS_BOARD_SIZE; ++i) {
+		int piece = sourceBoard[size_t(i)];
+		if (piece == 0 || pieceSide(piece) != side) {
+			continue;
+		}
+		chessAddPseudoMovesForPiece(sourceBoard, i, &pseudo, nullptr);
+	}
+	return int(pseudo.size());
 }
 
 inline int chessPieceMaterialValue(int pieceType) {
@@ -1033,6 +1059,13 @@ inline int chessEvaluatePosition(const BoardState& board, const ChessState& stat
 	if (aiMoves.empty()) {
 		score -= chessIsKingInCheck(board, AI_SIDE) ? 100000 : 0;
 	}
+	return score;
+}
+
+inline int chessEvaluatePositionFast(const BoardState& board) {
+	int score = chessEvaluateBoardMaterial(board);
+	score += chessCountPseudoMovesForSide(board, AI_SIDE) * 4;
+	score -= chessCountPseudoMovesForSide(board, HUMAN_SIDE) * 4;
 	return score;
 }
 
@@ -1104,7 +1137,7 @@ inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* 
 	if (!moves || moves->size() < 2) {
 		return;
 	}
-	std::stable_sort(moves->begin(), moves->end(), [&](const Move& a, const Move& b) {
+	std::sort(moves->begin(), moves->end(), [&board](const Move& a, const Move& b) {
 		int scoreA = chessMoveOrderingScore(board, a);
 		int scoreB = chessMoveOrderingScore(board, b);
 		if (scoreA != scoreB) {
@@ -1128,12 +1161,15 @@ inline int chessSearchDepthForDifficulty(int difficulty) {
 
 inline int chessSearchScore(const BoardState& board, const ChessState& state, int sideToMove, int depth, int alpha, int beta) {
 	if (depth <= 0) {
-		int score = chessEvaluatePosition(board, state);
+		int score = chessEvaluatePositionFast(board);
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
 	std::vector<Move> moves = chessGenerateLegalMovesForSide(board, sideToMove, state);
 	if (moves.empty()) {
-		int score = chessEvaluatePosition(board, state);
+		int score = chessEvaluateBoardMaterial(board);
+		if (chessIsKingInCheck(board, sideToMove)) {
+			score += (sideToMove == HUMAN_SIDE) ? 100000 : -100000;
+		}
 		return (sideToMove == AI_SIDE) ? score : -score;
 	}
 	chessSortMovesForSearch(board, &moves);
@@ -1165,6 +1201,8 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty, const Che
 	int depth = chessSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		ChessState nextState;
 		BoardState nextBoard = chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
@@ -1173,13 +1211,14 @@ inline Move chessChooseAiMove(const BoardState& board, int difficulty, const Che
 			nextState,
 			HUMAN_SIDE,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha
 		);
 		// Prefer captures when scores tie to keep the AI active in MVP mode.
 		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];
@@ -1227,7 +1266,8 @@ inline bool othelloCollectDirectionFlips(
 	if (!flips) {
 		return false;
 	}
-	std::vector<int> local;
+	int local[7];
+	int localCount = 0;
 	int r = row + dr;
 	int c = col + dc;
 	while (true) {
@@ -1240,13 +1280,16 @@ inline bool othelloCollectDirectionFlips(
 			return false;
 		}
 		if (piece == side) {
-			if (local.empty()) {
+			if (localCount == 0) {
 				return false;
 			}
-			flips->insert(flips->end(), local.begin(), local.end());
+			flips->insert(flips->end(), local, local + localCount);
 			return true;
 		}
-		local.push_back(idx);
+		if (localCount >= 7) {
+			return false;
+		}
+		local[localCount++] = idx;
 		r += dr;
 		c += dc;
 	}
@@ -1254,6 +1297,7 @@ inline bool othelloCollectDirectionFlips(
 
 inline std::vector<Move> othelloGenerateLegalMovesForSide(const BoardState& board, int side) {
 	std::vector<Move> moves;
+	moves.reserve(24);
 	for (int row = 0; row < 8; ++row) {
 		for (int col = 0; col < 8; ++col) {
 			int destination = othelloCoordToIndex(row, col);
@@ -1261,6 +1305,7 @@ inline std::vector<Move> othelloGenerateLegalMovesForSide(const BoardState& boar
 				continue;
 			}
 			std::vector<int> flips;
+			flips.reserve(16);
 			for (int dr = -1; dr <= 1; ++dr) {
 				for (int dc = -1; dc <= 1; ++dc) {
 					if (dr == 0 && dc == 0) {
@@ -1479,6 +1524,18 @@ inline int serpentineDiagonalRank(int row, int col, int rowCount, int colCount) 
 	return rank + pos;
 }
 
+inline int linearDiagonalRank(int row, int col, int rowCount, int colCount) {
+	int diagonal = row + col;
+	int rank = 0;
+	for (int d = 0; d < diagonal; ++d) {
+		int rowMin = std::max(0, d - (colCount - 1));
+		int rowMax = std::min(rowCount - 1, d);
+		rank += rowMax - rowMin + 1;
+	}
+	int rowMin = std::max(0, diagonal - (colCount - 1));
+	return rank + (row - rowMin);
+}
+
 inline int boardValueForIndex(int boardIndex, int layoutMode) {
 	int index = std::max(0, std::min(boardIndex, BOARD_SIZE - 1));
 	int mode = std::max(0, std::min(layoutMode, int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1));
@@ -1498,7 +1555,7 @@ inline int boardValueForIndex(int boardIndex, int layoutMode) {
 		case 2:
 			return posInRow * 8 + row;
 		case 3:
-			return serpentineDiagonalRank(row, posInRow, 8, 4);
+			return linearDiagonalRank(row, posInRow, 8, 4);
 		case 4: {
 			int serpentinePos = (row & 1) ? (3 - posInRow) : posInRow;
 			return row * 4 + serpentinePos;
@@ -1548,6 +1605,30 @@ inline float pitchDividerForMode(int dividerMode) {
 	return PITCH_DIVIDER_VALUES[size_t(mode)];
 }
 
+inline float pitchRangeParamFromMultiplier(float multiplier) {
+	float m = std::max(PITCH_RANGE_PARAM_MIN_MULTIPLIER, std::min(multiplier, PITCH_RANGE_PARAM_MAX_MULTIPLIER));
+	if (m <= PITCH_RANGE_PARAM_FULL_MULTIPLIER) {
+		return 0.5f * (m - PITCH_RANGE_PARAM_MIN_MULTIPLIER) /
+			(PITCH_RANGE_PARAM_FULL_MULTIPLIER - PITCH_RANGE_PARAM_MIN_MULTIPLIER);
+	}
+	return 0.5f + 0.5f * (m - PITCH_RANGE_PARAM_FULL_MULTIPLIER) /
+		(PITCH_RANGE_PARAM_MAX_MULTIPLIER - PITCH_RANGE_PARAM_FULL_MULTIPLIER);
+}
+
+inline float pitchRangeMultiplierFromParam(float rangeParam) {
+	float x = std::max(0.f, std::min(rangeParam, 1.f));
+	if (x <= 0.5f) {
+		return PITCH_RANGE_PARAM_MIN_MULTIPLIER +
+			(PITCH_RANGE_PARAM_FULL_MULTIPLIER - PITCH_RANGE_PARAM_MIN_MULTIPLIER) * (x / 0.5f);
+	}
+	return PITCH_RANGE_PARAM_FULL_MULTIPLIER +
+		(PITCH_RANGE_PARAM_MAX_MULTIPLIER - PITCH_RANGE_PARAM_FULL_MULTIPLIER) * ((x - 0.5f) / 0.5f);
+}
+
+inline float pitchRangeSemitoneSpan(float rangeParam, int boardCellCount) {
+	return float(std::max(0, boardCellCount - 1)) * pitchRangeMultiplierFromParam(rangeParam);
+}
+
 inline float applyPitchDividerToBoardValue(float boardValueIndex, int dividerMode) {
 	return boardValueIndex * pitchDividerForMode(dividerMode);
 }
@@ -1567,6 +1648,26 @@ inline float mapPitchFromIndex(float index, bool isKing, int scaleIndex, int roo
 		semitone += 12;
 	}
 	return float(semitone) / 12.f + transposeVolts;
+}
+
+inline int quantizeSemitoneToScale(float semitone, int scaleIndex, int rootSemitone) {
+	const Scale& scale = SCALES[size_t(std::max(0, std::min(scaleIndex, int(SCALES.size()) - 1)))];
+	const int scaleLen = std::max(scale.length, 1);
+	const int root = wrapSemitone12(rootSemitone);
+	const int centerOctave = int(std::floor((semitone - float(root)) / 12.f));
+	int bestSemitone = root;
+	float bestDistance = std::numeric_limits<float>::infinity();
+	for (int octave = centerOctave - 1; octave <= centerOctave + 1; ++octave) {
+		for (int degree = 0; degree < scaleLen; ++degree) {
+			const int candidate = scale.semitones[size_t(degree)] + octave * 12 + root;
+			const float distance = std::fabs(semitone - float(candidate));
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				bestSemitone = candidate;
+			}
+		}
+	}
+	return bestSemitone;
 }
 
 inline float mapRawPitchFromIndex(float index, bool isKing, float transposeVolts) {

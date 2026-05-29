@@ -10,6 +10,7 @@
 #include <exception>
 #include <atomic>
 #include <array>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -32,8 +33,8 @@ static constexpr float NO_SEQUENCE_PITCH_VOLTS = -10.f;
 static constexpr float AI_TURN_DELAY_SECONDS = 0.5f;
 static constexpr float EOC_ACTIVITY_PULSE_SECONDS = 0.25f;
 static constexpr float OTHELLO_FLIP_SECONDS_PER_PIECE = 0.1f;
-static constexpr int ROOT_CV_MAX_OFFSET_SEMITONES = 10;
-static constexpr float ROOT_CV_VOLTS_PER_SEMITONE = 1.f;
+static constexpr int ROOT_CV_MAX_OFFSET_SEMITONES = 120;
+static constexpr float ROOT_CV_SEMITONES_PER_VOLT = 12.f;
 static constexpr float TRANSPOSE_CV_ZERO_DEADBAND_VOLTS = 1e-3f;
 static constexpr int SEQ_LENGTH_MIN = 1;
 static constexpr int SEQ_LENGTH_MAX = 64;
@@ -63,6 +64,12 @@ struct CrownstepRootQuantity final : ParamQuantity {
 	}
 };
 
+struct CrownstepRangeQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
+
 struct Crownstep : Module {
 	enum ParamId {
 		SEQ_LENGTH_PARAM,
@@ -72,6 +79,7 @@ struct Crownstep : Module {
 		RUN_PARAM,
 		NEW_GAME_PARAM,
 		DEBUG_ADD_MOVES_PARAM,
+		RANGE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -132,6 +140,8 @@ struct Crownstep : Module {
 	std::vector<Move> moveHistory;
 	std::vector<Move> humanMoves;
 	std::vector<Move> aiMoves;
+	std::vector<Move> previewAiMovesScratch;
+	std::vector<uint8_t> destinationSeenScratch;
 	std::vector<int> highlightedDestinations;
 	std::vector<int> opponentHighlightedDestinations;
 	Move lastMove;
@@ -146,7 +156,7 @@ struct Crownstep : Module {
 		bool active = false;
 	};
 	MoveVisualAnimation moveAnimation;
-	std::vector<MoveVisualAnimation> moveAnimationQueue;
+	std::deque<MoveVisualAnimation> moveAnimationQueue;
 
 	dsp::SchmittTrigger clockTrigger;
 	dsp::SchmittTrigger resetTrigger;
@@ -164,6 +174,10 @@ struct Crownstep : Module {
 	int lastMoveSide = 0;
 	int aiDifficulty = 1;
 	int lastAiThinkMs = 0;
+	uint64_t lastAiSearchNodes = 0;
+	uint64_t lastAiSearchEvals = 0;
+	uint64_t lastAiSearchLegalMoveGenerations = 0;
+	uint64_t lastAiSearchCutoffs = 0;
 	bool quantizationEnabled = true;
 	bool pitchBipolarEnabled = false;
 	bool melodicBiasEnabled = false;
@@ -172,6 +186,7 @@ struct Crownstep : Module {
 	uint32_t boardValueRandomSeed = 1u;
 	bool boardValueLayoutInverted = false;
 	int pitchDividerMode = 0;
+	float cachedPitchRangeParam = crownstep::PITCH_RANGE_PARAM_DEFAULT;
 	bool showCellPitchOverlay = false;
 	int boardTextureMode = BOARD_TEXTURE_MARBLE;
 	int gameMode = GAME_MODE_CHECKERS;
@@ -179,6 +194,9 @@ struct Crownstep : Module {
 	int playerMode = PLAYER_INIT;
 	int stepCounterStyle = STEP_COUNTER_RIBBON;
 	int sequenceCapOverride = -1; // -1: use knob, 0: full, >0: explicit recent-window cap
+	bool sequenceRangeTrimEnabled = false;
+	int sequenceTrimLeft = 0;
+	int sequenceTrimRight = 0;
 	bool opponentHintsPreviewActive = false;
 	int playhead = 0;
 	int displayedStep = 0;
@@ -210,6 +228,10 @@ struct Crownstep : Module {
 		uint64_t id = 0;
 		Move move;
 		int thinkMs = 0;
+		uint64_t searchNodes = 0;
+		uint64_t searchEvals = 0;
+		uint64_t searchLegalMoveGenerations = 0;
+		uint64_t searchCutoffs = 0;
 	};
 	std::thread aiWorkerThread;
 	std::mutex aiWorkerMutex;
@@ -287,6 +309,9 @@ struct Crownstep : Module {
 
 	int activeLength();
 	int activeStartIndex();
+	int activeEndIndexExclusive();
+	void setActiveRangeTrimWindow(int startInclusive, int endExclusive);
+	void clearActiveRangeTrimWindow();
 	float pitchForSequenceIndex(int sequenceIndex);
 	void refreshHeldPitchForCurrentStep();
 	void randomizeBoardValueLayout();

@@ -1,4 +1,5 @@
 #include "../src/PanelSvgUtils.hpp"
+#include "../src/PanelAnchorAtlas.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -122,6 +123,19 @@ TestResult testMissingElementFailsGracefully() {
             " pointOk=" + std::to_string(pointOk ? 1 : 0)};
 }
 
+TestResult testGeneratedAtlasFindsRealPanelAnchor() {
+  panel_svg::PanelAnchorLookupResult anchor;
+  bool ok = panel_svg::lookupPanelAnchor("res/crownstep.svg", "ROOT_INPUT", &anchor);
+  bool pass = ok && anchor.found && anchor.hasCenter &&
+    nearlyEqual(anchor.cx, 3878.885f, 1e-3f) &&
+    nearlyEqual(anchor.cy, 11465.241f, 1e-3f);
+  return {"Generated atlas finds Crownstep ROOT_INPUT", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) +
+            " found=" + std::to_string(anchor.found ? 1 : 0) +
+            " cx=" + std::to_string(anchor.cx) +
+            " cy=" + std::to_string(anchor.cy)};
+}
+
 } // namespace
 
 int main() {
@@ -131,6 +145,7 @@ int main() {
   tests.push_back(testPointParsesRectCenter());
   tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
+  tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
 
   int failed = 0;
   std::cout << "Panel SVG Utils Spec\n";

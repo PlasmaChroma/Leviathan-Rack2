@@ -1,0 +1,40 @@
+#pragma once
+
+#include "ChronomawState.hpp"
+
+namespace chronomaw {
+
+struct FrameInputs {
+	float sampleTime = 1.f / 44100.f;
+	bool clkConnected = false;
+	float clkVoltage = 0.f;
+	bool runConnected = false;
+	float runVoltage = 0.f;
+	bool resetConnected = false;
+	float resetVoltage = 0.f;
+};
+
+struct FrameOutputs {
+	bool running = false;
+	float phaseBeats = 0.f;
+	uint64_t cycleCount = 0u;
+	std::array<float, kNumOutputs> internalVolts {};
+	std::array<float, kNumOutputs> outVolts {};
+	std::array<double, kNumOutputs> timingPhaseOffsets {};
+};
+
+class Engine {
+public:
+	void reset();
+	void process(const FrameInputs& in, LiveState& live, FrameOutputs* out);
+
+private:
+	float phaseBeats_ = 0.f;
+	uint64_t cycleCount_ = 0u;
+	float currentGate_ = 0.f;
+	std::array<double, kNumOutputs> timingPhaseOffsets_ {};
+	std::array<OutputState, kNumOutputs> prevOutputs_ {};
+	std::array<bool, kNumOutputs> prevOutputValid_ {};
+};
+
+} // namespace chronomaw

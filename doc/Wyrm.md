@@ -23,11 +23,11 @@ This spec will refer to the module as **Wyrmform** until renamed.
 
 # 1. Module Summary
 
-**Wyrmform** is a VCV Rack oscillator whose core waveform is defined by a user-editable periodic curve. The user edits **32 phase segments / control points** on a waveform grid. The grid’s horizontal axis represents one oscillator cycle. The vertical center line is **0V**, the top is **+5V**, and the bottom is **−5V**.
+**Wyrmform** is a VCV Rack oscillator whose core waveform is defined by a user-editable periodic curve. The user edits a set of **phase segments / control points** on a waveform grid. While **32 points is the standard default**, the system should allow this to be reconfigurable (e.g., to 48, 64, or other values) to support higher detail where needed. The grid’s horizontal axis represents one oscillator cycle. The vertical center line is **0V**, the top is **+5V**, and the bottom is **−5V**.
 
 The module provides:
 
-- A drawable 32-point periodic waveform editor.
+- A drawable periodic waveform editor (default 32 points, reconfigurable).
 - Built-in base shapes: sine, triangle, saw, reverse saw, pulse/square, and optional additional starter shapes.
 - A lock/unlock editing model so users can browse stable shapes, then unlock and sculpt manually.
 - Pitch input using **1V/oct**.
@@ -53,7 +53,7 @@ The oscillator should be stable, musical, and suitable both as a conventional os
    The drawn curve is not a decorative waveshaper; it is the source waveform.
 
 2. **Audio quality over naive drawing playback**  
-   Do not simply step through 32 values at audio rate. The waveform must be interpolated into a smooth high-resolution representation, then bandlimited so sharp edges do not generate severe aliasing.
+   Do not simply step through the control values at audio rate. The waveform must be interpolated into a smooth high-resolution representation, then bandlimited so sharp edges do not generate severe aliasing.
 
 3. **Fast enough for Rack polyphony and patching**  
    Runtime oscillator playback should be cheap. More expensive waveform rebuild work should happen only when the shape changes, and should be throttled/deferred as needed.
@@ -77,7 +77,7 @@ This module can be narrower if the editor is compact, but the curve editor is th
 Recommended layout:
 
 1. **Top area:** module title + optional mode/status indicators.
-2. **Large central waveform editor:** 32-segment grid, vertical range ±5V.
+2. **Large central waveform editor:** Grid representing the control points (default 32, reconfigurable), vertical range ±5V.
 3. **Shape selector row beneath editor:** left arrow, shape name/display, right arrow, lock/unlock/draw button.
 4. **Primary controls:**
    - Large **FREQ** knob.
@@ -251,13 +251,14 @@ Pre-folder output.
 
 ## 5.1 Editing model
 
-The editor contains **32 editable vertical values**, representing one periodic cycle.
+The editor contains a series of editable vertical values representing one periodic cycle. **32 points is the standard default**, but the architecture should be reconfigurable (e.g., 48, 64, or 128) to allow for higher resolution curve sculpting.
 
 Internal storage:
 
 ```cpp
-static constexpr int NUM_POINTS = 32;
-float points[NUM_POINTS]; // each in [-1.0f, +1.0f]
+// 32 is the default, but should be reconfigurable (e.g. 48, 64, 128)
+int numPoints = 32; 
+std::vector<float> points; // size depends on numPoints, each in [-1.0f, +1.0f]
 ```
 
 Mapping:
@@ -270,7 +271,7 @@ Important: Internally store normalized values. Convert to volts at output.
 
 ## 5.2 Periodicity
 
-The waveform is periodic. Interpolation from point 31 to point 0 must wrap smoothly.
+The waveform is periodic. Interpolation from the last point back to the first must wrap smoothly.
 
 Do not treat the waveform as an open-ended envelope. It is a closed cyclic contour.
 
@@ -298,7 +299,7 @@ The grid should show:
 - Horizontal center line = 0V.
 - Top/bottom boundaries = ±5V.
 - Optional faint horizontal divisions at ±2.5V.
-- 32 segment divisions or every 4th/8th division to avoid visual clutter.
+- Segment divisions corresponding to the number of points (default 32) or every 4th/8th division to avoid visual clutter.
 - Current waveform as a bright polyline/curve.
 - Editable points as small handles when unlocked.
 - Locked state visually obvious: handles hidden or dimmed, lock icon active.
@@ -325,7 +326,7 @@ Factory shapes v1:
 9. Folded Sine starter shape
 10. Random Smooth, optional
 
-When a factory shape is selected, populate the 32 control points from the ideal shape function, then rebuild the bandlimited tables.
+When a factory shape is selected, populate the control points (default 32) from the ideal shape function, then rebuild the bandlimited tables.
 
 ---
 
@@ -333,13 +334,13 @@ When a factory shape is selected, populate the 32 control points from the ideal 
 
 ## 6.1 Core recommendation
 
-Use a **bandlimited wavetable oscillator** derived from the user’s 32-point curve.
+Use a **bandlimited wavetable oscillator** derived from the user’s editable curve.
 
-Do not directly evaluate a 32-segment piecewise waveform at runtime as the final output. That approach will alias badly when curves contain sharp edges or corners.
+Do not directly evaluate the control-point segments piecewise at runtime as the final output. That approach will alias badly when curves contain sharp edges or corners.
 
 Recommended architecture:
 
-1. User edits 32 normalized points.
+1. User edits normalized points.
 2. Convert those points into a high-resolution single-cycle source table using periodic interpolation.
 3. Remove DC offset and normalize safely.
 4. Build a bank of bandlimited mipmap tables for different pitch ranges.
@@ -351,7 +352,7 @@ This is the best balance of sound quality and CPU cost.
 
 ---
 
-# 7. Interpolation from 32 Points to Source Table
+# 7. Interpolation from Control Points (Default 32) to Source Table
 
 ## 7.1 Source table size
 
@@ -373,7 +374,7 @@ static constexpr int SOURCE_TABLE_SIZE = 4096;
 
 Recommended v1 method:
 
-**Periodic Catmull-Rom cubic interpolation** between the 32 points.
+**Periodic Catmull-Rom cubic interpolation** between the control points.
 
 Benefits:
 
@@ -684,7 +685,7 @@ Do not block v1 on oversampling unless existing project utilities already make t
 
 Must serialize:
 
-- 32 point values.
+- The array of point values (default 32, but variable if reconfigured).
 - Current selected factory shape index.
 - Whether current waveform is custom.
 - Editor locked/unlocked state.
@@ -719,18 +720,18 @@ Example:
 Backward compatibility:
 
 - If points array missing or malformed, default to sine.
-- If points array length is not 32, default to sine or resample defensively.
+- If points array length differs from current `numPoints`, default to sine or resample defensively.
 
 ---
 
 # 13. Factory Shape Generation
 
-Factory shapes should populate `points[32]` and then trigger table rebuild.
+Factory shapes should populate the `points` array (default size 32) and then trigger table rebuild.
 
 Use normalized phase:
 
 ```cpp
-float phase = (float)i / NUM_POINTS;
+float phase = (float)i / points.size();
 ```
 
 ## 13.1 Sine
@@ -789,7 +790,7 @@ struct Wyrmform : Module {
     enum OutputIds { OUT_OUTPUT, RAW_OUTPUT, NUM_OUTPUTS };
     enum LightIds { LFO_LIGHT, LOCK_LIGHT, NUM_LIGHTS };
 
-    float points[32];
+    std::vector<float> points; // Default 32 points, but reconfigurable
     bool editorLocked = true;
     bool customWaveform = false;
     int shapeIndex = 0;
@@ -819,7 +820,7 @@ struct WavetableBank {
     float tables[NUM_TABLES][TABLE_SIZE];
     bool valid = false;
 
-    void buildFromPoints(const float* points, int pointCount, float sampleRate);
+    void buildFromPoints(const std::vector<float>& points, float sampleRate);
     float lookup(float phase, float frequency, float sampleRate) const;
 };
 ```
@@ -852,7 +853,7 @@ If using NanoVG:
 - Draw grid first.
 - Draw center line.
 - Draw interpolated/high-res preview curve if possible.
-- Draw raw 32-point handles when unlocked.
+- Draw raw control point handles (default 32) when unlocked.
 - Draw lock overlay if locked.
 
 Important: The editor should not rebuild wavetables directly. It should mutate module points and call a lightweight method such as:
@@ -876,7 +877,7 @@ The editor should show what the oscillator approximately emits.
 
 Preferred:
 
-- Draw the interpolated source curve, not only the 32-point polyline.
+- Draw the interpolated source curve, not only the polyline between control points.
 - When locked, show a clean curve.
 - When unlocked, show both the smooth curve and handles.
 
@@ -1068,10 +1069,10 @@ Keep v1 focused. Do not overbuild context options before the core oscillator fee
 - Use a single high-res source table.
 - Confirm pitch and voltage behavior.
 
-## Milestone 2: 32-point waveform editor
+## Milestone 2: Waveform editor
 
 - Draw editor grid.
-- Display 32 points.
+- Display control points (default 32).
 - Support unlock + mouse drawing.
 - Generate source table from Catmull-Rom interpolation.
 - Serialize/deserialize points.
@@ -1183,7 +1184,7 @@ Recommendation:
 
 If scope needs tightening, ship v1 with:
 
-- 32-point editor.
+- Waveform editor (default 32 points, reconfigurable).
 - Smooth periodic interpolation.
 - Factory shape selector.
 - Lock/unlock.
@@ -1204,4 +1205,3 @@ Defer:
 - Visual overlay of selected mip table.
 
 This keeps the essence intact: **draw a waveform, hear it cleanly, play it musically**.
-

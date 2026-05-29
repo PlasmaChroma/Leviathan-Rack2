@@ -31,6 +31,7 @@ namespace {
 static constexpr int kDefaultPort = 8765;
 static constexpr int kReconnectIntervalMs = 1000;
 static constexpr int kPublishIntervalMs = 125;
+static constexpr double kSnapshotStaleSec = 2.0;
 
 struct Snapshot {
   std::string module;
@@ -171,7 +172,7 @@ private:
         continue;
       }
 
-      std::vector<Snapshot> snapshots = copySnapshots();
+      std::vector<Snapshot> snapshots = collectFreshSnapshots(system::getTime());
       for (const Snapshot &snap : snapshots) {
         if (!sendSnapshot(snap)) {
           closeSocket();
@@ -182,12 +183,22 @@ private:
     }
   }
 
-  std::vector<Snapshot> copySnapshots() {
+  std::vector<Snapshot> collectFreshSnapshots(double nowSec) {
     std::vector<Snapshot> out;
     std::lock_guard<std::mutex> lock(mutex_);
+    if (snapshots_.empty()) {
+      return out;
+    }
     out.reserve(snapshots_.size());
-    for (const auto &entry : snapshots_) {
-      out.push_back(entry.second);
+    for (auto it = snapshots_.begin(); it != snapshots_.end();) {
+      const Snapshot &snap = it->second;
+      const bool stale = (nowSec - snap.ts) > kSnapshotStaleSec;
+      if (stale) {
+        it = snapshots_.erase(it);
+        continue;
+      }
+      out.push_back(snap);
+      ++it;
     }
     return out;
   }
@@ -349,19 +360,94 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  float uiMs,
+                                 float audioUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
-  char dataBuf[256];
+  char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
                 std::max(0.f, uiMs),
+                std::max(0.f, audioUs),
                 std::max(0.f, scopePreviewUs),
                 std::max(0, scopeStride),
                 scopeMetricValid ? 1 : 0);
   double ts = system::getTime();
   transport().submit("TemporalDeck", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitBifurxUiMetrics(uint32_t instanceId,
+                           float uiMs,
+                           float uiDrawMs,
+                           float uiSyncMs,
+                           float uiLocalPrepMs,
+                           bool renderOpengl,
+                           float audioUs,
+                           float curvePrepUs,
+                           float overlayPrepUs,
+                           int visualWorkerMode,
+                           float visualWorkerAgeMs,
+                           float visualWorkerQueueMs) {
+  char dataBuf[512];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"ui_draw_ms\":%.4f,\"ui_sync_ms\":%.4f,\"ui_local_prep_ms\":%.4f,\"opengl\":%d,\"audio_us\":%.3f,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
+                std::max(0.f, uiMs),
+                std::max(0.f, uiDrawMs),
+                std::max(0.f, uiSyncMs),
+                std::max(0.f, uiLocalPrepMs),
+                renderOpengl ? 1 : 0,
+                std::max(0.f, audioUs),
+                std::max(0.f, curvePrepUs),
+                std::max(0.f, overlayPrepUs),
+                visualWorkerMode,
+                std::max(0.f, visualWorkerAgeMs),
+                std::max(0.f, visualWorkerQueueMs));
+  double ts = system::getTime();
+  transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitWyrmMetrics(uint32_t instanceId,
+                       float uiMs,
+                       float editorDrawUs,
+                       float sandUpdateUs,
+                       float sandDrawUs,
+                       float sandGlUs,
+                       float audioUs,
+                       int channels,
+                       int bodySamples,
+                       uint64_t bodySampleCacheHits,
+                       uint64_t bodySampleCacheMisses) {
+  char dataBuf[512];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
+                std::max(0.f, uiMs),
+                std::max(0.f, editorDrawUs),
+                std::max(0.f, sandUpdateUs),
+                std::max(0.f, sandDrawUs),
+                std::max(0.f, sandGlUs),
+                std::max(0.f, audioUs),
+                std::max(0, channels),
+                std::max(0, bodySamples),
+                static_cast<unsigned long long>(bodySampleCacheHits),
+                static_cast<unsigned long long>(bodySampleCacheMisses));
+  double ts = system::getTime();
+  transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitIntegralFluxMetrics(uint32_t instanceId,
+                               float uiMs,
+                               float audioUs) {
+  char dataBuf[192];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f}",
+                std::max(0.f, uiMs),
+                std::max(0.f, audioUs));
+  double ts = system::getTime();
+  transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
 }
 
 } // namespace debug_terminal

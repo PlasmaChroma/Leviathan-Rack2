@@ -1,4 +1,5 @@
 #include "PanelSvgUtils.hpp"
+#include "PanelAnchorAtlas.hpp"
 
 #include <fstream>
 #include <regex>
@@ -50,6 +51,13 @@ bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, ma
 		return false;
 	}
 
+	PanelAnchorLookupResult anchor;
+	if (lookupPanelAnchor(svgPath, rectId, &anchor) && anchor.hasRect) {
+		outRect->pos = Vec(anchor.x * 0.01f, anchor.y * 0.01f);
+		outRect->size = Vec(anchor.width * 0.01f, anchor.height * 0.01f);
+		return true;
+	}
+
 	std::string svgText;
 	if (!loadSvgText(svgPath, &svgText)) {
 		return false;
@@ -90,6 +98,17 @@ bool loadCircleFromSvg(
 		return false;
 	}
 
+	PanelAnchorLookupResult anchor;
+	if (lookupPanelAnchor(svgPath, circleId, &anchor) && anchor.hasCenter && anchor.hasRadius) {
+		if (outCenter) {
+			*outCenter = Vec(anchor.cx * unitScale, anchor.cy * unitScale);
+		}
+		if (outRadius) {
+			*outRadius = anchor.radius * unitScale;
+		}
+		return true;
+	}
+
 	std::string svgText;
 	if (!loadSvgText(svgPath, &svgText)) {
 		return false;
@@ -126,6 +145,12 @@ bool loadCircleFromSvg(
 bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId, Vec* outPointMm) {
 	if (!outPointMm) {
 		return false;
+	}
+
+	PanelAnchorLookupResult anchor;
+	if (lookupPanelAnchor(svgPath, elementId, &anchor) && anchor.hasCenter) {
+		*outPointMm = Vec(anchor.cx * 0.01f, anchor.cy * 0.01f);
+		return true;
 	}
 
 	Vec centerMm;
@@ -170,6 +195,18 @@ bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId
 	}
 
 	return false;
+}
+
+const char* getAtlasStatusLabelForSvg(const std::string& svgPath) {
+	switch (getPanelAnchorAtlasStatus(svgPath)) {
+	case PanelAnchorAtlasStatus::Valid:
+		return "valid";
+	case PanelAnchorAtlasStatus::StaleOrUnreadable:
+		return "stale";
+	case PanelAnchorAtlasStatus::Missing:
+	default:
+		return "missing";
+	}
 }
 
 } // namespace panel_svg

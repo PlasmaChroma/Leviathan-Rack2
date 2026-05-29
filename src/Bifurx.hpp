@@ -13,6 +13,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <vector>
 
 namespace bifurx {
@@ -20,6 +21,17 @@ namespace bifurx {
 // Forward declarations
 struct Bifurx;
 struct BifurxSpectrumGLWidget;
+struct BifurxUiRenderSnapshot;
+struct BifurxFreqQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
+struct BifurxSpanQuantity final : ParamQuantity {
+	float getDisplayValue() override;
+	void setDisplayValue(float displayValue) override;
+	std::string getDisplayValueString() override;
+};
 
 Widget* createGlSpectrumDisplay(Bifurx* module, math::Rect rectMm);
 
@@ -31,12 +43,15 @@ constexpr float kLog2e = 1.4426950408889634f;
 constexpr float kFreqMinHz = 4.f;
 constexpr float kFreqMaxHz = 28000.f;
 constexpr float kFreqLog2Span = 12.7731392f; // log2(28000 / 4)
+constexpr float kSvfDampingMin = 0.02f;
+constexpr float kSvfDampingMax = 2.2f;
 constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
+constexpr int kPerfMeasureDivision = 17;
 constexpr int kPreviewAdaptiveCooldownSamples = 64;
 constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
 constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
@@ -45,18 +60,15 @@ constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
-constexpr int kBifurxModeCount = 10;
+constexpr int kBifurxModeCount = 11;
+constexpr int kBifurxDisplayOnlyMode = 10;
+constexpr int kBifurxUiModeCount = kBifurxModeCount;
 constexpr int kBifurxModeParamIndex = 0;
 extern const char* const kBifurxModeLabels[kBifurxModeCount];
 
-constexpr int kBifurxCircuitModeCount = 4;
-enum BifurxCharacterMode {
-	BIFURX_CHARACTER_SVF = 0,
-	BIFURX_CHARACTER_BITE = 1,
-	BIFURX_CHARACTER_VOWEL = 2,
-	BIFURX_CHARACTER_ERODE = 3
-};
-extern const char* const kBifurxCircuitLabels[kBifurxCircuitModeCount];
+inline bool isBifurxDisplayOnlyMode(int mode) {
+	return mode == kBifurxDisplayOnlyMode;
+}
 
 constexpr float kResponseMinDb = -48.f;
 constexpr float kResponseMaxDb = 48.f;
@@ -66,6 +78,8 @@ constexpr float kOverlaySubsonicCutHz = 10.f;
 constexpr float kOverlaySubsonicFadeHz = 30.f;
 constexpr float kVoctSmoothingTauSeconds = 0.0025f;
 constexpr float kVoctDeadbandVolts = 0.001f;
+constexpr float kTitoCoeffRelativeUpdateThreshold = 2.5e-4f;
+constexpr float kTitoCoeffAbsoluteUpdateThresholdHz = 0.002f;
 constexpr float kDisplayDbfsSpan = 30.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
@@ -91,6 +105,18 @@ inline float fastExp(float x) {
 	return fastExp2(x * kLog2e);
 }
 
+inline float fastLog2(float x) {
+	union { float f; uint32_t i; } vx = {x};
+	float y = (float)vx.i;
+	y *= 1.1920928955078125e-7f;
+	return y - 126.94269504f;
+}
+
+inline float fastTan(float x) {
+	const float x2 = x * x;
+	return x * (15.f - x2) / (15.f - 6.f * x2);
+}
+
 inline float amplitudeRatioDb(float numerator, float denominator) {
 	return 20.f * std::log10((std::fabs(numerator) + 1e-6f) / (std::fabs(denominator) + 1e-6f));
 }
@@ -102,9 +128,23 @@ inline float shapedSpan(float value) {
 }
 
 float levelDriveGain(float knob);
+float smoothstep01(float x);
+float levelInputGain(float knob);
+float levelDriveAmount(float knob);
+float levelOutputClipWet(float knob);
+float applyLevelInputStage(float in, float levelKnob);
+float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
+
+inline float fastTanh(float x) {
+	const float x2 = x * x;
+	if (x2 < 9.f) {
+		return x * (27.f + x2) / (27.f + 9.f * x2);
+	}
+	return (x > 0.f) ? 1.f : -1.f;
+}
 
 inline float softClip(float x) {
-	return std::tanh(x);
+	return fastTanh(x);
 }
 
 inline float sanitizeFinite(float x, float fallback = 0.f) {
@@ -127,6 +167,18 @@ inline float orderedSpectrumMagnitude(const float* fftData, int bin) {
 	return std::sqrt(re * re + im * im);
 }
 
+inline float orderedSpectrumPower(const float* fftData, int bin) {
+	if (bin <= 0) {
+		return fftData[0] * fftData[0];
+	}
+	if (bin >= kFftSize / 2) {
+		return fftData[1] * fftData[1];
+	}
+	const float re = fftData[2 * bin];
+	const float im = fftData[2 * bin + 1];
+	return re * re + im * im;
+}
+
 float onePoleAlpha(float dt, float tauSeconds);
 float logPosition(float hz, float minHz, float maxHz);
 float logFrequencyAt(float x01, float minHz, float maxHz);
@@ -135,39 +187,9 @@ float softLimitOverlayDeltaDb(float db);
 float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
-inline int clampCircuitMode(int mode) {
-	return clamp(mode, 0, kBifurxCircuitModeCount - 1);
-}
-
 float signedWeight(float balance, bool upperPeak);
 float cascadeWideMorph(float spanNorm);
 float highHighSpanCompGain(float wideMorph);
-float circuitCutoffScale(int circuitMode);
-float circuitQScale(float resoNorm, int circuitMode);
-
-struct SemanticExportProfile {
-	float lpScale = 0.f;
-	float bpScale = 0.f;
-	float hpScale = 0.f;
-};
-
-SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex);
-
-template <typename T>
-T normalizeSemanticComponent(const T& value, float exportScale) {
-	if (!(exportScale > 0.f)) {
-		return value;
-	}
-	const float magnitude = std::abs(value);
-	if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
-		return value;
-	}
-	const float compressed = exportScale * std::tanh(magnitude / exportScale);
-	if (!(compressed > 0.f) || !std::isfinite(compressed)) {
-		return value;
-	}
-	return value * T(compressed / magnitude);
-}
 
 struct SvfOutputs {
 	float lp = 0.f;
@@ -176,9 +198,8 @@ struct SvfOutputs {
 	float notch = 0.f;
 };
 
-SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex);
-float modeCircuitSyncCompGain(int mode, int circuitMode, float wideMorph);
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t);
+float displayOnlyColorTone(float energy, float shapeControl);
 void formatFrequencyLabel(float hz, char* out, size_t outSize);
 
 struct SvfCoeffs {
@@ -187,13 +208,14 @@ struct SvfCoeffs {
 	float a1 = 1.f;
 };
 
-SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping);
+SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dampingMin = kSvfDampingMin);
 
 struct TptSvf {
 	float ic1eq = 0.f;
 	float ic2eq = 0.f;
 
 	SvfOutputs processWithCoeffs(float input, const SvfCoeffs& coeffs);
+	SvfOutputs processSelfOscWithCoeffs(const SvfCoeffs& coeffs, float input, float oscOnset, float oscHeat, float oscDrive);
 	SvfOutputs process(float input, float sampleRate, float cutoff, float damping);
 };
 
@@ -208,6 +230,7 @@ SvfOutputs processCharacterStage(
 	float damping,
 	float drive,
 	float resoNorm,
+	bool highResonanceSelfOscEnabled,
 	const SvfCoeffs* cachedCoeffsOrNull = nullptr
 );
 
@@ -219,10 +242,10 @@ struct DisplayBiquad {
 	float a2 = 0.f;
 
 	std::complex<float> response(float omega) const;
+	std::complex<float> response(std::complex<float> z1, std::complex<float> z2) const;
 };
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type);
-
 template <typename T>
 T combineModeResponse(
 	int mode,
@@ -236,26 +259,26 @@ T combineModeResponse(
 	const T& ntB,
 	const T& cascadeLp,
 	const T& cascadeNotch,
+	const T& cascadeNotchToLow,
 	const T& cascadeHpToLp,
+	const T& cascadeHighToNotch,
 	const T& cascadeHpToHp,
 	float wA,
 	float wB,
-	float wideMorph,
-	int circuitMode
+	float wideMorph
 ) {
-	const T circuitComp = T(modeCircuitSyncCompGain(mode, circuitMode, wideMorph));
 	switch (mode) {
 		case 0:
-			return circuitComp * cascadeLp;
-		case 1: return circuitComp * (T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB));
-		case 2: return circuitComp * (T(1.08f) * T(wB) * lpB - T(0.61f) * T(wA) * bpA);
+			return cascadeLp;
+		case 1: return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
+		case 2: return T(1.04f) * cascadeNotchToLow;
 		case 3: return T(1.03f) * cascadeNotch;
 		case 4: return T(0.98f) * T(wA) * lpA + T(0.98f) * T(wB) * hpB - T(0.06f) * (bpA + bpB);
 		case 5: return T(1.08f) * (T(wA) * bpA + T(wB) * bpB);
 		case 6: return T(1.04f) * cascadeHpToLp;
-		case 7: return circuitComp * (T(1.08f) * T(wA) * hpA - T(0.61f) * T(wB) * bpB);
-		case 8: return circuitComp * (T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB));
-		case 9: return circuitComp * (T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp);
+		case 7: return T(1.04f) * cascadeHighToNotch;
+		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
+		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -277,12 +300,10 @@ struct BifurxPreviewState {
 	float freqParamNorm = 0.5f;
 	float voctCv = 0.f;
 	int mode = 0;
-	int circuitMode = 0;
 };
 
 struct BifurxLlTelemetryState {
 	bool active = false;
-	int circuitMode = 0;
 	float excitationRms = 0.f;
 	float stageALpRms = 0.f;
 	float stageBLpRms = 0.f;
@@ -303,23 +324,19 @@ struct BifurxPreviewModel {
 	float markerFreqA = 440.f;
 	float markerFreqB = 440.f;
 	float sampleRate = 44100.f;
+	float qA = 1.f;
+	float qB = 1.f;
+	float resoNorm = 0.f;
 	float wA = 1.f;
 	float wB = 1.f;
 	float wideMorph = 0.f;
 	int mode = 0;
-	int circuitMode = 0;
 };
-
-enum BifurxPreviewCurvePolicy {
-	BIFURX_PREVIEW_ANALYTIC,
-	BIFURX_PREVIEW_PROBE_FFT
-};
-
-BifurxPreviewCurvePolicy previewCurvePolicyForCharacter(int characterMode);
 
 struct BifurxAnalysisFrame {
 	alignas(16) float rawInput[kFftSize];
 	alignas(16) float output[kFftSize];
+	alignas(16) float responseOutput[kFftSize];
 };
 
 struct BifurxSpectrumState {
@@ -336,6 +353,7 @@ struct BifurxSpectrumState {
 	float cachedAxisSampleRate = 0.f;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
+	double previewPublishTimeSec = 0.0;
 	bool hasPreview = false;
 	bool hasOverlay = false;
 	bool hasCurveTarget = false;
@@ -366,9 +384,25 @@ struct BifurxMarkerLayout {
 	bool anchorToBottomLane;
 };
 
+struct BifurxRenderTickResult {
+	bool previewUpdated = false;
+	bool analysisUpdated = false;
+	bool animationActive = false;
+	float curvePrepUs = 0.f;
+	float overlayPrepUs = 0.f;
+};
+
 struct BifurxSpectrumBase {
 	Bifurx* module = nullptr;
 	BifurxSpectrumState state;
+	uint64_t workerDisplayId = 0;
+	uint64_t workerRequestSeq = 0;
+	uint64_t workerLastAppliedRequestSeq = 0;
+	uint32_t workerLastSubmittedPreviewSeq = 0;
+	uint32_t workerLastAppliedPreviewSeq = 0;
+	uint32_t workerLastSubmittedAnalysisSeq = 0;
+	uint32_t workerLastAppliedAnalysisSeq = 0;
+	std::shared_ptr<const BifurxUiRenderSnapshot> workerSnapshotCache;
 
 	// Common FF resources for analysis
 	dsp::RealFFT fft;
@@ -377,6 +411,28 @@ struct BifurxSpectrumBase {
 	alignas(16) float fftOutputTime[kFftSize];
 	alignas(16) float fftInputFreq[2 * kFftSize];
 	alignas(16) float fftOutputFreq[2 * kFftSize];
+	alignas(16) float fftResponseOutputFreq[2 * kFftSize];
+	alignas(16) float fftRawInputFreq[2 * kFftSize];
+
+	uint32_t lastModelUpdateSeq = 0;
+	mutable BifurxPreviewModel cachedModel;
+	float lastCurvePrepUs = 0.f;
+	float lastOverlayPrepUs = 0.f;
+	mutable std::vector<BifurxCurvePoint> refinedCurveTemplate;
+	mutable bool refinedCurveTemplateValid = false;
+	mutable float refinedCurveTemplateW = 0.f;
+	mutable float refinedCurveTemplateH = 0.f;
+	mutable float refinedCurveTemplateSampleRate = 0.f;
+	mutable float refinedCurveTemplateAnchorX01[2] = {0.f, 0.f};
+	mutable bool refinedCurveTemplateMarkerPinned[2] = {false, false};
+	mutable BifurxMarkerLayout cachedMarkerLayout;
+	mutable bool cachedMarkerLayoutValid = false;
+	mutable float cachedMarkerLayoutW = 0.f;
+	mutable float cachedMarkerLayoutH = 0.f;
+	mutable float cachedMarkerLayoutSampleRate = 0.f;
+	mutable uint32_t cachedMarkerLayoutPreviewSeq = 0;
+	mutable float cachedMarkerLayoutAnchorX01[2] = {0.f, 0.f};
+	mutable bool cachedMarkerLayoutMarkerPinned[2] = {false, false};
 
 	BifurxSpectrumBase() : fft(kFftSize) {
 		for (int i = 0; i < kFftSize; i++) {
@@ -392,13 +448,24 @@ struct BifurxSpectrumBase {
 		}
 	}
 
-	virtual ~BifurxSpectrumBase() {}
+	virtual ~BifurxSpectrumBase();
 
 	void syncBase();
+	bool shouldUseVisualWorker() const;
+	int effectiveVisualWorkerMode() const;
+	float workerSnapshotAgeMs() const;
+	float workerQueueLatencyMs() const;
+	void ensureWorkerRegistration();
+	void releaseWorkerRegistration();
+	void submitWorkerCurveRequest();
+	bool adoptWorkerCurveSnapshot();
+	void initializeStaticPreviewStateIfNeeded();
 	void updateAxisCache();
 	void updateCurveCache();
-	void updateOverlayCache(const BifurxAnalysisFrame& frame);
-	void updateAnimation(float dt);
+	const BifurxPreviewModel& getOrUpdateModel() const;
+	void updateOverlayCache();
+	bool updateAnimation(float dt);
+	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
 
 	int markerAnchorKind(int markerIndex) const {
@@ -410,12 +477,25 @@ struct BifurxSpectrumBase {
 		}
 	}
 
+	bool markerPinnedToBottomLane(int markerIndex) const {
+		switch (state.previewState.mode) {
+			case 2: return markerIndex == 0; // Notch + Low
+			case 3: return true;            // Notch + Notch
+			case 7: return markerIndex == 1; // High + Notch
+			default: return false;
+		}
+	}
+
 	struct DisplayAnchor { float x01 = 0.f; float hz = 0.f; };
 	DisplayAnchor displayAnchorForMarker(int markerIndex, float targetHz, float minHz, float maxHz) const {
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
 		const int anchorKind = markerAnchorKind(markerIndex);
 		if (anchorKind == 0) return anchor;
+		if ((state.previewState.mode == 2 || state.previewState.mode == 7) &&
+			std::fabs(std::log2(std::max(state.previewState.freqB, 1e-6f) / std::max(state.previewState.freqA, 1e-6f))) < 0.08f) {
+			return anchor;
+		}
 		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
 		int bestIndex = centerIndex;
 		float bestScore = (anchorKind < 0) ? state.curveDb[centerIndex] : -state.curveDb[centerIndex];
@@ -437,6 +517,7 @@ struct BifurxSpectrumBase {
 	}
 
 	void calculateMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const;
+	void getCachedMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const;
 	void calculateRefinedCurvePoints(std::vector<BifurxCurvePoint>* points, float w, float h) const;
 };
 
@@ -459,13 +540,13 @@ struct BifurxProbeEngineState {
 SvfOutputs processProbeStage(
 	BifurxProbeEngineState& state,
 	int stageIndex,
-	int circuitMode,
 	float input,
 	float sampleRate,
 	float cutoff,
 	float damping,
 	float drive,
-	float resoNorm
+	float resoNorm,
+	bool highResonanceSelfOscEnabled
 );
 
 void simulatePreviewProbeImpulseResponse(
@@ -476,6 +557,13 @@ void simulatePreviewProbeImpulseResponse(
 );
 
 struct Bifurx : Module {
+	enum ColorScheme {
+		SCHEME_DEFAULT = 0,
+		SCHEME_CLASSIC,
+		SCHEME_MONOCHROME,
+		SCHEME_FIRE,
+		SCHEME_LEN
+	};
 	enum ParamId {
 		MODE_PARAM,
 		LEVEL_PARAM,
@@ -488,7 +576,7 @@ struct Bifurx : Module {
 		TITO_PARAM,
 		MODE_LEFT_PARAM,
 		MODE_RIGHT_PARAM,
-		FILTER_CIRCUIT_PARAM,
+		MODE_MENU_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -511,10 +599,6 @@ struct Bifurx : Module {
 		SPAN_CV_ATTEN_NEG_LIGHT,
 		TITO_SM_LIGHT,
 		TITO_XM_LIGHT,
-		FILTER_CIRCUIT_TL_LIGHT,
-		FILTER_CIRCUIT_TR_LIGHT,
-		FILTER_CIRCUIT_BR_LIGHT,
-		FILTER_CIRCUIT_BL_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -522,13 +606,22 @@ struct Bifurx : Module {
 		RENDER_NANOVG,
 		RENDER_OPENGL
 	};
+	enum ModulationQualityMode {
+		MOD_QUALITY_BALANCED = 0,
+		MOD_QUALITY_HIGH,
+		MOD_QUALITY_EXACT,
+		MOD_QUALITY_COUNT
+	};
+	enum VisualWorkerMode {
+		VISUAL_WORKER_INHERIT = -1,
+		VISUAL_WORKER_OFF = 0,
+		VISUAL_WORKER_AUTO = 1,
+		VISUAL_WORKER_ON = 2
+	};
 
 	TptSvf coreA;
 	TptSvf coreB;
-	int filterCircuitMode = 0; // 0: SVF, 1: Bite, 2: Vowel, 3: Erode
-	int activeCircuitMode = 0;
-	static constexpr bool kBifurxTuneSvfOnly = false;
-	RenderMode renderMode = RENDER_NANOVG;
+	RenderMode renderMode = RENDER_OPENGL;
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -538,6 +631,7 @@ struct Bifurx : Module {
 	BifurxPreviewState previewStates[2];
 	std::atomic<int> previewPublishedIndex{0};
 	std::atomic<uint32_t> previewPublishSeq{0};
+	std::atomic<double> previewPublishTimeSec{0.0};
 	BifurxLlTelemetryState llTelemetryStates[2];
 	std::atomic<int> llTelemetryPublishedIndex{0};
 	std::atomic<uint32_t> llTelemetryPublishSeq{0};
@@ -554,10 +648,13 @@ struct Bifurx : Module {
 	bool voctCvFilterInitialized = false;
 	float voctCvFilterAlpha = 0.f;
 	float voctCvFilterSampleRate = 0.f;
+	float llTelemetryAlpha = 0.f;
+	float llTelemetryAlphaSampleRate = 0.f;
 	float previewPrevTargetFreqA = 440.f;
 	float previewPrevTargetFreqB = 440.f;
 	bool previewTargetMotionInitialized = false;
 	int previewTargetStillSamples = 0;
+	int previewSampleAccum = 0;
 	int previewAdaptiveCooldown = 0;
 	bool controlFastCacheValid = false;
 	float cachedDampingA = 0.7f;
@@ -567,10 +664,32 @@ struct Bifurx : Module {
 	float cachedFreqA0 = 440.f;
 	float cachedFreqB0 = 440.f;
 	float cachedBalance = 0.f;
+	float cachedResoNorm = 0.35f;
+	float cachedBalanceNorm = 0.f;
+	float cachedSpanParamNorm = 0.33f;
+	float cachedSpanCvNorm = 0.f;
+	float cachedSpanAtten = 0.f;
+	float cachedSpanNorm = 0.33f;
+	float cachedSpanOct = 0.f;
+	float cachedSpanWideMorph = 0.f;
+	float cachedSpanFreqMulA = 1.f;
+	float cachedSpanFreqMulB = 1.f;
 	SvfCoeffs cachedCoeffsA;
 	SvfCoeffs cachedCoeffsB;
+	SvfCoeffs titoCoeffsA;
+	SvfCoeffs titoCoeffsB;
+	float titoCoeffFreqA = 0.f;
+	float titoCoeffFreqB = 0.f;
+	float titoCoeffDampingA = 0.f;
+	float titoCoeffDampingB = 0.f;
+	float titoCoeffSampleRateA = 0.f;
+	float titoCoeffSampleRateB = 0.f;
 	float analysisRawInputHistory[kFftSize] = {};
 	float analysisOutputHistory[kFftSize] = {};
+	float analysisResponseOutputHistory[kFftSize] = {};
+	float analysisPublishedRawInputFrames[2][kFftSize] = {};
+	float analysisPublishedOutputFrames[2][kFftSize] = {};
+	float analysisPublishedResponseOutputFrames[2][kFftSize] = {};
 	float llTelemetryExcitationSq = 0.f;
 	float llTelemetryStageALpSq = 0.f;
 	float llTelemetryStageBLpSq = 0.f;
@@ -581,13 +700,22 @@ struct Bifurx : Module {
 	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	dsp::SchmittTrigger filterCircuitTrigger;
-	BifurxAnalysisFrame analysisFrames[2];
-	std::atomic<int> analysisPublishedIndex{0};
+	std::atomic<int> analysisPublishedFrameIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
-	bool fftScaleDynamic = true;
-	bool curveDebugLogging = false;
-	bool perfDebugLogging = false;
+	std::atomic<bool> fftScaleDynamic {true};
+	std::atomic<bool> showModuleResponseOverlay {false};
+	ColorScheme colorScheme = SCHEME_DEFAULT;
+	std::atomic<bool> useGlShaderRenderer {true};
+	std::atomic<bool> lowLatencyVisual {false};
+	std::atomic<int> visualWorkerMode {VISUAL_WORKER_INHERIT};
+	std::atomic<bool> highResonanceSelfOscEnabled {false};
+	std::atomic<bool> softLimitingEnabled {true};
+	std::atomic<int> modulationQualityMode {MOD_QUALITY_BALANCED};
+	int controlUpdateDivision = 16;
+	int previewPublishFastDivision = kPreviewPublishFastDivision;
+	int previewPublishSlowDivision = kPreviewPublishSlowDivision;
+	std::atomic<bool> curveDebugLogging {false};
+	std::atomic<bool> perfDebugLogging {false};
 	std::atomic<uint64_t> perfAudioSampledCount{0};
 	std::atomic<uint64_t> perfAudioProcessNs{0};
 	std::atomic<uint64_t> perfAudioControlsNs{0};
@@ -596,23 +724,30 @@ struct Bifurx : Module {
 	std::atomic<uint64_t> perfAudioAnalysisNs{0};
 	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
 	std::atomic<float> perfSampleRate{0.f};
+	std::atomic<float> perfUiRenderMs{0.f};
 	std::atomic<int> perfMode{0};
-	std::atomic<int> perfCircuitMode{0};
 	std::atomic<bool> perfFastPathEligible{false};
 	std::atomic<bool> perfPreviewPitchCvConnected{false};
+	uint32_t debugInstanceId = 0;
+	double createdUnixTimeSec = 0.0;
 
 	Bifurx();
 	void resetCircuitStates();
-	void setFilterCircuitMode(int newMode);
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
 	void resetPerfStats();
 	void publishPreviewState(const BifurxPreviewState& state);
 	void publishLlTelemetryState(const BifurxLlTelemetryState& state);
-	void publishAnalysisFrame();
-	void pushAnalysisSample(float rawInputSample, float outputSample);
+	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
 	void process(const ProcessArgs& args) override;
+};
+
+struct BifurxColors {
+	NVGcolor low;
+	NVGcolor high;
+	NVGcolor white;
+	static BifurxColors get(Bifurx::ColorScheme scheme);
 };
 
 } // namespace bifurx

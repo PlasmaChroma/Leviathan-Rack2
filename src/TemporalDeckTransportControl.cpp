@@ -32,7 +32,6 @@ TransportButtonResult applyTransportButtonEvents(TransportControlState &state, c
     if (next) {
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.slipLatched = false;
       if (sampleModeEnabled && sampleLoaded) {
         result.forceSampleTransportPlay = true;
       }
@@ -45,17 +44,14 @@ TransportButtonResult applyTransportButtonEvents(TransportControlState &state, c
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_SLOW;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else if (state.slipReturnMode == temporaldeck::TemporalDeckEngine::SLIP_RETURN_SLOW) {
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_NORMAL;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else if (state.slipReturnMode == temporaldeck::TemporalDeckEngine::SLIP_RETURN_NORMAL) {
       state.slipReturnMode = temporaldeck::TemporalDeckEngine::SLIP_RETURN_INSTANT;
       state.freezeLatched = false;
       state.freezeLatchedByButton = false;
-      state.reverseLatched = false;
     } else {
       state.slipLatched = false;
     }
@@ -128,9 +124,7 @@ uint32_t applyPendingLiveSeekArc(temporaldeck::TemporalDeckEngine &engine, uint3
   engine.readHead = engine.buffer.wrapPosition(targetRead);
   engine.scratchLagSamples = targetLag;
   engine.scratchLagTargetSamples = targetLag;
-  engine.filteredManualLagTargetSamples = targetLag;
   engine.liveManualScratchAnchorNewestPos = newestPos;
-  engine.liveManualScratchAnchorLagSamples = targetLag;
   engine.scratchHandVelocity = 0.f;
   engine.scratchMotionVelocity = 0.f;
   engine.scratch3LagVelocity = 0.f;

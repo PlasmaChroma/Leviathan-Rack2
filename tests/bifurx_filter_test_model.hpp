@@ -11,6 +11,8 @@ namespace bifurx_test_model {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kFreqMinHz = 4.f;
 constexpr float kFreqMaxHz = 28000.f;
+constexpr float kSvfDampingMin = 0.02f;
+constexpr float kSvfDampingMax = 2.2f;
 
 inline float clampf(float x, float lo, float hi) {
   return std::max(lo, std::min(hi, x));
@@ -29,8 +31,10 @@ inline float fastExp(float x) {
 }
 
 inline float signedWeight(float balance, bool upperPeak) {
+  const float b = clampf(balance, -1.f, 1.f);
+  const float shaped = clampf(b + 0.35f * b * b * b, -1.f, 1.f);
   const float sign = upperPeak ? 1.f : -1.f;
-  return fastExp(0.82f * sign * clampf(balance, -1.f, 1.f));
+  return fastExp(0.82f * sign * shaped);
 }
 
 inline float cascadeWideMorph(float spanNorm) {
@@ -43,68 +47,11 @@ inline float highHighSpanCompGain(float wideMorph) {
   return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
-struct SemanticExportProfile {
-  float lpScale = 0.f;
-  float bpScale = 0.f;
-  float hpScale = 0.f;
-};
-
-inline SemanticExportProfile semanticExportProfile(int circuitMode, int stageIndex) {
-  (void)circuitMode;
-  const int clampedCircuitMode = 0;
-  (void)stageIndex;
-  SemanticExportProfile profile;
-  switch (clampedCircuitMode) {
-    case 1:
-      profile.lpScale = 0.f;
-      profile.bpScale = 6.8f;
-      profile.hpScale = 6.2f;
-      return profile;
-    case 2:
-      profile.lpScale = 0.f;
-      profile.bpScale = 6.5f;
-      profile.hpScale = 0.f;
-      return profile;
-    case 3:
-      profile.lpScale = 4.4f;
-      profile.bpScale = 4.2f;
-      profile.hpScale = 3.6f;
-      return profile;
-    default:
-      return profile;
-  }
-}
-
-template <typename T>
-inline T normalizeSemanticComponent(const T& value, float exportScale) {
-  if (!(exportScale > 0.f)) {
-    return value;
-  }
-  const float magnitude = std::abs(value);
-  if (!(magnitude > 0.f) || !std::isfinite(magnitude)) {
-    return value;
-  }
-  const float compressed = exportScale * std::tanh(magnitude / exportScale);
-  if (!(compressed > 0.f) || !std::isfinite(compressed)) {
-    return value;
-  }
-  return value * T(compressed / magnitude);
-}
-
 struct SvfOutputs {
   float lp = 0.f;
   float bp = 0.f;
   float hp = 0.f;
 };
-
-inline SvfOutputs normalizeSemanticOutputs(const SvfOutputs& raw, int circuitMode, int stageIndex) {
-  const SemanticExportProfile profile = semanticExportProfile(circuitMode, stageIndex);
-  SvfOutputs out;
-  out.lp = normalizeSemanticComponent(raw.lp, profile.lpScale);
-  out.bp = normalizeSemanticComponent(raw.bp, profile.bpScale);
-  out.hp = normalizeSemanticComponent(raw.hp, profile.hpScale);
-  return out;
-}
 
 struct DisplayBiquad {
   float b0 = 0.f;
@@ -128,7 +75,8 @@ inline DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, 
   const float omega = 2.f * kPi * freq / sr;
   const float cosW = std::cos(omega);
   const float sinW = std::sin(omega);
-  const float alpha = sinW / (2.f * std::max(q, 0.05f));
+  const float clampedQ = std::max(q, 1.f / kSvfDampingMax);
+  const float alpha = sinW / (2.f * clampedQ);
 
   float b0 = 0.f;
   float b1 = 0.f;
@@ -144,9 +92,9 @@ inline DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, 
       b2 = 0.5f * (1.f - cosW);
       break;
     case 1: // bandpass
-      b0 = alpha;
+      b0 = alpha * clampedQ;
       b1 = 0.f;
-      b2 = -alpha;
+      b2 = -b0;
       break;
     case 2: // highpass
       b0 = 0.5f * (1.f + cosW);
@@ -176,13 +124,15 @@ inline T combineModeResponse(
   const T& bpA,
   const T& hpA,
   const T& /*ntA*/,
-  const T& lpB,
+  const T& /*lpB*/,
   const T& bpB,
   const T& hpB,
   const T& /*ntB*/,
   const T& cascadeLp,
   const T& cascadeNotch,
+  const T& cascadeNotchToLow,
   const T& cascadeHpToLp,
+  const T& cascadeHighToNotch,
   const T& cascadeHpToHp,
   float wA,
   float wB,
@@ -195,7 +145,7 @@ inline T combineModeResponse(
     case 1:
       return T(0.92f) * T(wA) * lpA + T(1.18f) * T(wB) * bpB - T(0.16f) * (bpA + bpB);
     case 2:
-      return T(1.08f) * T(wB) * lpB - T(0.62f) * T(wA) * bpA;
+      return T(1.04f) * cascadeNotchToLow;
     case 3:
       return T(1.03f) * cascadeNotch;
     case 4:
@@ -205,7 +155,7 @@ inline T combineModeResponse(
     case 6:
       return T(1.04f) * cascadeHpToLp;
     case 7:
-      return T(1.08f) * T(wA) * hpA - T(0.60f) * T(wB) * bpB;
+      return T(1.04f) * cascadeHighToNotch;
     case 8:
       return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
     case 9:
@@ -225,7 +175,6 @@ struct PreviewState {
   float resoNorm = 0.f;
   float spanNorm = 0.5f;
   int mode = 0;
-  int circuitMode = 0;
 };
 
 struct PreviewModel {
@@ -240,22 +189,19 @@ struct PreviewModel {
   float markerFreqA = 440.f;
   float markerFreqB = 440.f;
   float sampleRate = 44100.f;
+  float resoNorm = 0.f;
   float wA = 1.f;
   float wB = 1.f;
   float wideMorph = 0.f;
   int mode = 0;
-  int circuitMode = 0;
 };
 
 inline PreviewModel makePreviewModel(const PreviewState& state) {
   PreviewModel model;
-  float qScale = 1.f;
-  float cutoffScale = 1.f;
-
-  const float freqA = clampf(state.freqA * cutoffScale, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
-  const float freqB = clampf(state.freqB * cutoffScale, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
-  const float qA = clampf(state.qA * qScale, 0.2f, 18.f);
-  const float qB = clampf(state.qB * qScale, 0.2f, 18.f);
+  const float freqA = clampf(state.freqA, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
+  const float freqB = clampf(state.freqB, kFreqMinHz, 0.46f * std::max(state.sampleRate, 1.f));
+  const float qA = clampf(state.qA, 1.f / kSvfDampingMax, 1.f / kSvfDampingMin);
+  const float qB = clampf(state.qB, 1.f / kSvfDampingMax, 1.f / kSvfDampingMin);
 
   model.lowA = makeDisplayBiquad(state.sampleRate, freqA, qA, 0);
   model.bandA = makeDisplayBiquad(state.sampleRate, freqA, qA, 1);
@@ -268,8 +214,8 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   model.markerFreqA = freqA;
   model.markerFreqB = freqB;
   model.sampleRate = state.sampleRate;
+  model.resoNorm = state.resoNorm;
   model.mode = state.mode;
-  model.circuitMode = 0;
 
   const float lowW = signedWeight(state.balance, false);
   const float highW = signedWeight(state.balance, true);
@@ -282,26 +228,26 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
 
 inline std::complex<float> response(const PreviewModel& model, float hz) {
   const float omega = 2.f * kPi * clampf(hz, kFreqMinHz, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-  const SemanticExportProfile profileA = semanticExportProfile(model.circuitMode, 0);
-  const SemanticExportProfile profileB = semanticExportProfile(model.circuitMode, 1);
-  const std::complex<float> lpA = normalizeSemanticComponent(model.lowA.response(omega), profileA.lpScale);
-  const std::complex<float> bpA = normalizeSemanticComponent(model.bandA.response(omega), profileA.bpScale);
-  const std::complex<float> hpA = normalizeSemanticComponent(model.highA.response(omega), profileA.hpScale);
+  const std::complex<float> lpA = model.lowA.response(omega);
+  const std::complex<float> bpA = model.bandA.response(omega);
+  const std::complex<float> hpA = model.highA.response(omega);
   const std::complex<float> ntA = lpA + hpA;
-  const std::complex<float> lpB = normalizeSemanticComponent(model.lowB.response(omega), profileB.lpScale);
-  const std::complex<float> bpB = normalizeSemanticComponent(model.bandB.response(omega), profileB.bpScale);
-  const std::complex<float> hpB = normalizeSemanticComponent(model.highB.response(omega), profileB.hpScale);
+  const std::complex<float> lpB = model.lowB.response(omega);
+  const std::complex<float> bpB = model.bandB.response(omega);
+  const std::complex<float> hpB = model.highB.response(omega);
   const std::complex<float> ntB = lpB + hpB;
   const std::complex<float> cascadeLp = lpB * lpA;
   const std::complex<float> cascadeNotch = ntB * ntA;
+  const std::complex<float> cascadeNotchToLow = lpB * ntA;
   const std::complex<float> cascadeHpToLp = lpB * hpA;
+  const std::complex<float> cascadeHighToNotch = ntB * hpA;
   const std::complex<float> cascadeHpToHp = hpB * hpA;
 
   return combineModeResponse<std::complex<float>>(
     model.mode,
     lpA, bpA, hpA, ntA,
     lpB, bpB, hpB, ntB,
-    cascadeLp, cascadeNotch, cascadeHpToLp, cascadeHpToHp,
+    cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp,
     model.wA, model.wB, model.wideMorph
   );
 }
@@ -313,11 +259,62 @@ inline float responseDb(const PreviewModel& model, float hz) {
 
 inline float levelDriveGain(float knob) {
   const float x = clamp01(knob);
-  return 0.06f + 0.95f * x + 3.6f * x * x * x;
+  return 0.075f + 0.95f * x + 3.6f * x * x * x;
+}
+
+inline float smoothstep01(float x) {
+  const float t = clamp01(x);
+  return t * t * (3.f - 2.f * t);
+}
+
+inline float levelInputGain(float knob) {
+  const float x = clamp01(knob);
+  if (x <= 0.5f) {
+    return 2.f * x;
+  }
+  const float hot = 2.f * (x - 0.5f);
+  return 1.f + 2.5f * hot * hot;
+}
+
+inline float levelDriveAmount(float knob) {
+  const float x = clamp01(knob);
+  constexpr float kLevelDriveStart = 0.62f;
+  if (x <= kLevelDriveStart) {
+    return 0.f;
+  }
+  const float hot = clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
+  return hot * hot;
+}
+
+inline float levelOutputClipWet(float knob) {
+  (void) knob;
+  return 0.f;
+}
+
+inline float levelOutputMakeupGain(float knob) {
+  (void) knob;
+  return 1.f;
 }
 
 inline float softClip(float x) {
   return std::tanh(x);
+}
+
+inline float applyLevelInputStage(float in, float levelKnob) {
+  constexpr float kLevelMaxDriveGain = 2.5f;
+  const float clean = in * levelInputGain(levelKnob);
+  const float driveAmount = levelDriveAmount(levelKnob);
+  if (driveAmount <= 1e-5f) {
+    return clean;
+  }
+  const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
+  const float driven = 5.f * softClip((clean * driveGain) / 5.f);
+  return clean + (driven - clean) * driveAmount;
+}
+
+inline float applyLevelOutputStage(float modeOut, float levelKnob) {
+  (void) levelKnob;
+  return modeOut;
 }
 
 inline float amplitudeRatioDb(float numerator, float denominator) {
@@ -334,7 +331,7 @@ inline SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping) {
   const float sr = std::max(sampleRate, 1.f);
   const float limitedCutoff = clampf(cutoff, kFreqMinHz, 0.46f * sr);
   const float g = std::tan(kPi * limitedCutoff / sr);
-  const float k = clampf(damping, 0.02f, 2.2f);
+  const float k = clampf(damping, kSvfDampingMin, kSvfDampingMax);
   const float a1 = 1.f / (1.f + g * (g + k));
   SvfCoeffs c;
   c.g = g;
@@ -384,8 +381,7 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -396,7 +392,6 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   SvfState a;
   SvfState b;
 
-  const float drive = levelDriveGain(levelKnob);
   float inSq = 0.f;
   float aSq = 0.f;
   float bSq = 0.f;
@@ -406,11 +401,11 @@ inline LlRuntimeTelemetry measureLlRuntimeTelemetry(
   for (int n = 0; n < totalSamples; ++n) {
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
-    const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.lp, cB), circuitMode, 1);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.lp, cB);
     const float modeOut = oB.lp;
-    const float out = 5.5f * softClip(modeOut / 5.5f);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {
       inSq += in * in;
@@ -439,8 +434,7 @@ inline std::vector<LlRuntimeSweepPoint> makeLlRuntimeSweep(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   std::vector<LlRuntimeSweepPoint> sweep;
   sweep.reserve(freqsHz.size());
@@ -455,8 +449,7 @@ inline std::vector<LlRuntimeSweepPoint> makeLlRuntimeSweep(
       cutoffA,
       cutoffB,
       dampingA,
-      dampingB,
-      circuitMode
+      dampingB
     );
     sweep.push_back(point);
   }
@@ -471,11 +464,10 @@ inline float simulateLlRuntimeGainDb(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  int circuitMode = 0
+  float dampingB
 ) {
   const LlRuntimeTelemetry telemetry = measureLlRuntimeTelemetry(
-    sampleRate, inputHz, inputAmplitude, levelKnob, cutoffA, cutoffB, dampingA, dampingB, circuitMode
+    sampleRate, inputHz, inputAmplitude, levelKnob, cutoffA, cutoffB, dampingA, dampingB
   );
   return telemetry.outputOverInputDb;
 }
@@ -489,8 +481,7 @@ inline float simulateHhRuntimeGainDb(
   float cutoffB,
   float dampingA,
   float dampingB,
-  float wideMorph,
-  int circuitMode = 0
+  float wideMorph
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -501,7 +492,6 @@ inline float simulateHhRuntimeGainDb(
   SvfState a;
   SvfState b;
 
-  const float drive = levelDriveGain(levelKnob);
   const float hhGain = 1.06f * highHighSpanCompGain(wideMorph);
   float inSq = 0.f;
   float outSq = 0.f;
@@ -510,11 +500,11 @@ inline float simulateHhRuntimeGainDb(
   for (int n = 0; n < totalSamples; ++n) {
     const float t = float(n) / sampleRate;
     const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
-    const float drivenIn = 5.f * softClip(0.2f * in * drive);
-    const SvfOutputs oA = normalizeSemanticOutputs(processSvf(a, drivenIn, cA), circuitMode, 0);
-    const SvfOutputs oB = normalizeSemanticOutputs(processSvf(b, oA.hp, cB), circuitMode, 1);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, oA.hp, cB);
     const float modeOut = hhGain * oB.hp;
-    const float out = 5.5f * softClip(modeOut / 5.5f);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {
       inSq += in * in;
@@ -526,6 +516,107 @@ inline float simulateHhRuntimeGainDb(
   const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
   const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
   return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+inline float simulateLhRuntimeGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB,
+  float balance
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float lowW = signedWeight(balance, false);
+  const float highW = signedWeight(balance, true);
+  const float norm = 2.f / (lowW + highW);
+  const float wA = lowW * norm;
+  const float wB = highW * norm;
+  float inSq = 0.f;
+  float outSq = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, drivenIn, cB);
+    const float modeOut = 0.98f * wA * oA.lp + 0.98f * wB * oB.hp - 0.06f * (oA.bp + oB.bp);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
+
+    if (n >= settleSamples) {
+      inSq += in * in;
+      outSq += out * out;
+      nAccum++;
+    }
+  }
+
+  const float inRms = std::sqrt(std::max(inSq / std::max(1, nAccum), 1e-12f));
+  const float outRms = std::sqrt(std::max(outSq / std::max(1, nAccum), 1e-12f));
+  return 20.f * std::log10(std::max(outRms / inRms, 1e-6f));
+}
+
+inline float simulateLhRuntimeFundamentalGainDb(
+  float sampleRate,
+  float inputHz,
+  float inputAmplitude,
+  float levelKnob,
+  float cutoffA,
+  float cutoffB,
+  float dampingA,
+  float dampingB,
+  float balance
+) {
+  const int settleSamples = int(sampleRate * 0.30f);
+  const int measureSamples = int(sampleRate * 0.60f);
+  const int totalSamples = settleSamples + measureSamples;
+
+  const SvfCoeffs cA = makeSvfCoeffs(sampleRate, cutoffA, dampingA);
+  const SvfCoeffs cB = makeSvfCoeffs(sampleRate, cutoffB, dampingB);
+  SvfState a;
+  SvfState b;
+
+  const float lowW = signedWeight(balance, false);
+  const float highW = signedWeight(balance, true);
+  const float norm = 2.f / (lowW + highW);
+  const float wA = lowW * norm;
+  const float wB = highW * norm;
+
+  float outI = 0.f;
+  float outQ = 0.f;
+  int nAccum = 0;
+
+  for (int n = 0; n < totalSamples; ++n) {
+    const float t = float(n) / sampleRate;
+    const float in = inputAmplitude * std::sin(2.f * kPi * inputHz * t);
+    const float drivenIn = applyLevelInputStage(in, levelKnob);
+    const SvfOutputs oA = processSvf(a, drivenIn, cA);
+    const SvfOutputs oB = processSvf(b, drivenIn, cB);
+    const float modeOut = 0.98f * wA * oA.lp + 0.98f * wB * oB.hp - 0.06f * (oA.bp + oB.bp);
+    const float out = applyLevelOutputStage(modeOut, levelKnob);
+
+    if (n >= settleSamples) {
+      const float phase = 2.f * kPi * inputHz * t;
+      outI += out * std::sin(phase);
+      outQ += out * std::cos(phase);
+      nAccum++;
+    }
+  }
+
+  const float outAmp = (2.f / std::max(1, nAccum)) * std::sqrt(outI * outI + outQ * outQ);
+  return 20.f * std::log10(std::max(outAmp / std::max(inputAmplitude, 1e-6f), 1e-6f));
 }
 
 } // namespace bifurx_test_model

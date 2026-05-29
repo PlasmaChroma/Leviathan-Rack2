@@ -115,6 +115,7 @@ struct Proc : Module {
 
 	struct ChannelResult {
 		bool cycleOn = false;
+		bool previewStatePublished = false;
 	};
 
 	struct SlewStepResult {
@@ -150,13 +151,16 @@ struct Proc : Module {
 	};
 	PreviewSharedState previewState;
 	PreviewUpdateState previewUpdate;
-	bool bandlimitedGateOutputs = false;
-	bool bandlimitedSignalOutputs = true;
+	std::atomic<bool> bandlimitedGateOutputs {false};
+	std::atomic<bool> bandlimitedSignalOutputs {true};
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
-	bool timingInterpolate = true;
+	std::atomic<int> requestedTimingUpdateDiv {1};
+	std::atomic<bool> timingInterpolate {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
+	float previewDotPublishTimer = 0.f;
+	bool previewDotWasVisible = false;
 	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float FUNCTION_V_MIN = 0.f;
 	// Proc's free-running FG mode spans 0-10 V, while slew mode keeps the wider reference range.
@@ -198,6 +202,7 @@ struct Proc : Module {
 	static constexpr float PREVIEW_INTERACTIVE_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_CV_INTERVAL = 1.f / 60.f;
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
+	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
@@ -273,6 +278,24 @@ struct Proc : Module {
 			sum += 1.f / slopeWarp(xi, s);
 		}
 		return sum / float(WARP_SCALE_SAMPLES);
+	}
+
+	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
+		outputNorm = clamp(outputNorm, 0.f, 1.f);
+		if (std::fabs(shapeSigned) < 1e-6f) {
+			return rising ? outputNorm : (1.f - outputNorm);
+		}
+		const float start = rising ? 0.f : outputNorm;
+		const float end = rising ? outputNorm : 1.f;
+		const float span = std::max(end - start, 0.f);
+		float partialSum = 0.f;
+		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
+			float t = (float(i) + 0.5f) / float(WARP_SCALE_SAMPLES);
+			partialSum += 1.f / slopeWarp(start + span * t, shapeSigned);
+		}
+		const float partialIntegral = span * partialSum / float(WARP_SCALE_SAMPLES);
+		const float totalIntegral = std::max(slopeWarpScale(shapeSigned), 1e-6f);
+		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
 	}
 
 	static float computeSegPhase(float out, float startOut, float invSpan) {
@@ -360,6 +383,26 @@ struct Proc : Module {
 		return clamp(1.f - ((phasePos - 1.f) / dp), 0.f, 1.f);
 	}
 
+	static void remapPhasePosForStageTimeChange(ChannelState& ch, float oldRise, float oldFall, float newRise, float newFall) {
+		if (ch.phase == CHANNEL_IDLE) {
+			return;
+		}
+		oldRise = std::max(oldRise, 1e-6f);
+		oldFall = std::max(oldFall, 1e-6f);
+		newRise = std::max(newRise, 1e-6f);
+		newFall = std::max(newFall, 1e-6f);
+		const float oldTotal = oldRise + oldFall;
+		const float newTotal = newRise + newFall;
+		if (ch.phase == CHANNEL_RISE) {
+			const float dotX = clamp((ch.phasePos * oldRise) / oldTotal, 0.f, 1.f);
+			ch.phasePos = clamp((dotX * newTotal) / newRise, 0.f, 2.f);
+		}
+		else if (ch.phase == CHANNEL_FALL) {
+			const float dotX = clamp((oldRise + ch.phasePos * oldFall) / oldTotal, 0.f, 1.f);
+			ch.phasePos = clamp(((dotX * newTotal) - newRise) / newFall, 0.f, 2.f);
+		}
+	}
+
 	static void insertGateTransition(dsp::MinBlepGenerator<16, 16>& blep, bool& state, bool newState, float fraction01) {
 		if (newState == state) {
 			return;
@@ -385,11 +428,22 @@ struct Proc : Module {
 		ch.signalBlep.insertDiscontinuity(p, step * ch.signalOutputGain);
 	}
 
-	void setTimingUpdateDiv(int div) {
+	void applyTimingUpdateDiv(int div) {
 		// Changing update rate invalidates cached timing so the channel resyncs immediately.
 		timingUpdateDiv = std::max(1, div);
 		timingUpdateCounter = 0;
 		channel.stageTimeValid = false;
+	}
+
+	void requestTimingUpdateDiv(int div) {
+		requestedTimingUpdateDiv.store(std::max(1, div), std::memory_order_relaxed);
+	}
+
+	void applyRequestedTimingUpdateDiv() {
+		const int requested = requestedTimingUpdateDiv.load(std::memory_order_relaxed);
+		if (requested != timingUpdateDiv) {
+			applyTimingUpdateDiv(requested);
+		}
 	}
 
 	void initKnobCurveLut() {
@@ -448,7 +502,7 @@ struct Proc : Module {
 		return riseAbs > 1e-4f || fallAbs > 1e-4f || riseRel > 0.01f || fallRel > 0.01f || std::fabs(curveNow - curvePrev) > 0.005f;
 	}
 
-	void updatePreviewChannel(
+	bool updatePreviewChannel(
 		PreviewSharedState& shared,
 		PreviewUpdateState& state,
 		float riseKnob,
@@ -490,7 +544,9 @@ struct Proc : Module {
 			state.lastCurveSent = curveSigned;
 			state.sentOnce = true;
 			state.timer = 0.f;
+			return true;
 		}
+		return false;
 	}
 
 	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm, float& dotYNorm,
@@ -565,10 +621,14 @@ struct Proc : Module {
 		const ChannelConfig& cfg,
 		PreviewSharedState& previewShared,
 		PreviewUpdateState& previewUpdateState,
-		bool timingTick
+		bool timingTick,
+		bool bandlimitedSignal,
+		bool bandlimitedGate,
+		bool timingInterpEnabled,
+		float injectAlphaBase
 	) {
 		auto updateGateOutputs = [&](bool eorHigh, bool eocHigh, float fraction01) {
-			if (bandlimitedGateOutputs) {
+			if (bandlimitedGate) {
 				insertGateTransition(ch.eorGateBlep, ch.eorGateState, eorHigh, fraction01);
 				insertGateTransition(ch.eocGateBlep, ch.eocGateState, eocHigh, fraction01);
 			}
@@ -601,7 +661,7 @@ struct Proc : Module {
 				// Manual behavior: trigger can reset only during FALL, restarting from cycle start.
 				float prevOut = ch.out;
 				ch.out = FUNCTION_V_MIN;
-				if (bandlimitedSignalOutputs) {
+				if (bandlimitedSignal) {
 					insertSignalTransition(ch, ch.out - prevOut, 1e-6f);
 				}
 			}
@@ -654,7 +714,7 @@ struct Proc : Module {
 					ch.fallTimeStep = 0.f;
 					ch.timeInterpSamplesLeft = 0;
 				}
-				else if (timingInterpolate && timingUpdateDiv > 1) {
+				else if (timingInterpEnabled && timingUpdateDiv > 1) {
 					// Interpolate timing across N samples to avoid sample-and-hold zipper tone.
 					ch.riseTimeStep = (ch.cachedRiseTime - ch.activeRiseTime) / float(timingUpdateDiv);
 					ch.fallTimeStep = (ch.cachedFallTime - ch.activeFallTime) / float(timingUpdateDiv);
@@ -670,9 +730,15 @@ struct Proc : Module {
 				ch.stageTimeValid = true;
 			}
 		}
+		float prevRiseTime = ch.activeRiseTime;
+		float prevFallTime = ch.activeFallTime;
 		updateActiveStageTimes(ch);
 		float riseTime = ch.activeRiseTime;
 		float fallTime = ch.activeFallTime;
+		if (ch.phase != CHANNEL_IDLE
+			&& (std::fabs(riseTime - prevRiseTime) > 1e-6f || std::fabs(fallTime - prevFallTime) > 1e-6f)) {
+			remapPhasePosForStageTimeChange(ch, prevRiseTime, prevFallTime, riseTime, fallTime);
+		}
 		bool fgActive = (ch.phase != CHANNEL_IDLE);
 		if (trigAccepted) {
 			// External trigger may run faster than self-cycle, but with an explicit ceiling.
@@ -687,7 +753,7 @@ struct Proc : Module {
 			enforceSpeedLimit(riseTime, fallTime, 1.f / std::max(MAX_TRIGGER_HZ, 1.f));
 		}
 		float shapeSigned = shapeSignedFromKnob(shape);
-		updatePreviewChannel(
+		bool previewStatePublished = updatePreviewChannel(
 			previewShared,
 			previewUpdateState,
 			riseKnob,
@@ -709,7 +775,7 @@ struct Proc : Module {
 			// location is invalidated/recomputed against the updated curve shape.
 			float range = std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
 			float x = clamp((ch.out - FUNCTION_V_MIN) / range, 0.f, 1.f);
-			ch.phasePos = (ch.phase == CHANNEL_RISE) ? x : (1.f - x);
+			ch.phasePos = segmentPhaseFromOutputNorm(x, shapeSigned, ch.phase == CHANNEL_RISE);
 		}
 		float scale = ch.cachedWarpScale;
 
@@ -725,6 +791,7 @@ struct Proc : Module {
 		if (haltHigh) {
 			ChannelResult result;
 			result.cycleOn = cycleOn;
+			result.previewStatePublished = previewStatePublished;
 			return result;
 		}
 
@@ -752,8 +819,7 @@ struct Proc : Module {
 					? clamp((shapedTarget - FUNCTION_V_MIN) / (FG_V_MAX - FUNCTION_V_MIN), 0.f, 1.f)
 					: 0.f;
 				xIn = targetNorm;
-				float a = 1.f - std::exp(-dt / SIGNAL_INJECT_TAU);
-				injectAlpha = SIGNAL_INJECT_GAIN * clamp(a, 0.f, 1.f);
+				injectAlpha = injectAlphaBase;
 			}
 
 			if (ch.phase == CHANNEL_RISE) {
@@ -796,7 +862,7 @@ struct Proc : Module {
 					ch.phase = CHANNEL_IDLE;
 					float prevOut = ch.out;
 					ch.out = FUNCTION_V_MIN;
-					if (bandlimitedSignalOutputs) {
+					if (bandlimitedSignal) {
 						insertSignalTransition(ch, ch.out - prevOut, f);
 					}
 					updateGateOutputs(ch.phase == cfg.gateHighPhase, ch.phase == CHANNEL_RISE, f);
@@ -828,6 +894,7 @@ struct Proc : Module {
 
 		ChannelResult result;
 		result.cycleOn = cycleOn;
+		result.previewStatePublished = previewStatePublished;
 		return result;
 	}
 
@@ -854,10 +921,10 @@ struct Proc : Module {
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "cycleLatched", json_boolean(channel.cycleLatched));
-		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs));
-		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs));
-		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(timingUpdateDiv));
-		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate));
+		json_object_set_new(rootJ, "bandlimitedGateOutputs", json_boolean(bandlimitedGateOutputs.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -873,26 +940,27 @@ struct Proc : Module {
 
 		json_t* blepGatesJ = json_object_get(rootJ, "bandlimitedGateOutputs");
 		if (blepGatesJ) {
-			bandlimitedGateOutputs = json_boolean_value(blepGatesJ);
+			bandlimitedGateOutputs.store(json_boolean_value(blepGatesJ), std::memory_order_relaxed);
 		}
 
 		json_t* blepSignalJ = json_object_get(rootJ, "bandlimitedSignalOutputs");
 		if (blepSignalJ) {
-			bandlimitedSignalOutputs = json_boolean_value(blepSignalJ);
+			bandlimitedSignalOutputs.store(json_boolean_value(blepSignalJ), std::memory_order_relaxed);
 		}
 
 		json_t* timingDivJ = json_object_get(rootJ, "timingUpdateDiv");
 		if (timingDivJ) {
-			setTimingUpdateDiv(json_integer_value(timingDivJ));
+			requestTimingUpdateDiv(json_integer_value(timingDivJ));
 		}
 
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
 		if (timingInterpJ) {
-			timingInterpolate = json_boolean_value(timingInterpJ);
+			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
 		}
 	}
 
 	void process(const ProcessArgs& args) override {
+		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
 			CYCLE_PARAM,
 			TRIGGER_INPUT,
@@ -910,6 +978,11 @@ struct Proc : Module {
 		};
 
 		bool timingTick = true;
+		const bool bandlimitedSignal = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
+		const bool bandlimitedGate = bandlimitedGateOutputs.load(std::memory_order_relaxed);
+		const bool timingInterpEnabled = timingInterpolate.load(std::memory_order_relaxed);
+		const float injectAlphaBase = SIGNAL_INJECT_GAIN *
+			clamp(1.f - std::exp(-args.sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
 		if (timingUpdateDiv > 1) {
 			timingUpdateCounter++;
 			if (timingUpdateCounter >= timingUpdateDiv) {
@@ -928,10 +1001,29 @@ struct Proc : Module {
 			}
 			lightTick = true;
 		}
+		previewDotPublishTimer += args.sampleTime;
+		bool previewDotTick = false;
+		if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+			previewDotPublishTimer -= PREVIEW_DOT_PUBLISH_INTERVAL;
+			if (previewDotPublishTimer >= PREVIEW_DOT_PUBLISH_INTERVAL) {
+				previewDotPublishTimer = 0.f;
+			}
+			previewDotTick = true;
+		}
 
-		ChannelResult channelResult = processChannel(args, channel, channelConfig, previewState, previewUpdate, timingTick);
+		ChannelResult channelResult = processChannel(
+			args,
+			channel,
+			channelConfig,
+			previewState,
+			previewUpdate,
+			timingTick,
+			bandlimitedSignal,
+			bandlimitedGate,
+			timingInterpEnabled,
+			injectAlphaBase);
 		float outRendered = channel.out * channel.signalOutputGain
-			+ (bandlimitedSignalOutputs ? channel.signalBlep.process() : 0.f);
+			+ (bandlimitedSignal ? channel.signalBlep.process() : 0.f);
 		auto computeDotX = [](const ChannelState& ch) {
 			if (ch.phase == CHANNEL_IDLE) {
 				return 0.f;
@@ -947,15 +1039,19 @@ struct Proc : Module {
 			}
 			return 0.f;
 		};
-		float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
-		publishPreviewDot(
-			previewState,
-			channel.phase != CHANNEL_IDLE,
-			computeDotX(channel),
-			(channel.out - FUNCTION_V_MIN) * outRangeInv
-		);
-		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eorGateBlep.process() : 0.f);
-		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGateOutputs ? channel.eocGateBlep.process() : 0.f);
+		const bool dotVisible = channel.phase != CHANNEL_IDLE;
+		if (previewDotTick || channelResult.previewStatePublished || dotVisible != previewDotWasVisible) {
+			float outRangeInv = 1.f / std::max(FG_V_MAX - FUNCTION_V_MIN, 1e-6f);
+			publishPreviewDot(
+				previewState,
+				dotVisible,
+				computeDotX(channel),
+				(channel.out - FUNCTION_V_MIN) * outRangeInv
+			);
+			previewDotWasVisible = dotVisible;
+		}
+		float eorOut = (channel.eorGateState ? 10.f : 0.f) + (bandlimitedGate ? channel.eorGateBlep.process() : 0.f);
+		float eocOut = (channel.eocGateState ? 10.f : 0.f) + (bandlimitedGate ? channel.eocGateBlep.process() : 0.f);
 		float negOut = -outRendered;
 
 		outputs[EOR_OUTPUT].setVoltage(eorOut);
@@ -1010,8 +1106,9 @@ struct BananutBlack : app::SvgPort {
 };
 
 struct WavePreviewWidget : Widget {
-	static constexpr int POINT_COUNT = 320;
-	static constexpr int PREVIEW_LUT_SIZE = 1024;
+	// Small preview box: lower geometry density reduces UI cost while staying smooth.
+	static constexpr int POINT_COUNT = 128;
+	static constexpr int PREVIEW_LUT_SIZE = 512;
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float WAVE_LINE_WIDTH = 1.4f;
 	static constexpr float WAVE_EDGE_PAD = 1.0f;
@@ -1099,10 +1196,15 @@ struct WavePreviewWidget : Widget {
 			points[i] = Vec(x, py);
 		}
 
-		int peakIndex = int(std::round(riseRatio * float(POINT_COUNT - 1)));
-		peakIndex = std::max(0, std::min(POINT_COUNT - 1, peakIndex));
-		float peakPx = left + (float(peakIndex) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex] = Vec(peakPx, top);
+		// Preserve full crest height under extreme rise/fall asymmetry by pinning
+		// both vertices that bracket the true peak location.
+		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
+		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
+		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
+		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
+		points[peakIndex0] = Vec(peakPx0, top);
+		points[peakIndex1] = Vec(peakPx1, top);
 		points.front() = Vec(left, bottom);
 		points.back() = Vec(right, bottom);
 		pointsValid = true;
@@ -1175,21 +1277,27 @@ struct WavePreviewWidget : Widget {
 			float drawH = bottom - top;
 			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
 			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
-			// Keep the marker locked to the drawn curve while still honoring
-			// both audio-space Y (dotYNorm) and phase-space X (dotXNorm).
-			int bestIndex = 0;
-			float bestCost = std::numeric_limits<float>::infinity();
-			for (int i = 0; i < POINT_COUNT; ++i) {
-				float dy = std::fabs(points[i].y - targetY);
-				float dx = std::fabs(points[i].x - targetX);
-				float cost = dy + 0.15f * dx;
-				if (cost < bestCost) {
-					bestCost = cost;
-					bestIndex = i;
+			// Keep the marker on the drawn curve, but use continuous interpolation
+			// across neighboring points to avoid visible stepping at slow rates.
+			int i0 = 0;
+			for (int i = 1; i < POINT_COUNT; ++i) {
+				if (points[i].x >= targetX) {
+					i0 = i - 1;
+					break;
 				}
+				i0 = i - 1;
 			}
-			float x = points[bestIndex].x;
-			float y = points[bestIndex].y;
+			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
+			float x0 = points[i0].x;
+			float x1 = points[i1].x;
+			float x = targetX;
+			float y = points[i0].y;
+			if (i1 != i0 && x1 > x0) {
+				float t = clamp((targetX - x0) / (x1 - x0), 0.f, 1.f);
+				y = points[i0].y + (points[i1].y - points[i0].y) * t;
+			}
+			float blendToCurve = 0.9f;
+			y = y * blendToCurve + targetY * (1.f - blendToCurve);
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, DOT_RADIUS);
 			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
@@ -1260,24 +1368,75 @@ struct AmpVoltageReadoutWidget : Widget {
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
+		PreviewBuildLogTimer previewBuildTimer("Proc", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/proc.svg");
 		setPanel(createPanel(panelPath));
+		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(Vec(33.075, 20.138)), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 36.293)), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(32.907, 53.079)), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(Vec(11.775, 57.926)), module, Proc::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(7.246, 28.71)), module, Proc::AMP_PARAM));
+		Vec cyclePos(33.075f, 20.138f);
+		Vec risePos(32.907f, 36.293f);
+		Vec fallPos(32.907f, 53.079f);
+		Vec shapePos(11.775f, 57.926f);
+		Vec ampPos(7.246f, 28.71f);
+		Vec signalInPos(7.247f, 16.654f);
+		Vec trigInPos(19.943f, 16.654f);
+		Vec haltInPos(7.207f, 40.367f);
+		Vec riseCvInPos(19.943f, 32.416f);
+		Vec bothCvInPos(19.943f, 44.898f);
+		Vec fallCvInPos(23.604f, 63.263f);
+		Vec eorOutPos(9.437f, 96.946f);
+		Vec eocOutPos(26.595f, 96.915f);
+		Vec outPos(9.447f, 110.682f);
+		Vec negOutPos(26.552f, 110.882f);
+		Vec cycleLightPos(33.075f, 14.055f);
+		Vec eorLightPos(15.937f, 96.76f);
+		Vec eocLightPos(33.645f, 96.952f);
+		Vec outLightPos(15.947f, 110.758f);
+		Vec negLightPos(33.579f, 110.941f);
+
+		auto applyPointOverride = [&](const char* elementId, Vec* outPosMm) {
+			Vec pointMm;
+			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+				*outPosMm = pointMm;
+			}
+		};
+
+		applyPointOverride("CYCLE_1", &cyclePos);
+		applyPointOverride("RISE_1", &risePos);
+		applyPointOverride("FALL_1", &fallPos);
+		applyPointOverride("LIN_LOG_1", &shapePos);
+		applyPointOverride("AMP", &ampPos);
+		applyPointOverride("SIGNAL_INPUT", &signalInPos);
+		applyPointOverride("TRIGGER_INPUT", &trigInPos);
+		applyPointOverride("HALT_INPUT", &haltInPos);
+		applyPointOverride("RISE_CV_INPUT", &riseCvInPos);
+		applyPointOverride("BOTH_CV_INPUT", &bothCvInPos);
+		applyPointOverride("FALL_CV_INPUT", &fallCvInPos);
+		applyPointOverride("EOR_OUTPUT", &eorOutPos);
+		applyPointOverride("EOC_OUTPUT", &eocOutPos);
+		applyPointOverride("MAIN_OUTPUT", &outPos);
+		applyPointOverride("NEG_OUTPUT", &negOutPos);
+		applyPointOverride("CYCLE_LIGHT", &cycleLightPos);
+		applyPointOverride("EOR_LIGHT", &eorLightPos);
+		applyPointOverride("EOC_LIGHT", &eocLightPos);
+		applyPointOverride("MAIN_LIGHT", &outLightPos);
+		applyPointOverride("NEG_LIGHT", &negLightPos);
+
+		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;
 			ampReadout->paramId = Proc::AMP_PARAM;
-			ampReadout->box.pos = mm2px(Vec(2.5, 32.15));
+			ampReadout->box.pos = mm2px(Vec(ampPos.x - 4.746f, ampPos.y + 3.44f));
 			ampReadout->box.size = mm2px(Vec(9.6, 2.6));
 			addChild(ampReadout);
 		}
@@ -1296,25 +1455,27 @@ struct ProcWidget : ModuleWidget {
 			}
 			addChild(previewWidget);
 		}
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.markAnchorsDone();
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.247, 16.654)), module, Proc::SIGNAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 16.654)), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.207, 40.367)), module, Proc::HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 32.416)), module, Proc::RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.943, 44.898)), module, Proc::BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(23.604, 63.263)), module, Proc::FALL_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(haltInPos), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.437, 96.946)), module, Proc::EOR_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.595, 96.915)), module, Proc::EOC_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(9.447, 110.682)), module, Proc::MAIN_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(Vec(26.552, 110.882)), module, Proc::NEG_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Proc::MAIN_OUTPUT));
+		addOutput(createOutputCentered<BananutBlack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(33.075, 14.055)), module, Proc::CYCLE_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.937, 96.76)), module, Proc::EOR_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.645, 96.952)), module, Proc::EOC_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(15.947, 110.758)), module, Proc::MAIN_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(33.579, 110.941)), module, Proc::NEG_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1324,16 +1485,25 @@ struct ProcWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (proc) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited EOR/EOC", "", &proc->bandlimitedGateOutputs));
-			menu->addChild(createBoolPtrMenuItem("Bandlimited Signal Outputs", "", &proc->bandlimitedSignalOutputs));
+			menu->addChild(createCheckMenuItem("Bandlimited EOR/EOC", "",
+				[=]() { return proc->bandlimitedGateOutputs.load(std::memory_order_relaxed); },
+				[=]() { proc->bandlimitedGateOutputs.store(!proc->bandlimitedGateOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createCheckMenuItem("Bandlimited Signal Outputs", "",
+				[=]() { return proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
+				[=]() { proc->bandlimitedSignalOutputs.store(!proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createMenuLabel("Rate Control"));
-			menu->addChild(createBoolPtrMenuItem("Interpolate Timing Updates", "", &proc->timingInterpolate));
+			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
+				[=]() { return proc->timingInterpolate.load(std::memory_order_relaxed); },
+				[=]() { proc->timingInterpolate.store(!proc->timingInterpolate.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
 			menu->addChild(createSubmenuItem("Timing Update Rate", "",
 				[=](Menu* submenu) {
 					auto addDivItem = [=](int div, std::string label) {
 						submenu->addChild(createCheckMenuItem(label, "",
-							[=]() { return proc->timingUpdateDiv == div; },
-							[=]() { proc->setTimingUpdateDiv(div); }
+							[=]() { return proc->requestedTimingUpdateDiv.load(std::memory_order_relaxed) == div; },
+							[=]() { proc->requestTimingUpdateDiv(div); }
 						));
 					};
 					addDivItem(1, "Audio rate (/1)");

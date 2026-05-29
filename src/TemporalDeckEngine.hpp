@@ -23,6 +23,10 @@ inline float realBufferSecondsForMode(int index) {
   case 2:
   case 3:
     return 601.f; // 10m modes with guard second
+  case 4:
+    return 61.f; // 1m stereo mode with guard second
+  case 5:
+    return 121.f; // 2m stereo mode with guard second
   default:
     return 11.f;
   }
@@ -358,6 +362,7 @@ struct TemporalDeckEngine {
   static constexpr float kReverseBiteMaxBoost = 1.55f;
   static constexpr float kNowSnapThresholdMs = 33.0f;
   static constexpr float kNowCatchTime = 0.004f;
+  static constexpr float kLiveManualWriteHeadCompensationWindowSec = 1.0f;
   static constexpr float kMouseScratchTravelScale = 4.0f;
   static constexpr float kWheelScratchTravelScale = 4.5f;
   static constexpr float kManualVelocityPredictScale = 0.95f;
@@ -387,6 +392,69 @@ struct TemporalDeckEngine {
   static constexpr float kLofiModControlRateHz = 3000.f;
   static constexpr int kLiveScopeEnvelopeBlockSamples = 32;
 
+  static bool shouldApplyLiveManualWriteHeadCompensation(bool sampleModeActive,
+                                                         bool scratchModelTreatsAsFreeze,
+                                                         bool scopeLagDragActive,
+                                                         bool hasFreshPlatterGesture,
+                                                         bool platterMotionActive,
+                                                         double scratchLagSamples,
+                                                         float sampleRate) {
+    // Keep this helper narrowly scoped to the current policy: only apply
+    // write-head baseline compensation when motion is active and lag is within
+    // the near-NOW window. Note that callers may pass freeze-like touch state
+    // through `scratchModelTreatsAsFreeze`, which can disable this path for manual
+    // touch gestures.
+    return !sampleModeActive &&
+           platter_interaction::shouldApplyWriteHeadCompensation(
+             scopeLagDragActive ? false : scratchModelTreatsAsFreeze, hasFreshPlatterGesture,
+                                                                 platterMotionActive) &&
+           scratchLagSamples <= double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
+  }
+
+  static bool isDeepLiveManualTouchMotion(bool sampleModeActive,
+                                          bool manualTouchScratch,
+                                          bool manualMotionActive,
+                                          double scratchLagSamples,
+                                          float sampleRate) {
+    return !sampleModeActive && manualTouchScratch && manualMotionActive &&
+           scratchLagSamples > double(std::max(sampleRate, 1.f) * kLiveManualWriteHeadCompensationWindowSec);
+  }
+
+  static bool shouldAllowManualTouchNowSnap(bool sampleModeActive,
+                                            bool scratchModelTreatsAsFreeze,
+                                            bool scopeLagDragActive,
+                                            bool manualTouchScratch,
+                                            bool manualMotionActive,
+                                            float gestureDirection,
+                                            double scratchLagTargetSamples,
+                                            float nowSnapThresholdSamples) {
+    return !sampleModeActive && (!scratchModelTreatsAsFreeze || scopeLagDragActive) && manualTouchScratch &&
+           manualMotionActive && gestureDirection > 0.f && scratchLagTargetSamples <= nowSnapThresholdSamples;
+  }
+
+  static float liveManualTowardNowAssistSamplesPerSec(bool sampleModeActive,
+                                                      bool scratchModelTreatsAsFreeze,
+                                                      bool scopeLagDragActive,
+                                                      bool manualTouchScratch,
+                                                      bool manualMotionActive,
+                                                      float gestureDirection,
+                                                      double scratchLagSamples,
+                                                      float sampleRate) {
+    if (sampleModeActive || (scratchModelTreatsAsFreeze && !scopeLagDragActive) || !manualTouchScratch || !manualMotionActive ||
+        gestureDirection <= 0.f) {
+      return 0.f;
+    }
+    const float liveDriftCancel = std::max(sampleRate, 1.f) * 0.55f;
+    const float nearNowWindowSamples = std::max(sampleRate, 1.f);
+    if (scratchLagSamples >= double(nearNowWindowSamples)) {
+      return liveDriftCancel;
+    }
+    const float depthT = clamp(float(scratchLagSamples) / nearNowWindowSamples, 0.f, 1.f);
+    // Keep this gentle and depth-tapered so it helps final settle near NOW
+    // without changing deep-buffer drag character beyond drift cancellation.
+    return liveDriftCancel + sampleRate * (1.0f - depthT) * 0.85f;
+  }
+
   enum CartridgeCharacter {
     CARTRIDGE_CLEAN,
     CARTRIDGE_M44_7,
@@ -401,6 +469,8 @@ struct TemporalDeckEngine {
     BUFFER_DURATION_20S,
     BUFFER_DURATION_10MIN_STEREO,
     BUFFER_DURATION_10MIN_MONO,
+    BUFFER_DURATION_1MIN_STEREO,
+    BUFFER_DURATION_2MIN_STEREO,
     BUFFER_DURATION_COUNT
   };
   enum ScratchInterpolationMode {
@@ -505,13 +575,11 @@ struct TemporalDeckEngine {
   double scratchLagSamples = 0.0;
   double scratchLagTargetSamples = 0.0;
   double liveManualScratchAnchorNewestPos = 0.0;
-  double liveManualScratchAnchorLagSamples = 0.0;
   float scratchHandVelocity = 0.f;
   float scratchMotionVelocity = 0.f;
   float scratch3LagVelocity = 0.f;
   float scratch3GestureAgeSec = 0.f;
   float scratchWheelVelocityBurst = 0.f;
-  double filteredManualLagTargetSamples = 0.0;
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
   bool platterTouchHoldLatched = false;
@@ -752,13 +820,11 @@ struct TemporalDeckEngine {
     scratchLagSamples = 0.f;
     scratchLagTargetSamples = 0.f;
     liveManualScratchAnchorNewestPos = 0.0;
-    liveManualScratchAnchorLagSamples = 0.0;
     scratchHandVelocity = 0.f;
     scratchMotionVelocity = 0.f;
     scratch3LagVelocity = 0.f;
     scratch3GestureAgeSec = 0.f;
     scratchWheelVelocityBurst = 0.f;
-    filteredManualLagTargetSamples = 0.f;
     lastPlatterLagTarget = 0.f;
     lastPlatterGestureRevision = 0;
     platterTouchHoldLatched = false;
@@ -2001,6 +2067,8 @@ struct TemporalDeckEngine {
     bool rateCvConnected = false;
     bool platterTouched = false;
     bool platterTouchHoldDirect = false;
+    bool scopeLagDragActive = false;
+    bool scopeLagDragSoftHold = false;
     bool wheelScratchHeld = false;
     bool platterMotionActive = false;
     uint32_t platterGestureRevision = 0;
@@ -2030,6 +2098,8 @@ struct TemporalDeckEngine {
     const bool rateCvConnected = input.rateCvConnected;
     const bool platterTouched = input.platterTouched;
     const bool platterTouchHoldDirect = input.platterTouchHoldDirect;
+    const bool scopeLagDragActive = input.scopeLagDragActive;
+    const bool scopeLagDragSoftHold = input.scopeLagDragSoftHold;
     const bool wheelScratchHeld = input.wheelScratchHeld;
     const bool platterMotionActive = input.platterMotionActive;
     const uint32_t platterGestureRevision = input.platterGestureRevision;
@@ -2069,9 +2139,9 @@ struct TemporalDeckEngine {
     bool manualTouchScratch = platterTouched;
     bool wheelScratch = wheelScratchHeld;
     bool manualScratch = manualTouchScratch || wheelScratch;
-    bool sampleManualFreezeBehavior = sampleModeActive && manualTouchScratch;
-    bool liveManualFreezeLikeBehavior = !sampleModeActive && manualTouchScratch;
-    bool freezeForScratchModel = freezeState || sampleManualFreezeBehavior || liveManualFreezeLikeBehavior;
+    bool sampleTouchUsesFrozenScratchModel = sampleModeActive && manualTouchScratch;
+    bool liveTouchUsesFrozenScratchModel = !sampleModeActive && manualTouchScratch;
+    bool scratchModelTreatsAsFreeze = freezeState || sampleTouchUsesFrozenScratchModel || liveTouchUsesFrozenScratchModel;
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
@@ -2210,12 +2280,10 @@ struct TemporalDeckEngine {
     if (!wasScratchActive && anyScratch) {
       scratchLagSamples = currentLagFromNewest(newestPos);
       scratchLagTargetSamples = scratchLagSamples;
-      filteredManualLagTargetSamples = scratchLagSamples;
       lastPlatterLagTarget = platterLagTarget;
       lastPlatterGestureRevision = platterGestureRevision;
       if (!sampleModeActive && manualTouchScratch) {
         liveManualScratchAnchorNewestPos = newestPos;
-        liveManualScratchAnchorLagSamples = scratchLagSamples;
       }
       if (sampleModeActive) {
         sampleSlipAnchorPos = normalizeSamplePosition(readHead, sampleWindowEndPos);
@@ -2296,7 +2364,7 @@ struct TemporalDeckEngine {
       beginSlipReturn();
     }
 
-    if (anyScratch || freezeForScratchModel) {
+    if (anyScratch || scratchModelTreatsAsFreeze) {
       cancelSlipReturnState();
     }
 
@@ -2311,7 +2379,7 @@ struct TemporalDeckEngine {
         speed = 0.f;
         sampleSlipJustCompleted = integrateSampleSlipReturn(sampleWindowEndPos, dt);
       }
-      if (!sampleTransportPlaying || freezeForScratchModel) {
+      if (!sampleTransportPlaying || scratchModelTreatsAsFreeze) {
         speed = 0.f;
       }
       if ((!(slipReturning || slipBlendActive) || sampleSlipJustCompleted) && sampleLoopEnabled) {
@@ -2320,13 +2388,13 @@ struct TemporalDeckEngine {
         samplePlayhead = clampd(samplePlayhead + double(speed), 0.0, sampleWindowEndPos);
         if (samplePlayhead >= sampleWindowEndPos && speed > 0.f) {
           samplePlayhead = sampleWindowEndPos;
-          if (!freezeForScratchModel) {
+          if (!scratchModelTreatsAsFreeze) {
             autoFreezeRequested = true;
           }
         }
         if (samplePlayhead <= 0.0 && speed < 0.f) {
           samplePlayhead = 0.0;
-          if (!freezeForScratchModel) {
+          if (!scratchModelTreatsAsFreeze) {
             autoFreezeRequested = true;
           }
         }
@@ -2334,7 +2402,7 @@ struct TemporalDeckEngine {
     }
 
     // 3. Determine actual playhead (readHead)
-    if (freezeForScratchModel) {
+    if (scratchModelTreatsAsFreeze) {
       speed = 0.f;
     }
 
@@ -2345,7 +2413,7 @@ struct TemporalDeckEngine {
       reverseState && limit > 0.f && lagNow >= (limit - 0.5f);
     if (reverseAtOldestEdge && speed < 0.f) {
       speed = 0.f;
-      if (!freezeForScratchModel) {
+      if (!scratchModelTreatsAsFreeze) {
         autoFreezeRequested = true;
       }
     }
@@ -2412,6 +2480,7 @@ struct TemporalDeckEngine {
           platterTouchHoldLatched = false;
         }
 
+        bool liveScopeSoftHoldActive = scopeLagDragActive && scopeLagDragSoftHold && !sampleModeActive && !freezeState;
         bool stationaryManualHold = !platterMotionActive && !hasFreshPlatterGesture;
         if (directTouchHoldActive) {
           // Direct-position requests are only for stationary hold behavior.
@@ -2432,6 +2501,9 @@ struct TemporalDeckEngine {
           scratchMotionVelocity = 0.f;
           scratch3LagVelocity = 0.f;
           lastPlatterGestureRevision = platterGestureRevision;
+        } else if (liveScopeSoftHoldActive) {
+          scratchLagTargetSamples = clampLag(platterLagTarget, limit);
+          integrateHybridScratch(dt, limit, newestPos, sampleRate, 1.55f, 0.72f, 0.68f, nowSnapThresholdSamples, false, true);
         } else if (stationaryManualHold) {
           scratchLagTargetSamples = scratchLagSamples;
           scratchHandVelocity = 0.f;
@@ -2439,14 +2511,22 @@ struct TemporalDeckEngine {
         } else {
           bool manualMotionActive = platter_interaction::hasActiveManualMotion(hasFreshPlatterGesture, platterMotionActive);
           float targetReadVelocity = 0.f;
+          bool writeHeadCompensationActive = false;
           if (manualMotionActive) {
-            // While motion is fresh, gesture velocity is relative to the write
-            // head. Convert it into absolute read velocity by adding the write
-            // baseline (except in freeze, where write head is stationary).
+            // Gesture velocity is relative to lag movement. Optionally add the
+            // write-head baseline when near NOW according to the current
+            // compensation policy.
             targetReadVelocity = platterGestureVelocity;
-            if (platter_interaction::shouldApplyWriteHeadCompensation(freezeForScratchModel, hasFreshPlatterGesture,
-                                                                      platterMotionActive)) {
+            if (scopeLagDragActive && !sampleModeActive && !freezeState) {
+              writeHeadCompensationActive = true;
               targetReadVelocity += sampleRate;
+            } else {
+              writeHeadCompensationActive = shouldApplyLiveManualWriteHeadCompensation(
+                sampleModeActive, scratchModelTreatsAsFreeze, scopeLagDragActive, hasFreshPlatterGesture, platterMotionActive,
+                scratchLagSamples, sampleRate);
+              if (writeHeadCompensationActive) {
+                targetReadVelocity += sampleRate;
+              }
             }
           }
           float gestureDirection = 0.f;
@@ -2463,34 +2543,38 @@ struct TemporalDeckEngine {
           }
           bool reverseGestureIntent = gestureDirection < 0.f;
           if (manualTouchScratch && manualMotionActive && platterGestureVelocity < 0.f) {
-            // CONTAINMENT NOTE
-            // This branch exists because slow live drags away from NOW were
-            // getting classified too weakly to overcome write-head baseline
-            // compensation, which manifested as a downward "barrier" in
-            // TD.Scope-driven drag. The cleaner architecture would be for the
-            // expander/host contract to encode this intent unambiguously before
-            // it gets here; for now the engine preserves reverse intent for any
-            // negative touch velocity during active manual motion.
-            // In live touch drag, even slow negative gesture velocity means the
-            // user is pulling away from NOW. Preserve reverse intent so write
-            // compensation does not create a false downward "barrier".
+            // Preserve reverse intent even for slow touch motion so lag-correct
+            // terms do not flip direction during away-from-NOW drags.
             reverseGestureIntent = true;
           } else if (platterGestureVelocity < -kHybridScratchVelocityDeadband) {
             // Preserve reverse intent across sparse gesture updates. Using raw
             // platter velocity avoids sign flips caused by write compensation.
             reverseGestureIntent = true;
           }
-          if (!sampleModeActive && !freezeForScratchModel && reverseGestureIntent) {
+          if (!sampleModeActive && !scratchModelTreatsAsFreeze && reverseGestureIntent && writeHeadCompensationActive) {
             // In live touch scratch, reverse gestures should not need to
             // overcome write-head baseline speed before audible/visual motion
-            // appears. Keep compensation for forward motion only.
+            // appears. Cancel only the near-NOW baseline that was actually
+            // added above.
             targetReadVelocity -= sampleRate;
           }
+          targetReadVelocity += liveManualTowardNowAssistSamplesPerSec(
+            sampleModeActive, scratchModelTreatsAsFreeze, scopeLagDragActive, manualTouchScratch, manualMotionActive,
+            gestureDirection, scratchLagSamples, sampleRate);
           float motionNorm = clamp(std::fabs(targetReadVelocity) / std::max(sampleRate * 0.45f, 1.f), 0.f, 1.f);
-          bool allowNowSnap = !manualTouchScratch;
+          bool touchForwardNearNow = shouldAllowManualTouchNowSnap(
+            sampleModeActive, scratchModelTreatsAsFreeze, scopeLagDragActive, manualTouchScratch, manualMotionActive, gestureDirection,
+            scratchLagTargetSamples, nowSnapThresholdSamples);
+          bool allowNowSnap = !manualTouchScratch || touchForwardNearNow;
           double preIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
+          bool deepLiveManualMotion = isDeepLiveManualTouchMotion(
+            sampleModeActive, manualTouchScratch, manualMotionActive, scratchLagSamples, sampleRate);
+          // Use stronger correction near NOW and reduced correction deeper in
+          // the live buffer to limit forward pull from stale targets.
+          float correctionScale = deepLiveManualMotion ? 0.33f : 0.68f;
           integrateHybridScratch(dt, limit, newestPos, targetReadVelocity, 1.55f + 0.55f * motionNorm,
-                                 0.72f - 0.12f * motionNorm, 0.68f, nowSnapThresholdSamples, false, allowNowSnap);
+                                 0.72f - 0.12f * motionNorm, correctionScale, nowSnapThresholdSamples, false,
+                                 allowNowSnap);
           if (!sampleModeActive && manualMotionActive && gestureDirection != 0.f) {
             double postIntegrateReadHead = unwrapReadNearWrite(readHead, newestPos);
             double deltaRead = postIntegrateReadHead - preIntegrateReadHead;
@@ -2509,7 +2593,7 @@ struct TemporalDeckEngine {
         // Wheel scratch uses the same Hybrid motion model as drag scratch.
         float wheelDeltaSoftRange = sampleRate * 0.16f * kWheelScratchTravelScale;
         float wheelDeltaShaped = wheelDeltaSoftRange * std::tanh(wheelDelta / std::max(wheelDeltaSoftRange, 1e-6f));
-        if (!sampleModeActive && !freezeForScratchModel && wheelDeltaShaped < 0.f) {
+        if (!sampleModeActive && !scratchModelTreatsAsFreeze && wheelDeltaShaped < 0.f) {
           // In live circular mode, small toward-NOW wheel nudges must overcome
           // moving write-head drift. Give forward wheel ticks a slight assist.
           wheelDeltaShaped *= 1.35f;
@@ -2538,7 +2622,7 @@ struct TemporalDeckEngine {
         // In live circular mode, wheel scratch nudges lag around a moving write
         // head. In sample mode there is no moving write head, so keep this
         // neutral to preserve forward/back symmetry.
-        float wheelTargetReadVelocity = (sampleModeActive || freezeForScratchModel) ? 0.f : sampleRate;
+        float wheelTargetReadVelocity = (sampleModeActive || scratchModelTreatsAsFreeze) ? 0.f : sampleRate;
         bool clampWheelOvershoot = sampleModeActive;
         integrateHybridScratch(dt, limit, newestPos, wheelTargetReadVelocity, 1.25f, 0.95f, 1.20f,
                                nowSnapThresholdSamples, clampWheelOvershoot, true);
@@ -2551,7 +2635,7 @@ struct TemporalDeckEngine {
       double targetLag = externalCvAnchorLagSamples + lagOffsetForPositionCv(positionCv);
       targetLag = clampLag(targetLag, limit);
       integrateExternalCvScratch(dt, limit, newestPos, targetLag, nowSnapThresholdSamples);
-    } else if ((slipReturning || slipBlendActive) && !sampleModeActive && !freezeForScratchModel) {
+    } else if ((slipReturning || slipBlendActive) && !sampleModeActive && !scratchModelTreatsAsFreeze) {
       if (integrateSlipCatchup(newestPos, maxLag, speed, dt)) {
         pinToNow = true;
       }

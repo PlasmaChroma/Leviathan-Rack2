@@ -9,6 +9,8 @@ struct PlatterInputSnapshot {
   bool quickSlipTrigger = false;
   bool platterTouched = false;
   bool platterTouchHoldDirect = false;
+  bool scopeLagDragActive = false;
+  bool scopeLagDragSoftHold = false;
   bool wheelScratchHeld = false;
   bool platterMotionActive = false;
   uint32_t platterGestureRevision = 0;
@@ -20,6 +22,7 @@ struct PlatterInputSnapshot {
 class PlatterInputState {
 public:
   void setScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0);
+  void setScopeLagDrag(bool active, float lagSamples, float velocitySamples, bool softHold);
   void setDirectScratch(bool touched, float lagSamples, float velocitySamples);
   void setTouchHold(bool touched, float lagSamples);
   void setMotionFreshSamples(int motionFreshSamples);
@@ -31,6 +34,8 @@ public:
 private:
   std::atomic<bool> platterTouched{false};
   std::atomic<bool> platterTouchHoldDirect{false};
+  std::atomic<bool> scopeLagDragActive{false};
+  std::atomic<bool> scopeLagDragSoftHold{false};
   std::atomic<uint32_t> platterGestureRevision{0};
   std::atomic<float> platterLagTarget{0.f};
   std::atomic<float> platterGestureVelocity{0.f};

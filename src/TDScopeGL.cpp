@@ -1,4 +1,6 @@
 #include "TDScope.hpp"
+#include "TDScopeShared.hpp"
+#include "GlLifecycleUtils.hpp"
 #include <nanovg_gl.h>
 
 #include <array>
@@ -58,10 +60,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
-  bool redrawLastHaloEnabled = false;
-  bool redrawLastMainTraceEnabled = false;
-  bool redrawLastConnectorsEnabled = false;
-  bool redrawLastStereoRightLaneEnabled = false;
+  float redrawLastColorBrightness = NAN;
+  bool redrawLastUseGlShaderRenderer = false;
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
   std::vector<float> rowX0;
@@ -84,11 +84,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   int liveBucketCount = 0;
   float liveBucketSpanSamples = 0.f;
   uint64_t liveBucketLastPublishSeq = 0;
-  float autoDisplayFullScaleVolts = 5.f;
-  bool autoDisplayScaleInitialized = false;
-  bool autoLastSampleMode = true;
-  float autoLivePeakHoldVolts = 0.f;
-  int autoLivePeakHoldFrames = 0;
+  tdscope::ScopeAutoScaleState autoScaleState;
   uint64_t cachedPublishSeq = 0;
   int cachedRowCount = 0;
   int cachedRangeMode = -1;
@@ -116,10 +112,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   float historyNewestPosSamples = 0.f;
   float historyShiftResidualRows = 0.f;
   int historyHeadRow = 0;
-  std::array<std::vector<GlLineVertex>, 8> haloBatchVerts;
   std::array<std::vector<GlLineVertex>, 10> mainBatchVerts;
   std::array<std::vector<GlLineVertex>, 8> connectorBatchVerts;
-  std::vector<GlSegmentQuadVertex> haloSegmentVerts;
   std::vector<GlSegmentQuadVertex> bodySegmentVerts;
   std::vector<GlSegmentQuadVertex> fillSegmentVerts;
   std::vector<GlSegmentQuadVertex> continuitySegmentVerts;
@@ -155,17 +149,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint fieldUniformRowStep = -1;
   GLint fieldUniformZoomThickness = -1;
   GLint fieldUniformZoomInWidthComp = -1;
-  GLint fieldUniformZoomInHaloWidthComp = -1;
   GLint fieldUniformZoomInAlphaComp = -1;
   GLint fieldUniformZoomInLiftComp = -1;
-  GLint fieldUniformZoomInHaloAlphaComp = -1;
   GLint fieldUniformDeepZoomEnergyFill = -1;
   GLint fieldUniformRenderMain = -1;
-  GLint fieldUniformRenderHalo = -1;
   GLint fieldUniformRenderContinuity = -1;
   std::vector<GLfloat> fieldRowData;
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
+  float fieldColorLutBrightness = NAN;
   uint64_t fieldRowTexturePublishSeqLeft = 0;
   uint64_t fieldRowTexturePublishSeqRight = 0;
   bool fieldRowTextureValidLeft = false;
@@ -175,6 +167,78 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLsizeiptr shaderVboCapacityBytes = 0;
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
+
+  void resetLineShaderState() {
+    shaderProgram = 0;
+    shaderVertex = 0;
+    shaderFragment = 0;
+    shaderVbo = 0;
+    shaderUniformColorScale = -1;
+    shaderUniformColorLift = -1;
+    shaderUniformAlphaScale = -1;
+    shaderUniformAlphaGamma = -1;
+    shaderVboCapacityBytes = 0;
+    shaderReady = false;
+    shaderInitAttempted = false;
+  }
+
+  void resetSegmentShaderState() {
+    segmentShaderProgram = 0;
+    segmentShaderVertex = 0;
+    segmentShaderFragment = 0;
+    segmentShaderVbo = 0;
+    segmentShaderVboCapacityBytes = 0;
+    segmentShaderReady = false;
+    segmentShaderInitAttempted = false;
+  }
+
+  void resetFieldShaderState() {
+    fieldShaderProgram = 0;
+    fieldShaderVertex = 0;
+    fieldShaderFragment = 0;
+    fieldShaderVbo = 0;
+    fieldRowTextureLeft = 0;
+    fieldRowTextureRight = 0;
+    fieldColorLutTexture = 0;
+    fieldUniformRowTex = -1;
+    fieldUniformColorLutTex = -1;
+    fieldUniformRowCount = -1;
+    fieldUniformDrawTop = -1;
+    fieldUniformRowStep = -1;
+    fieldUniformZoomThickness = -1;
+    fieldUniformZoomInWidthComp = -1;
+    fieldUniformZoomInAlphaComp = -1;
+    fieldUniformZoomInLiftComp = -1;
+    fieldUniformDeepZoomEnergyFill = -1;
+    fieldUniformRenderMain = -1;
+    fieldUniformRenderContinuity = -1;
+    fieldRowTextureWidth = 0;
+    fieldColorLutScheme = -1;
+    fieldColorLutBrightness = NAN;
+    fieldRowTexturePublishSeqLeft = 0;
+    fieldRowTexturePublishSeqRight = 0;
+    fieldRowTextureValidLeft = false;
+    fieldRowTextureValidRight = false;
+    fieldQuadW = -1.f;
+    fieldQuadH = -1.f;
+    fieldShaderReady = false;
+    fieldShaderInitAttempted = false;
+  }
+
+  void validateGlResourcesForCurrentContext() {
+    if (shaderReady && !gl_lifecycle::isValidProgramBufferPair(shaderProgram, shaderVbo)) {
+      resetLineShaderState();
+    }
+    if (segmentShaderReady &&
+        !gl_lifecycle::isValidProgramBufferPair(segmentShaderProgram, segmentShaderVbo)) {
+      resetSegmentShaderState();
+    }
+    if (fieldShaderReady &&
+        (!gl_lifecycle::isValidProgramBufferPair(fieldShaderProgram, fieldShaderVbo) ||
+         !gl_lifecycle::areValidTextures({fieldRowTextureLeft, fieldRowTextureRight, fieldColorLutTexture}))) {
+      resetFieldShaderState();
+    }
+  }
 
   void step() override {
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -200,41 +264,39 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       dirty = true;
       redrawLastRackZoom = rackZoom;
     }
-    if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
+    const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+    const bool scopeVerticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
+    const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+    const int scopeColorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+    const bool debugUseGlShaderRenderer = module->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
+    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    if (scopeDisplayRangeMode != redrawLastRangeMode) {
       dirty = true;
-      redrawLastRangeMode = module->scopeDisplayRangeMode;
+      redrawLastRangeMode = scopeDisplayRangeMode;
     }
-    if (module->scopeVerticalInverted != redrawLastVerticalInverted) {
+    if (scopeVerticalInverted != redrawLastVerticalInverted) {
       dirty = true;
-      redrawLastVerticalInverted = module->scopeVerticalInverted;
+      redrawLastVerticalInverted = scopeVerticalInverted;
     }
-    if (module->scopeChannelMode != redrawLastChannelMode) {
+    if (scopeChannelMode != redrawLastChannelMode) {
       dirty = true;
-      redrawLastChannelMode = module->scopeChannelMode;
+      redrawLastChannelMode = scopeChannelMode;
     }
-    if (module->scopeColorScheme != redrawLastColorScheme) {
+    if (scopeColorScheme != redrawLastColorScheme) {
       dirty = true;
-      redrawLastColorScheme = module->scopeColorScheme;
+      redrawLastColorScheme = scopeColorScheme;
     }
-    if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
+    if (std::fabs(module->scopeColorBrightness - redrawLastColorBrightness) > 1e-4f) {
       dirty = true;
-      redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
+      redrawLastColorBrightness = module->scopeColorBrightness;
     }
-    if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
+    if (debugUseGlShaderRenderer != redrawLastUseGlShaderRenderer) {
       dirty = true;
-      redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
+      redrawLastUseGlShaderRenderer = debugUseGlShaderRenderer;
     }
-    if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
+    if (debugRenderMode != redrawLastRenderMode) {
       dirty = true;
-      redrawLastConnectorsEnabled = module->debugRenderConnectorsEnabled;
-    }
-    if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
-      dirty = true;
-      redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
-    }
-    if (module->debugRenderMode != redrawLastRenderMode) {
-      dirty = true;
-      redrawLastRenderMode = module->debugRenderMode;
+      redrawLastRenderMode = debugRenderMode;
     }
 
     temporaldeck_expander::HostToDisplay msg;
@@ -278,7 +340,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     math::Vec fbSize = getFramebufferSize();
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    validateGlResourcesForCurrentContext();
     glDisable(GL_SCISSOR_TEST);
+    // Keep framebuffer clear transparent; we draw opaque black only inside the
+    // scoped waveform region so panel border lines stay intact.
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -286,6 +351,51 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       publishUiDebugMetrics(0.f, 0);
       return;
     }
+    if (!tdscope::isTemporalDeckModule(module->leftExpander.module)) {
+      publishUiDebugMetrics(0.f, 0);
+      return;
+    }
+
+    const float yInset = 0.75f;
+    const float drawTop = yInset;
+    const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
+    const float drawHeight = std::max(drawBottom - drawTop, 1.f);
+    const float xInset = 0.75f;
+
+    // Match NanoVG clipping behavior so wide GL strokes cannot bleed
+    // past the intended scope drawable region.
+    const float scaleX = (box.size.x > 1e-6f) ? (fbSize.x / box.size.x) : 1.f;
+    const float scaleY = (box.size.y > 1e-6f) ? (fbSize.y / box.size.y) : 1.f;
+    const int scissorX = std::max(0, int(std::lround(xInset * scaleX)));
+    const int scissorW = std::max(1, int(std::lround(std::max(1.f, box.size.x - 2.f * xInset) * scaleX)));
+    const int scissorY = std::max(0, int(std::lround((box.size.y - drawBottom) * scaleY)));
+    const int scissorH = std::max(1, int(std::lround(drawHeight * scaleY)));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(scissorX, scissorY, scissorW, scissorH);
+    struct ScissorGuard final {
+      ~ScissorGuard() {
+        glDisable(GL_SCISSOR_TEST);
+      }
+    } scissorGuard;
+    glDisable(GL_BLEND);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glColor4f(0.f, 0.f, 0.f, 1.f);
+    glBegin(GL_QUADS);
+    glVertex2f(xInset, drawTop);
+    glVertex2f(box.size.x - xInset, drawTop);
+    glVertex2f(box.size.x - xInset, drawBottom);
+    glVertex2f(xInset, drawBottom);
+    glEnd();
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 
     bool linkActive = module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module->uiPreviewValid.load(std::memory_order_relaxed);
@@ -318,10 +428,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       return;
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
-    bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+    const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+    bool renderStereo = (scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
-    const bool verticalInverted = module->scopeVerticalInverted;
+    const bool verticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -339,79 +450,33 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
     }
-    float peakWindowVolts = (float(peakQAbs) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-    bool lowSignalWindow = peakWindowVolts < 0.03f;
-
-    const float yInset = 0.75f;
-    const float drawTop = yInset;
-    const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
-    const float drawHeight = std::max(drawBottom - drawTop, 1.f);
-    const float laneGap = renderStereo ? 2.f : 0.f;
-    const float laneWidth =
-      renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);
-    const float lane0CenterX = renderStereo ? (laneWidth * 0.5f) : (box.size.x * 0.5f);
-    const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
-    const float laneAmpHalfWidth = laneWidth * 0.46f;
+    tdscope::ScopeLaneGeometry laneGeo = tdscope::computeScopeLaneGeometry(box.size.x, renderStereo);
+    const float lane0CenterX = laneGeo.lane0CenterX;
+    const float lane1CenterX = laneGeo.lane1CenterX;
+    const float laneAmpHalfWidth = laneGeo.laneAmpHalfWidth;
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
-    const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
+    const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+    const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
     const bool verticalInversionChanged = cachedVerticalInverted != verticalInverted;
+    const bool dragActive = module->uiLagDragActive.load(std::memory_order_relaxed);
 
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
-    if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
-      float targetFullScaleVolts = 5.f;
-      if (!lowSignalWindow) {
-        float basePeakVolts = std::max(peakWindowVolts * 1.22f, 0.25f);
-        if (basePeakVolts <= 2.5f) {
-          targetFullScaleVolts = 2.5f;
-        } else if (basePeakVolts <= 5.f) {
-          targetFullScaleVolts = 5.f;
-        } else if (basePeakVolts <= 10.f) {
-          targetFullScaleVolts = 10.f;
-        } else {
-          targetFullScaleVolts = basePeakVolts;
-        }
-      }
+    if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-      if (!autoDisplayScaleInitialized || autoLastSampleMode != sampleMode) {
-        autoDisplayFullScaleVolts = targetFullScaleVolts;
-        autoDisplayScaleInitialized = true;
-      } else {
-        if (!sampleMode) {
-          if (peakWindowVolts > autoLivePeakHoldVolts) {
-            autoLivePeakHoldVolts = peakWindowVolts;
-            autoLivePeakHoldFrames = 8;
-          } else if (autoLivePeakHoldFrames > 0) {
-            autoLivePeakHoldFrames -= 1;
-          } else {
-            autoLivePeakHoldVolts *= 0.94f;
-          }
-          float heldPeakVolts = std::max(peakWindowVolts, autoLivePeakHoldVolts);
-          float heldTarget = std::max(heldPeakVolts * 1.22f, 0.25f);
-          if (heldTarget <= 2.5f) {
-            targetFullScaleVolts = 2.5f;
-          } else if (heldTarget <= 5.f) {
-            targetFullScaleVolts = 5.f;
-          } else if (heldTarget <= 10.f) {
-            targetFullScaleVolts = 10.f;
-          } else {
-            targetFullScaleVolts = heldTarget;
-          }
-        }
-        float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-        if (std::fabs(delta) > 0.01f) {
-          float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
-          float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
-          float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
-          autoDisplayFullScaleVolts += delta * alpha;
-        }
-      }
-      autoLastSampleMode = sampleMode;
-      displayFullScaleVolts = autoDisplayFullScaleVolts;
+      const std::pair<float, float> liveStats = tdscope::computeScopePeakStatsFromBins(
+        leftScopeBins, rightScopeBins, scopeBinCount, renderStereo);
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState,
+        true,
+        msgChanged || rangeModeChanged || !autoScaleState.initialized,
+        dragActive,
+        sampleMode,
+        liveStats.first,
+        liveStats.second,
+        displayFullScaleVolts);
     } else {
-      autoDisplayScaleInitialized = false;
-      autoLastSampleMode = true;
-      autoLivePeakHoldVolts = 0.f;
-      autoLivePeakHoldFrames = 0;
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState, false, false, dragActive, true, 0.f, 0.f, displayFullScaleVolts);
     }
 
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
@@ -423,19 +488,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
 
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+    tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
+    float totalWindowSamples = lagSpan.totalWindowSamples;
     bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    float windowTopLag = msg.lagSamples + backwardWindowSamples;
-    float windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    float windowTopLag = lagSpan.windowTopLag;
+    float windowBottomLag = lagSpan.windowBottomLag;
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = 333;
+    const int rowCount = 512;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
@@ -459,10 +518,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       rowValidRight.assign(rowCountU, 0u);
       rowHoldFrames.assign(rowCountU, 0u);
       rowHoldFramesRight.assign(rowCountU, 0u);
-      for (auto &verts : haloBatchVerts) {
-        verts.clear();
-        verts.reserve(size_t(rowCount / 2 + 8) * 2u);
-      }
       for (auto &verts : mainBatchVerts) {
         verts.clear();
         verts.reserve(size_t(rowCount / 2 + 8) * 2u);
@@ -649,11 +704,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float y = drawTop + (float(iy) + 0.5f) * rowStep;
           rowY[idx] = y;
           int sampleRow = visualRowIndex(iy);
-          float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
-          float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
           float rowMinNorm = 0.f;
           float rowMaxNorm = 0.f;
-          if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
+          bool haveRow = false;
+          float t0 = clamp(float(sampleRow) / float(rowCount), 0.f, 1.f);
+          float t1 = clamp(float(sampleRow + 1) / float(rowCount), 0.f, 1.f);
+          haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
+          if (!haveRow) {
             if (prevValid && prevHold > 0u) {
               (*x0Out)[idx] = prevX0;
               (*x1Out)[idx] = prevX1;
@@ -679,7 +736,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -735,7 +792,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           float fillInfluence = 0.55f + 0.45f * clamp(fillFraction, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f * fillInfluence, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f * fillInfluence, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
         }
@@ -851,7 +908,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
-    bool useGeometryHistoryCache = module->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL;
+    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    bool useGeometryHistoryCache = debugRenderMode == TDScope::DEBUG_RENDER_OPENGL;
     bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || verticalInversionChanged ||
                          cachedRowCount != rowCount || stereoLayoutChanged;
     if (useGeometryHistoryCache) {
@@ -1010,7 +1068,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -1137,7 +1195,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1188,7 +1246,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1201,24 +1259,34 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       if (colorLutValid[size_t(scheme)]) {
         return;
       }
-      float lowR = 85.f, lowG = 227.f, lowB = 238.f;
-      float highR = 233.f, highG = 112.f, highB = 218.f;
+      float lowR = 122.f, lowG = 92.f, lowB = 255.f;
+      float highR = 28.f, highG = 204.f, highB = 217.f;
+      float curve = 1.75f;
       switch (scheme) {
-        case TDScope::COLOR_SCHEME_EMERALD: lowR = 15.f; lowG = 79.f; lowB = 54.f; highR = 87.f; highG = 240.f; highB = 182.f; break;
-        case TDScope::COLOR_SCHEME_WASP: lowR = 33.f; lowG = 27.f; lowB = 18.f; highR = 255.f; highG = 216.f; highB = 74.f; break;
-        case TDScope::COLOR_SCHEME_PIXIE: lowR = 255.f; lowG = 143.f; lowB = 209.f; highR = 129.f; highG = 255.f; highB = 210.f; break;
-        case TDScope::COLOR_SCHEME_VIOLET_FLAME: lowR = 42.f; lowG = 31.f; lowB = 95.f; highR = 181.f; highG = 109.f; highB = 255.f; break;
-        case TDScope::COLOR_SCHEME_ANGELIC: lowR = 248.f; lowG = 245.f; lowB = 255.f; highR = 179.f; highG = 229.f; highB = 255.f; break;
-        case TDScope::COLOR_SCHEME_HELLFIRE: lowR = 120.f; lowG = 24.f; lowB = 15.f; highR = 255.f; highG = 209.f; highB = 102.f; break;
-        case TDScope::COLOR_SCHEME_PICKLE: lowR = 62.f; lowG = 111.f; lowB = 49.f; highR = 190.f; highG = 234.f; highB = 97.f; break;
-        case TDScope::COLOR_SCHEME_LEVIATHAN: lowR = 122.f; lowG = 92.f; lowB = 255.f; highR = 92.f; highG = 190.f; highB = 246.f; break;
-        default: break;
+        case TDScope::COLOR_SCHEME_CLASSIC:
+          lowR = 0.f; lowG = 255.f; lowB = 65.f;
+          highR = 255.f; highG = 15.f; highB = 5.f;
+          curve = 1.95f;
+          break;
+        case TDScope::COLOR_SCHEME_MONOCHROME:
+          lowR = 92.f; lowG = 92.f; lowB = 92.f;
+          highR = 242.f; highG = 242.f; highB = 242.f;
+          curve = 1.45f;
+          break;
+        case TDScope::COLOR_SCHEME_FIRE:
+          lowR = 140.f; lowG = 0.f; lowB = 0.f;
+          highR = 255.f; highG = 255.f; highB = 30.f;
+          curve = 2.15f;
+          break;
+        default:
+          break;
       }
       for (int i = 0; i < 256; ++i) {
         float intensity = float(i) / 255.f;
-        float r = lowR + (highR - lowR) * intensity;
-        float g = lowG + (highG - lowG) * intensity;
-        float b = lowB + (highB - lowB) * intensity;
+        float t = std::pow(clamp(intensity, 0.f, 1.f), curve);
+        float r = lowR + (highR - lowR) * t;
+        float g = lowG + (highG - lowG) * t;
+        float b = lowB + (highB - lowB) * t;
         colorLut[size_t(scheme)][size_t(i)] = nvgRGBA(uint8_t(std::lround(clamp(r, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(g, 0.f, 255.f))),
                                                       uint8_t(std::lround(clamp(b, 0.f, 255.f))), 255);
@@ -1230,19 +1298,31 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       ensureColorLut(scheme);
       int index = clamp(int(std::lround(clamp(intensity, 0.f, 1.f) * 255.f)), 0, 255);
       NVGcolor c = colorLut[size_t(scheme)][size_t(index)];
-      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.82f) / 0.18f, 0.f, 1.f);
-      float hotLift = 0.24f * hotT * hotT;
-      c.r = c.r + (1.f - c.r) * hotLift;
-      c.g = c.g + (1.f - c.g) * hotLift;
-      c.b = c.b + (1.f - c.b) * hotLift;
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      constexpr float kVibrance = 1.40f;
+      c.r = clamp(luma + (c.r - luma) * kVibrance, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * kVibrance, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * kVibrance, 0.f, 1.f);
+      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.74f) / 0.26f, 0.f, 1.f);
+      float hotLift = 0.22f * std::pow(hotT, 1.15f);
+      c.r = clamp(c.r * (1.f + hotLift), 0.f, 1.f);
+      c.g = clamp(c.g * (1.f + hotLift), 0.f, 1.f);
+      c.b = clamp(c.b * (1.f + hotLift), 0.f, 1.f);
+      c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
     };
     auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
       lift = clamp(lift, 0.f, 1.f);
-      c.r = c.r + (1.f - c.r) * lift;
-      c.g = c.g + (1.f - c.g) * lift;
-      c.b = c.b + (1.f - c.b) * lift;
+      float gain = 1.f + 0.88f * lift;
+      c.r = clamp(c.r * gain, 0.f, 1.f);
+      c.g = clamp(c.g * gain, 0.f, 1.f);
+      c.b = clamp(c.b * gain, 0.f, 1.f);
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      float sat = 1.f + 0.30f * lift;
+      c.r = clamp(luma + (c.r - luma) * sat, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * sat, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * sat, 0.f, 1.f);
       return c;
     };
     auto encodeColorByte = [](float v) -> GLubyte {
@@ -1525,13 +1605,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRowStep;\n"
         "uniform float uZoomThickness;\n"
         "uniform float uZoomInWidthComp;\n"
-        "uniform float uZoomInHaloWidthComp;\n"
         "uniform float uZoomInAlphaComp;\n"
         "uniform float uZoomInLiftComp;\n"
-        "uniform float uZoomInHaloAlphaComp;\n"
         "uniform float uDeepZoomEnergyFill;\n"
         "uniform float uRenderMain;\n"
-        "uniform float uRenderHalo;\n"
         "uniform float uRenderContinuity;\n"
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
@@ -1547,9 +1624,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  c.a = alpha;\n"
         "  return c;\n"
         "}\n"
+        "vec3 saturate(vec3 rgb, float adjustment) {\n"
+        "  const vec3 W = vec3(0.2125, 0.7154, 0.0721);\n"
+        "  float intensity = dot(rgb, W);\n"
+        "  return mix(vec3(intensity), rgb, adjustment);\n"
+        "}\n"
         "vec4 brightenColor(vec4 c, float lift) {\n"
         "  lift = clamp(lift, 0.0, 1.0);\n"
-        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * lift;\n"
+        "  float gain = 1.0 + 0.88 * lift;\n"
+        "  c.rgb = clamp(c.rgb * gain, 0.0, 1.0);\n"
+        "  float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
+        "  float sat = 1.0 + 0.30 * lift;\n"
+        "  c.rgb = clamp(mix(vec3(luma), c.rgb, sat), 0.0, 1.0);\n"
         "  return c;\n"
         "}\n"
         "float segmentDistance(vec2 p, vec2 a, vec2 b) {\n"
@@ -1563,12 +1649,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float sigma = max(radius * 0.70, 0.001);\n"
         "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
         "}\n"
-        "float gaussianAlphaTight(float dist, float radius, float sigmaScale) {\n"
-        "  float sigma = max(radius * sigmaScale, 0.001);\n"
-        "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
-        "}\n"
-        "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax,\n"
-        "                   inout vec3 haloRgb, inout float haloAlphaMax) {\n"
+        "float hash(float n) { return fract(sin(n) * 43758.5453123); }\n"
+        "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax) {\n"
         "  if (!rowValid(row)) {\n"
         "    return;\n"
         "  }\n"
@@ -1582,38 +1664,27 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * 1.16 * uZoomInAlphaComp, 0.0, 1.0);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
-        "  float mainHotLift = 0.24 * mainHotT * mainHotT;\n"
-        "  mainColor.rgb = mainColor.rgb + (vec3(1.0) - mainColor.rgb) * mainHotLift;\n"
-        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.90, 0.0, 1.0));\n"
+        "  float mainHotLift = 0.18 * mainHotT * mainHotT;\n"
+        "  mainColor.rgb = clamp(mainColor.rgb * (1.0 + mainHotLift), 0.0, 1.0);\n"
+        "  mainColor = brightenColor(mainColor, clamp(transientLift * 0.72, 0.0, 1.0));\n"
+        "  mainColor.rgb = saturate(mainColor.rgb, 1.12);\n"
         "  float mainW = (0.78 + 0.62 * tone) * uZoomThickness * 1.10 * uZoomInWidthComp;\n"
-        "  float lowVisualBoost = 1.0 + 0.32 * (1.0 - clamp(visual, 0.0, 1.0));\n"
+        "  float lowVisualBoost = 1.0 + 0.24 * (1.0 - clamp(visual, 0.0, 1.0));\n"
         "  mainW *= lowVisualBoost;\n"
-        "  float maxMainW = max(uRowStep * 0.82, 0.70);\n"
+        "  float maxMainW = max(uRowStep * 0.92, 0.78);\n"
         "  mainW = min(mainW, maxMainW);\n"
         "  float mainRadius = max(mainW * 0.55, 0.40);\n"
         "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
         "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.82);\n"
-        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.25);\n"
-        "  float mainCov = clamp(0.72 * mainCovCore + 0.28 * mainCovSoft, 0.0, 1.0);\n"
+        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.28);\n"
+        "  float mainCov = clamp(0.74 * mainCovCore + 0.26 * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
-        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.34);\n"
+        "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.30);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
-        "    baseRgb += mainColor.rgb * mainPremult;\n"
+        "    float heatPriority = mix(0.42, 1.0, tone);\n"
+        "    float coverAlpha = clamp(mainPremult * heatPriority, 0.0, 1.0);\n"
+        "    baseRgb = baseRgb * (1.0 - coverAlpha) + mainColor.rgb * mainPremult;\n"
         "    baseAlphaMax = max(baseAlphaMax, mainPremult);\n"
-        "  }\n"
-        "  if (uRenderHalo > 0.5) {\n"
-        "    float haloLinear = clamp((transientLift - 0.030) / 0.800, 0.0, 1.0);\n"
-        "    float haloT = haloLinear * haloLinear;\n"
-        "    float haloAlpha = ((88.0 + 196.0 * max(visual, 0.24)) / 255.0) * haloT;\n"
-        "    float boostedHaloAlpha = clamp(haloAlpha * 0.98 * uZoomInHaloAlphaComp, 0.0, 1.0);\n"
-        "    if (haloAlpha >= (26.0 / 255.0) && boostedHaloAlpha > 0.001) {\n"
-        "      float haloW = (mainW + (1.10 + 2.20 * haloT) * uZoomThickness) * 1.10 * uZoomInHaloWidthComp;\n"
-        "      float haloRadius = max(haloW * 0.48, mainRadius + 0.18);\n"
-        "      float haloCov = gaussianAlphaTight(segmentDistance(p, vec2(x0, y), vec2(x1, y)), haloRadius, 0.54);\n"
-        "      float haloPremult = boostedHaloAlpha * haloCov;\n"
-        "      haloRgb += vec3(1.0) * haloPremult;\n"
-        "      haloAlphaMax = max(haloAlphaMax, haloPremult);\n"
-        "    }\n"
         "  }\n"
         "}\n"
         "void accumulateContinuity(vec2 p, vec4 rowA, float idxA, vec4 rowB, float idxB, inout vec3 baseRgb,\n"
@@ -1626,7 +1697,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float x0b = rowB.x;\n"
         "  float x1b = rowB.y;\n"
         "  float delta = max(abs(x0b - x0a), abs(x1b - x1a));\n"
-        "  float connectorMinDelta = max(0.60 * uZoomThickness, 0.40);\n"
+        "  float connectorMinDelta = max(0.55 * uZoomThickness, 0.35);\n"
         "  if (delta < connectorMinDelta) {\n"
         "    return;\n"
         "  }\n"
@@ -1639,29 +1710,31 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float connectTone = clamp(0.82 * connectVisual + 0.18 * connectTransientLift, 0.0, 1.0);\n"
         "  float connectColorVisual = connectTone;\n"
         "  vec4 c = gradientColor(connectColorVisual,\n"
-        "                         clamp(((88.0 + 92.0 * connectColorVisual) / 255.0) * uZoomInAlphaComp, 0.0, 1.0));\n"
+        "                         clamp(((88.0 + 92.0 * connectColorVisual) / 255.0) * 1.04 * uZoomInAlphaComp, 0.0, 1.0));\n"
         "  float connectHotT = clamp((connectColorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
-        "  float connectHotLift = 0.24 * connectHotT * connectHotT;\n"
-        "  c.rgb = c.rgb + (vec3(1.0) - c.rgb) * connectHotLift;\n"
-        "  c = brightenColor(c, clamp(connectTransientLift * 0.72, 0.0, 1.0));\n"
+        "  float connectHotLift = 0.16 * connectHotT * connectHotT;\n"
+        "  c.rgb = clamp(c.rgb * (1.0 + connectHotLift), 0.0, 1.0);\n"
+        "  c = brightenColor(c, clamp(connectTransientLift * 0.56, 0.0, 1.0));\n"
         "  float drift0 = abs(x0b - x0a);\n"
         "  float drift1 = abs(x1b - x1a);\n"
         "  float edgeDrift = max(drift0, drift1);\n"
         "  float spanAvg = 0.5 * (abs(x1a - x0a) + abs(x1b - x0b));\n"
-        "  if (spanAvg <= connectorMinDelta * 1.2 || edgeDrift <= connectorMinDelta * 0.70) {\n"
+        "  if (spanAvg <= connectorMinDelta * 1.1 || edgeDrift <= connectorMinDelta * 0.65) {\n"
         "    return;\n"
         "  }\n"
-        "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.70) / max(connectorMinDelta * 1.80, 1e-4), 0.0, 1.0);\n"
-        "  float continuityRadius = max((0.80 + 0.40 * connectTone) * uZoomThickness * 1.04 *\n"
-        "                               (1.02 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.62,\n"
-        "                               0.45);\n"
+        "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.65) / max(connectorMinDelta * 1.60, 1e-4), 0.0, 1.0);\n"
+        "  float continuityRadius = max((0.68 + 0.44 * connectTone) * uZoomThickness * 1.05 *\n"
+        "                               (1.01 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.64,\n"
+        "                               0.44);\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
-        "  float contAlphaBase = clamp(c.a * (0.20 + 0.04 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
+        "  float contAlphaBase = clamp(c.a * (0.26 + 0.06 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
         "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
         "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
-        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.46;\n"
-        "  baseRgb += c.rgb * contAlpha;\n"
+        "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.50;\n"
+        "  float contPriority = mix(0.38, 0.92, connectTone);\n"
+        "  float contCover = clamp(contAlpha * contPriority, 0.0, 1.0);\n"
+        "  baseRgb = baseRgb * (1.0 - contCover) + c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
         "}\n"
         "void main() {\n"
@@ -1672,24 +1745,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  vec4 row0 = fetchRow(i0);\n"
         "  vec4 row1 = fetchRow(i1);\n"
         "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
+        "  vec4 rowBody = fetchRow(rowPos);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
-        "  vec3 haloRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
-        "  float haloAlphaMax = 0.0;\n"
-        "  accumulateRow(p, row0, i0, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateRow(p, row1, i1, baseRgb, baseAlphaMax, haloRgb, haloAlphaMax);\n"
-        "  accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
-        "  accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
-        "  bool haloOnly = (uRenderHalo > 0.5) && !(uRenderMain > 0.5) && !(uRenderContinuity > 0.5);\n"
-        "  if (haloOnly) {\n"
-        "    vec3 haloOut = clamp(haloRgb, 0.0, 1.0);\n"
-        "    float haloAlpha = clamp(haloAlphaMax, 0.0, 1.0);\n"
-        "    gl_FragColor = vec4(haloOut, haloAlpha);\n"
-        "  } else {\n"
-        "    vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
-        "    float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
-        "    gl_FragColor = vec4(baseOut, baseAlpha);\n"
+        "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax);\n"
+        "  if (uZoomInWidthComp > 1.05) {\n"
+        "    accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
+        "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
         "  }\n"
+        "  vec3 baseOut = clamp(baseRgb, 0.0, 1.0);\n"
+        "  float baseAlpha = clamp(baseAlphaMax, 0.0, 1.0);\n"
+        "  gl_FragColor = vec4(baseOut, baseAlpha);\n"
         "}\n";
 
       auto compileShader = [](GLenum type, const char *src) -> GLuint {
@@ -1789,39 +1855,33 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRowStep = glGetUniformLocation(fieldShaderProgram, "uRowStep");
       fieldUniformZoomThickness = glGetUniformLocation(fieldShaderProgram, "uZoomThickness");
       fieldUniformZoomInWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInWidthComp");
-      fieldUniformZoomInHaloWidthComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloWidthComp");
       fieldUniformZoomInAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInAlphaComp");
       fieldUniformZoomInLiftComp = glGetUniformLocation(fieldShaderProgram, "uZoomInLiftComp");
-      fieldUniformZoomInHaloAlphaComp = glGetUniformLocation(fieldShaderProgram, "uZoomInHaloAlphaComp");
       fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
-      fieldUniformRenderHalo = glGetUniformLocation(fieldShaderProgram, "uRenderHalo");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
       if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
-          fieldUniformZoomInWidthComp < 0 ||
-          fieldUniformZoomInHaloWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
-          fieldUniformZoomInHaloAlphaComp < 0 ||
-          fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 || fieldUniformRenderHalo < 0 ||
+          fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
+          fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
           fieldUniformRenderContinuity < 0) {
         WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
-             "zoomInWidth=%d zoomInHaloWidth=%d zoomInAlpha=%d zoomInLift=%d zoomInHaloAlpha=%d deepZoomFill=%d renderMain=%d "
-             "renderHalo=%d renderContinuity=%d",
+             "zoomInWidth=%d zoomInAlpha=%d zoomInLift=%d deepZoomFill=%d renderMain=%d renderContinuity=%d",
              fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
-             fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInHaloWidthComp,
-             fieldUniformZoomInAlphaComp, fieldUniformZoomInLiftComp, fieldUniformZoomInHaloAlphaComp,
-             fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain, fieldUniformRenderHalo, fieldUniformRenderContinuity);
+             fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInAlphaComp,
+             fieldUniformZoomInLiftComp, fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain,
+             fieldUniformRenderContinuity);
         return false;
       }
 
       glBindTexture(GL_TEXTURE_2D, fieldRowTextureLeft);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glBindTexture(GL_TEXTURE_2D, fieldRowTextureRight);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
@@ -1852,22 +1912,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldShaderReady = true;
       return true;
     };
-    constexpr int kGlHaloStrokeBins = 8;
     constexpr int kGlMainStrokeBins = 10;
     constexpr int kGlConnectorStrokeBins = 8;
     constexpr float kGlMainAlphaGain = 1.26f;
     constexpr float kGlMainLiftGain = 1.16f;
     constexpr float kGlConnectorAlphaGain = 1.14f;
     constexpr float kGlConnectorLiftGain = 1.12f;
-    constexpr float kGlHaloAlphaGain = 1.34f;
-    constexpr float kGlHaloWidthGain = 1.10f;
     constexpr float kGlMainWidthGain = 1.10f;
     constexpr float kGlConnectorWidthGain = 1.08f;
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
-      constexpr uint8_t kHaloMinAlphaToDraw = 28u;
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
         return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
@@ -1880,10 +1936,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glDeepZoomT = clamp((rackZoom - 2.f) / 1.4f, 0.f, 1.f);
       float glDeepZoomEase = std::pow(glDeepZoomT, 0.82f);
       float glZoomInWidthComp = 1.f + 0.16f * glZoomInEase + 0.05f * glDeepZoomEase;
-      float glZoomInHaloWidthComp = 1.f + 0.22f * glZoomInEase + 0.06f * glDeepZoomEase;
       float glZoomInAlphaComp = 1.f + 0.14f * glZoomInEase + 0.18f * glDeepZoomEase;
       float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
-      float glZoomInHaloAlphaComp = 1.f + 0.58f * glZoomInEase + 0.76f * glDeepZoomEase;
       float glDeepZoomEnergyFill = glDeepZoomEase;
       auto uploadFieldLaneTextures = [&]() -> bool {
         if (!initFieldShaderPipeline()) {
@@ -1954,10 +2008,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
         int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
         ensureColorLut(scheme);
-        if (fieldColorLutScheme != scheme) {
+        float colorBrightness = module->scopeColorBrightnessClamped();
+        if (fieldColorLutScheme != scheme || std::fabs(fieldColorLutBrightness - colorBrightness) > 1e-4f) {
           std::array<GLubyte, 256 * 4> lutBytes {};
           for (int i = 0; i < 256; ++i) {
-            const NVGcolor &c = colorLut[size_t(scheme)][size_t(i)];
+            NVGcolor c = module->applyScopeColorBrightness(colorLut[size_t(scheme)][size_t(i)]);
             lutBytes[size_t(i) * 4u + 0u] = encodeColorByte(c.r);
             lutBytes[size_t(i) * 4u + 1u] = encodeColorByte(c.g);
             lutBytes[size_t(i) * 4u + 2u] = encodeColorByte(c.b);
@@ -1966,11 +2021,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
           glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, lutBytes.data());
           fieldColorLutScheme = scheme;
+          fieldColorLutBrightness = colorBrightness;
         }
 
         return true;
       };
-      auto drawFieldLanePass = [&](float renderMain, float renderHalo, float renderContinuity, GLenum srcBlend,
+      auto drawFieldLanePass = [&](float renderMain, float renderContinuity, GLenum srcBlend,
                                    GLenum dstBlend) -> bool {
         static const GLuint kAttrPos = 0;
         GLuint rowTex = (fieldLaneSlot != 0) ? fieldRowTextureRight : fieldRowTextureLeft;
@@ -1985,13 +2041,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUniform1f(fieldUniformRowStep, rowStep);
         glUniform1f(fieldUniformZoomThickness, zoomThicknessMul);
         glUniform1f(fieldUniformZoomInWidthComp, glZoomInWidthComp);
-        glUniform1f(fieldUniformZoomInHaloWidthComp, glZoomInHaloWidthComp);
         glUniform1f(fieldUniformZoomInAlphaComp, glZoomInAlphaComp);
         glUniform1f(fieldUniformZoomInLiftComp, glZoomInLiftComp);
-        glUniform1f(fieldUniformZoomInHaloAlphaComp, glZoomInHaloAlphaComp);
         glUniform1f(fieldUniformDeepZoomEnergyFill, glDeepZoomEnergyFill);
         glUniform1f(fieldUniformRenderMain, renderMain);
-        glUniform1f(fieldUniformRenderHalo, renderHalo);
         glUniform1f(fieldUniformRenderContinuity, renderContinuity);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rowTex);
@@ -2013,16 +2066,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(0);
         return true;
       };
-      const bool renderHaloField = module->scopeTransientHaloEnabled;
-      const bool renderMainField = module->debugRenderMainTraceEnabled;
-      const bool renderContinuityField = module->debugRenderConnectorsEnabled;
-      if (renderHaloField || renderMainField || renderContinuityField) {
+      const bool renderMainField = true;
+      const bool renderContinuityField = true;
+      if (renderMainField || renderContinuityField) {
         bool fieldDrawOk = uploadFieldLaneTextures();
-        if (renderHaloField) {
-          fieldDrawOk = drawFieldLanePass(0.f, 1.f, 0.f, GL_ONE, GL_ONE) && fieldDrawOk;
-        }
         if (fieldDrawOk && (renderMainField || renderContinuityField)) {
-          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, 0.f, renderContinuityField ? 1.f : 0.f,
+          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
                                          GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
                         fieldDrawOk;
         }
@@ -2030,8 +2079,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fallbackRendererActive = false;
           return;
         }
+        fallbackRendererActive = true;
+      } else {
+        fallbackRendererActive = false;
       }
-      fallbackRendererActive = true;
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
         if (!verts) {
@@ -2091,11 +2142,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         return true;
       };
       if (initSegmentShaderPipeline()) {
-        haloSegmentVerts.clear();
         bodySegmentVerts.clear();
         fillSegmentVerts.clear();
         continuitySegmentVerts.clear();
-        haloSegmentVerts.reserve(size_t(rowCount) * 6u);
         bodySegmentVerts.reserve(size_t(rowCount) * 6u);
         fillSegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
         continuitySegmentVerts.reserve(size_t(rowCount / 2 + 8) * 6u);
@@ -2118,12 +2167,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float y = rowY[idx];
           float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           NVGcolor mainColor = brightenColor(
             gradientColorForIntensity(
               tone,
               uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
           GLubyte mainR = encodeColorByte(mainColor.r);
           GLubyte mainG = encodeColorByte(mainColor.g);
           GLubyte mainB = encodeColorByte(mainColor.b);
@@ -2139,21 +2188,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                               mainR, mainG, mainB, fillAlpha);
           }
 
-          if (module->scopeTransientHaloEnabled) {
-            float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
-            float haloT = haloLinear * haloLinear;
-            uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
-            if (haloAlpha >= kHaloMinAlphaToDraw) {
-              float haloW =
-                (mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
-              float haloRadius = std::max(haloW * 0.58f, mainRadius + 0.30f);
-              uint8_t boostedHaloAlpha = uint8_t(std::lround(
-                clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
-              appendSegmentQuad(&haloSegmentVerts, x0, y, x1, y, haloRadius, 255, 255, 255, boostedHaloAlpha);
-            }
-          }
-
-          if (module->debugRenderConnectorsEnabled && prevValid) {
+          if (prevValid) {
             if (!(std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx)) {
               float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
               float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
@@ -2163,7 +2198,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                   connectVisual,
                   uint8_t(std::lround(clamp(
                     (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-                clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+                clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
               GLubyte r = encodeColorByte(c.r);
               GLubyte g = encodeColorByte(c.g);
               GLubyte b = encodeColorByte(c.b);
@@ -2196,12 +2231,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           prevValid = true;
         }
 
-        if (!haloSegmentVerts.empty()) {
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-          drawSegmentBatch(haloSegmentVerts);
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        }
-        if (module->debugRenderMainTraceEnabled) {
+        {
           drawSegmentBatch(bodySegmentVerts);
           if (!fillSegmentVerts.empty()) {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -2219,7 +2249,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           return;
         }
         glLineWidth(width);
-        if (initShaderPipeline()) {
+        if (module->debugUseGlShaderRenderer && initShaderPipeline()) {
           glUseProgram(shaderProgram);
           glUniform1f(shaderUniformColorScale, shaderParams.colorScale);
           glUniform1f(shaderUniformColorLift, shaderParams.colorLift);
@@ -2247,43 +2277,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glUseProgram(0);
         }
       };
-      if (module->scopeTransientHaloEnabled) {
-        const ShaderPassParams haloShaderParams = makeShaderPassParams(1.08f, 0.14f, 1.16f, 0.92f);
-        for (auto &verts : haloBatchVerts) {
-          verts.clear();
-        }
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!isValid(idx)) {
-            continue;
-          }
-          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float haloLinear = clamp((transientLift - 0.030f) / 0.800f, 0.f, 1.f);
-          float haloT = haloLinear * haloLinear;
-          uint8_t haloAlpha = uint8_t(std::lround((88.f + 196.f * std::max(visual, 0.24f)) * haloT));
-          if (haloAlpha < kHaloMinAlphaToDraw) {
-            continue;
-          }
-          int rowBin = quantizeStrokeBin(haloT, kGlHaloStrokeBins);
-          float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-          uint8_t boostedHaloAlpha = uint8_t(std::lround(
-            clamp(float(haloAlpha) * kGlHaloAlphaGain * glZoomInHaloAlphaComp, 0.f, 255.f)));
-          haloBatchVerts[size_t(rowBin)].push_back({getX0(idx) - haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
-          haloBatchVerts[size_t(rowBin)].push_back({getX1(idx) + haloExtend, rowY[idx], 255, 255, 255, boostedHaloAlpha});
-        }
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-        for (int widthBin = 0; widthBin < kGlHaloStrokeBins; ++widthBin) {
-          float haloCenter = strokeBinCenter(widthBin, kGlHaloStrokeBins);
-          float visualCenter = haloCenter;
-          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
-          float haloW =
-            (mainW + (1.10f + 2.20f * haloCenter) * zoomThicknessMul) * kGlHaloWidthGain * glZoomInHaloWidthComp;
-          drawBatch(haloBatchVerts[size_t(widthBin)], haloW, haloShaderParams);
-        }
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      }
-      if (module->debugRenderMainTraceEnabled) {
+      {
         const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
         const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
         for (auto &verts : mainBatchVerts) {
@@ -2296,13 +2290,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
           float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
           NVGcolor c = brightenColor(
             gradientColorForIntensity(
               tone,
               uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-            clamp(transientLift * 0.90f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
           GLubyte r = encodeColorByte(c.r);
           GLubyte g = encodeColorByte(c.g);
           GLubyte b = encodeColorByte(c.b);
@@ -2339,7 +2333,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
       }
-      if (module->debugRenderConnectorsEnabled) {
+      {
         const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.74f, 1.10f);
         const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
         std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
@@ -2380,7 +2374,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                 connectVisual,
                 uint8_t(std::lround(clamp(
                   (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-              clamp(connectTransientLift * 0.84f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+              clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
@@ -2454,7 +2448,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
         [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, 0);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(
           [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
           [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
@@ -2466,7 +2460,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
         [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
         [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, 0);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(
           [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
           [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,

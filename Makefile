@@ -33,7 +33,9 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
-	build/tests/bifurx_filter_spec
+	build/tests/bifurx_filter_spec \
+	build/tests/sil_repair_spec \
+	build/tests/bulkhead_geometry_spec
 
 TEST_BINS_RACK := \
 	build/tests/bifurx_runtime_spec \
@@ -45,6 +47,10 @@ TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
+
+.PHONY: generate-panel-anchor-atlas
+generate-panel-anchor-atlas:
+	python3 tools/generate_panel_anchor_atlas.py
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32
@@ -160,14 +166,34 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
 	$(call run_test_bin,build/tests/crownstep_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
+	$(call run_test_bin,build/tests/sil_repair_spec)
+	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
+	$(call run_rack_test_bin,build/tests/chronomaw_serialization_spec)
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
 
-test: test-fast test-rack
-	@$(MAKE) --no-print-directory test-odr
+test:
+	@fast_rc=0; \
+	rack_rc=0; \
+	odr_rc=0; \
+	$(MAKE) --no-print-directory test-fast || fast_rc=$$?; \
+	$(MAKE) --no-print-directory test-rack || rack_rc=$$?; \
+	$(MAKE) --no-print-directory test-odr || odr_rc=$$?; \
+	failed=0; \
+	if [ "$$fast_rc" -eq 0 ]; then fast_status="PASS"; else fast_status="FAIL"; failed=$$((failed + 1)); fi; \
+	if [ "$$rack_rc" -eq 0 ]; then rack_status="PASS"; else rack_status="FAIL"; failed=$$((failed + 1)); fi; \
+	if [ "$$odr_rc" -eq 0 ]; then odr_status="PASS"; else odr_status="FAIL"; failed=$$((failed + 1)); fi; \
+	passed=$$((3 - failed)); \
+	echo "--------------------------------"; \
+	echo "[TEST SUMMARY] targets=3 passed=$$passed failed=$$failed"; \
+	echo "[TEST SUMMARY] test-fast=$$fast_status"; \
+	echo "[TEST SUMMARY] test-rack=$$rack_status"; \
+	echo "[TEST SUMMARY] test-odr=$$odr_status"; \
+	echo "--------------------------------"; \
+	if [ "$$failed" -ne 0 ]; then exit 1; fi
 
 test-odr: plugin.so
 	@set -- $$(nm -C --defined-only plugin.so | awk '\
@@ -221,6 +247,12 @@ build/tests/temporaldeck_platter_input_spec: tests/temporaldeck_platter_input_sp
 build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.cpp src/TemporalDeckSamplePrep.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
+build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
@@ -230,12 +262,15 @@ build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
-build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/PanelSvgUtils.cpp | build/tests
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/PanelSvgUtils.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+
+build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp | build/tests
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
-build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp | build/tests build/tests/bifurx_runtime_spec
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec build/tests/chronomaw_serialization_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec

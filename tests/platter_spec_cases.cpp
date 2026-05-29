@@ -124,6 +124,20 @@ TestResult testWriteHeadCompensationPolicy() {
             " freeze=" + std::to_string(freeze) + " idle=" + std::to_string(idle)};
 }
 
+TestResult testLiveUiRebaseStrengthPolicy() {
+  constexpr float sr = 48000.f;
+  float near = platter_interaction::liveUiRebaseStrength(0.5f * sr, sr);
+  float edgeNear = platter_interaction::liveUiRebaseStrength(1.0f * sr, sr);
+  float mid = platter_interaction::liveUiRebaseStrength(2.5f * sr, sr);
+  float edgeDeep = platter_interaction::liveUiRebaseStrength(4.0f * sr, sr);
+  float deep = platter_interaction::liveUiRebaseStrength(6.0f * sr, sr);
+  bool monotonic = near >= edgeNear && edgeNear >= mid && mid >= edgeDeep && edgeDeep >= deep;
+  bool bounded = near <= 1.0001f && deep >= 0.349f && deep <= 0.351f;
+  bool pass = monotonic && bounded;
+  return {"Live UI rebase strength tapers with lag depth", pass,
+          "near=" + std::to_string(near) + " mid=" + std::to_string(mid) + " deep=" + std::to_string(deep)};
+}
+
 TestResult testLiveForwardCompensated() {
   // Contract-level model: while motion is active, write-head baseline
   // compensation keeps forward drag from being penalized by elapsed wall time.
@@ -205,6 +219,7 @@ std::vector<TestResult> collectTests() {
   tests.push_back(testDirectionSymmetry());
   tests.push_back(testRebaseDirectionAware());
   tests.push_back(testWriteHeadCompensationPolicy());
+  tests.push_back(testLiveUiRebaseStrengthPolicy());
   tests.push_back(testLiveForwardCompensated());
   tests.push_back(testStationaryHoldNoDrift());
   tests.push_back(testMouseSeqFullRevolutionFreeze());

@@ -1,4 +1,6 @@
 #include "TDScope.hpp"
+#include "TDScopeShared.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include <nanovg_gl.h>
 
 #include <chrono>
@@ -15,14 +17,9 @@ std::atomic<uint32_t> gTDScopeDebugInstanceCounter {1u};
 float computeScopeDisplayVerticalSupersample(float rackZoom) {
   rackZoom = std::max(rackZoom, 1e-4f);
   (void) rackZoom;
+  // Fixed-density path: keep row count stable across zoom levels for now.
+  // We can reintroduce adaptive supersampling later if profiling justifies it.
   return 0.55f;
-  // Zoomed out: reduce total row density to save draw calls when several
-  // scopes are visible. Zoomed in: restore the full supersampled trace/halo.
-  float zoomOutT = clamp((1.0f - rackZoom) / 0.35f, 0.f, 1.f);
-  float zoomInT = clamp((rackZoom - 1.0f) / 1.0f, 0.f, 1.f);
-  float supersample = 1.10f + (1.35f - 1.10f) * (1.f - zoomOutT);
-  supersample += (kScopeDisplayVerticalSupersampleMax - 1.35f) * zoomInT;
-  return clamp(supersample, 1.10f, kScopeDisplayVerticalSupersampleMax);
 }
 
 PanelBorder *findPanelBorder(Widget *widget) {
@@ -41,17 +38,14 @@ bool isTemporalDeckModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
     return false;
   }
+  // Legacy fallback for older host states where pointer identity may miss
+  // but stable slug matching still identifies Temporal Deck.
   return (neighbor->model == modelTemporalDeck) || (neighbor->model->slug == "TemporalDeck");
 }
 
 } // namespace tdscope
 
 struct TDScopeDisplayWidget final : Widget {
-  // Scope is an input proxy for platter drag. Define drag travel directly in
-  // platter turns so full-height swipes have stable, deck-equivalent meaning.
-  // Scale factor applied to nominal 1-turn-per-full-height scope drag.
-  // 1.0 = one nominal platter turn across full scope height.
-  static constexpr float kScopeDragNominalTurnScale = 0.30f;
   static constexpr float kNominalPlatterRpm = 33.3333f;
 
   struct LiveScopeBucket {
@@ -66,11 +60,7 @@ struct TDScopeDisplayWidget final : Widget {
 
   TDScope *module = nullptr;
   widget::FramebufferWidget *framebuffer = nullptr;
-  float autoDisplayFullScaleVolts = 5.f;
-  bool autoDisplayScaleInitialized = false;
-  bool autoLastSampleMode = true;
-  float autoLivePeakHoldVolts = 0.f;
-  int autoLivePeakHoldFrames = 0;
+  tdscope::ScopeAutoScaleState autoScaleState;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
   std::vector<float> rowX0Right;
@@ -121,16 +111,6 @@ struct TDScopeDisplayWidget final : Widget {
   int liveBucketCount = 0;
   float liveBucketSpanSamples = 0.f;
   uint64_t liveBucketLastPublishSeq = 0;
-  bool lagDragging = false;
-  Vec lagDragCursorPos;
-  float lagDragAnchorCursorY = 0.f;
-  float lagDragAnchorLagSamples = 0.f;
-  float lagDragReferenceHeight = 1.f;
-  float lagDragTravelSamples = 0.f;
-  float lagDragNormalizedOffset = 0.f;
-  float lagDragLocalLagSamples = 0.f;
-  float lagDragResidualY = 0.f;
-  double lagDragLastMoveSec = 0.0;
   uint64_t redrawLastPublishSeq = 0;
   bool redrawHasFreshFrame = false;
   bool redrawLastLinkActive = false;
@@ -140,12 +120,9 @@ struct TDScopeDisplayWidget final : Widget {
   bool redrawLastVerticalInverted = false;
   int redrawLastChannelMode = -1;
   int redrawLastColorScheme = -1;
-  bool redrawLastHaloEnabled = false;
-  bool redrawLastMainTraceEnabled = false;
-  bool redrawLastConnectorsEnabled = false;
-  bool redrawLastStereoRightLaneEnabled = false;
   int redrawLastRenderMode = -1;
   int tailRasterImage = -1;
+  NVGcontext* tailRasterImageVg = nullptr;
   int tailRasterW = 0;
   int tailRasterH = 0;
   std::vector<uint8_t> tailRasterPixels;
@@ -157,19 +134,26 @@ struct TDScopeDisplayWidget final : Widget {
   float tailRasterShiftResidualPx = 0.f;
   uint64_t tailRasterPublishSeq = 0;
 
-  ~TDScopeDisplayWidget() override {
-    if (APP && APP->window) {
-      NVGcontext *vg = APP->window->vg;
-      if (vg) {
-        if (tailRasterImage >= 0) {
-          nvgDeleteImage(vg, tailRasterImage);
-        }
-      }
-    }
+  void resetTailRasterImage(NVGcontext* vg, bool deleteCurrentHandle) {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      tailRasterImageVg,
+      tailRasterImage,
+      tailRasterW,
+      tailRasterH,
+      vg,
+      deleteCurrentHandle
+    );
+    tailRasterPixels.clear();
+    tailRasterValid = false;
+    tailRasterShiftResidualPx = 0.f;
   }
 
-  bool isWithinDisplay(Vec pos) const {
-    return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
+  ~TDScopeDisplayWidget() override {
+    if (APP && APP->window && APP->window->vg) {
+      resetTailRasterImage(APP->window->vg, true);
+      return;
+    }
+    resetTailRasterImage(nullptr, false);
   }
 
   struct ScopeWindowMap {
@@ -184,18 +168,9 @@ struct TDScopeDisplayWidget final : Widget {
 
   ScopeWindowMap buildScopeWindowMap(const temporaldeck_expander::HostToDisplay &msg) const {
     ScopeWindowMap map;
-    float sampleRate = std::max(msg.sampleRate, 1.f);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * sampleRate);
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
-    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    map.windowTopLag = msg.lagSamples + backwardWindowSamples;
-    map.windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    tdscope::ScopeWindowLagSpan span = tdscope::computeScopeWindowLagSpan(msg);
+    map.windowTopLag = span.windowTopLag;
+    map.windowBottomLag = span.windowBottomLag;
     map.accessibleLag = std::max(0.f, msg.accessibleLagSamples);
     float yInset = 0.75f;
     map.drawTop = yInset;
@@ -214,166 +189,60 @@ struct TDScopeDisplayWidget final : Widget {
     return 1.f;
   }
 
-  bool beginLagDragAt(Vec pos) {
-    if (!module || !hasLastGoodMsg || !isWithinDisplay(pos)) {
-      return false;
-    }
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      return false;
-    }
-    lagDragging = true;
-    lagDragCursorPos = pos;
-    lagDragAnchorCursorY = pos.y;
-    lagDragResidualY = 0.f;
-    lagDragLastMoveSec = system::getTime();
-    float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    lagDragAnchorLagSamples = anchorLagSamples;
-    lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
-    lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
-    lagDragNormalizedOffset = 0.f;
-    lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
-    return true;
-  }
-
-  void endLagDrag() {
-    lagDragging = false;
-    lagDragResidualY = 0.f;
-    lagDragReferenceHeight = 1.f;
-    lagDragTravelSamples = 0.f;
-    lagDragNormalizedOffset = 0.f;
+  NVGcolor silWaveformLowColor() const {
+    float lowR = 122.f, lowG = 92.f, lowB = 255.f;
     if (module) {
-      module->setLagDragRequest(false, 0.f);
-    }
-  }
-
-  void onButton(const event::Button &e) override {
-    if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
-      if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        (void)beginLagDragAt(e.pos);
-        e.consume(this);
-        return;
-      }
-      if (e.action == GLFW_RELEASE && lagDragging) {
-        endLagDrag();
-        e.consume(this);
-        return;
+      const int colorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      switch (colorScheme) {
+        case TDScope::COLOR_SCHEME_CLASSIC: lowR = 0.f; lowG = 255.f; lowB = 65.f; break;
+        case TDScope::COLOR_SCHEME_MONOCHROME: lowR = 92.f; lowG = 92.f; lowB = 92.f; break;
+        case TDScope::COLOR_SCHEME_FIRE: lowR = 140.f; lowG = 0.f; lowB = 0.f; break;
+        default: break;
       }
     }
-    Widget::onButton(e);
+    NVGcolor c = nvgRGBAf(lowR / 255.f, lowG / 255.f, lowB / 255.f, 1.f);
+    if (module) c = module->applyScopeColorBrightness(c);
+    return c;
   }
 
-  void onDragStart(const event::DragStart &e) override {
-    Widget::onDragStart(e);
-  }
-
-  void onDragMove(const event::DragMove &e) override {
-    if (!lagDragging || e.button != GLFW_MOUSE_BUTTON_LEFT || !module || !hasLastGoodMsg) {
-      Widget::onDragMove(e);
-      return;
-    }
-    double nowSec = system::getTime();
-    // Match platter gesture timing bounds to avoid tiny-dt velocity spikes
-    // that can over-drive scratch motion.
-    constexpr double kMinGestureDtSec = 1.0 / 240.0;
-    constexpr double kMaxGestureDtSec = 1.0 / 20.0;
-    double dtSec = std::max(kMinGestureDtSec, std::min(kMaxGestureDtSec, nowSec - lagDragLastMoveSec));
-    lagDragLastMoveSec = nowSec;
-
-    // Full-window time mapping is intentionally high resolution; suppress
-    // tiny hand jitter so stationary holds stay truly pinned.
-    // Keep this close to platter drag sensitivity so rapid short reversals
-    // feel immediate instead of waiting on accumulated cursor motion.
-    constexpr float kLagDragJitterDeadzonePx = 0.05f;
-    // DragMoveEvent mouseDelta is reported in screen pixels, but the anchor
-    // cursor position and widget box size live in rack-local coordinates
-    // under ZoomWidget. Normalize delta back into local scope space so drag
-    // travel stays consistent across rack zoom levels.
-    float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
-    lagDragResidualY += localMouseDeltaY;
-    if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f);
-      e.consume(this);
-      return;
-    }
-    float appliedDeltaY = lagDragResidualY;
-    lagDragResidualY = 0.f;
-    float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
-    float signedDeltaY = appliedDeltaY * lagDragDirection;
-    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
-      // CONTAINMENT NOTE
-      // This is not architecturally "clean". Scope is compensating for live
-      // write-head advance here because, without it, slow downward drags in
-      // live mode can fall behind the moving lag reference and feel like they
-      // hit a false barrier. The matching trace that exposed this looked like:
-      // target lag going stale while frame lag kept advancing.
-      //
-      // This compensation is intentionally one-sided. Applying it during
-      // upward drags created visible/audible stutter because it fought reversal
-      // intent. If future work removes or moves this logic, re-test both:
-      // 1. slow downward live drags for the "barrier" symptom
-      // 2. upward drags for reversal stutter
-      // In live mode, compensate write-head advance only while dragging away
-      // from NOW (downward). Applying this during upward drags can feel like
-      // stutter because compensation fights reversal intent.
-      lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
-    }
-    lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      return;
-    }
-
-    float previousLag = lagDragLocalLagSamples;
-    // Keep scope drag in normalized local travel space so behavior is tied to
-    // the visible scope window rather than raw rendered pixel density.
-    float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
-    bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
-      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(map.accessibleLag) + 1.0;
+  NVGcolor silWaveformHighColor() const {
+    float highR = 28.f, highG = 204.f, highB = 217.f;
+    if (module) {
+      const int colorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      switch (colorScheme) {
+        case TDScope::COLOR_SCHEME_CLASSIC: highR = 255.f; highG = 15.f; highB = 5.f; break;
+        case TDScope::COLOR_SCHEME_MONOCHROME: highR = 242.f; highG = 242.f; highB = 242.f; break;
+        case TDScope::COLOR_SCHEME_FIRE: highR = 255.f; highG = 255.f; highB = 30.f; break;
+        default: break;
       }
-      lagDragLocalLagSamples = float(wrappedLag);
-    } else {
-      // CONTAINMENT NOTE
-      // This extra headroom is another live-mode workaround. Fresh host
-      // snapshots arrive at UI cadence, not audio cadence, so a strict clamp to
-      // the last advertised accessible lag can create a false local ceiling
-      // during live drag. The host still remains authoritative; this just keeps
-      // the UI-side request from getting artificially pinned too early.
-      // Live (non-sample) streaming advances the write head between UI updates.
-      // Add dynamic headroom so scope-side clamping doesn't create a false
-      // downward barrier while dragging away from NOW.
-      float effectiveAccessibleLag = map.accessibleLag;
-      if (!sampleMode && !freezeActive && lastGoodMsgTimeSec >= 0.0) {
-        double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
-        effectiveAccessibleLag += std::max(lastGoodMsg.sampleRate, 1.f) * float(msgAgeSec);
-      }
-      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
     }
-    // WARNING: Keep velocity sign aligned with setLagDragRequest() contract:
-    // positive velocity means toward NOW (lag decreasing), hence
-    // (previousLag - currentLag) / dt.
-    float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
-    float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
-    float maxAbsGestureVelocity = sampleRate * 3.0f;
-    velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
-    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples);
-    e.consume(this);
+    NVGcolor c = nvgRGBAf(highR / 255.f, highG / 255.f, highB / 255.f, 1.f);
+    if (module) c = module->applyScopeColorBrightness(c);
+    return c;
   }
 
-  void onDragEnd(const event::DragEnd &e) override {
-    if (lagDragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-      endLagDrag();
-      e.consume(this);
-      return;
+  void drawSilWaveformBackground(NVGcontext *vg, bool renderStereo, float laneWidth, float laneGap, float drawTop, float drawBottom) const {
+    const float xInset = 0.75f;
+    const float bgX = xInset;
+    const float bgY = drawTop;
+    const float bgW = std::max(0.f, box.size.x - 2.f * xInset);
+    const float bgH = std::max(0.f, drawBottom - drawTop);
+    nvgBeginPath(vg);
+    nvgRect(vg, bgX, bgY, bgW, bgH);
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 255));
+    nvgFill(vg);
+
+    if (renderStereo) {
+      const float dividerX = laneWidth + laneGap * 0.5f;
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, dividerX, drawTop);
+      nvgLineTo(vg, dividerX, drawBottom);
+      NVGcolor divC = silWaveformLowColor();
+      divC.a = 0.25f;
+      nvgStrokeColor(vg, divC);
+      nvgStrokeWidth(vg, 0.5f);
+      nvgStroke(vg);
     }
-    Widget::onDragEnd(e);
   }
 
   void step() override {
@@ -403,41 +272,30 @@ struct TDScopeDisplayWidget final : Widget {
     }
 
     if (module) {
-      if (module->scopeDisplayRangeMode != redrawLastRangeMode) {
+      const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+      const bool scopeVerticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
+      const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+      const int scopeColorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
+      const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+      if (scopeDisplayRangeMode != redrawLastRangeMode) {
         dirty = true;
-        redrawLastRangeMode = module->scopeDisplayRangeMode;
+        redrawLastRangeMode = scopeDisplayRangeMode;
       }
-      if (module->scopeVerticalInverted != redrawLastVerticalInverted) {
+      if (scopeVerticalInverted != redrawLastVerticalInverted) {
         dirty = true;
-        redrawLastVerticalInverted = module->scopeVerticalInverted;
+        redrawLastVerticalInverted = scopeVerticalInverted;
       }
-      if (module->scopeChannelMode != redrawLastChannelMode) {
+      if (scopeChannelMode != redrawLastChannelMode) {
         dirty = true;
-        redrawLastChannelMode = module->scopeChannelMode;
+        redrawLastChannelMode = scopeChannelMode;
       }
-      if (module->scopeColorScheme != redrawLastColorScheme) {
+      if (scopeColorScheme != redrawLastColorScheme) {
         dirty = true;
-        redrawLastColorScheme = module->scopeColorScheme;
+        redrawLastColorScheme = scopeColorScheme;
       }
-      if (module->scopeTransientHaloEnabled != redrawLastHaloEnabled) {
+      if (debugRenderMode != redrawLastRenderMode) {
         dirty = true;
-        redrawLastHaloEnabled = module->scopeTransientHaloEnabled;
-      }
-      if (module->debugRenderMainTraceEnabled != redrawLastMainTraceEnabled) {
-        dirty = true;
-        redrawLastMainTraceEnabled = module->debugRenderMainTraceEnabled;
-      }
-      if (module->debugRenderConnectorsEnabled != redrawLastConnectorsEnabled) {
-        dirty = true;
-        redrawLastConnectorsEnabled = module->debugRenderConnectorsEnabled;
-      }
-      if (module->debugRenderStereoRightLaneEnabled != redrawLastStereoRightLaneEnabled) {
-        dirty = true;
-        redrawLastStereoRightLaneEnabled = module->debugRenderStereoRightLaneEnabled;
-      }
-      if (module->debugRenderMode != redrawLastRenderMode) {
-        dirty = true;
-        redrawLastRenderMode = module->debugRenderMode;
+        redrawLastRenderMode = debugRenderMode;
         tailRasterValid = false;
         tailRasterShiftResidualPx = 0.f;
         historyValidState = false;
@@ -498,7 +356,7 @@ struct TDScopeDisplayWidget final : Widget {
         return;
       }
       const float centerX = box.size.x * 0.5f;
-      const float centerY = box.size.y * 0.5f;
+      const float bottomY = box.size.y - 7.f;
       const float fontSize1 = 12.f;
       const float fontSize2 = 14.f;
       const float lineGap = 9.f;
@@ -509,15 +367,21 @@ struct TDScopeDisplayWidget final : Widget {
 
       nvgFontSize(args.vg, fontSize1);
       nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
-      nvgText(args.vg, centerX, centerY - lineGap, line1, nullptr);
+      nvgText(args.vg, centerX, bottomY - 2.f * lineGap, line1, nullptr);
 
       nvgFontSize(args.vg, fontSize2);
       nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
-      nvgText(args.vg, centerX, centerY + lineGap, line2, nullptr);
+      nvgText(args.vg, centerX, bottomY - lineGap + 2.f, line2, nullptr);
       nvgRestore(args.vg);
     };
 
     if (!module) {
+      drawStatusMessage("Attach to", "Temporal Deck");
+      publishUiDebugMetrics(0.f, 0);
+      return;
+    }
+    bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(module->leftExpander.module);
+    if (!hasTemporalDeckNeighbor) {
       drawStatusMessage("Attach to", "Temporal Deck");
       publishUiDebugMetrics(0.f, 0);
       return;
@@ -552,9 +416,12 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     bool hostStereoPayload = (msg.flags & temporaldeck_expander::FLAG_SCOPE_STEREO) != 0u;
-    bool renderStereo = (module->scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
+    const int scopeChannelMode = module->scopeChannelMode.load(std::memory_order_relaxed);
+    bool renderStereo = (scopeChannelMode == TDScope::SCOPE_CHANNEL_STEREO) && hostStereoPayload;
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
+    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    const bool silStandardStyle = debugRenderMode == TDScope::DEBUG_RENDER_STANDARD;
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -580,130 +447,48 @@ struct TDScopeDisplayWidget final : Widget {
     const float drawBottom = std::max(drawTop + 1.f, box.size.y - yInset);
     const float drawHeight = std::max(drawBottom - drawTop, 1.f);
 
-    const float laneGap = renderStereo ? 2.f : 0.f;
-    const float laneWidth =
-      renderStereo ? std::max((box.size.x - laneGap) * 0.5f, 1.f) : std::max(box.size.x, 1.f);
-    const float lane0CenterX = renderStereo ? (laneWidth * 0.5f) : (box.size.x * 0.5f);
-    const float lane1CenterX = renderStereo ? (laneWidth + laneGap + laneWidth * 0.5f) : lane0CenterX;
-    const float laneAmpHalfWidth = laneWidth * 0.46f;
+    tdscope::ScopeLaneGeometry laneGeo = tdscope::computeScopeLaneGeometry(box.size.x, renderStereo);
+    const float laneGap = laneGeo.laneGap;
+    const float laneWidth = laneGeo.laneWidth;
+    const float lane0CenterX = laneGeo.lane0CenterX;
+    const float lane1CenterX = laneGeo.lane1CenterX;
+    const float laneAmpHalfWidth = laneGeo.laneAmpHalfWidth;
     const float yDen = std::max(drawHeight - 1.f, 1.f);
+    if (!module->useOpenGlGeometryRenderMode()) {
+      const float xInset = 0.75f;
+      const float bgX = xInset;
+      const float bgY = drawTop;
+      const float bgW = std::max(0.f, box.size.x - 2.f * xInset);
+      const float bgH = std::max(0.f, drawBottom - drawTop);
+      nvgBeginPath(args.vg);
+      nvgRect(args.vg, bgX, bgY, bgW, bgH);
+      nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+      nvgFill(args.vg);
+    }
+    if (silStandardStyle) {
+      drawSilWaveformBackground(args.vg, renderStereo, laneWidth, laneGap, drawTop, drawBottom);
+    }
     const bool msgChanged = !cachedGeometryValid || msg.publishSeq != cachedPublishSeq;
-    const bool rangeModeChanged = module->scopeDisplayRangeMode != cachedRangeMode;
+    const int scopeDisplayRangeMode = module->scopeDisplayRangeMode.load(std::memory_order_relaxed);
+    const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
+    const bool dragActive = module->uiLagDragActive.load(std::memory_order_relaxed);
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
-    if (module->scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
+    if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-      bool sampleLoaded = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-      auto computeLivePeakStats = [&]() -> std::pair<float, float> {
-        // Returns {windowPeakVolts, p99Volts} over per-bin absolute peaks.
-        std::vector<float> peaks;
-        peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
-        for (uint32_t i = 0; i < scopeBinCount; ++i) {
-          const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
-          if (!temporaldeck_expander::isScopeBinValid(bin)) {
-            // fall through to right channel in stereo mode
-          } else {
-            int peakQ = std::max(std::abs(int(bin.min)), std::abs(int(bin.max)));
-            float peakV = (float(peakQ) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-            peaks.push_back(clamp(peakV, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
-          }
-          if (renderStereo) {
-            const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
-            if (temporaldeck_expander::isScopeBinValid(binR)) {
-              int peakQR = std::max(std::abs(int(binR.min)), std::abs(int(binR.max)));
-              float peakVR = (float(peakQR) / 32767.f) * temporaldeck_expander::kPreviewQuantizeVolts;
-              peaks.push_back(clamp(peakVR, 0.f, temporaldeck_expander::kPreviewQuantizeVolts));
-            }
-          }
-        }
-        if (peaks.empty()) {
-          return std::make_pair(0.f, 0.f);
-        }
-        float windowPeakVolts = *std::max_element(peaks.begin(), peaks.end());
-        size_t n = peaks.size();
-        size_t rank = size_t(std::ceil(0.99f * float(n)));
-        rank = std::max<size_t>(1, std::min(rank, n));
-        size_t p99Index = rank - 1;
-        std::nth_element(peaks.begin(), peaks.begin() + ptrdiff_t(p99Index), peaks.end());
-        float p99Volts = peaks[p99Index];
-        return std::make_pair(windowPeakVolts, p99Volts);
-      };
-
-      // Recompute auto-scale state only when snapshot updates (or mode changes).
-      if (msgChanged || rangeModeChanged || !autoDisplayScaleInitialized) {
-        bool modeChanged = !autoDisplayScaleInitialized || sampleMode != autoLastSampleMode;
-        float targetFullScaleVolts = 5.f;
-        if (sampleMode) {
-          float peakVolts = 0.f;
-          bool haveTrustedSamplePeak = sampleLoaded && std::isfinite(msg.sampleAbsolutePeakVolts);
-          if (haveTrustedSamplePeak) {
-            // In sample mode with loaded sample, treat 0V as a valid true peak
-            // (e.g., fully silent sample) instead of falling back to bin scanning.
-            peakVolts = std::max(msg.sampleAbsolutePeakVolts, 0.f);
-          } else {
-            auto liveStats = computeLivePeakStats();
-            peakVolts = liveStats.first;
-          }
-          targetFullScaleVolts = clamp(peakVolts * 1.08f, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
-        } else {
-          auto liveStats = computeLivePeakStats();
-          float windowPeakVolts = liveStats.first;
-          float p99Volts = liveStats.second;
-          if (p99Volts <= 0.f) {
-            p99Volts = windowPeakVolts;
-          }
-          float hostPeakVolts =
-            (std::isfinite(msg.sampleAbsolutePeakVolts) && msg.sampleAbsolutePeakVolts > 0.f) ? msg.sampleAbsolutePeakVolts : 0.f;
-          float truePeakVolts = std::max(windowPeakVolts, hostPeakVolts);
-
-          // Guardrail: hold true peaks, then decay slowly so transients don't
-          // immediately collapse display width.
-          if (modeChanged || !std::isfinite(autoLivePeakHoldVolts)) {
-            autoLivePeakHoldVolts = truePeakVolts;
-            autoLivePeakHoldFrames = 0;
-          } else if (truePeakVolts > autoLivePeakHoldVolts) {
-            autoLivePeakHoldVolts = truePeakVolts;
-            autoLivePeakHoldFrames = 24; // ~400ms @ 60Hz
-          } else if (autoLivePeakHoldFrames > 0) {
-            autoLivePeakHoldFrames--;
-          } else {
-            autoLivePeakHoldVolts += (truePeakVolts - autoLivePeakHoldVolts) * 0.03f;
-          }
-
-          targetFullScaleVolts = std::max(p99Volts * 1.10f, autoLivePeakHoldVolts * 1.02f);
-          targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
-
-          // Hysteresis: ignore small retargeting around current full-scale.
-          if (!modeChanged) {
-            float hysteresisFrac = 0.03f;
-            float lowBand = autoDisplayFullScaleVolts * (1.f - hysteresisFrac);
-            float highBand = autoDisplayFullScaleVolts * (1.f + hysteresisFrac);
-            if (targetFullScaleVolts >= lowBand && targetFullScaleVolts <= highBand) {
-              targetFullScaleVolts = autoDisplayFullScaleVolts;
-            }
-          }
-        }
-        if (!autoDisplayScaleInitialized) {
-          autoDisplayFullScaleVolts = targetFullScaleVolts;
-          autoDisplayScaleInitialized = true;
-        } else {
-          // Smooth autoscale transitions.
-          // In live mode keep slower motion to minimize flicker.
-          float delta = targetFullScaleVolts - autoDisplayFullScaleVolts;
-          if (std::fabs(delta) > 0.01f) {
-            float kAutoScaleAttackAlpha = sampleMode ? 0.16f : 0.10f;
-            float kAutoScaleReleaseAlpha = sampleMode ? 0.08f : 0.03f;
-            float alpha = delta > 0.f ? kAutoScaleAttackAlpha : kAutoScaleReleaseAlpha;
-            autoDisplayFullScaleVolts += delta * alpha;
-          }
-        }
-        autoLastSampleMode = sampleMode;
-      }
-      displayFullScaleVolts = autoDisplayFullScaleVolts;
+      const std::pair<float, float> liveStats = tdscope::computeScopePeakStatsFromBins(
+        leftScopeBins, rightScopeBins, scopeBinCount, renderStereo);
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState,
+        true,
+        msgChanged || rangeModeChanged || !autoScaleState.initialized,
+        dragActive,
+        sampleMode,
+        liveStats.first,
+        liveStats.second,
+        displayFullScaleVolts);
     } else {
-      autoDisplayScaleInitialized = false;
-      autoLastSampleMode = true;
-      autoLivePeakHoldVolts = 0.f;
-      autoLivePeakHoldFrames = 0;
+      displayFullScaleVolts = tdscope::updateScopeAutoScale(
+        &autoScaleState, false, false, dragActive, true, 0.f, 0.f, displayFullScaleVolts);
     }
     float scopeNormGain = temporaldeck_expander::kPreviewQuantizeVolts / displayFullScaleVolts;
     float rackZoom = 1.f;
@@ -715,27 +500,16 @@ struct TDScopeDisplayWidget final : Widget {
     float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.70f, 1.42f);
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * std::max(msg.sampleRate, 1.f));
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+    tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
+    float totalWindowSamples = lagSpan.totalWindowSamples;
     bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      // Live mode viewport bias near NOW:
-      // lag=0 => read-head at bottom, lag=halfWindow => read-head centered.
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    float windowTopLag = msg.lagSamples + backwardWindowSamples;
-    float windowBottomLag = msg.lagSamples - forwardWindowSamples;
-    bool verticalInverted = module->scopeVerticalInverted;
-    float readHeadT = 0.5f;
-    if (windowTopLag != windowBottomLag) {
-      readHeadT = clamp((msg.lagSamples - windowTopLag) / (windowBottomLag - windowTopLag), 0.f, 1.f);
-    }
-    if (verticalInverted) {
-      readHeadT = 1.f - readHeadT;
-    }
+    bool lagDragActive = module && module->uiLagDragActive.load(std::memory_order_relaxed);
+    float windowTopLag = lagSpan.windowTopLag;
+    float windowBottomLag = lagSpan.windowBottomLag;
+    bool verticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
+    float readHeadT = tdscope::computeReadHeadMarkerT(lagSpan, msg.lagSamples);
+    readHeadT =
+      tdscope::applyLiveReadHeadPolicy(readHeadT, msg.lagSamples, lagSpan.halfWindowSamples, sampleMode, verticalInverted);
     float readHeadY = drawTop + readHeadT * yDen + 0.5f;
     if (lowSignalWindow && sampleMode) {
       readHeadY = drawTop + 0.5f * yDen + 0.5f;
@@ -746,7 +520,7 @@ struct TDScopeDisplayWidget final : Widget {
     constexpr float kReadHeadNowNudgePx = 0.45f;
     float readHeadDrawY = readHeadY;
     if (!sampleMode) {
-      float nowProximity = clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
+      float nowProximity = lagDragActive ? 0.f : clamp((readHeadT - 0.96f) / 0.04f, 0.f, 1.f);
       readHeadDrawY += (verticalInverted ? -kReadHeadNowNudgePx : kReadHeadNowNudgePx) * nowProximity;
     }
     float minReadHeadY = drawTop + kReadHeadHalfBandPx + 0.5f;
@@ -758,7 +532,7 @@ struct TDScopeDisplayWidget final : Widget {
       readHeadDrawY = 0.5f * (drawTop + drawBottom);
     }
     if (module->useOpenGlGeometryRenderMode()) {
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         float dividerX = laneWidth + laneGap * 0.5f;
         nvgBeginPath(args.vg);
         nvgMoveTo(args.vg, dividerX, drawTop);
@@ -787,7 +561,7 @@ struct TDScopeDisplayWidget final : Widget {
       return;
     }
     float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
-    const int rowCount = 333;
+    const int rowCount = 512;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
@@ -1041,11 +815,13 @@ struct TDScopeDisplayWidget final : Widget {
         uint8_t prevHold = (*holdOut)[idx];
         float y = drawTop + (float(iy) + 0.5f) * rowStep;
         rowY[idx] = y;
-        float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
-        float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
         float rowMinNorm = 0.f;
         float rowMaxNorm = 0.f;
-        if (!sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm)) {
+        bool haveRow = false;
+        float t0 = clamp(float(iy) / float(rowCount), 0.f, 1.f);
+        float t1 = clamp(float(iy + 1) / float(rowCount), 0.f, 1.f);
+        haveRow = sampleEnvelopeOverInterval(scopeData, t0, t1, &rowMinNorm, &rowMaxNorm);
+        if (!haveRow) {
           if (prevValid && prevHold > 0u) {
             (*x0Out)[idx] = prevX0;
             (*x1Out)[idx] = prevX1;
@@ -1073,8 +849,7 @@ struct TDScopeDisplayWidget final : Widget {
         float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
         float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
         float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-        constexpr float kIntensityGamma = 0.68f;
-        float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f, 0.f, 1.f);
+        float visualIntensity = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
         (*visualOut)[idx] = visualIntensity;
         (*validOut)[idx] = 1u;
         (*holdOut)[idx] = kRowTailHoldFrames;
@@ -1091,7 +866,6 @@ struct TDScopeDisplayWidget final : Widget {
         }
         constexpr uint8_t kGapHoldFrames = 1u;
         constexpr float kGapIntensityDecay = 0.88f;
-        constexpr float kIntensityGamma = 0.68f;
         for (int iy = 0; iy < rowCount; ++iy) {
           size_t idx = size_t(iy);
           bool prevValid = (*validOut)[idx] != 0u;
@@ -1145,7 +919,7 @@ struct TDScopeDisplayWidget final : Widget {
           // scope look artificially dim. Keep some coverage influence for
           // fidelity, but apply a floor so visibility remains stable.
           float fillInfluence = 0.55f + 0.45f * fillFraction;
-          float visualIntensity = clamp(std::pow(intensity, kIntensityGamma) * 1.06f * fillInfluence, 0.f, 1.f);
+          float visualIntensity = clamp(std::pow(intensity, 0.60f) * 1.12f * fillInfluence, 0.f, 1.f);
           (*visualOut)[idx] = visualIntensity;
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
@@ -1322,7 +1096,7 @@ struct TDScopeDisplayWidget final : Widget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.68f) * 1.06f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -1411,7 +1185,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1455,7 +1229,7 @@ struct TDScopeDisplayWidget final : Widget {
       }
       cachedPublishSeq = msg.publishSeq;
       cachedRowCount = rowCount;
-      cachedRangeMode = module->scopeDisplayRangeMode;
+      cachedRangeMode = scopeDisplayRangeMode;
       cachedVerticalInverted = verticalInverted;
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
@@ -1487,113 +1261,53 @@ struct TDScopeDisplayWidget final : Widget {
       float midPoint = 0.5f;
       float midHoldHalfWidth = 0.f;
       switch (scheme) {
-        case TDScope::COLOR_SCHEME_EMERALD:
-          lowR = 15.f;
-          lowG = 79.f;
-          lowB = 54.f;
-          midR = 47.f;
+        case TDScope::COLOR_SCHEME_CLASSIC:
+          lowR = 0.f;
+          lowG = 255.f;
+          lowB = 65.f;
+          midR = 255.f;
+          midG = 232.f;
+          midB = 32.f;
+          highR = 255.f;
+          highG = 15.f;
+          highB = 5.f;
+          midPoint = 0.5f;
+          break;
+        case TDScope::COLOR_SCHEME_MONOCHROME:
+          lowR = 92.f;
+          lowG = 92.f;
+          lowB = 92.f;
+          midR = 168.f;
           midG = 168.f;
-          midB = 110.f;
-          highR = 87.f;
-          highG = 240.f;
-          highB = 182.f;
+          midB = 168.f;
+          highR = 242.f;
+          highG = 242.f;
+          highB = 242.f;
           midPoint = 0.52f;
           break;
-        case TDScope::COLOR_SCHEME_WASP:
-          lowR = 33.f;
-          lowG = 27.f;
-          lowB = 18.f;
-          midR = 231.f;
-          midG = 137.f;
-          midB = 47.f;
-          highR = 255.f;
-          highG = 216.f;
-          highB = 74.f;
-          midPoint = 0.58f;
-          break;
-        case TDScope::COLOR_SCHEME_PIXIE:
-          lowR = 255.f;
-          lowG = 143.f;
-          lowB = 209.f;
-          midR = 211.f;
-          midG = 180.f;
-          midB = 239.f;
-          highR = 129.f;
-          highG = 255.f;
-          highB = 210.f;
-          midPoint = 0.48f;
-          break;
-        case TDScope::COLOR_SCHEME_VIOLET_FLAME:
-          lowR = 42.f;
-          lowG = 31.f;
-          lowB = 95.f;
-          midR = 147.f;
-          midG = 71.f;
-          midB = 217.f;
-          highR = 181.f;
-          highG = 109.f;
-          highB = 255.f;
-          midPoint = 0.54f;
-          break;
-        case TDScope::COLOR_SCHEME_ANGELIC:
-          lowR = 248.f;
-          lowG = 245.f;
-          lowB = 255.f;
-          midR = 232.f;
-          midG = 220.f;
-          midB = 255.f;
-          highR = 179.f;
-          highG = 229.f;
-          highB = 255.f;
-          midPoint = 0.40f;
-          break;
-        case TDScope::COLOR_SCHEME_HELLFIRE:
-          lowR = 120.f;
-          lowG = 24.f;
-          lowB = 15.f;
+        case TDScope::COLOR_SCHEME_FIRE:
+          lowR = 140.f;
+          lowG = 0.f;
+          lowB = 0.f;
           midR = 255.f;
-          midG = 111.f;
-          midB = 43.f;
+          midG = 120.f;
+          midB = 0.f;
           highR = 255.f;
-          highG = 209.f;
-          highB = 102.f;
-          midPoint = 0.60f;
+          highG = 255.f;
+          highB = 30.f;
+          midPoint = 0.5f;
           break;
-        case TDScope::COLOR_SCHEME_PICKLE:
-          lowR = 62.f;
-          lowG = 111.f;
-          lowB = 49.f;
-          midR = 132.f;
-          midG = 185.f;
-          midB = 72.f;
-          highR = 190.f;
-          highG = 234.f;
-          highB = 97.f;
-          midPoint = 0.56f;
-          break;
-        case TDScope::COLOR_SCHEME_LEVIATHAN:
+        case TDScope::COLOR_SCHEME_DEFAULT:
+        default:
           lowR = 122.f;
           lowG = 92.f;
           lowB = 255.f;
-          midR = 75.f;
-          midG = 141.f;
-          midB = 255.f;
+          midR = 81.f;
+          midG = 157.f;
+          midB = 244.f;
           highR = 28.f;
           highG = 204.f;
           highB = 217.f;
-          midPoint = 0.52f;
-          break;
-        case TDScope::COLOR_SCHEME_TEMPORAL_DECK:
-        default:
-          lowR = 85.f;
-          lowG = 227.f;
-          lowB = 238.f;
-          midR = 255.f;
-          midG = 191.f;
-          midB = 86.f;
-          highR = 233.f;
-          highG = 112.f;
-          highB = 218.f;
           midPoint = 0.5f;
           midHoldHalfWidth = 0.f;
           break;
@@ -1644,42 +1358,58 @@ struct TDScopeDisplayWidget final : Widget {
       ensureColorLut(scheme);
       int index = clamp(int(std::lround(clamp(intensity, 0.f, 1.f) * 255.f)), 0, 255);
       NVGcolor c = colorLut[size_t(scheme)][size_t(index)];
-      // Keep a strong top-end accent without paying for a second boost stroke pass.
-      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.82f) / 0.18f, 0.f, 1.f);
-      hotT = hotT * hotT;
-      float hotLift = 0.24f * hotT;
-      c.r = c.r + (1.f - c.r) * hotLift;
-      c.g = c.g + (1.f - c.g) * hotLift;
-      c.b = c.b + (1.f - c.b) * hotLift;
+      // Keep hue/chroma strong (Sil-like vibrance) before brightness shaping.
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      constexpr float kVibrance = 1.40f;
+      c.r = clamp(luma + (c.r - luma) * kVibrance, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * kVibrance, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * kVibrance, 0.f, 1.f);
+      // Keep a strong top-end accent without washing hue toward white.
+      float hotT = clamp((clamp(intensity, 0.f, 1.f) - 0.74f) / 0.26f, 0.f, 1.f);
+      float hotLift = 0.22f * std::pow(hotT, 1.15f);
+      c.r = clamp(c.r * (1.f + hotLift), 0.f, 1.f);
+      c.g = clamp(c.g * (1.f + hotLift), 0.f, 1.f);
+      c.b = clamp(c.b * (1.f + hotLift), 0.f, 1.f);
+      c = module->applyScopeColorBrightness(c);
       c.a = float(alpha) / 255.f;
       return c;
     };
 
     auto brightenColor = [&](NVGcolor c, float lift) -> NVGcolor {
       lift = clamp(lift, 0.f, 1.f);
-      c.r = c.r + (1.f - c.r) * lift;
-      c.g = c.g + (1.f - c.g) * lift;
-      c.b = c.b + (1.f - c.b) * lift;
+      float gain = 1.f + 0.88f * lift;
+      c.r = clamp(c.r * gain, 0.f, 1.f);
+      c.g = clamp(c.g * gain, 0.f, 1.f);
+      c.b = clamp(c.b * gain, 0.f, 1.f);
+      float luma = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+      float sat = 1.f + 0.30f * lift;
+      c.r = clamp(luma + (c.r - luma) * sat, 0.f, 1.f);
+      c.g = clamp(luma + (c.g - luma) * sat, 0.f, 1.f);
+      c.b = clamp(luma + (c.b - luma) * sat, 0.f, 1.f);
       return c;
     };
 
     auto ensureTailRasterImage = [&]() {
       int targetW = std::max(1, int(std::ceil(box.size.x)));
       int targetH = std::max(1, int(std::ceil(box.size.y)));
+      if (tailRasterImageVg != args.vg) {
+        resetTailRasterImage(args.vg, false);
+      }
+      if (tailRasterImage >= 0) {
+        if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, tailRasterImage, tailRasterW, tailRasterH)) {
+          resetTailRasterImage(args.vg, true);
+        }
+      }
       bool recreate = (tailRasterImage < 0) || (tailRasterW != targetW) || (tailRasterH != targetH);
       if (!recreate) {
         return;
       }
-      if (tailRasterImage >= 0) {
-        nvgDeleteImage(args.vg, tailRasterImage);
-        tailRasterImage = -1;
-      }
+      resetTailRasterImage(args.vg, true);
       tailRasterW = targetW;
       tailRasterH = targetH;
       tailRasterPixels.assign(size_t(tailRasterW * tailRasterH * 4), 0u);
       tailRasterImage = nvgCreateImageRGBA(args.vg, tailRasterW, tailRasterH, NVG_IMAGE_PREMULTIPLIED, nullptr);
-      tailRasterValid = false;
-      tailRasterShiftResidualPx = 0.f;
+      tailRasterImageVg = args.vg;
       if (tailRasterImage >= 0) {
         nvgUpdateImage(args.vg, tailRasterImage, tailRasterPixels.data());
       }
@@ -1738,7 +1468,6 @@ struct TDScopeDisplayWidget final : Widget {
       [&](const std::vector<float> &x0, const std::vector<float> &x1, const std::vector<float> &visualIntensity,
           const std::vector<float> &colorDrive, const std::vector<uint8_t> &valid, float laneCenterXForConnectors,
           int iyMin, int iyMax) {
-        constexpr uint8_t kHaloMinAlphaToDraw = 28u;
         iyMin = clamp(iyMin, 0, rowCount - 1);
         iyMax = clamp(iyMax, 0, rowCount - 1);
         if (iyMax < iyMin) {
@@ -1758,10 +1487,10 @@ struct TDScopeDisplayWidget final : Widget {
           int yPx = clamp(int(std::lround(rowY[idx])), 0, tailRasterH - 1);
           float visual = clamp(visualIntensity[idx], 0.f, 1.f);
           float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
           NVGcolor c = brightenColor(
             gradientColorForIntensity(tone, uint8_t(std::lround(122.f + 120.f * tone))),
-            transientLift * 0.90f);
+            transientLift * 0.62f);
           uint8_t r = uint8_t(std::lround(clamp(c.r, 0.f, 1.f) * 255.f));
           uint8_t g = uint8_t(std::lround(clamp(c.g, 0.f, 1.f) * 255.f));
           uint8_t b = uint8_t(std::lround(clamp(c.b, 0.f, 1.f) * 255.f));
@@ -1769,27 +1498,12 @@ struct TDScopeDisplayWidget final : Widget {
           int xMin = int(std::lround(std::min(x0[idx], x1[idx])));
           int xMax = int(std::lround(std::max(x0[idx], x1[idx])));
 
-          if (module->scopeTransientHaloEnabled) {
-            float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
-            float haloT = haloLinear * haloLinear;
-            uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-            if (haloAlpha >= kHaloMinAlphaToDraw) {
-              int haloExtend = int(std::lround((1.35f + 5.20f * haloT) * zoomThicknessMul));
-              int haloHalfW = std::max(1, int(std::lround((0.50f + 1.20f * haloT) * zoomThicknessMul)));
-              for (int yy = yPx - haloHalfW; yy <= yPx + haloHalfW; ++yy) {
-                fillTailRasterSpan(yy, xMin - haloExtend, xMax + haloExtend, 255u, 255u, 255u, haloAlpha);
-              }
-            }
+          int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
+          for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
+            fillTailRasterSpan(yy, xMin, xMax, r, g, b, a);
           }
 
-          if (module->debugRenderMainTraceEnabled) {
-            int halfW = std::max(0, int(std::lround((0.78f + 0.62f * tone) * zoomThicknessMul * 0.5f)));
-            for (int yy = yPx - halfW; yy <= yPx + halfW; ++yy) {
-              fillTailRasterSpan(yy, xMin, xMax, r, g, b, a);
-            }
-          }
-
-          if (module->debugRenderConnectorsEnabled && prevValid) {
+          if (prevValid) {
             int y0i = prevY;
             int y1i = yPx;
             int dy = std::abs(y1i - y0i);
@@ -1823,12 +1537,8 @@ struct TDScopeDisplayWidget final : Widget {
       // Batch trace rendering into ordered intensity bins so NanoVG receives
       // far fewer stroke submissions while preserving a low->high gradient
       // progression across the scope.
-      constexpr uint8_t kHaloMinAlphaToDraw = 28u;
-      constexpr float kHaloFullDensityThreshold = 0.72f;
       constexpr int kMainStrokeBins = 10;
       constexpr int kConnectorStrokeBins = 8;
-      const bool denseHaloRows = rowStep <= 0.75f;
-      const bool fullHaloDensity = rackZoom >= 2.0f;
 
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
@@ -1838,46 +1548,11 @@ struct TDScopeDisplayWidget final : Widget {
         return (float(bin) + 0.5f) / float(binCount);
       };
 
-      // Keep halo as a separate diffuse layer so stronger transients can still
-      // bloom independently of the quantized main-trace bins.
-      for (int iy = 0; iy < rowCount; ++iy) {
-        size_t idx = size_t(iy);
-        if (!valid[idx]) {
-          continue;
-        }
-
-        float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-        float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-        float mainW = (0.78f + 0.62f * visual) * zoomThicknessMul;
-        // Bias toward faster fade-out for lower-transient content while
-        // preserving strong halo response for high-transient peaks.
-        float haloLinear = clamp((transientLift - 0.080f) / 0.920f, 0.f, 1.f);
-        float haloT = haloLinear * haloLinear;
-
-        if (module->scopeTransientHaloEnabled && haloT > 1e-4f) {
-          uint8_t haloAlpha = uint8_t(std::lround((72.f + 176.f * std::max(visual, 0.24f)) * haloT));
-          bool drawHaloRow = haloAlpha >= kHaloMinAlphaToDraw;
-          // The main trace already renders every supersampled row. For the
-          // diffuse halo, decimating lower-energy rows in dense layouts keeps
-          // the look while materially cutting UI-thread stroke count.
-          if (drawHaloRow && !fullHaloDensity && denseHaloRows && haloT < kHaloFullDensityThreshold && (iy & 1)) {
-            drawHaloRow = false;
-          }
-          if (drawHaloRow) {
-            float haloExtend = (1.35f + 5.20f * haloT) * zoomThicknessMul;
-            float haloW = mainW + (1.10f + 2.20f * haloT) * zoomThicknessMul;
-            nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, x0[idx] - haloExtend, rowY[idx]);
-            nvgLineTo(args.vg, x1[idx] + haloExtend, rowY[idx]);
-            nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, haloAlpha));
-            nvgStrokeWidth(args.vg, haloW);
-            nvgStroke(args.vg);
-          }
-        }
-      }
-
-      if (module->debugRenderMainTraceEnabled) {
-        for (int bin = 0; bin < kMainStrokeBins; ++bin) {
+      if (silStandardStyle) {
+        const NVGcolor silLow = gradientColorForIntensity(0.f, 255u);
+        const NVGcolor silHigh = gradientColorForIntensity(1.f, 255u);
+        constexpr int kSilStrokeBins = 12;
+        for (int bin = 0; bin < kSilStrokeBins; ++bin) {
           bool hasPath = false;
           nvgBeginPath(args.vg);
           for (int iy = 0; iy < rowCount; ++iy) {
@@ -1885,10 +1560,8 @@ struct TDScopeDisplayWidget final : Widget {
             if (!valid[idx]) {
               continue;
             }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            float tone = clamp(0.78f * visual + 0.22f * transientLift, 0.f, 1.f);
-            if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
+            const float amp = clamp(0.84f * visualIntensity[idx] + 0.16f * colorDrive[idx], 0.f, 1.f);
+            if (quantizeStrokeBin(amp, kSilStrokeBins) != bin) {
               continue;
             }
             nvgMoveTo(args.vg, x0[idx], rowY[idx]);
@@ -1898,99 +1571,118 @@ struct TDScopeDisplayWidget final : Widget {
           if (!hasPath) {
             continue;
           }
-          float toneCenter = strokeBinCenter(bin, kMainStrokeBins);
-          float visualCenter = toneCenter;
-          float transientCenter = toneCenter;
-          NVGcolor mainC = brightenColor(
-            gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
-            transientCenter * 0.90f);
-          float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
-          nvgStrokeColor(args.vg, mainC);
-          nvgStrokeWidth(args.vg, mainW);
+          const float ampCenter = strokeBinCenter(bin, kSilStrokeBins);
+          NVGcolor c = nvgLerpRGBA(silLow, silHigh, ampCenter);
+          c.a = 1.f;
+          nvgStrokeColor(args.vg, c);
+          nvgStrokeWidth(args.vg, std::max(0.75f, 1.0f * zoomThicknessMul));
           nvgStroke(args.vg);
         }
+        return;
       }
 
-      if (module->debugRenderConnectorsEnabled) {
-        const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
-        for (int bin = 0; bin < kConnectorStrokeBins; ++bin) {
-          bool hasPath = false;
-          bool prevValid = false;
-          float prevX0 = laneCenterXForConnectors;
-          float prevX1 = laneCenterXForConnectors;
-          float prevY = drawTop + 0.5f;
-          float prevVisual = 0.f;
-          float prevColorDrive = 0.f;
-          nvgBeginPath(args.vg);
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            if (!valid[idx]) {
-              prevValid = false;
-              continue;
-            }
-            float visual = clamp(visualIntensity[idx], 0.f, 1.f);
-            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-            if (prevValid) {
-              float leftDeltaPx = std::fabs(x0[idx] - prevX0);
-              float rightDeltaPx = std::fabs(x1[idx] - prevX1);
-              if (leftDeltaPx < connectorMinDeltaPx && rightDeltaPx < connectorMinDeltaPx) {
-                prevX0 = x0[idx];
-                prevX1 = x1[idx];
-                prevY = rowY[idx];
-                prevVisual = visual;
-                prevColorDrive = transientLift;
-                prevValid = true;
-                continue;
-              }
-              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
-              float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
-              if (quantizeStrokeBin(tone, kConnectorStrokeBins) == bin) {
-                nvgMoveTo(args.vg, prevX0, prevY);
-                nvgLineTo(args.vg, x0[idx], rowY[idx]);
-                nvgMoveTo(args.vg, prevX1, prevY);
-                nvgLineTo(args.vg, x1[idx], rowY[idx]);
-                hasPath = true;
-              }
-            }
-            prevX0 = x0[idx];
-            prevX1 = x1[idx];
-            prevY = rowY[idx];
-            prevVisual = visual;
-            prevColorDrive = transientLift;
-            prevValid = true;
-          }
-          if (!hasPath) {
+      for (int bin = 0; bin < kMainStrokeBins; ++bin) {
+        bool hasPath = false;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
             continue;
           }
-          float toneCenter = strokeBinCenter(bin, kConnectorStrokeBins);
-          float connectVisual = toneCenter;
-          float connectTransientLift = toneCenter;
-          NVGcolor connectC = brightenColor(
-            gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
-            connectTransientLift * 0.72f);
-          float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
-          nvgStrokeColor(args.vg, connectC);
-          nvgStrokeWidth(args.vg, connectW);
-          nvgStroke(args.vg);
+          float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
+          if (quantizeStrokeBin(tone, kMainStrokeBins) != bin) {
+            continue;
+          }
+          nvgMoveTo(args.vg, x0[idx], rowY[idx]);
+          nvgLineTo(args.vg, x1[idx], rowY[idx]);
+          hasPath = true;
         }
+        if (!hasPath) {
+          continue;
+        }
+        float toneCenter = strokeBinCenter(bin, kMainStrokeBins);
+        float visualCenter = toneCenter;
+        float transientCenter = toneCenter;
+        NVGcolor mainC = brightenColor(
+          gradientColorForIntensity(visualCenter, uint8_t(std::lround(122.f + 120.f * visualCenter))),
+          transientCenter * 0.62f);
+        float mainW = (0.78f + 0.62f * visualCenter) * zoomThicknessMul;
+        nvgStrokeColor(args.vg, mainC);
+        nvgStrokeWidth(args.vg, mainW);
+        nvgStroke(args.vg);
+      }
+
+      const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
+      for (int bin = 0; bin < kConnectorStrokeBins; ++bin) {
+        bool hasPath = false;
+        bool prevValid = false;
+        float prevX0 = laneCenterXForConnectors;
+        float prevX1 = laneCenterXForConnectors;
+        float prevY = drawTop + 0.5f;
+        float prevVisual = 0.f;
+        float prevColorDrive = 0.f;
+        nvgBeginPath(args.vg);
+        for (int iy = 0; iy < rowCount; ++iy) {
+          size_t idx = size_t(iy);
+          if (!valid[idx]) {
+            prevValid = false;
+            continue;
+          }
+          float visual = clamp(visualIntensity[idx], 0.f, 1.f);
+          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+          if (prevValid) {
+            float leftDeltaPx = std::fabs(x0[idx] - prevX0);
+            float rightDeltaPx = std::fabs(x1[idx] - prevX1);
+            if (leftDeltaPx < connectorMinDeltaPx && rightDeltaPx < connectorMinDeltaPx) {
+              prevX0 = x0[idx];
+              prevX1 = x1[idx];
+              prevY = rowY[idx];
+              prevVisual = visual;
+              prevColorDrive = transientLift;
+              prevValid = true;
+              continue;
+            }
+            float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+            float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+            float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+            if (quantizeStrokeBin(tone, kConnectorStrokeBins) == bin) {
+              nvgMoveTo(args.vg, prevX0, prevY);
+              nvgLineTo(args.vg, x0[idx], rowY[idx]);
+              nvgMoveTo(args.vg, prevX1, prevY);
+              nvgLineTo(args.vg, x1[idx], rowY[idx]);
+              hasPath = true;
+            }
+          }
+          prevX0 = x0[idx];
+          prevX1 = x1[idx];
+          prevY = rowY[idx];
+          prevVisual = visual;
+          prevColorDrive = transientLift;
+          prevValid = true;
+        }
+        if (!hasPath) {
+          continue;
+        }
+        float toneCenter = strokeBinCenter(bin, kConnectorStrokeBins);
+        float connectVisual = toneCenter;
+        float connectTransientLift = toneCenter;
+        NVGcolor connectC = brightenColor(
+          gradientColorForIntensity(connectVisual, uint8_t(std::lround(88.f + 92.f * connectVisual))),
+          connectTransientLift * 0.58f);
+        float connectW = (0.58f + 0.40f * connectVisual) * zoomThicknessMul;
+        nvgStrokeColor(args.vg, connectC);
+        nvgStrokeWidth(args.vg, connectW);
+        nvgStroke(args.vg);
       }
     };
 
     bool useTailRaster = module->useTailRasterRenderMode();
     if (!useTailRaster) {
       drawLane(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX);
-      if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+      if (renderStereo) {
         drawLane(rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX);
-
-        // Draw subtle lane divider for stereo side-by-side view.
-        float dividerX = laneWidth + laneGap * 0.5f;
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, dividerX, drawTop);
-        nvgLineTo(args.vg, dividerX, drawBottom);
-        nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 22));
-        nvgStrokeWidth(args.vg, 1.f);
-        nvgStroke(args.vg);
       }
       tailRasterValid = false;
     } else {
@@ -2058,7 +1750,7 @@ struct TDScopeDisplayWidget final : Widget {
         }
 
         drawTailRasterLaneRows(rowX0, rowX1, rowVisualIntensity, rowColorDrive, rowValid, lane0CenterX, iyMin, iyMax);
-        if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+        if (renderStereo) {
           drawTailRasterLaneRows(
             rowX0Right, rowX1Right, rowVisualIntensityRight, rowColorDriveRight, rowValidRight, lane1CenterX, iyMin, iyMax);
         }
@@ -2081,7 +1773,7 @@ struct TDScopeDisplayWidget final : Widget {
     }
     float lineX0 = 2.f;
     float lineX1 = box.size.x - 2.f;
-    if (renderStereo && module->debugRenderStereoRightLaneEnabled) {
+    if (renderStereo && !silStandardStyle) {
       float dividerX = laneWidth + laneGap * 0.5f;
       nvgBeginPath(args.vg);
       nvgMoveTo(args.vg, dividerX, drawTop);
@@ -2133,22 +1825,23 @@ Widget *createDisplay(TDScope *module, math::Rect scopeRectMm) {
 } // namespace tdscope
 
 struct TDScopeInputWidget final : Widget {
-  static constexpr double kLagDragHoldDetectSec = 1.0 / 180.0;
+  static constexpr double kLagDragHoldDetectSec = 0.025;
   TDScope *module = nullptr;
   temporaldeck_expander::HostToDisplay lastGoodMsg;
   bool hasLastGoodMsg = false;
   double lastGoodMsgTimeSec = -1.0;
   bool lagDragging = false;
-  float lagDragAnchorLagSamples = 0.f;
   float lagDragReferenceHeight = 1.f;
-  float lagDragTravelSamples = 0.f;
   float lagDragNormalizedOffset = 0.f;
-  float lagDragLocalLagSamples = 0.f;
   float lagDragResidualY = 0.f;
   double lagDragLastMoveSec = 0.0;
+  bool lagDragStationaryHoldActive = false;
 
   bool isWithinDisplay(Vec pos) const {
     return pos.x >= 0.f && pos.y >= 0.f && pos.x < box.size.x && pos.y < box.size.y;
+  }
+  bool isPhysicallyAttachedToTemporalDeck() const {
+    return module && tdscope::isTemporalDeckModule(module->leftExpander.module);
   }
 
   struct ScopeWindowMap {
@@ -2163,18 +1856,9 @@ struct TDScopeInputWidget final : Widget {
 
   ScopeWindowMap buildScopeWindowMap(const temporaldeck_expander::HostToDisplay &msg) const {
     ScopeWindowMap map;
-    float sampleRate = std::max(msg.sampleRate, 1.f);
-    float halfWindowSamples = std::max(0.f, msg.scopeHalfWindowMs * 0.001f * sampleRate);
-    float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
-    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float forwardWindowSamples = halfWindowSamples;
-    float backwardWindowSamples = halfWindowSamples;
-    if (!sampleMode) {
-      forwardWindowSamples = std::min(halfWindowSamples, std::max(msg.lagSamples, 0.f));
-      backwardWindowSamples = totalWindowSamples - forwardWindowSamples;
-    }
-    map.windowTopLag = msg.lagSamples + backwardWindowSamples;
-    map.windowBottomLag = msg.lagSamples - forwardWindowSamples;
+    tdscope::ScopeWindowLagSpan span = tdscope::computeScopeWindowLagSpan(msg);
+    map.windowTopLag = span.windowTopLag;
+    map.windowBottomLag = span.windowBottomLag;
     map.accessibleLag = std::max(0.f, msg.accessibleLagSamples);
     float yInset = 0.75f;
     map.drawTop = yInset;
@@ -2220,13 +1904,11 @@ struct TDScopeInputWidget final : Widget {
     lagDragging = true;
     lagDragResidualY = 0.f;
     lagDragLastMoveSec = system::getTime();
-    float anchorLagSamples = clamp(lastGoodMsg.lagSamples, 0.f, map.accessibleLag);
-    lagDragAnchorLagSamples = anchorLagSamples;
+    lagDragStationaryHoldActive = true;
     lagDragReferenceHeight = std::max(map.drawYDen, 1.f);
-    lagDragTravelSamples = std::max(map.windowTopLag - map.windowBottomLag, 1.f);
     lagDragNormalizedOffset = 0.f;
-    lagDragLocalLagSamples = anchorLagSamples;
-    module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                              temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
     return true;
   }
 
@@ -2234,18 +1916,23 @@ struct TDScopeInputWidget final : Widget {
     lagDragging = false;
     lagDragResidualY = 0.f;
     lagDragReferenceHeight = 1.f;
-    lagDragTravelSamples = 0.f;
     lagDragNormalizedOffset = 0.f;
+    lagDragStationaryHoldActive = false;
     if (module) {
-      module->setLagDragRequest(false, 0.f, 0.f, false);
+      module->setLagDragRequest(false, 0.f, 0.f, false, temporaldeck_expander::LAG_DRAG_PHASE_INACTIVE);
     }
   }
 
   void onButton(const event::Button &e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS && isWithinDisplay(e.pos)) {
-        (void) beginLagDragAt(e.pos);
-        e.consume(this);
+        if (!isPhysicallyAttachedToTemporalDeck()) {
+          Widget::onButton(e);
+          return;
+        }
+        if (beginLagDragAt(e.pos)) {
+          e.consume(this);
+        }
         return;
       }
       if (e.action == GLFW_RELEASE && lagDragging) {
@@ -2264,7 +1951,9 @@ struct TDScopeInputWidget final : Widget {
     }
     refreshLastGoodMsg();
     if (!hasLastGoodMsg) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, lagDragStationaryHoldActive,
+                                lagDragStationaryHoldActive ? temporaldeck_expander::LAG_DRAG_PHASE_HOLD
+                                                            : temporaldeck_expander::LAG_DRAG_PHASE_DRAG);
       e.consume(this);
       return;
     }
@@ -2272,55 +1961,37 @@ struct TDScopeInputWidget final : Widget {
     constexpr double kMinGestureDtSec = 1.0 / 240.0;
     constexpr double kMaxGestureDtSec = 1.0 / 20.0;
     double dtSec = std::max(kMinGestureDtSec, std::min(kMaxGestureDtSec, nowSec - lagDragLastMoveSec));
-    lagDragLastMoveSec = nowSec;
 
-    constexpr float kLagDragJitterDeadzonePx = 0.05f;
+    constexpr float kLagDragJitterDeadzonePx = 0.10f;
+    constexpr float kLagDragHoldExitThresholdPx = 0.85f;
+    // DragMove has no local position, and Rack event recursion does not
+    // localize mouseDelta. Convert screen/rack-scroll pixels into scope-local
+    // pixels before normalizing by the visible widget height.
     float localMouseDeltaY = e.mouseDelta.y / currentRackZoom();
     lagDragResidualY += localMouseDeltaY;
-    if (std::fabs(lagDragResidualY) < kLagDragJitterDeadzonePx) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+    float movementThreshold = lagDragStationaryHoldActive ? kLagDragHoldExitThresholdPx : kLagDragJitterDeadzonePx;
+    if (std::fabs(lagDragResidualY) < movementThreshold) {
+      if (lagDragStationaryHoldActive) {
+        module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                                  temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
+      }
       e.consume(this);
       return;
     }
+    lagDragLastMoveSec = nowSec;
     float appliedDeltaY = lagDragResidualY;
     lagDragResidualY = 0.f;
     float lagDragDirection = module->scopeVerticalInverted ? -1.f : 1.f;
     float signedDeltaY = appliedDeltaY * lagDragDirection;
-    bool sampleMode = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    bool freezeActive = (lastGoodMsg.flags & temporaldeck_expander::FLAG_FREEZE) != 0u;
-    if (!sampleMode && !freezeActive && signedDeltaY > 0.f) {
-      lagDragAnchorLagSamples += std::max(lastGoodMsg.sampleRate, 1.f) * float(dtSec);
+    if (lagDragStationaryHoldActive) {
+      lagDragNormalizedOffset = 0.f;
     }
+    lagDragStationaryHoldActive = false;
+    float previousNormalizedOffset = lagDragNormalizedOffset;
     lagDragNormalizedOffset += signedDeltaY / std::max(lagDragReferenceHeight, 1.f);
-    ScopeWindowMap map = buildScopeWindowMap(lastGoodMsg);
-    if (!map.valid) {
-      e.consume(this);
-      return;
-    }
-
-    float previousLag = lagDragLocalLagSamples;
-    float desiredPlaybackLag = lagDragAnchorLagSamples + lagDragNormalizedOffset * lagDragTravelSamples;
-    bool sampleLoop = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOOP) != 0u;
-    bool sampleLoaded = (lastGoodMsg.flags & temporaldeck_expander::FLAG_SAMPLE_LOADED) != 0u;
-    if (sampleMode && sampleLoaded && sampleLoop && map.accessibleLag > 0.f) {
-      double wrappedLag = std::fmod(double(desiredPlaybackLag), double(map.accessibleLag) + 1.0);
-      if (wrappedLag < 0.0) {
-        wrappedLag += double(map.accessibleLag) + 1.0;
-      }
-      lagDragLocalLagSamples = float(wrappedLag);
-    } else {
-      float effectiveAccessibleLag = map.accessibleLag;
-      if (!sampleMode && !freezeActive && lastGoodMsgTimeSec >= 0.0) {
-        double msgAgeSec = std::max(0.0, nowSec - lastGoodMsgTimeSec);
-        effectiveAccessibleLag += std::max(lastGoodMsg.sampleRate, 1.f) * float(msgAgeSec);
-      }
-      lagDragLocalLagSamples = clamp(desiredPlaybackLag, 0.f, std::max(0.f, effectiveAccessibleLag));
-    }
-    float velocitySamples = (previousLag - lagDragLocalLagSamples) / float(dtSec);
-    float sampleRate = std::max(lastGoodMsg.sampleRate, 1.f);
-    float maxAbsGestureVelocity = sampleRate * 3.0f;
-    velocitySamples = clamp(velocitySamples, -maxAbsGestureVelocity, maxAbsGestureVelocity);
-    module->setLagDragRequest(true, lagDragLocalLagSamples, velocitySamples, false);
+    float normalizedVelocity = (previousNormalizedOffset - lagDragNormalizedOffset) / std::max(float(dtSec), 1e-6f);
+    module->setLagDragRequest(true, lagDragNormalizedOffset, normalizedVelocity, false,
+                              temporaldeck_expander::LAG_DRAG_PHASE_DRAG);
     e.consume(this);
   }
 
@@ -2340,7 +2011,9 @@ struct TDScopeInputWidget final : Widget {
     }
     double nowSec = system::getTime();
     if ((nowSec - lagDragLastMoveSec) >= kLagDragHoldDetectSec) {
-      module->setLagDragRequest(true, lagDragLocalLagSamples, 0.f, true);
+      module->setLagDragRequest(true, lagDragNormalizedOffset, 0.f, true,
+                                temporaldeck_expander::LAG_DRAG_PHASE_HOLD);
+      lagDragStationaryHoldActive = true;
     }
   }
 };

@@ -16,8 +16,38 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  float uiMs,
+                                 float audioUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid);
+
+void submitBifurxUiMetrics(uint32_t instanceId,
+                           float uiMs,
+                           float uiDrawMs,
+                           float uiSyncMs,
+                           float uiLocalPrepMs,
+                           bool renderOpengl,
+                           float audioUs,
+                           float curvePrepUs,
+                           float overlayPrepUs,
+                           int visualWorkerMode,
+                           float visualWorkerAgeMs,
+                           float visualWorkerQueueMs);
+
+void submitWyrmMetrics(uint32_t instanceId,
+                       float uiMs,
+                       float editorDrawUs,
+                       float sandUpdateUs,
+                       float sandDrawUs,
+                       float sandGlUs,
+                       float audioUs,
+                       int channels,
+                       int bodySamples,
+                       uint64_t bodySampleCacheHits,
+                       uint64_t bodySampleCacheMisses);
+
+void submitIntegralFluxMetrics(uint32_t instanceId,
+                               float uiMs,
+                               float audioUs);
 
 } // namespace debug_terminal
