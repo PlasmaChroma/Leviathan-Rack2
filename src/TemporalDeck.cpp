@@ -96,9 +96,12 @@ using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 static std::atomic<uint32_t> gTemporalDeckDebugInstanceCounter {1u};
 
-// Push scope payload faster so TD.Scope tracks live output motion more tightly.
-static constexpr float kExpanderPublishRateHz = 120.f;
+// Match TD.Scope's current practical update ceiling so the audio thread does
+// not spend time preparing preview payloads faster than the UI can consume.
+static constexpr float kExpanderPublishRateHz = 90.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
+static constexpr float kExpanderPublishRateHzFrozenLive = 20.f;
+static constexpr float kExpanderPublishIntervalSecFrozenLive = 1.f / kExpanderPublishRateHzFrozenLive;
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr float kScopeDragNominalTurnScale = 1.00f;
@@ -1712,15 +1715,20 @@ void TemporalDeck::process(const ProcessArgs &args) {
   if (expanderConnected) {
     impl->expanderRequestedScopeFormat = requestedScopeFormat;
     bool wantStereoScope = requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO;
+    const bool scopeInteractionActive =
+      platterInput.platterMotionActive || platterInput.scopeLagDragActive || impl->expanderLagDragWasActive;
+    const bool frozenLiveScopeIdle = freezeActive && !frame.sampleMode && !scopeInteractionActive;
+    const float expanderPublishIntervalSec =
+      frozenLiveScopeIdle ? kExpanderPublishIntervalSecFrozenLive : kExpanderPublishIntervalSec;
 
     bool justConnected = !impl->expanderWasConnected;
     bool generationChanged = impl->engine.bufferGeneration != impl->expanderLastPublishedGeneration;
     impl->expanderPublishTimerSec += args.sampleTime;
-    bool timerElapsed = impl->expanderPublishTimerSec >= kExpanderPublishIntervalSec;
+    bool timerElapsed = impl->expanderPublishTimerSec >= expanderPublishIntervalSec;
     bool shouldPublish = justConnected || generationChanged || timerElapsed;
     if (shouldPublish) {
       if (timerElapsed) {
-        impl->expanderPublishTimerSec = std::fmod(impl->expanderPublishTimerSec, kExpanderPublishIntervalSec);
+        impl->expanderPublishTimerSec = std::fmod(impl->expanderPublishTimerSec, expanderPublishIntervalSec);
       } else {
         impl->expanderPublishTimerSec = 0.f;
       }
