@@ -2271,6 +2271,67 @@ struct TemporalDeckEngine {
       result.sampleProgress = sampleUiEndFrame > 0.0 ? clampd(sampleUiFrame / sampleUiEndFrame, 0.0, 1.0) : 0.0;
       return result;
     }
+    bool fastLiveTransportPath =
+      !sampleModeActive && !freezeState && !anyScratch && !wasScratchActive && !slipState && !prevSlipState &&
+      !slipReturning && !slipBlendActive && !nowCatchActive && !quickSlipTrigger && !externalCvGateHigh &&
+      !scopeLagDragActive && !platterMotionActive && !rateCvConnected && !reverseState &&
+      std::fabs(baseSpeed - 1.f) <= kUnityRateSnapEps;
+    if (fastLiveTransportPath) {
+      newestPos = newestReadablePos();
+      double candidate = unwrapReadNearWrite(readHead, newestPos) + 1.0;
+      candidate = std::max(newestPos - maxLag, std::min(candidate, newestPos - minLag));
+      readHead = snapReadHeadToSampleCenter(buffer.wrapPosition(candidate));
+
+      std::pair<float, float> wet = buffer.readCubic(readHead);
+      wet = applyCartridgeCharacter(wet, 0.f, false);
+
+      scratchFlipTransientEnv *= 0.92f;
+      if (scratchFlipTransientEnv < 1e-4f) {
+        scratchFlipTransientEnv = 0.f;
+        prevScratchDeltaSign = 0;
+      }
+      scratchDcInL = wet.first;
+      scratchDcInR = wet.second;
+      scratchDcOutL = 0.f;
+      scratchDcOutR = 0.f;
+      prevScratchReadDelta = 1.f;
+      prevWetL = wet.first;
+      prevWetR = wet.second;
+      prevScratchOutL = wet.first;
+      prevScratchOutR = wet.second;
+
+      float outL = fullyWet ? wet.first : (inL * (1.f - mix) + wet.first * mix);
+      float outR = fullyWet ? wet.second : (inR * (1.f - mix) + wet.second * mix);
+
+      float writeL = noFeedback ? inL : (inL + outL * feedback);
+      float writeR = noFeedback ? inR : (inR + outR * feedback);
+      pushLiveScopeEnvelopeSample(writeL, writeR);
+      buffer.write(writeL, writeR);
+      preview.pushMonoSample(0.5f * (writeL + writeR));
+      newestPos = newestReadablePos();
+
+      platterPhase += platterRadiansPerSample();
+      if (platterPhase > kPi || platterPhase < -kPi) {
+        platterPhase = std::fmod(platterPhase, kTwoPi);
+      }
+
+      scratchActive = false;
+      externalCvGateHigh = false;
+      result.outL = outL;
+      result.outR = outR;
+      result.lag = currentLagFromNewest(newestPos);
+      result.accessibleLag = limit;
+      updateScratchControlOutputs(false, result.lag, false);
+      result.platterAngle = platterPhase;
+      result.sampleMode = false;
+      result.sampleLoaded = sampleLoaded;
+      result.sampleTransportPlaying = sampleTransportPlaying;
+      result.autoFreezeRequested = false;
+      result.samplePlayhead = 0.0;
+      result.sampleDuration = 0.0;
+      result.sampleProgress = 0.0;
+      return result;
+    }
     auto startNowCatch = [&](float startLag) {
       nowCatchActive = true;
       nowCatchRemaining = kNowCatchTime;
