@@ -470,7 +470,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (APP && APP->scene && APP->scene->rackScroll) {
       rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
     }
-    float zoomThicknessMul = clamp(1.f + 0.30f * std::log2(1.f / rackZoom), 0.70f, 1.42f);
+    // The shader path holds up well when zoomed in, but gets too dense when
+    // zoomed out if we push thickness compensation too hard. Keep the response
+    // gentler here than the NanoVG path.
+    float zoomThicknessMul = clamp(1.f + 0.18f * std::log2(1.f / rackZoom), 0.78f, 1.22f);
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
 
@@ -1652,6 +1655,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float sigma = max(radius * 0.78, 0.001);\n"
         "  return exp(-0.5 * (dist * dist) / (sigma * sigma));\n"
         "}\n"
+        "float rowDensityT() {\n"
+        "  return clamp((1.10 - uRowStep) / 0.55, 0.0, 1.0);\n"
+        "}\n"
         "float hash(float n) { return fract(sin(n) * 43758.5453123); }\n"
         "void accumulateRow(vec2 p, vec4 row, float rowIdx, inout vec3 baseRgb, inout float baseAlphaMax) {\n"
         "  if (!rowValid(row)) {\n"
@@ -1663,8 +1669,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float visual = clamp(row.z, 0.0, 1.0);\n"
         "  float transientLift = clamp(row.w, 0.0, 1.0);\n"
         "  float tone = clamp(0.78 * visual + 0.22 * transientLift, 0.0, 1.0);\n"
+        "  float densityT = rowDensityT();\n"
         "  float colorVisual = tone;\n"
         "  float mainAlpha = clamp(((122.0 + 120.0 * colorVisual) / 255.0) * 1.16 * uZoomInAlphaComp, 0.0, 1.0);\n"
+        "  mainAlpha *= mix(1.0, 0.82, densityT);\n"
         "  vec4 mainColor = gradientColor(colorVisual, mainAlpha);\n"
         "  float mainHotT = clamp((colorVisual - 0.82) / 0.18, 0.0, 1.0);\n"
         "  float mainHotLift = 0.18 * mainHotT * mainHotT;\n"
@@ -1676,11 +1684,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  mainW *= lowVisualBoost;\n"
         "  float maxMainW = max(uRowStep * 0.92, 0.78);\n"
         "  mainW = min(mainW, maxMainW);\n"
-        "  float mainRadius = max(mainW * 0.58, 0.46);\n"
+        "  mainW *= mix(1.0, 0.94, densityT);\n"
+        "  float mainRadiusFloor = mix(0.46, 0.28, densityT);\n"
+        "  float mainRadius = max(mainW * mix(0.58, 0.52, densityT), mainRadiusFloor);\n"
         "  float dist = segmentDistance(p, vec2(x0, y), vec2(x1, y));\n"
-        "  float mainCovCore = gaussianAlpha(dist, mainRadius * 0.86);\n"
-        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * 1.34);\n"
-        "  float mainCov = clamp(0.66 * mainCovCore + 0.34 * mainCovSoft, 0.0, 1.0);\n"
+        "  float mainCovCore = gaussianAlpha(dist, mainRadius * mix(0.86, 0.78, densityT));\n"
+        "  float mainCovSoft = gaussianAlpha(dist, mainRadius * mix(1.34, 1.16, densityT));\n"
+        "  float mainCov = clamp(mix(0.66, 0.76, densityT) * mainCovCore + mix(0.34, 0.24, densityT) * mainCovSoft, 0.0, 1.0);\n"
         "  if (uRenderMain > 0.5) {\n"
         "    float widthFade = 1.0 / (1.0 + max(mainW - 1.25, 0.0) * 0.30);\n"
         "    float mainPremult = mainColor.a * mainCov * widthFade;\n"
@@ -1700,7 +1710,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float x0b = rowB.x;\n"
         "  float x1b = rowB.y;\n"
         "  float delta = max(abs(x0b - x0a), abs(x1b - x1a));\n"
-        "  float connectorMinDelta = max(0.55 * uZoomThickness, 0.35);\n"
+        "  float densityT = rowDensityT();\n"
+        "  float continuityPresence = 1.0 - 0.70 * densityT;\n"
+        "  float connectorMinDelta = mix(max(0.55 * uZoomThickness, 0.35), max(0.74 * uZoomThickness, 0.48), densityT);\n"
         "  if (delta < connectorMinDelta) {\n"
         "    return;\n"
         "  }\n"
@@ -1728,10 +1740,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  float driftT = clamp((edgeDrift - connectorMinDelta * 0.65) / max(connectorMinDelta * 1.60, 1e-4), 0.0, 1.0);\n"
         "  float continuityRadius = max((0.68 + 0.44 * connectTone) * uZoomThickness * 1.05 *\n"
         "                               (1.01 + 0.08 * uZoomInWidthComp) * (1.01 + 0.06 * uDeepZoomEnergyFill) * 0.64,\n"
-        "                               0.48);\n"
+        "                               mix(0.48, 0.32, densityT));\n"
         "  float yA = uDrawTop + (idxA + 0.5) * uRowStep;\n"
         "  float yB = uDrawTop + (idxB + 0.5) * uRowStep;\n"
-        "  float contAlphaBase = clamp(c.a * (0.26 + 0.06 * uDeepZoomEnergyFill) * driftT, 0.0, 1.0);\n"
+        "  float contAlphaBase = clamp(c.a * (0.26 + 0.06 * uDeepZoomEnergyFill) * driftT * continuityPresence, 0.0, 1.0);\n"
         "  float contCov0 = gaussianAlpha(segmentDistance(p, vec2(x0a, yA), vec2(x0b, yB)), continuityRadius);\n"
         "  float contCov1 = gaussianAlpha(segmentDistance(p, vec2(x1a, yA), vec2(x1b, yB)), continuityRadius);\n"
         "  float contAlpha = (contAlphaBase * contCov0 + contAlphaBase * contCov1) * 0.50;\n"
@@ -1752,7 +1764,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  vec3 baseRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
         "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax);\n"
-        "  if (uZoomInWidthComp > 1.05) {\n"
+        "  if (rowDensityT() < 0.92) {\n"
         "    accumulateContinuity(p, rowPrev, i0 - 1.0, row0, i0, baseRgb, baseAlphaMax);\n"
         "    accumulateContinuity(p, row0, i0, row1, i1, baseRgb, baseAlphaMax);\n"
         "  }\n"
@@ -1935,14 +1947,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       auto strokeBinCenter = [&](int bin, int binCount) -> float {
         return (float(bin) + 0.5f) / float(binCount);
       };
-      float glZoomInT = clamp((rackZoom - 1.f) / 2.4f, 0.f, 1.f);
-      float glZoomInEase = std::pow(glZoomInT, 0.72f);
-      float glDeepZoomT = clamp((rackZoom - 2.f) / 1.4f, 0.f, 1.f);
-      float glDeepZoomEase = std::pow(glDeepZoomT, 0.82f);
-      float glZoomInWidthComp = 1.f + 0.16f * glZoomInEase + 0.05f * glDeepZoomEase;
-      float glZoomInAlphaComp = 1.f + 0.14f * glZoomInEase + 0.18f * glDeepZoomEase;
-      float glZoomInLiftComp = 1.f + 0.30f * glZoomInEase + 0.36f * glDeepZoomEase;
-      float glDeepZoomEnergyFill = glDeepZoomEase;
+      // Keep shader-mode rendering more stable across rack zoom. The base
+      // `zoomThicknessMul` already compensates heavily; these secondary zoom
+      // responses should stay subtle and avoid introducing a distinct new look
+      // at moderate zoom levels.
+      float glZoomInT = clamp((rackZoom - 1.12f) / 2.9f, 0.f, 1.f);
+      float glZoomInEase = std::pow(glZoomInT, 0.92f);
+      float glDeepZoomT = clamp((rackZoom - 2.55f) / 1.75f, 0.f, 1.f);
+      float glDeepZoomEase = std::pow(glDeepZoomT, 0.90f);
+      float glZoomInWidthComp = 1.f + 0.07f * glZoomInEase + 0.03f * glDeepZoomEase;
+      float glZoomInAlphaComp = 1.f + 0.05f * glZoomInEase + 0.10f * glDeepZoomEase;
+      float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
+      float glDeepZoomEnergyFill = 0.55f * glDeepZoomEase;
       auto uploadFieldLaneTextures = [&]() -> bool {
         if (!initFieldShaderPipeline()) {
           return false;
