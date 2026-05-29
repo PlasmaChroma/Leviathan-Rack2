@@ -76,7 +76,10 @@ inline float computeReadHeadMarkerT(const ScopeWindowLagSpan& span, float marker
 inline float applyLiveReadHeadPolicy(float markerT, float markerLagSamples, float halfWindowSamples, bool sampleMode,
                                      bool verticalInverted) {
   float t = clamp(markerT, 0.f, 1.f);
-  if (!sampleMode) {
+  if (sampleMode) {
+    // Sample mode policy: marker is always centered.
+    t = 0.5f;
+  } else {
     // Live scope policy:
     // - if lag reaches/exceeds half-window (900ms default), pin marker to center
     // - otherwise keep marker in the NOW-side half.
