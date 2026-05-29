@@ -789,6 +789,7 @@ struct TemporalDeck::Impl {
   bool expanderInputLWasConnected = false;
   bool expanderInputRWasConnected = false;
   bool expanderStereoAutoPromotePending = false;
+  bool expanderStereoSampleWasLoaded = false;
   bool expanderAttachChannelSyncPending = false;
   bool expanderAttachChannelSyncStereo = false;
   ScopeWindowCache expanderScopeCacheMono;
@@ -1342,6 +1343,11 @@ void TemporalDeck::process(const ProcessArgs &args) {
   Module* right = rightExpander.module;
   bool expanderConnected =
     isTDScopeModule(right) && right->leftExpander.producerMessage;
+  bool stereoSampleLoadedNow = impl->engine.sampleLoaded && !impl->engine.buffer.monoStorage;
+  if (stereoSampleLoadedNow && !impl->expanderStereoSampleWasLoaded) {
+    impl->expanderStereoAutoPromotePending = true;
+  }
+  impl->expanderStereoSampleWasLoaded = stereoSampleLoadedNow;
   if (expanderConnected) {
     bool inputLConnected = inputs[INPUT_L_INPUT].isConnected();
     bool inputRConnected = inputs[INPUT_R_INPUT].isConnected();
@@ -1350,7 +1356,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     bool justConnected = !impl->expanderWasConnected;
     if (justConnected) {
       impl->expanderAttachChannelSyncPending = true;
-      impl->expanderAttachChannelSyncStereo = (nowConnectedCount == 2);
+      impl->expanderAttachChannelSyncStereo = (nowConnectedCount == 2) || stereoSampleLoadedNow;
     }
     if (prevConnectedCount == 1 && nowConnectedCount == 2) {
       impl->expanderStereoAutoPromotePending = true;
