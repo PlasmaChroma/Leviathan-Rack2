@@ -477,11 +477,12 @@ static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const Sco
   return validCount > 0u ? params.binCount : 0u;
 }
 
-static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache) {
+static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache,
+                                     bool allowLiveReuse) {
   if (!cache.valid || cache.scopeBinCount == 0u) {
     return false;
   }
-  if (!current.sampleMode) {
+  if (!current.sampleMode && !allowLiveReuse) {
     return false;
   }
   const ScopeWindowParams &prev = cache.params;
@@ -500,14 +501,14 @@ static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const Sco
 
 static uint32_t buildScopeWindowBinsWithCache(
   const TemporalDeckEngine &engine, const ScopeWindowParams &params, ScopeChannelMode channelMode, ScopeWindowCache *cache,
-  std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut) {
+  std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut, bool allowLiveReuse = false) {
   if (!binsOut) {
     return 0u;
   }
 
   uint32_t scopeBinCount = 0u;
   bool reused = false;
-  if (cache && canReuseScopeWindowCache(params, *cache)) {
+  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse)) {
     const ScopeWindowParams &prev = cache->params;
     int64_t newestDeltaFp = int64_t(std::llround((params.newestPos - prev.newestPos) * double(kScopeLagFpOne)));
     int64_t shiftLagFp = (prev.scopeStartLagFp - params.scopeStartLagFp) + newestDeltaFp;
@@ -1765,12 +1766,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
         if (haveScopeParams) {
           ScopeChannelMode leftMode = wantStereoScope ? SCOPE_CHANNEL_LEFT : SCOPE_CHANNEL_MID;
-          uint32_t leftCount =
-            buildScopeWindowBinsWithCache(impl->engine, scopeParams, leftMode, &impl->expanderScopeCacheMono, &scopeBins);
+          const bool allowFrozenLiveScopeCacheReuse = freezeActive && !frame.sampleMode && !scopeInteractionActive;
+          uint32_t leftCount = buildScopeWindowBinsWithCache(impl->engine, scopeParams, leftMode,
+                                                             &impl->expanderScopeCacheMono, &scopeBins,
+                                                             allowFrozenLiveScopeCacheReuse);
           uint32_t rightCount = 0u;
           if (wantStereoScope) {
-            rightCount = buildScopeWindowBinsWithCache(
-              impl->engine, scopeParams, SCOPE_CHANNEL_RIGHT, &impl->expanderScopeCacheRight, &scopeBinsRight);
+            rightCount = buildScopeWindowBinsWithCache(impl->engine, scopeParams, SCOPE_CHANNEL_RIGHT,
+                                                       &impl->expanderScopeCacheRight, &scopeBinsRight,
+                                                       allowFrozenLiveScopeCacheReuse);
             scopeBinCount = (leftCount > 0u && rightCount > 0u) ? std::min(leftCount, rightCount) : 0u;
           } else {
             impl->expanderScopeCacheRight.valid = false;

@@ -168,6 +168,73 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
 
+  static bool hasCurrentRackGlContext() {
+    return APP && APP->window && APP->window->win && glfwGetCurrentContext() == APP->window->win;
+  }
+
+  void releaseGlResources(bool deleteGlObjects) {
+    if (deleteGlObjects && shaderVbo) {
+      glDeleteBuffers(1, &shaderVbo);
+    }
+    if (deleteGlObjects && shaderProgram) {
+      glDeleteProgram(shaderProgram);
+    }
+    if (deleteGlObjects && shaderVertex) {
+      glDeleteShader(shaderVertex);
+    }
+    if (deleteGlObjects && shaderFragment) {
+      glDeleteShader(shaderFragment);
+    }
+    resetLineShaderState();
+
+    if (deleteGlObjects && segmentShaderVbo) {
+      glDeleteBuffers(1, &segmentShaderVbo);
+    }
+    if (deleteGlObjects && segmentShaderProgram) {
+      glDeleteProgram(segmentShaderProgram);
+    }
+    if (deleteGlObjects && segmentShaderVertex) {
+      glDeleteShader(segmentShaderVertex);
+    }
+    if (deleteGlObjects && segmentShaderFragment) {
+      glDeleteShader(segmentShaderFragment);
+    }
+    resetSegmentShaderState();
+
+    if (deleteGlObjects && fieldShaderVbo) {
+      glDeleteBuffers(1, &fieldShaderVbo);
+    }
+    if (deleteGlObjects && fieldShaderProgram) {
+      glDeleteProgram(fieldShaderProgram);
+    }
+    if (deleteGlObjects && fieldShaderVertex) {
+      glDeleteShader(fieldShaderVertex);
+    }
+    if (deleteGlObjects && fieldShaderFragment) {
+      glDeleteShader(fieldShaderFragment);
+    }
+    if (deleteGlObjects) {
+      GLuint textures[] = {fieldRowTextureLeft, fieldRowTextureRight, fieldColorLutTexture};
+      if (textures[0] || textures[1] || textures[2]) {
+        glDeleteTextures(3, textures);
+      }
+    }
+    resetFieldShaderState();
+    fallbackRendererActive = false;
+  }
+
+  ~TDScopeGlWidget() override {
+    // Widget teardown can happen after the host/editor has already disturbed the
+    // GL context. Only issue driver calls when Rack's window context is
+    // definitely current; otherwise fall back to state invalidation only.
+    releaseGlResources(hasCurrentRackGlContext());
+  }
+
+  void onContextDestroy(const ContextDestroyEvent &e) override {
+    OpenGlWidget::onContextDestroy(e);
+    releaseGlResources(hasCurrentRackGlContext());
+  }
+
   void resetLineShaderState() {
     shaderProgram = 0;
     shaderVertex = 0;

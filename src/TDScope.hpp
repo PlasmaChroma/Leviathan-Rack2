@@ -106,8 +106,11 @@ struct TDScope final : Module {
   static constexpr float kUiPublishIntervalSec = 1.f / 90.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
   static constexpr float kRequestPublishIntervalDragSec = 1.f / 120.f;
-  static constexpr float kLinkDropGraceSec = 1.f / 45.f;
-  static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
+  // Temporal Deck can intentionally throttle expander preview publishes as low
+  // as 20 Hz in frozen live idle. Keep link/preview validity latched long
+  // enough to cover that cadence plus modest scheduling jitter.
+  static constexpr float kLinkDropGraceSec = 0.125f;
+  static constexpr float kPreviewDropGraceSec = 0.125f;
 
   static int normalizeColorSchemeIndex(int raw) {
     // Preserve older patch values by mapping legacy scheme ids.
@@ -439,7 +442,9 @@ struct TDScope final : Module {
 
     Module *left = leftExpander.module;
     bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(left);
-    bool linkActive = hasTemporalDeckNeighbor && staleFrames < 2048 && invalidMessageTimerSec <= kLinkDropGraceSec;
+    const int staleFrameLimit =
+      std::max(2048, int(std::ceil(std::max(args.sampleRate, 1.f) * kLinkDropGraceSec)));
+    bool linkActive = hasTemporalDeckNeighbor && staleFrames < staleFrameLimit && invalidMessageTimerSec <= kLinkDropGraceSec;
     bool previewVisible = invalidPreviewTimerSec <= kPreviewDropGraceSec;
     uiLinkActive.store(linkActive, std::memory_order_relaxed);
     uiPreviewValid.store(linkActive && previewVisible, std::memory_order_relaxed);
