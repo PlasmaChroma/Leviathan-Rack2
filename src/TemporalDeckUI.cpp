@@ -2977,7 +2977,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       if (std::fabs(filteredGestureVelocity) < 1.f) {
         filteredGestureVelocity = 0.f;
       }
-      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterTouchHold(true, localLagSamples);
       module->setPlatterMotionFreshSamples(0);
       logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, deltaAngle, 0.f, float(module->getUiLagSamples()),
                     localLagSamples, filteredGestureVelocity);
@@ -2994,7 +2994,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       if (std::fabs(filteredGestureVelocity) < 1.f) {
         filteredGestureVelocity = 0.f;
       }
-      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterTouchHold(true, localLagSamples);
       module->setPlatterMotionFreshSamples(0);
       logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, 0.f, 0.f, float(module->getUiLagSamples()),
                     localLagSamples, filteredGestureVelocity);

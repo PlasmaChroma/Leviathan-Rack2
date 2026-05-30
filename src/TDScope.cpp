@@ -197,6 +197,8 @@ struct TDScopeDisplayWidget final : Widget {
         case TDScope::COLOR_SCHEME_CLASSIC: lowR = 0.f; lowG = 255.f; lowB = 65.f; break;
         case TDScope::COLOR_SCHEME_MONOCHROME: lowR = 92.f; lowG = 92.f; lowB = 92.f; break;
         case TDScope::COLOR_SCHEME_FIRE: lowR = 140.f; lowG = 0.f; lowB = 0.f; break;
+        case TDScope::COLOR_SCHEME_AMBER: lowR = 92.f; lowG = 28.f; lowB = 0.f; break;
+        case TDScope::COLOR_SCHEME_GREEN_PHOSPHOR: lowR = 0.f; lowG = 48.f; lowB = 8.f; break;
         default: break;
       }
     }
@@ -213,6 +215,8 @@ struct TDScopeDisplayWidget final : Widget {
         case TDScope::COLOR_SCHEME_CLASSIC: highR = 255.f; highG = 15.f; highB = 5.f; break;
         case TDScope::COLOR_SCHEME_MONOCHROME: highR = 242.f; highG = 242.f; highB = 242.f; break;
         case TDScope::COLOR_SCHEME_FIRE: highR = 255.f; highG = 255.f; highB = 30.f; break;
+        case TDScope::COLOR_SCHEME_AMBER: highR = 255.f; highG = 188.f; highB = 64.f; break;
+        case TDScope::COLOR_SCHEME_GREEN_PHOSPHOR: highR = 168.f; highG = 255.f; highB = 112.f; break;
         default: break;
       }
     }
@@ -1296,6 +1300,30 @@ struct TDScopeDisplayWidget final : Widget {
           highG = 255.f;
           highB = 30.f;
           midPoint = 0.5f;
+          break;
+        case TDScope::COLOR_SCHEME_AMBER:
+          lowR = 92.f;
+          lowG = 28.f;
+          lowB = 0.f;
+          midR = 214.f;
+          midG = 118.f;
+          midB = 28.f;
+          highR = 255.f;
+          highG = 188.f;
+          highB = 64.f;
+          midPoint = 0.52f;
+          break;
+        case TDScope::COLOR_SCHEME_GREEN_PHOSPHOR:
+          lowR = 0.f;
+          lowG = 48.f;
+          lowB = 8.f;
+          midR = 32.f;
+          midG = 160.f;
+          midB = 32.f;
+          highR = 168.f;
+          highG = 255.f;
+          highB = 112.f;
+          midPoint = 0.54f;
           break;
         case TDScope::COLOR_SCHEME_DEFAULT:
         default:

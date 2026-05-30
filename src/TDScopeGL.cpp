@@ -1334,6 +1334,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           highR = 255.f; highG = 255.f; highB = 30.f;
           curve = 2.15f;
           break;
+        case TDScope::COLOR_SCHEME_AMBER:
+          lowR = 92.f; lowG = 28.f; lowB = 0.f;
+          highR = 255.f; highG = 188.f; highB = 64.f;
+          curve = 1.95f;
+          break;
+        case TDScope::COLOR_SCHEME_GREEN_PHOSPHOR:
+          lowR = 0.f; lowG = 48.f; lowB = 8.f;
+          highR = 168.f; highG = 255.f; highB = 112.f;
+          curve = 1.85f;
+          break;
         default:
           break;
       }
@@ -2077,7 +2087,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (rowUploadNeeded) {
           for (int iy = 0; iy < rowCount; ++iy) {
             size_t idx = size_t(iy);
-            size_t base = idx * 4u;
+            size_t texIdx = size_t(visualRowIndex(iy));
+            if (texIdx >= rowCountU || idx >= colorDrive.size()) {
+              continue;
+            }
+            size_t base = texIdx * 4u;
+            if ((base + 3u) >= fieldRowData.size()) {
+              continue;
+            }
             if (!isValid(idx)) {
               fieldRowData[base + 0u] = laneCenterXForConnectors;
               fieldRowData[base + 1u] = laneCenterXForConnectors;
@@ -2558,13 +2575,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     auto historyVisibleSlot = [&](size_t visibleIdx) {
       int slot = historyHeadRow + historyMarginRows + int(visibleIdx);
-      slot %= std::max(historyCapacityRows, 1);
+      const int slotCount = int(historyX0.size());
+      slot %= std::max(slotCount, 1);
       if (slot < 0) {
-        slot += std::max(historyCapacityRows, 1);
+        slot += std::max(slotCount, 1);
       }
       return size_t(slot);
     };
-    const bool drawFromHistory = useGeometryHistoryCache && historyValidState && historyCapacityRows > 0;
+    const bool historyBuffersReady = historyX0.size() == historyX1.size() &&
+                                     historyX0.size() == historyVisualIntensity.size() &&
+                                     historyX0.size() == historyValid.size() &&
+                                     historyX0.size() == historyX0Right.size() &&
+                                     historyX0.size() == historyX1Right.size() &&
+                                     historyX0.size() == historyVisualIntensityRight.size() &&
+                                     historyX0.size() == historyValidRight.size() &&
+                                     !historyX0.empty();
+    const bool drawFromHistory = useGeometryHistoryCache && historyValidState && historyCapacityRows > 0 && historyBuffersReady;
     if (drawFromHistory) {
       drawLane(
         [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },

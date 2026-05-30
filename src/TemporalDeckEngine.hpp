@@ -329,6 +329,7 @@ struct TemporalDeckEngine {
   static constexpr float kQuickSlipMaxReturnTime = 1.0f;
   static constexpr float kQuickSlipVelocityCapRatio = 64.0f;
   static constexpr float kSlipEnableReturnThreshold = 64.f;
+  static constexpr float kManualTouchNowReleaseAssistSec = 0.100f;
   static constexpr float kSlipBlendTime = 0.010f;
   static constexpr float kSlipBlendTimeMin = 0.004f;
   static constexpr float kSlipBlendTimeMax = 0.012f;
@@ -582,6 +583,9 @@ struct TemporalDeckEngine {
   float scratchWheelVelocityBurst = 0.f;
   double lastPlatterLagTarget = 0.0;
   uint32_t lastPlatterGestureRevision = 0;
+  bool lastScratchWasManualTouch = false;
+  float manualTouchNowReleaseAssistRemaining = 0.f;
+  bool manualTouchNowReleaseAssistMovedAway = false;
   bool platterTouchHoldLatched = false;
   double platterTouchHoldReadHead = 0.0;
   int cartridgeCharacter = CARTRIDGE_CLEAN;
@@ -2145,6 +2149,7 @@ struct TemporalDeckEngine {
     bool anyScratch = externalScratch || manualScratch;
     bool wasScratchActive = scratchActive;
     bool releasedFromScratch = !anyScratch && wasScratchActive;
+    manualTouchNowReleaseAssistRemaining = std::max(0.f, manualTouchNowReleaseAssistRemaining - dt);
     constexpr float kUnityRateSnapEps = 1e-4f;
     bool enteredUnityRateFromKnob = !rateCvConnected && !reverseState && std::fabs(baseSpeed - 1.f) <= kUnityRateSnapEps &&
                                     std::fabs(prevBaseSpeedLocal - 1.f) > kUnityRateSnapEps;
@@ -2157,6 +2162,9 @@ struct TemporalDeckEngine {
       }
       return buffer.wrapPosition(snapped);
     };
+    const bool releaseFromManualTouchNearNow =
+      releasedFromScratch && lastScratchWasManualTouch && !sampleModeActive && !freezeState &&
+      manualTouchNowReleaseAssistRemaining > 0.f && !manualTouchNowReleaseAssistMovedAway;
     if (releasedFromScratch) {
       // One-shot post-scratch phase quantization: at most 0.5-sample movement,
       // but it returns transport to exact sample centers so interpolation fast
@@ -2164,6 +2172,13 @@ struct TemporalDeckEngine {
       readHead = snapReadHeadToSampleCenter(readHead);
       if (sampleModeActive) {
         samplePlayhead = readHead;
+      }
+      if (releaseFromManualTouchNearNow) {
+        readHead = buffer.wrapPosition(newestPos);
+        scratchLagSamples = 0.0;
+        scratchLagTargetSamples = 0.0;
+        manualTouchNowReleaseAssistRemaining = 0.f;
+        manualTouchNowReleaseAssistMovedAway = false;
       }
     }
     if (enteredUnityRateFromKnob && !anyScratch) {
@@ -2351,6 +2366,12 @@ struct TemporalDeckEngine {
       }
       clearScratchMotionState();
     }
+    if (anyScratch) {
+      lastScratchWasManualTouch = manualTouchScratch;
+    } else if (!releasedFromScratch) {
+      lastScratchWasManualTouch = false;
+      manualTouchNowReleaseAssistMovedAway = false;
+    }
 
     if (scratchGateHigh && !externalCvGateHigh) {
       externalCvAnchorLagSamples = currentLagFromNewest(newestPos);
@@ -2534,6 +2555,14 @@ struct TemporalDeckEngine {
             readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
           }
           lastPlatterGestureRevision = platterGestureRevision;
+        }
+        if (hasFreshPlatterGesture && !sampleModeActive && !freezeState) {
+          if (platterLagTarget <= 0.5f) {
+            manualTouchNowReleaseAssistRemaining = kManualTouchNowReleaseAssistSec;
+            manualTouchNowReleaseAssistMovedAway = false;
+          } else if (manualTouchNowReleaseAssistRemaining > 0.f) {
+            manualTouchNowReleaseAssistMovedAway = true;
+          }
         }
 
         bool directTouchHoldActive = manualTouchScratch && platterTouchHoldDirect;

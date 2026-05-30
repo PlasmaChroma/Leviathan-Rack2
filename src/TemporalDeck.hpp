@@ -133,6 +133,7 @@ struct TemporalDeck final : Module {
   void applyBufferDurationMode(int mode);
 
   void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0);
+  void setPlatterTouchHold(bool touched, float lagSamples);
   void setPlatterMotionFreshSamples(int motionFreshSamples);
   void addPlatterWheelDelta(float delta, int holdSamples);
   void triggerQuickSlipReturn();

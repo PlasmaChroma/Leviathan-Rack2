@@ -1911,6 +1911,10 @@ void TemporalDeck::setPlatterScratch(bool touched, float lagSamples, float veloc
   impl->platterInput.setScratch(touched, lagSamples, velocitySamples, holdSamples);
 }
 
+void TemporalDeck::setPlatterTouchHold(bool touched, float lagSamples) {
+  impl->platterInput.setTouchHold(touched, lagSamples);
+}
+
 void TemporalDeck::setPlatterMotionFreshSamples(int motionFreshSamples) {
   impl->platterInput.setMotionFreshSamples(motionFreshSamples);
 }

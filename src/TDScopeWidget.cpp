@@ -294,6 +294,13 @@ struct TDScopeWidget : ModuleWidget {
       submenu->addChild(createCheckMenuItem(
         "Fire (Red/Yellow)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
+      submenu->addChild(createCheckMenuItem(
+        "Amber (Retro CRT)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_AMBER; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_AMBER; }));
+      submenu->addChild(createCheckMenuItem(
+        "Green Phosphor (Retro CRT)", "",
+        [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; }));
     }));
     addBrightnessSlider(menu);
 
