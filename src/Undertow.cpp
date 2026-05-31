@@ -44,7 +44,7 @@ Undertow::Undertow() {
   configParam<UndertowFreqQuantity>(COARSE_PARAM, 0.f, 1.f, undertowKnobValueForFrequency(261.63f), "Frequency");
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM");
-  configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+  configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape", " %", 0.f, 100.f);
 
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(EXPO_INPUT, "Expo FM");
@@ -124,14 +124,36 @@ void Undertow::process(const ProcessArgs& args) {
     shape = clamp(params[SHAPE_PARAM].getValue(), 0.f, 1.f);
   }
   const float shapeCurve = shape * shape;
-  const float asym = tri + 0.22f * shape * (1.f - tri * tri);
-  const float cubic = asym * asym * asym;
-  const float kink = asym - 0.35f * shape * clamp(cubic, -1.f, 1.f);
-  const float creasePhase = 1.f - 4.f * std::fabs(voice.phase - 0.5f) * (1.f - std::fabs(voice.phase - 0.5f));
-  const float crease = clamp(creasePhase, -1.f, 1.f) * shapeCurve * 0.16f;
-  const float alt = clamp(kink + crease, -1.2f, 1.2f);
-  const float shapedRaw = crossfade(sine, alt, shapeCurve);
-  const float shaped = dcBlockShape(shapedRaw, &voice);
+  const float phase01 = voice.phase;
+  const float halfSign = (phase01 < 0.5f) ? 1.f : -1.f;
+  const float triAbs = std::fabs(tri);
+  const float edge = clamp((triAbs - 0.35f) / 0.65f, 0.f, 1.f);
+  const float edge2 = edge * edge;
+
+  // Stronger endpoint: warped/asymmetric triangle with a deliberate half-cycle
+  // shear so SHAPE=1 reads clearly different from sine.
+  float warpedPhase = phase01 + 0.085f * shape * std::sin(2.f * float(M_PI) * phase01);
+  warpedPhase -= std::floor(warpedPhase);
+  const float triWarp = 4.f * std::fabs(warpedPhase - 0.5f) - 1.f;
+  const float skew = triWarp + 0.56f * shape * halfSign * (1.f - triAbs);
+  const float kink = skew + 0.46f * shape * edge2 * halfSign;
+  const float alt = clamp(kink, -1.35f, 1.35f);
+
+  // Ease in a little faster than shape^2 so the audible difference arrives
+  // earlier while still preserving a sine-like low end.
+  const float shapeMix = clamp(shape * 0.85f + shapeCurve * 0.25f, 0.f, 1.f);
+  const float shapedRaw = crossfade(sine, alt, shapeMix);
+  const float shapedDc = dcBlockShape(shapedRaw, &voice);
+  const float shapedCentered = shapedDc - 0.03f * shape;
+  // Keep SHAPE near 10Vpp across the knob range:
+  // - SHAPE=0 should stay close to full-amplitude sine.
+  // - higher SHAPE gets progressively controlled without hard flat-topping.
+  const float shapeTrim = 1.f - 0.22f * shape;
+  const float shapedPreSat = shapedCentered * shapeTrim;
+  const float satAmt = 0.18f * shape;
+  const float shaped = (satAmt > 1e-6f)
+    ? (shapedPreSat / (1.f + satAmt * std::fabs(shapedPreSat)))
+    : shapedPreSat;
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -145,7 +167,7 @@ void Undertow::process(const ProcessArgs& args) {
     const float subOld = subRaw;
     voice.subFlip = !voice.subFlip;
     subRaw = voice.subFlip ? 1.f : -1.f;
-    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 6.f, wrapDiscontinuityFrac);
+    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 4.f, wrapDiscontinuityFrac);
   }
 
   bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
@@ -155,7 +177,7 @@ void Undertow::process(const ProcessArgs& args) {
     float subOld = subRaw;
     voice.subFlip = false;
     subRaw = voice.subFlip ? 1.f : -1.f;
-    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 6.f, 0.5f);
+    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 4.f, 0.5f);
   }
   float sub = (!sGatePatched || sGateHigh) ? subRaw : 0.f;
 
@@ -164,7 +186,8 @@ void Undertow::process(const ProcessArgs& args) {
   outputs[SUB_OUTPUT].setChannels(1);
   outputs[SINE_OUTPUT].setVoltage(5.f * sine + voice.sineBlep.process());
   outputs[SHAPE_OUTPUT].setVoltage(5.f * shaped + voice.shapeBlep.process());
-  outputs[SUB_OUTPUT].setVoltage(6.f * sub + voice.subBlep.process());
+  const float subOut = clamp(4.f * sub + voice.subBlep.process(), -5.f, 5.f);
+  outputs[SUB_OUTPUT].setVoltage(subOut);
 
   lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
   lights[S_GATE_LIGHT].setBrightnessSmooth((!sGatePatched || sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
