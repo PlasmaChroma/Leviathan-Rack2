@@ -130,8 +130,11 @@ void Undertow::process(const ProcessArgs& args) {
   const float edge = clamp((triAbs - 0.35f) / 0.65f, 0.f, 1.f);
   const float edge2 = edge * edge;
 
-  // Stronger endpoint: warped/asymmetric triangle with a deliberate half-cycle
-  // shear so SHAPE=1 reads clearly different from sine.
+  // The SHAPE output is intentionally deterministic rather than auto-normalized.
+  // It should behave like a calibrated analog transfer path: same knob/CV state
+  // gives the same waveform every sample, with no peak follower changing level
+  // based on recent history.  The endpoint is a warped/asymmetric triangle with
+  // a deliberate half-cycle shear so SHAPE=100% reads clearly different from sine.
   float warpedPhase = phase01 + 0.085f * shape * std::sin(2.f * float(M_PI) * phase01);
   warpedPhase -= std::floor(warpedPhase);
   const float triWarp = 4.f * std::fabs(warpedPhase - 0.5f) - 1.f;
@@ -148,12 +151,16 @@ void Undertow::process(const ProcessArgs& args) {
   // Keep SHAPE near 10Vpp across the knob range:
   // - SHAPE=0 should stay close to full-amplitude sine.
   // - higher SHAPE gets progressively controlled without hard flat-topping.
+  // - high shape is statically rebalanced below because the asymmetric transfer
+  //   naturally rides positive; avoid dynamic normalization here.
   const float shapeTrim = 1.f - 0.22f * shape;
   const float shapedPreSat = shapedCentered * shapeTrim;
   const float satAmt = 0.18f * shape;
-  const float shaped = (satAmt > 1e-6f)
+  const float shapedSaturated = (satAmt > 1e-6f)
     ? (shapedPreSat / (1.f + satAmt * std::fabs(shapedPreSat)))
     : shapedPreSat;
+  const float shapeBalance = shapeMix * shapeMix;
+  const float shaped = clamp((shapedSaturated - 0.10f * shapeBalance) * (1.f + 0.12f * shapeBalance), -1.f, 1.f);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -185,7 +192,10 @@ void Undertow::process(const ProcessArgs& args) {
   outputs[SHAPE_OUTPUT].setChannels(1);
   outputs[SUB_OUTPUT].setChannels(1);
   outputs[SINE_OUTPUT].setVoltage(5.f * sine + voice.sineBlep.process());
-  outputs[SHAPE_OUTPUT].setVoltage(5.f * shaped + voice.shapeBlep.process());
+  outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shaped + voice.shapeBlep.process(), -5.f, 5.f));
+  // The sub square is band-limited with MinBLEP, so it will not scope as an
+  // ideal digital square.  Keep the steady state inside rails and let the clamp
+  // catch residual correction energy instead of using clipping as the tone.
   const float subOut = clamp(4.f * sub + voice.subBlep.process(), -5.f, 5.f);
   outputs[SUB_OUTPUT].setVoltage(subOut);
 
