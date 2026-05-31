@@ -29,6 +29,7 @@ struct UndertowShapePreviewWidget final : Widget {
   std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> samples {};
   uint32_t lastVersion = 0;
   float lastFreqHz = 0.f;
+  float displayedFreqHz = 0.f;
   bool valid = false;
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
@@ -46,6 +47,11 @@ struct UndertowShapePreviewWidget final : Widget {
     if (!valid || version != lastVersion) {
       samples = nextSamples;
       lastFreqHz = frequencyHz;
+      if (!valid || displayedFreqHz <= 0.f) {
+        displayedFreqHz = frequencyHz;
+      } else if (std::fabs(frequencyHz - displayedFreqHz) > 0.15f) {
+        displayedFreqHz += 0.25f * (frequencyHz - displayedFreqHz);
+      }
       lastVersion = version;
       valid = true;
     }
@@ -98,12 +104,12 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgRestore(args.vg);
 
     char freqText[32];
-    if (lastFreqHz < 1.f) {
-      std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
-    } else if (lastFreqHz >= 1000.f) {
-      std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
+    if (displayedFreqHz < 1.f) {
+      std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", displayedFreqHz * 1000.f);
+    } else if (displayedFreqHz >= 1000.f) {
+      std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", displayedFreqHz / 1000.f);
     } else {
-      std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
+      std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", displayedFreqHz);
     }
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);

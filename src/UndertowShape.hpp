@@ -107,10 +107,14 @@ inline float thresholdFold(float phase, float shape) {
   const float knee = 0.115f - 0.075f * fold;
   const float under = softPositiveKnee(foldThreshold - core, knee);
   float y = core + (2.05f + 0.55f * fold) * fold * under;
+  const float troughRegion = clampf(under / 0.35f, 0.f, 1.f);
+  const float foldSide = (p < 0.5f) ? -1.f : 1.f;
+  const float foldAsym = 1.f - smooth01((u - 0.58f) / 0.42f);
+  y += 0.18f * fold * foldAsym * foldSide * troughRegion;
 
   const float edge = smooth01((u - 0.46f) / 0.50f);
   const float zeroCrossWindow = std::max(0.f, 1.f - std::fabs(tri));
-  y += 0.055f * edge * std::sin(2.f * float(M_PI) * p) * zeroCrossWindow;
+  y -= 0.055f * edge * std::sin(2.f * float(M_PI) * p) * zeroCrossWindow;
 
   const float posDrive = 0.06f * u + 0.06f * edge;
   const float negDrive = 0.025f * u;
