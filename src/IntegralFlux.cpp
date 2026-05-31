@@ -1639,20 +1639,20 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate4KnobPos), module, IntegralFlux::ATTENUATE_4_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input4TrigPos), module, IntegralFlux::INPUT_4_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input4Pos), module, IntegralFlux::INPUT_4_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1CycleCvPos), module, IntegralFlux::CH1_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4CycleCvPos), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1RiseCvPos), module, IntegralFlux::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4RiseCvPos), module, IntegralFlux::CH4_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1BothCvPos), module, IntegralFlux::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4BothCvPos), module, IntegralFlux::CH4_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1FallCvPos), module, IntegralFlux::CH1_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4FallCvPos), module, IntegralFlux::CH4_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input2Pos), module, IntegralFlux::INPUT_2_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input3Pos), module, IntegralFlux::INPUT_3_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input4TrigPos), module, IntegralFlux::INPUT_4_TRIG_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input4Pos), module, IntegralFlux::INPUT_4_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch1CycleCvPos), module, IntegralFlux::CH1_CYCLE_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch4CycleCvPos), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch1RiseCvPos), module, IntegralFlux::CH1_RISE_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch4RiseCvPos), module, IntegralFlux::CH4_RISE_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch1BothCvPos), module, IntegralFlux::CH1_BOTH_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch4BothCvPos), module, IntegralFlux::CH4_BOTH_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch1FallCvPos), module, IntegralFlux::CH1_FALL_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(ch4FallCvPos), module, IntegralFlux::CH4_FALL_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input2Pos), module, IntegralFlux::INPUT_2_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input3Pos), module, IntegralFlux::INPUT_3_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(eor1OutputPos), module, IntegralFlux::EOR_1_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(out1OutputPos), module, IntegralFlux::OUT_1_OUTPUT));

@@ -473,7 +473,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	auto addInputPort = [&](int inputId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;
 		loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-		addInput(createInputCentered<PJ301MPort>(mm2px(posMm), module, inputId));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(posMm), module, inputId));
 	};
 	auto addOutputPort = [&](int outputId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;

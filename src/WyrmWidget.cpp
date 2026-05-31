@@ -391,18 +391,18 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
 		));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
 		));
-		addInput(createInputCentered<PJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));

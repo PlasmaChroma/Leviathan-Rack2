@@ -3973,10 +3973,10 @@ struct CrownstepWidget final : ModuleWidget {
 				addChild(aiThinkMsWidget);
 			}
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));

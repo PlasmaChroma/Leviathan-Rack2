@@ -1458,12 +1458,12 @@ struct ProcWidget : ModuleWidget {
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(haltInPos), module, Proc::HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(haltInPos), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
+		addInput(createInputCentered<DarkPJ301MPort>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
 
 		addOutput(createOutputCentered<BananutBlack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT));
 		addOutput(createOutputCentered<BananutBlack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT));

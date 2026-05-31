@@ -3340,13 +3340,13 @@ struct TemporalDeckWidget : ModuleWidget {
     addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<DarkPJ301MPort>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
 
     addOutput(createOutputCentered<BananutBlack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
     addOutput(createOutputCentered<BananutBlack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));

@@ -1635,13 +1635,13 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
 	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(timelineZoomPos), module, Chronomaw::TIMELINE_ZOOM_PARAM));
 
-	addInput(createInputCentered<PJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(resetInPos), module, Chronomaw::RESET_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(cv1InPos), module, Chronomaw::CV_1_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(cv2InPos), module, Chronomaw::CV_2_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(cv3InPos), module, Chronomaw::CV_3_INPUT));
-	addInput(createInputCentered<PJ301MPort>(mm2px(cv4InPos), module, Chronomaw::CV_4_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(resetInPos), module, Chronomaw::RESET_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv1InPos), module, Chronomaw::CV_1_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv2InPos), module, Chronomaw::CV_2_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv3InPos), module, Chronomaw::CV_3_INPUT));
+	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv4InPos), module, Chronomaw::CV_4_INPUT));
 
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(outPos[size_t(i)]), module, Chronomaw::OUT_1_OUTPUT + i));
