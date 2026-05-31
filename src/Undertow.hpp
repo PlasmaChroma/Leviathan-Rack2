@@ -2,6 +2,8 @@
 
 #include "plugin.hpp"
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <cmath>
 
 constexpr float kUndertowMinHz = 10.f;
@@ -23,6 +25,8 @@ struct UndertowFreqQuantity final : ParamQuantity {
 };
 
 struct Undertow final : Module {
+  static constexpr int SHAPE_PREVIEW_SAMPLE_COUNT = 128;
+
   enum ShapeAlgorithm {
     SHAPE_ALGO_GEOMETRIC = 0,
     SHAPE_ALGO_NONLINEAR = 1,
@@ -74,11 +78,22 @@ struct Undertow final : Module {
   VoiceState voice;
   bool coarseTuneStepped = false;
   int shapeAlgorithm = SHAPE_ALGO_GEOMETRIC;
+  std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
+  std::atomic<float> shapePreviewFrequencyHz {0.f};
+  std::atomic<uint32_t> shapePreviewVersion {1};
+  std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycle {};
+  std::array<uint8_t, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycleFilled {};
+  int shapePreviewCycleFillCount = 0;
+  float shapePreviewPublishTimer = 0.f;
+  float shapePreviewCycleTimer = 0.f;
 
   Undertow();
   void process(const ProcessArgs& args) override;
   json_t* dataToJson() override;
   void dataFromJson(json_t* root) override;
+  void recordShapePreviewSample(float phase, float volts);
+  void finishShapePreviewCycle();
+  void getShapePreview(std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT>& outSamples, float& outFrequencyHz, uint32_t& outVersion) const;
 };
 
 extern Model* modelUndertow;

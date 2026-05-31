@@ -248,13 +248,13 @@
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
    inkscape:cx="32.277618"
-   inkscape:cy="222.7994"
+   inkscape:cy="256.33459"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="panel_art"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -458,50 +458,50 @@
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="LIN_FM_PARAM"
    cx="860"
-   cy="8260.001"
+   cy="7840.001"
    r="220" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_PARAM"
    cx="2900"
-   cy="8260.001"
+   cy="7840.001"
    r="220" />
 
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="LIN_FM_INPUT"
    cx="860"
-   cy="4100"
+   cy="3680.0002"
    r="240" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_CV_INPUT"
    cx="2900"
-   cy="4100"
+   cy="3680.0002"
    r="240" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="EXPO_INPUT"
    cx="860"
-   cy="5493.3335"
+   cy="5073.3335"
    r="240" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="V_OCT_INPUT"
    cx="2900"
-   cy="5493.3335"
+   cy="5073.3335"
    r="240" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SYNC_INPUT"
    cx="860"
-   cy="6886.6675"
+   cy="6466.6675"
    r="240" />
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="S_GATE_INPUT"
    cx="2900"
-   cy="6886.6675"
+   cy="6466.6675"
    r="240" />
 
   <circle
@@ -522,7 +522,7 @@
    width="3628.1987"
    height="1648.6146"
    x="217.90068"
-   y="9153.1514" /></g>
+   y="8733.1514" /></g>
 <g
    id="g5"
    inkscape:groupmode="layer"

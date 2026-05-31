@@ -11,7 +11,107 @@ bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm,
   return false;
 }
 
+math::Rect insetRectMm(math::Rect rect, float insetMm) {
+  rect.pos.x += insetMm;
+  rect.pos.y += insetMm;
+  rect.size.x = std::max(0.f, rect.size.x - 2.f * insetMm);
+  rect.size.y = std::max(0.f, rect.size.y - 2.f * insetMm);
+  return rect;
+}
+
 } // namespace
+
+struct UndertowShapePreviewWidget final : Widget {
+  static constexpr float WAVE_LINE_WIDTH = 1.25f;
+  static constexpr float WAVE_EDGE_PAD = 1.0f;
+  static constexpr float LABEL_FONT_SIZE = 11.5f;
+  Undertow* module = nullptr;
+  std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> samples {};
+  uint32_t lastVersion = 0;
+  float lastFreqHz = 0.f;
+  bool valid = false;
+
+  explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
+  }
+
+  void step() override {
+    Widget::step();
+    if (!module) {
+      return;
+    }
+    uint32_t version = 0;
+    float frequencyHz = 0.f;
+    std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> nextSamples {};
+    module->getShapePreview(nextSamples, frequencyHz, version);
+    if (!valid || version != lastVersion) {
+      samples = nextSamples;
+      lastFreqHz = frequencyHz;
+      lastVersion = version;
+      valid = true;
+    }
+  }
+
+  void draw(const DrawArgs& args) override {
+    if (!valid) {
+      return;
+    }
+
+    const float w = std::max(box.size.x, 1.f);
+    const float h = std::max(box.size.y, 1.f);
+    const float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
+    const float left = drawPad;
+    const float top = drawPad;
+    const float right = std::max(left + 1.f, w - drawPad);
+    const float bottom = std::max(top + 1.f, h - drawPad);
+    const float drawW = right - left;
+    const float drawH = bottom - top;
+
+    nvgSave(args.vg);
+    nvgScissor(args.vg, 0.f, 0.f, w, h);
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, left, top + 0.5f * drawH);
+    nvgLineTo(args.vg, right, top + 0.5f * drawH);
+    nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 36));
+    nvgStrokeWidth(args.vg, 0.65f);
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    for (int i = 0; i < Undertow::SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+      const float xNorm = float(i) / float(Undertow::SHAPE_PREVIEW_SAMPLE_COUNT - 1);
+      const float x = left + xNorm * drawW;
+      const float yNorm = clamp(0.5f - 0.5f * (samples[size_t(i)] / 5.f), 0.f, 1.f);
+      const float y = top + yNorm * drawH;
+      if (i == 0) {
+        nvgMoveTo(args.vg, x, y);
+      } else {
+        nvgLineTo(args.vg, x, y);
+      }
+    }
+    nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
+    nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgLineJoin(args.vg, NVG_ROUND);
+    nvgStroke(args.vg);
+
+    nvgResetScissor(args.vg);
+    nvgRestore(args.vg);
+
+    char freqText[32];
+    if (lastFreqHz < 1.f) {
+      std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
+    } else if (lastFreqHz >= 1000.f) {
+      std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
+    } else {
+      std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
+    }
+    nvgFontSize(args.vg, LABEL_FONT_SIZE);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+    nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
+  }
+};
 
 struct UndertowWidget final : ModuleWidget {
   explicit UndertowWidget(Undertow* module) {
@@ -54,6 +154,17 @@ struct UndertowWidget final : ModuleWidget {
       light->baseColors[0] = color;
       addChild(light);
     };
+
+    {
+      math::Rect previewRectMm;
+      if (panel_svg::loadRectFromSvgMm(panelPath, "wave_preview", &previewRectMm)) {
+        previewRectMm = insetRectMm(previewRectMm, 0.2f);
+        auto* previewWidget = new UndertowShapePreviewWidget(module);
+        previewWidget->box.pos = mm2px(previewRectMm.pos);
+        previewWidget->box.size = mm2px(previewRectMm.size);
+        addChild(previewWidget);
+      }
+    }
 
     // STO-style first layout pass with anchor-first lookups.
     // Top outputs: SHAPE / SUB / SINE

@@ -7,6 +7,7 @@ static constexpr float kLinHpCoeff = 0.9993f;
 static constexpr float kLinFmScale = 0.10f;
 static constexpr float kMinFreqHz = 8.f;
 static constexpr float kMaxFreqHz = 20000.f;
+static constexpr float kShapePreviewPublishIntervalSec = 1.f / 60.f;
 
 inline float acCoupledLinFm(float x, Undertow::VoiceState* voice) {
   // Minimal one-pole HP for LIN FM DC rejection.
@@ -53,9 +54,17 @@ Undertow::Undertow() {
   configOutput(SINE_OUTPUT, "Sine");
   configOutput(SHAPE_OUTPUT, "Shape");
   configOutput(SUB_OUTPUT, "Sub");
+
+  for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+    shapePreviewSamples[size_t(i)].store(0.f, std::memory_order_relaxed);
+    shapePreviewCycle[size_t(i)] = 0.f;
+    shapePreviewCycleFilled[size_t(i)] = 0;
+  }
 }
 
 void Undertow::process(const ProcessArgs& args) {
+  shapePreviewPublishTimer += args.sampleTime;
+  shapePreviewCycleTimer += args.sampleTime;
   float coarseHz = undertowBaseFrequencyFromKnob(params[COARSE_PARAM].getValue());
   if (coarseTuneStepped) {
     const float coarsePitchV = std::log2(std::max(coarseHz, 1e-6f) / dsp::FREQ_C4);
@@ -83,6 +92,7 @@ void Undertow::process(const ProcessArgs& args) {
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
   if (syncRising) {
+    finishShapePreviewCycle();
     if (phaseInc > 1e-9f) {
       syncDiscontinuityFrac = clamp((1.f - phaseBeforeEvents) / phaseInc, 1e-6f, 1.f);
     }
@@ -141,8 +151,70 @@ void Undertow::process(const ProcessArgs& args) {
   const float subOut = clamp(4.f * sub + voice.subBlep.process(), -5.f, 5.f);
   outputs[SUB_OUTPUT].setVoltage(subOut);
 
+  if (wrapped) {
+    finishShapePreviewCycle();
+  }
+  recordShapePreviewSample(voice.phase, outputs[SHAPE_OUTPUT].getVoltage());
+
   lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
   lights[S_GATE_LIGHT].setBrightnessSmooth((!sGatePatched || sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
+}
+
+void Undertow::recordShapePreviewSample(float phase, float volts) {
+  phase = phase - std::floor(phase);
+  int index = int(phase * float(SHAPE_PREVIEW_SAMPLE_COUNT));
+  index = clamp(index, 0, SHAPE_PREVIEW_SAMPLE_COUNT - 1);
+  if (!shapePreviewCycleFilled[size_t(index)]) {
+    shapePreviewCycleFilled[size_t(index)] = 1;
+    shapePreviewCycleFillCount++;
+  }
+  shapePreviewCycle[size_t(index)] = clamp(volts, -5.f, 5.f);
+}
+
+void Undertow::finishShapePreviewCycle() {
+  if (shapePreviewCycleFillCount >= 4 && shapePreviewPublishTimer >= kShapePreviewPublishIntervalSec) {
+    const float frequencyHz = (shapePreviewCycleTimer > 1e-6f) ? (1.f / shapePreviewCycleTimer) : 0.f;
+    std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT> publish {};
+    int firstFilled = -1;
+    for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+      if (shapePreviewCycleFilled[size_t(i)]) {
+        firstFilled = i;
+        break;
+      }
+    }
+    float held = (firstFilled >= 0) ? shapePreviewCycle[size_t(firstFilled)] : 0.f;
+    for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+      if (shapePreviewCycleFilled[size_t(i)]) {
+        held = shapePreviewCycle[size_t(i)];
+      }
+      publish[size_t(i)] = held;
+    }
+    if (firstFilled > 0) {
+      for (int i = firstFilled - 1; i >= 0; --i) {
+        publish[size_t(i)] = held;
+      }
+    }
+    for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+      shapePreviewSamples[size_t(i)].store(publish[size_t(i)], std::memory_order_relaxed);
+    }
+    shapePreviewFrequencyHz.store(frequencyHz, std::memory_order_relaxed);
+    shapePreviewVersion.fetch_add(1, std::memory_order_release);
+    shapePreviewPublishTimer = 0.f;
+  }
+
+  for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+    shapePreviewCycleFilled[size_t(i)] = 0;
+  }
+  shapePreviewCycleFillCount = 0;
+  shapePreviewCycleTimer = 0.f;
+}
+
+void Undertow::getShapePreview(std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT>& outSamples, float& outFrequencyHz, uint32_t& outVersion) const {
+  outVersion = shapePreviewVersion.load(std::memory_order_acquire);
+  outFrequencyHz = shapePreviewFrequencyHz.load(std::memory_order_relaxed);
+  for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
+    outSamples[size_t(i)] = shapePreviewSamples[size_t(i)].load(std::memory_order_relaxed);
+  }
 }
 
 json_t* Undertow::dataToJson() {
