@@ -97,6 +97,20 @@ struct UndertowWidget final : ModuleWidget {
       "Octave Stepped", "",
       [m]() { return m->coarseTuneStepped; },
       [m]() { m->coarseTuneStepped = true; }));
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Shape Algorithm"));
+    menu->addChild(createCheckMenuItem(
+      "Geometric (Legacy)", "",
+      [m]() { return m->shapeAlgorithm == Undertow::SHAPE_ALGO_GEOMETRIC; },
+      [m]() { m->shapeAlgorithm = Undertow::SHAPE_ALGO_GEOMETRIC; }));
+    menu->addChild(createCheckMenuItem(
+      "Nonlinear (Gem Study)", "",
+      [m]() { return m->shapeAlgorithm == Undertow::SHAPE_ALGO_NONLINEAR; },
+      [m]() { m->shapeAlgorithm = Undertow::SHAPE_ALGO_NONLINEAR; }));
+    menu->addChild(createCheckMenuItem(
+      "Threshold Fold (GPT Study)", "",
+      [m]() { return m->shapeAlgorithm == Undertow::SHAPE_ALGO_THRESHOLD_FOLD; },
+      [m]() { m->shapeAlgorithm = Undertow::SHAPE_ALGO_THRESHOLD_FOLD; }));
   }
 };
 

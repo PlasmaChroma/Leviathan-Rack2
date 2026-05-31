@@ -23,6 +23,12 @@ struct UndertowFreqQuantity final : ParamQuantity {
 };
 
 struct Undertow final : Module {
+  enum ShapeAlgorithm {
+    SHAPE_ALGO_GEOMETRIC = 0,
+    SHAPE_ALGO_NONLINEAR = 1,
+    SHAPE_ALGO_THRESHOLD_FOLD = 2,
+  };
+
   enum ParamId {
     COARSE_PARAM,
     FINE_PARAM,
@@ -58,8 +64,6 @@ struct Undertow final : Module {
     float phase = 0.f;
     bool subFlip = false;
     float linHpState = 0.f;
-    float shapeDcX1 = 0.f;
-    float shapeDcY1 = 0.f;
     dsp::SchmittTrigger syncTrig;
     dsp::SchmittTrigger sGateTrig;
     dsp::MinBlepGenerator<16, 16> sineBlep;
@@ -69,6 +73,7 @@ struct Undertow final : Module {
 
   VoiceState voice;
   bool coarseTuneStepped = false;
+  int shapeAlgorithm = SHAPE_ALGO_GEOMETRIC;
 
   Undertow();
   void process(const ProcessArgs& args) override;

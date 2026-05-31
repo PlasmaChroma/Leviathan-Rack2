@@ -33,6 +33,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
+	build/tests/undertow_shape_spec \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec
@@ -165,6 +166,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_sample_prep_spec)
 	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
 	$(call run_test_bin,build/tests/crownstep_spec)
+	$(call run_test_bin,build/tests/undertow_shape_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
@@ -258,6 +260,9 @@ build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_in
 
 build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
 
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
