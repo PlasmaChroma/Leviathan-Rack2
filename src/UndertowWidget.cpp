@@ -132,6 +132,8 @@ struct UndertowWidget final : ModuleWidget {
     PreviewBuildLogTimer previewBuildTimer("Undertow", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/undertow.svg");
     setPanel(createPanel(panelPath));
+    addChild(createWidget<ScrewSilver>(Vec(0.f, 0.f)));
+    addChild(createWidget<ScrewSilver>(Vec(box.size.x - RACK_GRID_WIDTH, 0.f)));
     previewBuildTimer.markPanelDone();
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 
