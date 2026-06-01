@@ -1,4 +1,5 @@
 #include "Undertow.hpp"
+#include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
 
 namespace {
@@ -22,13 +23,12 @@ math::Rect insetRectMm(math::Rect rect, float insetMm) {
 } // namespace
 
 struct UndertowShapePreviewWidget final : Widget {
+  static constexpr int PREVIEW_POINT_COUNT = 128;
   static constexpr float WAVE_LINE_WIDTH = 1.25f;
   static constexpr float WAVE_EDGE_PAD = 1.0f;
   static constexpr float LABEL_FONT_SIZE = 11.5f;
   Undertow* module = nullptr;
-  std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> samples {};
-  uint32_t lastVersion = 0;
-  bool valid = false;
+  std::array<float, PREVIEW_POINT_COUNT> samples {};
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
   }
@@ -57,19 +57,20 @@ struct UndertowShapePreviewWidget final : Widget {
     if (!module) {
       return;
     }
-    uint32_t version = 0;
-    float ignoredFrequencyHz = 0.f;
-    std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> nextSamples {};
-    module->getShapePreview(nextSamples, ignoredFrequencyHz, version);
-    if (!valid || version != lastVersion) {
-      samples = nextSamples;
-      lastVersion = version;
-      valid = true;
+
+    const float shapeAmount = module->getShapeAmount();
+    const bool hardEdges = module->shapeHardEdges;
+    const bool asymEnabled = module->shapeEntryAsymmetry;
+    const bool asymOnRight = module->shapeEntryAsymmetryOnRight;
+    for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
+      const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
+      const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, hardEdges, asymOnRight);
+      samples[size_t(i)] = clamp(folded, -1.f, 1.f) * 5.f;
     }
   }
 
   void draw(const DrawArgs& args) override {
-    if (!valid) {
+    if (!module) {
       return;
     }
 
@@ -94,8 +95,8 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgStroke(args.vg);
 
     nvgBeginPath(args.vg);
-    for (int i = 0; i < Undertow::SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
-      const float xNorm = float(i) / float(Undertow::SHAPE_PREVIEW_SAMPLE_COUNT - 1);
+    for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
+      const float xNorm = float(i) / float(PREVIEW_POINT_COUNT - 1);
       const float x = left + xNorm * drawW;
       const float yNorm = clamp(0.5f - 0.5f * (samples[size_t(i)] / 5.f), 0.f, 1.f);
       const float y = top + yNorm * drawH;

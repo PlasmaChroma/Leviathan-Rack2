@@ -25,8 +25,6 @@ struct UndertowFreqQuantity final : ParamQuantity {
 };
 
 struct Undertow final : Module {
-  static constexpr int SHAPE_PREVIEW_SAMPLE_COUNT = 128;
-
   enum ParamId {
     COARSE_PARAM,
     FINE_PARAM,
@@ -78,24 +76,12 @@ struct Undertow final : Module {
   bool shapeEntryAsymmetryOnRight = false;
   bool shapeHardEdges = true;
   std::atomic<float> displayFrequencyHz {0.f};
-  std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
-  std::atomic<float> shapePreviewFrequencyHz {0.f};
-  std::atomic<float> shapePreviewShape {0.f};
-  std::atomic<uint8_t> shapePreviewFlags {0};
-  std::atomic<uint32_t> shapePreviewVersion {1};
-  std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycle {};
-  std::array<uint8_t, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycleFilled {};
-  int shapePreviewCycleFillCount = 0;
-  float shapePreviewPublishTimer = 0.f;
-  float shapePreviewCycleTimer = 0.f;
 
   Undertow();
+  float getShapeAmount();
   void process(const ProcessArgs& args) override;
   json_t* dataToJson() override;
   void dataFromJson(json_t* root) override;
-  void recordShapePreviewSample(float phase, float volts);
-  void finishShapePreviewCycle();
-  void getShapePreview(std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT>& outSamples, float& outFrequencyHz, uint32_t& outVersion) const;
 };
 
 extern Model* modelUndertow;
