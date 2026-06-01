@@ -63,7 +63,6 @@ float Undertow::getShapeAmount() {
 
 void Undertow::process(const ProcessArgs& args) {
   const bool coarseTuneSteppedNow = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
-  coarseTuneStepped = coarseTuneSteppedNow;
   float coarseHz = undertowBaseFrequencyFromKnob(params[COARSE_PARAM].getValue());
   if (coarseTuneSteppedNow) {
     const float coarsePitchV = std::log2(std::max(coarseHz, 1e-6f) / dsp::FREQ_C4);
@@ -161,7 +160,6 @@ void Undertow::process(const ProcessArgs& args) {
 
 json_t* Undertow::dataToJson() {
   json_t* root = json_object();
-  json_object_set_new(root, "coarseTuneStepped", json_boolean(coarseTuneStepped));
   json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry));
   json_object_set_new(root, "shapeEntryAsymmetryOnRight", json_boolean(shapeEntryAsymmetryOnRight));
   json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges));
@@ -171,10 +169,6 @@ json_t* Undertow::dataToJson() {
 void Undertow::dataFromJson(json_t* root) {
   if (!root) {
     return;
-  }
-  if (json_t* steppedJ = json_object_get(root, "coarseTuneStepped")) {
-    coarseTuneStepped = json_boolean_value(steppedJ);
-    params[COARSE_STEP_MODE_PARAM].setValue(coarseTuneStepped ? 1.f : 0.f);
   }
   if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
     shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);

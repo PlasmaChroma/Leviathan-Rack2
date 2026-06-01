@@ -1,9 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
-#include <array>
 #include <atomic>
-#include <cstdint>
 #include <cmath>
 
 constexpr float kUndertowMinHz = 10.f;
@@ -71,7 +69,6 @@ struct Undertow final : Module {
   };
 
   VoiceState voice;
-  bool coarseTuneStepped = false;
   bool shapeEntryAsymmetry = false;
   bool shapeEntryAsymmetryOnRight = false;
   bool shapeHardEdges = true;

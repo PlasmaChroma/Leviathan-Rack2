@@ -1,6 +1,7 @@
 #include "Undertow.hpp"
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
+#include <array>
 
 namespace {
 

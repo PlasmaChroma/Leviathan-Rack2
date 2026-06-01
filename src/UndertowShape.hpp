@@ -18,16 +18,6 @@ inline float smooth01(float x) {
   return x * x * (3.f - 2.f * x);
 }
 
-inline float smoothPulse(float x, float start, float end, float edge) {
-  if (end <= start) {
-    return 0.f;
-  }
-  edge = std::max(edge, 1e-5f);
-  const float rise = smooth01((x - start) / edge);
-  const float fall = 1.f - smooth01((x - (end - edge)) / edge);
-  return clampf(rise * fall, 0.f, 1.f);
-}
-
 inline float triToSine(float x) {
   const float x2 = x * x;
   return x * (1.5707963f - 0.6459641f * x2 + 0.0796926f * x2 * x2);
@@ -35,17 +25,6 @@ inline float triToSine(float x) {
 
 inline float shapeControlTaper(float shape) {
   return clampf(shape, 0.f, 1.f);
-}
-
-inline float softPositiveKnee(float x, float knee) {
-  knee = std::max(knee, 1e-5f);
-  if (x <= 0.f) {
-    return 0.f;
-  }
-  if (x >= knee) {
-    return x - 0.5f * knee;
-  }
-  return 0.5f * x * x / knee;
 }
 
 inline float foldedTriangleWidth(float shape) {
