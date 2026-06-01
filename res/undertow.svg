@@ -426,7 +426,7 @@
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_OUTPUT"
-   cx="1000"
+   cx="940"
    cy="11400"
    r="240" />
   <circle
@@ -438,7 +438,7 @@
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SINE_OUTPUT"
-   cx="3060"
+   cx="3120"
    cy="11400"
    r="240" />
 

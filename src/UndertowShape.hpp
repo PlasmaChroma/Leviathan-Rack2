@@ -18,6 +18,16 @@ inline float smooth01(float x) {
   return x * x * (3.f - 2.f * x);
 }
 
+inline float smoothPulse(float x, float start, float end, float edge) {
+  if (end <= start) {
+    return 0.f;
+  }
+  edge = std::max(edge, 1e-5f);
+  const float rise = smooth01((x - start) / edge);
+  const float fall = 1.f - smooth01((x - (end - edge)) / edge);
+  return clampf(rise * fall, 0.f, 1.f);
+}
+
 inline float triToSine(float x) {
   const float x2 = x * x;
   return x * (1.5707963f - 0.6459641f * x2 + 0.0796926f * x2 * x2);
@@ -25,9 +35,9 @@ inline float triToSine(float x) {
 
 inline float shapeControlTaper(float shape) {
   shape = clampf(shape, 0.f, 1.f);
-  // Perceptual taper: the STO-like fold/triangle character should emerge before
-  // full clockwise. Keep 0 and 1 fixed while accelerating the mid/high region.
-  return clampf(1.f - std::sqrt(1.f - shape), 0.f, 1.f);
+  // Front-load the SHAPE travel: by 50% knob the folded triangle should be
+  // visibly reaching the zero line, with the last half mostly increasing peak.
+  return std::sqrt(shape);
 }
 
 inline float softPositiveKnee(float x, float knee) {
@@ -47,8 +57,18 @@ inline float thresholdFold(float phase, float shape) {
   const float sine = triToSine(tri);
   const float u = smooth01(shape);
 
-  const float triAmt = 0.035f * u + 0.30f * u * u;
-  float core = crossfade(sine, tri, triAmt);
+  // Use a growing local triangle region rather than a uniform whole-wave
+  // crossfade. This lets the triangle start as a narrow wedge and expand until
+  // it occupies almost the full cycle, leaving only a small sine remnant.
+  const float takeover = smooth01(shape / 0.52f);
+  const float baseTriAmt = clampf(0.12f * shape + 0.22f * u, 0.f, 0.34f);
+  const float triRegionStart = 0.5f - (0.065f + 0.435f * takeover);
+  const float triRegionEnd = 0.5f + (0.095f + 0.405f * takeover);
+  const float triRegionEdge = 0.006f + 0.016f * (1.f - takeover);
+  const float triRegionAmt = 0.34f + 0.66f * takeover;
+  const float regionTriMix = triRegionAmt * smoothPulse(p, triRegionStart, triRegionEnd, triRegionEdge);
+  const float triMix = clampf(std::max(baseTriAmt, regionTriMix), 0.f, 1.f);
+  float core = crossfade(sine, tri, triMix);
 
   const float fold = smooth01((u - 0.07f) / 0.86f);
   const float foldThreshold = -0.995f + 0.58f * fold;
@@ -62,15 +82,18 @@ inline float thresholdFold(float phase, float shape) {
   const float centerNorm = clampf(center / centerWidth, -1.f, 1.f);
   const float centerWindow = 1.f - smooth01(std::fabs(centerNorm));
   const float asymSkew = centerNorm * centerWindow;
-  const float localThreshold = foldThreshold + 0.065f * fold * foldAsym * asymSkew;
+  const float localThreshold = foldThreshold + 0.045f * fold * foldAsym * asymSkew;
   const float under = softPositiveKnee(localThreshold - core, knee);
   float y = core + (2.05f + 0.55f * fold) * fold * under;
 
+  const float peakLift = smooth01((shape - 0.72f) / 0.28f);
+  y += 0.42f * peakLift * centerWindow;
+
   const float edge = smooth01((u - 0.46f) / 0.50f);
   const float zeroCrossWindow = std::max(0.f, 1.f - std::fabs(tri));
-  y -= 0.055f * edge * std::sin(2.f * float(M_PI) * p) * zeroCrossWindow;
+  y -= 0.030f * edge * std::sin(2.f * float(M_PI) * p) * zeroCrossWindow;
 
-  const float posDrive = 0.06f * u + 0.06f * edge;
+  const float posDrive = 0.04f * u + 0.05f * edge;
   const float negDrive = 0.025f * u;
   if (y >= 0.f) {
     y = y / (1.f + posDrive * y);
@@ -78,8 +101,8 @@ inline float thresholdFold(float phase, float shape) {
     y = y / (1.f + negDrive * -y);
   }
 
-  y -= 0.185f * fold;
-  y *= 1.f + 0.34f * u;
+  y -= 0.155f * fold;
+  y *= 1.f + 0.42f * u;
   return clampf(y, -1.f, 1.f);
 }
 
