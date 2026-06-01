@@ -40,32 +40,6 @@ inline void clearSubBlep(Undertow::VoiceState* voice) {
   }
 }
 
-inline void insertShapeHardEdgeBleps(Undertow* module, float startPhase, float phaseInc, float shape) {
-  if (!module || !module->shapeHardEdges || phaseInc <= 1e-9f) {
-    return;
-  }
-
-  const float width = undertow_shape::foldedTriangleWidth(shape);
-  const float leftBoundary = 0.5f - width;
-  const float rightBoundary = 0.5f + width;
-  const float endPhase = startPhase + phaseInc;
-  auto insertBoundary = [&](float boundary, bool enteringTriangle) {
-    float crossedAt = boundary;
-    if (crossedAt <= startPhase) {
-      crossedAt += 1.f;
-    }
-    if (crossedAt > startPhase && crossedAt <= endPhase) {
-      const float frac = clamp((crossedAt - startPhase) / phaseInc, 1e-6f, 1.f);
-      const float step = undertow_shape::hardEdgeStepAtBoundary(boundary, shape, module->shapeEntryAsymmetry,
-                                                                enteringTriangle);
-      insertBlepStep(&module->voice.shapeBlep, 5.f * step, frac);
-    }
-  };
-
-  insertBoundary(leftBoundary, true);
-  insertBoundary(rightBoundary, false);
-}
-
 } // namespace
 
 Undertow::Undertow() {
@@ -152,7 +126,6 @@ void Undertow::process(const ProcessArgs& args) {
     insertBlepStep(&voice.sineBlep, sineStep * 5.f, syncDiscontinuityFrac);
     insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
   }
-  insertShapeHardEdgeBleps(this, phaseBeforeAdvance, phaseInc, shape);
 
   bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
   float sGateV = sGatePatched ? inputs[S_GATE_INPUT].getVoltage() : 10.f;
@@ -211,29 +184,19 @@ void Undertow::finishShapePreviewCycle() {
   if (shapePreviewCycleFillCount >= 4 && shapePreviewPublishTimer >= kShapePreviewPublishIntervalSec) {
     const float frequencyHz = (shapePreviewCycleTimer > 1e-6f) ? (1.f / shapePreviewCycleTimer) : 0.f;
     std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT> publish {};
-    int firstFilled = -1;
+    const float shape = shapeAmount(this);
     for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
-      if (shapePreviewCycleFilled[size_t(i)]) {
-        firstFilled = i;
-        break;
-      }
-    }
-    float held = (firstFilled >= 0) ? shapePreviewCycle[size_t(firstFilled)] : 0.f;
-    for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
-      if (shapePreviewCycleFilled[size_t(i)]) {
-        held = shapePreviewCycle[size_t(i)];
-      }
-      publish[size_t(i)] = held;
-    }
-    if (firstFilled > 0) {
-      for (int i = firstFilled - 1; i >= 0; --i) {
-        publish[size_t(i)] = held;
-      }
+      const float phase = float(i) / float(SHAPE_PREVIEW_SAMPLE_COUNT - 1);
+      const float shaped = undertow_shape::thresholdFold(phase, shape, shapeEntryAsymmetry, shapeHardEdges);
+      publish[size_t(i)] = clamp(5.f * shaped, -5.f, 5.f);
     }
     for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
       shapePreviewSamples[size_t(i)].store(publish[size_t(i)], std::memory_order_relaxed);
     }
     shapePreviewFrequencyHz.store(frequencyHz, std::memory_order_relaxed);
+    shapePreviewShape.store(shape, std::memory_order_relaxed);
+    shapePreviewFlags.store(uint8_t((shapeEntryAsymmetry ? 1 : 0) | (shapeHardEdges ? 2 : 0)),
+                            std::memory_order_relaxed);
     shapePreviewVersion.fetch_add(1, std::memory_order_release);
     shapePreviewPublishTimer = 0.f;
   }

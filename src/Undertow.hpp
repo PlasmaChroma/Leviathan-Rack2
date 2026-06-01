@@ -76,6 +76,8 @@ struct Undertow final : Module {
   bool shapeHardEdges = false;
   std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
   std::atomic<float> shapePreviewFrequencyHz {0.f};
+  std::atomic<float> shapePreviewShape {0.f};
+  std::atomic<uint8_t> shapePreviewFlags {0};
   std::atomic<uint32_t> shapePreviewVersion {1};
   std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycle {};
   std::array<uint8_t, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewCycleFilled {};
