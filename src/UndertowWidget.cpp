@@ -151,7 +151,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addOutputPort = [&](int outputId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addOutput(createOutputCentered<PJ301MPort>(mm2px(posMm), module, outputId));
+      addOutput(createOutputCentered<BananutBlack>(mm2px(posMm), module, outputId));
     };
     auto addTinyLight = [&](int lightId, const char* anchorId, const Vec& fallbackMm, NVGcolor color) {
       Vec posMm;
@@ -215,7 +215,7 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { return m->coarseTuneStepped; },
       [m]() { m->coarseTuneStepped = true; }));
     menu->addChild(new MenuSeparator());
-    menu->addChild(createMenuLabel("Shape"));
+    menu->addChild(createMenuLabel("Morph"));
     menu->addChild(createSubmenuItem("Asymmetry", "", [m](Menu* submenu) {
       submenu->addChild(createCheckMenuItem(
         "Off", "",
@@ -237,7 +237,7 @@ struct UndertowWidget final : ModuleWidget {
         }));
     }));
     menu->addChild(createCheckMenuItem(
-      "Hard shape edges", "",
+      "Hard morph edges", "",
       [m]() { return m->shapeHardEdges; },
       [m]() { m->shapeHardEdges = !m->shapeHardEdges; }));
   }

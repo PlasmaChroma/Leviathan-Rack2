@@ -48,17 +48,17 @@ Undertow::Undertow() {
   configParam<UndertowFreqQuantity>(COARSE_PARAM, 0.f, 1.f, undertowKnobValueForFrequency(261.63f), "Frequency");
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM");
-  configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape", " %", 0.f, 100.f);
+  configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Morph", " %", 0.f, 100.f);
 
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(EXPO_INPUT, "Expo FM");
   configInput(LIN_FM_INPUT, "Linear FM");
-  configInput(SHAPE_CV_INPUT, "Shape CV");
+  configInput(SHAPE_CV_INPUT, "Morph CV");
   configInput(SYNC_INPUT, "Sync");
   configInput(S_GATE_INPUT, "Sub gate");
 
   configOutput(SINE_OUTPUT, "Sine");
-  configOutput(SHAPE_OUTPUT, "Shape");
+  configOutput(SHAPE_OUTPUT, "Morph");
   configOutput(SUB_OUTPUT, "Sub");
 
   for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
