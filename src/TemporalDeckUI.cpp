@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -2199,6 +2200,17 @@ static bool isSupportedPlatterArtPath(const std::string &path) {
   return ext == ".svg" || ext == ".png" || ext == ".jpg" || ext == ".jpeg";
 }
 
+static bool isSupportedSampleDropPath(const std::string &path) {
+  std::string ext = lowercaseExtension(path);
+  return ext == ".wav" || ext == ".wave" || ext == ".flac" || ext == ".mp3";
+}
+
+static void playDropErrorCue() {
+  // Non-modal cue for unsupported drop payloads.
+  std::fputc('\a', stderr);
+  std::fflush(stderr);
+}
+
 static float platterDimmingOverlayAlphaForMode(int mode) {
   switch (mode) {
   case TemporalDeck::PLATTER_BRIGHTNESS_LOW:
@@ -3532,6 +3544,50 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }
+
+  void onPathDrop(const event::PathDrop &e) override {
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    if (!deckModule) {
+      ModuleWidget::onPathDrop(e);
+      return;
+    }
+
+    std::string selectedPath;
+    bool sawDirectory = false;
+    for (const std::string &path : e.paths) {
+      if (system::isDirectory(path)) {
+        sawDirectory = true;
+        continue;
+      }
+      if (system::isFile(path) && isSupportedSampleDropPath(path)) {
+        selectedPath = path;
+        break;
+      }
+    }
+
+    if (!selectedPath.empty()) {
+      std::string error;
+      if (!deckModule->loadSampleFromPath(selectedPath, &error)) {
+        playDropErrorCue();
+      }
+      e.consume(this);
+      return;
+    }
+
+    if (sawDirectory) {
+      playDropErrorCue();
+      e.consume(this);
+      return;
+    }
+
+    if (!e.paths.empty()) {
+      playDropErrorCue();
+      e.consume(this);
+      return;
+    }
+
+    ModuleWidget::onPathDrop(e);
+  }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);
