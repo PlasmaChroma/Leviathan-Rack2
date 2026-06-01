@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="undertow.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -247,14 +247,14 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
-   inkscape:cx="32.277618"
-   inkscape:cy="256.33459"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:cx="32.487213"
+   inkscape:cy="155.72903"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="58"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="svg488"
+   inkscape:current-layer="panel_art"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -355,7 +355,20 @@
    stroke-opacity="0.06"
    stroke-width="18.2665"
    id="outputs"
-   style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /></g>
+   style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /><rect
+   x="105.94666"
+   y="1053.9938"
+   width="3852.1067"
+   height="7575.6689"
+   rx="180.84251"
+   ry="237.2843"
+   fill="#000000"
+   opacity="0.1"
+   stroke="#ffffff"
+   stroke-opacity="0.06"
+   stroke-width="51.7874"
+   id="frame_left"
+   style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" /></g>
   <g
    id="panel_labels_reworked"
    inkscape:groupmode="layer"
@@ -443,78 +456,78 @@
    r="240" />
 
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="COARSE_PARAM"
-   cx="1440"
+   cx="860"
    cy="2100"
    r="320" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="FINE_PARAM"
-   cx="2780"
-   cy="2370.0002"
+   cx="3016.7002"
+   cy="2100"
    r="180" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="LIN_FM_PARAM"
    cx="860"
    cy="7840.001"
    r="220" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_PARAM"
-   cx="2900"
+   cx="3016.7002"
    cy="7840.001"
    r="220" />
 
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="LIN_FM_INPUT"
    cx="860"
-   cy="3680.0002"
+   cy="6652.4058"
    r="240" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_CV_INPUT"
-   cx="2900"
-   cy="3680.0002"
+   cx="3016.7002"
+   cy="6652.4058"
    r="240" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="EXPO_INPUT"
-   cx="860"
-   cy="5073.3335"
+   cx="2008.3501"
+   cy="5548.936"
    r="240" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="V_OCT_INPUT"
-   cx="2900"
-   cy="5073.3335"
+   cx="2008.3501"
+   cy="3010.3955"
    r="240" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="SYNC_INPUT"
    cx="860"
-   cy="6466.6675"
+   cy="4250"
    r="240" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="S_GATE_INPUT"
-   cx="2900"
-   cy="6466.6675"
+   cx="3016.7002"
+   cy="4281.7275"
    r="240" />
 
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd"
    id="SYNC_LIGHT"
-   cx="500"
-   cy="800"
+   cx="1445.6001"
+   cy="4250"
    r="110" />
   <circle
-   style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
+   style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd"
    id="S_GATE_LIGHT"
-   cx="3500"
-   cy="800"
+   cx="3608.8735"
+   cy="4281.7275"
    r="110" />
 <rect
    style="display:inline;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
