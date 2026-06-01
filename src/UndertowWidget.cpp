@@ -220,6 +220,10 @@ struct UndertowWidget final : ModuleWidget {
       "Entry asymmetry", "",
       [m]() { return m->shapeEntryAsymmetry; },
       [m]() { m->shapeEntryAsymmetry = !m->shapeEntryAsymmetry; }));
+    menu->addChild(createCheckMenuItem(
+      "Hard shape edges", "",
+      [m]() { return m->shapeHardEdges; },
+      [m]() { m->shapeHardEdges = !m->shapeHardEdges; }));
   }
 };
 

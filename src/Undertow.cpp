@@ -40,6 +40,32 @@ inline void clearSubBlep(Undertow::VoiceState* voice) {
   }
 }
 
+inline void insertShapeHardEdgeBleps(Undertow* module, float startPhase, float phaseInc, float shape) {
+  if (!module || !module->shapeHardEdges || phaseInc <= 1e-9f) {
+    return;
+  }
+
+  const float width = undertow_shape::foldedTriangleWidth(shape);
+  const float leftBoundary = 0.5f - width;
+  const float rightBoundary = 0.5f + width;
+  const float endPhase = startPhase + phaseInc;
+  auto insertBoundary = [&](float boundary, bool enteringTriangle) {
+    float crossedAt = boundary;
+    if (crossedAt <= startPhase) {
+      crossedAt += 1.f;
+    }
+    if (crossedAt > startPhase && crossedAt <= endPhase) {
+      const float frac = clamp((crossedAt - startPhase) / phaseInc, 1e-6f, 1.f);
+      const float step = undertow_shape::hardEdgeStepAtBoundary(boundary, shape, module->shapeEntryAsymmetry,
+                                                                enteringTriangle);
+      insertBlepStep(&module->voice.shapeBlep, 5.f * step, frac);
+    }
+  };
+
+  insertBoundary(leftBoundary, true);
+  insertBoundary(rightBoundary, false);
+}
+
 } // namespace
 
 Undertow::Undertow() {
@@ -92,7 +118,8 @@ void Undertow::process(const ProcessArgs& args) {
   const float phaseBeforeEvents = voice.phase;
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
-  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape, shapeEntryAsymmetry);
+  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape, shapeEntryAsymmetry,
+                                                                 shapeHardEdges);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -117,7 +144,7 @@ void Undertow::process(const ProcessArgs& args) {
 
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
-  const float shaped = undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry);
+  const float shaped = undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry, shapeHardEdges);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -125,6 +152,7 @@ void Undertow::process(const ProcessArgs& args) {
     insertBlepStep(&voice.sineBlep, sineStep * 5.f, syncDiscontinuityFrac);
     insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
   }
+  insertShapeHardEdgeBleps(this, phaseBeforeAdvance, phaseInc, shape);
 
   bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
   float sGateV = sGatePatched ? inputs[S_GATE_INPUT].getVoltage() : 10.f;
@@ -229,6 +257,7 @@ json_t* Undertow::dataToJson() {
   json_t* root = json_object();
   json_object_set_new(root, "coarseTuneStepped", json_boolean(coarseTuneStepped));
   json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry));
+  json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges));
   return root;
 }
 
@@ -241,6 +270,9 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
     shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);
+  }
+  if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
+    shapeHardEdges = json_boolean_value(hardEdgesJ);
   }
 }
 
