@@ -5,6 +5,8 @@ namespace {
 
 static constexpr float kLinHpCoeff = 0.9993f;
 static constexpr float kLinFmScale = 0.10f;
+static constexpr float kLinFmDriveThreshold = 0.80f;
+static constexpr float kLinFmMaxDrive = 4.0f;
 static constexpr float kMinFreqHz = 8.f;
 static constexpr float kMaxFreqHz = 20000.f;
 
@@ -13,6 +15,16 @@ inline float acCoupledLinFm(float x, Undertow::VoiceState* voice) {
   float y = x - voice->linHpState;
   voice->linHpState = x - kLinHpCoeff * y;
   return y;
+}
+
+inline float drivenLinFm(float lin, float amount) {
+  const float bus = lin * amount;
+  const float driveNorm = clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
+  if (driveNorm <= 0.f || std::fabs(bus) < 1e-9f) {
+    return bus;
+  }
+  const float drive = 1.f + driveNorm * (kLinFmMaxDrive - 1.f);
+  return std::tanh(bus * drive) / std::tanh(drive);
 }
 
 inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, float fraction01) {
@@ -37,7 +49,7 @@ Undertow::Undertow() {
 
   configParam<UndertowFreqQuantity>(COARSE_PARAM, 0.f, 1.f, undertowKnobValueForFrequency(261.63f), "Frequency");
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
-  configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM");
+  configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
   configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Morph", " %", 0.f, 100.f);
   configParam(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped");
 
@@ -77,7 +89,8 @@ void Undertow::process(const ProcessArgs& args) {
   const float linIn = inputs[LIN_FM_INPUT].isConnected() ? inputs[LIN_FM_INPUT].getVoltage() : 0.f;
   const float lin = acCoupledLinFm(linIn, &voice);
   const float linAmt = params[LIN_FM_PARAM].getValue();
-  const float freq = clamp(baseFreq + baseFreq * lin * linAmt * kLinFmScale, kMinFreqHz, kMaxFreqHz);
+  const float linBus = drivenLinFm(lin, linAmt);
+  const float freq = clamp(baseFreq + baseFreq * linBus * kLinFmScale, kMinFreqHz, kMaxFreqHz);
   const float phaseInc = freq * args.sampleTime;
   const float shape = getShapeAmount();
 
