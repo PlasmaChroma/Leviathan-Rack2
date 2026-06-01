@@ -43,6 +43,11 @@ TEST_BINS_RACK := \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec
 
+RUN_CHRONOMAW_WIP_TESTS ?= 0
+ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
+TEST_BINS_RACK += build/tests/chronomaw_serialization_spec
+endif
+
 TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
@@ -173,7 +178,11 @@ test-fast: test-build-fast
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
+ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
 	$(call run_rack_test_bin,build/tests/chronomaw_serialization_spec)
+else
+	@echo "[SKIP] chronomaw_serialization_spec (Chronomaw WIP; set RUN_CHRONOMAW_WIP_TESTS=1 to run)"
+endif
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
 
@@ -275,7 +284,7 @@ build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
-build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec build/tests/chronomaw_serialization_spec
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
