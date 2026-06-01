@@ -248,13 +248,13 @@
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
    inkscape:cx="32.487213"
-   inkscape:cy="155.72903"
+   inkscape:cy="356.94015"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="58"
    inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="panel_art"
+   inkscape:current-layer="undertow_interface_labels"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -589,4 +589,78 @@
    id="text5"
    style="font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';dominant-baseline:middle;text-anchor:middle;fill:url(#linearGradient1);stroke-width:37.1"
    inkscape:label="reworked_LEVIATHAN_LOGO"
-   aria-label="Leviathan" /></g></svg>
+   aria-label="Leviathan" /></g><g
+   id="undertow_interface_labels"
+   inkscape:groupmode="layer"
+   inkscape:label="Interface Labels"
+   style="display:inline"><text
+     x="940"
+     y="11880"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_shape_output">SHAPE</text><text
+     x="2030"
+     y="11880"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_sub_output">SUB</text><text
+     x="3120"
+     y="11880"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_sine_output">SINE</text><text
+     x="860"
+     y="2580"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_coarse_param">COARSE</text><text
+     x="3016.7002"
+     y="2500"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_fine_param">FINE</text><text
+     x="860"
+     y="8310"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_lin_fm_param">LIN FM</text><text
+     x="3016.7002"
+     y="8310"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_shape_param">SHAPE</text><text
+     x="860"
+     y="7110"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_lin_fm_input">LIN FM</text><text
+     x="3016.7002"
+     y="7110"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_shape_cv_input">SHAPE CV</text><text
+     x="2008.3501"
+     y="6010"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_expo_input">EXPO</text><text
+     x="2008.3501"
+     y="3470"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_v_oct_input">V/OCT</text><text
+     x="860"
+     y="4710"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_sync_input">SYNC</text><text
+     x="3016.7002"
+     y="4740"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_s_gate_input">S GATE</text><text
+     x="2032"
+     y="10602"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+     xml:space="preserve"
+     id="label_wave_preview">WAVE</text></g></svg>
