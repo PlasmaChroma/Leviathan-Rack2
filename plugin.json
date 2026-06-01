@@ -121,7 +121,7 @@
     {
       "slug": "Undertow",
       "name": "Undertow",
-      "description": "Compact sub-harmonic oscillator with sine, shape, and sub outputs.",
+      "description": "Compact sub-harmonic oscillator with sine, morph, and sub outputs.",
       "tags": [
         "Oscillator"
       ],

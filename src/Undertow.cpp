@@ -3,7 +3,7 @@
 
 namespace {
 
-static constexpr float kLinHpCoeff = 0.9993f;
+static constexpr float kLinHpCutoffHz = 4.9f;
 static constexpr float kLinFmScale = 0.10f;
 static constexpr float kLinFmDriveThreshold = 0.80f;
 static constexpr float kLinFmMaxDrive = 4.0f;
@@ -11,10 +11,11 @@ static constexpr float kSubLevelVolts = 5.f;
 static constexpr float kMinFreqHz = 8.f;
 static constexpr float kMaxFreqHz = 20000.f;
 
-inline float acCoupledLinFm(float x, Undertow::VoiceState* voice) {
+inline float acCoupledLinFm(float x, Undertow::VoiceState* voice, float sampleTime) {
   // Minimal one-pole HP for LIN FM DC rejection.
+  const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
   float y = x - voice->linHpState;
-  voice->linHpState = x - kLinHpCoeff * y;
+  voice->linHpState = x - hpCoeff * y;
   return y;
 }
 
@@ -82,7 +83,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float baseFreq = coarseHz * dsp::approxExp2_taylor5(fineOctaves + vOct + expo);
   displayFrequencyHz.store(clamp(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
   const float linIn = inputs[LIN_FM_INPUT].isConnected() ? inputs[LIN_FM_INPUT].getVoltage() : 0.f;
-  const float lin = acCoupledLinFm(linIn, &voice);
+  const float lin = acCoupledLinFm(linIn, &voice, args.sampleTime);
   const float linAmt = params[LIN_FM_PARAM].getValue();
   const float linBus = drivenLinFm(lin, linAmt);
   const float freq = clamp(baseFreq + baseFreq * linBus * kLinFmScale, kMinFreqHz, kMaxFreqHz);
