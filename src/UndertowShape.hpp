@@ -5,12 +5,6 @@
 
 namespace undertow_shape {
 
-enum ShapeAlgorithm {
-  SHAPE_ALGO_GEOMETRIC = 0,
-  SHAPE_ALGO_NONLINEAR = 1,
-  SHAPE_ALGO_THRESHOLD_FOLD = 2,
-};
-
 inline float clampf(float x, float lo, float hi) {
   return std::max(lo, std::min(x, hi));
 }
@@ -45,52 +39,6 @@ inline float softPositiveKnee(float x, float knee) {
     return x - 0.5f * knee;
   }
   return 0.5f * x * x / knee;
-}
-
-inline float geometric(float phase, float shape) {
-  const float p = phase - std::floor(phase);
-  const float tri = 4.f * std::fabs(p - 0.5f) - 1.f;
-  const float sine = triToSine(tri);
-  const float s = smooth01(shape);
-
-  const float triAmt = 0.99f * smooth01((shape - 0.00f) / 0.48f);
-  const float foldAmt = smooth01((shape - 0.34f) / 0.62f);
-  const float leanAmt = smooth01((shape - 0.12f) / 0.88f);
-
-  float y = crossfade(sine, tri, triAmt);
-
-  const float midDist = std::fabs(p - 0.5f);
-  const float troughWidth = 0.16f - 0.05f * s;
-  const float troughWindow = 1.f - smooth01(midDist / troughWidth);
-  const float troughFold = troughWindow * troughWindow * troughWindow;
-  y += 0.62f * foldAmt * troughFold;
-
-  const float zeroCrossWindow = 1.f - std::fabs(tri);
-  y += 0.16f * leanAmt * std::sin(2.f * float(M_PI) * p) * zeroCrossWindow;
-
-  const float drive = 0.08f * s;
-  y = y / (1.f + drive * std::fabs(y));
-
-  y -= 0.14f * foldAmt;
-  y *= 1.f + 0.16f * s;
-  return clampf(y, -1.f, 1.f);
-}
-
-inline float nonlinear(float phase, float shape) {
-  const float p = phase - std::floor(phase);
-  const float tri = 4.f * std::fabs(p - 0.5f) - 1.f;
-  const float s = smooth01(shape);
-
-  const float sineBase = triToSine(tri);
-  const float drive = 1.8f + 4.4f * s;
-  const float offset = 0.34f * s;
-  const float x = drive * (tri + offset);
-  const float overdriven = x / (1.f + std::fabs(x));
-  const float cancelAmt = 0.45f * s;
-  float y = crossfade(sineBase, overdriven - cancelAmt * sineBase, s);
-  y -= 0.08f * s;
-  y *= 1.f + 0.16f * s;
-  return clampf(y, -1.f, 1.f);
 }
 
 inline float thresholdFold(float phase, float shape) {
@@ -133,18 +81,6 @@ inline float thresholdFold(float phase, float shape) {
   y -= 0.185f * fold;
   y *= 1.f + 0.34f * u;
   return clampf(y, -1.f, 1.f);
-}
-
-inline float evaluate(int algorithm, float phase, float shape) {
-  switch (algorithm) {
-    case SHAPE_ALGO_THRESHOLD_FOLD:
-      return thresholdFold(phase, shape);
-    case SHAPE_ALGO_NONLINEAR:
-      return nonlinear(phase, shape);
-    case SHAPE_ALGO_GEOMETRIC:
-    default:
-      return geometric(phase, shape);
-  }
 }
 
 } // namespace undertow_shape

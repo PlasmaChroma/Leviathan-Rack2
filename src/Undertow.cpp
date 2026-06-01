@@ -81,13 +81,12 @@ void Undertow::process(const ProcessArgs& args) {
   const float freq = clamp(baseFreq + baseFreq * lin * linAmt * kLinFmScale, kMinFreqHz, kMaxFreqHz);
   const float phaseInc = freq * args.sampleTime;
   const float shape = shapeAmount(this);
-  const int shapeAlgoMode = this->shapeAlgorithm;
 
   // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
   const float phaseBeforeEvents = voice.phase;
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
-  const float shapedBeforeEvents = undertow_shape::evaluate(shapeAlgoMode, phaseBeforeEvents, shape);
+  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -112,7 +111,7 @@ void Undertow::process(const ProcessArgs& args) {
 
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
-  const float shaped = undertow_shape::evaluate(shapeAlgoMode, voice.phase, shape);
+  const float shaped = undertow_shape::thresholdFold(voice.phase, shape);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -220,7 +219,6 @@ void Undertow::getShapePreview(std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT>& ou
 json_t* Undertow::dataToJson() {
   json_t* root = json_object();
   json_object_set_new(root, "coarseTuneStepped", json_boolean(coarseTuneStepped));
-  json_object_set_new(root, "shapeAlgorithm", json_integer(shapeAlgorithm));
   return root;
 }
 
@@ -230,12 +228,6 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* steppedJ = json_object_get(root, "coarseTuneStepped")) {
     coarseTuneStepped = json_boolean_value(steppedJ);
-  }
-  if (json_t* shapeAlgoJ = json_object_get(root, "shapeAlgorithm")) {
-    const int loaded = json_integer_value(shapeAlgoJ);
-    if (loaded == SHAPE_ALGO_GEOMETRIC || loaded == SHAPE_ALGO_NONLINEAR || loaded == SHAPE_ALGO_THRESHOLD_FOLD) {
-      shapeAlgorithm = loaded;
-    }
   }
 }
 

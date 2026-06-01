@@ -27,12 +27,6 @@ struct UndertowFreqQuantity final : ParamQuantity {
 struct Undertow final : Module {
   static constexpr int SHAPE_PREVIEW_SAMPLE_COUNT = 128;
 
-  enum ShapeAlgorithm {
-    SHAPE_ALGO_GEOMETRIC = 0,
-    SHAPE_ALGO_NONLINEAR = 1,
-    SHAPE_ALGO_THRESHOLD_FOLD = 2,
-  };
-
   enum ParamId {
     COARSE_PARAM,
     FINE_PARAM,
@@ -77,7 +71,6 @@ struct Undertow final : Module {
 
   VoiceState voice;
   bool coarseTuneStepped = false;
-  int shapeAlgorithm = SHAPE_ALGO_GEOMETRIC;
   std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
   std::atomic<float> shapePreviewFrequencyHz {0.f};
   std::atomic<uint32_t> shapePreviewVersion {1};
