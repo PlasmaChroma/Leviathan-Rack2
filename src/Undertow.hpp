@@ -69,10 +69,11 @@ struct Undertow final : Module {
   };
 
   VoiceState voice;
-  bool shapeEntryAsymmetry = false;
-  bool shapeEntryAsymmetryOnRight = false;
-  bool shapeHardEdges = true;
+  std::atomic<bool> shapeEntryAsymmetry {false};
+  std::atomic<bool> shapeEntryAsymmetryOnRight {false};
+  std::atomic<bool> shapeHardEdges {true};
   std::atomic<float> displayFrequencyHz {0.f};
+  std::atomic<float> displayShapeAmount {0.f};
 
   Undertow();
   float getShapeAmount();

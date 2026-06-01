@@ -19,13 +19,15 @@ struct ShapeStats {
   float mean = 0.f;
 };
 
-ShapeStats measureShape(int algorithm, float knobShape, int samples = 4096) {
+ShapeStats measureShape(float knobShape, bool entryAsymmetry = false, bool hardEdges = true,
+                        bool entryAsymmetryOnRight = false, int samples = 4096) {
   ShapeStats stats;
   double sum = 0.0;
   const float shape = undertow_shape::shapeControlTaper(knobShape);
   for (int i = 0; i < samples; ++i) {
     const float phase = float(i) / float(samples);
-    const float volts = 5.f * undertow_shape::evaluate(algorithm, phase, shape);
+    const float volts = 5.f * undertow_shape::thresholdFold(phase, shape, entryAsymmetry, hardEdges,
+                                                            entryAsymmetryOnRight);
     stats.min = std::min(stats.min, volts);
     stats.max = std::max(stats.max, volts);
     sum += volts;
@@ -46,27 +48,17 @@ bool inRange(float x, float lo, float hi) {
 }
 
 TestResult testShapeZeroIsFullScaleSineLike() {
-  bool pass = true;
-  std::string detail;
-  const int algorithms[] = {
-    undertow_shape::SHAPE_ALGO_GEOMETRIC,
-    undertow_shape::SHAPE_ALGO_NONLINEAR,
-    undertow_shape::SHAPE_ALGO_THRESHOLD_FOLD,
-  };
-  for (int algorithm : algorithms) {
-    const ShapeStats s = measureShape(algorithm, 0.f);
-    const bool ok = inRange(s.max, 4.85f, 5.05f) &&
-      inRange(s.min, -5.05f, -4.85f) &&
-      inRange(s.max - s.min, 9.75f, 10.10f) &&
-      std::fabs(s.mean) < 0.05f;
-    pass = pass && ok;
-    detail += " algo=" + std::to_string(algorithm) + "{" + statsDetail(s) + "}";
-  }
+  const ShapeStats s = measureShape(0.f);
+  const bool pass = inRange(s.max, 4.85f, 5.05f) &&
+    inRange(s.min, -5.05f, -4.85f) &&
+    inRange(s.max - s.min, 9.75f, 10.10f) &&
+    std::fabs(s.mean) < 0.05f;
+  const std::string detail = statsDetail(s);
   return {"SHAPE=0 stays full-scale and centered", pass, detail};
 }
 
 TestResult testThresholdFoldMaxShapeHasUsableLevel() {
-  const ShapeStats s = measureShape(undertow_shape::SHAPE_ALGO_THRESHOLD_FOLD, 1.f);
+  const ShapeStats s = measureShape(1.f);
   const bool pass = inRange(s.max, 4.25f, 5.05f) &&
     inRange(s.min, -5.05f, -3.75f) &&
     inRange(s.max - s.min, 8.75f, 10.10f) &&
@@ -77,27 +69,39 @@ TestResult testThresholdFoldMaxShapeHasUsableLevel() {
 TestResult testShapeAlgorithmsStayInsideRailsAcrossSweep() {
   bool pass = true;
   std::string detail;
-  const int algorithms[] = {
-    undertow_shape::SHAPE_ALGO_GEOMETRIC,
-    undertow_shape::SHAPE_ALGO_NONLINEAR,
-    undertow_shape::SHAPE_ALGO_THRESHOLD_FOLD,
-  };
   const float shapes[] = {0.f, 0.10f, 0.25f, 0.50f, 0.75f, 1.f};
-  for (int algorithm : algorithms) {
-    for (float shape : shapes) {
-      const ShapeStats s = measureShape(algorithm, shape);
-      const bool ok = s.max <= 5.001f && s.min >= -5.001f && std::isfinite(s.mean);
-      pass = pass && ok;
-      if (!ok) {
-        detail += " algo=" + std::to_string(algorithm) +
-          " shape=" + std::to_string(shape) + "{" + statsDetail(s) + "}";
-      }
+  for (float shape : shapes) {
+    const ShapeStats s = measureShape(shape);
+    const bool ok = s.max <= 5.001f && s.min >= -5.001f && std::isfinite(s.mean);
+    pass = pass && ok;
+    if (!ok) {
+      detail += " shape=" + std::to_string(shape) + "{" + statsDetail(s) + "}";
     }
   }
   if (detail.empty()) {
     detail = "all sampled shapes inside +/-5V";
   }
-  return {"Shape algorithms stay inside output rails", pass, detail};
+  return {"Shape output stays inside rails", pass, detail};
+}
+
+TestResult testThresholdFoldIsContinuousAtWrap() {
+  bool pass = true;
+  float worst = 0.f;
+  for (int si = 0; si <= 100; ++si) {
+    const float shape = float(si) / 100.f;
+    for (int asym = 0; asym <= 1; ++asym) {
+      for (int hard = 0; hard <= 1; ++hard) {
+        for (int side = 0; side <= 1; ++side) {
+          const float beforeWrap =
+              undertow_shape::thresholdFold(1.f - 1e-6f, shape, asym != 0, hard != 0, side != 0);
+          const float atWrap = undertow_shape::thresholdFold(0.f, shape, asym != 0, hard != 0, side != 0);
+          worst = std::max(worst, std::fabs(beforeWrap - atWrap));
+        }
+      }
+    }
+  }
+  pass = worst < 1e-3f;
+  return {"Threshold fold remains continuous at phase wrap", pass, "worst delta=" + std::to_string(worst)};
 }
 
 } // namespace
@@ -107,6 +111,7 @@ int main() {
   tests.push_back(testShapeZeroIsFullScaleSineLike());
   tests.push_back(testThresholdFoldMaxShapeHasUsableLevel());
   tests.push_back(testShapeAlgorithmsStayInsideRailsAcrossSweep());
+  tests.push_back(testThresholdFoldIsContinuousAtWrap());
 
   int failed = 0;
   std::cout << "Undertow Shape Spec\n";

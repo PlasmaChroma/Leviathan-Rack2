@@ -7,6 +7,7 @@ static constexpr float kLinHpCoeff = 0.9993f;
 static constexpr float kLinFmScale = 0.10f;
 static constexpr float kLinFmDriveThreshold = 0.80f;
 static constexpr float kLinFmMaxDrive = 4.0f;
+static constexpr float kSubLevelVolts = 5.f;
 static constexpr float kMinFreqHz = 8.f;
 static constexpr float kMaxFreqHz = 20000.f;
 
@@ -34,12 +35,6 @@ inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, floa
   float f = clamp(fraction01, 1e-6f, 1.f);
   // Rack MinBLEP expects discontinuity position in [-1, 0] samples from current sample.
   blep->insertDiscontinuity(f - 1.f, step);
-}
-
-inline void clearSubBlep(Undertow::VoiceState* voice) {
-  for (int i = 0; i < 32; ++i) {
-    voice->subBlep.process();
-  }
 }
 
 } // namespace
@@ -93,13 +88,17 @@ void Undertow::process(const ProcessArgs& args) {
   const float freq = clamp(baseFreq + baseFreq * linBus * kLinFmScale, kMinFreqHz, kMaxFreqHz);
   const float phaseInc = freq * args.sampleTime;
   const float shape = getShapeAmount();
+  displayShapeAmount.store(shape, std::memory_order_relaxed);
+  const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
+  const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
+  const bool hardEdges = shapeHardEdges.load(std::memory_order_relaxed);
 
   // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
   const float phaseBeforeEvents = voice.phase;
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
-  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape, shapeEntryAsymmetry,
-                                                                 shapeHardEdges, shapeEntryAsymmetryOnRight);
+  const float shapedBeforeEvents =
+      undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, hardEdges, entryAsymmetryOnRight);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -124,7 +123,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
   const float shaped =
-      undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry, shapeHardEdges, shapeEntryAsymmetryOnRight);
+      undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, hardEdges, entryAsymmetryOnRight);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -138,20 +137,25 @@ void Undertow::process(const ProcessArgs& args) {
   bool sGateHigh = sGateV >= 1.f;
   bool sGateRising = voice.sGateTrig.process(sGateV);
   bool sGateFalling = voice.subGateHighLast && !sGateHigh;
-  if (sGateRising || sGateFalling) {
-    clearSubBlep(&voice);
-  }
+  const float subBeforeGate =
+      (voice.subGateHighLast || !sGatePatched) ? (voice.subFlip ? kSubLevelVolts : -kSubLevelVolts) : 0.f;
   if (sGateRising) {
     voice.subFlip = false;
   }
-  voice.subGateHighLast = sGateHigh;
 
   float subRaw = voice.subFlip ? 1.f : -1.f;
+  float subBase = (sGatePatched && !sGateHigh) ? 0.f : kSubLevelVolts * subRaw;
+  if (sGateRising || sGateFalling) {
+    insertBlepStep(&voice.subBlep, subBase - subBeforeGate, 0.5f);
+  }
+  voice.subGateHighLast = sGateHigh;
+
   if (wrapped && (!sGatePatched || sGateHigh)) {
-    const float subOld = subRaw;
+    const float subOldBase = subBase;
     voice.subFlip = !voice.subFlip;
     subRaw = voice.subFlip ? 1.f : -1.f;
-    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 4.f, wrapDiscontinuityFrac);
+    subBase = kSubLevelVolts * subRaw;
+    insertBlepStep(&voice.subBlep, subBase - subOldBase, wrapDiscontinuityFrac);
   }
 
   outputs[SINE_OUTPUT].setChannels(1);
@@ -159,11 +163,9 @@ void Undertow::process(const ProcessArgs& args) {
   outputs[SUB_OUTPUT].setChannels(1);
   outputs[SINE_OUTPUT].setVoltage(5.f * sine + voice.sineBlep.process());
   outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shaped + voice.shapeBlep.process(), -5.f, 5.f));
-  // The sub square is band-limited with MinBLEP, so it will not scope as an
-  // ideal digital square.  Keep the steady state inside rails and let the clamp
-  // catch residual correction energy instead of using clipping as the tone.
-  const float subOut = (!sGatePatched || sGateHigh) ? clamp(4.f * subRaw + voice.subBlep.process(), -5.f, 5.f)
-                                                    : (voice.subBlep.process(), 0.f);
+  // The sub square and S-Gate edges are band-limited with MinBLEP, so the
+  // correction may briefly move around the steady +/-5V rails.
+  const float subOut = clamp(subBase + voice.subBlep.process(), -5.f, 5.f);
   outputs[SUB_OUTPUT].setVoltage(subOut);
 
   lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
@@ -173,9 +175,10 @@ void Undertow::process(const ProcessArgs& args) {
 
 json_t* Undertow::dataToJson() {
   json_t* root = json_object();
-  json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry));
-  json_object_set_new(root, "shapeEntryAsymmetryOnRight", json_boolean(shapeEntryAsymmetryOnRight));
-  json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges));
+  json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "shapeEntryAsymmetryOnRight",
+                      json_boolean(shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges.load(std::memory_order_relaxed)));
   return root;
 }
 
@@ -184,13 +187,13 @@ void Undertow::dataFromJson(json_t* root) {
     return;
   }
   if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
-    shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);
+    shapeEntryAsymmetry.store(json_boolean_value(entryAsymmetryJ), std::memory_order_relaxed);
   }
   if (json_t* entryAsymmetrySideJ = json_object_get(root, "shapeEntryAsymmetryOnRight")) {
-    shapeEntryAsymmetryOnRight = json_boolean_value(entryAsymmetrySideJ);
+    shapeEntryAsymmetryOnRight.store(json_boolean_value(entryAsymmetrySideJ), std::memory_order_relaxed);
   }
   if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
-    shapeHardEdges = json_boolean_value(hardEdgesJ);
+    shapeHardEdges.store(json_boolean_value(hardEdgesJ), std::memory_order_relaxed);
   }
 }
 

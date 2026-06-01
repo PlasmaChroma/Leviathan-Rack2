@@ -59,10 +59,10 @@ struct UndertowShapePreviewWidget final : Widget {
       return;
     }
 
-    const float shapeAmount = module->getShapeAmount();
-    const bool hardEdges = module->shapeHardEdges;
-    const bool asymEnabled = module->shapeEntryAsymmetry;
-    const bool asymOnRight = module->shapeEntryAsymmetryOnRight;
+    const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
+    const bool hardEdges = module->shapeHardEdges.load(std::memory_order_relaxed);
+    const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
+    const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
       const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
       const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, hardEdges, asymOnRight);
@@ -234,27 +234,36 @@ struct UndertowWidget final : ModuleWidget {
     menu->addChild(createSubmenuItem("Asymmetry", "", [m](Menu* submenu) {
       submenu->addChild(createCheckMenuItem(
         "Off", "",
-        [m]() { return !m->shapeEntryAsymmetry; },
-        [m]() { m->shapeEntryAsymmetry = false; }));
+        [m]() { return !m->shapeEntryAsymmetry.load(std::memory_order_relaxed); },
+        [m]() { m->shapeEntryAsymmetry.store(false, std::memory_order_relaxed); }));
       submenu->addChild(createCheckMenuItem(
         "Rising", "",
-        [m]() { return m->shapeEntryAsymmetry && !m->shapeEntryAsymmetryOnRight; },
         [m]() {
-          m->shapeEntryAsymmetry = true;
-          m->shapeEntryAsymmetryOnRight = false;
+          return m->shapeEntryAsymmetry.load(std::memory_order_relaxed) &&
+                 !m->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
+        },
+        [m]() {
+          m->shapeEntryAsymmetry.store(true, std::memory_order_relaxed);
+          m->shapeEntryAsymmetryOnRight.store(false, std::memory_order_relaxed);
         }));
       submenu->addChild(createCheckMenuItem(
         "Falling", "",
-        [m]() { return m->shapeEntryAsymmetry && m->shapeEntryAsymmetryOnRight; },
         [m]() {
-          m->shapeEntryAsymmetry = true;
-          m->shapeEntryAsymmetryOnRight = true;
+          return m->shapeEntryAsymmetry.load(std::memory_order_relaxed) &&
+                 m->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
+        },
+        [m]() {
+          m->shapeEntryAsymmetry.store(true, std::memory_order_relaxed);
+          m->shapeEntryAsymmetryOnRight.store(true, std::memory_order_relaxed);
         }));
     }));
     menu->addChild(createCheckMenuItem(
       "Hard morph edges", "",
-      [m]() { return m->shapeHardEdges; },
-      [m]() { m->shapeHardEdges = !m->shapeHardEdges; }));
+      [m]() { return m->shapeHardEdges.load(std::memory_order_relaxed); },
+      [m]() {
+        const bool enabled = m->shapeHardEdges.load(std::memory_order_relaxed);
+        m->shapeHardEdges.store(!enabled, std::memory_order_relaxed);
+      }));
   }
 };
 
