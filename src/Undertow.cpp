@@ -48,6 +48,7 @@ Undertow::Undertow() {
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM");
   configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Morph", " %", 0.f, 100.f);
+  configParam(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped");
 
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(EXPO_INPUT, "Expo FM");
@@ -70,8 +71,10 @@ Undertow::Undertow() {
 void Undertow::process(const ProcessArgs& args) {
   shapePreviewPublishTimer += args.sampleTime;
   shapePreviewCycleTimer += args.sampleTime;
+  const bool coarseTuneSteppedNow = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
+  coarseTuneStepped = coarseTuneSteppedNow;
   float coarseHz = undertowBaseFrequencyFromKnob(params[COARSE_PARAM].getValue());
-  if (coarseTuneStepped) {
+  if (coarseTuneSteppedNow) {
     const float coarsePitchV = std::log2(std::max(coarseHz, 1e-6f) / dsp::FREQ_C4);
     const float snappedPitchV = std::round(coarsePitchV);
     coarseHz = dsp::FREQ_C4 * dsp::approxExp2_taylor5(snappedPitchV);
@@ -168,6 +171,7 @@ void Undertow::process(const ProcessArgs& args) {
 
   lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
   lights[S_GATE_LIGHT].setBrightnessSmooth((sGatePatched && sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
+  lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseTuneSteppedNow ? 0.5f : 0.f);
 }
 
 void Undertow::recordShapePreviewSample(float phase, float volts) {
@@ -233,6 +237,7 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* steppedJ = json_object_get(root, "coarseTuneStepped")) {
     coarseTuneStepped = json_boolean_value(steppedJ);
+    params[COARSE_STEP_MODE_PARAM].setValue(coarseTuneStepped ? 1.f : 0.f);
   }
   if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
     shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);

@@ -32,6 +32,7 @@ struct Undertow final : Module {
     FINE_PARAM,
     LIN_FM_PARAM,
     SHAPE_PARAM,
+    COARSE_STEP_MODE_PARAM,
     PARAMS_LEN
   };
 
@@ -55,6 +56,7 @@ struct Undertow final : Module {
   enum LightId {
     SYNC_LIGHT,
     S_GATE_LIGHT,
+    COARSE_STEP_MODE_LIGHT,
     LIGHTS_LEN
   };
 

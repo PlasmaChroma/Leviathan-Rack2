@@ -148,6 +148,12 @@ struct UndertowWidget final : ModuleWidget {
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
       addParam(createParamCentered<RoundBlackKnob>(mm2px(posMm), module, paramId));
     };
+    auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
+      Vec posMm;
+      loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
+      addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+        mm2px(posMm), module, paramId, lightId));
+    };
     auto addInputPort = [&](int inputId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
@@ -192,6 +198,8 @@ struct UndertowWidget final : ModuleWidget {
     // Lower patch field: modulation, pitch, sync, and sub-gate.
     addInputPort(Undertow::LIN_FM_INPUT, "LIN_FM_INPUT", Vec(8.600f, 65.124f));
     addInputPort(Undertow::SHAPE_CV_INPUT, "SHAPE_CV_INPUT", Vec(30.167f, 65.124f));
+    addModeToggle(Undertow::COARSE_STEP_MODE_PARAM, Undertow::COARSE_STEP_MODE_LIGHT, "COARSE_STEP_MODE_PARAM",
+                  Vec(20.084f, 49.700f));
     addInputPort(Undertow::EXPO_INPUT, "EXPO_INPUT", Vec(20.084f, 55.489f));
     addInputPort(Undertow::V_OCT_INPUT, "V_OCT_INPUT", Vec(20.084f, 30.104f));
     addInputPort(Undertow::SYNC_INPUT, "SYNC_INPUT", Vec(8.600f, 42.500f));
@@ -212,13 +220,11 @@ struct UndertowWidget final : ModuleWidget {
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Coarse Tune"));
     menu->addChild(createCheckMenuItem(
-      "Continuous", "",
-      [m]() { return !m->coarseTuneStepped; },
-      [m]() { m->coarseTuneStepped = false; }));
+      "Continuous", "", [m]() { return m->params[Undertow::COARSE_STEP_MODE_PARAM].getValue() <= 0.5f; },
+      [m]() { m->params[Undertow::COARSE_STEP_MODE_PARAM].setValue(0.f); }));
     menu->addChild(createCheckMenuItem(
-      "Octave Stepped", "",
-      [m]() { return m->coarseTuneStepped; },
-      [m]() { m->coarseTuneStepped = true; }));
+      "Octave Stepped", "", [m]() { return m->params[Undertow::COARSE_STEP_MODE_PARAM].getValue() > 0.5f; },
+      [m]() { m->params[Undertow::COARSE_STEP_MODE_PARAM].setValue(1.f); }));
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Morph"));
     menu->addChild(createSubmenuItem("Asymmetry", "", [m](Menu* submenu) {

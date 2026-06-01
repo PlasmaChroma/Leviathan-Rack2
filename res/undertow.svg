@@ -248,7 +248,7 @@
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
    inkscape:cx="70.214298"
-   inkscape:cy="190.52178"
+   inkscape:cy="190.10259"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="58"
@@ -327,22 +327,7 @@
    id="gray_outline"
    style="display:none;stroke:#3c3f42;stroke-opacity:1" />
       
-    </g><path
-   d="M 216.55646,952.22271 H 3847.4434"
-   stroke="url(#accentGrad)"
-   stroke-width="31.1071"
-   stroke-linecap="round"
-   opacity="0.55"
-   fill="none"
-   id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
-    
-    
-    
-    
-    
-    
-  <rect
+    </g><rect
    x="89.212578"
    y="10734.063"
    width="3885.575"
@@ -369,6 +354,21 @@
    stroke-width="51.3798"
    id="frame_left"
    style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" /><path
+   d="M 216.55646,952.22271 H 3847.4434"
+   stroke="url(#accentGrad)"
+   stroke-width="31.1071"
+   stroke-linecap="round"
+   opacity="0.55"
+   fill="none"
+   id="top_horizontal_line"
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
+    
+    
+    
+    
+    
+    
+  <path
    d="M 922.07621,1966.136 2024.2003,3030.8782"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"
@@ -464,10 +464,16 @@
    cy="6512.4004"
    r="240" />
   <circle
+   style="font-variation-settings:'wght' 400;display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
+   id="COARSE_STEP_MODE_PARAM"
+   cx="2008.3501"
+   cy="4790"
+   r="140" />
+  <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="EXPO_INPUT"
    cx="2008.3501"
-   cy="6088.9004"
+   cy="6248.9004"
    r="240" />
   <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
@@ -484,7 +490,7 @@
   <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="S_GATE_INPUT"
-   cx="3016.7002"
+   cx="3136.6833"
    cy="4281.7275"
    r="240" />
 
@@ -497,7 +503,7 @@
   <circle
    style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd"
    id="S_GATE_LIGHT"
-   cx="3608.8735"
+   cx="3728.8567"
    cy="4281.7275"
    r="110" />
 <rect
@@ -601,7 +607,7 @@
      x="919.9942"
      y="2810.0002">FREQ</tspan></text><text
    x="3016.7002"
-   y="2709.9785"
+   y="2669.9785"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_fine_param">FINE</text><text
@@ -620,27 +626,36 @@
      x="3136.696"
      y="8310">MORPH</tspan></text><text
    x="2008.3501"
-   y="6710.0137"
+   y="6910.0137"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_expo_input"><tspan
      sodipodi:role="line"
      id="tspan19"
      x="2008.3501"
-     y="6710.0137">EXPO</tspan></text><text
+     y="6910.0137">EXPO</tspan></text><text
    x="2008.3501"
-   y="3630.0493"
+   y="3670.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_v_oct_input">V/OCT</text><text
    x="860"
-   y="4870.0493"
+   y="4910.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_sync_input">SYNC</text><text
-   x="3016.7002"
-   y="4900.0493"
+   x="3136.6833"
+   y="4940.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_s_gate_input">S GATE</text></g>
+   id="label_s_gate_input">S GATE</text><text
+   x="2009.761"
+   y="5385.1001"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"
+   id="label_s_gate_input-9"><tspan
+     sodipodi:role="line"
+     id="tspan3"
+     x="2009.761"
+     y="5385.1001">OCT</tspan></text></g>
 </svg>
