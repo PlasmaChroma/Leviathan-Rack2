@@ -72,6 +72,7 @@ struct Undertow final : Module {
 
   VoiceState voice;
   bool coarseTuneStepped = false;
+  bool shapeEntryAsymmetry = false;
   std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
   std::atomic<float> shapePreviewFrequencyHz {0.f};
   std::atomic<uint32_t> shapePreviewVersion {1};

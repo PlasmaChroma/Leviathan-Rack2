@@ -48,18 +48,22 @@ inline float softPositiveKnee(float x, float knee) {
   return 0.5f * x * x / knee;
 }
 
-inline float thresholdFold(float phase, float shape) {
+inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false) {
   const float p = phase - std::floor(phase);
   const float tri = 4.f * std::fabs(p - 0.5f) - 1.f;
   const float sine = triToSine(tri);
   const float s = clampf(shape, 0.f, 1.f);
   const float width = 0.030f + 0.460f * smooth01(s);
-  const float x = std::fabs(p - 0.5f) / width;
+  const float centerNorm = (p - 0.5f) / width;
+  const float x = std::fabs(centerNorm);
   const float triangle = clampf(1.f - x, 0.f, 1.f);
 
   // Direct target: a triangle rises out of the sine trough. Its apex is -1 at
   // 0% shape, 0 at 50%, and +1 at 100%, while its width expands with shape.
-  const float foldedTriangle = -1.f + 2.f * s * triangle;
+  const float leftEntry = clampf(-centerNorm, 0.f, 1.f);
+  const float baseRegion = 1.f - smooth01(triangle / 0.45f);
+  const float entryLift = entryAsymmetry ? (0.09f * smooth01((s - 0.12f) / 0.72f) * leftEntry * baseRegion) : 0.f;
+  const float foldedTriangle = -1.f + entryLift + 2.f * s * triangle;
   const float active = smooth01(s / 0.08f);
   // Keep the triangle base near the lower rail. A wide edge blend makes the
   // sine erase the base too early, which reduces SHAPE peak-to-peak level.

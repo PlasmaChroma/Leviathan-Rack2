@@ -92,7 +92,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float phaseBeforeEvents = voice.phase;
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
-  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape);
+  const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape, shapeEntryAsymmetry);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -117,7 +117,7 @@ void Undertow::process(const ProcessArgs& args) {
 
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
-  const float shaped = undertow_shape::thresholdFold(voice.phase, shape);
+  const float shaped = undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -228,6 +228,7 @@ void Undertow::getShapePreview(std::array<float, SHAPE_PREVIEW_SAMPLE_COUNT>& ou
 json_t* Undertow::dataToJson() {
   json_t* root = json_object();
   json_object_set_new(root, "coarseTuneStepped", json_boolean(coarseTuneStepped));
+  json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry));
   return root;
 }
 
@@ -237,6 +238,9 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* steppedJ = json_object_get(root, "coarseTuneStepped")) {
     coarseTuneStepped = json_boolean_value(steppedJ);
+  }
+  if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
+    shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);
   }
 }
 

@@ -214,6 +214,12 @@ struct UndertowWidget final : ModuleWidget {
       "Octave Stepped", "",
       [m]() { return m->coarseTuneStepped; },
       [m]() { m->coarseTuneStepped = true; }));
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Shape"));
+    menu->addChild(createCheckMenuItem(
+      "Entry asymmetry", "",
+      [m]() { return m->shapeEntryAsymmetry; },
+      [m]() { m->shapeEntryAsymmetry = !m->shapeEntryAsymmetry; }));
   }
 };
 
