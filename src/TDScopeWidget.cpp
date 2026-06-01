@@ -295,10 +295,10 @@ struct TDScopeWidget : ModuleWidget {
         "Fire (Red/Yellow)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
       submenu->addChild(createCheckMenuItem(
-        "Amber (Retro CRT)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_AMBER; },
+        "Retro Amber", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_AMBER; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_AMBER; }));
       submenu->addChild(createCheckMenuItem(
-        "Green Phosphor (Retro CRT)", "",
+        "Retro Green", "",
         [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; }));
     }));
