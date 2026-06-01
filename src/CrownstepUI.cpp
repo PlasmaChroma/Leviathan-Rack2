@@ -126,12 +126,6 @@ inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
 	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
 }
 
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
-
 std::shared_ptr<Image> crownstepWoodBoardTileImage() {
 	if (!APP || !APP->window) {
 		return std::shared_ptr<Image>();

@@ -28,11 +28,28 @@ struct UndertowShapePreviewWidget final : Widget {
   Undertow* module = nullptr;
   std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> samples {};
   uint32_t lastVersion = 0;
-  float lastFreqHz = 0.f;
-  float displayedFreqHz = 0.f;
   bool valid = false;
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
+  }
+
+  static std::string formatFrequencyText(float hz) {
+    if (!std::isfinite(hz) || hz < 0.f) {
+      hz = 0.f;
+    }
+    if (hz < 1.f) {
+      return string::f("%.1f mHz", hz * 1000.f);
+    }
+    if (hz >= 1000.f) {
+      return string::f("%.2f kHz", hz / 1000.f);
+    }
+    if (hz < 10.f) {
+      return string::f("%.2f Hz", hz);
+    }
+    if (hz < 100.f) {
+      return string::f("%.1f Hz", hz);
+    }
+    return string::f("%.0f Hz", hz);
   }
 
   void step() override {
@@ -41,17 +58,11 @@ struct UndertowShapePreviewWidget final : Widget {
       return;
     }
     uint32_t version = 0;
-    float frequencyHz = 0.f;
+    float ignoredFrequencyHz = 0.f;
     std::array<float, Undertow::SHAPE_PREVIEW_SAMPLE_COUNT> nextSamples {};
-    module->getShapePreview(nextSamples, frequencyHz, version);
+    module->getShapePreview(nextSamples, ignoredFrequencyHz, version);
     if (!valid || version != lastVersion) {
       samples = nextSamples;
-      lastFreqHz = frequencyHz;
-      if (!valid || displayedFreqHz <= 0.f) {
-        displayedFreqHz = frequencyHz;
-      } else if (std::fabs(frequencyHz - displayedFreqHz) > 0.15f) {
-        displayedFreqHz += 0.25f * (frequencyHz - displayedFreqHz);
-      }
       lastVersion = version;
       valid = true;
     }
@@ -103,19 +114,13 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgResetScissor(args.vg);
     nvgRestore(args.vg);
 
-    char freqText[32];
-    if (displayedFreqHz < 1.f) {
-      std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", displayedFreqHz * 1000.f);
-    } else if (displayedFreqHz >= 1000.f) {
-      std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", displayedFreqHz / 1000.f);
-    } else {
-      std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", displayedFreqHz);
-    }
+    const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+    const std::string freqText = formatFrequencyText(displayHz);
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-    nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
+    nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText.c_str(), nullptr);
   }
 };
 
@@ -173,27 +178,27 @@ struct UndertowWidget final : ModuleWidget {
     }
 
     // STO-style first layout pass with anchor-first lookups.
-    // Top outputs: SHAPE / SUB / SINE
-    addOutputPort(Undertow::SHAPE_OUTPUT, "SHAPE_OUTPUT", Vec(10.0f, 14.5f));
-    addOutputPort(Undertow::SUB_OUTPUT, "SUB_OUTPUT", Vec(20.3f, 14.5f));
-    addOutputPort(Undertow::SINE_OUTPUT, "SINE_OUTPUT", Vec(30.6f, 14.5f));
+    // Top outputs: MORPH / SUB / SINE
+    addOutputPort(Undertow::SHAPE_OUTPUT, "SHAPE_OUTPUT", Vec(32.800f, 112.800f));
+    addOutputPort(Undertow::SUB_OUTPUT, "SUB_OUTPUT", Vec(20.300f, 112.800f));
+    addOutputPort(Undertow::SINE_OUTPUT, "SINE_OUTPUT", Vec(7.800f, 112.800f));
 
-    // Main controls: coarse freq center-left, fine trim near it, shape to the right, lin fm amount left-lower.
-    addLargeKnob(Undertow::COARSE_PARAM, "COARSE_PARAM", Vec(14.4f, 40.0f));
-    addFineKnob(Undertow::FINE_PARAM, "FINE_PARAM", Vec(27.8f, 35.2f));
-    addSmallKnob(Undertow::LIN_FM_PARAM, "LIN_FM_PARAM", Vec(8.6f, 63.8f));
-    addSmallKnob(Undertow::SHAPE_PARAM, "SHAPE_PARAM", Vec(29.0f, 63.8f));
+    // Main controls: coarse/fine frequency, morph amount, and lin FM amount.
+    addLargeKnob(Undertow::COARSE_PARAM, "COARSE_PARAM", Vec(8.600f, 21.000f));
+    addFineKnob(Undertow::FINE_PARAM, "FINE_PARAM", Vec(30.167f, 21.000f));
+    addSmallKnob(Undertow::LIN_FM_PARAM, "LIN_FM_PARAM", Vec(8.600f, 76.200f));
+    addSmallKnob(Undertow::SHAPE_PARAM, "SHAPE_PARAM", Vec(30.167f, 76.200f));
 
-    // Lower patch field: STO-style modulation/pitch/sync/sub-gate ordering.
-    addInputPort(Undertow::LIN_FM_INPUT, "LIN_FM_INPUT", Vec(8.6f, 84.0f));
-    addInputPort(Undertow::SHAPE_CV_INPUT, "SHAPE_CV_INPUT", Vec(29.0f, 84.0f));
-    addInputPort(Undertow::EXPO_INPUT, "EXPO_INPUT", Vec(8.6f, 98.8f));
-    addInputPort(Undertow::V_OCT_INPUT, "V_OCT_INPUT", Vec(29.0f, 98.8f));
-    addInputPort(Undertow::SYNC_INPUT, "SYNC_INPUT", Vec(8.6f, 113.6f));
-    addInputPort(Undertow::S_GATE_INPUT, "S_GATE_INPUT", Vec(29.0f, 113.6f));
+    // Lower patch field: modulation, pitch, sync, and sub-gate.
+    addInputPort(Undertow::LIN_FM_INPUT, "LIN_FM_INPUT", Vec(8.600f, 65.124f));
+    addInputPort(Undertow::SHAPE_CV_INPUT, "SHAPE_CV_INPUT", Vec(30.167f, 65.124f));
+    addInputPort(Undertow::EXPO_INPUT, "EXPO_INPUT", Vec(20.084f, 55.489f));
+    addInputPort(Undertow::V_OCT_INPUT, "V_OCT_INPUT", Vec(20.084f, 30.104f));
+    addInputPort(Undertow::SYNC_INPUT, "SYNC_INPUT", Vec(8.600f, 42.500f));
+    addInputPort(Undertow::S_GATE_INPUT, "S_GATE_INPUT", Vec(30.167f, 42.817f));
 
-    addTinyLight(Undertow::SYNC_LIGHT, "SYNC_LIGHT", Vec(5.0f, 8.0f), nvgRGB(255, 235, 120));
-    addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(35.0f, 8.0f), nvgRGB(120, 255, 140));
+    addTinyLight(Undertow::SYNC_LIGHT, "SYNC_LIGHT", Vec(14.456f, 42.500f), nvgRGB(255, 235, 120));
+    addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(36.089f, 42.817f), nvgRGB(255, 235, 120));
 
     previewBuildTimer.markAnchorsDone();
   }

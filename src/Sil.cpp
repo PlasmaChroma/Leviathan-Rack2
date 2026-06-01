@@ -2506,12 +2506,6 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 	}
 };
 
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
-
 struct SilWidget : ModuleWidget {
 	SilWidget(Sil* module) {
 		setModule(module);

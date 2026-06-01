@@ -1219,12 +1219,6 @@ struct BigTL1105 : TL1105 {
     }
 };
 
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
-
 struct WavePreviewWidget : Widget {
 	// Preview boxes are small; this density materially lowers per-frame NanoVG work
 	// while remaining visually smooth at current panel scale.

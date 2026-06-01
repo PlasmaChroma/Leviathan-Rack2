@@ -17,12 +17,11 @@ inline float acCoupledLinFm(float x, Undertow::VoiceState* voice) {
 }
 
 inline float shapeAmount(Undertow* module) {
-  float shape = module->params[Undertow::SHAPE_PARAM].getValue();
+  const float shapeKnob = module->params[Undertow::SHAPE_PARAM].getValue();
   if (module->inputs[Undertow::SHAPE_CV_INPUT].isConnected()) {
-    // STO-style shape CV is a modulation source, not an attenuator for the knob.
-    shape += module->inputs[Undertow::SHAPE_CV_INPUT].getVoltage() / 8.f;
+    return undertow_shape::shapeControlTaper(shapeKnob * (module->inputs[Undertow::SHAPE_CV_INPUT].getVoltage() / 8.f));
   }
-  return undertow_shape::shapeControlTaper(shape);
+  return undertow_shape::shapeControlTaper(shapeKnob);
 }
 
 inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, float fraction01) {
@@ -81,6 +80,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float vOct = inputs[V_OCT_INPUT].isConnected() ? inputs[V_OCT_INPUT].getVoltage() : 0.f;
   const float expo = inputs[EXPO_INPUT].isConnected() ? inputs[EXPO_INPUT].getVoltage() : 0.f;
   const float baseFreq = coarseHz * dsp::approxExp2_taylor5(fineOctaves + vOct + expo);
+  displayFrequencyHz.store(clamp(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
   const float linIn = inputs[LIN_FM_INPUT].isConnected() ? inputs[LIN_FM_INPUT].getVoltage() : 0.f;
   const float lin = acCoupledLinFm(linIn, &voice);
   const float linAmt = params[LIN_FM_PARAM].getValue();
@@ -167,7 +167,7 @@ void Undertow::process(const ProcessArgs& args) {
   recordShapePreviewSample(voice.phase, outputs[SHAPE_OUTPUT].getVoltage());
 
   lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
-  lights[S_GATE_LIGHT].setBrightnessSmooth((!sGatePatched || sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
+  lights[S_GATE_LIGHT].setBrightnessSmooth((sGatePatched && sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
 }
 
 void Undertow::recordShapePreviewSample(float phase, float volts) {

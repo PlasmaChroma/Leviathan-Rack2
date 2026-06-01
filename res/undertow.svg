@@ -247,8 +247,8 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="2.385554"
-   inkscape:cx="47.578047"
-   inkscape:cy="338.4958"
+   inkscape:cx="70.214298"
+   inkscape:cy="190.52178"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
    inkscape:window-x="58"
@@ -369,16 +369,25 @@
    stroke-width="51.3798"
    id="frame_left"
    style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" /><path
-   d="M 855.52982,2110.3198 2024.2003,3030.8782"
+   d="M 922.07621,1966.136 2024.2003,3030.8782"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"
    stroke-linecap="round"
    opacity="0.55"
    fill="none"
    id="freq_line"
-   style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1"
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 3016.6362,6518.3602 0.128,1128.3864"
+   d="m 870.54965,1960.3365 2135.55375,-0.6728"
+   stroke="url(#accentGrad)"
+   stroke-width="31.1071"
+   stroke-linecap="round"
+   opacity="0.55"
+   fill="none"
+   id="fine_freq_line"
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
+   sodipodi:nodetypes="cc" /><path
+   d="m 3136.635,6518.3602 0.128,1128.3864"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"
    stroke-linecap="round"
@@ -420,14 +429,14 @@
   <circle
    style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="COARSE_PARAM"
-   cx="860"
-   cy="2100"
+   cx="919.9942"
+   cy="1960.0001"
    r="320" />
   <circle
    style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="FINE_PARAM"
    cx="3016.7002"
-   cy="2100"
+   cy="1960.0001"
    r="180" />
   <circle
    style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
@@ -438,7 +447,7 @@
   <circle
    style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_PARAM"
-   cx="3016.7002"
+   cx="3136.7002"
    cy="7620.0005"
    r="220" />
 
@@ -451,14 +460,14 @@
   <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_CV_INPUT"
-   cx="3016.7002"
+   cx="3136.7002"
    cy="6512.4004"
    r="240" />
   <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
    id="EXPO_INPUT"
    cx="2008.3501"
-   cy="5548.936"
+   cy="6088.9004"
    r="240" />
   <circle
    style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd"
@@ -582,15 +591,17 @@
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_sine_output">SINE</text><text
-   x="860"
-   y="2910.0002"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal"
+   x="919.9942"
+   y="2810.0002"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_coarse_param"><tspan
      sodipodi:role="line"
-     id="tspan35">FREQ</tspan></text><text
+     id="tspan35"
+     x="919.9942"
+     y="2810.0002">FREQ</tspan></text><text
    x="3016.7002"
-   y="2790.0005"
+   y="2709.9785"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_fine_param">FINE</text><text
@@ -599,24 +610,24 @@
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_lin_fm_param">LIN FM</text><text
-   x="3016.7002"
+   x="3136.696"
    y="8310"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_shape_param"><tspan
      sodipodi:role="line"
      id="tspan20"
-     x="3016.7002"
+     x="3136.696"
      y="8310">MORPH</tspan></text><text
    x="2008.3501"
-   y="6170.0493"
+   y="6710.0137"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
    id="label_expo_input"><tspan
      sodipodi:role="line"
      id="tspan19"
      x="2008.3501"
-     y="6170.0493">EXPO</tspan></text><text
+     y="6710.0137">EXPO</tspan></text><text
    x="2008.3501"
    y="3630.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"

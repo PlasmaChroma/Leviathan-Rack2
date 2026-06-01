@@ -74,7 +74,8 @@ struct Undertow final : Module {
   bool coarseTuneStepped = false;
   bool shapeEntryAsymmetry = false;
   bool shapeEntryAsymmetryOnRight = false;
-  bool shapeHardEdges = false;
+  bool shapeHardEdges = true;
+  std::atomic<float> displayFrequencyHz {0.f};
   std::array<std::atomic<float>, SHAPE_PREVIEW_SAMPLE_COUNT> shapePreviewSamples {};
   std::atomic<float> shapePreviewFrequencyHz {0.f};
   std::atomic<float> shapePreviewShape {0.f};

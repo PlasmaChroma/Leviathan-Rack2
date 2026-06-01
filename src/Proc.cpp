@@ -1099,12 +1099,6 @@ struct BigTL1105 : TL1105 {
     }
 };
 
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
-
 struct WavePreviewWidget : Widget {
 	// Small preview box: lower geometry density reduces UI cost while staying smooth.
 	static constexpr int POINT_COUNT = 128;

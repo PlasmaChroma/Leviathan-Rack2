@@ -4,12 +4,6 @@
 
 #include <cstdio>
 
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
-
 void drawWyrmStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool pointRight) {
 	const float cx = 0.5f * size.x;
 	const float cy = 0.5f * size.y;

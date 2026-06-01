@@ -3226,10 +3226,6 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
   }
 }
 
-struct BananutBlack : app::SvgPort {
-  BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
-};
-
 static PanelBorder *findPanelBorder(Widget *widget) {
   if (!widget) {
     return nullptr;

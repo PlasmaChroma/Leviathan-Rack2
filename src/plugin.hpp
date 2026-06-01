@@ -19,6 +19,12 @@ using namespace rack;
 // Declare the Plugin, defined in plugin.cpp
 extern Plugin* pluginInstance;
 
+struct BananutBlack : app::SvgPort {
+	BananutBlack() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	}
+};
+
 // Declare each Model, defined in each module source file
 // extern Model* modelMyModule;
 extern Model* modelIntegralFlux;
