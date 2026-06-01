@@ -61,6 +61,7 @@ struct Undertow final : Module {
   struct VoiceState {
     float phase = 0.f;
     bool subFlip = false;
+    bool subGateHighLast = true;
     float linHpState = 0.f;
     dsp::SchmittTrigger syncTrig;
     dsp::SchmittTrigger sGateTrig;

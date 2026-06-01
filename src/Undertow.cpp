@@ -34,6 +34,12 @@ inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, floa
   blep->insertDiscontinuity(f - 1.f, step);
 }
 
+inline void clearSubBlep(Undertow::VoiceState* voice) {
+  for (int i = 0; i < 32; ++i) {
+    voice->subBlep.process();
+  }
+}
+
 } // namespace
 
 Undertow::Undertow() {
@@ -120,24 +126,26 @@ void Undertow::process(const ProcessArgs& args) {
     insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
   }
 
+  bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
+  float sGateV = sGatePatched ? inputs[S_GATE_INPUT].getVoltage() : 10.f;
+  bool sGateHigh = sGateV >= 1.f;
+  bool sGateRising = voice.sGateTrig.process(sGateV);
+  bool sGateFalling = voice.subGateHighLast && !sGateHigh;
+  if (sGateRising || sGateFalling) {
+    clearSubBlep(&voice);
+  }
+  if (sGateRising) {
+    voice.subFlip = false;
+  }
+  voice.subGateHighLast = sGateHigh;
+
   float subRaw = voice.subFlip ? 1.f : -1.f;
-  if (wrapped) {
+  if (wrapped && (!sGatePatched || sGateHigh)) {
     const float subOld = subRaw;
     voice.subFlip = !voice.subFlip;
     subRaw = voice.subFlip ? 1.f : -1.f;
     insertBlepStep(&voice.subBlep, (subRaw - subOld) * 4.f, wrapDiscontinuityFrac);
   }
-
-  bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
-  float sGateV = sGatePatched ? inputs[S_GATE_INPUT].getVoltage() : 10.f;
-  bool sGateHigh = sGateV >= 1.f;
-  if (voice.sGateTrig.process(sGateV)) {
-    float subOld = subRaw;
-    voice.subFlip = false;
-    subRaw = voice.subFlip ? 1.f : -1.f;
-    insertBlepStep(&voice.subBlep, (subRaw - subOld) * 4.f, 0.5f);
-  }
-  float sub = (!sGatePatched || sGateHigh) ? subRaw : 0.f;
 
   outputs[SINE_OUTPUT].setChannels(1);
   outputs[SHAPE_OUTPUT].setChannels(1);
@@ -147,7 +155,8 @@ void Undertow::process(const ProcessArgs& args) {
   // The sub square is band-limited with MinBLEP, so it will not scope as an
   // ideal digital square.  Keep the steady state inside rails and let the clamp
   // catch residual correction energy instead of using clipping as the tone.
-  const float subOut = clamp(4.f * sub + voice.subBlep.process(), -5.f, 5.f);
+  const float subOut = (!sGatePatched || sGateHigh) ? clamp(4.f * subRaw + voice.subBlep.process(), -5.f, 5.f)
+                                                    : (voice.subBlep.process(), 0.f);
   outputs[SUB_OUTPUT].setVoltage(subOut);
 
   if (wrapped) {

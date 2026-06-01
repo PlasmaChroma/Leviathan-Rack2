@@ -61,7 +61,9 @@ inline float thresholdFold(float phase, float shape) {
   // 0% shape, 0 at 50%, and +1 at 100%, while its width expands with shape.
   const float foldedTriangle = -1.f + 2.f * s * triangle;
   const float active = smooth01(s / 0.08f);
-  const float edgeBlend = smooth01(triangle / 0.18f);
+  // Keep the triangle base near the lower rail. A wide edge blend makes the
+  // sine erase the base too early, which reduces SHAPE peak-to-peak level.
+  const float edgeBlend = smooth01(triangle / 0.075f);
   const float y = crossfade(sine, foldedTriangle, active * edgeBlend);
   return clampf(y, -1.f, 1.f);
 }
