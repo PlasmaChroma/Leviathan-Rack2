@@ -53,7 +53,8 @@ inline float foldedTriangleWidth(float shape) {
   return 0.030f + 0.460f * smooth01(s);
 }
 
-inline float foldedTriangleTarget(float phase, float shape, bool entryAsymmetry = false) {
+inline float foldedTriangleTarget(float phase, float shape, bool entryAsymmetry = false,
+                                  bool entryAsymmetryOnRight = false) {
   const float p = phase - std::floor(phase);
   const float s = clampf(shape, 0.f, 1.f);
   const float width = foldedTriangleWidth(s);
@@ -61,12 +62,15 @@ inline float foldedTriangleTarget(float phase, float shape, bool entryAsymmetry 
   const float x = std::fabs(centerNorm);
   const float triangle = clampf(1.f - x, 0.f, 1.f);
   const float leftEntry = clampf(-centerNorm, 0.f, 1.f);
+  const float rightEntry = clampf(centerNorm, 0.f, 1.f);
+  const float selectedEntry = entryAsymmetryOnRight ? rightEntry : leftEntry;
   const float baseRegion = 1.f - smooth01(triangle / 0.45f);
-  const float entryLift = entryAsymmetry ? (0.09f * smooth01((s - 0.12f) / 0.72f) * leftEntry * baseRegion) : 0.f;
+  const float entryLift = entryAsymmetry ? (0.09f * smooth01((s - 0.12f) / 0.72f) * selectedEntry * baseRegion) : 0.f;
   return -1.f + entryLift + 2.f * s * triangle;
 }
 
-inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false, bool hardEdges = false) {
+inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false, bool hardEdges = false,
+                          bool entryAsymmetryOnRight = false) {
   const float p = phase - std::floor(phase);
   const float tri = 4.f * std::fabs(p - 0.5f) - 1.f;
   const float sine = triToSine(tri);
@@ -78,7 +82,7 @@ inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false
 
   // Direct target: a triangle rises out of the sine trough. Its apex is -1 at
   // 0% shape, 0 at 50%, and +1 at 100%, while its width expands with shape.
-  const float foldedTriangle = foldedTriangleTarget(p, s, entryAsymmetry);
+  const float foldedTriangle = foldedTriangleTarget(p, s, entryAsymmetry, entryAsymmetryOnRight);
   const float active = smooth01(s / 0.08f);
   // Keep the triangle base near the lower rail. A wide edge blend makes the
   // sine erase the base too early, which reduces SHAPE peak-to-peak level.

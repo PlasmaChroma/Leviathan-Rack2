@@ -216,10 +216,26 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { m->coarseTuneStepped = true; }));
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Shape"));
-    menu->addChild(createCheckMenuItem(
-      "Entry asymmetry", "",
-      [m]() { return m->shapeEntryAsymmetry; },
-      [m]() { m->shapeEntryAsymmetry = !m->shapeEntryAsymmetry; }));
+    menu->addChild(createSubmenuItem("Asymmetry", "", [m](Menu* submenu) {
+      submenu->addChild(createCheckMenuItem(
+        "Off", "",
+        [m]() { return !m->shapeEntryAsymmetry; },
+        [m]() { m->shapeEntryAsymmetry = false; }));
+      submenu->addChild(createCheckMenuItem(
+        "Rising", "",
+        [m]() { return m->shapeEntryAsymmetry && !m->shapeEntryAsymmetryOnRight; },
+        [m]() {
+          m->shapeEntryAsymmetry = true;
+          m->shapeEntryAsymmetryOnRight = false;
+        }));
+      submenu->addChild(createCheckMenuItem(
+        "Falling", "",
+        [m]() { return m->shapeEntryAsymmetry && m->shapeEntryAsymmetryOnRight; },
+        [m]() {
+          m->shapeEntryAsymmetry = true;
+          m->shapeEntryAsymmetryOnRight = true;
+        }));
+    }));
     menu->addChild(createCheckMenuItem(
       "Hard shape edges", "",
       [m]() { return m->shapeHardEdges; },

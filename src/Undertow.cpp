@@ -93,7 +93,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
   const float shapedBeforeEvents = undertow_shape::thresholdFold(phaseBeforeEvents, shape, shapeEntryAsymmetry,
-                                                                 shapeHardEdges);
+                                                                 shapeHardEdges, shapeEntryAsymmetryOnRight);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -118,7 +118,8 @@ void Undertow::process(const ProcessArgs& args) {
 
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
-  const float shaped = undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry, shapeHardEdges);
+  const float shaped =
+      undertow_shape::thresholdFold(voice.phase, shape, shapeEntryAsymmetry, shapeHardEdges, shapeEntryAsymmetryOnRight);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -187,7 +188,8 @@ void Undertow::finishShapePreviewCycle() {
     const float shape = shapeAmount(this);
     for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
       const float phase = float(i) / float(SHAPE_PREVIEW_SAMPLE_COUNT - 1);
-      const float shaped = undertow_shape::thresholdFold(phase, shape, shapeEntryAsymmetry, shapeHardEdges);
+      const float shaped =
+          undertow_shape::thresholdFold(phase, shape, shapeEntryAsymmetry, shapeHardEdges, shapeEntryAsymmetryOnRight);
       publish[size_t(i)] = clamp(5.f * shaped, -5.f, 5.f);
     }
     for (int i = 0; i < SHAPE_PREVIEW_SAMPLE_COUNT; ++i) {
@@ -220,6 +222,7 @@ json_t* Undertow::dataToJson() {
   json_t* root = json_object();
   json_object_set_new(root, "coarseTuneStepped", json_boolean(coarseTuneStepped));
   json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry));
+  json_object_set_new(root, "shapeEntryAsymmetryOnRight", json_boolean(shapeEntryAsymmetryOnRight));
   json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges));
   return root;
 }
@@ -233,6 +236,9 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* entryAsymmetryJ = json_object_get(root, "shapeEntryAsymmetry")) {
     shapeEntryAsymmetry = json_boolean_value(entryAsymmetryJ);
+  }
+  if (json_t* entryAsymmetrySideJ = json_object_get(root, "shapeEntryAsymmetryOnRight")) {
+    shapeEntryAsymmetryOnRight = json_boolean_value(entryAsymmetrySideJ);
   }
   if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
     shapeHardEdges = json_boolean_value(hardEdgesJ);
