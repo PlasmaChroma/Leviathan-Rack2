@@ -92,14 +92,14 @@ void Undertow::process(const ProcessArgs& args) {
   displayShapeAmount.store(shape, std::memory_order_relaxed);
   const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
   const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
-  const bool hardEdges = shapeHardEdges.load(std::memory_order_relaxed);
+  const float edgeHardness = shapeEdgeHardness.load(std::memory_order_relaxed);
 
   // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
   const float phaseBeforeEvents = voice.phase;
   const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
   const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
   const float shapedBeforeEvents =
-      undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, hardEdges, entryAsymmetryOnRight);
+      undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
 
   bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
   float syncDiscontinuityFrac = 0.5f;
@@ -124,7 +124,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
   const float sine = undertow_shape::triToSine(tri);
   const float shaped =
-      undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, hardEdges, entryAsymmetryOnRight);
+      undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
 
   if (syncRising) {
     const float sineStep = sine - sineBeforeEvents;
@@ -179,7 +179,7 @@ json_t* Undertow::dataToJson() {
   json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry.load(std::memory_order_relaxed)));
   json_object_set_new(root, "shapeEntryAsymmetryOnRight",
                       json_boolean(shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed)));
-  json_object_set_new(root, "shapeHardEdges", json_boolean(shapeHardEdges.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "shapeEdgeHardness", json_real(shapeEdgeHardness.load(std::memory_order_relaxed)));
   return root;
 }
 
@@ -193,8 +193,11 @@ void Undertow::dataFromJson(json_t* root) {
   if (json_t* entryAsymmetrySideJ = json_object_get(root, "shapeEntryAsymmetryOnRight")) {
     shapeEntryAsymmetryOnRight.store(json_boolean_value(entryAsymmetrySideJ), std::memory_order_relaxed);
   }
-  if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
-    shapeHardEdges.store(json_boolean_value(hardEdgesJ), std::memory_order_relaxed);
+  if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
+    shapeEdgeHardness.store(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f), std::memory_order_relaxed);
+  }
+  else if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
+    shapeEdgeHardness.store(json_boolean_value(hardEdgesJ) ? 0.5f : 0.f, std::memory_order_relaxed);
   }
 }
 

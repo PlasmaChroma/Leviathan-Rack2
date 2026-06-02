@@ -5,6 +5,55 @@
 
 namespace {
 
+struct UndertowEdgeHardnessQuantity final : Quantity {
+  Undertow* module = nullptr;
+
+  explicit UndertowEdgeHardnessQuantity(Undertow* module) : module(module) {}
+
+  void setValue(float value) override {
+    if (!module) {
+      return;
+    }
+    module->shapeEdgeHardness.store(clamp(value, 0.f, 1.f), std::memory_order_relaxed);
+  }
+
+  float getValue() override {
+    return module ? module->shapeEdgeHardness.load(std::memory_order_relaxed) : 0.5f;
+  }
+
+  float getDefaultValue() override {
+    return 0.5f;
+  }
+
+  float getMinValue() override {
+    return 0.f;
+  }
+
+  float getMaxValue() override {
+    return 1.f;
+  }
+
+  std::string getLabel() override {
+    return "Morph edge hardness";
+  }
+
+  std::string getUnit() override {
+    return "%";
+  }
+
+  float getDisplayValue() override {
+    return getValue() * 100.f;
+  }
+
+  void setDisplayValue(float displayValue) override {
+    setValue(displayValue / 100.f);
+  }
+
+  std::string getDisplayValueString() override {
+    return string::f("%.0f", getDisplayValue());
+  }
+};
+
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, const Vec& fallbackMm) {
   if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) {
     return true;
@@ -60,12 +109,12 @@ struct UndertowShapePreviewWidget final : Widget {
     }
 
     const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
-    const bool hardEdges = module->shapeHardEdges.load(std::memory_order_relaxed);
+    const float edgeHardness = module->shapeEdgeHardness.load(std::memory_order_relaxed);
     const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
     const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
       const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
-      const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, hardEdges, asymOnRight);
+      const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, edgeHardness, asymOnRight);
       samples[size_t(i)] = clamp(folded, -1.f, 1.f) * 5.f;
     }
   }
@@ -257,13 +306,10 @@ struct UndertowWidget final : ModuleWidget {
           m->shapeEntryAsymmetryOnRight.store(true, std::memory_order_relaxed);
         }));
     }));
-    menu->addChild(createCheckMenuItem(
-      "Hard morph edges", "",
-      [m]() { return m->shapeHardEdges.load(std::memory_order_relaxed); },
-      [m]() {
-        const bool enabled = m->shapeHardEdges.load(std::memory_order_relaxed);
-        m->shapeHardEdges.store(!enabled, std::memory_order_relaxed);
-      }));
+    auto* edgeHardnessSlider = new ui::Slider();
+    edgeHardnessSlider->box.size = Vec(180.f, 24.f);
+    edgeHardnessSlider->quantity = new UndertowEdgeHardnessQuantity(m);
+    menu->addChild(edgeHardnessSlider);
   }
 };
 

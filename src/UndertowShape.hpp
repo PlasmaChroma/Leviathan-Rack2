@@ -32,6 +32,14 @@ inline float foldedTriangleWidth(float shape) {
   return 0.030f + 0.460f * smooth01(s);
 }
 
+inline float morphEdgeBlendWidth(float edgeHardness) {
+  const float hardness = clampf(edgeHardness, 0.f, 1.f);
+  if (hardness <= 0.5f) {
+    return crossfade(0.075f, 0.018f, hardness * 2.f);
+  }
+  return crossfade(0.018f, 0.f, (hardness - 0.5f) * 2.f);
+}
+
 inline float foldedTriangleTarget(float phase, float shape, bool entryAsymmetry = false,
                                   bool entryAsymmetryOnRight = false) {
   const float p = phase - std::floor(phase);
@@ -48,7 +56,7 @@ inline float foldedTriangleTarget(float phase, float shape, bool entryAsymmetry 
   return -1.f + entryLift + 2.f * s * triangle;
 }
 
-inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false, bool hardEdges = false,
+inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false, float edgeHardness = 1.f,
                           bool entryAsymmetryOnRight = false) {
   const float p = phase - std::floor(phase);
   const float tri = 4.f * std::fabs(p - 0.5f) - 1.f;
@@ -65,8 +73,8 @@ inline float thresholdFold(float phase, float shape, bool entryAsymmetry = false
   const float active = smooth01(s / 0.08f);
   // Keep the triangle base near the lower rail. A wide edge blend makes the
   // sine erase the base too early, which reduces SHAPE peak-to-peak level.
-  const float edgeWidth = hardEdges ? 0.018f : 0.075f;
-  const float edgeBlend = smooth01(triangle / edgeWidth);
+  const float edgeWidth = morphEdgeBlendWidth(edgeHardness);
+  const float edgeBlend = (edgeWidth <= 1e-6f) ? (triangle > 0.f ? 1.f : 0.f) : smooth01(triangle / edgeWidth);
   const float y = crossfade(sine, foldedTriangle, active * edgeBlend);
   return clampf(y, -1.f, 1.f);
 }

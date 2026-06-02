@@ -165,7 +165,7 @@ struct Sil : Module {
 		float magnitudesR[SPEC_FREQ_BINS] = {};
 		float displayNormL[SPEC_FREQ_BINS] = {};
 		float displayNormR[SPEC_FREQ_BINS] = {};
-		
+
 		float bufferL[FFT_SIZE] = {};
 		float bufferR[FFT_SIZE] = {};
 		int writePtr = 0;
@@ -1122,7 +1122,7 @@ struct Sil : Module {
 		const float initialSampleRate = (APP && APP->engine) ? APP->engine->getSampleRate() : 44100.f;
 		hist.samplesPerBin = (int)(initialSampleRate * HISTOGRAM_DURATION / HISTOGRAM_BINS);
 		if (hist.samplesPerBin < 1) hist.samplesPerBin = 1;
-		
+
 		spec.fft = new dsp::RealFFT(FFT_SIZE);
 		for (int i = 0; i < FFT_SIZE; i++) {
 			spec.window[i] = 0.5f - 0.5f * std::cos(2.f * M_PI * i / (FFT_SIZE - 1));
@@ -2134,11 +2134,11 @@ struct Sil : Module {
 				std::max(std::fabs(hist.currentMinL), std::fabs(hist.currentMaxL)),
 				std::max(std::fabs(hist.currentMinR), std::fabs(hist.currentMaxR))
 			);
-			if (instantPeak > hist.smoothedPeak) 
+			if (instantPeak > hist.smoothedPeak)
 				hist.smoothedPeak = hist.smoothedPeak * 0.9f + instantPeak * 0.1f;
 			else
 				hist.smoothedPeak = hist.smoothedPeak * 0.999f + instantPeak * 0.001f;
-			
+
 			hist.smoothedPeak = clamp(hist.smoothedPeak, 0.5f, 12.f);
 
 			hist.currentMinL = 1e10f; hist.currentMaxL = -1e10f;
@@ -2355,10 +2355,10 @@ struct SpectrumWidget : TransparentWidget {
 				float f = decade * i;
 				if (f < 20.f) continue;
 				if (f > 20000.f) break;
-				
+
 				float x = getX(f);
 				if (x < 0 || x > box.size.x) continue;
-				
+
 				bool isDecade = (i == 1);
 
 				nvgBeginPath(args.vg);
@@ -2497,10 +2497,16 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 		char label[40];
 		const uint32_t countL = module->micropeakRepairCountL.load(std::memory_order_relaxed);
 		const uint32_t countR = module->micropeakRepairCountR.load(std::memory_order_relaxed);
-		const uint32_t nearMissCount = module->micropeakNearMissCount.load(std::memory_order_relaxed);
-		std::snprintf(label, sizeof(label), "L: %u R: %u NM: %u", countL, countR, nearMissCount);
+		std::snprintf(label, sizeof(label), "Micropeak Smoothing - L : %u R : %u", countL, countR);
+
+		const float boldOffset = 0.16f;
 		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
 		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
+		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
+		nvgText(args.vg, textPosPx.x - boldOffset, textPosPx.y, label, nullptr);
+		nvgText(args.vg, textPosPx.x + boldOffset, textPosPx.y, label, nullptr);
+		nvgText(args.vg, textPosPx.x, textPosPx.y - boldOffset, label, nullptr);
+		nvgText(args.vg, textPosPx.x, textPosPx.y + boldOffset, label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
 		nvgText(args.vg, textPosPx.x, textPosPx.y, label, nullptr);
 	}
@@ -2618,7 +2624,7 @@ struct SilWidget : ModuleWidget {
 			MicropeakRepairCountWidget* micropeakCount = createWidget<MicropeakRepairCountWidget>(Vec(0.f, 0.f));
 			micropeakCount->box.size = box.size;
 			micropeakCount->module = module;
-			micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 4.4f, micropeakLightPos.y));
+			micropeakCount->textPosPx = mm2px(Vec(micropeakLightPos.x + 2.7f, micropeakLightPos.y));
 			addChild(micropeakCount);
 		}
 
