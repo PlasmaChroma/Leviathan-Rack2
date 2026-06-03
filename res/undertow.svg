@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="undertow.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -246,13 +246,13 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="55.873658"
-   inkscape:cy="140.35107"
-   inkscape:window-width="1862"
-   inkscape:window-height="1016"
-   inkscape:window-x="58"
-   inkscape:window-y="27"
+   inkscape:zoom="4.771108"
+   inkscape:cx="107.73179"
+   inkscape:cy="135.08393"
+   inkscape:window-width="2560"
+   inkscape:window-height="1377"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
    inkscape:window-maximized="1"
    inkscape:current-layer="svg488"
    showgrid="false"
@@ -340,20 +340,20 @@
    stroke-opacity="0.06"
    stroke-width="18.3253"
    id="outputs"
-   style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /><rect
-   x="105.74289"
-   y="1053.79"
-   width="3852.5142"
-   height="7456.1206"
-   rx="180.86165"
-   ry="233.53981"
+   style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:#404040;stroke-opacity:1;stroke-width:20.00000076;stroke-dasharray:none" /><rect
+   x="105.75994"
+   y="1047.9"
+   width="3852.48"
+   height="7466.0864"
+   rx="125.96202"
+   ry="131.89856"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="51.3798"
+   stroke-width="51.4139"
    id="frame_left"
-   style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" /><path
+   style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:#404040;stroke-width:20;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1" /><path
    d="M 216.55646,952.22271 H 3847.4434"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"
@@ -361,7 +361,7 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
+   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:49.8000019;stroke-dasharray:none" />
     
     
     
@@ -406,7 +406,7 @@
    style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /></g><g
    id="components"
-   style="display:none">
+   style="display:inline">
   <circle
    style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd"
    id="SHAPE_OUTPUT"

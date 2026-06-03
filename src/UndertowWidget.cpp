@@ -73,7 +73,7 @@ math::Rect insetRectMm(math::Rect rect, float insetMm) {
 } // namespace
 
 struct UndertowShapePreviewWidget final : Widget {
-  static constexpr int PREVIEW_POINT_COUNT = 128;
+  static constexpr int PREVIEW_POINT_COUNT = 256;
   static constexpr float WAVE_LINE_WIDTH = 1.25f;
   static constexpr float WAVE_EDGE_PAD = 1.0f;
   static constexpr float LABEL_FONT_SIZE = 11.5f;
@@ -306,6 +306,11 @@ struct UndertowWidget final : ModuleWidget {
           m->shapeEntryAsymmetryOnRight.store(true, std::memory_order_relaxed);
         }));
     }));
+    menu->addChild(createCheckMenuItem(
+      "Analog character", "",
+      [m]() { return m->analogCharacterEnabled.load(std::memory_order_relaxed); },
+      [m]() { m->analogCharacterEnabled.store(!m->analogCharacterEnabled.load(std::memory_order_relaxed),
+                                              std::memory_order_relaxed); }));
     auto* edgeHardnessSlider = new ui::Slider();
     edgeHardnessSlider->box.size = Vec(180.f, 24.f);
     edgeHardnessSlider->quantity = new UndertowEdgeHardnessQuantity(m);

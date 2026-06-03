@@ -10,6 +10,11 @@ static constexpr float kLinFmMaxDrive = 4.0f;
 static constexpr float kSubLevelVolts = 5.f;
 static constexpr float kMinFreqHz = 8.f;
 static constexpr float kMaxFreqHz = 20000.f;
+static constexpr float kAnalogCharacterEnvAttackSec = 0.002f;
+static constexpr float kAnalogCharacterEnvReleaseSec = 0.050f;
+static constexpr float kAnalogCharacterBaseDrive = 1.02f;
+static constexpr float kAnalogCharacterEnvDriveDepth = 0.18f;
+static constexpr float kAnalogCharacterDriveSkew = 0.02f;
 
 inline float acCoupledLinFm(float x, Undertow::VoiceState* voice, float sampleTime) {
   // Minimal one-pole HP for LIN FM DC rejection.
@@ -19,6 +24,18 @@ inline float acCoupledLinFm(float x, Undertow::VoiceState* voice, float sampleTi
   return y;
 }
 
+// Cheap asymmetric output soft-clip. This keeps the default analog character
+// subtle and gives the SINE/SHAPE outputs a little more hardware-style bend.
+inline float fastAtanApprox(float x) {
+  const float ax = std::fabs(x);
+  if (ax <= 1.f) {
+    return x * (0.78539816339f + 0.273f * (1.f - ax));
+  }
+  const float inv = 1.f / ax;
+  const float t = inv * (0.78539816339f + 0.273f * (1.f - inv));
+  return (x >= 0.f) ? (1.57079632679f - t) : (-1.57079632679f + t);
+}
+
 inline float drivenLinFm(float lin, float amount) {
   const float bus = lin * amount;
   const float driveNorm = clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
@@ -26,7 +43,28 @@ inline float drivenLinFm(float lin, float amount) {
     return bus;
   }
   const float drive = 1.f + driveNorm * (kLinFmMaxDrive - 1.f);
-  return std::tanh(bus * drive) / std::tanh(drive);
+  const float norm = std::max(fastAtanApprox(drive), 1e-6f);
+  return fastAtanApprox(bus * drive) / norm;
+}
+
+inline float onePoleCoeff(float sampleTime, float tauSeconds) {
+  return clamp(sampleTime / (tauSeconds + sampleTime), 0.f, 1.f);
+}
+
+inline float updateAnalogCharacterEnv(float x, Undertow::VoiceState* voice, float sampleTime) {
+  const float target = std::fabs(x);
+  const bool rising = target > voice->analogCharacterEnv;
+  const float coeff =
+      rising ? onePoleCoeff(sampleTime, kAnalogCharacterEnvAttackSec) : onePoleCoeff(sampleTime, kAnalogCharacterEnvReleaseSec);
+  voice->analogCharacterEnv += (target - voice->analogCharacterEnv) * coeff;
+  return voice->analogCharacterEnv;
+}
+
+inline float analogCharacter(float x, float env, float baseDrive, float driveSkew) {
+  const float drive = baseDrive + kAnalogCharacterEnvDriveDepth * clamp(env, 0.f, 1.f);
+  const float signDrive = x >= 0.f ? (drive + driveSkew) : (drive - driveSkew);
+  const float norm = std::max(fastAtanApprox(signDrive), 1e-6f);
+  return fastAtanApprox(x * signDrive) / norm;
 }
 
 inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, float fraction01) {
@@ -93,6 +131,7 @@ void Undertow::process(const ProcessArgs& args) {
   const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
   const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
   const float edgeHardness = shapeEdgeHardness.load(std::memory_order_relaxed);
+  const bool analogCharacterEnabledNow = analogCharacterEnabled.load(std::memory_order_relaxed);
 
   // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
   const float phaseBeforeEvents = voice.phase;
@@ -125,10 +164,22 @@ void Undertow::process(const ProcessArgs& args) {
   const float sine = undertow_shape::triToSine(tri);
   const float shaped =
       undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
+  const float analogCharacterEnv =
+      updateAnalogCharacterEnv(0.5f * (std::fabs(sine) + std::fabs(shaped)), &voice, args.sampleTime);
 
   if (syncRising) {
-    const float sineStep = sine - sineBeforeEvents;
-    const float shapeStep = shaped - shapedBeforeEvents;
+    const float sineStep = analogCharacterEnabledNow
+                               ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                 kAnalogCharacterDriveSkew) -
+                                     analogCharacter(sineBeforeEvents, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                     kAnalogCharacterDriveSkew)
+                               : sine - sineBeforeEvents;
+    const float shapeStep = analogCharacterEnabledNow
+                                ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                  kAnalogCharacterDriveSkew) -
+                                      analogCharacter(shapedBeforeEvents, analogCharacterEnv,
+                                                      kAnalogCharacterBaseDrive, kAnalogCharacterDriveSkew)
+                                : shaped - shapedBeforeEvents;
     insertBlepStep(&voice.sineBlep, sineStep * 5.f, syncDiscontinuityFrac);
     insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
   }
@@ -162,8 +213,16 @@ void Undertow::process(const ProcessArgs& args) {
   outputs[SINE_OUTPUT].setChannels(1);
   outputs[SHAPE_OUTPUT].setChannels(1);
   outputs[SUB_OUTPUT].setChannels(1);
-  outputs[SINE_OUTPUT].setVoltage(5.f * sine + voice.sineBlep.process());
-  outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shaped + voice.shapeBlep.process(), -5.f, 5.f));
+  const float sineOut = analogCharacterEnabledNow
+                            ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                              kAnalogCharacterDriveSkew)
+                            : sine;
+  const float shapeOut = analogCharacterEnabledNow
+                             ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                               kAnalogCharacterDriveSkew)
+                             : shaped;
+  outputs[SINE_OUTPUT].setVoltage(5.f * sineOut + voice.sineBlep.process());
+  outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shapeOut + voice.shapeBlep.process(), -5.f, 5.f));
   // The sub square and S-Gate edges are band-limited with MinBLEP, so the
   // correction may briefly move around the steady +/-5V rails.
   const float subOut = clamp(subBase + voice.subBlep.process(), -5.f, 5.f);
@@ -179,6 +238,8 @@ json_t* Undertow::dataToJson() {
   json_object_set_new(root, "shapeEntryAsymmetry", json_boolean(shapeEntryAsymmetry.load(std::memory_order_relaxed)));
   json_object_set_new(root, "shapeEntryAsymmetryOnRight",
                       json_boolean(shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "analogCharacterEnabled",
+                      json_boolean(analogCharacterEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "shapeEdgeHardness", json_real(shapeEdgeHardness.load(std::memory_order_relaxed)));
   return root;
 }
@@ -192,6 +253,9 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* entryAsymmetrySideJ = json_object_get(root, "shapeEntryAsymmetryOnRight")) {
     shapeEntryAsymmetryOnRight.store(json_boolean_value(entryAsymmetrySideJ), std::memory_order_relaxed);
+  }
+  if (json_t* analogCharacterEnabledJ = json_object_get(root, "analogCharacterEnabled")) {
+    analogCharacterEnabled.store(json_boolean_value(analogCharacterEnabledJ), std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
     shapeEdgeHardness.store(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f), std::memory_order_relaxed);

@@ -61,6 +61,7 @@ struct Undertow final : Module {
     bool subFlip = false;
     bool subGateHighLast = false;
     float linHpState = 0.f;
+    float analogCharacterEnv = 0.f;
     dsp::SchmittTrigger syncTrig;
     dsp::SchmittTrigger sGateTrig;
     dsp::MinBlepGenerator<16, 16> sineBlep;
@@ -71,6 +72,7 @@ struct Undertow final : Module {
   VoiceState voice;
   std::atomic<bool> shapeEntryAsymmetry {false};
   std::atomic<bool> shapeEntryAsymmetryOnRight {false};
+  std::atomic<bool> analogCharacterEnabled {true};
   std::atomic<float> shapeEdgeHardness {0.5f};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<float> displayShapeAmount {0.f};
