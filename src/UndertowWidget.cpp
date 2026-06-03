@@ -14,11 +14,11 @@ struct UndertowEdgeHardnessQuantity final : Quantity {
     if (!module) {
       return;
     }
-    module->shapeEdgeHardness.store(clamp(value, 0.f, 1.f), std::memory_order_relaxed);
+    module->params[Undertow::EDGE_HARDNESS_PARAM].setValue(clamp(value, 0.f, 1.f));
   }
 
   float getValue() override {
-    return module ? module->shapeEdgeHardness.load(std::memory_order_relaxed) : 0.5f;
+    return module ? module->params[Undertow::EDGE_HARDNESS_PARAM].getValue() : 0.5f;
   }
 
   float getDefaultValue() override {
@@ -109,7 +109,7 @@ struct UndertowShapePreviewWidget final : Widget {
     }
 
     const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
-    const float edgeHardness = module->shapeEdgeHardness.load(std::memory_order_relaxed);
+    const float edgeHardness = module->params[Undertow::EDGE_HARDNESS_PARAM].getValue();
     const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
     const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
@@ -201,6 +201,11 @@ struct UndertowWidget final : ModuleWidget {
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
       addParam(createParamCentered<RoundBlackKnob>(mm2px(posMm), module, paramId));
     };
+    auto addTrimPot = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
+      Vec posMm;
+      loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
+      addParam(createParamCentered<Trimpot>(mm2px(posMm), module, paramId));
+    };
     auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
@@ -254,6 +259,7 @@ struct UndertowWidget final : ModuleWidget {
     addModeToggle(Undertow::COARSE_STEP_MODE_PARAM, Undertow::COARSE_STEP_MODE_LIGHT, "COARSE_STEP_MODE_PARAM",
                   Vec(20.084f, 49.700f));
     addInputPort(Undertow::EXPO_INPUT, "EXPO_INPUT", Vec(20.084f, 55.489f));
+    addTrimPot(Undertow::EDGE_HARDNESS_PARAM, "EDGE_HARDNESS_PARAM", Vec(20.084f, 71.2f));
     addInputPort(Undertow::V_OCT_INPUT, "V_OCT_INPUT", Vec(20.084f, 30.104f));
     addInputPort(Undertow::SYNC_INPUT, "SYNC_INPUT", Vec(8.600f, 42.500f));
     addInputPort(Undertow::S_GATE_INPUT, "S_GATE_INPUT", Vec(30.167f, 42.817f));

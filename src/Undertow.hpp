@@ -29,6 +29,7 @@ struct Undertow final : Module {
     LIN_FM_PARAM,
     SHAPE_PARAM,
     COARSE_STEP_MODE_PARAM,
+    EDGE_HARDNESS_PARAM,
     PARAMS_LEN
   };
 
@@ -73,7 +74,6 @@ struct Undertow final : Module {
   std::atomic<bool> shapeEntryAsymmetry {false};
   std::atomic<bool> shapeEntryAsymmetryOnRight {false};
   std::atomic<bool> analogCharacterEnabled {true};
-  std::atomic<float> shapeEdgeHardness {0.5f};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<float> displayShapeAmount {0.f};
 

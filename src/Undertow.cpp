@@ -86,6 +86,7 @@ Undertow::Undertow() {
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
   configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Morph", " %", 0.f, 100.f);
   configParam(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped");
+  configParam(EDGE_HARDNESS_PARAM, 0.f, 1.f, 0.5f, "Morph edge hardness", " %", 0.f, 100.f);
 
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(EXPO_INPUT, "Expo FM");
@@ -130,7 +131,7 @@ void Undertow::process(const ProcessArgs& args) {
   displayShapeAmount.store(shape, std::memory_order_relaxed);
   const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
   const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
-  const float edgeHardness = shapeEdgeHardness.load(std::memory_order_relaxed);
+  const float edgeHardness = params[EDGE_HARDNESS_PARAM].getValue();
   const bool analogCharacterEnabledNow = analogCharacterEnabled.load(std::memory_order_relaxed);
 
   // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
@@ -240,7 +241,7 @@ json_t* Undertow::dataToJson() {
                       json_boolean(shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed)));
   json_object_set_new(root, "analogCharacterEnabled",
                       json_boolean(analogCharacterEnabled.load(std::memory_order_relaxed)));
-  json_object_set_new(root, "shapeEdgeHardness", json_real(shapeEdgeHardness.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "shapeEdgeHardness", json_real(params[EDGE_HARDNESS_PARAM].getValue()));
   return root;
 }
 
@@ -258,10 +259,10 @@ void Undertow::dataFromJson(json_t* root) {
     analogCharacterEnabled.store(json_boolean_value(analogCharacterEnabledJ), std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
-    shapeEdgeHardness.store(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f), std::memory_order_relaxed);
+    params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));
   }
   else if (json_t* hardEdgesJ = json_object_get(root, "shapeHardEdges")) {
-    shapeEdgeHardness.store(json_boolean_value(hardEdgesJ) ? 0.5f : 0.f, std::memory_order_relaxed);
+    params[EDGE_HARDNESS_PARAM].setValue(json_boolean_value(hardEdgesJ) ? 0.5f : 0.f);
   }
 }
 
