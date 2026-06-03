@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="bifurx.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -247,13 +247,13 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="4"
-   inkscape:cx="186"
-   inkscape:cy="335.375"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:zoom="2"
+   inkscape:cx="140.25"
+   inkscape:cy="330.25"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="1978"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
    inkscape:current-layer="svg488"
    showgrid="false"
@@ -398,26 +398,126 @@
    sodipodi:nodetypes="cc" /><g
    id="slider_ticks"
    style="display:inline;fill:none;stroke:#ffffff;stroke-width:22;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.72">
-    <line x1="680.0" y1="8330.000" x2="870.0" y2="8330.000" />
-    <line x1="680.0" y1="8607.778" x2="845.0" y2="8607.778" />
-    <line x1="680.0" y1="8885.556" x2="820.0" y2="8885.556" />
-    <line x1="680.0" y1="9163.333" x2="795.0" y2="9163.333" />
-    <line x1="680.0" y1="9441.111" x2="770.0" y2="9441.111" />
-    <line x1="590.0" y1="9718.889" x2="680.0" y2="9718.889" />
-    <line x1="565.0" y1="9996.667" x2="680.0" y2="9996.667" />
-    <line x1="540.0" y1="10274.444" x2="680.0" y2="10274.444" />
-    <line x1="515.0" y1="10552.222" x2="680.0" y2="10552.222" />
-    <line x1="490.0" y1="10830.000" x2="680.0" y2="10830.000" />
-    <line x1="6402.0" y1="8330.000" x2="6592.0" y2="8330.000" />
-    <line x1="6402.0" y1="8607.778" x2="6567.0" y2="8607.778" />
-    <line x1="6402.0" y1="8885.556" x2="6542.0" y2="8885.556" />
-    <line x1="6402.0" y1="9163.333" x2="6517.0" y2="9163.333" />
-    <line x1="6402.0" y1="9441.111" x2="6492.0" y2="9441.111" />
-    <line x1="6312.0" y1="9718.889" x2="6402.0" y2="9718.889" />
-    <line x1="6287.0" y1="9996.667" x2="6402.0" y2="9996.667" />
-    <line x1="6262.0" y1="10274.444" x2="6402.0" y2="10274.444" />
-    <line x1="6237.0" y1="10552.222" x2="6402.0" y2="10552.222" />
-    <line x1="6212.0" y1="10830.000" x2="6402.0" y2="10830.000" />
+    <line
+   x1="680.0"
+   y1="8330.000"
+   x2="870.0"
+   y2="8330.000"
+   id="line1" />
+    <line
+   x1="680.0"
+   y1="8607.778"
+   x2="845.0"
+   y2="8607.778"
+   id="line2" />
+    <line
+   x1="680.0"
+   y1="8885.556"
+   x2="820.0"
+   y2="8885.556"
+   id="line3" />
+    <line
+   x1="680.0"
+   y1="9163.333"
+   x2="795.0"
+   y2="9163.333"
+   id="line4" />
+    <line
+   x1="680.0"
+   y1="9441.111"
+   x2="770.0"
+   y2="9441.111"
+   id="line5" />
+    <line
+   x1="590.0"
+   y1="9718.889"
+   x2="680.0"
+   y2="9718.889"
+   id="line6" />
+    <line
+   x1="565.0"
+   y1="9996.667"
+   x2="680.0"
+   y2="9996.667"
+   id="line7" />
+    <line
+   x1="540.0"
+   y1="10274.444"
+   x2="680.0"
+   y2="10274.444"
+   id="line8" />
+    <line
+   x1="515.0"
+   y1="10552.222"
+   x2="680.0"
+   y2="10552.222"
+   id="line9" />
+    <line
+   x1="490.0"
+   y1="10830.000"
+   x2="680.0"
+   y2="10830.000"
+   id="line10" />
+    <line
+   x1="6402.0"
+   y1="8330.000"
+   x2="6592.0"
+   y2="8330.000"
+   id="line11" />
+    <line
+   x1="6402.0"
+   y1="8607.778"
+   x2="6567.0"
+   y2="8607.778"
+   id="line12" />
+    <line
+   x1="6402.0"
+   y1="8885.556"
+   x2="6542.0"
+   y2="8885.556"
+   id="line13" />
+    <line
+   x1="6402.0"
+   y1="9163.333"
+   x2="6517.0"
+   y2="9163.333"
+   id="line14" />
+    <line
+   x1="6402.0"
+   y1="9441.111"
+   x2="6492.0"
+   y2="9441.111"
+   id="line15" />
+    <line
+   x1="6312.0"
+   y1="9718.889"
+   x2="6402.0"
+   y2="9718.889"
+   id="line16" />
+    <line
+   x1="6287.0"
+   y1="9996.667"
+   x2="6402.0"
+   y2="9996.667"
+   id="line17" />
+    <line
+   x1="6262.0"
+   y1="10274.444"
+   x2="6402.0"
+   y2="10274.444"
+   id="line18" />
+    <line
+   x1="6237.0"
+   y1="10552.222"
+   x2="6402.0"
+   y2="10552.222"
+   id="line19" />
+    <line
+   x1="6212.0"
+   y1="10830.000"
+   x2="6402.0"
+   y2="10830.000"
+   id="line20" />
   </g><rect
    x="3974.6584"
    y="10837.059"
@@ -715,8 +815,7 @@
    aria-label="XM" />
       </g><g
    id="components"
-   style="display:none"
-   sodipodi:insensitive="true"><ellipse
+   style="display:inline"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_PARAM"
      cx="1150.0443"
@@ -764,22 +863,22 @@
      cy="10295.81"
      rx="294.84427"
      ry="295.80988" /><rect
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:26.5304"
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4616"
      id="FM_AMT_PARAM"
-     width="260"
-     height="2800"
-     x="550"
-     y="8110"
-     rx="90"
-     ry="86.896591" /><rect
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:26.5304"
+     width="300"
+     height="2600"
+     x="530"
+     y="8230"
+     rx="103.84615"
+     ry="80.68969" /><rect
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617"
      id="SPAN_CV_ATTEN_PARAM"
-     width="260"
-     height="2800"
-     x="6272"
-     y="8110"
-     rx="90"
-     ry="86.896591" /><ellipse
+     width="300"
+     height="2600"
+     x="6252"
+     y="8230"
+     rx="103.84616"
+     ry="80.68972" /><ellipse
      style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="FM_AMT_LIGHT"
      cx="680"
