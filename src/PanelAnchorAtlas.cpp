@@ -25,7 +25,7 @@ struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; fl
 
 static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/BananutBlack.svg", 5275ull, 0xedcd7926be8de7ecull},
-	{"res/bifurx.svg", 69555ull, 0x5877a44cbf031c26ull},
+	{"res/bifurx.svg", 72184ull, 0x2a41d9c56e4fe8e8ull},
 	{"res/blank.svg", 21648ull, 0x5d682cc9d0d5089full},
 	{"res/bulkhead.svg", 16553ull, 0x95702365aac0f428ull},
 	{"res/chess.svg", 41960ull, 0x4fe61040f37916eeull},
