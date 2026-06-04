@@ -71,6 +71,7 @@ MODULE_COLUMNS = {
     "IntegralFlux": (
         ("ui_ms", "UI (ms)"),
         ("audio_us", "Audio (us)"),
+        ("gear_us", "Gear (us)"),
     ),
 }
 

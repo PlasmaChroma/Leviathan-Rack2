@@ -439,13 +439,15 @@ void submitWyrmMetrics(uint32_t instanceId,
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                float uiMs,
-                               float audioUs) {
-  char dataBuf[192];
+                               float audioUs,
+                               float gearUs) {
+  char dataBuf[256];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f}",
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"gear_us\":%.3f}",
                 std::max(0.f, uiMs),
-                std::max(0.f, audioUs));
+                std::max(0.f, audioUs),
+                std::max(0.f, gearUs));
   double ts = system::getTime();
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
 }

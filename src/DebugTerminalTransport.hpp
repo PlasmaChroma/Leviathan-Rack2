@@ -48,6 +48,7 @@ void submitWyrmMetrics(uint32_t instanceId,
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                float uiMs,
-                               float audioUs);
+                               float audioUs,
+                               float gearUs);
 
 } // namespace debug_terminal

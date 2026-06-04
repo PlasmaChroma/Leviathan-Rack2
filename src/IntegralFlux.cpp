@@ -14,6 +14,7 @@ namespace {
 std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
 constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
+thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
 }
 
 struct IntegralFlux : Module {
@@ -1459,9 +1460,20 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
+struct IntegralFluxGearKnob : ClockworkGearKnob {
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		ClockworkGearKnob::draw(args);
+		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
+	float gearDrawUsEma = 0.f;
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
@@ -1593,12 +1605,12 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
-        addParam(createParamCentered<ClockworkGearKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
+        addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
+		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
+		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
+		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
+		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
@@ -1672,6 +1684,7 @@ struct IntegralFluxWidget : ModuleWidget {
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
+		gIntegralFluxGearDrawNsThisFrame = 0u;
 		const PerfClock::time_point perfStart = PerfClock::now();
 		ModuleWidget::draw(args);
 		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
@@ -1681,6 +1694,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStart).count()) * 1e-6f;
 		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
+		const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
+		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
 		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
 
@@ -1692,7 +1707,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs);
+				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];
