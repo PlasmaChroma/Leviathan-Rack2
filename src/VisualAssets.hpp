@@ -13,6 +13,89 @@ struct GearKnobInvertSized : app::SvgKnob {
 			shadow->opacity = 0.f;
 		}
 	}
+
+	void draw(const DrawArgs& args) override {
+		app::SvgKnob::draw(args);
+		drawActivePointer(args);
+	}
+
+	float normalizedParamValue() {
+		engine::ParamQuantity* pq = getParamQuantity();
+		if (!pq) return 0.5f;
+		const float minValue = pq->getMinValue();
+		const float maxValue = pq->getMaxValue();
+		const float range = maxValue - minValue;
+		if (range <= 1e-6f) return 0.5f;
+		return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+	}
+
+	void drawActivePointer(const DrawArgs& args) {
+		const float valueNorm = normalizedParamValue();
+		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
+		const float assetScale = 46.f / 56.f;
+		const Vec center = Vec(28.f, 28.f).mult(assetScale);
+		const float tipY = 7.25f * assetScale;
+		const float baseY = 28.f * assetScale;
+		const float tipHalfWidth = 1.85f * assetScale;
+		const float midHalfWidth = 2.55f * assetScale;
+		const float baseHalfWidth = 2.9f * assetScale;
+		const float activeTopY = crossfade(baseY, tipY, valueNorm);
+		const float activeHalfWidth = crossfade(baseHalfWidth, tipHalfWidth, valueNorm);
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgRotate(args.vg, knobAngle);
+		nvgTranslate(args.vg, -center.x, -center.y);
+
+		NVGpaint inactivePaint = nvgLinearGradient(args.vg,
+			center.x - baseHalfWidth, tipY,
+			center.x + baseHalfWidth, baseY,
+			nvgRGBA(40, 30, 16, 255),
+			nvgRGBA(5, 4, 3, 255));
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x - baseHalfWidth, baseY);
+		nvgBezierTo(args.vg, center.x - midHalfWidth, 20.8f * assetScale, center.x - 2.15f * assetScale, 13.7f * assetScale, center.x - tipHalfWidth, tipY);
+		nvgLineTo(args.vg, center.x + tipHalfWidth, tipY);
+		nvgBezierTo(args.vg, center.x + 2.15f * assetScale, 13.7f * assetScale, center.x + midHalfWidth, 20.8f * assetScale, center.x + baseHalfWidth, baseY);
+		nvgBezierTo(args.vg, center.x + 0.75f * assetScale, 28.45f * assetScale, center.x - 0.75f * assetScale, 28.45f * assetScale, center.x - baseHalfWidth, baseY);
+		nvgFillPaint(args.vg, inactivePaint);
+		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 218, 88, 170));
+		nvgStrokeWidth(args.vg, 0.72f);
+		nvgStroke(args.vg);
+
+		NVGpaint activePaint = nvgLinearGradient(args.vg,
+			center.x, baseY,
+			center.x, tipY,
+			nvgRGBA(255, 204, 34, 235),
+			nvgRGBA(255, 252, 112, 250));
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x - baseHalfWidth, baseY);
+		nvgBezierTo(args.vg, center.x - activeHalfWidth, crossfade(baseY, activeTopY, 0.35f), center.x - activeHalfWidth, crossfade(baseY, activeTopY, 0.7f), center.x - activeHalfWidth, activeTopY);
+		nvgLineTo(args.vg, center.x + activeHalfWidth, activeTopY);
+		nvgBezierTo(args.vg, center.x + activeHalfWidth, crossfade(baseY, activeTopY, 0.7f), center.x + activeHalfWidth, crossfade(baseY, activeTopY, 0.35f), center.x + baseHalfWidth, baseY);
+		nvgBezierTo(args.vg, center.x + 0.75f * assetScale, 28.45f * assetScale, center.x - 0.75f * assetScale, 28.45f * assetScale, center.x - baseHalfWidth, baseY);
+		nvgFillPaint(args.vg, activePaint);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x, baseY - 1.4f * assetScale);
+		nvgLineTo(args.vg, center.x, activeTopY + 0.7f * assetScale);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 252, 120, 165));
+		nvgStrokeWidth(args.vg, 0.52f);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, baseHalfWidth);
+		nvgFillColor(args.vg, nvgRGBA(3, 2, 1, 255));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, 1.45f * assetScale);
+		nvgFillColor(args.vg, nvgRGBA(255, 228, 54, 185));
+		nvgFill(args.vg);
+
+		nvgRestore(args.vg);
+	}
 };
 
 struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
@@ -74,13 +157,4 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 		nvgRestore(args.vg);
 	}
 
-	float normalizedParamValue() {
-		engine::ParamQuantity* pq = getParamQuantity();
-		if (!pq) return 0.5f;
-		const float minValue = pq->getMinValue();
-		const float maxValue = pq->getMaxValue();
-		const float range = maxValue - minValue;
-		if (range <= 1e-6f) return 0.5f;
-		return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
-	}
 };

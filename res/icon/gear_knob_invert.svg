@@ -23,7 +23,7 @@
      showgrid="false"
      inkscape:zoom="25.543479"
      inkscape:cx="19.241702"
-     inkscape:cy="16.971064"
+     inkscape:cy="16.971063"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -74,7 +74,7 @@
          stop-color="#f8fbff"
          stop-opacity="0.08"
          id="stop5"
-         style="stop-color:#f8fbff;stop-opacity:0.33169532;" />
+         style="stop-color:#aad5ff;stop-opacity:0.33169532;" />
       <stop
          offset="1"
          stop-color="#ffffff"
@@ -91,15 +91,18 @@
       <stop
          offset="0"
          stop-color="#3b2a0f"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop7" />
       <stop
          offset="0.55"
          stop-color="#120c05"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop8" />
       <stop
          offset="1"
          stop-color="#050301"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop9" />
     </linearGradient>
     <linearGradient
        id="gearKnobPointerBezel"
@@ -111,19 +114,23 @@
       <stop
          offset="0"
          stop-color="#fff0b8"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop10" />
       <stop
          offset="0.22"
          stop-color="#d9b44f"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop11" />
       <stop
          offset="0.62"
          stop-color="#8c6420"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop12" />
       <stop
          offset="1"
          stop-color="#2d1a08"
-         stop-opacity="1" />
+         stop-opacity="1"
+         id="stop13" />
     </linearGradient>
   </defs>
   <g
@@ -136,7 +143,7 @@
        style="display:inline;fill:url(#gearKnobBody)" />
     <circle
        id="circle5"
-       style="display:inline;fill:url(#gearKnobGlass);stroke:#ffffff;stroke-width:0.65;stroke-opacity:0.2"
+       style="display:inline;fill:url(#gearKnobGlass);stroke:#ffffff;stroke-width:0.65008696;stroke-opacity:0.2;stroke-dasharray:none"
        r="19.768196"
        cy="28"
        cx="28" />
@@ -159,20 +166,21 @@
     <path
        id="line7"
        d="M 25.55,27.9 C 25.85,20.85 26.35,13.85 27.1,7.25 L 28.9,7.25 C 29.65,13.85 30.15,20.85 30.45,27.9 C 29.25,28.45 26.75,28.45 25.55,27.9 Z"
-       style="display:inline;fill:url(#gearKnobPointerBezel);stroke:#2a1d0d;stroke-width:0.38;stroke-opacity:0.75;stroke-linejoin:round" />
+       style="display:none;fill:url(#gearKnobPointerBezel);stroke:#2a1d0d;stroke-width:0.38;stroke-opacity:0.75;stroke-linejoin:round" />
     <path
        id="pointerInlayChannel"
        d="M 26.35,27.25 C 26.66,20.8 27.1,14.3 27.68,8.55 L 28.32,8.55 C 28.9,14.3 29.34,20.8 29.65,27.25 C 28.82,27.62 27.18,27.62 26.35,27.25 Z"
-       style="display:inline;fill:url(#gearKnobPointerInlay);stroke:#f5d76a;stroke-width:0.2;stroke-opacity:0.5;stroke-linejoin:round" />
+       style="display:none;fill:url(#gearKnobPointerInlay);stroke:#f5d76a;stroke-width:0.2;stroke-opacity:0.5;stroke-linejoin:round" />
     <path
        id="pointerInlayHighlight"
        d="M 27.55,25.35 C 27.74,19.2 27.92,14.15 28.06,9.75"
-       style="display:inline;fill:none;stroke:#fff4b8;stroke-width:0.34;stroke-linecap:round;stroke-opacity:0.58" />
+       style="display:none;fill:none;stroke:#fff4b8;stroke-width:0.34;stroke-linecap:round;stroke-opacity:0.58" />
     <circle
        cx="28"
        cy="28"
        r="2.1"
        fill="#080503"
-       id="circle9" />
+       id="circle9"
+       style="display:none" />
   </g>
 </svg>
