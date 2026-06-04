@@ -202,10 +202,10 @@ struct UndertowWidget final : ModuleWidget {
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
       addParam(createParamCentered<RoundBlackKnob>(mm2px(posMm), module, paramId));
     };
-    auto addTrimPot = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
+    auto addTinyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<Trimpot>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
@@ -260,7 +260,7 @@ struct UndertowWidget final : ModuleWidget {
     addModeToggle(Undertow::COARSE_STEP_MODE_PARAM, Undertow::COARSE_STEP_MODE_LIGHT, "COARSE_STEP_MODE_PARAM",
                   Vec(20.084f, 49.700f));
     addInputPort(Undertow::EXPO_INPUT, "EXPO_INPUT", Vec(20.084f, 55.489f));
-    addTrimPot(Undertow::EDGE_HARDNESS_PARAM, "EDGE_HARDNESS_PARAM", Vec(20.084f, 71.2f));
+    addTinyKnob(Undertow::EDGE_HARDNESS_PARAM, "EDGE_HARDNESS_PARAM", Vec(20.084f, 71.2f));
     addInputPort(Undertow::V_OCT_INPUT, "V_OCT_INPUT", Vec(20.084f, 30.104f));
     addInputPort(Undertow::SYNC_INPUT, "SYNC_INPUT", Vec(8.600f, 42.500f));
     addInputPort(Undertow::S_GATE_INPUT, "S_GATE_INPUT", Vec(30.167f, 42.817f));
