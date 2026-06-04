@@ -161,6 +161,12 @@
        d="M 26.55,28.45 C 26.85,25.4 27.25,22.6 27.65,20.2 L 28.35,20.2 C 28.75,22.6 29.15,25.4 29.45,28.45 C 28.65,28.85 27.35,28.85 26.55,28.45 Z"
        style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.28;stroke-linejoin:round" />
     <circle
+       id="centerPointerCap"
+       cx="28"
+       cy="28"
+       r="1.65"
+       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.22" />
+    <circle
        cx="28"
        cy="28"
        r="7.3499999"
