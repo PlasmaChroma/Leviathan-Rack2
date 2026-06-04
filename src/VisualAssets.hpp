@@ -34,7 +34,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
 		const float assetScale = 46.f / 56.f;
 		const Vec center = Vec(28.f, 28.f).mult(assetScale);
-		const float ringRadius = 19.95f * assetScale;
+		const float ringRadius = 18.9f * assetScale;
 		const float ringWidth = 5.0f * assetScale;
 		const float activeRingWidth = 3.2f * assetScale;
 		const float startAngle = -0.5f * M_PI + minAngle;
@@ -103,7 +103,8 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 		const float secondaryDiameterPx = primaryDiameterPx * 0.5f;
 		const float valueNorm = normalizedParamValue();
 		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
-		const Vec primaryPos = box.size.mult(0.5f);
+		const Vec cogwheelOffset(0.f, -1.25f);
+		const Vec primaryPos = box.size.mult(0.5f).plus(cogwheelOffset);
 		const Vec primaryCenter = primaryPos.plus(Vec(0.5f * primaryDiameterPx, 0.5f * primaryDiameterPx));
 
 		drawCogwheelSvg(args, cogwheelSvg, primaryCenter, primaryDiameterPx, -knobAngle);
