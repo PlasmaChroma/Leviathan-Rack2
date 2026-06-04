@@ -132,9 +132,9 @@ TinyClockworkGearKnob::TinyClockworkGearKnob() {
 		activeRing->centerPx = 12.f;
 		activeRing->sourceDiameterPx = 24.f;
 		activeRing->sourceViewBoxPx = 56.f;
-		activeRing->ringRadiusSourcePx = 17.2f;
+		activeRing->ringRadiusSourcePx = 16.9f;
 		activeRing->ringWidthSourcePx = 7.0f;
-		activeRing->activeRingWidthSourcePx = 5.2f;
+		activeRing->activeRingWidthSourcePx = 5.8f;
 		activeRing->innerLineWidthSourcePx = 0.0f;
 	}
 	if (fb) {
