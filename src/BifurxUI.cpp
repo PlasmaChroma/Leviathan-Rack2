@@ -761,38 +761,6 @@ struct BifurxModeReadoutWidget final : Widget {
 	}
 };
 
-struct BifurxFrequencyCogwheelWidget final : Widget {
-	Bifurx* module = nullptr;
-	std::shared_ptr<window::Svg> svg;
-
-	BifurxFrequencyCogwheelWidget() {
-		try {
-			svg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_small.svg"));
-		}
-		catch (const std::exception& e) {
-			WARN("Bifurx: failed to load frequency cogwheel SVG: %s", e.what());
-			svg.reset();
-		}
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!svg) return;
-		const Vec svgSize = svg->getSize();
-		if (svgSize.x <= 1.f || svgSize.y <= 1.f || box.size.x <= 1.f || box.size.y <= 1.f) return;
-
-		const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
-		const float freqParam = module ? clamp(module->params[Bifurx::FREQ_PARAM].getValue(), 0.f, 1.f) : 0.5f;
-		const float freqKnobAngle = crossfade(-0.83f * float(M_PI), 0.83f * float(M_PI), freqParam);
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
-		nvgRotate(args.vg, -freqKnobAngle);
-		nvgScale(args.vg, scale, scale);
-		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		svg->draw(args.vg);
-		nvgRestore(args.vg);
-	}
-};
-
 struct BifurxWidget final : ModuleWidget {
 	Widget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
@@ -844,13 +812,7 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(modeMenuButton);
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		const Vec freqCenterPx = mm2px(fP);
-		const float freqCogwheelDiameterPx = 17.f;
-		auto* freqCogwheel = new BifurxFrequencyCogwheelWidget();
-		freqCogwheel->module = module;
-		freqCogwheel->box.size = Vec(freqCogwheelDiameterPx, freqCogwheelDiameterPx);
-		freqCogwheel->box.pos = freqCenterPx;
-		addChild(freqCogwheel);
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<GearKnobInvertSized>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
 		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(tP), module, Bifurx::TITO_PARAM));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
