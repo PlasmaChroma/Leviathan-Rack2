@@ -469,7 +469,7 @@ ChessPieceAtlasCache& chessPieceAtlasCache() {
 	if (!cache.initialized) {
 		cache.initialized = true;
 		try {
-			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/chess.svg"));
+			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/icon/chess.svg"));
 		}
 		catch (...) {
 			cache.svg.reset();
