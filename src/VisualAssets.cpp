@@ -82,8 +82,7 @@ GearKnobInvertSized::GearKnobInvertSized() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
 
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_invert.svg"));
-	box.size = Vec(46.f, 46.f);
+	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_invert.svg"));
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
@@ -109,6 +108,28 @@ void GearKnobInvertSized::onChange(const ChangeEvent& e) {
 	}
 }
 
+void GearKnobInvertSized::setCachedSvg(std::shared_ptr<window::Svg> svg) {
+	app::SvgKnob::setSvg(svg);
+	if (sw) {
+		sw->hide();
+	}
+	if (!svg) {
+		return;
+	}
+	if (!cachedSvgFb) {
+		cachedSvgFb = new widget::FramebufferWidget();
+		cachedSvgFb->dirtyOnSubpixelChange = false;
+		cachedSvgSw = new widget::SvgWidget();
+		cachedSvgFb->addChild(cachedSvgSw);
+		tw->addChild(cachedSvgFb);
+	}
+	if (cachedSvgSw) {
+		cachedSvgSw->setSvg(svg);
+		cachedSvgFb->box.size = cachedSvgSw->box.size;
+		cachedSvgFb->setDirty();
+	}
+}
+
 float GearKnobInvertSized::normalizedParamValue() {
 	engine::ParamQuantity* pq = getParamQuantity();
 	if (!pq) return 0.5f;
@@ -122,8 +143,7 @@ float GearKnobInvertSized::normalizedParamValue() {
 TinyClockworkGearKnob::TinyClockworkGearKnob() {
 	minAngle = -0.8 * M_PI;
 	maxAngle = 0.8 * M_PI;
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny.svg"));
-	box.size = Vec(24.f, 24.f);
+	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny.svg"));
 	if (activeRing) {
 		activeRing->box.size = box.size;
 		activeRing->minAngle = minAngle;
@@ -153,6 +173,23 @@ BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
 	}
 }
 
+ClockworkGearKnob::CogwheelWidget::CogwheelWidget() {
+	cachedSvgFb = new widget::FramebufferWidget();
+	cachedSvgFb->dirtyOnSubpixelChange = false;
+	cachedSvgSw = new widget::SvgWidget();
+	cachedSvgFb->addChild(cachedSvgSw);
+	addChild(cachedSvgFb);
+}
+
+void ClockworkGearKnob::CogwheelWidget::setSvg(std::shared_ptr<window::Svg> svg) {
+	this->svg = svg;
+	if (!svg) return;
+	if (!cachedSvgSw || !cachedSvgFb) return;
+	cachedSvgSw->setSvg(svg);
+	cachedSvgFb->box.size = cachedSvgSw->box.size;
+	cachedSvgFb->setDirty();
+}
+
 void ClockworkGearKnob::CogwheelWidget::draw(const DrawArgs& args) {
 	if (!svg) return;
 	const Vec svgSize = svg->getSize();
@@ -164,7 +201,7 @@ void ClockworkGearKnob::CogwheelWidget::draw(const DrawArgs& args) {
 	nvgRotate(args.vg, angleRad);
 	nvgScale(args.vg, scale, scale);
 	nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-	svg->draw(args.vg);
+	Widget::draw(args);
 	nvgRestore(args.vg);
 }
 
@@ -174,18 +211,18 @@ ClockworkGearKnob::ClockworkGearKnob() {
 	primaryCogwheel->box.size = box.size;
 	secondaryCogwheel->box.size = box.size;
 	try {
-		primaryCogwheel->svg = visual_assets::loadPluginSvgCached("res/icon/cogwheel_amythyst.svg");
+		primaryCogwheel->setSvg(visual_assets::loadPluginSvgCached("res/icon/cogwheel_amythyst.svg"));
 	}
 	catch (const std::exception& e) {
 		WARN("Failed to load cogwheel-backed gear knob SVG: %s", e.what());
-		primaryCogwheel->svg.reset();
+		primaryCogwheel->setSvg(nullptr);
 	}
 	try {
-		secondaryCogwheel->svg = visual_assets::loadPluginSvgCached("res/icon/cogwheel_grandidierite.svg");
+		secondaryCogwheel->setSvg(visual_assets::loadPluginSvgCached("res/icon/cogwheel_grandidierite.svg"));
 	}
 	catch (const std::exception& e) {
 		WARN("Failed to load secondary cogwheel-backed gear knob SVG: %s", e.what());
-		secondaryCogwheel->svg.reset();
+		secondaryCogwheel->setSvg(nullptr);
 	}
 	updateCogwheelGeometry();
 	fb->addChildBelow(primaryCogwheel, tw);

@@ -6,7 +6,7 @@
    version="1.1"
    id="svg9"
    sodipodi:docname="gear_knob_invert.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -22,12 +22,12 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="25.543479"
-     inkscape:cx="19.241702"
-     inkscape:cy="16.971063"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:cx="26.954042"
+     inkscape:cy="17.988936"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="1978"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
      inkscape:current-layer="g1" />
   <defs
@@ -170,8 +170,8 @@
        style="fill:#c2c1be;fill-opacity:1" />
     <path
        id="centerTaperPointer"
-       d="M 26.55,28.45 C 26.85,25.4 27.25,22.6 27.65,20.2 L 28.35,20.2 C 28.75,22.6 29.15,25.4 29.45,28.45 C 28.65,28.85 27.35,28.85 26.55,28.45 Z"
-       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.28;stroke-linejoin:round" />
+       d="m 26.553288,28.431694 c 0.29932,-3.20062 0.698413,-6.138894 1.097506,-8.657414 h 0.698412 c 0.399093,2.51852 0.798186,5.456794 1.097506,8.657414 -0.798186,0.419753 -2.095238,0.419753 -2.893424,0 z"
+       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.286505;stroke-linejoin:round" />
     <circle
        id="centerPointerCap"
        cx="28"
@@ -197,14 +197,14 @@
        style="display:none;fill:url(#gearKnobPointerInlay);stroke:#f5d76a;stroke-width:0.2;stroke-opacity:0.5;stroke-linejoin:round" />
     <path
        id="pointerInlayHighlight"
-       d="M 27.55,25.35 C 27.74,19.2 27.92,14.15 28.06,9.75"
+       d="m 27.55,25.35 c 0.19,-6.15 0.37,-11.2 0.51,-15.6"
        style="display:none;fill:none;stroke:#fff4b8;stroke-width:0.34;stroke-linecap:round;stroke-opacity:0.58" />
     <circle
        cx="28"
        cy="28"
-       r="2.1"
+       r="2.0999999"
        fill="#080503"
        id="circle9"
-       style="display:none" />
+       style="display:inline" />
   </g>
 </svg>

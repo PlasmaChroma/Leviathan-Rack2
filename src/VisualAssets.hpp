@@ -27,11 +27,14 @@ struct GearKnobInvertSized : app::SvgKnob {
 	};
 
 	ActiveRingWidget* activeRing = nullptr;
+	widget::FramebufferWidget* cachedSvgFb = nullptr;
+	widget::SvgWidget* cachedSvgSw = nullptr;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
 	void onChange(const ChangeEvent& e) override;
 
+	void setCachedSvg(std::shared_ptr<window::Svg> svg);
 	float normalizedParamValue();
 };
 
@@ -46,10 +49,14 @@ struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {
 		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
 		Vec center;
 		float diameterPx = 1.f;
 		float angleRad = 0.f;
 
+		CogwheelWidget();
+		void setSvg(std::shared_ptr<window::Svg> svg);
 		void draw(const DrawArgs& args) override;
 	};
 
