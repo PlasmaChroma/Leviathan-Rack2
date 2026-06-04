@@ -43,16 +43,44 @@
       <stop
          offset="0"
          stop-color="#b0a69b"
-         id="stop1" />
+         id="stop1"
+         style="stop-color:#b0aeab;stop-opacity:1;" />
       <stop
-         offset="0.55"
+         offset="0.55000001"
          stop-color="#d1cbc4"
-         id="stop2" />
+         id="stop2"
+         style="stop-color:#d1cfcd;stop-opacity:1;" />
       <stop
          offset="1"
          stop-color="#eae6e1"
-         id="stop3" />
+         id="stop3"
+         style="stop-color:#eae9e8;stop-opacity:1;" />
     </linearGradient>
+    <radialGradient
+       id="gearKnobGlass"
+       cx="28"
+       cy="28"
+       r="20"
+       fx="28"
+       fy="28"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#ffffff"
+         stop-opacity="0.16"
+         id="stop4" />
+      <stop
+         offset="0.62"
+         stop-color="#f8fbff"
+         stop-opacity="0.08"
+         id="stop5"
+         style="stop-color:#f8fbff;stop-opacity:0.33169532;" />
+      <stop
+         offset="1"
+         stop-color="#ffffff"
+         stop-opacity="0.18"
+         id="stop6" />
+    </radialGradient>
   </defs>
   <g
      transform="scale(0.8214285714)"
@@ -63,10 +91,8 @@
        id="path5"
        style="display:inline;fill:url(#gearKnobBody)" />
     <circle
-       fill="#f0ece8"
-       opacity="0.82"
        id="circle5"
-       style="opacity:0.3;stroke-width:1.00601;fill:#ffffff;fill-opacity:1"
+       style="display:inline;fill:url(#gearKnobGlass);stroke:#ffffff;stroke-width:0.65;stroke-opacity:0.2"
        r="19.768196"
        cy="28"
        cx="28" />
@@ -75,7 +101,8 @@
        cy="28"
        r="8.75"
        fill="#c2b9af"
-       id="circle6" />
+       id="circle6"
+       style="fill:#c2c1be;fill-opacity:1" />
     <circle
        cx="28"
        cy="28"

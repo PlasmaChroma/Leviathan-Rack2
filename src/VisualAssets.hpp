@@ -17,14 +17,22 @@ struct GearKnobInvertSized : app::SvgKnob {
 
 struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 	std::shared_ptr<window::Svg> cogwheelSvg;
+	std::shared_ptr<window::Svg> secondaryCogwheelSvg;
 
 	CogwheelBackedGearKnobInvertSized() {
 		try {
-			cogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_small.svg"));
+			cogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_amythyst.svg"));
 		}
 		catch (const std::exception& e) {
 			WARN("Failed to load cogwheel-backed gear knob SVG: %s", e.what());
 			cogwheelSvg.reset();
+		}
+		try {
+			secondaryCogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_large_half_teeth.svg"));
+		}
+		catch (const std::exception& e) {
+			WARN("Failed to load secondary cogwheel-backed gear knob SVG: %s", e.what());
+			secondaryCogwheelSvg.reset();
 		}
 	}
 
@@ -34,23 +42,36 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 	}
 
 	void drawCogwheel(const DrawArgs& args) {
-		if (!cogwheelSvg) return;
-		const Vec svgSize = cogwheelSvg->getSize();
-		if (svgSize.x <= 1.f || svgSize.y <= 1.f) return;
-
-		const float cogwheelDiameterPx = 17.f;
-		const float scale = cogwheelDiameterPx / std::max(svgSize.x, svgSize.y);
+		const float primaryDiameterPx = 17.f;
+		const float secondaryDiameterPx = primaryDiameterPx * 0.5f;
 		const float valueNorm = normalizedParamValue();
 		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
-		const Vec cogwheelPos = box.size.mult(0.5f);
-		const Vec cogwheelCenter = cogwheelPos.plus(Vec(0.5f * cogwheelDiameterPx, 0.5f * cogwheelDiameterPx));
+		const Vec primaryPos = box.size.mult(0.5f);
+		const Vec primaryCenter = primaryPos.plus(Vec(0.5f * primaryDiameterPx, 0.5f * primaryDiameterPx));
 
+		drawCogwheelSvg(args, cogwheelSvg, primaryCenter, primaryDiameterPx, -knobAngle);
+
+		const float centerDistancePx = 0.5f * (primaryDiameterPx + secondaryDiameterPx);
+		const float secondaryVisualYOffsetPx = -1.f;
+		const Vec secondaryCenter = primaryCenter.plus(Vec(
+			-0.8660254f * centerDistancePx,
+			0.5f * centerDistancePx + secondaryVisualYOffsetPx));
+		const float secondaryGearRatio = primaryDiameterPx / secondaryDiameterPx;
+		drawCogwheelSvg(args, secondaryCogwheelSvg, secondaryCenter, secondaryDiameterPx, knobAngle * secondaryGearRatio);
+	}
+
+	void drawCogwheelSvg(const DrawArgs& args, const std::shared_ptr<window::Svg>& svg, const Vec& center, float diameterPx, float angleRad) {
+		if (!svg) return;
+		const Vec svgSize = svg->getSize();
+		if (svgSize.x <= 1.f || svgSize.y <= 1.f) return;
+
+		const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
 		nvgSave(args.vg);
-		nvgTranslate(args.vg, cogwheelCenter.x, cogwheelCenter.y);
-		nvgRotate(args.vg, -knobAngle);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgRotate(args.vg, angleRad);
 		nvgScale(args.vg, scale, scale);
 		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		cogwheelSvg->draw(args.vg);
+		svg->draw(args.vg);
 		nvgRestore(args.vg);
 	}
 
