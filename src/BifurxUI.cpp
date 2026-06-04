@@ -792,7 +792,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
 
 		try {
-			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/Vahdrim'Keth.svg"));
+			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
 		}
 		catch (const std::exception& e) {
 			WARN("Bifurx: failed to load age sigil SVG: %s", e.what());

@@ -21,7 +21,7 @@ extern Plugin* pluginInstance;
 
 struct BananutBlack : app::SvgPort {
 	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/icon/BananutBlack.svg")));
 	}
 };
 

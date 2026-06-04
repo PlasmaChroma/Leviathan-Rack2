@@ -24,7 +24,7 @@ struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; };
 struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; float cx; float cy; float x; float y; float width; float height; float radius; };
 
 static const SvgAtlasRecord kSvgAtlas[] = {
-	{"res/BananutBlack.svg", 5275ull, 0xedcd7926be8de7ecull},
+	{"res/icon/BananutBlack.svg", 5275ull, 0xedcd7926be8de7ecull},
 	{"res/bifurx.svg", 72184ull, 0x2a41d9c56e4fe8e8ull},
 	{"res/blank.svg", 21648ull, 0x5d682cc9d0d5089full},
 	{"res/bulkhead.svg", 16553ull, 0x95702365aac0f428ull},
@@ -37,7 +37,7 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/sil.svg", 137528ull, 0x1983fe15ab63ac72ull},
 	{"res/tdscope.svg", 82905ull, 0xda06b2fa7a1b9be8ull},
 	{"res/undertow.svg", 90762ull, 0x0588a08ba39e38cbull},
-	{"res/Vahdrim'Keth.svg", 6757ull, 0x7933dbdd114343ceull},
+	{"res/icon/Vahdrim'Keth.svg", 6757ull, 0x7933dbdd114343ceull},
 	{"res/wyrm.svg", 82953ull, 0xd8050c9718972665ull},
 };
 
