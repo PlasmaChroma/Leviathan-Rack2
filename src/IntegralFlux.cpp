@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -1593,12 +1594,12 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
-        addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
+        addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
+		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
+		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
+		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
+		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
