@@ -28,7 +28,7 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 			cogwheelSvg.reset();
 		}
 		try {
-			secondaryCogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_large_half_teeth.svg"));
+			secondaryCogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_grandidierite.svg"));
 		}
 		catch (const std::exception& e) {
 			WARN("Failed to load secondary cogwheel-backed gear knob SVG: %s", e.what());
@@ -51,7 +51,7 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 
 		drawCogwheelSvg(args, cogwheelSvg, primaryCenter, primaryDiameterPx, -knobAngle);
 
-		const float centerDistancePx = 0.5f * (primaryDiameterPx + secondaryDiameterPx);
+		const float centerDistancePx = 0.5f * (primaryDiameterPx + secondaryDiameterPx) - 0.45f;
 		const Vec secondaryCenter = primaryCenter.plus(Vec(
 			-0.8338858f * centerDistancePx,
 			0.551937f * centerDistancePx));
