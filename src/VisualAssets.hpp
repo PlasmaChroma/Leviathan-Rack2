@@ -53,8 +53,8 @@ struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
 
 		const float centerDistancePx = 0.5f * (primaryDiameterPx + secondaryDiameterPx) - 0.45f;
 		const Vec secondaryCenter = primaryCenter.plus(Vec(
-			-0.8338858f * centerDistancePx,
-			0.551937f * centerDistancePx));
+			-0.9636305f * centerDistancePx,
+			0.2672384f * centerDistancePx));
 		const float secondaryGearRatio = primaryDiameterPx / secondaryDiameterPx;
 		drawCogwheelSvg(args, secondaryCogwheelSvg, secondaryCenter, secondaryDiameterPx, knobAngle * secondaryGearRatio);
 	}

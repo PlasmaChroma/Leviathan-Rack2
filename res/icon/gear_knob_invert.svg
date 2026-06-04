@@ -81,6 +81,50 @@
          stop-opacity="0.18"
          id="stop6" />
     </radialGradient>
+    <linearGradient
+       id="gearKnobPointerInlay"
+       x1="25"
+       y1="8"
+       x2="31"
+       y2="28"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#3b2a0f"
+         stop-opacity="1" />
+      <stop
+         offset="0.55"
+         stop-color="#120c05"
+         stop-opacity="1" />
+      <stop
+         offset="1"
+         stop-color="#050301"
+         stop-opacity="1" />
+    </linearGradient>
+    <linearGradient
+       id="gearKnobPointerBezel"
+       x1="25"
+       y1="8"
+       x2="31"
+       y2="28"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#fff0b8"
+         stop-opacity="1" />
+      <stop
+         offset="0.22"
+         stop-color="#d9b44f"
+         stop-opacity="1" />
+      <stop
+         offset="0.62"
+         stop-color="#8c6420"
+         stop-opacity="1" />
+      <stop
+         offset="1"
+         stop-color="#2d1a08"
+         stop-opacity="1" />
+    </linearGradient>
   </defs>
   <g
      transform="scale(0.8214285714)"
@@ -112,16 +156,18 @@
        stroke-width="0.8"
        id="circle7"
        style="display:none" />
-    <line
-       x1="28"
-       y1="27.805624"
-       x2="28"
-       y2="7.9601245"
-       stroke="#120d08"
-       stroke-width="2.74919"
-       stroke-linecap="round"
+    <path
        id="line7"
-       style="stroke-width:4.20973913;stroke-dasharray:none" />
+       d="M 25.55,27.9 C 25.85,20.85 26.35,13.85 27.1,7.25 L 28.9,7.25 C 29.65,13.85 30.15,20.85 30.45,27.9 C 29.25,28.45 26.75,28.45 25.55,27.9 Z"
+       style="display:inline;fill:url(#gearKnobPointerBezel);stroke:#2a1d0d;stroke-width:0.38;stroke-opacity:0.75;stroke-linejoin:round" />
+    <path
+       id="pointerInlayChannel"
+       d="M 26.35,27.25 C 26.66,20.8 27.1,14.3 27.68,8.55 L 28.32,8.55 C 28.9,14.3 29.34,20.8 29.65,27.25 C 28.82,27.62 27.18,27.62 26.35,27.25 Z"
+       style="display:inline;fill:url(#gearKnobPointerInlay);stroke:#f5d76a;stroke-width:0.2;stroke-opacity:0.5;stroke-linejoin:round" />
+    <path
+       id="pointerInlayHighlight"
+       d="M 27.55,25.35 C 27.74,19.2 27.92,14.15 28.06,9.75"
+       style="display:inline;fill:none;stroke:#fff4b8;stroke-width:0.34;stroke-linecap:round;stroke-opacity:0.58" />
     <circle
        cx="28"
        cy="28"
