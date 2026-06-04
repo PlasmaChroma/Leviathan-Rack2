@@ -68,18 +68,20 @@
          offset="0"
          stop-color="#ffffff"
          stop-opacity="0.16"
-         id="stop4" />
+         id="stop4"
+         style="stop-color:#ffffff;stop-opacity:0.09828009;" />
       <stop
          offset="0.62"
          stop-color="#f8fbff"
          stop-opacity="0.08"
          id="stop5"
-         style="stop-color:#aad5ff;stop-opacity:0.33169532;" />
+         style="stop-color:#aad5ff;stop-opacity:0.04914005;" />
       <stop
          offset="1"
          stop-color="#ffffff"
          stop-opacity="0.18"
-         id="stop6" />
+         id="stop6"
+         style="stop-color:#ffffff;stop-opacity:0.05896806;" />
     </radialGradient>
     <linearGradient
        id="gearKnobPointerInlay"
