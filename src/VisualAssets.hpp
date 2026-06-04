@@ -34,9 +34,9 @@ struct GearKnobInvertSized : app::SvgKnob {
 		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
 		const float assetScale = 46.f / 56.f;
 		const Vec center = Vec(28.f, 28.f).mult(assetScale);
-		const float ringRadius = 20.25f * assetScale;
-		const float ringWidth = 4.4f * assetScale;
-		const float activeRingWidth = 3.35f * assetScale;
+		const float ringRadius = 19.95f * assetScale;
+		const float ringWidth = 5.0f * assetScale;
+		const float activeRingWidth = 3.95f * assetScale;
 		const float startAngle = -0.5f * M_PI + minAngle;
 		const float endAngle = -0.5f * M_PI + maxAngle;
 		const float activeAngle = -0.5f * M_PI + knobAngle;
@@ -45,7 +45,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(5, 4, 3, 210));
+		nvgStrokeColor(args.vg, nvgRGBA(2, 1, 1, 230));
 		nvgStrokeWidth(args.vg, ringWidth);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);

@@ -154,6 +154,10 @@
        fill="#c2b9af"
        id="circle6"
        style="fill:#c2c1be;fill-opacity:1" />
+    <path
+       id="centerTaperPointer"
+       d="M 26.55,28.45 C 26.85,25.4 27.25,22.6 27.65,20.2 L 28.35,20.2 C 28.75,22.6 29.15,25.4 29.45,28.45 C 28.65,28.85 27.35,28.85 26.55,28.45 Z"
+       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.28;stroke-linejoin:round" />
     <circle
        cx="28"
        cy="28"
