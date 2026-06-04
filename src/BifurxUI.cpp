@@ -844,13 +844,11 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(modeMenuButton);
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		const Vec freqCenterPx = mm2px(fP);
-		const float freqCogwheelDiameterPx = 34.f;
-		const float freqCogwheelRadiusPx = 0.5f * freqCogwheelDiameterPx;
-		const Vec freqCogwheelCenterPx = freqCenterPx.plus(Vec(freqCogwheelRadiusPx * M_SQRT1_2, freqCogwheelRadiusPx * M_SQRT1_2));
+		const float freqCogwheelDiameterPx = 17.f;
 		auto* freqCogwheel = new BifurxFrequencyCogwheelWidget();
 		freqCogwheel->module = module;
 		freqCogwheel->box.size = Vec(freqCogwheelDiameterPx, freqCogwheelDiameterPx);
-		freqCogwheel->box.pos = freqCogwheelCenterPx.minus(freqCogwheel->box.size.mult(0.5f));
+		freqCogwheel->box.pos = freqCenterPx;
 		addChild(freqCogwheel);
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<GearKnobInvertSized>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(bP), module, Bifurx::BALANCE_PARAM)); addParam(createParamCentered<RoundBlackKnob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
