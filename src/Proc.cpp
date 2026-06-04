@@ -1356,7 +1356,7 @@ struct AmpVoltageReadoutWidget : Widget {
 		nvgFontSize(args.vg, 10.0f);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-		nvgText(args.vg, box.size.x * 0.5f, 0.f, ampText, nullptr);
+		nvgText(args.vg, box.size.x * 0.5f, 0.75f, ampText, nullptr);
 	}
 };
 
