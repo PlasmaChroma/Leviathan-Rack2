@@ -21,6 +21,55 @@ inline std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 } // namespace visual_assets
 
 struct GearKnobInvertSized : app::SvgKnob {
+	struct ActiveRingWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		void draw(const DrawArgs& args) override {
+			const float knobAngle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+			const float assetScale = 46.f / 56.f;
+			const Vec center = Vec(28.f, 28.f).mult(assetScale);
+			const float ringRadius = 18.9f * assetScale;
+			const float ringWidth = 5.0f * assetScale;
+			const float activeRingWidth = 3.2f * assetScale;
+			const float startAngle = -0.5f * M_PI + minAngle;
+			const float endAngle = -0.5f * M_PI + maxAngle;
+			const float activeAngle = -0.5f * M_PI + knobAngle;
+
+			nvgSave(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(2, 1, 1, 230));
+			nvgStrokeWidth(args.vg, ringWidth);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, activeAngle, NVG_CW);
+			NVGpaint activePaint = nvgLinearGradient(args.vg,
+				center.x - ringRadius, center.y,
+				center.x + ringRadius, center.y,
+				nvgRGBA(255, 218, 42, 248),
+				nvgRGBA(255, 250, 205, 255));
+			nvgStrokePaint(args.vg, activePaint);
+			nvgStrokeWidth(args.vg, activeRingWidth);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
+			nvgStrokeWidth(args.vg, 0.55f * assetScale);
+			nvgStroke(args.vg);
+
+			nvgRestore(args.vg);
+		}
+	};
+
+	ActiveRingWidget* activeRing = nullptr;
+
 	GearKnobInvertSized() {
 		minAngle = -0.83 * M_PI;
 		maxAngle = 0.83 * M_PI;
@@ -30,11 +79,16 @@ struct GearKnobInvertSized : app::SvgKnob {
 		if (shadow) {
 			shadow->opacity = 0.f;
 		}
+		activeRing = new ActiveRingWidget();
+		activeRing->box.size = box.size;
+		activeRing->minAngle = minAngle;
+		activeRing->maxAngle = maxAngle;
+		activeRing->valueNorm = normalizedParamValue();
+		fb->addChild(activeRing);
 	}
 
 	void draw(const DrawArgs& args) override {
 		app::SvgKnob::draw(args);
-		drawActiveRing(args);
 	}
 
 	float normalizedParamValue() {
@@ -47,46 +101,14 @@ struct GearKnobInvertSized : app::SvgKnob {
 		return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
 	}
 
-	void drawActiveRing(const DrawArgs& args) {
-		const float valueNorm = normalizedParamValue();
-		const float knobAngle = crossfade(minAngle, maxAngle, valueNorm);
-		const float assetScale = 46.f / 56.f;
-		const Vec center = Vec(28.f, 28.f).mult(assetScale);
-		const float ringRadius = 18.9f * assetScale;
-		const float ringWidth = 5.0f * assetScale;
-		const float activeRingWidth = 3.2f * assetScale;
-		const float startAngle = -0.5f * M_PI + minAngle;
-		const float endAngle = -0.5f * M_PI + maxAngle;
-		const float activeAngle = -0.5f * M_PI + knobAngle;
-
-		nvgSave(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(2, 1, 1, 230));
-		nvgStrokeWidth(args.vg, ringWidth);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, activeAngle, NVG_CW);
-		NVGpaint activePaint = nvgLinearGradient(args.vg,
-			center.x - ringRadius, center.y,
-			center.x + ringRadius, center.y,
-			nvgRGBA(255, 218, 42, 248),
-			nvgRGBA(255, 250, 205, 255));
-		nvgStrokePaint(args.vg, activePaint);
-		nvgStrokeWidth(args.vg, activeRingWidth);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
-		nvgStrokeWidth(args.vg, 0.55f * assetScale);
-		nvgStroke(args.vg);
-
-		nvgRestore(args.vg);
+	void onChange(const ChangeEvent& e) override {
+		app::SvgKnob::onChange(e);
+		if (activeRing) {
+			activeRing->valueNorm = normalizedParamValue();
+		}
+		if (fb) {
+			fb->setDirty();
+		}
 	}
 };
 
