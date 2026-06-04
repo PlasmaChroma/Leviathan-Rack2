@@ -7,6 +7,7 @@ class DebugState(object):
     def __init__(self):
         self._lock = threading.Lock()
         self._rows = {}
+        self._schemas = {}
         self._row_stale_sec = 3.0
         self._client_count = 0
         self._events_total = 0
@@ -23,6 +24,25 @@ class DebugState(object):
 
     def ingest_event(self, event):
         now = time.time()
+        schema_key = (event["plugin"], event["module"], event["stream"])
+        if event["kind"] == "schema":
+            columns = self._normalize_columns(event["data"].get("columns"))
+            if not columns:
+                return
+            schema = {
+                "plugin": event["plugin"],
+                "module": event["module"],
+                "stream": event["stream"],
+                "target_kind": str(event["data"].get("target_kind", "metric")),
+                "columns": columns,
+                "last_seen_sec": now,
+                "ts": event["ts"],
+            }
+            with self._lock:
+                self._schemas[schema_key] = schema
+                self._events_total += 1
+            return
+
         row_key = (event["plugin"], event["module"], event["instance"], event["stream"])
         data = dict(event["data"])
         ui_ms_value = data.get("ui_ms")
@@ -39,6 +59,10 @@ class DebugState(object):
             "data": data,
         }
         with self._lock:
+            schema = self._schemas.get(schema_key)
+            if schema is None or schema.get("target_kind") != event["kind"]:
+                self._events_total += 1
+                return
             prev_row = self._rows.get(row_key)
             ui_ms_history = prev_row.get("ui_ms_history") if prev_row else None
             if ui_ms_history is None:
@@ -65,8 +89,26 @@ class DebugState(object):
             row["ui_ms_history"] = ui_ms_history
             row["vw_age_history"] = vw_age_history
             row["vw_queue_history"] = vw_queue_history
+            row["columns"] = list(schema["columns"])
             self._rows[row_key] = row
             self._events_total += 1
+
+    @staticmethod
+    def _normalize_columns(raw_columns):
+        if not isinstance(raw_columns, list):
+            return []
+        columns = []
+        seen = set()
+        for item in raw_columns:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key", "")).strip()
+            label = str(item.get("label", key)).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            columns.append({"key": key, "label": label or key})
+        return columns
 
     def snapshot(self):
         now = time.time()
@@ -78,8 +120,12 @@ class DebugState(object):
 
             rows = []
             for row in self._rows.values():
+                schema = self._schemas.get((row["plugin"], row["module"], row["stream"]))
+                if schema is None:
+                    continue
                 snap = dict(row)
                 snap["data"] = dict(row["data"])
+                snap["columns"] = list(schema["columns"])
                 ui_ms_history = row.get("ui_ms_history")
                 if ui_ms_history:
                     cutoff_sec = now - 1.0
@@ -117,6 +163,7 @@ class DebugState(object):
                 "client_count": self._client_count,
                 "events_total": self._events_total,
                 "parse_errors": self._parse_errors,
+                "schemas": len(self._schemas),
                 "uptime_sec": uptime_sec,
                 "events_per_sec": self._events_total / uptime_sec,
             }

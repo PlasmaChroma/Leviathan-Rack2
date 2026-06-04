@@ -25,56 +25,6 @@ except ImportError:
     Text = None
 
 
-MODULE_COLUMNS = {
-    "TDScope": (
-        ("ui_ms", "UI (ms)"),
-        ("rows", "Rows"),
-        ("density_pct", "Density%"),
-        ("zoom", "Zoom"),
-        ("thickness", "Thickness"),
-        ("publish_seq", "Publish"),
-        ("draw_seq", "Draw"),
-        ("draw_calls", "Calls"),
-    ),
-    "TemporalDeck": (
-        ("ui_ms", "UI (ms)"),
-        ("audio_us", "Audio (us)"),
-        ("scope_preview_us", "Scope (us)"),
-        ("scope_stride", "Stride"),
-        ("scope_metric_valid", "Scope OK"),
-    ),
-    "Bifurx": (
-        ("ui_ms", "UI (ms)"),
-        ("ui_draw_ms", "Draw (ms)"),
-        ("ui_sync_ms", "Sync (ms)"),
-        ("ui_local_prep_ms", "Prep (ms)"),
-        ("opengl", "GL"),
-        ("vw_mode", "VW"),
-        ("vw_age_ms", "VW age (ms)"),
-        ("vw_queue_ms", "VW q (ms)"),
-        ("audio_us", "Audio (us)"),
-        ("curve_prep_us", "Curve (us)"),
-        ("overlay_prep_us", "Overlay (us)"),
-    ),
-    "Wyrm": (
-        ("ui_ms", "UI (ms)"),
-        ("ed_us", "Ed (us)"),
-        ("sand_up_us", "SUp (us)"),
-        ("sand_dr_us", "SDr (us)"),
-        ("sand_gl_us", "SGL (us)"),
-        ("audio_us", "Aud (us)"),
-        ("ch", "Ch"),
-        ("body", "Body"),
-        ("body_cache_hit", "BHit"),
-        ("body_cache_miss", "BMiss"),
-    ),
-    "IntegralFlux": (
-        ("ui_ms", "UI (ms)"),
-        ("audio_us", "Audio (us)"),
-        ("gear_us", "Gear (us)"),
-    ),
-}
-
 KEY_UP = "up"
 KEY_DOWN = "down"
 KEY_TOGGLE = "toggle"
@@ -151,8 +101,19 @@ def _format_bifurx_vw_mode(value):
     return str(mode)
 
 
-def _module_columns(module_name):
-    return MODULE_COLUMNS.get(module_name, tuple())
+def _module_columns(rows):
+    if not rows:
+        return tuple()
+    columns = rows[0].get("columns", [])
+    out = []
+    for column in columns:
+        if not isinstance(column, dict):
+            continue
+        key = str(column.get("key", ""))
+        label = str(column.get("label", key))
+        if key:
+            out.append((key, label or key))
+    return tuple(out)
 
 
 def _group_rows_by_module(snapshot):
@@ -189,14 +150,15 @@ def build_module_table(module_name, rows, selected=False, collapsed=False):
     table = Table(title=_module_title(module_name, len(rows), selected=selected, collapsed=False))
     table.add_column("ID", no_wrap=True)
     table.add_column("Stream", no_wrap=True)
-    for _, label in _module_columns(module_name):
+    columns = _module_columns(rows)
+    for _, label in columns:
         table.add_column(label, justify="right", no_wrap=True)
     table.add_column("Age", justify="right", no_wrap=True)
 
     for row in rows:
         metrics = row["data"]
         cells = [row["instance"], row["stream"]]
-        for key, _ in _module_columns(module_name):
+        for key, _ in columns:
             if module_name == "Bifurx" and key == "vw_mode":
                 cells.append(_format_bifurx_vw_mode(metrics.get(key)))
             else:
@@ -212,10 +174,11 @@ def build_table(snapshot, host, port, view_state=None):
     if Text is None:
         renderables.append("Debug Terminal %s:%d" % (host, port))
         renderables.append(
-            "clients=%d  rows=%d  events=%d  parse_errors=%d  eps=%.1f"
+            "clients=%d  rows=%d  schemas=%d  events=%d  parse_errors=%d  eps=%.1f"
             % (
                 snapshot["client_count"],
                 len(snapshot["rows"]),
+                snapshot.get("schemas", 0),
                 snapshot["events_total"],
                 snapshot["parse_errors"],
                 snapshot["events_per_sec"],
@@ -233,6 +196,8 @@ def build_table(snapshot, host, port, view_state=None):
         status.append("rows=%d" % len(snapshot["rows"]), style="white")
         status.append("  ")
         status.append("events=%d" % snapshot["events_total"], style="white")
+        status.append("  ")
+        status.append("schemas=%d" % snapshot.get("schemas", 0), style="cyan")
         status.append("  ")
         status.append("parse_errors=%d" % snapshot["parse_errors"], style="yellow" if snapshot["parse_errors"] else "dim")
         status.append("  ")
@@ -257,6 +222,13 @@ def build_table(snapshot, host, port, view_state=None):
                 collapsed=(module_name in collapsed_modules),
             )
         )
+    if not module_names:
+        if Text is None:
+            renderables.append("Waiting for schema...")
+        else:
+            waiting = Text()
+            waiting.append("Waiting for schema...", style="dim")
+            renderables.append(waiting)
     if Text is None:
         renderables.append("Controls: j/k move  space/enter toggle  c collapse-all  e expand-all  q quit")
     else:
@@ -291,7 +263,7 @@ def _truncate(text, width):
 
 
 def _plain_module_lines(module_name, rows):
-    columns = _module_columns(module_name)
+    columns = _module_columns(rows)
     header = ["ID", "Stream"] + [label for _, label in columns] + ["Age"]
     table_rows = []
     for row in rows:
@@ -331,10 +303,11 @@ def _plain_module_lines(module_name, rows):
 def build_plain_text(snapshot, host, port):
     lines = [
         "Debug Terminal %s:%d" % (host, port),
-        "clients=%d  rows=%d  events=%d  parse_errors=%d  eps=%.1f"
+        "clients=%d  rows=%d  schemas=%d  events=%d  parse_errors=%d  eps=%.1f"
         % (
             snapshot["client_count"],
             len(snapshot["rows"]),
+            snapshot.get("schemas", 0),
             snapshot["events_total"],
             snapshot["parse_errors"],
             snapshot["events_per_sec"],
@@ -343,7 +316,10 @@ def build_plain_text(snapshot, host, port):
     ]
 
     grouped = _group_rows_by_module(snapshot)
-    for module_name in sorted(grouped.keys()):
+    module_names = sorted(grouped.keys())
+    if not module_names:
+        lines.append("Waiting for schema...")
+    for module_name in module_names:
         lines.extend(_plain_module_lines(module_name, grouped[module_name]))
         lines.append("")
     lines.append("")
