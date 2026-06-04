@@ -256,11 +256,16 @@ void ClockworkGearKnob::updateCogwheelGeometry() {
 	primaryCogwheel->angleRad = -knobAngle;
 
 	const float centerDistancePx = 0.5f * (primaryDiameterPx + secondaryDiameterPx) - 0.45f;
+	const float secondaryCenterPhaseOffsetRad = -0.10f;
+	const float secondaryCenterCos = std::cos(secondaryCenterPhaseOffsetRad);
+	const float secondaryCenterSin = std::sin(secondaryCenterPhaseOffsetRad);
+	const Vec secondaryDirection(-0.9636305f, 0.2672384f);
 	const Vec secondaryCenter = primaryCenter.plus(Vec(
-		-0.9636305f * centerDistancePx,
-		0.2672384f * centerDistancePx));
+		(secondaryDirection.x * secondaryCenterCos - secondaryDirection.y * secondaryCenterSin) * centerDistancePx,
+		(secondaryDirection.x * secondaryCenterSin + secondaryDirection.y * secondaryCenterCos) * centerDistancePx));
 	const float secondaryGearRatio = primaryDiameterPx / secondaryDiameterPx;
+	const float secondaryToothPhaseOffsetRad = secondaryCenterPhaseOffsetRad * (1.f + secondaryGearRatio);
 	secondaryCogwheel->center = secondaryCenter;
 	secondaryCogwheel->diameterPx = secondaryDiameterPx;
-	secondaryCogwheel->angleRad = knobAngle * secondaryGearRatio;
+	secondaryCogwheel->angleRad = knobAngle * secondaryGearRatio + secondaryToothPhaseOffsetRad;
 }
