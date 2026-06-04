@@ -1426,7 +1426,7 @@ struct ProcWidget : ModuleWidget {
 		addParam(createParamCentered<ClockworkGearKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
 		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
 		addParam(createParamCentered<ClockworkGearKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(ampPos), module, Proc::AMP_PARAM));
+		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;

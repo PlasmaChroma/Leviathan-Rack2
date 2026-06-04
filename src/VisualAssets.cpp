@@ -122,7 +122,7 @@ float GearKnobInvertSized::normalizedParamValue() {
 TinyClockworkGearKnob::TinyClockworkGearKnob() {
 	minAngle = -0.8 * M_PI;
 	maxAngle = 0.8 * M_PI;
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_small.svg"));
+	setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny.svg"));
 	box.size = Vec(24.f, 24.f);
 	if (activeRing) {
 		activeRing->box.size = box.size;
@@ -132,9 +132,9 @@ TinyClockworkGearKnob::TinyClockworkGearKnob() {
 		activeRing->centerPx = 12.f;
 		activeRing->sourceDiameterPx = 24.f;
 		activeRing->sourceViewBoxPx = 56.f;
-		activeRing->ringRadiusSourcePx = 18.0f;
-		activeRing->ringWidthSourcePx = 5.4f;
-		activeRing->activeRingWidthSourcePx = 3.6f;
+		activeRing->ringRadiusSourcePx = 17.2f;
+		activeRing->ringWidthSourcePx = 7.0f;
+		activeRing->activeRingWidthSourcePx = 5.2f;
 		activeRing->innerLineWidthSourcePx = 0.0f;
 	}
 	if (fb) {
