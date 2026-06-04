@@ -380,7 +380,7 @@ struct WyrmWidget : ModuleWidget {
 		addParam(waveRight);
 
 		addParam(createParamCentered<ClockworkGearKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
-		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
+		addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));

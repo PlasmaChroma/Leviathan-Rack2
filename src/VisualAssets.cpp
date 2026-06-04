@@ -1,5 +1,6 @@
 #include "VisualAssets.hpp"
 
+#include <cmath>
 #include <map>
 #include <string>
 
@@ -20,15 +21,19 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 } // namespace visual_assets
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
-	const float knobAngle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float assetScale = 46.f / 56.f;
-	const Vec center = Vec(28.f, 28.f).mult(assetScale);
-	const float ringRadius = 18.9f * assetScale;
-	const float ringWidth = 5.0f * assetScale;
-	const float activeRingWidth = 3.2f * assetScale;
+	const float clampedValueNorm = clamp(valueNorm, 0.f, 1.f);
+	const float clampedCenterNorm = clamp(centerNorm, 0.f, 1.f);
+	const float knobAngle = crossfade(minAngle, maxAngle, clampedValueNorm);
+	const float centerAngle = crossfade(minAngle, maxAngle, clampedCenterNorm);
+	const float assetScale = sourceDiameterPx / sourceViewBoxPx;
+	const Vec center(centerPx, centerPx);
+	const float ringRadius = ringRadiusSourcePx * assetScale;
+	const float ringWidth = ringWidthSourcePx * assetScale;
+	const float activeRingWidth = activeRingWidthSourcePx * assetScale;
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float activeAngle = -0.5f * M_PI + knobAngle;
+	const float centerArcAngle = -0.5f * M_PI + centerAngle;
 
 	nvgSave(args.vg);
 
@@ -39,23 +44,36 @@ void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, activeAngle, NVG_CW);
-	NVGpaint activePaint = nvgLinearGradient(args.vg,
-		center.x - ringRadius, center.y,
-		center.x + ringRadius, center.y,
-		nvgRGBA(255, 218, 42, 248),
-		nvgRGBA(255, 250, 205, 255));
-	nvgStrokePaint(args.vg, activePaint);
-	nvgStrokeWidth(args.vg, activeRingWidth);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStroke(args.vg);
+	const bool drawActive = !bipolar || std::fabs(clampedValueNorm - clampedCenterNorm) > 0.001f;
+	if (drawActive) {
+		const float activeStartAngle = bipolar ? centerArcAngle : startAngle;
+		const float activeEndAngle = activeAngle;
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg,
+			center.x,
+			center.y,
+			ringRadius,
+			std::min(activeStartAngle, activeEndAngle),
+			std::max(activeStartAngle, activeEndAngle),
+			NVG_CW);
+		NVGpaint activePaint = nvgLinearGradient(args.vg,
+			center.x - ringRadius, center.y,
+			center.x + ringRadius, center.y,
+			nvgRGBA(255, 218, 42, 248),
+			nvgRGBA(255, 250, 205, 255));
+		nvgStrokePaint(args.vg, activePaint);
+		nvgStrokeWidth(args.vg, activeRingWidth);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	}
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
-	nvgStrokeWidth(args.vg, 0.55f * assetScale);
-	nvgStroke(args.vg);
+	if (innerLineWidthSourcePx > 0.f) {
+		nvgStrokeWidth(args.vg, innerLineWidthSourcePx * assetScale);
+		nvgStroke(args.vg);
+	}
 
 	nvgRestore(args.vg);
 }
@@ -99,6 +117,40 @@ float GearKnobInvertSized::normalizedParamValue() {
 	const float range = maxValue - minValue;
 	if (range <= 1e-6f) return 0.5f;
 	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
+TinyClockworkGearKnob::TinyClockworkGearKnob() {
+	minAngle = -0.8 * M_PI;
+	maxAngle = 0.8 * M_PI;
+	setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_small.svg"));
+	box.size = Vec(24.f, 24.f);
+	if (activeRing) {
+		activeRing->box.size = box.size;
+		activeRing->minAngle = minAngle;
+		activeRing->maxAngle = maxAngle;
+		activeRing->valueNorm = normalizedParamValue();
+		activeRing->centerPx = 12.f;
+		activeRing->sourceDiameterPx = 24.f;
+		activeRing->sourceViewBoxPx = 56.f;
+		activeRing->ringRadiusSourcePx = 18.0f;
+		activeRing->ringWidthSourcePx = 5.4f;
+		activeRing->activeRingWidthSourcePx = 3.6f;
+		activeRing->innerLineWidthSourcePx = 0.0f;
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
+	if (activeRing) {
+		activeRing->bipolar = true;
+		activeRing->centerNorm = 0.5f;
+		activeRing->valueNorm = normalizedParamValue();
+	}
+	if (fb) {
+		fb->setDirty();
+	}
 }
 
 void ClockworkGearKnob::CogwheelWidget::draw(const DrawArgs& args) {

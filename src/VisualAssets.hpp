@@ -13,6 +13,15 @@ struct GearKnobInvertSized : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		float centerPx = 23.f;
+		float sourceDiameterPx = 46.f;
+		float sourceViewBoxPx = 56.f;
+		float ringRadiusSourcePx = 18.9f;
+		float ringWidthSourcePx = 5.0f;
+		float activeRingWidthSourcePx = 3.2f;
+		float innerLineWidthSourcePx = 0.55f;
+		bool bipolar = false;
+		float centerNorm = 0.5f;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -24,6 +33,14 @@ struct GearKnobInvertSized : app::SvgKnob {
 	void onChange(const ChangeEvent& e) override;
 
 	float normalizedParamValue();
+};
+
+struct TinyClockworkGearKnob : GearKnobInvertSized {
+	TinyClockworkGearKnob();
+};
+
+struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
+	BipolarTinyClockworkGearKnob();
 };
 
 struct ClockworkGearKnob : GearKnobInvertSized {

@@ -1,6 +1,7 @@
 #include "Chronomaw.hpp"
 #include "ChronomawWaveforms.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -1628,12 +1629,12 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addChild(surface);
 
 	addParam(createParamCentered<CKD6>(mm2px(runPos), module, Chronomaw::RUN_PARAM));
-	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(bpmPos), module, Chronomaw::BPM_PARAM));
-	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(activeBankPos), module, Chronomaw::ACTIVE_BANK_PARAM));
+	addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(bpmPos), module, Chronomaw::BPM_PARAM));
+	addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(activeBankPos), module, Chronomaw::ACTIVE_BANK_PARAM));
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(loadBankPos), module, Chronomaw::LOAD_BANK_PARAM));
 	addParam(createParamCentered<ChronomawActionButton>(mm2px(saveBankPos), module, Chronomaw::SAVE_BANK_PARAM));
-	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
-	addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(timelineZoomPos), module, Chronomaw::TIMELINE_ZOOM_PARAM));
+	addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
+	addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(timelineZoomPos), module, Chronomaw::TIMELINE_ZOOM_PARAM));
 
 	addInput(createInputCentered<DarkPJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
 	addInput(createInputCentered<DarkPJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));

@@ -1,5 +1,6 @@
 #include "Bulkhead.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 
 namespace {
 
@@ -468,7 +469,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	auto addKnob = [&](int paramId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;
 		loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(posMm), module, paramId));
+		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(posMm), module, paramId));
 	};
 	auto addInputPort = [&](int inputId, const char* anchorId, Vec fallbackMm) {
 		Vec posMm;

@@ -195,7 +195,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addFineKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addSmallKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
