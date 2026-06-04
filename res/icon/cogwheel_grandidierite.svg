@@ -4,25 +4,25 @@
     <polygon
        id="outerTeeth"
        points="282.763,105.518 247.901,148.536 278.881,194.430 225.391,208.742 223.479,264.080 171.793,244.218 137.719,287.863 107.578,241.414 54.358,256.696 57.276,201.401 5.237,182.482 40.099,139.464 9.119,93.570 62.609,79.258 64.521,23.920 116.207,43.782 150.281,0.137 180.422,46.586 233.642,31.304 230.724,86.599"
-       style="fill:#797882" />
+       style="fill:#aeb2b8" />
     <circle
        id="outerBody"
        cx="144"
        cy="144"
        r="104"
-       style="fill:#797882" />
+       style="fill:#aeb2b8" />
     <circle
        id="innerRecess"
        cx="144"
        cy="144"
        r="66"
-       style="fill:#3e3e42" />
+       style="fill:#4f535a" />
     <circle
        id="axleCutout"
        cx="144"
        cy="144"
        r="24"
-       style="fill:#1f1f23" />
+       style="fill:#24262b" />
     <g id="grandidieriteCore" style="display:inline">
       <circle cx="144" cy="144" r="44" style="fill:#176c72;stroke:#073136;stroke-width:6" />
       <polygon points="144.0,128.4 122.0,106.0 144.0,100.0 166.0,106.0" style="fill:#58b3ab;stroke:#0b4247;stroke-width:1.6" />
