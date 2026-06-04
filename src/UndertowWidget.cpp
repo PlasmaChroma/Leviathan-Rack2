@@ -1,6 +1,7 @@
 #include "Undertow.hpp"
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 #include <array>
 
 namespace {
@@ -189,7 +190,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addLargeKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<ClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addFineKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;

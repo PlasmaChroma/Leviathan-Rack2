@@ -72,11 +72,11 @@ struct GearKnobInvertSized : app::SvgKnob {
 	}
 };
 
-struct CogwheelBackedGearKnobInvertSized : GearKnobInvertSized {
+struct ClockworkGearKnob : GearKnobInvertSized {
 	std::shared_ptr<window::Svg> cogwheelSvg;
 	std::shared_ptr<window::Svg> secondaryCogwheelSvg;
 
-	CogwheelBackedGearKnobInvertSized() {
+	ClockworkGearKnob() {
 		try {
 			cogwheelSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/cogwheel_amythyst.svg"));
 		}

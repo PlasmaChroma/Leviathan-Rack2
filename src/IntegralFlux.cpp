@@ -1483,7 +1483,6 @@ struct IntegralFluxWidget : ModuleWidget {
         // use LargeLight<RedLight> for the cycle and EOR LEDs
         // use Rogan1PSWhite for the attenuverter knobs
         // use TL1105 for the cycle buttons
-        // Davies1900hWhiteKnob
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -1594,12 +1593,12 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
-        addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
-		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<CogwheelBackedGearKnobInvertSized>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
+        addParam(createParamCentered<ClockworkGearKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;

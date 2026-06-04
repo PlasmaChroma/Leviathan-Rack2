@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -1422,9 +1423,9 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
 		addParam(createParamCentered<Trimpot>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();

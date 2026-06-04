@@ -1,6 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 
 #include <cstdio>
 
@@ -378,7 +379,7 @@ struct WyrmWidget : ModuleWidget {
 		waveRight->module = module;
 		addParam(waveRight);
 
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
+		addParam(createParamCentered<ClockworkGearKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
