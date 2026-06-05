@@ -6,28 +6,52 @@
       <stop offset="50%" stop-color="#1e1e21" />
       <stop offset="100%" stop-color="#121214" />
     </linearGradient>
+    <radialGradient id="toothFaceGrad" cx="60" cy="60" r="60" gradientUnits="userSpaceOnUse">
+      <stop offset="74%" stop-color="#17171a" />
+      <stop offset="100%" stop-color="#4a484f" />
+    </radialGradient>
   </defs>
   <g id="outer-gear-rim" stroke="#09090a" stroke-width="0.8">
-    <circle cx="60" cy="60" r="50.5" fill="url(#darkGearGrad)" stroke="#302d38" stroke-width="1.1" />
-    <g id="gear-teeth-group" stroke="#4b4656" stroke-width="1.15" stroke-linejoin="round">
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(0,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(20,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(40,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(60,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(80,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(100,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(120,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(140,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(160,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(180,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(200,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(220,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(240,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(260,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(280,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(300,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(320,60,60)" />
-      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#darkGearGrad)" transform="rotate(340,60,60)" />
+    <circle cx="60" cy="60" r="50.5" fill="url(#darkGearGrad)" stroke="#292633" stroke-width="1" />
+    <g id="gear-teeth-shadow" fill="none" stroke="#050506" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.62">
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(0,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(20,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(40,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(60,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(80,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(100,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(120,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(140,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(160,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(180,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(200,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(220,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(240,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(260,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(280,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(300,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(320,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(340,60,60)" />
+    </g>
+    <g id="gear-teeth-group" stroke="#969088" stroke-width="0.72" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.42">
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(0,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(20,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(40,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(60,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(80,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(100,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(120,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(140,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(160,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(180,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(200,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(220,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(240,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(260,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(280,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(300,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(320,60,60)" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(340,60,60)" />
     </g>
     <circle cx="60" cy="60" r="45" fill="#141416" stroke="#000000" stroke-width="1.5" />
     <circle cx="60" cy="60" r="44" fill="none" stroke="#3a3a40" stroke-width="0.5" opacity="0.5" />
