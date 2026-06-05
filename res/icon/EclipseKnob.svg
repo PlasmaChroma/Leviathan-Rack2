@@ -101,96 +101,101 @@
        cy="60"
        r="50.5"
        fill="url(#darkGearGrad)"
+       stroke="#302d38"
+       stroke-width="1.1"
        id="circle12" />
     <g
-       id="gear-teeth-group">
+       id="gear-teeth-group"
+       stroke="#4b4656"
+       stroke-width="1.15"
+       stroke-linejoin="round">
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(0, 60, 60)"
          id="tooth0" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(20, 60, 60)"
          id="tooth20" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(40, 60, 60)"
          id="tooth40" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(60, 60, 60)"
          id="tooth60" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(80, 60, 60)"
          id="tooth80" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(100, 60, 60)"
          id="tooth100" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(120, 60, 60)"
          id="tooth120" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(140, 60, 60)"
          id="tooth140" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(160, 60, 60)"
          id="tooth160" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(180, 60, 60)"
          id="tooth180" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(200, 60, 60)"
          id="tooth200" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(220, 60, 60)"
          id="tooth220" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(240, 60, 60)"
          id="tooth240" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(260, 60, 60)"
          id="tooth260" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(280, 60, 60)"
          id="tooth280" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(300, 60, 60)"
          id="tooth300" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(320, 60, 60)"
          id="tooth320" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
+         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
          fill="url(#darkGearGrad)"
          transform="rotate(340, 60, 60)"
          id="tooth340" />
