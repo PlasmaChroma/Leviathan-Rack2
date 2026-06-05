@@ -6,9 +6,10 @@
    version="1.1"
    id="svg9"
    sodipodi:docname="gear_knob_invert.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
@@ -22,12 +23,12 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="25.543479"
-     inkscape:cx="26.954042"
+     inkscape:cx="26.973616"
      inkscape:cy="17.988936"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="1978"
-     inkscape:window-y="27"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="g1" />
   <defs
@@ -65,35 +66,23 @@
        fy="28"
        gradientUnits="userSpaceOnUse">
       <stop
-         offset="0"
+         offset="0.14510937"
          stop-color="#ffffff"
          stop-opacity="0.04"
          id="stop4"
-         style="stop-color:#ffffff;stop-opacity:0.04;" />
+         style="stop-color:#1c747a;stop-opacity:1;" />
       <stop
-         offset="0.35"
+         offset="0.50025934"
          stop-color="#fff8da"
          stop-opacity="0.015"
          id="stop14"
          style="stop-color:#fff8da;stop-opacity:0.015;" />
       <stop
-         offset="0.62"
+         offset="0.84179688"
          stop-color="#f8fbff"
          stop-opacity="0.02"
          id="stop5"
-         style="stop-color:#ffffff;stop-opacity:0.02;" />
-      <stop
-         offset="0.78"
-         stop-color="#fff6cf"
-         stop-opacity="0.07"
-         id="stop15"
-         style="stop-color:#fff6cf;stop-opacity:0.07;" />
-      <stop
-         offset="1"
-         stop-color="#ffffff"
-         stop-opacity="0.18"
-         id="stop6"
-         style="stop-color:#ffffff;stop-opacity:0.18;" />
+         style="stop-color:#2000ad;stop-opacity:1;" />
     </radialGradient>
     <linearGradient
        id="gearKnobPointerInlay"
@@ -146,6 +135,28 @@
          stop-opacity="1"
          id="stop13" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#gearKnobGlass"
+       id="linearGradient1"
+       x1="42.076523"
+       y1="41.678299"
+       x2="13.97114"
+       y2="14.321703"
+       gradientUnits="userSpaceOnUse" />
+    <filter
+       inkscape:collect="always"
+       style="color-interpolation-filters:sRGB"
+       id="filter1"
+       x="-0.056221375"
+       y="-0.056221375"
+       width="1.1124427"
+       height="1.1124427">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="0.79072784"
+         id="feGaussianBlur1" />
+    </filter>
   </defs>
   <g
      transform="scale(0.8214285714)"
@@ -157,7 +168,7 @@
        style="display:inline;fill:url(#gearKnobBody)" />
     <circle
        id="circle5"
-       style="display:inline;fill:url(#gearKnobGlass);stroke:#ffffff;stroke-width:0.65008696;stroke-opacity:0.2;stroke-dasharray:none"
+       style="display:inline;fill:url(#linearGradient1);stroke:#ffffff;stroke-width:0.65008696;stroke-opacity:0.2;stroke-dasharray:none;opacity:0.3;filter:url(#filter1)"
        r="19.768196"
        cy="28"
        cx="28" />
