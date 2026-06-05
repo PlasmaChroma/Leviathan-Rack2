@@ -331,6 +331,8 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const Vec center = box.size.mult(0.5f);
 	const float radiusPx = diameterPx * (41.f / 120.f);
 	const float strokeWidthPx = std::max(1.35f, diameterPx * (5.8f / 120.f));
+	const float activeStrokeWidthPx = std::max(strokeWidthPx, diameterPx * (7.2f / 120.f));
+	const float activeRadiusPx = radiusPx - 0.5f * (activeStrokeWidthPx - strokeWidthPx);
 	const float startNorm = bipolar ? centerNorm : 0.f;
 	const float startAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(startNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
@@ -354,11 +356,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	}
 
 	if (sweep > 0.008f) {
-		NVGpaint activePaint = nvgLinearGradient(args.vg,
-			center.x - radiusPx, center.y - radiusPx,
-			center.x + radiusPx, center.y + radiusPx,
-			nvgRGBA(255, 230, 128, 245),
-			nvgRGBA(184, 134, 11, 235));
+		const NVGcolor activeColor = nvgRGBA(255, 230, 128, 245);
 		for (float covered = 0.f; covered < sweep; covered += dashAngle + gapAngle) {
 			const float a0 = startAngle + direction * covered;
 			const float a1 = startAngle + direction * std::min(covered + dashAngle, sweep);
@@ -366,12 +364,12 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 			nvgArc(args.vg,
 				center.x,
 				center.y,
-				radiusPx,
+				activeRadiusPx,
 				std::min(a0, a1),
 				std::max(a0, a1),
 				NVG_CW);
-			nvgStrokePaint(args.vg, activePaint);
-			nvgStrokeWidth(args.vg, strokeWidthPx);
+			nvgStrokeColor(args.vg, activeColor);
+			nvgStrokeWidth(args.vg, activeStrokeWidthPx);
 			nvgStroke(args.vg);
 		}
 	}

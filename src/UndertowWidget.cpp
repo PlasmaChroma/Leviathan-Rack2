@@ -200,7 +200,7 @@ struct UndertowWidget final : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/undertow.svg");
     setPanel(createPanel(panelPath));
     addChild(createWidget<ScrewSilver>(Vec(0.f, 0.f)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - RACK_GRID_WIDTH, 0.f)));
+    addChild(createWidget<ScrewSilver>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 
@@ -217,7 +217,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addSmallKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<RoundBlackKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<EclipseKnob>(mm2px(posMm), module, paramId));
     };
     auto addTinyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
