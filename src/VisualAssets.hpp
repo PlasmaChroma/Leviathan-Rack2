@@ -64,6 +64,7 @@ struct EclipseKnob : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		bool rotateWithValue = true;
 
 		SvgLayer();
 		void setSvg(std::shared_ptr<window::Svg> svg);
@@ -71,12 +72,14 @@ struct EclipseKnob : app::SvgKnob {
 	};
 
 	ProgressRingWidget* progressRing = nullptr;
-	SvgLayer* svgLayer = nullptr;
+	SvgLayer* backLayer = nullptr;
+	SvgLayer* pointerLayer = nullptr;
 
 	EclipseKnob();
 	void onChange(const ChangeEvent& e) override;
 
-	void setKnobSvg(std::shared_ptr<window::Svg> svg);
+	void setBackSvg(std::shared_ptr<window::Svg> svg);
+	void setPointerSvg(std::shared_ptr<window::Svg> svg);
 	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
 	float normalizedParamValue();
 };

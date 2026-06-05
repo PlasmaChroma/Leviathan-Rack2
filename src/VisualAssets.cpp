@@ -185,8 +185,8 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const float endAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float direction = (endAngle >= startAngle) ? 1.f : -1.f;
 	const float sweep = std::fabs(endAngle - startAngle);
-	const float dashAngle = 0.115f;
-	const float gapAngle = 0.075f;
+	const float dashAngle = 0.11f;
+	const float gapAngle = 0.18f;
 
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
@@ -253,7 +253,7 @@ void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
 
 	const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
 	const Vec center = box.size.mult(0.5f);
-	const float angle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float angle = rotateWithValue ? crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)) : 0.f;
 
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, center.x, center.y);
@@ -268,57 +268,71 @@ EclipseKnob::EclipseKnob() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
 
-	setKnobSvg(visual_assets::loadPluginSvgCached("res/icon/EclipseKnob.svg"));
+	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/EclipseKnobBack.svg");
+	app::SvgKnob::setSvg(backSvg);
 	box.size = Vec(28.f, 28.f);
 	if (fb) {
 		fb->box.size = box.size;
 	}
-	if (svgLayer) {
-		svgLayer->box.size = box.size;
+	if (sw) {
+		sw->hide();
 	}
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	setBackSvg(backSvg);
 	progressRing = new ProgressRingWidget();
 	progressRing->box.size = box.size;
 	progressRing->minAngle = minAngle;
 	progressRing->maxAngle = maxAngle;
 	progressRing->valueNorm = normalizedParamValue();
 	fb->addChild(progressRing);
+	setPointerSvg(visual_assets::loadPluginSvgCached("res/icon/EclipseKnobPointer.svg"));
 }
 
 void EclipseKnob::onChange(const ChangeEvent& e) {
 	app::SvgKnob::onChange(e);
-	if (svgLayer) {
-		svgLayer->valueNorm = normalizedParamValue();
+	const float valueNorm = normalizedParamValue();
+	if (backLayer) {
+		backLayer->valueNorm = valueNorm;
+	}
+	if (pointerLayer) {
+		pointerLayer->valueNorm = valueNorm;
 	}
 	if (progressRing) {
-		progressRing->valueNorm = normalizedParamValue();
+		progressRing->valueNorm = valueNorm;
 	}
 	if (fb) {
 		fb->setDirty();
 	}
 }
 
-void EclipseKnob::setKnobSvg(std::shared_ptr<window::Svg> svg) {
-	app::SvgKnob::setSvg(svg);
-	if (sw) {
-		sw->hide();
+void EclipseKnob::setBackSvg(std::shared_ptr<window::Svg> svg) {
+	if (!svg || !fb) return;
+	if (!backLayer) {
+		backLayer = new SvgLayer();
+		backLayer->minAngle = minAngle;
+		backLayer->maxAngle = maxAngle;
+		backLayer->valueNorm = normalizedParamValue();
+		backLayer->rotateWithValue = false;
+		fb->addChild(backLayer);
 	}
-	if (!svg) {
-		return;
+	backLayer->setSvg(svg);
+	backLayer->box.size = box.size;
+}
+
+void EclipseKnob::setPointerSvg(std::shared_ptr<window::Svg> svg) {
+	if (!svg || !fb) return;
+	if (!pointerLayer) {
+		pointerLayer = new SvgLayer();
+		pointerLayer->minAngle = minAngle;
+		pointerLayer->maxAngle = maxAngle;
+		pointerLayer->valueNorm = normalizedParamValue();
+		pointerLayer->rotateWithValue = true;
+		fb->addChild(pointerLayer);
 	}
-	if (!svgLayer) {
-		svgLayer = new SvgLayer();
-		svgLayer->minAngle = minAngle;
-		svgLayer->maxAngle = maxAngle;
-		svgLayer->valueNorm = normalizedParamValue();
-		fb->addChild(svgLayer);
-	}
-	if (svgLayer) {
-		svgLayer->setSvg(svg);
-		svgLayer->box.size = box.size;
-	}
+	pointerLayer->setSvg(svg);
+	pointerLayer->box.size = box.size;
 }
 
 float EclipseKnob::normalizedParamValue() {
