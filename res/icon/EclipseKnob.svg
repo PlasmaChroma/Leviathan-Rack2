@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 120 120"
+   width="120"
+   height="120"
+   version="1.1"
+   id="svg44"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs12">
+    <linearGradient
+       id="darkGearGrad"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="100%">
+      <stop
+         offset="0%"
+         stop-color="#2c2c30"
+         id="stop1" />
+      <stop
+         offset="50%"
+         stop-color="#1e1e21"
+         id="stop2" />
+      <stop
+         offset="100%"
+         stop-color="#121214"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="brassGearGrad"
+       x1="0%"
+       y1="0%"
+       x2="0%"
+       y2="100%">
+      <stop
+         offset="0%"
+         stop-color="#ffd700"
+         id="stop4" />
+      <stop
+         offset="50%"
+         stop-color="#b8860b"
+         id="stop5" />
+      <stop
+         offset="100%"
+         stop-color="#8b6508"
+         id="stop6" />
+    </linearGradient>
+    <linearGradient
+       id="obsidianCap"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="100%">
+      <stop
+         offset="0%"
+         stop-color="#3a3a40"
+         id="stop7" />
+      <stop
+         offset="40%"
+         stop-color="#1c1c1f"
+         id="stop8" />
+      <stop
+         offset="100%"
+         stop-color="#0b0b0d"
+         id="stop9" />
+    </linearGradient>
+    <radialGradient
+       id="rubyGlow"
+       cx="50%"
+       cy="50%"
+       r="50%">
+      <stop
+         offset="0%"
+         stop-color="#ff3366"
+         id="stop10" />
+      <stop
+         offset="70%"
+         stop-color="#aa0022"
+         id="stop11" />
+      <stop
+         offset="100%"
+         stop-color="#4a0000"
+         id="stop12" />
+    </radialGradient>
+    <path
+       id="perfect-tooth"
+       d="M 55.5,10 L 57.5,4 L 62.5,4 L 64.5,10 Z"
+       fill="url(#darkGearGrad)" />
+    <linearGradient
+       xlink:href="#brassGearGrad"
+       id="linearGradient46"
+       x1="-7.4697988"
+       y1="-14.920813"
+       x2="-87.305733"
+       y2="-7.7320423"
+       gradientTransform="scale(0.36841513,2.7143294)"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     id="outer-gear-rim"
+     stroke="#09090a"
+     stroke-width="0.8">
+    <circle
+       cx="60"
+       cy="60"
+       r="50.5"
+       fill="url(#darkGearGrad)"
+       id="circle12" />
+    <g
+       id="gear-teeth-group">
+      <use
+         href="#perfect-tooth"
+         transform="rotate(0, 60, 60)"
+         id="use12" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(20, 60, 60)"
+         id="use13" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(40, 60, 60)"
+         id="use14" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(60, 60, 60)"
+         id="use15" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(80, 60, 60)"
+         id="use16" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(100, 60, 60)"
+         id="use17" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(120, 60, 60)"
+         id="use18" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(140, 60, 60)"
+         id="use19" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(160, 60, 60)"
+         id="use20" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(180, 60, 60)"
+         id="use21" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(200, 60, 60)"
+         id="use22" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(220, 60, 60)"
+         id="use23" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(240, 60, 60)"
+         id="use24" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(260, 60, 60)"
+         id="use25" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(280, 60, 60)"
+         id="use26" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(300, 60, 60)"
+         id="use27" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(320, 60, 60)"
+         id="use28" />
+      <use
+         href="#perfect-tooth"
+         transform="rotate(340, 60, 60)"
+         id="use29" />
+    </g>
+    <circle
+       cx="60"
+       cy="60"
+       r="45"
+       fill="#141416"
+       stroke="#000000"
+       stroke-width="1.5"
+       id="circle29" />
+    <circle
+       cx="60"
+       cy="60"
+       r="44"
+       fill="none"
+       stroke="#3a3a40"
+       stroke-width="0.5"
+       opacity="0.5"
+       id="circle30" />
+  </g>
+  <g
+     id="internal-clockwork"
+     transform="translate(60,60)"
+     style="display:inline">
+    <circle
+       cx="0"
+       cy="0"
+       r="41"
+       fill="none"
+       stroke="url(#brassGearGrad)"
+       stroke-width="2"
+       stroke-dasharray="2, 1.5"
+       opacity="0.85"
+       id="circle31"
+       style="display:inline" />
+    <circle
+       cx="0"
+       cy="0"
+       r="39"
+       fill="none"
+       stroke="#5c4308"
+       stroke-width="0.5"
+       id="circle32"
+       style="display:none" />
+    <g
+       id="sub-gear-left"
+       transform="translate(-19,-10) rotate(15)">
+      <circle
+         cx="0"
+         cy="0"
+         r="14"
+         fill="none"
+         stroke="url(#brassGearGrad)"
+         stroke-width="2.1"
+         stroke-dasharray="2, 1"
+         id="circle33"
+         style="display:inline" />
+      <circle
+         cx="0"
+         cy="0"
+         r="10"
+         fill="none"
+         stroke="#8b6508"
+         stroke-width="0.9"
+         id="circle34"
+         style="display:inline" />
+    </g>
+    <g
+       id="sub-gear-bottom"
+       transform="translate(-5,24) rotate(45)">
+      <circle
+         cx="0"
+         cy="0"
+         r="11"
+         fill="none"
+         stroke="url(#brassGearGrad)"
+         stroke-width="1.8"
+         stroke-dasharray="1.8, 0.95"
+         id="circle35"
+         style="display:inline" />
+      <circle
+         cx="0"
+         cy="0"
+         r="7"
+         fill="none"
+         stroke="#8b6508"
+         stroke-width="0.8"
+         id="circle36"
+         style="display:inline" />
+    </g>
+  </g>
+  <g
+     id="rotating-component"
+     transform="translate(60,60) rotate(0)">
+    <path
+       d="M -36.4,-21 A 42,42 0 0 0 -42,0 42,42 0 0 0 0,42 42,42 0 0 0 36.4,21"
+       fill="none"
+       stroke="#4a4a52"
+       stroke-width="0.75"
+       id="path38"
+       style="display:none" />
+    <circle
+       cx="0"
+       cy="0"
+       r="16"
+       fill="#161619"
+       stroke="#2d2d30"
+       stroke-width="1"
+       id="circle38" />
+    <circle
+       cx="0"
+       cy="0"
+       r="12"
+       fill="url(#darkGearGrad)"
+       stroke="#09090a"
+       stroke-width="1"
+       id="circle39" />
+    <g
+       id="clockwork-pointer">
+      <path
+         d="M 0,0 L 4.6,9.8 C 1.5,14.6 -1.5,14.6 -4.6,9.8 Z"
+         fill="url(#brassGearGrad)"
+         stroke="#443003"
+         stroke-width="0.75"
+         id="path41" />
+      <path
+         d="M 0,0 L -4.2,-13.5 L -1.45,-42 C -0.75,-46 0.75,-46 1.45,-42 L 4.2,-13.5 Z"
+         fill="url(#brassGearGrad)"
+         stroke="#443003"
+         stroke-width="0.8"
+         id="path42"
+         style="fill:url(#linearGradient46)" />
+      <path
+         d="m 0,-18 -1.5,-5 1.5,-5 1.5,5 z"
+         fill="#141416"
+         id="path43"
+         style="display:none" />
+      <circle
+         cx="0"
+         cy="0"
+         r="5.8"
+         fill="url(#brassGearGrad)"
+         stroke="#3a2802"
+         stroke-width="0.95"
+         id="circle43" />
+      <circle
+         cx="0"
+         cy="0"
+         r="2"
+         fill="#141416"
+         id="circle44" />
+    </g>
+  </g>
+</svg>
