@@ -314,7 +314,7 @@ void EclipseKnob::setBackSvg(std::shared_ptr<window::Svg> svg) {
 		backLayer->minAngle = minAngle;
 		backLayer->maxAngle = maxAngle;
 		backLayer->valueNorm = normalizedParamValue();
-		backLayer->rotateWithValue = false;
+		backLayer->rotateWithValue = true;
 		fb->addChild(backLayer);
 	}
 	backLayer->setSvg(svg);
