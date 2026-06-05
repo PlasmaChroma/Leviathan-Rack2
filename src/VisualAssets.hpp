@@ -29,10 +29,15 @@ struct GearKnobInvertSized : app::SvgKnob {
 	ActiveRingWidget* activeRing = nullptr;
 	widget::FramebufferWidget* cachedSvgFb = nullptr;
 	widget::SvgWidget* cachedSvgSw = nullptr;
+	int dragMoveFrame = 0;
+	uint64_t dragLogGestureId = 0;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
 	void onChange(const ChangeEvent& e) override;
+	void onDragStart(const DragStartEvent& e) override;
+	void onDragEnd(const DragEndEvent& e) override;
+	void onDragMove(const DragMoveEvent& e) override;
 
 	void setCachedSvg(std::shared_ptr<window::Svg> svg);
 	float normalizedParamValue();

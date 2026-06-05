@@ -1,6 +1,8 @@
 #include "VisualAssets.hpp"
 
 #include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <map>
 #include <string>
 
@@ -19,6 +21,101 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 }
 
 } // namespace visual_assets
+
+namespace {
+
+struct ClockworkDragDebugRecorder {
+	std::ofstream file;
+	std::string path;
+	double startTimeSec = 0.0;
+	uint64_t sequence = 0;
+	uint64_t gestureSequence = 0;
+
+	std::string userRootPath() {
+		return system::join(asset::user(), "Leviathan/UI");
+	}
+
+	bool ensureOpen() {
+		if (file.is_open()) {
+			return true;
+		}
+		system::createDirectories(userRootPath());
+		const long long stampMs = (long long)std::llround(system::getUnixTime() * 1000.0);
+		path = system::join(userRootPath(), "clockwork_knob_drag_" + std::to_string(stampMs) + ".csv");
+		file.open(path);
+		if (!file.is_open()) {
+			WARN("Failed to open Clockwork knob drag debug CSV: %s", path.c_str());
+			path.clear();
+			return false;
+		}
+		file << std::setprecision(9);
+		file << "sequence,gesture,t_sec,event,param_id,module_id,frame,knob_mode,mods,"
+			<< "mouse_dx,mouse_dy,mouse_len,sent_dx,sent_dy,sent_len,max_len,clamped,value_before,value_after\n";
+		startTimeSec = system::getTime();
+		sequence = 0;
+		DEBUG("Started Clockwork knob drag debug CSV: %s", path.c_str());
+		return true;
+	}
+
+	uint64_t nextGesture() {
+		return ++gestureSequence;
+	}
+
+	void log(
+		const char* eventName,
+		GearKnobInvertSized* knob,
+		uint64_t gestureId,
+		int frame,
+		Vec mouseDelta,
+		Vec sentDelta,
+		float maxLen,
+		bool clamped,
+		float valueBefore,
+		float valueAfter) {
+		if (!ensureOpen()) {
+			return;
+		}
+		const int moduleId = (knob && knob->module) ? knob->module->id : -1;
+		const int knobMode = int(settings::knobMode);
+		const int mods = (APP && APP->window) ? APP->window->getMods() : 0;
+		const double tSec = std::max(0.0, system::getTime() - startTimeSec);
+		file
+			<< sequence++ << ','
+			<< gestureId << ','
+			<< tSec << ','
+			<< (eventName ? eventName : "") << ','
+			<< (knob ? knob->paramId : -1) << ','
+			<< moduleId << ','
+			<< frame << ','
+			<< knobMode << ','
+			<< mods << ','
+			<< mouseDelta.x << ','
+			<< mouseDelta.y << ','
+			<< mouseDelta.norm() << ','
+			<< sentDelta.x << ','
+			<< sentDelta.y << ','
+			<< sentDelta.norm() << ','
+			<< maxLen << ','
+			<< (clamped ? 1 : 0) << ','
+			<< valueBefore << ','
+			<< valueAfter << '\n';
+		if (clamped || (eventName && eventName[0] == 'e')) {
+			file.flush();
+		}
+	}
+};
+
+ClockworkDragDebugRecorder& clockworkDragDebugRecorder() {
+	static ClockworkDragDebugRecorder recorder;
+	return recorder;
+}
+
+float clockworkParamValue(GearKnobInvertSized* knob) {
+	engine::ParamQuantity* pq = knob ? knob->getParamQuantity() : nullptr;
+	return pq ? pq->getValue() : NAN;
+}
+
+} // namespace
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 	const float clampedValueNorm = clamp(valueNorm, 0.f, 1.f);
@@ -105,6 +202,60 @@ void GearKnobInvertSized::onChange(const ChangeEvent& e) {
 	}
 	if (fb) {
 		fb->setDirty();
+	}
+}
+
+void GearKnobInvertSized::onDragStart(const DragStartEvent& e) {
+	if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		app::SvgKnob::onDragStart(e);
+		return;
+	}
+	dragMoveFrame = 0;
+	if (isDragonKingDebugEnabled()) {
+		dragLogGestureId = clockworkDragDebugRecorder().nextGesture();
+		const float valueBefore = clockworkParamValue(this);
+		clockworkDragDebugRecorder().log("start", this, dragLogGestureId, -1, Vec(), Vec(), 0.f, false, valueBefore, valueBefore);
+	}
+	else {
+		dragLogGestureId = 0;
+	}
+	app::SvgKnob::onDragStart(e);
+}
+
+void GearKnobInvertSized::onDragEnd(const DragEndEvent& e) {
+	if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		app::SvgKnob::onDragEnd(e);
+		return;
+	}
+	if (isDragonKingDebugEnabled() && dragLogGestureId != 0) {
+		const float valueAfter = clockworkParamValue(this);
+		clockworkDragDebugRecorder().log("end", this, dragLogGestureId, dragMoveFrame, Vec(), Vec(), 0.f, false, valueAfter, valueAfter);
+	}
+	dragMoveFrame = 0;
+	dragLogGestureId = 0;
+	app::SvgKnob::onDragEnd(e);
+}
+
+void GearKnobInvertSized::onDragMove(const DragMoveEvent& e) {
+	if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+		app::SvgKnob::onDragMove(e);
+		return;
+	}
+	DragMoveEvent clampedEvent = e;
+	const float deltaLen = clampedEvent.mouseDelta.norm();
+	const float maxDeltaPx = dragMoveFrame == 0 ? 12.f : 48.f;
+	// Temporarily disabled for Rack drag-delta diagnostics so the original jump remains observable.
+	if (false && deltaLen > maxDeltaPx && deltaLen > 1e-6f) {
+		clampedEvent.mouseDelta = clampedEvent.mouseDelta.mult(maxDeltaPx / deltaLen);
+	}
+	const bool clamped = clampedEvent.mouseDelta.x != e.mouseDelta.x || clampedEvent.mouseDelta.y != e.mouseDelta.y;
+	const bool logMove = isDragonKingDebugEnabled() && dragLogGestureId != 0 && (dragMoveFrame < 8 || clamped);
+	const float valueBefore = logMove ? clockworkParamValue(this) : NAN;
+	dragMoveFrame++;
+	app::SvgKnob::onDragMove(clampedEvent);
+	if (logMove) {
+		const float valueAfter = clockworkParamValue(this);
+		clockworkDragDebugRecorder().log("move", this, dragLogGestureId, dragMoveFrame - 1, e.mouseDelta, clampedEvent.mouseDelta, maxDeltaPx, clamped, valueBefore, valueAfter);
 	}
 }
 
