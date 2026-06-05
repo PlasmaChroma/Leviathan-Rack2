@@ -173,6 +173,61 @@ BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
 	}
 }
 
+void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float radiusPx = diameterPx * (41.f / 120.f);
+	const float strokeWidthPx = std::max(1.35f, diameterPx * (5.8f / 120.f));
+	const float startNorm = bipolar ? centerNorm : 0.f;
+	const float startAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(startNorm, 0.f, 1.f));
+	const float endAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float direction = (endAngle >= startAngle) ? 1.f : -1.f;
+	const float sweep = std::fabs(endAngle - startAngle);
+	const float dashAngle = 0.115f;
+	const float gapAngle = 0.075f;
+
+	nvgSave(args.vg);
+	nvgLineCap(args.vg, NVG_ROUND);
+
+	const float ringMinAngle = -0.5f * float(M_PI) + minAngle;
+	const float ringMaxAngle = -0.5f * float(M_PI) + maxAngle;
+	for (float a = ringMinAngle; a < ringMaxAngle; a += dashAngle + gapAngle) {
+		const float b = std::min(a + dashAngle, ringMaxAngle);
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, a, b, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(92, 67, 8, 100));
+		nvgStrokeWidth(args.vg, std::max(0.95f, strokeWidthPx * 0.72f));
+		nvgStroke(args.vg);
+	}
+
+	if (sweep > 0.008f) {
+		NVGpaint activePaint = nvgLinearGradient(args.vg,
+			center.x - radiusPx, center.y - radiusPx,
+			center.x + radiusPx, center.y + radiusPx,
+			nvgRGBA(255, 230, 128, 245),
+			nvgRGBA(184, 134, 11, 235));
+		for (float covered = 0.f; covered < sweep; covered += dashAngle + gapAngle) {
+			const float a0 = startAngle + direction * covered;
+			const float a1 = startAngle + direction * std::min(covered + dashAngle, sweep);
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg,
+				center.x,
+				center.y,
+				radiusPx,
+				std::min(a0, a1),
+				std::max(a0, a1),
+				NVG_CW);
+			nvgStrokePaint(args.vg, activePaint);
+			nvgStrokeWidth(args.vg, strokeWidthPx);
+			nvgStroke(args.vg);
+		}
+	}
+
+	nvgRestore(args.vg);
+}
+
 EclipseKnob::SvgLayer::SvgLayer() {
 	cachedSvgFb = new widget::FramebufferWidget();
 	cachedSvgFb->dirtyOnSubpixelChange = false;
@@ -224,12 +279,21 @@ EclipseKnob::EclipseKnob() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	progressRing = new ProgressRingWidget();
+	progressRing->box.size = box.size;
+	progressRing->minAngle = minAngle;
+	progressRing->maxAngle = maxAngle;
+	progressRing->valueNorm = normalizedParamValue();
+	fb->addChild(progressRing);
 }
 
 void EclipseKnob::onChange(const ChangeEvent& e) {
 	app::SvgKnob::onChange(e);
 	if (svgLayer) {
 		svgLayer->valueNorm = normalizedParamValue();
+	}
+	if (progressRing) {
+		progressRing->valueNorm = normalizedParamValue();
 	}
 	if (fb) {
 		fb->setDirty();
@@ -265,6 +329,15 @@ float EclipseKnob::normalizedParamValue() {
 	const float range = maxValue - minValue;
 	if (range <= 1e-6f) return 0.5f;
 	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
+void EclipseKnob::setProgressRingBipolar(bool bipolar, float centerNorm) {
+	if (!progressRing) return;
+	progressRing->bipolar = bipolar;
+	progressRing->centerNorm = clamp(centerNorm, 0.f, 1.f);
+	if (fb) {
+		fb->setDirty();
+	}
 }
 
 ClockworkGearKnob::CogwheelWidget::CogwheelWidget() {

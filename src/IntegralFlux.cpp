@@ -1640,10 +1640,15 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(ch4Preview);
 		}
 
-		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate2KnobPos), module, IntegralFlux::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate4KnobPos), module, IntegralFlux::ATTENUATE_4_PARAM));
+		auto addBipolarEclipseKnob = [&](Vec posMm, int paramId) {
+			EclipseKnob* knob = createParamCentered<EclipseKnob>(mm2px(posMm), module, paramId);
+			knob->setProgressRingBipolar(true);
+			addParam(knob);
+		};
+		addBipolarEclipseKnob(attenuate1KnobPos, IntegralFlux::ATTENUATE_1_PARAM);
+		addBipolarEclipseKnob(attenuate2KnobPos, IntegralFlux::ATTENUATE_2_PARAM);
+		addBipolarEclipseKnob(attenuate3KnobPos, IntegralFlux::ATTENUATE_3_PARAM);
+		addBipolarEclipseKnob(attenuate4KnobPos, IntegralFlux::ATTENUATE_4_PARAM);
 
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));

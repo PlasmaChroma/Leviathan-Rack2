@@ -78,10 +78,15 @@ struct UndertowShapePreviewWidget final : Widget {
   static constexpr float WAVE_LINE_WIDTH = 1.25f;
   static constexpr float WAVE_EDGE_PAD = 1.0f;
   static constexpr float LABEL_FONT_SIZE = 11.5f;
+  static constexpr float DEFAULT_FREQUENCY_HZ = 261.63f;
+  static constexpr float DEFAULT_SHAPE_AMOUNT = 0.f;
+  static constexpr float DEFAULT_EDGE_HARDNESS = 0.5f;
   Undertow* module = nullptr;
   std::array<float, PREVIEW_POINT_COUNT> samples {};
+  bool samplesInitialized = false;
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
+    refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
   }
 
   static std::string formatFrequencyText(float hz) {
@@ -103,26 +108,32 @@ struct UndertowShapePreviewWidget final : Widget {
     return string::f("%.0f Hz", hz);
   }
 
-  void step() override {
-    Widget::step();
-    if (!module) {
-      return;
-    }
-
-    const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
-    const float edgeHardness = module->params[Undertow::EDGE_HARDNESS_PARAM].getValue();
-    const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
-    const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
+  void refreshSamples(float shapeAmount, float edgeHardness, bool asymEnabled, bool asymOnRight) {
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
       const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
       const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, edgeHardness, asymOnRight);
       samples[size_t(i)] = clamp(folded, -1.f, 1.f) * 5.f;
     }
+    samplesInitialized = true;
+  }
+
+  void step() override {
+    Widget::step();
+    if (module) {
+      const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
+      const float edgeHardness = module->params[Undertow::EDGE_HARDNESS_PARAM].getValue();
+      const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
+      const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
+      refreshSamples(shapeAmount, edgeHardness, asymEnabled, asymOnRight);
+    }
+    else if (!samplesInitialized) {
+      refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
+    }
   }
 
   void draw(const DrawArgs& args) override {
-    if (!module) {
-      return;
+    if (!samplesInitialized) {
+      refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
     }
 
     const float w = std::max(box.size.x, 1.f);
@@ -166,7 +177,13 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgResetScissor(args.vg);
     nvgRestore(args.vg);
 
-    const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+    float displayHz = DEFAULT_FREQUENCY_HZ;
+    if (module) {
+      displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+      if (displayHz <= 0.f) {
+        displayHz = undertowBaseFrequencyFromKnob(module->params[Undertow::COARSE_PARAM].getValue());
+      }
+    }
     const std::string freqText = formatFrequencyText(displayHz);
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);

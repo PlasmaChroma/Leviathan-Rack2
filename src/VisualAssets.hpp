@@ -47,6 +47,16 @@ struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 };
 
 struct EclipseKnob : app::SvgKnob {
+	struct ProgressRingWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		float centerNorm = 0.5f;
+		bool bipolar = false;
+
+		void draw(const DrawArgs& args) override;
+	};
+
 	struct SvgLayer : TransparentWidget {
 		std::shared_ptr<window::Svg> svg;
 		widget::FramebufferWidget* cachedSvgFb = nullptr;
@@ -60,12 +70,14 @@ struct EclipseKnob : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
+	ProgressRingWidget* progressRing = nullptr;
 	SvgLayer* svgLayer = nullptr;
 
 	EclipseKnob();
 	void onChange(const ChangeEvent& e) override;
 
 	void setKnobSvg(std::shared_ptr<window::Svg> svg);
+	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
 	float normalizedParamValue();
 };
 
