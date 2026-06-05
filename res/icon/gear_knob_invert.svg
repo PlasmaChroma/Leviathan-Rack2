@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="25.543479"
-     inkscape:cx="26.973616"
-     inkscape:cy="17.988936"
+     inkscape:zoom="51.086958"
+     inkscape:cx="21.668936"
+     inkscape:cy="19.95617"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -181,8 +181,8 @@
        style="fill:#c2c1be;fill-opacity:1" />
     <path
        id="centerTaperPointer"
-       d="m 26.553288,28.431694 c 0.29932,-3.20062 0.698413,-6.138894 1.097506,-8.657414 h 0.698412 c 0.399093,2.51852 0.798186,5.456794 1.097506,8.657414 -0.798186,0.419753 -2.095238,0.419753 -2.893424,0 z"
-       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.286505;stroke-linejoin:round" />
+       d="m 26.120239,28.413002 c 0.390148,-3.186268 0.910347,-6.111367 1.430545,-8.618591 h 0.910348 c 0.520198,2.507224 1.040396,5.432323 1.430544,8.618591 -1.040397,0.417871 -2.731041,0.417871 -3.771437,0 z"
+       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.326365;stroke-linejoin:round" />
     <circle
        id="centerPointerCap"
        cx="28"
