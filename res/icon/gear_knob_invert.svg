@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="51.086958"
-     inkscape:cx="21.668936"
-     inkscape:cy="19.95617"
+     inkscape:zoom="18.061967"
+     inkscape:cx="19.045544"
+     inkscape:cy="23.723883"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -35,27 +35,27 @@
      id="defs5">
     <linearGradient
        id="gearKnobBody"
-       x1="10"
-       y1="8"
-       x2="46"
-       y2="48"
+       x1="46"
+       y1="48"
+       x2="10"
+       y2="8"
        gradientUnits="userSpaceOnUse"
        gradientTransform="rotate(-139.9,27.988028,27.994051)">
       <stop
          offset="0"
          stop-color="#b0a69b"
          id="stop1"
-         style="stop-color:#b0aeab;stop-opacity:1;" />
+         style="stop-color:#a8a8a8;stop-opacity:1;" />
       <stop
          offset="0.55000001"
          stop-color="#d1cbc4"
          id="stop2"
-         style="stop-color:#d1cfcd;stop-opacity:1;" />
+         style="stop-color:#c4c2c1;stop-opacity:1;" />
       <stop
          offset="1"
          stop-color="#eae6e1"
          id="stop3"
-         style="stop-color:#eae9e8;stop-opacity:1;" />
+         style="stop-color:#e0dfde;stop-opacity:1;" />
     </linearGradient>
     <radialGradient
        id="gearKnobGlass"

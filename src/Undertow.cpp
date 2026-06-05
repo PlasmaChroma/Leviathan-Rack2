@@ -37,7 +37,10 @@ inline float fastAtanApprox(float x) {
 }
 
 inline float drivenLinFm(float lin, float amount) {
-  const float bus = lin * amount;
+  // Normalize the documented 10V LIN FM range before applying the upper-range
+  // bus drive. This keeps the 80% transition continuous instead of clipping raw
+  // Rack volts down to a much smaller post-drive value.
+  const float bus = lin * amount * kLinFmScale;
   const float driveNorm = clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
   if (driveNorm <= 0.f || std::fabs(bus) < 1e-9f) {
     return bus;
@@ -125,7 +128,7 @@ void Undertow::process(const ProcessArgs& args) {
   const float lin = acCoupledLinFm(linIn, &voice, args.sampleTime);
   const float linAmt = params[LIN_FM_PARAM].getValue();
   const float linBus = drivenLinFm(lin, linAmt);
-  const float freq = clamp(baseFreq + baseFreq * linBus * kLinFmScale, kMinFreqHz, kMaxFreqHz);
+  const float freq = clamp(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
   const float phaseInc = freq * args.sampleTime;
   const float shape = getShapeAmount();
   displayShapeAmount.store(shape, std::memory_order_relaxed);
