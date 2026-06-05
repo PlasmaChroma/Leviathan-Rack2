@@ -15,6 +15,7 @@ std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
 constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
 }
 
 struct IntegralFlux : Module {
@@ -1470,10 +1471,21 @@ struct IntegralFluxGearKnob : ClockworkGearKnob {
 	}
 };
 
+struct IntegralFluxEclipseKnob : EclipseKnob {
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		EclipseKnob::draw(args);
+		gIntegralFluxEclipseDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
+	float eclipseDrawUsEma = 0.f;
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
@@ -1641,7 +1653,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 
 		auto addBipolarEclipseKnob = [&](Vec posMm, int paramId) {
-			EclipseKnob* knob = createParamCentered<EclipseKnob>(mm2px(posMm), module, paramId);
+			IntegralFluxEclipseKnob* knob = createParamCentered<IntegralFluxEclipseKnob>(mm2px(posMm), module, paramId);
 			knob->setProgressRingBipolar(true);
 			addParam(knob);
 		};
@@ -1690,6 +1702,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		gIntegralFluxGearDrawNsThisFrame = 0u;
+		gIntegralFluxEclipseDrawNsThisFrame = 0u;
 		const PerfClock::time_point perfStart = PerfClock::now();
 		ModuleWidget::draw(args);
 		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
@@ -1701,6 +1714,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
 		const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
 		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
+		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
+		eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
 		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
 
@@ -1712,7 +1727,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma);
+				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma, eclipseDrawUsEma);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];

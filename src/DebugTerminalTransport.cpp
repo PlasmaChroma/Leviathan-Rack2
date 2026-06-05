@@ -479,16 +479,18 @@ void submitWyrmMetrics(uint32_t instanceId,
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                float uiMs,
                                float audioUs,
-                               float gearUs) {
+                               float gearUs,
+                               float eclipseUs) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"}]");
+                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Eclipse (us)\"}]");
   char dataBuf[256];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"gear_us\":%.3f}",
+                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"gear_us\":%.3f,\"eclipse_us\":%.3f}",
                 std::max(0.f, uiMs),
                 std::max(0.f, audioUs),
-                std::max(0.f, gearUs));
+                std::max(0.f, gearUs),
+                std::max(0.f, eclipseUs));
   double ts = system::getTime();
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
 }
