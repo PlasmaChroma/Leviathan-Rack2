@@ -1493,7 +1493,7 @@ struct IntegralFluxWidget : ModuleWidget {
 
         // use Rogan1PSBlue for the rise/fall knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
-        // use Rogan1PSWhite for the attenuverter knobs
+        // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
@@ -1640,10 +1640,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(ch4Preview);
 		}
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate2KnobPos), module, IntegralFlux::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate4KnobPos), module, IntegralFlux::ATTENUATE_4_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate2KnobPos), module, IntegralFlux::ATTENUATE_2_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(attenuate4KnobPos), module, IntegralFlux::ATTENUATE_4_PARAM));
 
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));

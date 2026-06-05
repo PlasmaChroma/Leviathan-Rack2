@@ -5,7 +5,6 @@
    height="120"
    version="1.1"
    id="svg44"
-   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
@@ -49,55 +48,25 @@
          id="stop6" />
     </linearGradient>
     <linearGradient
-       id="obsidianCap"
-       x1="0%"
-       y1="0%"
-       x2="100%"
-       y2="100%">
+       id="needleBrassGrad"
+       x1="0"
+       y1="-46"
+       x2="0"
+       y2="14"
+       gradientUnits="userSpaceOnUse">
       <stop
          offset="0%"
-         stop-color="#3a3a40"
-         id="stop7" />
-      <stop
-         offset="40%"
-         stop-color="#1c1c1f"
-         id="stop8" />
-      <stop
-         offset="100%"
-         stop-color="#0b0b0d"
-         id="stop9" />
-    </linearGradient>
-    <radialGradient
-       id="rubyGlow"
-       cx="50%"
-       cy="50%"
-       r="50%">
-      <stop
-         offset="0%"
-         stop-color="#ff3366"
+         stop-color="#ffe680"
          id="stop10" />
       <stop
-         offset="70%"
-         stop-color="#aa0022"
+         offset="48%"
+         stop-color="#d49d14"
          id="stop11" />
       <stop
          offset="100%"
-         stop-color="#4a0000"
+         stop-color="#7b5405"
          id="stop12" />
-    </radialGradient>
-    <path
-       id="perfect-tooth"
-       d="M 55.5,10 L 57.5,4 L 62.5,4 L 64.5,10 Z"
-       fill="url(#darkGearGrad)" />
-    <linearGradient
-       xlink:href="#brassGearGrad"
-       id="linearGradient46"
-       x1="-7.4697988"
-       y1="-14.920813"
-       x2="-87.305733"
-       y2="-7.7320423"
-       gradientTransform="scale(0.36841513,2.7143294)"
-       gradientUnits="userSpaceOnUse" />
+    </linearGradient>
   </defs>
   <g
      id="outer-gear-rim"
@@ -111,78 +80,24 @@
        id="circle12" />
     <g
        id="gear-teeth-group">
-      <use
-         href="#perfect-tooth"
-         transform="rotate(0, 60, 60)"
-         id="use12" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(20, 60, 60)"
-         id="use13" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(40, 60, 60)"
-         id="use14" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(60, 60, 60)"
-         id="use15" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(80, 60, 60)"
-         id="use16" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(100, 60, 60)"
-         id="use17" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(120, 60, 60)"
-         id="use18" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(140, 60, 60)"
-         id="use19" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(160, 60, 60)"
-         id="use20" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(180, 60, 60)"
-         id="use21" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(200, 60, 60)"
-         id="use22" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(220, 60, 60)"
-         id="use23" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(240, 60, 60)"
-         id="use24" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(260, 60, 60)"
-         id="use25" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(280, 60, 60)"
-         id="use26" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(300, 60, 60)"
-         id="use27" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(320, 60, 60)"
-         id="use28" />
-      <use
-         href="#perfect-tooth"
-         transform="rotate(340, 60, 60)"
-         id="use29" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(0, 60, 60)" id="tooth0" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(20, 60, 60)" id="tooth20" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(40, 60, 60)" id="tooth40" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(60, 60, 60)" id="tooth60" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(80, 60, 60)" id="tooth80" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(100, 60, 60)" id="tooth100" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(120, 60, 60)" id="tooth120" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(140, 60, 60)" id="tooth140" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(160, 60, 60)" id="tooth160" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(180, 60, 60)" id="tooth180" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(200, 60, 60)" id="tooth200" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(220, 60, 60)" id="tooth220" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(240, 60, 60)" id="tooth240" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(260, 60, 60)" id="tooth260" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(280, 60, 60)" id="tooth280" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(300, 60, 60)" id="tooth300" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(320, 60, 60)" id="tooth320" />
+      <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z" fill="url(#darkGearGrad)" transform="rotate(340, 60, 60)" id="tooth340" />
     </g>
     <circle
        cx="60"
@@ -204,8 +119,7 @@
   </g>
   <g
      id="internal-clockwork"
-     transform="translate(60,60)"
-     style="display:inline">
+     transform="translate(60,60)">
     <circle
        cx="0"
        cy="0"
@@ -215,17 +129,7 @@
        stroke-width="2"
        stroke-dasharray="2, 1.5"
        opacity="0.85"
-       id="circle31"
-       style="display:inline" />
-    <circle
-       cx="0"
-       cy="0"
-       r="39"
-       fill="none"
-       stroke="#5c4308"
-       stroke-width="0.5"
-       id="circle32"
-       style="display:none" />
+       id="circle31" />
     <g
        id="sub-gear-left"
        transform="translate(-19,-10) rotate(15)">
@@ -237,8 +141,7 @@
          stroke="url(#brassGearGrad)"
          stroke-width="2.1"
          stroke-dasharray="2, 1"
-         id="circle33"
-         style="display:inline" />
+         id="circle33" />
       <circle
          cx="0"
          cy="0"
@@ -246,8 +149,7 @@
          fill="none"
          stroke="#8b6508"
          stroke-width="0.9"
-         id="circle34"
-         style="display:inline" />
+         id="circle34" />
     </g>
     <g
        id="sub-gear-bottom"
@@ -260,8 +162,7 @@
          stroke="url(#brassGearGrad)"
          stroke-width="1.8"
          stroke-dasharray="1.8, 0.95"
-         id="circle35"
-         style="display:inline" />
+         id="circle35" />
       <circle
          cx="0"
          cy="0"
@@ -269,20 +170,12 @@
          fill="none"
          stroke="#8b6508"
          stroke-width="0.8"
-         id="circle36"
-         style="display:inline" />
+         id="circle36" />
     </g>
   </g>
   <g
      id="rotating-component"
      transform="translate(60,60) rotate(0)">
-    <path
-       d="M -36.4,-21 A 42,42 0 0 0 -42,0 42,42 0 0 0 0,42 42,42 0 0 0 36.4,21"
-       fill="none"
-       stroke="#4a4a52"
-       stroke-width="0.75"
-       id="path38"
-       style="display:none" />
     <circle
        cx="0"
        cy="0"
@@ -309,16 +202,10 @@
          id="path41" />
       <path
          d="M 0,0 L -4.2,-13.5 L -1.45,-42 C -0.75,-46 0.75,-46 1.45,-42 L 4.2,-13.5 Z"
-         fill="url(#brassGearGrad)"
+         fill="url(#needleBrassGrad)"
          stroke="#443003"
          stroke-width="0.8"
-         id="path42"
-         style="fill:url(#linearGradient46)" />
-      <path
-         d="m 0,-18 -1.5,-5 1.5,-5 1.5,5 z"
-         fill="#141416"
-         id="path43"
-         style="display:none" />
+         id="path42" />
       <circle
          cx="0"
          cy="0"

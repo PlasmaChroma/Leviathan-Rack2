@@ -173,6 +173,100 @@ BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
 	}
 }
 
+EclipseKnob::SvgLayer::SvgLayer() {
+	cachedSvgFb = new widget::FramebufferWidget();
+	cachedSvgFb->dirtyOnSubpixelChange = false;
+	cachedSvgSw = new widget::SvgWidget();
+	cachedSvgFb->addChild(cachedSvgSw);
+	addChild(cachedSvgFb);
+}
+
+void EclipseKnob::SvgLayer::setSvg(std::shared_ptr<window::Svg> svg) {
+	this->svg = svg;
+	if (!svg) return;
+	if (!cachedSvgSw || !cachedSvgFb) return;
+	cachedSvgSw->setSvg(svg);
+	cachedSvgFb->box.size = cachedSvgSw->box.size;
+	cachedSvgFb->setDirty();
+}
+
+void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
+	if (!svg) return;
+	const Vec svgSize = svg->getSize();
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (svgSize.x <= 1.f || svgSize.y <= 1.f || diameterPx <= 1.f) return;
+
+	const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
+	const Vec center = box.size.mult(0.5f);
+	const float angle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, center.x, center.y);
+	nvgRotate(args.vg, angle);
+	nvgScale(args.vg, scale, scale);
+	nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+	Widget::draw(args);
+	nvgRestore(args.vg);
+}
+
+EclipseKnob::EclipseKnob() {
+	minAngle = -0.83 * M_PI;
+	maxAngle = 0.83 * M_PI;
+
+	setKnobSvg(visual_assets::loadPluginSvgCached("res/icon/EclipseKnob.svg"));
+	box.size = Vec(28.f, 28.f);
+	if (fb) {
+		fb->box.size = box.size;
+	}
+	if (svgLayer) {
+		svgLayer->box.size = box.size;
+	}
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+}
+
+void EclipseKnob::onChange(const ChangeEvent& e) {
+	app::SvgKnob::onChange(e);
+	if (svgLayer) {
+		svgLayer->valueNorm = normalizedParamValue();
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+void EclipseKnob::setKnobSvg(std::shared_ptr<window::Svg> svg) {
+	app::SvgKnob::setSvg(svg);
+	if (sw) {
+		sw->hide();
+	}
+	if (!svg) {
+		return;
+	}
+	if (!svgLayer) {
+		svgLayer = new SvgLayer();
+		svgLayer->minAngle = minAngle;
+		svgLayer->maxAngle = maxAngle;
+		svgLayer->valueNorm = normalizedParamValue();
+		fb->addChild(svgLayer);
+	}
+	if (svgLayer) {
+		svgLayer->setSvg(svg);
+		svgLayer->box.size = box.size;
+	}
+}
+
+float EclipseKnob::normalizedParamValue() {
+	engine::ParamQuantity* pq = getParamQuantity();
+	if (!pq) return 0.5f;
+	const float minValue = pq->getMinValue();
+	const float maxValue = pq->getMaxValue();
+	const float range = maxValue - minValue;
+	if (range <= 1e-6f) return 0.5f;
+	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
 ClockworkGearKnob::CogwheelWidget::CogwheelWidget() {
 	cachedSvgFb = new widget::FramebufferWidget();
 	cachedSvgFb->dirtyOnSubpixelChange = false;

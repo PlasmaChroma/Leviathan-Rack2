@@ -46,6 +46,29 @@ struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 	BipolarTinyClockworkGearKnob();
 };
 
+struct EclipseKnob : app::SvgKnob {
+	struct SvgLayer : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		SvgLayer();
+		void setSvg(std::shared_ptr<window::Svg> svg);
+		void draw(const DrawArgs& args) override;
+	};
+
+	SvgLayer* svgLayer = nullptr;
+
+	EclipseKnob();
+	void onChange(const ChangeEvent& e) override;
+
+	void setKnobSvg(std::shared_ptr<window::Svg> svg);
+	float normalizedParamValue();
+};
+
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {
 		std::shared_ptr<window::Svg> svg;
