@@ -331,6 +331,8 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const Vec center = box.size.mult(0.5f);
 	const float radiusPx = diameterPx * (41.f / 120.f);
 	const float strokeWidthPx = std::max(1.35f, diameterPx * (5.8f / 120.f));
+	const float inactiveStrokeWidthPx = std::max(0.95f, strokeWidthPx * 0.84f);
+	const float inactiveRadiusPx = radiusPx - 0.5f * (inactiveStrokeWidthPx - strokeWidthPx * 0.72f);
 	const float activeStrokeWidthPx = std::max(strokeWidthPx, diameterPx * (7.2f / 120.f));
 	const float activeRadiusPx = radiusPx - 0.5f * (activeStrokeWidthPx - strokeWidthPx);
 	const float startNorm = bipolar ? centerNorm : 0.f;
@@ -349,9 +351,9 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	for (float a = ringMinAngle; a < ringMaxAngle; a += dashAngle + gapAngle) {
 		const float b = std::min(a + dashAngle, ringMaxAngle);
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a, b, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, inactiveRadiusPx, a, b, NVG_CW);
 		nvgStrokeColor(args.vg, nvgRGBA(92, 67, 8, 100));
-		nvgStrokeWidth(args.vg, std::max(0.95f, strokeWidthPx * 0.72f));
+		nvgStrokeWidth(args.vg, inactiveStrokeWidthPx);
 		nvgStroke(args.vg);
 	}
 
