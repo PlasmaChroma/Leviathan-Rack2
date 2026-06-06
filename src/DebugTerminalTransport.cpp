@@ -484,7 +484,7 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                float eclipseShadowUs,
                                uint64_t eclipseShadowDraws) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Eclipse (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"Ecl sh (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"Ecl sh draws\"}]");
+                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Eclipse (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
   char dataBuf[384];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),

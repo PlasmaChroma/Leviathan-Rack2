@@ -196,6 +196,56 @@ void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+GearKnobInvertSized::ShadowWidget::ShadowWidget() {
+	cachedSvgFb = new widget::FramebufferWidget();
+	cachedSvgFb->dirtyOnSubpixelChange = false;
+	cachedSvgSw = new widget::SvgWidget();
+	cachedSvgFb->addChild(cachedSvgSw);
+	addChild(cachedSvgFb);
+}
+
+void GearKnobInvertSized::ShadowWidget::setSvg(std::shared_ptr<window::Svg> svg) {
+	this->svg = svg;
+	if (!svg) return;
+	if (!cachedSvgSw || !cachedSvgFb) return;
+	cachedSvgSw->setSvg(svg);
+	cachedSvgFb->box.size = cachedSvgSw->box.size;
+	cachedSvgFb->setDirty();
+}
+
+void GearKnobInvertSized::ShadowWidget::draw(const DrawArgs& args) {
+	if (!svg) return;
+	const Vec svgSize = svg->getSize();
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (svgSize.x <= 1.f || svgSize.y <= 1.f || diameterPx <= 1.f) return;
+
+	const float angle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
+	const Vec center = box.size.mult(0.5f);
+	struct ShadowPass {
+		float offsetX;
+		float offsetY;
+		float scaleMul;
+		float alpha;
+	};
+	const ShadowPass passes[] = {
+		{0.18f, 0.28f, 1.003f, 46.f / 255.f},
+		{0.45f, 0.62f, 1.010f, 78.f / 255.f},
+		{0.78f, 1.05f, 1.020f, 42.f / 255.f},
+	};
+
+	for (const ShadowPass& pass : passes) {
+		nvgSave(args.vg);
+		nvgGlobalAlpha(args.vg, pass.alpha);
+		nvgTranslate(args.vg, center.x + pass.offsetX, center.y + pass.offsetY);
+		nvgRotate(args.vg, angle);
+		nvgScale(args.vg, scale * pass.scaleMul, scale * pass.scaleMul);
+		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+		Widget::draw(args);
+		nvgRestore(args.vg);
+	}
+}
+
 GearKnobInvertSized::GearKnobInvertSized() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
@@ -204,6 +254,13 @@ GearKnobInvertSized::GearKnobInvertSized() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	shadowLayer = new ShadowWidget();
+	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_shadow.svg"));
+	shadowLayer->box.size = box.size;
+	shadowLayer->minAngle = minAngle;
+	shadowLayer->maxAngle = maxAngle;
+	shadowLayer->valueNorm = normalizedParamValue();
+	fb->addChildBelow(shadowLayer, tw);
 	activeRing = new ActiveRingWidget();
 	activeRing->box.size = box.size;
 	activeRing->minAngle = minAngle;
@@ -218,6 +275,9 @@ void GearKnobInvertSized::draw(const DrawArgs& args) {
 
 void GearKnobInvertSized::onChange(const ChangeEvent& e) {
 	app::SvgKnob::onChange(e);
+	if (shadowLayer) {
+		shadowLayer->valueNorm = normalizedParamValue();
+	}
 	if (activeRing) {
 		activeRing->valueNorm = normalizedParamValue();
 	}
@@ -300,6 +360,9 @@ void GearKnobInvertSized::setCachedSvg(std::shared_ptr<window::Svg> svg) {
 		cachedSvgFb->box.size = cachedSvgSw->box.size;
 		cachedSvgFb->setDirty();
 	}
+	if (shadowLayer) {
+		shadowLayer->box.size = box.size;
+	}
 }
 
 float GearKnobInvertSized::normalizedParamValue() {
@@ -316,6 +379,12 @@ TinyClockworkGearKnob::TinyClockworkGearKnob() {
 	minAngle = -0.8 * M_PI;
 	maxAngle = 0.8 * M_PI;
 	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny.svg"));
+	if (shadowLayer) {
+		shadowLayer->box.size = box.size;
+		shadowLayer->minAngle = minAngle;
+		shadowLayer->maxAngle = maxAngle;
+		shadowLayer->valueNorm = normalizedParamValue();
+	}
 	if (activeRing) {
 		activeRing->box.size = box.size;
 		activeRing->minAngle = minAngle;

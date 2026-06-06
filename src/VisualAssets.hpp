@@ -29,7 +29,21 @@ struct GearKnobInvertSized : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
+	struct ShadowWidget : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		ShadowWidget();
+		void setSvg(std::shared_ptr<window::Svg> svg);
+		void draw(const DrawArgs& args) override;
+	};
+
 	ActiveRingWidget* activeRing = nullptr;
+	ShadowWidget* shadowLayer = nullptr;
 	widget::FramebufferWidget* cachedSvgFb = nullptr;
 	widget::SvgWidget* cachedSvgSw = nullptr;
 	int dragMoveFrame = 0;
