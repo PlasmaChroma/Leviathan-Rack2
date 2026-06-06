@@ -160,7 +160,7 @@
     <g
        id="gear-teeth-group"
        fill="none"
-       stroke="url(#darkGearGrad)"
+       stroke="#b9ad8c"
        stroke-width="1.18"
        stroke-linecap="round"
        stroke-linejoin="round"
@@ -241,7 +241,7 @@
     <g
        id="gear-tooth-tip-glints"
        fill="none"
-       stroke="url(#darkGearGrad)"
+       stroke="#ded2a7"
        stroke-width="0.9"
        stroke-linecap="round"
        stroke-opacity="0.72">
