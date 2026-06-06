@@ -9,6 +9,7 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
@@ -21,7 +22,7 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="9.7916667"
-     inkscape:cx="59.948936"
+     inkscape:cx="60.051064"
      inkscape:cy="60"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
@@ -32,11 +33,25 @@
   <defs
      id="defs9">
     <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7f6426;stop-opacity:1;"
+         offset="0"
+         id="stop10" />
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="1"
+         id="stop11" />
+    </linearGradient>
+    <linearGradient
        id="darkGearGrad"
-       x1="0%"
-       y1="0%"
-       x2="100%"
-       y2="100%">
+       x1="-12.5"
+       y1="-12.5"
+       x2="12.5"
+       y2="12.5"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="scale(0.73571428)">
       <stop
          offset="0%"
          stop-color="#2c2c30"
@@ -58,20 +73,20 @@
        y2="100%">
       <stop
          offset="0%"
-         stop-color="#a9e4dc"
+         stop-color="#fff4b6"
          id="stop4" />
       <stop
          offset="50%"
-         stop-color="#3fa2a7"
+         stop-color="#e0b84a"
          id="stop5" />
       <stop
          offset="100%"
-         stop-color="#17606a"
+         stop-color="#8f7130"
          id="stop6" />
     </linearGradient>
     <linearGradient
        id="needleBrassGrad"
-       x1="0"
+       x1="7.0595886e-14"
        y1="-46"
        x2="0"
        y2="0"
@@ -79,59 +94,69 @@
        gradientTransform="matrix(1.0048827,0,0,0.87943496,-2.237212e-5,0.03810377)">
       <stop
          offset="0%"
-         stop-color="#d8fff7"
+         stop-color="#fff6c2"
          id="stop7" />
       <stop
-         offset="70%"
-         stop-color="#48adb0"
+         offset="1"
+         stop-color="#d7b13f"
          id="stop8" />
       <stop
          offset="100%"
-         stop-color="#145d66"
+         stop-color="#a68435"
          id="stop9" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient11"
+       x1="-0.056999899"
+       y1="-8.4427423"
+       x2="-2.237212e-05"
+       y2="-40.415905"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <g
      id="rotating-component"
      transform="translate(60,60) scale(1.12)">
     <circle
-       cx="0"
-       cy="0"
-       r="16"
+       cx="-4.4408921e-16"
+       cy="5.3290705e-15"
        fill="#161619"
        stroke="#2d2d30"
-       stroke-width="1"
-       id="circle9" />
+       stroke-width="0.629319"
+       id="circle9"
+       r="10.069267" />
     <circle
-       cx="0"
-       cy="0"
-       r="12"
+       cx="-8.8817842e-16"
+       cy="-8.8817842e-16"
+       r="8.8285685"
        fill="url(#darkGearGrad)"
        stroke="#09090a"
-       stroke-width="1"
-       id="circle10" />
+       stroke-width="0.735716"
+       id="circle10"
+       style="fill:url(#darkGearGrad)" />
     <g
        id="clockwork-pointer">
       <path
          d="M 0,0 6.4,10.8 C 2.2,16 -2.2,16 -6.4,10.8 Z"
          fill="url(#brassGearGrad)"
-         stroke="#0f4b52"
+         stroke="#6f5a26"
          stroke-width="1"
          id="path10"
          style="display:none" />
       <path
-         d="M 0,-42 L 4.8,-27 L 5.8,-2 L 0,3.4 L -5.8,-2 L -4.8,-27 Z"
+         d="M 0,-37 L 4.8,-21 L 5.8,-2 L 0,3.4 L -5.8,-2 L -4.8,-21 Z"
          fill="url(#needleBrassGrad)"
-         stroke="#17626a"
+         stroke="#7f6426"
          stroke-width="1.02467"
          id="path11"
-         style="fill:url(#needleBrassGrad)" />
+         style="fill:url(#needleBrassGrad);stroke:url(#linearGradient11);stroke-width:0.89285714;stroke-dasharray:none;stroke-linejoin:miter;stroke-linecap:butt" />
       <circle
          cx="0"
          cy="0"
          r="7"
          fill="url(#brassGearGrad)"
-         stroke="#0f4b52"
+         stroke="#6f5a26"
          stroke-width="1.1"
          id="circle11" />
       <circle

@@ -1461,11 +1461,11 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
-struct IntegralFluxGearKnob : ClockworkGearKnob {
+struct IntegralFluxGearKnob : BigClockworkGearKnob {
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point drawStart = PerfClock::now();
-		ClockworkGearKnob::draw(args);
+		BigClockworkGearKnob::draw(args);
 		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - drawStart).count());
 	}

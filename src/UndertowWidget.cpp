@@ -207,7 +207,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addLargeKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<ClockworkGearKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<BigClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addFineKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;

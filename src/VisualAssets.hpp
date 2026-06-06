@@ -25,6 +25,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 		float innerLineWidthSourcePx = 0.55f;
 		bool bipolar = false;
 		float centerNorm = 0.5f;
+		double liquidShimmerUntil = 0.0;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -51,6 +52,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
+	void step() override;
 	void onChange(const ChangeEvent& e) override;
 	void onDragStart(const DragStartEvent& e) override;
 	void onDragEnd(const DragEndEvent& e) override;
@@ -143,3 +145,5 @@ struct ClockworkGearKnob : GearKnobInvertSized {
 
 	void updateCogwheelGeometry();
 };
+
+using BigClockworkGearKnob = ClockworkGearKnob;
