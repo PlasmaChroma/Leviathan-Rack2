@@ -5,7 +5,7 @@
    viewBox="0 0 120 120"
    version="1.1"
    xmlns="http://www.w3.org/2000/svg">
-  <g fill="#ff0000" stroke="none">
+  <g fill="#000000" stroke="none">
     <circle
        cx="60"
        cy="60"

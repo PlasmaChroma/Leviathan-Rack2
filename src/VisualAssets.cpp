@@ -229,9 +229,9 @@ void GearKnobInvertSized::ShadowWidget::draw(const DrawArgs& args) {
 		float alpha;
 	};
 	const ShadowPass passes[] = {
-		{0.18f, 0.28f, 1.003f, 46.f / 255.f},
-		{0.45f, 0.62f, 1.010f, 78.f / 255.f},
-		{0.78f, 1.05f, 1.020f, 42.f / 255.f},
+		{0.18f, 0.28f, 1.003f, 62.f / 255.f},
+		{0.45f, 0.62f, 1.010f, 106.f / 255.f},
+		{0.78f, 1.05f, 1.020f, 58.f / 255.f},
 	};
 
 	for (const ShadowPass& pass : passes) {
@@ -419,7 +419,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	if (diameterPx <= 1.f) return;
 
 	const Vec center = box.size.mult(0.5f);
-	const float radiusPx = diameterPx * (45.f / 120.f);
+	const float radiusPx = diameterPx * (46.f / 120.f);
 	const float strokeWidthPx = std::max(1.35f, diameterPx * (5.8f / 120.f));
 	const float inactiveStrokeWidthPx = std::max(0.95f, strokeWidthPx * 0.84f);
 	const float inactiveRadiusPx = radiusPx - 0.5f * (inactiveStrokeWidthPx - strokeWidthPx * 0.72f);
@@ -448,13 +448,13 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 		if (b <= ringMinAngle) continue;
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, inactiveRadiusPx, std::max(a, ringMinAngle), b, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(92, 67, 8, 100));
+		nvgStrokeColor(args.vg, nvgRGBA(142, 124, 72, 118));
 		nvgStrokeWidth(args.vg, inactiveStrokeWidthPx);
 		nvgStroke(args.vg);
 	}
 
 	if (sweep > 0.008f) {
-		const NVGcolor activeColor = nvgRGBA(255, 230, 128, 245);
+		const NVGcolor activeColor = nvgRGBA(255, 242, 184, 248);
 		const float activeMinAngle = std::min(startAngle, endAngle);
 		const float activeMaxAngle = std::max(startAngle, endAngle);
 		for (float a = firstSegmentAngle; a < activeMaxAngle; a += periodAngle) {
@@ -550,9 +550,9 @@ void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
 		float alpha;
 	};
 	const ShadowPass passes[] = {
-		{0.22f, 0.32f, 1.003f, 48.f / 255.f},
-		{0.52f, 0.70f, 1.009f, 82.f / 255.f},
-		{0.90f, 1.18f, 1.018f, 46.f / 255.f},
+		{0.22f, 0.32f, 1.003f, 62.f / 255.f},
+		{0.52f, 0.70f, 1.009f, 106.f / 255.f},
+		{0.90f, 1.18f, 1.018f, 58.f / 255.f},
 	};
 
 	for (const ShadowPass& pass : passes) {

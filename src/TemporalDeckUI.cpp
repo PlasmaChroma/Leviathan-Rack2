@@ -3,6 +3,7 @@
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "VisualAssets.hpp"
 
 #include <algorithm>
 #include <array>
@@ -3338,12 +3339,20 @@ struct TemporalDeckWidget : ModuleWidget {
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(sensitivityKnobMm), module,
-                                                 TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
+    addParam(createParamCentered<EclipseKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
+    {
+      EclipseKnob* rateKnob = createParamCentered<EclipseKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM);
+      rateKnob->setProgressRingBipolar(true);
+      addParam(rateKnob);
+    }
+    addParam(createParamCentered<EclipseKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<EclipseKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
+    {
+      EclipseKnob* sensitivityKnob = createParamCentered<EclipseKnob>(mm2px(sensitivityKnobMm), module,
+                                                                     TemporalDeck::SCRATCH_SENSITIVITY_PARAM);
+      sensitivityKnob->setProgressRingBipolar(true);
+      addParam(sensitivityKnob);
+    }
     addParam(createParamCentered<LEDButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
