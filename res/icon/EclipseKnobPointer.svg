@@ -58,15 +58,15 @@
        y2="100%">
       <stop
          offset="0%"
-         stop-color="#8ed1ca"
+         stop-color="#a9e4dc"
          id="stop4" />
       <stop
          offset="50%"
-         stop-color="#247f88"
+         stop-color="#3fa2a7"
          id="stop5" />
       <stop
          offset="100%"
-         stop-color="#0e4850"
+         stop-color="#17606a"
          id="stop6" />
     </linearGradient>
     <linearGradient
@@ -79,15 +79,15 @@
        gradientTransform="matrix(1.0048827,0,0,0.87943496,-2.237212e-5,0.03810377)">
       <stop
          offset="0%"
-         stop-color="#c6fff1"
+         stop-color="#d8fff7"
          id="stop7" />
       <stop
          offset="70%"
-         stop-color="#2f8f93"
+         stop-color="#48adb0"
          id="stop8" />
       <stop
          offset="100%"
-         stop-color="#0a3f47"
+         stop-color="#145d66"
          id="stop9" />
     </linearGradient>
   </defs>
@@ -115,14 +115,14 @@
       <path
          d="M 0,0 6.4,10.8 C 2.2,16 -2.2,16 -6.4,10.8 Z"
          fill="url(#brassGearGrad)"
-         stroke="#073136"
+         stroke="#0f4b52"
          stroke-width="1"
          id="path10"
          style="display:none" />
       <path
          d="M -2.237212e-5,0.03810377 -6.9236639,0.08207552 -4.1099924,-39.817889 c 1.1053709,-3.790364 7.1145692,-3.790364 8.2199401,0 L 6.933668,-0.11140018 Z"
          fill="url(#needleBrassGrad)"
-         stroke="#0b4247"
+         stroke="#17626a"
          stroke-width="1.02467"
          id="path11"
          style="fill:url(#needleBrassGrad)" />
@@ -131,7 +131,7 @@
          cy="0"
          r="7"
          fill="url(#brassGearGrad)"
-         stroke="#073136"
+         stroke="#0f4b52"
          stroke-width="1.1"
          id="circle11" />
       <circle
