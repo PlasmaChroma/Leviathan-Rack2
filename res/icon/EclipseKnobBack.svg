@@ -33,7 +33,7 @@
       <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(320,60,60)" />
       <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" transform="rotate(340,60,60)" />
     </g>
-    <g id="gear-teeth-group" stroke="#d0b56c" stroke-width="1.08" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.56">
+    <g id="gear-teeth-group" stroke="#dcc173" stroke-width="1.18" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.68">
       <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(0,60,60)" />
       <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(20,60,60)" />
       <path d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" fill="url(#toothFaceGrad)" transform="rotate(40,60,60)" />
