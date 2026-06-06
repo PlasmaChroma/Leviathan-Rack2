@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="18.061967"
-     inkscape:cx="19.045544"
-     inkscape:cy="23.723883"
+     inkscape:zoom="36.123934"
+     inkscape:cx="22.450489"
+     inkscape:cy="24.236009"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -135,6 +135,35 @@
          stop-opacity="1"
          id="stop13" />
     </linearGradient>
+    <radialGradient
+       id="obsidianCap"
+       cx="27.35"
+       cy="27.05"
+       r="2.6"
+       fx="27.05"
+       fy="26.65"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#607281"
+         stop-opacity="1"
+         id="obsidianCapStop1" />
+      <stop
+         offset="0.22"
+         stop-color="#1b222b"
+         stop-opacity="1"
+         id="obsidianCapStop2" />
+      <stop
+         offset="0.58"
+         stop-color="#05070a"
+         stop-opacity="1"
+         id="obsidianCapStopMid" />
+      <stop
+         offset="1"
+         stop-color="#010102"
+         stop-opacity="1"
+         id="obsidianCapStop3" />
+    </radialGradient>
     <linearGradient
        inkscape:collect="always"
        xlink:href="#gearKnobGlass"
@@ -188,7 +217,7 @@
        cx="28"
        cy="28"
        r="1.65"
-       style="display:inline;fill:#050403;stroke:#19110a;stroke-width:0.22" />
+       style="display:inline;fill:url(#obsidianCap);stroke:#4b5863;stroke-width:0.22" />
     <circle
        cx="28"
        cy="28"
@@ -216,6 +245,6 @@
        r="2.0999999"
        fill="#080503"
        id="circle9"
-       style="display:inline" />
+       style="display:inline;fill:url(#obsidianCap);stroke:#4b5863;stroke-width:0.22;stroke-opacity:0.82" />
   </g>
 </svg>

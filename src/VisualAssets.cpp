@@ -341,7 +341,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const float direction = (endAngle >= startAngle) ? 1.f : -1.f;
 	const float sweep = std::fabs(endAngle - startAngle);
 	const float dashAngle = 0.11f;
-	const float gapAngle = 0.205f;
+	const float gapAngle = 0.225f;
 
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
