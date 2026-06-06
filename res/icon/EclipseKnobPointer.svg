@@ -93,7 +93,7 @@
   </defs>
   <g
      id="rotating-component"
-     transform="translate(60,60)">
+     transform="translate(60,60) scale(1.04)">
     <circle
        cx="0"
        cy="0"
