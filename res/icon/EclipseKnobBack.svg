@@ -29,7 +29,7 @@
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg59" />
+     inkscape:current-layer="outer-gear-rim" />
   <defs
      id="defs5">
     <linearGradient
@@ -67,6 +67,39 @@
          stop-color="#17171b"
          id="stop5" />
     </radialGradient>
+    <linearGradient
+       id="metallicGoldTeethGrad"
+       x1="0"
+       y1="0"
+       x2="120"
+       y2="120"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#f2dc8a"
+         id="stop6" />
+      <stop
+         offset="42%"
+         stop-color="#a67d22"
+         id="stop7" />
+      <stop
+         offset="100%"
+         stop-color="#4e3510"
+         id="stop8" />
+    </linearGradient>
+    <filter
+       inkscape:collect="always"
+       style="color-interpolation-filters:sRGB"
+       id="filter72"
+       x="-0.0030052069"
+       y="-0.0029948111"
+       width="1.0060104"
+       height="1.0059896">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="0.14774401"
+         id="feGaussianBlur72" />
+    </filter>
   </defs>
   <g
      id="outer-gear-rim"
@@ -75,7 +108,86 @@
     <path
        id="circle5"
        style="fill:url(#darkGearGrad);stroke:none"
-       d="M 110.5,60 A 50.5,50.5 0 1 0 9.5,60 A 50.5,50.5 0 1 0 110.5,60 Z M 53.70,11.00 L 56.00,0.80 L 64.00,0.80 L 66.30,11.00 Z M 70.84,11.80 L 76.49,3.00 L 84.01,5.74 L 82.68,16.11 Z M 86.67,18.41 L 94.99,12.08 L 101.12,17.22 L 96.32,26.51 Z M 99.29,30.04 L 109.27,26.94 L 113.27,33.86 L 105.59,40.96 Z M 107.16,45.29 L 117.61,45.78 L 119.00,53.66 L 109.35,57.70 Z M 109.35,62.30 L 119.00,66.34 L 117.61,74.22 L 107.16,74.71 Z M 105.59,79.04 L 113.27,86.14 L 109.27,93.06 L 99.29,89.96 Z M 96.32,93.49 L 101.12,102.78 L 94.99,107.92 L 86.67,101.59 Z M 82.68,103.89 L 84.01,114.26 L 76.49,117.00 L 70.84,108.20 Z M 66.30,109.00 L 64.00,119.20 L 56.00,119.20 L 53.70,109.00 Z M 49.16,108.20 L 43.51,117.00 L 35.99,114.26 L 37.32,103.89 Z M 33.33,101.59 L 25.01,107.92 L 18.88,102.78 L 23.68,93.49 Z M 20.71,89.96 L 10.73,93.06 L 6.73,86.14 L 14.41,79.04 Z M 12.84,74.71 L 2.39,74.22 L 1.00,66.34 L 10.65,62.30 Z M 10.65,57.70 L 1.00,53.66 L 2.39,45.78 L 12.84,45.29 Z M 14.41,40.96 L 6.73,33.86 L 10.73,26.94 L 20.71,30.04 Z M 23.68,26.51 L 18.88,17.22 L 25.01,12.08 L 33.33,18.41 Z M 37.32,16.11 L 35.99,5.74 L 43.51,3.00 L 49.16,11.80 Z" />
+       d="M 110.5,60 A 50.5,50.5 0 1 0 9.5,60 A 50.5,50.5 0 1 0 110.5,60 Z M 55.20,11.00 L 57.00,0.80 L 63.00,0.80 L 64.80,11.00 Z M 72.25,12.31 L 77.43,3.34 L 83.07,5.40 L 81.27,15.60 Z M 87.82,19.38 L 95.75,12.72 L 100.35,16.58 L 95.17,25.55 Z M 100.04,31.34 L 109.77,27.80 L 112.77,33.00 L 104.84,39.66 Z M 107.42,46.76 L 117.78,46.77 L 118.82,52.67 L 109.09,56.22 Z M 109.09,63.78 L 118.82,67.33 L 117.78,73.23 L 107.42,73.24 Z M 104.84,80.34 L 112.77,87.00 L 109.77,92.20 L 100.04,88.66 Z M 95.17,94.45 L 100.35,103.42 L 95.75,107.28 L 87.82,100.62 Z M 81.27,104.40 L 83.07,114.60 L 77.43,116.66 L 72.25,107.69 Z M 64.80,109.00 L 63.00,119.20 L 57.00,119.20 L 55.20,109.00 Z M 47.75,107.69 L 42.57,116.66 L 36.93,114.60 L 38.73,104.40 Z M 32.18,100.62 L 24.25,107.28 L 19.65,103.42 L 24.83,94.45 Z M 19.96,88.66 L 10.23,92.20 L 7.23,87.00 L 15.16,80.34 Z M 12.58,73.24 L 2.22,73.23 L 1.18,67.33 L 10.91,63.78 Z M 10.91,56.22 L 1.18,52.67 L 2.22,46.77 L 12.58,46.76 Z M 15.16,39.66 L 7.23,33.00 L 10.23,27.80 L 19.96,31.34 Z M 24.83,25.55 L 19.65,16.58 L 24.25,12.72 L 32.18,19.38 Z M 38.73,15.60 L 36.93,5.40 L 42.57,3.34 L 47.75,12.31 Z" />
+    <g
+       id="gear-teeth-metallic-gold"
+       fill="url(#metallicGoldTeethGrad)"
+       stroke="none"
+       opacity="0.88"
+       style="opacity:0.33;filter:url(#filter72)">
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(0,60,60)"
+         id="path1" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(20,60,60)"
+         id="path2" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(40,60,60)"
+         id="path3" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(60,60,60)"
+         id="path4" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(80,60,60)"
+         id="path5" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(100,60,60)"
+         id="path6" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(120,60,60)"
+         id="path7" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(140,60,60)"
+         id="path8" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(160,60,60)"
+         id="path9" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(180,60,60)"
+         id="path10" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(200,60,60)"
+         id="path11" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(220,60,60)"
+         id="path12" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(240,60,60)"
+         id="path13" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(260,60,60)"
+         id="path14" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(280,60,60)"
+         id="path15" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(300,60,60)"
+         id="path16" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(320,60,60)"
+         id="path17" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11 Z"
+         transform="rotate(340,60,60)"
+         id="path18" />
+    </g>
     <g
        id="gear-teeth-shadow"
        fill="none"
@@ -85,77 +197,77 @@
        stroke-linejoin="round"
        stroke-opacity="0.62">
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
          transform="rotate(0,60,60)"
-         id="path5" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(20,60,60)"
-         id="path6" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(40,60,60)"
-         id="path7" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(60,60,60)"
-         id="path8" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(80,60,60)"
-         id="path9" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(100,60,60)"
-         id="path10" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(120,60,60)"
-         id="path11" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(140,60,60)"
-         id="path12" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(160,60,60)"
-         id="path13" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(180,60,60)"
-         id="path14" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(200,60,60)"
-         id="path15" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(220,60,60)"
-         id="path16" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(240,60,60)"
-         id="path17" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(260,60,60)"
-         id="path18" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(280,60,60)"
          id="path19" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(300,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(20,60,60)"
          id="path20" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(320,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(40,60,60)"
          id="path21" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11"
-         transform="rotate(340,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(60,60,60)"
          id="path22" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(80,60,60)"
+         id="path23" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(100,60,60)"
+         id="path24" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(120,60,60)"
+         id="path25" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(140,60,60)"
+         id="path26" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(160,60,60)"
+         id="path27" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(180,60,60)"
+         id="path28" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(200,60,60)"
+         id="path29" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(220,60,60)"
+         id="path30" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(240,60,60)"
+         id="path31" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(260,60,60)"
+         id="path32" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(280,60,60)"
+         id="path33" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(300,60,60)"
+         id="path34" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(320,60,60)"
+         id="path35" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(340,60,60)"
+         id="path36" />
     </g>
     <g
        id="gear-teeth-group"
@@ -166,77 +278,77 @@
        stroke-linejoin="round"
        stroke-opacity="0.82">
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
          transform="rotate(0,60,60)"
-         id="path23" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(20,60,60)"
-         id="path24" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(40,60,60)"
-         id="path25" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(60,60,60)"
-         id="path26" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(80,60,60)"
-         id="path27" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(100,60,60)"
-         id="path28" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(120,60,60)"
-         id="path29" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(140,60,60)"
-         id="path30" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(160,60,60)"
-         id="path31" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(180,60,60)"
-         id="path32" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(200,60,60)"
-         id="path33" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(220,60,60)"
-         id="path34" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(240,60,60)"
-         id="path35" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(260,60,60)"
-         id="path36" />
-      <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(280,60,60)"
          id="path37" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(300,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(20,60,60)"
          id="path38" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(320,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(40,60,60)"
          id="path39" />
       <path
-         d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11" 
-         transform="rotate(340,60,60)"
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(60,60,60)"
          id="path40" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(80,60,60)"
+         id="path41" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(100,60,60)"
+         id="path42" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(120,60,60)"
+         id="path43" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(140,60,60)"
+         id="path44" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(160,60,60)"
+         id="path45" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(180,60,60)"
+         id="path46" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(200,60,60)"
+         id="path47" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(220,60,60)"
+         id="path48" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(240,60,60)"
+         id="path49" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(260,60,60)"
+         id="path50" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(280,60,60)"
+         id="path51" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(300,60,60)"
+         id="path52" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(320,60,60)"
+         id="path53" />
+      <path
+         d="M 55.2,11 L 57,0.8 L 63,0.8 L 64.8,11"
+         transform="rotate(340,60,60)"
+         id="path54" />
     </g>
     <g
        id="gear-tooth-tip-glints"
@@ -246,77 +358,77 @@
        stroke-linecap="round"
        stroke-opacity="0.82">
       <path
-         d="M 56.25,1.3 L 63.75,1.3"
+         d="M 57.35,1.3 L 62.65,1.3"
          transform="rotate(0,60,60)"
-         id="path41" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(20,60,60)"
-         id="path42" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(40,60,60)"
-         id="path43" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(60,60,60)"
-         id="path44" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(80,60,60)"
-         id="path45" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(100,60,60)"
-         id="path46" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(120,60,60)"
-         id="path47" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(140,60,60)"
-         id="path48" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(160,60,60)"
-         id="path49" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(180,60,60)"
-         id="path50" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(200,60,60)"
-         id="path51" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(220,60,60)"
-         id="path52" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(240,60,60)"
-         id="path53" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(260,60,60)"
-         id="path54" />
-      <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(280,60,60)"
          id="path55" />
       <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(300,60,60)"
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(20,60,60)"
          id="path56" />
       <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(320,60,60)"
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(40,60,60)"
          id="path57" />
       <path
-         d="M 56.25,1.3 L 63.75,1.3"
-         transform="rotate(340,60,60)"
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(60,60,60)"
          id="path58" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(80,60,60)"
+         id="path59" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(100,60,60)"
+         id="path60" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(120,60,60)"
+         id="path61" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(140,60,60)"
+         id="path62" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(160,60,60)"
+         id="path63" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(180,60,60)"
+         id="path64" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(200,60,60)"
+         id="path65" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(220,60,60)"
+         id="path66" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(240,60,60)"
+         id="path67" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(260,60,60)"
+         id="path68" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(280,60,60)"
+         id="path69" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(300,60,60)"
+         id="path70" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(320,60,60)"
+         id="path71" />
+      <path
+         d="M 57.35,1.3 L 62.65,1.3"
+         transform="rotate(340,60,60)"
+         id="path72" />
     </g>
     <circle
        cx="60"
