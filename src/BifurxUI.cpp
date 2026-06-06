@@ -950,6 +950,8 @@ struct BifurxWidget final : ModuleWidget {
 				addSchemeItem(Bifurx::SCHEME_CLASSIC, "Classic (Green/Red)");
 				addSchemeItem(Bifurx::SCHEME_MONOCHROME, "Monochrome (Gray/White)");
 				addSchemeItem(Bifurx::SCHEME_FIRE, "Fire (Red/Yellow)");
+				addSchemeItem(Bifurx::SCHEME_RETRO_AMBER, "Retro Amber");
+				addSchemeItem(Bifurx::SCHEME_RETRO_GREEN, "Retro Green");
 			}));
 			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
