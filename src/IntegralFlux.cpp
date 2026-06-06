@@ -1659,9 +1659,9 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setProgressRingBipolar(true);
 			addParam(knob);
 		};
-		addBipolarEclipseKnob(attenuate1KnobPos, IntegralFlux::ATTENUATE_1_PARAM);
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
 		addBipolarEclipseKnob(attenuate2KnobPos, IntegralFlux::ATTENUATE_2_PARAM);
-		addBipolarEclipseKnob(attenuate3KnobPos, IntegralFlux::ATTENUATE_3_PARAM);
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
 		addBipolarEclipseKnob(attenuate4KnobPos, IntegralFlux::ATTENUATE_4_PARAM);
 
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));

@@ -428,20 +428,26 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const float startNorm = bipolar ? centerNorm : 0.f;
 	const float startAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(startNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float direction = (endAngle >= startAngle) ? 1.f : -1.f;
 	const float sweep = std::fabs(endAngle - startAngle);
 	const float dashAngle = 0.11f;
 	const float gapAngle = 0.225f;
+	const float periodAngle = dashAngle + gapAngle;
+	const float topAngle = -0.5f * float(M_PI);
 
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
 
 	const float ringMinAngle = -0.5f * float(M_PI) + minAngle;
 	const float ringMaxAngle = -0.5f * float(M_PI) + maxAngle;
-	for (float a = ringMinAngle; a < ringMaxAngle; a += dashAngle + gapAngle) {
+	float firstSegmentAngle = topAngle + 0.5f * gapAngle;
+	while (firstSegmentAngle - periodAngle > ringMinAngle) {
+		firstSegmentAngle -= periodAngle;
+	}
+	for (float a = firstSegmentAngle; a < ringMaxAngle; a += periodAngle) {
 		const float b = std::min(a + dashAngle, ringMaxAngle);
+		if (b <= ringMinAngle) continue;
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, inactiveRadiusPx, a, b, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, inactiveRadiusPx, std::max(a, ringMinAngle), b, NVG_CW);
 		nvgStrokeColor(args.vg, nvgRGBA(92, 67, 8, 100));
 		nvgStrokeWidth(args.vg, inactiveStrokeWidthPx);
 		nvgStroke(args.vg);
@@ -449,16 +455,20 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 
 	if (sweep > 0.008f) {
 		const NVGcolor activeColor = nvgRGBA(255, 230, 128, 245);
-		for (float covered = 0.f; covered < sweep; covered += dashAngle + gapAngle) {
-			const float a0 = startAngle + direction * covered;
-			const float a1 = startAngle + direction * std::min(covered + dashAngle, sweep);
+		const float activeMinAngle = std::min(startAngle, endAngle);
+		const float activeMaxAngle = std::max(startAngle, endAngle);
+		for (float a = firstSegmentAngle; a < activeMaxAngle; a += periodAngle) {
+			const float b = a + dashAngle;
+			const float a0 = std::max(a, activeMinAngle);
+			const float a1 = std::min(b, activeMaxAngle);
+			if (a1 <= a0) continue;
 			nvgBeginPath(args.vg);
 			nvgArc(args.vg,
 				center.x,
 				center.y,
 				activeRadiusPx,
-				std::min(a0, a1),
-				std::max(a0, a1),
+				a0,
+				a1,
 				NVG_CW);
 			nvgStrokeColor(args.vg, activeColor);
 			nvgStrokeWidth(args.vg, activeStrokeWidthPx);
