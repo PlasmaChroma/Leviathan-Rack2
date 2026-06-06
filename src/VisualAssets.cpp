@@ -1,5 +1,6 @@
 #include "VisualAssets.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -7,6 +8,13 @@
 #include <string>
 
 namespace visual_assets {
+
+namespace {
+
+thread_local uint64_t gEclipseShadowDrawNs = 0u;
+thread_local uint64_t gEclipseShadowDrawCount = 0u;
+
+} // namespace
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 	static std::map<std::string, std::shared_ptr<window::Svg>> cache;
@@ -18,6 +26,19 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 	std::shared_ptr<window::Svg> svg = Svg::load(asset::plugin(pluginInstance, key));
 	cache[key] = svg;
 	return svg;
+}
+
+void resetEclipseShadowDrawMetrics() {
+	gEclipseShadowDrawNs = 0u;
+	gEclipseShadowDrawCount = 0u;
+}
+
+uint64_t eclipseShadowDrawNs() {
+	return gEclipseShadowDrawNs;
+}
+
+uint64_t eclipseShadowDrawCount() {
+	return gEclipseShadowDrawCount;
 }
 
 } // namespace visual_assets
@@ -415,6 +436,81 @@ void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+namespace {
+
+void drawEclipseGearShadowPath(NVGcontext* vg) {
+	nvgBeginPath(vg);
+	nvgCircle(vg, 60.f, 60.f, 50.5f);
+
+	const float baseX[4] = {53.7f, 56.f, 64.f, 66.3f};
+	const float baseY[4] = {11.f, 0.8f, 0.8f, 11.f};
+	for (int tooth = 0; tooth < 18; ++tooth) {
+		const float angle = tooth * (2.f * float(M_PI) / 18.f);
+		const float c = std::cos(angle);
+		const float s = std::sin(angle);
+		for (int i = 0; i < 4; ++i) {
+			const float x = baseX[i] - 60.f;
+			const float y = baseY[i] - 60.f;
+			const float rx = 60.f + x * c - y * s;
+			const float ry = 60.f + x * s + y * c;
+			if (i == 0) {
+				nvgMoveTo(vg, rx, ry);
+			}
+			else {
+				nvgLineTo(vg, rx, ry);
+			}
+		}
+		nvgClosePath(vg);
+	}
+}
+
+void drawEclipseGearShadow(const Widget::DrawArgs& args, Vec boxSize, float angleRad) {
+	const float diameterPx = std::min(boxSize.x, boxSize.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = boxSize.mult(0.5f);
+	const float scale = diameterPx / 120.f;
+	struct ShadowPass {
+		float offsetX;
+		float offsetY;
+		float scaleMul;
+		unsigned char alpha;
+	};
+	const ShadowPass passes[] = {
+		{0.28f, 0.42f, 1.004f, 48},
+		{0.68f, 0.92f, 1.012f, 82},
+		{1.18f, 1.55f, 1.024f, 46},
+	};
+
+	nvgSave(args.vg);
+	for (const ShadowPass& pass : passes) {
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x + pass.offsetX, center.y + pass.offsetY);
+		nvgRotate(args.vg, angleRad);
+		nvgScale(args.vg, scale * pass.scaleMul, scale * pass.scaleMul);
+		nvgTranslate(args.vg, -60.f, -60.f);
+		drawEclipseGearShadowPath(args.vg);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, pass.alpha));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+	nvgRestore(args.vg);
+}
+
+} // namespace
+
+void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
+	const bool measure = isDragonKingDebugEnabled();
+	const std::chrono::steady_clock::time_point start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+	const float angle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	drawEclipseGearShadow(args, box.size, angle);
+	if (measure) {
+		visual_assets::gEclipseShadowDrawNs += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - start).count());
+		visual_assets::gEclipseShadowDrawCount++;
+	}
+}
+
 EclipseKnob::EclipseKnob() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
@@ -431,6 +527,12 @@ EclipseKnob::EclipseKnob() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	shadowLayer = new ShadowWidget();
+	shadowLayer->box.size = box.size;
+	shadowLayer->minAngle = minAngle;
+	shadowLayer->maxAngle = maxAngle;
+	shadowLayer->valueNorm = normalizedParamValue();
+	fb->addChild(shadowLayer);
 	setBackSvg(backSvg);
 	progressRing = new ProgressRingWidget();
 	progressRing->box.size = box.size;
@@ -444,6 +546,9 @@ EclipseKnob::EclipseKnob() {
 void EclipseKnob::onChange(const ChangeEvent& e) {
 	app::SvgKnob::onChange(e);
 	const float valueNorm = normalizedParamValue();
+	if (shadowLayer) {
+		shadowLayer->valueNorm = valueNorm;
+	}
 	if (backLayer) {
 		backLayer->valueNorm = valueNorm;
 	}

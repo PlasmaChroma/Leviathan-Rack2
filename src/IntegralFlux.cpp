@@ -1486,6 +1486,8 @@ struct IntegralFluxWidget : ModuleWidget {
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
 	float eclipseDrawUsEma = 0.f;
+	float eclipseShadowDrawUsEma = 0.f;
+	uint64_t eclipseShadowDrawsSinceSubmit = 0u;
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
@@ -1703,6 +1705,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		using PerfClock = std::chrono::steady_clock;
 		gIntegralFluxGearDrawNsThisFrame = 0u;
 		gIntegralFluxEclipseDrawNsThisFrame = 0u;
+		visual_assets::resetEclipseShadowDrawMetrics();
 		const PerfClock::time_point perfStart = PerfClock::now();
 		ModuleWidget::draw(args);
 		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
@@ -1716,6 +1719,12 @@ struct IntegralFluxWidget : ModuleWidget {
 		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
 		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
 		eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
+		const uint64_t eclipseShadowDraws = visual_assets::eclipseShadowDrawCount();
+		if (eclipseShadowDraws > 0u) {
+			const float eclipseShadowDrawUs = float(visual_assets::eclipseShadowDrawNs()) * 1e-3f;
+			eclipseShadowDrawUsEma = (eclipseShadowDrawUsEma > 0.f) ? (eclipseShadowDrawUsEma + (eclipseShadowDrawUs - eclipseShadowDrawUsEma) * 0.18f) : eclipseShadowDrawUs;
+			eclipseShadowDrawsSinceSubmit += eclipseShadowDraws;
+		}
 		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
 
@@ -1727,7 +1736,9 @@ struct IntegralFluxWidget : ModuleWidget {
 				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma, eclipseDrawUsEma);
+				const uint64_t eclipseShadowDrawsToSubmit = eclipseShadowDrawsSinceSubmit;
+				eclipseShadowDrawsSinceSubmit = 0u;
+				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma, eclipseDrawUsEma, eclipseShadowDrawUsEma, eclipseShadowDrawsToSubmit);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];

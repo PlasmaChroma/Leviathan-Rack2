@@ -5,6 +5,9 @@
 namespace visual_assets {
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
+void resetEclipseShadowDrawMetrics();
+uint64_t eclipseShadowDrawNs();
+uint64_t eclipseShadowDrawCount();
 
 } // namespace visual_assets
 
@@ -76,7 +79,16 @@ struct EclipseKnob : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
+	struct ShadowWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		void draw(const DrawArgs& args) override;
+	};
+
 	ProgressRingWidget* progressRing = nullptr;
+	ShadowWidget* shadowLayer = nullptr;
 	SvgLayer* backLayer = nullptr;
 	SvgLayer* pointerLayer = nullptr;
 
