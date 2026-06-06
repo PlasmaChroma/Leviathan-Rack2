@@ -9,7 +9,7 @@
     <circle
        cx="60"
        cy="60"
-       r="52" />
+       r="56" />
     <path
        d="M 53.7,11 L 56,0.8 L 64,0.8 L 66.3,11 Z"
        transform="rotate(0,60,60)" />

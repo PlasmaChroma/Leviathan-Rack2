@@ -419,7 +419,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	if (diameterPx <= 1.f) return;
 
 	const Vec center = box.size.mult(0.5f);
-	const float radiusPx = diameterPx * (41.f / 120.f);
+	const float radiusPx = diameterPx * (45.f / 120.f);
 	const float strokeWidthPx = std::max(1.35f, diameterPx * (5.8f / 120.f));
 	const float inactiveStrokeWidthPx = std::max(0.95f, strokeWidthPx * 0.84f);
 	const float inactiveRadiusPx = radiusPx - 0.5f * (inactiveStrokeWidthPx - strokeWidthPx * 0.72f);
