@@ -75,6 +75,89 @@ void setSvgPortSizePx(app::SvgPort* port, float px) {
 
 constexpr float kMagitekPortSizePx = 24.5f;
 
+struct MagitekInputShadow : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const Vec center = box.size.div(2.f).plus(Vec(1.6f, 2.5f));
+		const float outerRadius = std::min(box.size.x, box.size.y) * 0.43f;
+		const float innerRadius = outerRadius * 0.35f;
+		NVGpaint paint = nvgRadialGradient(args.vg,
+			center.x,
+			center.y,
+			innerRadius,
+			outerRadius,
+			nvgRGBA(0, 0, 0, 92),
+			nvgRGBA(0, 0, 0, 0));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, outerRadius);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+};
+
+struct MagitekOutputShadow : TransparentWidget {
+	void drawHex(const DrawArgs& args, float radius, NVGcolor color) {
+		const Vec center = box.size.div(2.f).plus(Vec(0.55f, 0.95f));
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < 6; ++i) {
+			const float angle = -0.5f * M_PI + float(i) * (M_PI / 3.f);
+			const float x = center.x + std::cos(angle) * radius;
+			const float y = center.y + std::sin(angle) * radius;
+			if (i == 0) {
+				nvgMoveTo(args.vg, x, y);
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+		}
+		nvgClosePath(args.vg);
+		nvgFillColor(args.vg, color);
+		nvgFill(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float radius = kMagitekPortSizePx * 0.46f;
+		drawHex(args, radius * 1.34f, nvgRGBA(0, 0, 0, 28));
+		drawHex(args, radius * 1.13f, nvgRGBA(0, 0, 0, 62));
+		drawHex(args, radius * 0.93f, nvgRGBA(0, 0, 0, 132));
+	}
+};
+
+void installMagitekShadow(app::SvgPort* port, Widget* customShadow) {
+	if (!port || !customShadow) {
+		delete customShadow;
+		return;
+	}
+	if (port->shadow) {
+		port->shadow->opacity = 0.f;
+	}
+	const bool inputShadow = dynamic_cast<MagitekInputShadow*>(customShadow) != nullptr;
+	const bool outputShadow = dynamic_cast<MagitekOutputShadow*>(customShadow) != nullptr;
+	widget::FramebufferWidget* shadowFb = new widget::FramebufferWidget();
+	shadowFb->dirtyOnSubpixelChange = false;
+	if (inputShadow) {
+		const Vec bleed(8.f, 8.f);
+		shadowFb->box.pos = bleed.mult(-0.5f);
+		shadowFb->box.size = port->box.size.plus(bleed);
+	}
+	else if (outputShadow) {
+		const Vec bleed(10.f, 10.f);
+		shadowFb->box.pos = bleed.mult(-0.5f);
+		shadowFb->box.size = port->box.size.plus(bleed);
+	}
+	else {
+		shadowFb->box.size = port->box.size;
+	}
+	customShadow->box.pos = Vec(0.f, 0.f);
+	customShadow->box.size = shadowFb->box.size;
+	shadowFb->addChild(customShadow);
+	if (port->fb) {
+		port->addChildBelow(shadowFb, port->fb);
+	}
+	else {
+		port->addChildBottom(shadowFb);
+	}
+}
+
 struct ClockworkDragDebugRecorder {
 	std::ofstream file;
 	std::string path;
@@ -174,11 +257,13 @@ static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 MagitekInputJack::MagitekInputJack() {
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_input.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx);
+	installMagitekShadow(this, new MagitekInputShadow);
 }
 
 MagitekOutputJack::MagitekOutputJack() {
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_output.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx);
+	installMagitekShadow(this, new MagitekOutputShadow);
 }
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
