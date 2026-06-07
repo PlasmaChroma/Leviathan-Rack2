@@ -1600,7 +1600,12 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 		m.x = mX;
 		m.yCurve = curveYAtX01(anchor.x01, spectrumBottomY, spectrumTopY);
 		const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-		m.yMarker = markerPinnedToBottomLane(mIdx) ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
+		const bool allowBottomCurveMarker = state.previewState.mode == 0 || state.previewState.mode == 9;
+		m.yMarker = markerPinnedToBottomLane(mIdx)
+			? markerBottomLaneY
+			: (allowBottomCurveMarker && m.yCurve > mMaxY)
+				? std::min(m.yCurve, spectrumBottomY)
+				: clamp(m.yCurve, mMinY, mMaxY);
 		m.hz = std::max(anchor.hz, 1e-6f);
 		m.visible = true;
 		formatFrequencyLabel(m.hz, m.label, sizeof(m.label));
