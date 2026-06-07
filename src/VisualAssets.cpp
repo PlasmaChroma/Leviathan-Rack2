@@ -334,7 +334,7 @@ void GearKnobInvertSized::onDragStart(const DragStartEvent& e) {
 		return;
 	}
 	dragMoveFrame = 0;
-	if (isDragonKingDebugEnabled()) {
+	if (isClockworkDragDebugLoggingEnabled()) {
 		dragLogGestureId = clockworkDragDebugRecorder().nextGesture();
 		const float valueBefore = clockworkParamValue(this);
 		clockworkDragDebugRecorder().log("start", this, dragLogGestureId, -1, Vec(), Vec(), 0.f, false, valueBefore, valueBefore);
@@ -350,7 +350,7 @@ void GearKnobInvertSized::onDragEnd(const DragEndEvent& e) {
 		app::SvgKnob::onDragEnd(e);
 		return;
 	}
-	if (isDragonKingDebugEnabled() && dragLogGestureId != 0) {
+	if (isClockworkDragDebugLoggingEnabled() && dragLogGestureId != 0) {
 		const float valueAfter = clockworkParamValue(this);
 		clockworkDragDebugRecorder().log("end", this, dragLogGestureId, dragMoveFrame, Vec(), Vec(), 0.f, false, valueAfter, valueAfter);
 	}
@@ -364,7 +364,7 @@ void GearKnobInvertSized::onDragMove(const DragMoveEvent& e) {
 		app::SvgKnob::onDragMove(e);
 		return;
 	}
-	const bool logMove = isDragonKingDebugEnabled() && dragLogGestureId != 0 && dragMoveFrame < 8;
+	const bool logMove = isClockworkDragDebugLoggingEnabled() && dragLogGestureId != 0 && dragMoveFrame < 8;
 	const float valueBefore = logMove ? clockworkParamValue(this) : NAN;
 	dragMoveFrame++;
 	app::SvgKnob::onDragMove(e);
