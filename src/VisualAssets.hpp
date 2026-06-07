@@ -5,6 +5,9 @@
 namespace visual_assets {
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
+void resetEclipseShadowDrawMetrics();
+uint64_t eclipseShadowDrawNs();
+uint64_t eclipseShadowDrawCount();
 
 } // namespace visual_assets
 
@@ -22,17 +25,38 @@ struct GearKnobInvertSized : app::SvgKnob {
 		float innerLineWidthSourcePx = 0.55f;
 		bool bipolar = false;
 		float centerNorm = 0.5f;
+		double liquidShimmerUntil = 0.0;
 
 		void draw(const DrawArgs& args) override;
 	};
 
+	struct ShadowWidget : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		ShadowWidget();
+		void setSvg(std::shared_ptr<window::Svg> svg);
+		void draw(const DrawArgs& args) override;
+	};
+
 	ActiveRingWidget* activeRing = nullptr;
+	ShadowWidget* shadowLayer = nullptr;
 	widget::FramebufferWidget* cachedSvgFb = nullptr;
 	widget::SvgWidget* cachedSvgSw = nullptr;
+	int dragMoveFrame = 0;
+	uint64_t dragLogGestureId = 0;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
+	void step() override;
 	void onChange(const ChangeEvent& e) override;
+	void onDragStart(const DragStartEvent& e) override;
+	void onDragEnd(const DragEndEvent& e) override;
+	void onDragMove(const DragMoveEvent& e) override;
 
 	void setCachedSvg(std::shared_ptr<window::Svg> svg);
 	float normalizedParamValue();
@@ -44,6 +68,58 @@ struct TinyClockworkGearKnob : GearKnobInvertSized {
 
 struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 	BipolarTinyClockworkGearKnob();
+};
+
+struct EclipseKnob : app::SvgKnob {
+	struct ProgressRingWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		float centerNorm = 0.5f;
+		bool bipolar = false;
+
+		void draw(const DrawArgs& args) override;
+	};
+
+	struct SvgLayer : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		bool rotateWithValue = true;
+
+		SvgLayer();
+		void setSvg(std::shared_ptr<window::Svg> svg);
+		void draw(const DrawArgs& args) override;
+	};
+
+	struct ShadowWidget : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
+		widget::FramebufferWidget* cachedSvgFb = nullptr;
+		widget::SvgWidget* cachedSvgSw = nullptr;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		ShadowWidget();
+		void setSvg(std::shared_ptr<window::Svg> svg);
+		void draw(const DrawArgs& args) override;
+	};
+
+	ProgressRingWidget* progressRing = nullptr;
+	ShadowWidget* shadowLayer = nullptr;
+	SvgLayer* backLayer = nullptr;
+	SvgLayer* pointerLayer = nullptr;
+
+	EclipseKnob();
+	void onChange(const ChangeEvent& e) override;
+
+	void setBackSvg(std::shared_ptr<window::Svg> svg);
+	void setPointerSvg(std::shared_ptr<window::Svg> svg);
+	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
+	float normalizedParamValue();
 };
 
 struct ClockworkGearKnob : GearKnobInvertSized {
@@ -69,3 +145,5 @@ struct ClockworkGearKnob : GearKnobInvertSized {
 
 	void updateCogwheelGeometry();
 };
+
+using BigClockworkGearKnob = ClockworkGearKnob;

@@ -562,6 +562,8 @@ struct Bifurx : Module {
 		SCHEME_CLASSIC,
 		SCHEME_MONOCHROME,
 		SCHEME_FIRE,
+		SCHEME_RETRO_AMBER,
+		SCHEME_RETRO_GREEN,
 		SCHEME_LEN
 	};
 	enum ParamId {

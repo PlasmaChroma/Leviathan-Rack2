@@ -43,8 +43,9 @@ extern Model* modelUndertow;
 // without depending on another plugin's custom class declarations.
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
-// Runtime feature flag: enabled when `res/dragonking.txt` exists.
+// Runtime feature flags loaded from `res/dragonking.txt`.
 bool isDragonKingDebugEnabled();
+bool isClockworkDragDebugLoggingEnabled();
 void refreshDragonKingDebugEnabled();
 
 struct PreviewBuildLogTimer {

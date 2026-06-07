@@ -31,10 +31,10 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/crownstep.svg", 80614ull, 0x276429bdb533ba55ull},
 	{"res/deck.svg", 137860ull, 0x8d5cf0b3c4012fbfull},
 	{"res/flux.svg", 212153ull, 0xa2aee2fdbbfa6a78ull},
-	{"res/proc.svg", 96107ull, 0x6d843c599c3eb37dull},
+	{"res/proc.svg", 96069ull, 0xad08cc5729890898ull},
 	{"res/sil.svg", 137528ull, 0x1983fe15ab63ac72ull},
-	{"res/tdscope.svg", 82905ull, 0xda06b2fa7a1b9be8ull},
-	{"res/undertow.svg", 91184ull, 0x37293a3a505bc274ull},
+	{"res/tdscope.svg", 82893ull, 0x8187442951122d6aull},
+	{"res/undertow.svg", 91187ull, 0x1163f15a23e6e9d1ull},
 	{"res/wyrm.svg", 82953ull, 0xd8050c9718972665ull},
 };
 

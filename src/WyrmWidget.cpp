@@ -379,12 +379,12 @@ struct WyrmWidget : ModuleWidget {
 		waveRight->module = module;
 		addParam(waveRight);
 
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
+		addParam(createParamCentered<BigClockworkGearKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
+		addParam(createParamCentered<EclipseKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));

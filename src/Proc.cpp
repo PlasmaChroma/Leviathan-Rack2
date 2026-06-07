@@ -1368,10 +1368,9 @@ struct ProcWidget : ModuleWidget {
 		setPanel(createPanel(panelPath));
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(0.f, 0)));
 		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		Vec cyclePos(33.075f, 20.138f);
 		Vec risePos(32.907f, 36.293f);
@@ -1423,9 +1422,9 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<ClockworkGearKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<BigClockworkGearKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<BigClockworkGearKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<BigClockworkGearKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
 		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();

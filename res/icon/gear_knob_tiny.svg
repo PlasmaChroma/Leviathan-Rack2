@@ -20,9 +20,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="67.583334"
-     inkscape:cx="14.618989"
-     inkscape:cy="11.548705"
+     inkscape:zoom="47.788634"
+     inkscape:cx="17.682029"
+     inkscape:cy="13.130737"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -92,6 +92,55 @@
          style="stop-color:#8f8780;stop-opacity:1"
          id="stop9" />
     </linearGradient>
+    <linearGradient
+       id="gearSmallObsidianPointer"
+       x1="26.15"
+       y1="18.8"
+       x2="29.85"
+       y2="28.5"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         style="stop-color:#3d4b57;stop-opacity:1"
+         id="obsidianSmallStop1" />
+      <stop
+         offset="0.18"
+         style="stop-color:#151b22;stop-opacity:1"
+         id="obsidianSmallStop2" />
+      <stop
+         offset="0.64"
+         style="stop-color:#020203;stop-opacity:1"
+         id="obsidianSmallStop3" />
+      <stop
+         offset="1"
+         style="stop-color:#1b242c;stop-opacity:1"
+         id="obsidianSmallStop4" />
+    </linearGradient>
+    <radialGradient
+       id="gearSmallObsidianCap"
+       cx="27.35"
+       cy="27.05"
+       r="2.8"
+       fx="27.05"
+       fy="26.65"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         style="stop-color:#607281;stop-opacity:1"
+         id="obsidianSmallCapStop1" />
+      <stop
+         offset="0.22"
+         style="stop-color:#1b222b;stop-opacity:1"
+         id="obsidianSmallCapStop2" />
+      <stop
+         offset="0.58"
+         style="stop-color:#05070a;stop-opacity:1"
+         id="obsidianSmallCapStopMid" />
+      <stop
+         offset="1"
+         style="stop-color:#010102;stop-opacity:1"
+         id="obsidianSmallCapStop3" />
+    </radialGradient>
   </defs>
   <g
      transform="scale(0.8214285714)"
@@ -115,12 +164,12 @@
     <path
        id="gearTinyPointer"
        d="m 26.029285,27.904395 c 0.312662,-3.316108 0.795866,-6.253231 1.496986,-9.095609 h 0.947459 c 0.70112,2.842378 1.184324,5.779501 1.496985,9.095609 -1.1559,0.615848 -2.78553,0.615848 -3.94143,0 z"
-       style="fill:#050403;stroke:#19110a;stroke-width:0.284238;stroke-linejoin:round" />
+       style="fill:url(#gearSmallObsidianPointer);stroke:#4b5863;stroke-width:0.284238;stroke-linejoin:round" />
     <circle
        id="gearSmallCenter"
        cx="28"
        cy="28"
        r="2.25"
-       style="fill:#14100c" />
+       style="fill:url(#gearSmallObsidianCap);stroke:#3d4854;stroke-width:0.18;stroke-opacity:0.7" />
   </g>
 </svg>

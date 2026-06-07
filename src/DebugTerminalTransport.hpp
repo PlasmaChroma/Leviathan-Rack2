@@ -49,6 +49,9 @@ void submitWyrmMetrics(uint32_t instanceId,
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                float uiMs,
                                float audioUs,
-                               float gearUs);
+                               float gearUs,
+                               float eclipseUs,
+                               float eclipseShadowUs,
+                               uint64_t eclipseShadowDraws);
 
 } // namespace debug_terminal

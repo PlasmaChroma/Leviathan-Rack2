@@ -225,6 +225,10 @@ BifurxColors BifurxColors::get(Bifurx::ColorScheme scheme) {
 			return {nvgRGBA(0x40, 0x40, 0x40, 0xff), nvgRGBA(0xff, 0xff, 0xff, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
 		case Bifurx::SCHEME_FIRE:
 			return {nvgRGBA(0x80, 0x00, 0x00, 0xff), nvgRGBA(0xff, 0xff, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+		case Bifurx::SCHEME_RETRO_AMBER:
+			return {nvgRGBA(0x5a, 0x2f, 0x00, 0xff), nvgRGBA(0xff, 0xb8, 0x3d, 0xff), nvgRGBA(0xff, 0xd8, 0x8a, 0xff)};
+		case Bifurx::SCHEME_RETRO_GREEN:
+			return {nvgRGBA(0x0b, 0x3d, 0x22, 0xff), nvgRGBA(0x49, 0xff, 0x8f, 0xff), nvgRGBA(0xb7, 0xff, 0xcc, 0xff)};
 		case Bifurx::SCHEME_DEFAULT:
 		default:
 			return {nvgRGBA(0x7a, 0x5c, 0xff, 0xff), nvgRGBA(0x1c, 0xcc, 0xd9, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
@@ -1596,7 +1600,12 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 		m.x = mX;
 		m.yCurve = curveYAtX01(anchor.x01, spectrumBottomY, spectrumTopY);
 		const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-		m.yMarker = markerPinnedToBottomLane(mIdx) ? markerBottomLaneY : clamp(m.yCurve, mMinY, mMaxY);
+		const bool allowBottomCurveMarker = state.previewState.mode == 0 || state.previewState.mode == 9;
+		m.yMarker = markerPinnedToBottomLane(mIdx)
+			? markerBottomLaneY
+			: (allowBottomCurveMarker && m.yCurve > mMaxY)
+				? std::min(m.yCurve, spectrumBottomY)
+				: clamp(m.yCurve, mMinY, mMaxY);
 		m.hz = std::max(anchor.hz, 1e-6f);
 		m.visible = true;
 		formatFrequencyLabel(m.hz, m.label, sizeof(m.label));
