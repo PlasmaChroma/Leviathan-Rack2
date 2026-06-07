@@ -364,21 +364,13 @@ void GearKnobInvertSized::onDragMove(const DragMoveEvent& e) {
 		app::SvgKnob::onDragMove(e);
 		return;
 	}
-	DragMoveEvent clampedEvent = e;
-	const float deltaLen = clampedEvent.mouseDelta.norm();
-	const float maxDeltaPx = dragMoveFrame == 0 ? 12.f : 48.f;
-	// Temporarily disabled for Rack drag-delta diagnostics so the original jump remains observable.
-	if (false && deltaLen > maxDeltaPx && deltaLen > 1e-6f) {
-		clampedEvent.mouseDelta = clampedEvent.mouseDelta.mult(maxDeltaPx / deltaLen);
-	}
-	const bool clamped = clampedEvent.mouseDelta.x != e.mouseDelta.x || clampedEvent.mouseDelta.y != e.mouseDelta.y;
-	const bool logMove = isDragonKingDebugEnabled() && dragLogGestureId != 0 && (dragMoveFrame < 8 || clamped);
+	const bool logMove = isDragonKingDebugEnabled() && dragLogGestureId != 0 && dragMoveFrame < 8;
 	const float valueBefore = logMove ? clockworkParamValue(this) : NAN;
 	dragMoveFrame++;
-	app::SvgKnob::onDragMove(clampedEvent);
+	app::SvgKnob::onDragMove(e);
 	if (logMove) {
 		const float valueAfter = clockworkParamValue(this);
-		clockworkDragDebugRecorder().log("move", this, dragLogGestureId, dragMoveFrame - 1, e.mouseDelta, clampedEvent.mouseDelta, maxDeltaPx, clamped, valueBefore, valueAfter);
+		clockworkDragDebugRecorder().log("move", this, dragLogGestureId, dragMoveFrame - 1, e.mouseDelta, e.mouseDelta, 0.f, false, valueBefore, valueAfter);
 	}
 }
 
