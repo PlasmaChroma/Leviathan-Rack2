@@ -12,7 +12,7 @@
 /dist
 
 # Local runtime debug flag
-dragonking.txt
+res/dragonking.txt
 
 # Python cache artifacts
 __pycache__/
