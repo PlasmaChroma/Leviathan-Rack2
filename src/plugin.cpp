@@ -6,19 +6,40 @@
 
 Plugin* pluginInstance;
 static std::atomic<bool> gDragonKingDebugEnabled{false};
+static std::atomic<bool> gClockworkDragDebugLoggingEnabled{false};
 
 void refreshDragonKingDebugEnabled() {
+	gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
+	gClockworkDragDebugLoggingEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
-		gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
 		return;
 	}
 	const std::string flagPath = asset::plugin(pluginInstance, "res/dragonking.txt");
 	std::ifstream flagFile(flagPath);
-	gDragonKingDebugEnabled.store(flagFile.good(), std::memory_order_relaxed);
+	if (!flagFile.good()) {
+		return;
+	}
+	json_error_t error;
+	json_t* root = json_load_file(flagPath.c_str(), 0, &error);
+	if (!root) {
+		gDragonKingDebugEnabled.store(true, std::memory_order_relaxed);
+		return;
+	}
+	if (json_is_object(root)) {
+		json_t* debugJ = json_object_get(root, "debug");
+		json_t* clockworkDragLoggingJ = json_object_get(root, "clockworkDragLogging");
+		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
+		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);
+	}
+	json_decref(root);
 }
 
 bool isDragonKingDebugEnabled() {
 	return gDragonKingDebugEnabled.load(std::memory_order_relaxed);
+}
+
+bool isClockworkDragDebugLoggingEnabled() {
+	return gClockworkDragDebugLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 
