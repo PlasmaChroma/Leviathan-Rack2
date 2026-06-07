@@ -36,7 +36,7 @@
        id="linearGradient1"
        inkscape:collect="always">
       <stop
-         style="stop-color:#7f6426;stop-opacity:1;"
+         style="stop-color:#9f4d1b;stop-opacity:1;"
          offset="0"
          id="stop10" />
       <stop
@@ -73,15 +73,15 @@
        y2="100%">
       <stop
          offset="0%"
-         stop-color="#fff4b6"
+         stop-color="#ffd29a"
          id="stop4" />
       <stop
          offset="50%"
-         stop-color="#e0b84a"
+         stop-color="#f08a24"
          id="stop5" />
       <stop
          offset="100%"
-         stop-color="#8f7130"
+         stop-color="#9e4518"
          id="stop6" />
     </linearGradient>
     <linearGradient
@@ -94,15 +94,15 @@
        gradientTransform="matrix(1.0048827,0,0,0.87943496,-2.237212e-5,0.03810377)">
       <stop
          offset="0%"
-         stop-color="#fff6c2"
+         stop-color="#ffd7a3"
          id="stop7" />
       <stop
          offset="1"
-         stop-color="#d7b13f"
+         stop-color="#f08a24"
          id="stop8" />
       <stop
          offset="100%"
-         stop-color="#a68435"
+         stop-color="#b3541b"
          id="stop9" />
     </linearGradient>
     <linearGradient
@@ -140,14 +140,14 @@
       <path
          d="M 0,0 6.4,10.8 C 2.2,16 -2.2,16 -6.4,10.8 Z"
          fill="url(#brassGearGrad)"
-         stroke="#6f5a26"
+         stroke="#8f3f18"
          stroke-width="1"
          id="path10"
          style="display:none" />
       <path
          d="M 0,-37 L 4.8,-21 L 5.8,-2 L 0,3.4 L -5.8,-2 L -4.8,-21 Z"
          fill="url(#needleBrassGrad)"
-         stroke="#7f6426"
+         stroke="#9f4d1b"
          stroke-width="1.02467"
          id="path11"
          style="fill:url(#needleBrassGrad);stroke:url(#linearGradient11);stroke-width:0.89285714;stroke-dasharray:none;stroke-linejoin:miter;stroke-linecap:butt" />
@@ -156,7 +156,7 @@
          cy="0"
          r="7"
          fill="url(#brassGearGrad)"
-         stroke="#6f5a26"
+         stroke="#8f3f18"
          stroke-width="1.1"
          id="circle11" />
       <circle

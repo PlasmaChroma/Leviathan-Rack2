@@ -937,18 +937,18 @@ struct IntegralFlux : Module {
 		initKnobCurveLut();
 		debugInstanceId = gIntegralFluxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
+		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter", "%", 0.f, 200.f, -100.f);
 		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
 		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "CH4 cycle");
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise");
 		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "CH4 rise");
-		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "CH2 attenuverter");
+		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "CH2 attenuverter", "%", 0.f, 200.f, -100.f);
 		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall");
 		configParam(FALL_4_PARAM, 0.f, 1.f, 0.f, "CH4 fall");
-		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.5f, "CH3 attenuverter");
+		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.5f, "CH3 attenuverter", "%", 0.f, 200.f, -100.f);
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
 		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "CH4 shape");
-		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter");
+		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter", "%", 0.f, 200.f, -100.f);
 		configInput(INPUT_1_INPUT, "CH1 signal");
 		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
 		configInput(INPUT_2_INPUT, "CH2 signal");
@@ -1659,9 +1659,9 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setProgressRingBipolar(true);
 			addParam(knob);
 		};
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
+		addBipolarEclipseKnob(attenuate1KnobPos, IntegralFlux::ATTENUATE_1_PARAM);
 		addBipolarEclipseKnob(attenuate2KnobPos, IntegralFlux::ATTENUATE_2_PARAM);
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
+		addBipolarEclipseKnob(attenuate3KnobPos, IntegralFlux::ATTENUATE_3_PARAM);
 		addBipolarEclipseKnob(attenuate4KnobPos, IntegralFlux::ATTENUATE_4_PARAM);
 
 		addInput(createInputCentered<DarkPJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
