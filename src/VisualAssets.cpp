@@ -45,6 +45,36 @@ uint64_t eclipseShadowDrawCount() {
 
 namespace {
 
+void setSvgPortSizePx(app::SvgPort* port, float px) {
+	if (!port) {
+		return;
+	}
+	const Vec size(px, px);
+	if (port->fb && port->sw) {
+		const Vec svgSize = port->sw->box.size;
+		const float svgMax = std::max(svgSize.x, svgSize.y);
+		if (svgMax > 0.f) {
+			const float scale = px / svgMax;
+			port->fb->removeChild(port->sw);
+			port->sw->box.pos = Vec(0.f, 0.f);
+			TransformWidget* tw = new TransformWidget();
+			tw->addChild(port->sw);
+			tw->scale(Vec(scale, scale));
+			tw->box.size = svgSize.mult(scale);
+			port->fb->addChild(tw);
+		}
+	}
+	port->box.size = size;
+	if (port->fb) {
+		port->fb->box.size = size;
+	}
+	if (port->shadow) {
+		port->shadow->box.size = size;
+	}
+}
+
+constexpr float kMagitekPortSizePx = 24.5f;
+
 struct ClockworkDragDebugRecorder {
 	std::ofstream file;
 	std::string path;
@@ -141,6 +171,16 @@ static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 
 } // namespace
 
+MagitekInputJack::MagitekInputJack() {
+	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_input.svg")));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+}
+
+MagitekOutputJack::MagitekOutputJack() {
+	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_output.svg")));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+}
+
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 	const float clampedValueNorm = clamp(valueNorm, 0.f, 1.f);
 	const float clampedCenterNorm = clamp(centerNorm, 0.f, 1.f);
@@ -180,6 +220,7 @@ void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 		NVGpaint activePaint = nvgLinearGradient(args.vg,
 			center.x - ringRadius, center.y,
 			center.x + ringRadius, center.y,
+			// Eclipse-orange option: nvgRGBA(240, 138, 36, 248), nvgRGBA(255, 210, 154, 255)
 			nvgRGBA(255, 218, 42, 248),
 			nvgRGBA(255, 250, 205, 255));
 		nvgStrokePaint(args.vg, activePaint);
@@ -198,6 +239,7 @@ void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 				NVGpaint shimmerPaint = nvgLinearGradient(args.vg,
 					shimmerStartX, center.y - ringRadius,
 					shimmerStartX + ringRadius * 0.55f, center.y + ringRadius,
+					// Eclipse-orange option: nvgRGBA(255, 215, 163, 0), nvgRGBA(255, 230, 190, alpha)
 					nvgRGBA(255, 255, 220, 0),
 					nvgRGBA(255, 255, 250, (unsigned char) std::round(118.f * fade)));
 				nvgBeginPath(args.vg);
@@ -218,6 +260,7 @@ void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
+	// Eclipse-orange option: nvgRGBA(255, 210, 154, 76)
 	nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
 	if (innerLineWidthSourcePx > 0.f) {
 		nvgStrokeWidth(args.vg, innerLineWidthSourcePx * assetScale);

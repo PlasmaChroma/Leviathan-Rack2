@@ -11,6 +11,14 @@ uint64_t eclipseShadowDrawCount();
 
 } // namespace visual_assets
 
+struct MagitekInputJack : app::SvgPort {
+	MagitekInputJack();
+};
+
+struct MagitekOutputJack : app::SvgPort {
+	MagitekOutputJack();
+};
+
 struct GearKnobInvertSized : app::SvgKnob {
 	struct ActiveRingWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;

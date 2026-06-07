@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <linearGradient id="ironFlange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2d2d35" />
+      <stop offset="50%" stop-color="#1a1a20" />
+      <stop offset="100%" stop-color="#0f0f12" />
+    </linearGradient>
+    
+    <radialGradient id="barrelShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="#000000" />
+      <stop offset="100%" stop-color="#15151c" />
+    </radialGradient>
+  </defs>
+
+  <circle cx="20" cy="20" r="19" fill="url(#ironFlange)" stroke="#111115" stroke-width="1"/>
+  
+  <circle cx="20" cy="4" r="1" fill="#44444a"/>
+  <circle cx="20" cy="36" r="1" fill="#44444a"/>
+  <circle cx="4" cy="20" r="1" fill="#44444a"/>
+  <circle cx="36" cy="20" r="1" fill="#44444a"/>
+
+  <circle cx="20" cy="20" r="13" fill="url(#barrelShadow)" stroke="#2a2a30" stroke-width="1.5"/>
+
+  <circle cx="20" cy="20" r="9.5" fill="none" stroke="#ffd700" stroke-width="1.2" opacity="0.9" style="mix-blend-mode: screen;"/>
+  
+  <circle cx="20" cy="20" r="7.5" fill="#040405" stroke="#111" stroke-width="1"/>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <linearGradient id="imperialBrass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff1b0" />
+      <stop offset="30%" stop-color="#d4af37" />
+      <stop offset="70%" stop-color="#aa8010" />
+      <stop offset="100%" stop-color="#5a4505" />
+    </linearGradient>
+
+    <radialGradient id="amberGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffaa00" stop-opacity="0.2"/>
+      <stop offset="85%" stop-color="#ff5500" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#200a00"/>
+    </radialGradient>
+  </defs>
+
+  <polygon points="20,1 36.5,10.5 36.5,29.5 20,39 3.5,29.5 3.5,10.5" fill="#443005" stroke="#1a1302" stroke-width="1"/>
+  <polygon points="20,2.5 35,11.2 35,28.8 20,37.5 5,28.8 5,11.2" fill="url(#imperialBrass)"/>
+
+  <circle cx="20" cy="20" r="13.5" fill="#6e500b" stroke="#fff5c0" stroke-width="0.5"/>
+  <circle cx="20" cy="20" r="12" fill="#1c1301"/>
+
+  <circle cx="20" cy="20" r="10" fill="url(#amberGlow)"/>
+  <circle cx="20" cy="20" r="9.5" fill="none" stroke="#ff7700" stroke-width="1.5" style="mix-blend-mode: screen;"/>
+
+  <circle cx="20" cy="20" r="7.5" fill="#090300" stroke="#200a00" stroke-width="1"/>
+</svg>
