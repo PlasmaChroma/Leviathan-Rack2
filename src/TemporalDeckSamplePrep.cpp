@@ -43,6 +43,24 @@ void resampleSampleChannel(const std::vector<float> &src, float sourceRate, floa
   }
 }
 
+void buildPreparedPreview(PreparedSampleData *prepared) {
+  if (!prepared || prepared->frames <= 0 || prepared->left.empty()) {
+    return;
+  }
+  prepared->preview.reset(uint32_t(std::max(1, prepared->frames)));
+  prepared->sampleAbsolutePeakVolts = 0.f;
+  const int frames = std::min(prepared->frames, int(prepared->left.size()));
+  for (int i = 0; i < frames; ++i) {
+    const float l = prepared->left[i];
+    const float r = (prepared->monoStorage || prepared->right.empty()) ? l : prepared->right[std::min(i, int(prepared->right.size()) - 1)];
+    prepared->sampleAbsolutePeakVolts = std::max(prepared->sampleAbsolutePeakVolts, std::fabs(l));
+    prepared->sampleAbsolutePeakVolts = std::max(prepared->sampleAbsolutePeakVolts, std::fabs(r));
+    prepared->preview.pushMonoSample(0.5f * (l + r));
+  }
+  prepared->preview.finalizePartialBin();
+  prepared->previewValid = true;
+}
+
 } // namespace
 
 int chooseSampleBufferMode(const DecodedSampleFile &sample) {
@@ -107,6 +125,9 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
 
   prepared.frames = std::min(outFrames, int(prepared.left.size()));
   prepared.valid = prepared.frames > 0;
+  if (prepared.valid) {
+    buildPreparedPreview(&prepared);
+  }
   *outPrepared = std::move(prepared);
   return outPrepared->valid;
 }

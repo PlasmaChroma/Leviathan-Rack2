@@ -7,10 +7,12 @@
 Plugin* pluginInstance;
 static std::atomic<bool> gDragonKingDebugEnabled{false};
 static std::atomic<bool> gClockworkDragDebugLoggingEnabled{false};
+static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 
 void refreshDragonKingDebugEnabled() {
 	gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
 	gClockworkDragDebugLoggingEnabled.store(false, std::memory_order_relaxed);
+	gTemporalDeckLifetimeLoggingEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
 		return;
 	}
@@ -28,8 +30,10 @@ void refreshDragonKingDebugEnabled() {
 	if (json_is_object(root)) {
 		json_t* debugJ = json_object_get(root, "debug");
 		json_t* clockworkDragLoggingJ = json_object_get(root, "clockworkDragLogging");
+		json_t* temporalDeckLifetimeLoggingJ = json_object_get(root, "temporalDeckLifetimeLogging");
 		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);
+		gTemporalDeckLifetimeLoggingEnabled.store(json_boolean_value(temporalDeckLifetimeLoggingJ), std::memory_order_relaxed);
 	}
 	json_decref(root);
 }
@@ -40,6 +44,10 @@ bool isDragonKingDebugEnabled() {
 
 bool isClockworkDragDebugLoggingEnabled() {
 	return gClockworkDragDebugLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isTemporalDeckLifetimeLoggingEnabled() {
+	return gTemporalDeckLifetimeLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 

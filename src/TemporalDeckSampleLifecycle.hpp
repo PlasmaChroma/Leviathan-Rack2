@@ -5,6 +5,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -30,7 +31,7 @@ struct TemporalDeckSampleLifecycle {
   void startWorker();
   void stopWorker();
 
-  void requestAsyncSampleBuild(const AsyncSampleBuildRequest &request);
+  uint64_t requestAsyncSampleBuild(const AsyncSampleBuildRequest &request);
   bool sampleBuildInProgress() const;
   bool decodedSampleAvailable() const;
 
@@ -45,6 +46,7 @@ struct TemporalDeckSampleLifecycle {
   std::string sampleDisplayName() const;
   void sampleJsonSnapshot(std::string *pathOut) const;
   void setSampleSavedPath(const std::string &path);
+  void sampleMemorySnapshot(size_t *decodedBytesOut, size_t *preparedBytesOut) const;
 
 private:
   void workerLoop();

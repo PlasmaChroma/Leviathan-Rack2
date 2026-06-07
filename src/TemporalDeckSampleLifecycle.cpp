@@ -3,6 +3,7 @@
 #include "codec.hpp"
 #include "plugin.hpp"
 
+#include <chrono>
 #include <new>
 #include <utility>
 
@@ -13,6 +14,14 @@ using temporaldeck::chooseSampleBufferMode;
 using temporaldeck::decodeSampleFile;
 using temporaldeck::DecodedSampleFile;
 using temporaldeck::PreparedSampleData;
+
+namespace {
+
+double lifecycleElapsedMs(std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end) {
+  return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() * 1e-3;
+}
+
+} // namespace
 
 TemporalDeckSampleLifecycle::~TemporalDeckSampleLifecycle() {
   stopWorker();
@@ -38,15 +47,17 @@ void TemporalDeckSampleLifecycle::stopWorker() {
   }
 }
 
-void TemporalDeckSampleLifecycle::requestAsyncSampleBuild(const AsyncSampleBuildRequest &request) {
+uint64_t TemporalDeckSampleLifecycle::requestAsyncSampleBuild(const AsyncSampleBuildRequest &request) {
+  uint64_t requestSerial = 0u;
   {
     std::lock_guard<std::mutex> lock(sampleBuildMutex_);
     sampleBuildRequest_ = request;
     sampleBuildHasRequest_ = true;
-    sampleBuildRequestSerial_.fetch_add(1, std::memory_order_relaxed);
+    requestSerial = sampleBuildRequestSerial_.fetch_add(1, std::memory_order_relaxed) + 1u;
     sampleBuildInProgress_.store(true, std::memory_order_relaxed);
   }
   sampleBuildCv_.notify_one();
+  return requestSerial;
 }
 
 bool TemporalDeckSampleLifecycle::sampleBuildInProgress() const {
@@ -120,6 +131,17 @@ void TemporalDeckSampleLifecycle::setSampleSavedPath(const std::string &path) {
   sampleDisplayName_ = path.empty() ? std::string() : system::getFilename(path);
 }
 
+void TemporalDeckSampleLifecycle::sampleMemorySnapshot(size_t *decodedBytesOut, size_t *preparedBytesOut) const {
+  if (decodedBytesOut) {
+    std::lock_guard<std::mutex> lock(sampleStateMutex_);
+    *decodedBytesOut = (decodedSample_.left.capacity() + decodedSample_.right.capacity()) * sizeof(float);
+  }
+  if (preparedBytesOut) {
+    std::lock_guard<std::mutex> lock(preparedSampleMutex_);
+    *preparedBytesOut = (preparedSample_.left.capacity() + preparedSample_.right.capacity()) * sizeof(float);
+  }
+}
+
 void TemporalDeckSampleLifecycle::workerLoop() {
   while (true) {
     AsyncSampleBuildRequest request;
@@ -137,12 +159,16 @@ void TemporalDeckSampleLifecycle::workerLoop() {
 
     DecodedSampleFile decoded;
     bool validDecoded = false;
+    const auto buildStart = std::chrono::steady_clock::now();
+    double decodeMs = 0.0;
 
     if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
       std::string decodeError;
       bool decodeOk = false;
       try {
+        const auto decodeStart = std::chrono::steady_clock::now();
         decodeOk = decodeSampleFile(request.path, &decoded, &decodeError);
+        decodeMs = lifecycleElapsedMs(decodeStart, std::chrono::steady_clock::now());
       } catch (const std::bad_alloc &) {
         WARN("TemporalDeck: sample decode allocation failed, falling back to 10s live mode");
         allocationFallbackPending_.store(true, std::memory_order_relaxed);
@@ -164,8 +190,10 @@ void TemporalDeckSampleLifecycle::workerLoop() {
       }
       validDecoded = decoded.frames > 0 && !decoded.left.empty();
     } else if (request.type == AsyncSampleBuildRequest::REBUILD_FROM_DECODED) {
+      const auto decodeStart = std::chrono::steady_clock::now();
       std::lock_guard<std::mutex> lock(sampleStateMutex_);
       decoded = decodedSample_;
+      decodeMs = lifecycleElapsedMs(decodeStart, std::chrono::steady_clock::now());
       validDecoded = decoded.frames > 0 && !decoded.left.empty();
     }
 
@@ -181,7 +209,15 @@ void TemporalDeckSampleLifecycle::workerLoop() {
 
     PreparedSampleData prepared;
     try {
+      const auto prepStart = std::chrono::steady_clock::now();
       if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, &prepared)) {
+        prepared.buildSerial = requestSerial;
+        prepared.buildRequestType = request.type;
+        prepared.sourceFrames = decoded.frames;
+        prepared.sourceChannels = decoded.channels;
+        prepared.workerDecodeMs = decodeMs;
+        prepared.workerPrepMs = lifecycleElapsedMs(prepStart, std::chrono::steady_clock::now());
+        prepared.workerTotalMs = lifecycleElapsedMs(buildStart, std::chrono::steady_clock::now());
         if (requestSerial == sampleBuildRequestSerial_.load(std::memory_order_relaxed)) {
           std::lock_guard<std::mutex> lock(preparedSampleMutex_);
           preparedSample_ = std::move(prepared);

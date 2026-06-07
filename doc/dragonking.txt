@@ -1,4 +1,5 @@
 {
   "debug": true,
-  "clockworkDragLogging": false
+  "clockworkDragLogging": false,
+  "temporalDeckLifetimeLogging": true
 }

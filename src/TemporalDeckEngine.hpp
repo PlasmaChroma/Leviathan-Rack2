@@ -1739,7 +1739,8 @@ struct TemporalDeckEngine {
   }
 
   void installPreparedSample(std::vector<float> &&left, std::vector<float> &&right, int frames, bool truncated,
-                             bool monoStorage) {
+                             bool monoStorage, const temporaldeck_expander::PreviewAccumulator *preparedPreview = nullptr,
+                             float preparedAbsolutePeakVolts = 0.f, bool preparedPreviewValid = false) {
     sampleLoaded = frames > 0 && !left.empty();
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
     sampleTransportPlaying = sampleLoaded;
@@ -1769,7 +1770,12 @@ struct TemporalDeckEngine {
     buffer.filled = sampleFrames;
     buffer.writeHead = buffer.wrapIndex(sampleFrames);
     resetLiveScopeEnvelope();
-    rebuildPreviewFromCurrentSample();
+    if (preparedPreviewValid && preparedPreview) {
+      preview = *preparedPreview;
+      sampleAbsolutePeakVolts = preparedAbsolutePeakVolts;
+    } else {
+      rebuildPreviewFromCurrentSample();
+    }
     bumpBufferGeneration();
   }
 
