@@ -428,36 +428,36 @@
        opacity="0.78"
        style="display:inline;opacity:1;stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal">
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          id="path14"
          style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          transform="rotate(60,250,250)"
          id="path15"
          style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          transform="rotate(120,250,250)"
          id="path6"
          style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          transform="rotate(180,250,250)"
          id="path16"
          style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          transform="rotate(-120,250,250)"
          id="path17"
          style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
       <path
-         d="M 250,137 V 89"
+         d="M 250,137 V 76"
          stroke-width="3.5"
          transform="rotate(-60,250,250)"
          id="path18"
