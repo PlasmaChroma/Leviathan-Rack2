@@ -21,15 +21,16 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.175"
-     inkscape:cx="212.76596"
-     inkscape:cy="214.89362"
+     inkscape:zoom="1.6617009"
+     inkscape:cx="302.10009"
+     inkscape:cy="228.98224"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg17" />
+     inkscape:current-layer="svg17"
+     showgrid="false" />
   <defs
      id="defs9">
     <filter
@@ -54,13 +55,13 @@
        gradientTransform="scale(0.92920107,1.0761933)"
        gradientUnits="userSpaceOnUse">
       <stop
-         offset="0.68646836"
+         offset="0.61763245"
          stop-color="#ffffff"
          stop-opacity="0.6"
          id="stop3"
          style="stop-color:#faff74;stop-opacity:1;" />
       <stop
-         offset="0.91159505"
+         offset="0.85017532"
          stop-color="#e5c158"
          id="stop2"
          style="stop-color:#c0a046;stop-opacity:1;" />
@@ -113,7 +114,7 @@
        fx="250"
        fy="250"
        r="177"
-       gradientTransform="matrix(0.92029809,0.53510691,-0.62005991,0.99187018,174.94045,-131.74427)"
+       gradientTransform="matrix(0.91106816,0.5496011,-0.71109938,1.0963944,200.0078,-161.49887)"
        gradientUnits="userSpaceOnUse" />
   </defs>
   <rect
@@ -128,7 +129,7 @@
      points="73,352.5 73,147.5 250,45 427,147.5 427,352.5 250,455 "
      fill="url(#gold-metallic)"
      id="polygon10"
-     style="fill:url(#radialGradient17)"
+     style="fill:url(#radialGradient17);opacity:0.88"
      transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)" />
   <circle
      cx="250"
@@ -141,18 +142,10 @@
   <circle
      cx="250"
      cy="250"
-     r="145"
-     fill="none"
-     stroke="#fffdef"
-     stroke-width="3"
-     opacity="0.85"
-     id="circle12" />
-  <circle
-     cx="250"
-     cy="250"
      r="125"
      fill="#000000"
-     id="circle13" />
+     id="circle13"
+     style="display:inline" />
   <circle
      cx="250"
      cy="250"
