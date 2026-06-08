@@ -22,7 +22,7 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.6617009"
-     inkscape:cx="302.10009"
+     inkscape:cx="302.1001"
      inkscape:cy="228.98224"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
@@ -87,10 +87,10 @@
     </linearGradient>
     <filter
        id="neon-glow"
-       x="-0.13047619"
-       y="-0.13047619"
-       width="1.2609524"
-       height="1.2609524">
+       x="-inf"
+       y="-0.99375"
+       width="inf"
+       height="2.9875">
       <feGaussianBlur
          stdDeviation="6"
          result="blur"
@@ -129,7 +129,7 @@
      points="73,352.5 73,147.5 250,45 427,147.5 427,352.5 250,455 "
      fill="url(#gold-metallic)"
      id="polygon10"
-     style="fill:url(#radialGradient17);opacity:0.88"
+     style="fill:url(#radialGradient17);opacity:1"
      transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)" />
   <circle
      cx="250"
@@ -146,6 +146,186 @@
      fill="#000000"
      id="circle13"
      style="display:inline" />
+  <g
+     id="space-tech-detail"
+     style="display:inline">
+    <g
+       id="cyan-conduits"
+       stroke="#00e5ff"
+       stroke-linecap="round"
+       fill="none"
+       opacity="0.78">
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         id="path1" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         id="path2" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         transform="rotate(60 250 250)"
+         id="path3" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         transform="rotate(60 250 250)"
+         id="path4" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         transform="rotate(120 250 250)"
+         id="path5" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         transform="rotate(120 250 250)"
+         id="path6" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         transform="rotate(180 250 250)"
+         id="path7" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         transform="rotate(180 250 250)"
+         id="path8" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         transform="rotate(240 250 250)"
+         id="path9" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         transform="rotate(240 250 250)"
+         id="path10" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="8"
+         filter="url(#neon-glow)"
+         transform="rotate(300 250 250)"
+         id="path11" />
+      <path
+         d="M250 119 L250 89"
+         stroke-width="3.5"
+         transform="rotate(300 250 250)"
+         id="path12" />
+    </g>
+    <g
+       id="gold-contact-pads"
+       fill="#f8d45a"
+       stroke="#3a2802"
+       stroke-width="2.5"
+       opacity="0.9">
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         id="rect12" />
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         transform="rotate(60 250 250)"
+         id="rect13" />
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         transform="rotate(120 250 250)"
+         id="rect14" />
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         transform="rotate(180 250 250)"
+         id="rect15" />
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         transform="rotate(240 250 250)"
+         id="rect16" />
+      <rect
+         x="238"
+         y="76"
+         width="24"
+         height="15"
+         rx="4"
+         transform="rotate(300 250 250)"
+         id="rect17" />
+    </g>
+    <g
+       id="micro-arc-traces"
+       fill="none"
+       stroke-linecap="round" />
+    <g
+       id="lit-nodes"
+       fill="#00e5ff"
+       stroke="#001f26"
+       stroke-width="3">
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         id="circle24" />
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         transform="rotate(60 250 250)"
+         id="circle25" />
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         transform="rotate(120 250 250)"
+         id="circle26" />
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         transform="rotate(180 250 250)"
+         id="circle27" />
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         transform="rotate(240 250 250)"
+         id="circle28" />
+      <circle
+         cx="250"
+         cy="83"
+         r="8"
+         filter="url(#neon-glow)"
+         transform="rotate(300 250 250)"
+         id="circle29" />
+    </g>
+  </g>
   <circle
      cx="250"
      cy="250"
