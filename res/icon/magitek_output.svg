@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="1.6617009"
-     inkscape:cx="349.94263"
-     inkscape:cy="129.0846"
+     inkscape:zoom="0.41542523"
+     inkscape:cx="-184.14866"
+     inkscape:cy="-8.4251022"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -59,18 +59,18 @@
          stop-color="#ffffff"
          stop-opacity="0.6"
          id="stop3"
-         style="stop-color:#fff1a6;stop-opacity:1;" />
+         style="stop-color:#bfc8d1;stop-opacity:1;" />
       <stop
          offset="0.748115"
          stop-color="#ffffff"
          stop-opacity="0.6"
          id="stop1"
-         style="stop-color:#caa540;stop-opacity:1;" />
+         style="stop-color:#4b5660;stop-opacity:1;" />
       <stop
          offset="0.99293512"
          stop-color="#e5c158"
          id="stop2"
-         style="stop-color:#7b470b;stop-opacity:1;" />
+         style="stop-color:#425667;stop-opacity:1;" />
     </linearGradient>
     <linearGradient
        id="inner-bevel"
@@ -172,14 +172,14 @@
     <polygon
        points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
        fill="none"
-       stroke="#2b1804"
+       stroke="#05070a"
        stroke-width="13"
        stroke-opacity="0.34"
        id="polygon2" />
     <path
        d="M92 154 C142 126 187 113 245 109"
        fill="none"
-       stroke="#fff4b0"
+       stroke="#dce7f0"
        stroke-width="7"
        stroke-linecap="round"
        stroke-opacity="0.24"
@@ -187,7 +187,7 @@
     <path
        d="m 314,94 c 49,14 82.38298,50.10638 120.38298,95.10638"
        fill="none"
-       stroke="#f6d36d"
+       stroke="#95a5b3"
        stroke-width="8"
        stroke-linecap="round"
        stroke-opacity="0.2"
@@ -196,7 +196,7 @@
     <path
        d="M448 318 C421 377 368 423 300 446"
        fill="none"
-       stroke="#4c2a06"
+       stroke="#090d12"
        stroke-width="10"
        stroke-linecap="round"
        stroke-opacity="0.24"
@@ -204,7 +204,7 @@
     <path
        d="M70 306 C93 371 145 421 214 448"
        fill="none"
-       stroke="#3a2106"
+       stroke="#0d1218"
        stroke-width="11"
        stroke-linecap="round"
        stroke-opacity="0.22"
@@ -214,7 +214,7 @@
        cy="165"
        rx="42"
        ry="18"
-       fill="#5f3b0c"
+       fill="#1d2730"
        fill-opacity="0.22"
        transform="rotate(-18 151 165)"
        id="ellipse5" />
@@ -223,7 +223,7 @@
        cy="168"
        rx="50"
        ry="20"
-       fill="#2e1a05"
+       fill="#070b10"
        fill-opacity="0.18"
        transform="rotate(31 374 168)"
        id="ellipse6" />
@@ -232,7 +232,7 @@
        cy="360"
        rx="54"
        ry="21"
-       fill="#6a4512"
+       fill="#2f3a42"
        fill-opacity="0.2"
        transform="rotate(-36 385 360)"
        id="ellipse7" />
@@ -241,7 +241,7 @@
        cy="349"
        rx="50"
        ry="19"
-       fill="#281604"
+       fill="#06090d"
        fill-opacity="0.19"
        transform="rotate(42 129 349)"
        id="ellipse8" />
@@ -252,32 +252,32 @@
        stroke-width="4">
       <path
          d="M112 197 L188 174"
-         stroke="#fff3a7"
+         stroke="#d4e0ea"
          stroke-opacity="0.28"
          id="path8" />
       <path
          d="M330 126 L414 177"
-         stroke="#fff3a7"
+         stroke="#b4c0cb"
          stroke-opacity="0.22"
          id="path9" />
       <path
          d="M420 292 L350 395"
-         stroke="#fff3a7"
+         stroke="#9aa7b2"
          stroke-opacity="0.18"
          id="path10" />
       <path
          d="M91 295 L159 403"
-         stroke="#fff3a7"
+         stroke="#9aa7b2"
          stroke-opacity="0.18"
          id="path11" />
       <path
          d="M155 129 L214 119"
-         stroke="#2b1804"
+         stroke="#05070a"
          stroke-opacity="0.26"
          id="path12" />
       <path
          d="M296 434 L357 403"
-         stroke="#2b1804"
+         stroke="#05070a"
          stroke-opacity="0.3"
          id="path13" />
     </g>
