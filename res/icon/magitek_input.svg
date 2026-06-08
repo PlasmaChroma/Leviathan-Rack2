@@ -20,9 +20,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="14.33659"
-     inkscape:cx="16.84501"
-     inkscape:cy="27.13337"
+     inkscape:zoom="7.168295"
+     inkscape:cx="34.59679"
+     inkscape:cy="20.506969"
      inkscape:window-width="1920"
      inkscape:window-height="1043"
      inkscape:window-x="3840"
@@ -227,15 +227,16 @@
   <circle
      cx="20"
      cy="20"
-     r="18.2"
+     r="18.200001"
      fill="none"
      stroke="#3a3a42"
      stroke-width="0.55"
      opacity="0.45"
-     id="circle5-carbon-lip" />
+     id="circle5-carbon-lip"
+     style="display:inline" />
   <!-- Corner dots -->
   <g
-     id="g15"
+     id="screws"
      transform="rotate(45,20,20)">
     <circle
        cx="20"
@@ -275,56 +276,69 @@
   <circle
      cx="20"
      cy="20"
-     r="9.5"
+     r="8.4"
+     fill="none"
+     stroke="#5740bf"
+     stroke-width="2.08"
+     opacity="0.6"
+     id="main-ring-glow" />
+  <circle
+     cx="20"
+     cy="20"
+     r="8.4"
      fill="none"
      stroke="#6240bf"
-     stroke-width="1.2"
+     stroke-width="1.28"
      opacity="0.9"
-     id="circle11" />
+     id="main-ring" />
   <!-- Inner core -->
   <circle
      cx="20"
      cy="20"
      r="7.5"
      fill="#040405"
-     stroke="#111"
+     stroke="#111111"
      stroke-width="1"
-     id="circle12" />
+     id="circle12"
+     style="display:inline;stroke:none" />
   <!-- Outer extensions at 90-degree angles (flush with yellow circle edge) -->
   <!-- Top extension (0°) -->
-  <rect
-     x="19"
-     y="5.07"
-     width="2"
-     height="4.88"
-     fill="#6240bf"
-     opacity="0.9"
-     id="rect12" />
   <!-- Right extension (90°) -->
-  <rect
-     x="30.05"
-     y="19"
-     width="4.88"
-     height="2"
-     fill="#6240bf"
-     opacity="0.9"
-     id="rect13" />
   <!-- Bottom extension (180°) -->
-  <rect
-     x="19"
-     y="30.05"
-     width="2"
-     height="4.88"
-     fill="#6240bf"
-     opacity="0.9"
-     id="rect14" />
   <!-- Left extension (270°) -->
-  <rect
-     x="5.07"
-     y="19"
-     width="4.88"
-     height="2"
-     fill="#6240bf"
-     opacity="0.9"
-     id="rect15" />
+  <g
+     id="conduits">
+    <rect
+       x="19"
+       y="6.08"
+       width="2"
+       height="4.88"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect12" />
+    <rect
+       x="29.04"
+       y="19"
+       width="4.88"
+       height="2"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect13" />
+    <rect
+       x="19"
+       y="29.04"
+       width="2"
+       height="4.88"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect14" />
+    <rect
+       x="6.08"
+       y="19"
+       width="4.88"
+       height="2"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect15" />
+  </g>
 </svg>
