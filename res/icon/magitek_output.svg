@@ -1,27 +1,192 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-  <defs>
-    <linearGradient id="imperialBrass" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fff1b0" />
-      <stop offset="30%" stop-color="#d4af37" />
-      <stop offset="70%" stop-color="#aa8010" />
-      <stop offset="100%" stop-color="#5a4505" />
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 500 500"
+   width="100%"
+   height="100%"
+   version="1.1"
+   id="svg17"
+   sodipodi:docname="magitek_output.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview17"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.175"
+     inkscape:cx="212.76596"
+     inkscape:cy="214.89362"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg17" />
+  <defs
+     id="defs9">
+    <filter
+       id="dark-shadow"
+       x="0"
+       y="0"
+       width="1"
+       height="1">
+      <feDropShadow
+         dx="0"
+         dy="4"
+         stdDeviation="12"
+         flood-color="#000000"
+         flood-opacity="0.8" />
+    </filter>
+    <linearGradient
+       id="gold-metallic"
+       x1="78.562113"
+       y1="41.814048"
+       x2="459.53455"
+       y2="422.78649"
+       gradientTransform="scale(0.92920107,1.0761933)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0.68646836"
+         stop-color="#ffffff"
+         stop-opacity="0.6"
+         id="stop3"
+         style="stop-color:#faff74;stop-opacity:1;" />
+      <stop
+         offset="0.91159505"
+         stop-color="#e5c158"
+         id="stop2"
+         style="stop-color:#c0a046;stop-opacity:1;" />
     </linearGradient>
-
-    <radialGradient id="amberGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ffaa00" stop-opacity="0.2"/>
-      <stop offset="85%" stop-color="#ff5500" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#200a00"/>
-    </radialGradient>
+    <linearGradient
+       id="inner-bevel"
+       x1="0%"
+       y1="100%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         stop-color="#3a2802"
+         id="stop6" />
+      <stop
+         offset="70%"
+         stop-color="#ffd966"
+         id="stop7" />
+      <stop
+         offset="100%"
+         stop-color="#ffffff"
+         id="stop8" />
+    </linearGradient>
+    <filter
+       id="neon-glow"
+       x="-0.13047619"
+       y="-0.13047619"
+       width="1.2609524"
+       height="1.2609524">
+      <feGaussianBlur
+         stdDeviation="6"
+         result="blur"
+         id="feGaussianBlur8" />
+      <feMerge
+         id="feMerge9">
+        <feMergeNode
+           in="blur"
+           id="feMergeNode8" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode9" />
+      </feMerge>
+    </filter>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#gold-metallic"
+       id="radialGradient17"
+       cx="250"
+       cy="250"
+       fx="250"
+       fy="250"
+       r="177"
+       gradientTransform="matrix(0.92029809,0.53510691,-0.62005991,0.99187018,174.94045,-131.74427)"
+       gradientUnits="userSpaceOnUse" />
   </defs>
-
-  <polygon points="20,1 36.5,10.5 36.5,29.5 20,39 3.5,29.5 3.5,10.5" fill="#443005" stroke="#1a1302" stroke-width="1"/>
-  <polygon points="20,2.5 35,11.2 35,28.8 20,37.5 5,28.8 5,11.2" fill="url(#imperialBrass)"/>
-
-  <circle cx="20" cy="20" r="13.5" fill="#6e500b" stroke="#fff5c0" stroke-width="0.5"/>
-  <circle cx="20" cy="20" r="12" fill="#1c1301"/>
-
-  <circle cx="20" cy="20" r="10" fill="url(#amberGlow)"/>
-  <circle cx="20" cy="20" r="9.5" fill="none" stroke="#ff7700" stroke-width="1.5" style="mix-blend-mode: screen;"/>
-
-  <circle cx="20" cy="20" r="7.5" fill="#090300" stroke="#200a00" stroke-width="1"/>
+  <rect
+     width="500"
+     height="500"
+     fill="#050505"
+     id="rect9"
+     x="0"
+     y="0"
+     style="display:none" />
+  <polygon
+     points="73,352.5 73,147.5 250,45 427,147.5 427,352.5 250,455 "
+     fill="url(#gold-metallic)"
+     id="polygon10"
+     style="fill:url(#radialGradient17)"
+     transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)" />
+  <circle
+     cx="250"
+     cy="250"
+     r="160"
+     fill="#0d0d0d"
+     stroke="#553a05"
+     stroke-width="4"
+     id="circle11" />
+  <circle
+     cx="250"
+     cy="250"
+     r="145"
+     fill="none"
+     stroke="#fffdef"
+     stroke-width="3"
+     opacity="0.85"
+     id="circle12" />
+  <circle
+     cx="250"
+     cy="250"
+     r="125"
+     fill="#000000"
+     id="circle13" />
+  <circle
+     cx="250"
+     cy="250"
+     r="105"
+     fill="none"
+     stroke="#0099ab"
+     stroke-width="26"
+     filter="url(#neon-glow)"
+     opacity="0.6"
+     id="circle14" />
+  <circle
+     cx="250"
+     cy="250"
+     r="105"
+     fill="none"
+     stroke="#00e5ff"
+     stroke-width="16"
+     id="circle15" />
+  <circle
+     cx="250"
+     cy="250"
+     r="115"
+     fill="none"
+     stroke="#000000"
+     stroke-width="4"
+     opacity="0.5"
+     id="circle16" />
+  <circle
+     cx="250"
+     cy="250"
+     r="95"
+     fill="none"
+     stroke="#000000"
+     stroke-width="3"
+     opacity="0.4"
+     id="circle17" />
 </svg>
