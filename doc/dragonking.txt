@@ -1,5 +1,6 @@
 {
   "debug": true,
   "clockworkDragLogging": false,
-  "temporalDeckLifetimeLogging": true
+  "temporalDeckLifetimeLogging": false,
+  "moduleTeardownLogging": true
 }

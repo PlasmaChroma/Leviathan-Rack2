@@ -255,6 +255,7 @@ Crownstep::Crownstep() {
 }
 
 Crownstep::~Crownstep() {
+	teardownTimer.begin(id);
 	stopAiWorker();
 }
 

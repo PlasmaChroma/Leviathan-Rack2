@@ -6,6 +6,7 @@
 #include <vector>
 
 struct Bulkhead : Module {
+	ModuleTeardownTimer teardownTimer {"Bulkhead"};
 	enum ParamId {
 		DECAY_PARAM,
 		DIFFUSE_PARAM,
@@ -86,6 +87,7 @@ struct Bulkhead : Module {
 	void onReset() override;
 
 	Bulkhead();
+	~Bulkhead() override;
 	void process(const ProcessArgs& args) override;
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* rootJ) override;

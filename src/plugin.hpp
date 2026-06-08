@@ -47,7 +47,19 @@ struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 bool isDragonKingDebugEnabled();
 bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
+bool isModuleTeardownLoggingEnabled();
 void refreshDragonKingDebugEnabled();
+
+struct ModuleTeardownTimer {
+	const char* moduleName = nullptr;
+	int moduleId = -1;
+	bool active = false;
+	std::chrono::steady_clock::time_point startedAt;
+
+	explicit ModuleTeardownTimer(const char* moduleName);
+	~ModuleTeardownTimer();
+	void begin(int moduleId);
+};
 
 struct PreviewBuildLogTimer {
 	const char* moduleName = nullptr;

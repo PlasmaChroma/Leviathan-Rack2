@@ -19,6 +19,7 @@ thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
 }
 
 struct IntegralFlux : Module {
+	ModuleTeardownTimer teardownTimer {"IntegralFlux"};
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
 		ATTENUATE_1_PARAM,
@@ -974,6 +975,10 @@ struct IntegralFlux : Module {
 		configOutput(INV_OUT_OUTPUT, "INV");
 		configOutput(CH_4_UNITY_OUTPUT, "CH4 unity");
 		configOutput(EOC_4_OUTPUT, "CH4 end of cycle");
+	}
+
+	~IntegralFlux() override {
+		teardownTimer.begin(id);
 	}
 
 	json_t* dataToJson() override {

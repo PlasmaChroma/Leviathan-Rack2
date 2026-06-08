@@ -236,5 +236,6 @@ private:
   void applySampleRateChange(float sampleRate);
 
   struct Impl;
+  ModuleTeardownTimer teardownTimer {"TemporalDeck"};
   std::unique_ptr<Impl> impl;
 };

@@ -557,6 +557,7 @@ void simulatePreviewProbeImpulseResponse(
 );
 
 struct Bifurx : Module {
+	ModuleTeardownTimer teardownTimer {"Bifurx"};
 	enum ColorScheme {
 		SCHEME_DEFAULT = 0,
 		SCHEME_CLASSIC,
@@ -734,6 +735,7 @@ struct Bifurx : Module {
 	double createdUnixTimeSec = 0.0;
 
 	Bifurx();
+	~Bifurx() override;
 	void resetCircuitStates();
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;

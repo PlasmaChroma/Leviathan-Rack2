@@ -29,6 +29,8 @@ Widget *createGlDisplay(TDScope *module, math::Rect scopeRectMm);
 } // namespace tdscope
 
 struct TDScope final : Module {
+  ModuleTeardownTimer teardownTimer {"TDScope"};
+
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
   enum ScopeChannelMode { SCOPE_CHANNEL_MONO = 0, SCOPE_CHANNEL_STEREO, SCOPE_CHANNEL_COUNT };
@@ -149,6 +151,10 @@ struct TDScope final : Module {
     leftExpander.consumerMessage = &leftMessages[1];
     uiSnapshots[0] = temporaldeck_expander::HostToDisplay();
     uiSnapshots[1] = temporaldeck_expander::HostToDisplay();
+  }
+
+  ~TDScope() override {
+    teardownTimer.begin(id);
   }
 
   float scopeDisplayFullScaleVolts() const {

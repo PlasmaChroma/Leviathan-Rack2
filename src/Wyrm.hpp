@@ -225,6 +225,7 @@ struct WyrmRockStateSnapshot {
 };
 
 struct Wyrm : Module {
+	ModuleTeardownTimer teardownTimer {"Wyrm"};
 	enum ParamId {
 		FREQ_PARAM,
 		FINE_PARAM,
@@ -305,6 +306,7 @@ struct Wyrm : Module {
 	double createdUnixTimeSec = 0.0;
 
 	Wyrm();
+	~Wyrm() override;
 
 	void placeRock(int index);
 	void setRockCount(int count);

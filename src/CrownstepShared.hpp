@@ -71,6 +71,8 @@ struct CrownstepRangeQuantity final : ParamQuantity {
 };
 
 struct Crownstep : Module {
+	ModuleTeardownTimer teardownTimer {"Crownstep"};
+
 	enum ParamId {
 		SEQ_LENGTH_PARAM,
 		ROOT_PARAM,

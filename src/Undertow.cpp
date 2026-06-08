@@ -103,6 +103,10 @@ Undertow::Undertow() {
   configOutput(SUB_OUTPUT, "Sub");
 }
 
+Undertow::~Undertow() {
+  teardownTimer.begin(id);
+}
+
 float Undertow::getShapeAmount() {
   const float shapeKnob = params[SHAPE_PARAM].getValue();
   if (inputs[SHAPE_CV_INPUT].isConnected()) {

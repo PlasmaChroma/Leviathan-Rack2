@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <linearGradient id="magiOut_outerBrass" x1="5" y1="4" x2="35" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe78d"/>
+      <stop offset="0.18" stop-color="#c99722"/>
+      <stop offset="0.55" stop-color="#6e4c0b"/>
+      <stop offset="1" stop-color="#1d1303"/>
+    </linearGradient>
+    <linearGradient id="magiOut_innerBevel" x1="8" y1="7" x2="32" y2="33" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6d875"/>
+      <stop offset="0.35" stop-color="#9f7416"/>
+      <stop offset="0.72" stop-color="#533703"/>
+      <stop offset="1" stop-color="#1c1100"/>
+    </linearGradient>
+    <radialGradient id="magiOut_socketGlow" cx="20" cy="20" r="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#120500"/>
+      <stop offset="0.56" stop-color="#0a0300"/>
+      <stop offset="0.78" stop-color="#652400"/>
+      <stop offset="1" stop-color="#ff8a00"/>
+    </radialGradient>
+    <linearGradient id="magiOut_amberRing" x1="12" y1="9" x2="29" y2="31" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd15a"/>
+      <stop offset="0.42" stop-color="#ff7a00"/>
+      <stop offset="1" stop-color="#9d2500"/>
+    </linearGradient>
+  </defs>
+
+  <polygon points="20,0.9 36.55,10.45 36.55,29.55 20,39.1 3.45,29.55 3.45,10.45" fill="#070401" opacity="0.8"/>
+  <polygon points="20,1.65 35.85,10.85 35.85,29.15 20,38.35 4.15,29.15 4.15,10.85" fill="url(#magiOut_outerBrass)" stroke="#141006" stroke-width="1"/>
+  <polygon points="20,3.8 33.75,11.75 33.75,28.25 20,36.2 6.25,28.25 6.25,11.75" fill="#120b02" opacity="0.55"/>
+  <polygon points="20,4.65 32.95,12.15 32.95,27.85 20,35.35 7.05,27.85 7.05,12.15" fill="url(#magiOut_innerBevel)" stroke="#e4c36a" stroke-width="0.45" opacity="0.98"/>
+
+  <circle cx="20" cy="20" r="13.1" fill="#211404" stroke="#0a0500" stroke-width="1.05"/>
+  <circle cx="20" cy="20" r="11.3" fill="#060200" stroke="#7b540b" stroke-width="1.15"/>
+  <circle cx="20" cy="20" r="10.15" fill="url(#magiOut_socketGlow)" opacity="0.9"/>
+  <circle cx="20" cy="20" r="9.55" fill="none" stroke="url(#magiOut_amberRing)" stroke-width="1.55"/>
+  <path d="M13.55 14.2 A9.55 9.55 0 0 1 26.45 14.2" fill="none" stroke="#ffe08b" stroke-width="0.8" stroke-linecap="round" opacity="0.62"/>
+
+  <circle cx="20" cy="20" r="7.25" fill="#070100" stroke="#170500" stroke-width="1"/>
+  <circle cx="16.8" cy="16.15" r="1.05" fill="#ffffff" opacity="0.08"/>
+</svg>

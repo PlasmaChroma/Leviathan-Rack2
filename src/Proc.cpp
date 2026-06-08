@@ -9,6 +9,7 @@
 
 
 struct Proc : Module {
+	ModuleTeardownTimer teardownTimer {"Proc"};
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
 		CYCLE_PARAM,
@@ -917,6 +918,10 @@ struct Proc : Module {
 		configOutput(EOC_OUTPUT, "End of cycle");
 		configOutput(MAIN_OUTPUT, "Positive");
 		configOutput(NEG_OUTPUT, "Negative");
+	}
+
+	~Proc() override {
+		teardownTimer.begin(id);
 	}
 
 	json_t* dataToJson() override {

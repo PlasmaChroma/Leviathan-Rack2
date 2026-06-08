@@ -84,6 +84,10 @@ Wyrm::Wyrm() {
 	publishRockState();
 }
 
+Wyrm::~Wyrm() {
+	teardownTimer.begin(id);
+}
+
 void Wyrm::placeRock(int index) {
 	if (index < 0 || index >= kWyrmMaxRocks) return;
 	const uint32_t seed = 0x9e3779b9u + uint32_t(index) * 0x85ebca6bu;

@@ -1099,6 +1099,7 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
 }
 
 TemporalDeck::~TemporalDeck() {
+  teardownTimer.begin(id);
   if (!impl) {
     return;
   }

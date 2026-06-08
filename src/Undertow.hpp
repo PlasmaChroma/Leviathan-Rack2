@@ -23,6 +23,8 @@ struct UndertowFreqQuantity final : ParamQuantity {
 };
 
 struct Undertow final : Module {
+  ModuleTeardownTimer teardownTimer {"Undertow"};
+
   enum ParamId {
     COARSE_PARAM,
     FINE_PARAM,
@@ -78,6 +80,7 @@ struct Undertow final : Module {
   std::atomic<float> displayShapeAmount {0.f};
 
   Undertow();
+  ~Undertow() override;
   float getShapeAmount();
   void process(const ProcessArgs& args) override;
   json_t* dataToJson() override;

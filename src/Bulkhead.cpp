@@ -167,6 +167,10 @@ Bulkhead::Bulkhead() {
 	initDsp();
 }
 
+Bulkhead::~Bulkhead() {
+	teardownTimer.begin(id);
+}
+
 void Bulkhead::resetSceneDefaults() {
 	room.left = -4.f;
 	room.right = 4.f;

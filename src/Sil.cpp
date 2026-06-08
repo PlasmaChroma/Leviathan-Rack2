@@ -15,6 +15,7 @@
 #include <string>
 
 struct Sil : Module {
+	ModuleTeardownTimer teardownTimer {"Sil"};
 	struct Biquad {
 		float b0 = 1.f;
 		float b1 = 0.f;
@@ -1161,6 +1162,7 @@ struct Sil : Module {
 	}
 
 	~Sil() {
+		teardownTimer.begin(id);
 		stopMicropeakDebugCapture();
 		delete spec.fft;
 	}

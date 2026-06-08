@@ -583,6 +583,10 @@ Bifurx::Bifurx() {
 	previewPublishDivider.setDivision(kPreviewPublishFastDivision); previewPublishSlowDivider.setDivision(kPreviewPublishSlowDivision); controlUpdateDivider.setDivision(controlUpdateDivision); perfMeasureDivider.setDivision(kPerfMeasureDivision);
 }
 
+Bifurx::~Bifurx() {
+	teardownTimer.begin(id);
+}
+
 void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
 json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();

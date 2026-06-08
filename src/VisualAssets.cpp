@@ -79,13 +79,13 @@ struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const Vec center = box.size.div(2.f).plus(Vec(1.6f, 2.5f));
 		const float outerRadius = std::min(box.size.x, box.size.y) * 0.43f;
-		const float innerRadius = outerRadius * 0.35f;
+		const float innerRadius = outerRadius * 0.48f;
 		NVGpaint paint = nvgRadialGradient(args.vg,
 			center.x,
 			center.y,
 			innerRadius,
 			outerRadius,
-			nvgRGBA(0, 0, 0, 92),
+			nvgRGBA(0, 0, 0, 138),
 			nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, center.x, center.y, outerRadius);
@@ -116,9 +116,9 @@ struct MagitekOutputShadow : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		const float radius = kMagitekPortSizePx * 0.46f;
-		drawHex(args, radius * 1.34f, nvgRGBA(0, 0, 0, 28));
-		drawHex(args, radius * 1.13f, nvgRGBA(0, 0, 0, 62));
-		drawHex(args, radius * 0.93f, nvgRGBA(0, 0, 0, 132));
+		drawHex(args, radius * 1.22f, nvgRGBA(0, 0, 0, 28));
+		drawHex(args, radius * 1.04f, nvgRGBA(0, 0, 0, 62));
+		drawHex(args, radius * 0.86f, nvgRGBA(0, 0, 0, 132));
 	}
 };
 
@@ -255,13 +255,13 @@ static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 } // namespace
 
 MagitekInputJack::MagitekInputJack() {
-	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_input.svg")));
+	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_input.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx);
 	installMagitekShadow(this, new MagitekInputShadow);
 }
 
 MagitekOutputJack::MagitekOutputJack() {
-	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/magitek_output.svg")));
+	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx);
 	installMagitekShadow(this, new MagitekOutputShadow);
 }
