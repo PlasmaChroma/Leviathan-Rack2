@@ -148,8 +148,7 @@
        id="outer-nut-clip"
        clipPathUnits="userSpaceOnUse">
       <polygon
-         points="427,147.5 427,352.5 250,455 73,352.5 73,147.5 250,45"
-         transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)"
+         points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
          id="polygon1" />
     </clipPath>
   </defs>
@@ -162,18 +161,16 @@
      y="0"
      style="display:none" />
   <polygon
-     points="427,147.5 427,352.5 250,455 73,352.5 73,147.5 250,45 "
+     points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
      fill="url(#gold-metallic)"
      id="polygon10"
-     style="display:inline;opacity:1;fill:url(#radialGradient17)"
-     transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)" />
+     style="display:inline;opacity:1;fill:url(#radialGradient17)" />
   <g
      id="weathered-gold-nut"
      clip-path="url(#outer-nut-clip)"
      style="display:inline">
     <polygon
-       points="427,147.5 427,352.5 250,455 73,352.5 73,147.5 250,45"
-       transform="matrix(1.1091199,0,0,1.1500372,-27.279975,-37.5093)"
+       points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
        fill="none"
        stroke="#2b1804"
        stroke-width="13"

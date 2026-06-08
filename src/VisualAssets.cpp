@@ -1,6 +1,8 @@
 #include "VisualAssets.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -45,7 +47,7 @@ uint64_t eclipseShadowDrawCount() {
 
 namespace {
 
-void setSvgPortSizePx(app::SvgPort* port, float px) {
+void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 	if (!port) {
 		return;
 	}
@@ -57,11 +59,20 @@ void setSvgPortSizePx(app::SvgPort* port, float px) {
 			const float scale = px / svgMax;
 			port->fb->removeChild(port->sw);
 			port->sw->box.pos = Vec(0.f, 0.f);
-			TransformWidget* tw = new TransformWidget();
-			tw->addChild(port->sw);
-			tw->scale(Vec(scale, scale));
-			tw->box.size = svgSize.mult(scale);
-			port->fb->addChild(tw);
+			TransformWidget* scaleTw = new TransformWidget();
+			scaleTw->addChild(port->sw);
+			scaleTw->scale(Vec(scale, scale));
+			scaleTw->box.size = svgSize.mult(scale);
+			if (std::fabs(rotationRad) > 1e-6f) {
+				TransformWidget* rotateTw = new TransformWidget();
+				rotateTw->addChild(scaleTw);
+				rotateTw->rotate(rotationRad, size.div(2.f));
+				rotateTw->box.size = size;
+				port->fb->addChild(rotateTw);
+			}
+			else {
+				port->fb->addChild(scaleTw);
+			}
 		}
 	}
 	port->box.size = size;
@@ -74,6 +85,16 @@ void setSvgPortSizePx(app::SvgPort* port, float px) {
 }
 
 constexpr float kMagitekPortSizePx = 24.5f;
+std::atomic<uint32_t> gMagitekOutputJackRotationCounter{0u};
+
+float nextMagitekOutputJackRotationRad() {
+	uint32_t index = gMagitekOutputJackRotationCounter.fetch_add(1u, std::memory_order_relaxed);
+	uint32_t x = index * 747796405u + 2891336453u;
+	x = ((x >> ((x >> 28u) + 4u)) ^ x) * 277803737u;
+	x = (x >> 22u) ^ x;
+	const float unit = float(x & 0xffffu) / 65535.f;
+	return (unit * 2.f - 1.f) * (0.85f * float(M_PI));
+}
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -95,11 +116,17 @@ struct MagitekInputShadow : TransparentWidget {
 };
 
 struct MagitekOutputShadow : TransparentWidget {
+	float rotationRad = 0.f;
+
+	explicit MagitekOutputShadow(float rotationRad)
+		: rotationRad(rotationRad) {
+	}
+
 	void drawHex(const DrawArgs& args, float radius, NVGcolor color) {
 		const Vec center = box.size.div(2.f).plus(Vec(0.55f, 0.95f));
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < 6; ++i) {
-			const float angle = -0.5f * M_PI + float(i) * (M_PI / 3.f);
+			const float angle = rotationRad - 0.5f * M_PI + float(i) * (M_PI / 3.f);
 			const float x = center.x + std::cos(angle) * radius;
 			const float y = center.y + std::sin(angle) * radius;
 			if (i == 0) {
@@ -261,9 +288,10 @@ MagitekInputJack::MagitekInputJack() {
 }
 
 MagitekOutputJack::MagitekOutputJack() {
+	const float rotationRad = nextMagitekOutputJackRotationRad();
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
-	setSvgPortSizePx(this, kMagitekPortSizePx);
-	installMagitekShadow(this, new MagitekOutputShadow);
+	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
+	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
