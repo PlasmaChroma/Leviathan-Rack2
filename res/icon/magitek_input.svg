@@ -272,6 +272,77 @@
      stroke="#2a2a30"
      stroke-width="1.5"
      id="circle10" />
+  <!-- Inner core -->
+  <circle
+     cx="20"
+     cy="20"
+     r="7.5"
+     fill="#040405"
+     stroke="#111111"
+     stroke-width="1"
+     id="circle12"
+     style="display:inline;stroke:none" />
+  <!-- Outer extensions at 90-degree angles (flush with yellow circle edge) -->
+  <!-- Top extension (0°) -->
+  <!-- Right extension (90°) -->
+  <!-- Bottom extension (180°) -->
+  <!-- Left extension (270°) -->
+  <g
+     id="conduit-cutouts"
+     fill="none"
+     stroke="#000000"
+     stroke-width="4"
+     stroke-linecap="round"
+     opacity="0.9"
+     style="display:inline;stroke-width:4;stroke-linecap:round;stroke-dasharray:none">
+    <path
+       d="M 20,10.96 V 5.44"
+       id="conduit-cutout-top" />
+    <path
+       d="M 29.04,20 H 34.56"
+       id="conduit-cutout-right" />
+    <path
+       d="M 20,29.04 V 34.56"
+       id="conduit-cutout-bottom" />
+    <path
+       d="M 10.96,20 H 5.44"
+       id="conduit-cutout-left" />
+  </g>
+  <g
+     id="conduits">
+    <rect
+       x="19"
+       y="5.44"
+       width="2"
+       height="5.52"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect12" />
+    <rect
+       x="29.04"
+       y="19"
+       width="5.52"
+       height="2"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect13" />
+    <rect
+       x="19"
+       y="29.04"
+       width="2"
+       height="5.52"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect14" />
+    <rect
+       x="5.44"
+       y="19"
+       width="5.52"
+       height="2"
+       fill="#6240bf"
+       opacity="0.9"
+       id="rect15" />
+  </g>
   <!-- Purple glow ring -->
   <circle
      cx="20"
@@ -291,54 +362,4 @@
      stroke-width="1.28"
      opacity="0.9"
      id="main-ring" />
-  <!-- Inner core -->
-  <circle
-     cx="20"
-     cy="20"
-     r="7.5"
-     fill="#040405"
-     stroke="#111111"
-     stroke-width="1"
-     id="circle12"
-     style="display:inline;stroke:none" />
-  <!-- Outer extensions at 90-degree angles (flush with yellow circle edge) -->
-  <!-- Top extension (0°) -->
-  <!-- Right extension (90°) -->
-  <!-- Bottom extension (180°) -->
-  <!-- Left extension (270°) -->
-  <g
-     id="conduits">
-    <rect
-       x="19"
-       y="6.08"
-       width="2"
-       height="4.88"
-       fill="#6240bf"
-       opacity="0.9"
-       id="rect12" />
-    <rect
-       x="29.04"
-       y="19"
-       width="4.88"
-       height="2"
-       fill="#6240bf"
-       opacity="0.9"
-       id="rect13" />
-    <rect
-       x="19"
-       y="29.04"
-       width="2"
-       height="4.88"
-       fill="#6240bf"
-       opacity="0.9"
-       id="rect14" />
-    <rect
-       x="6.08"
-       y="19"
-       width="4.88"
-       height="2"
-       fill="#6240bf"
-       opacity="0.9"
-       id="rect15" />
-  </g>
 </svg>
