@@ -20,9 +20,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="7.168295"
-     inkscape:cx="34.59679"
-     inkscape:cy="20.506969"
+     inkscape:zoom="20.275"
+     inkscape:cx="22.342787"
+     inkscape:cy="24.167694"
      inkscape:window-width="1920"
      inkscape:window-height="1043"
      inkscape:window-x="3840"
@@ -309,37 +309,27 @@
        id="conduit-cutout-left" />
   </g>
   <g
-     id="conduits">
-    <rect
-       x="19"
-       y="5.44"
-       width="2"
-       height="5.52"
-       fill="#6240bf"
+     id="conduits"
+     fill="none"
+     stroke="#6240bf"
+     stroke-width="2"
+     stroke-linecap="round"
+     opacity="0.9"
+     style="display:inline;stroke-width:2;stroke-linecap:round;stroke-dasharray:none">
+    <path
+       d="M 20,10.96 V 5.44"
        opacity="0.9"
        id="rect12" />
-    <rect
-       x="29.04"
-       y="19"
-       width="5.52"
-       height="2"
-       fill="#6240bf"
+    <path
+       d="M 29.04,20 H 34.56"
        opacity="0.9"
        id="rect13" />
-    <rect
-       x="19"
-       y="29.04"
-       width="2"
-       height="5.52"
-       fill="#6240bf"
+    <path
+       d="M 20,29.04 V 34.56"
        opacity="0.9"
        id="rect14" />
-    <rect
-       x="5.44"
-       y="19"
-       width="5.52"
-       height="2"
-       fill="#6240bf"
+    <path
+       d="M 10.96,20 H 5.44"
        opacity="0.9"
        id="rect15" />
   </g>
@@ -361,5 +351,6 @@
      stroke="#6240bf"
      stroke-width="1.28"
      opacity="0.9"
-     id="main-ring" />
+     id="main-ring"
+     style="opacity:1" />
 </svg>
