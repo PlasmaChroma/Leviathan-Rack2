@@ -5,9 +5,32 @@
    height="100%"
    version="1.1"
    id="svg17"
+   sodipodi:docname="magitek_output.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.6617009"
+     inkscape:cx="266.8952"
+     inkscape:cy="148.94377"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="space-tech-detail" />
   <defs
      id="defs9">
     <filter
@@ -62,12 +85,35 @@
          stop-color="#ffffff"
          id="stop8" />
     </linearGradient>
+    <linearGradient
+       id="solder-pad-metal"
+       x1="0%"
+       y1="100%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         stop-color="#6f7680"
+         id="stop-solder-1" />
+      <stop
+         offset="38%"
+         stop-color="#d7dde4"
+         id="stop-solder-2" />
+      <stop
+         offset="66%"
+         stop-color="#f8fbff"
+         id="stop-solder-3" />
+      <stop
+         offset="100%"
+         stop-color="#8b929c"
+         id="stop-solder-4" />
+    </linearGradient>
     <filter
        id="neon-glow"
-       x="-0.67916667"
-       y="-0.67916667"
-       width="2.3583333"
-       height="2.3583333">
+       x="-0.80833333"
+       y="-0.80833333"
+       width="2.6166667"
+       height="2.6166667">
       <feGaussianBlur
          stdDeviation="6"
          result="blur"
@@ -114,7 +160,8 @@
      fill="#0d0d0d"
      stroke="#553a05"
      stroke-width="4"
-     id="circle11" />
+     id="circle11"
+     style="display:inline;stroke:#412204;stroke-opacity:1;fill:#000000;fill-opacity:1" />
   <circle
      cx="250"
      cy="250"
@@ -126,55 +173,12 @@
      id="space-tech-detail"
      style="display:inline">
     <g
-       id="cyan-conduits"
-       stroke="#00e5ff"
-       stroke-linecap="round"
-       fill="none"
-       opacity="0.78"
-       style="display:inline;opacity:1;stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal">
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         id="path2"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         transform="rotate(60,250,250)"
-         id="path4"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         transform="rotate(120,250,250)"
-         id="path6"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         transform="rotate(180,250,250)"
-         id="path8"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         transform="rotate(-120,250,250)"
-         id="path10"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-      <path
-         d="M 250,119 V 89"
-         stroke-width="3.5"
-         transform="rotate(-60,250,250)"
-         id="path12"
-         style="stroke-width:16.6;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:16.6,16.6;stroke-dashoffset:0;paint-order:normal" />
-    </g>
-    <g
        id="gold-contact-pads"
-       fill="#ffe26a"
-       stroke="#3a2802"
+       fill="url(#solder-pad-metal)"
+       stroke="#15191d"
        stroke-width="5"
        opacity="0.9"
-       style="stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1;opacity:1;fill:#ffe26a;fill-opacity:1">
+       style="display:inline;opacity:1;mix-blend-mode:normal;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1">
       <rect
          x="224"
          y="55"
@@ -182,66 +186,67 @@
          height="34"
          rx="9"
          id="rect12"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
       <rect
          x="224"
          y="55"
          width="52"
          height="34"
          rx="9"
-         transform="rotate(60 250 250)"
+         transform="rotate(60,250,250)"
          id="rect13"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
       <rect
          x="224"
          y="55"
          width="52"
          height="34"
          rx="9"
-         transform="rotate(120 250 250)"
+         transform="rotate(120,250,250)"
          id="rect14"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
       <rect
          x="224"
          y="55"
          width="52"
          height="34"
          rx="9"
-         transform="rotate(180 250 250)"
+         transform="rotate(180,250,250)"
          id="rect15"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
       <rect
          x="224"
          y="55"
          width="52"
          height="34"
          rx="9"
-         transform="rotate(240 250 250)"
+         transform="rotate(-120,250,250)"
          id="rect16"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
       <rect
          x="224"
          y="55"
          width="52"
          height="34"
          rx="9"
-         transform="rotate(300 250 250)"
+         transform="rotate(-60,250,250)"
          id="rect17"
-         style="fill:#ffe26a;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:5;stroke-dasharray:none;stroke-opacity:1" />
     </g>
     <g
        id="lit-nodes"
        fill="#00e5ff"
        stroke="#001f26"
        stroke-width="3"
-       style="display:inline;stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1">
+       style="display:none;fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+       transform="rotate(30,250,250)">
       <circle
          cx="250"
          cy="78"
          r="12"
          filter="url(#neon-glow)"
          id="circle24"
-         style="stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
       <circle
          cx="250"
          cy="78"
@@ -249,7 +254,7 @@
          filter="url(#neon-glow)"
          transform="rotate(60,250,250)"
          id="circle25"
-         style="display:inline;stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="display:inline;fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
       <circle
          cx="250"
          cy="78"
@@ -257,7 +262,7 @@
          filter="url(#neon-glow)"
          transform="rotate(120,250,250)"
          id="circle26"
-         style="stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
       <circle
          cx="250"
          cy="78"
@@ -265,7 +270,7 @@
          filter="url(#neon-glow)"
          transform="rotate(180,250,250)"
          id="circle27"
-         style="stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
       <circle
          cx="250"
          cy="78"
@@ -273,7 +278,7 @@
          filter="url(#neon-glow)"
          transform="rotate(-120,250,250)"
          id="circle28"
-         style="stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
       <circle
          cx="250"
          cy="78"
@@ -281,7 +286,138 @@
          filter="url(#neon-glow)"
          transform="rotate(-60,250,250)"
          id="circle29"
-         style="display:inline;stroke:#191919;stroke-width:3.8;stroke-dasharray:none;stroke-opacity:1" />
+         style="display:inline;fill:#000000;fill-opacity:1;stroke:#191919;stroke-width:10;stroke-dasharray:none;stroke-opacity:1" />
+    </g>
+    <g
+       id="cyan-conduits"
+       stroke="#00e5ff"
+       stroke-linecap="round"
+       fill="none"
+       opacity="0.78"
+       style="display:inline;opacity:1;stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal">
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         id="path2"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(60,250,250)"
+         id="path4"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(120,250,250)"
+         id="path6"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(180,250,250)"
+         id="path8"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-120,250,250)"
+         id="path10"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-60,250,250)"
+         id="path12"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:0, 16, 16;stroke-dashoffset:0;paint-order:normal" />
+    </g>
+    <g
+       id="conduit-clone"
+       stroke="#00e5ff"
+       stroke-linecap="round"
+       fill="none"
+       opacity="0.78"
+       style="display:none;opacity:1;stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal"
+       transform="rotate(30,250,250)">
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         id="path1"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(60,250,250)"
+         id="path3"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(120,250,250)"
+         id="path5"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(180,250,250)"
+         id="path7"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-120,250,250)"
+         id="path9"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-60,250,250)"
+         id="path11"
+         style="stroke-width:11;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:3;stroke-dasharray:11, 264;stroke-dashoffset:0;paint-order:normal" />
+    </g>
+    <g
+       id="g24"
+       stroke="#00e5ff"
+       stroke-linecap="round"
+       fill="none"
+       opacity="0.78"
+       style="display:inline;opacity:1;stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal"
+       transform="rotate(45,250,250)">
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         id="path19"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(60,250,250)"
+         id="path20"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(120,250,250)"
+         id="path21"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(180,250,250)"
+         id="path22"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-120,250,250)"
+         id="path23"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,119 V 89"
+         stroke-width="3.5"
+         transform="rotate(-60,250,250)"
+         id="path24"
+         style="stroke-width:16;stroke-linecap:butt;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:16,48;stroke-dashoffset:0;paint-order:normal" />
     </g>
   </g>
   <circle
@@ -293,7 +429,8 @@
      stroke-width="26"
      filter="url(#neon-glow)"
      opacity="0.6"
-     id="circle14" />
+     id="circle14"
+     style="display:inline" />
   <circle
      cx="250"
      cy="250"
@@ -301,7 +438,8 @@
      fill="none"
      stroke="#00e5ff"
      stroke-width="16"
-     id="circle15" />
+     id="circle15"
+     style="display:inline" />
   <circle
      cx="250"
      cy="250"
@@ -310,7 +448,8 @@
      stroke="#000000"
      stroke-width="4"
      opacity="0.5"
-     id="circle16" />
+     id="circle16"
+     style="display:inline" />
   <circle
      cx="250"
      cy="250"
@@ -319,5 +458,6 @@
      stroke="#000000"
      stroke-width="3"
      opacity="0.4"
-     id="circle17" />
+     id="circle17"
+     style="display:inline" />
 </svg>
