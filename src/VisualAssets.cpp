@@ -176,15 +176,15 @@ struct GoldButtonShadow : TransparentWidget {
 		const float p = clamp(pressAmount, 0.f, 1.f);
 		const Vec base = box.size.div(2.f);
 
-		const Vec castCenter = base.plus(Vec(crossfade(0.95f, 0.2f, p), crossfade(2.8f, 1.45f, p)));
-		const float castRx = box.size.x * crossfade(0.38f, 0.29f, p);
-		const float castRy = box.size.y * crossfade(0.32f, 0.23f, p);
+		const Vec castCenter = base.plus(Vec(crossfade(1.15f, 0.25f, p), crossfade(2.55f, 1.35f, p)));
+		const float castRx = box.size.x * crossfade(0.37f, 0.29f, p);
+		const float castRy = box.size.y * crossfade(0.33f, 0.23f, p);
 		NVGpaint castPaint = nvgRadialGradient(args.vg,
 			castCenter.x,
 			castCenter.y,
-			box.size.x * crossfade(0.12f, 0.07f, p),
-			box.size.x * crossfade(0.47f, 0.33f, p),
-			nvgRGBA(0, 0, 0, int(std::round(crossfade(78.f, 50.f, p)))),
+			box.size.x * crossfade(0.20f, 0.08f, p),
+			box.size.x * crossfade(0.43f, 0.31f, p),
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(96.f, 50.f, p)))),
 			nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		nvgEllipse(args.vg, castCenter.x, castCenter.y, castRx, castRy);
@@ -404,8 +404,8 @@ GoldButton::GoldButton() {
 	}
 	widget::FramebufferWidget* shadowLayerFb = new widget::FramebufferWidget();
 	shadowLayerFb->dirtyOnSubpixelChange = false;
-	shadowLayerFb->box.pos = Vec(-2.f, -1.f);
-	shadowLayerFb->box.size = box.size.plus(Vec(4.f, 5.f));
+	shadowLayerFb->box.pos = Vec(-4.f, -3.f);
+	shadowLayerFb->box.size = box.size.plus(Vec(8.f, 8.f));
 	GoldButtonShadow* shadowWidget = new GoldButtonShadow();
 	shadowWidget->box.size = shadowLayerFb->box.size;
 	shadowLayerFb->addChild(shadowWidget);
@@ -457,7 +457,7 @@ void GoldButton::step() {
 	if (faceTransform) {
 		faceTransform->identity();
 		const float scale = kGoldButtonSizePx / 64.f;
-		faceTransform->translate(Vec(0.f, 1.35f * pressAmount));
+		faceTransform->translate(Vec(0.f, 1.05f * pressAmount));
 		faceTransform->scale(Vec(scale, scale));
 	}
 	if (auto* shadowWidget = dynamic_cast<GoldButtonShadow*>(dropShadow)) {
@@ -467,7 +467,7 @@ void GoldButton::step() {
 		overlay->pressAmount = pressAmount;
 	}
 	if (dropShadowFb) {
-		dropShadowFb->box.pos = Vec(-2.f, crossfade(-1.15f, -0.35f, pressAmount));
+		dropShadowFb->box.pos = Vec(-4.f, crossfade(-3.15f, -2.35f, pressAmount));
 	}
 	if (pressChanged) {
 		if (fb) {
