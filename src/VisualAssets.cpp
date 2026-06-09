@@ -1,6 +1,5 @@
 #include "VisualAssets.hpp"
 
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cmath>
@@ -85,16 +84,6 @@ void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 }
 
 constexpr float kMagitekPortSizePx = 24.5f;
-std::atomic<uint32_t> gMagitekOutputJackRotationCounter{0u};
-
-float nextMagitekOutputJackRotationRad() {
-	uint32_t index = gMagitekOutputJackRotationCounter.fetch_add(1u, std::memory_order_relaxed);
-	uint32_t x = index * 747796405u + 2891336453u;
-	x = ((x >> ((x >> 28u) + 4u)) ^ x) * 277803737u;
-	x = (x >> 22u) ^ x;
-	const float unit = float(x & 0xffffu) / 65535.f;
-	return (unit * 2.f - 1.f) * (0.85f * float(M_PI));
-}
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -288,7 +277,7 @@ MagitekInputJack::MagitekInputJack() {
 }
 
 MagitekOutputJack::MagitekOutputJack() {
-	const float rotationRad = nextMagitekOutputJackRotationRad();
+	constexpr float rotationRad = float(M_PI) / 6.f;
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
