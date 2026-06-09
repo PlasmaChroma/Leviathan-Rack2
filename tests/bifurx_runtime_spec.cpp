@@ -16,7 +16,22 @@ bool isDragonKingDebugEnabled() {
 	return false;
 }
 
+bool isModuleTeardownLoggingEnabled() {
+	return false;
+}
+
 void refreshDragonKingDebugEnabled() {
+}
+
+ModuleTeardownTimer::ModuleTeardownTimer(const char* moduleName)
+	: moduleName(moduleName) {
+}
+
+void ModuleTeardownTimer::begin(int moduleId) {
+	this->moduleId = moduleId;
+}
+
+ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
 #include "../src/Bifurx.cpp"

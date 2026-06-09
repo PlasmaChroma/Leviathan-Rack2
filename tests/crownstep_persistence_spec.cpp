@@ -5,6 +5,17 @@
 #include <string>
 #include <vector>
 
+ModuleTeardownTimer::ModuleTeardownTimer(const char* moduleName)
+  : moduleName(moduleName) {
+}
+
+void ModuleTeardownTimer::begin(int moduleId) {
+  this->moduleId = moduleId;
+}
+
+ModuleTeardownTimer::~ModuleTeardownTimer() {
+}
+
 namespace {
 
 using crownstep::Move;
