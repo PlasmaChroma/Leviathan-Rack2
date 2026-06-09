@@ -53,23 +53,23 @@
        r="55%">
       <stop
          offset="0%"
-         stop-color="#f8fbff"
+         stop-color="#9aa7b2"
          id="stop6" />
       <stop
          offset="58%"
-         stop-color="#8b929c"
+         stop-color="#3f4b56"
          id="stop7" />
       <stop
          offset="70%"
-         stop-color="#d7dde4"
+         stop-color="#6f7d89"
          id="stop9" />
       <stop
          offset="86%"
-         stop-color="#6f7680"
+         stop-color="#222b34"
          id="stop10" />
       <stop
          offset="100%"
-         stop-color="#2f3a42"
+         stop-color="#10161c"
          id="stop8" />
     </radialGradient>
     <filter
@@ -109,8 +109,8 @@
      style="display:inline">
     <g
        id="carbon-grid-horizontal"
-       fill="#05070a"
-       opacity="0.34">
+       fill="#0a0f14"
+       opacity="0.48">
       <path
          d="m 13.4,2.65 h 13.2 v 0.72 H 13.4 Z" />
       <path
@@ -146,8 +146,8 @@
     </g>
     <g
        id="carbon-grid-vertical"
-       fill="#2c3741"
-       opacity="0.42">
+       fill="#4e5d69"
+       opacity="0.38">
       <path
          d="m 2.65,13.4 h 0.72 v 13.2 H 2.65 Z" />
       <path
@@ -183,8 +183,8 @@
     </g>
     <g
        id="carbon-grid-cell-shadows"
-       fill="#000000"
-       opacity="0.18">
+       fill="#151d24"
+       opacity="0.24">
       <path
          d="m 6.2,6.2 h 2.1 v 1.1 H 6.2 Z" />
       <path
