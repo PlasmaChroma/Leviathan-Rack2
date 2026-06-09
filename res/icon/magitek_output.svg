@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="1.6617009"
-     inkscape:cx="312.63147"
-     inkscape:cy="289.16155"
+     inkscape:zoom="2.3499999"
+     inkscape:cx="304.04256"
+     inkscape:cy="267.02128"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -180,14 +180,6 @@
          id="polygon1" />
     </clipPath>
   </defs>
-  <rect
-     width="500"
-     height="500"
-     fill="#050505"
-     id="rect9"
-     x="0"
-     y="0"
-     style="display:none" />
   <polygon
      points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
      fill="url(#gold-metallic)"
@@ -196,9 +188,9 @@
   <g
      id="weathered-gold-nut"
      clip-path="url(#outer-nut-clip)"
-     style="display:inline">
+     style="display:none">
     <polygon
-       points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18 "
+       points="450.918,366 250,482 49.082,366 49.082,134 250,18 450.918,134 "
        fill="none"
        stroke="#05070a"
        stroke-width="13"
@@ -332,7 +324,7 @@
      stroke-linecap="round"
      stroke-linejoin="round"
      style="display:inline"
-     transform="matrix(1.1383399,0,0,1.1383399,-34.584975,-34.584975)">
+     transform="matrix(1.1942377,0,0,1.1942377,-48.559425,-48.559425)">
     <g
        id="copper-wire-coil-foreground-shadows"
        stroke="#120703"

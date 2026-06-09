@@ -22,8 +22,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="28.67318"
-     inkscape:cx="27.761134"
-     inkscape:cy="19.129375"
+     inkscape:cx="10.009354"
+     inkscape:cy="18.571362"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -51,19 +51,20 @@
        cy="38%"
        r="58%">
       <stop
-         offset="0%"
+         offset="0.171875"
          stop-color="#16192c"
-         id="stop46" />
+         id="stop46"
+         style="stop-color:#282828;stop-opacity:1;" />
       <stop
-         offset="42%"
+         offset="0.56648433"
          stop-color="#030406"
          id="stop47" />
       <stop
-         offset="74%"
+         offset="0.78492188"
          stop-color="#070710"
          id="stop4" />
       <stop
-         offset="1"
+         offset="0.89453125"
          stop-color="#484895"
          id="stop5"
          style="stop-color:#484895;stop-opacity:1;" />
@@ -75,23 +76,23 @@
        r="76%">
       <stop
          offset="0%"
-         stop-color="#a8b6c1"
+         stop-color="#b8c4cc"
          id="stop6" />
       <stop
          offset="34%"
-         stop-color="#65737e"
+         stop-color="#7f8b94"
          id="stop7" />
       <stop
          offset="61%"
-         stop-color="#26313a"
+         stop-color="#4a5660"
          id="stop9" />
       <stop
          offset="84%"
-         stop-color="#0b1118"
+         stop-color="#242e36"
          id="stop10" />
       <stop
          offset="100%"
-         stop-color="#020406"
+         stop-color="#11181f"
          id="stop8" />
     </radialGradient>
     <radialGradient
@@ -128,12 +129,12 @@
       <stop
          offset="0%"
          stop-color="#000000"
-         stop-opacity="0.42"
+         stop-opacity="0.18"
          id="stop52" />
       <stop
          offset="58%"
          stop-color="#000000"
-         stop-opacity="0.18"
+         stop-opacity="0.07"
          id="stop53" />
       <stop
          offset="100%"
@@ -177,7 +178,7 @@
          stop-opacity="0.72"
          id="stop58" />
       <stop
-         offset="52%"
+         offset="0.93992186"
          stop-color="#a67cff"
          stop-opacity="0.3"
          id="stop59" />
@@ -218,10 +219,10 @@
        gradientUnits="userSpaceOnUse" />
     <filter
        id="filter2"
-       x="-0.081432385"
-       y="-0.081432385"
-       width="1.1628648"
-       height="1.1628648">
+       x="-0.06952762"
+       y="-0.06952762"
+       width="1.1390552"
+       height="1.1390552">
       <feGaussianBlur
          stdDeviation="0.0033599998"
          result="blur"
@@ -236,6 +237,16 @@
            id="feMergeNode2" />
       </feMerge>
     </filter>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#inputInnerBevel"
+       id="radialGradient1"
+       cx="20"
+       cy="20"
+       fx="20"
+       fy="20"
+       r="13.75"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- Outer ring -->
   <circle
@@ -388,7 +399,7 @@
      stroke="url(#inputInnerBevel)"
      stroke-width="1.5"
      id="circle10"
-     style="display:inline;stroke-width:1.5;stroke-dasharray:none" />
+     style="display:inline;stroke-width:1.5;stroke-dasharray:none;fill:none;stroke:url(#radialGradient1)" />
   <circle
      cx="20"
      cy="20"
@@ -397,7 +408,7 @@
      stroke-width="0.36"
      opacity="0.38"
      id="inner-metal-rise-highlight"
-     style="display:inline;opacity:0.262;mix-blend-mode:normal;stroke:url(#linearGradient45)"
+     style="display:none;opacity:0.262;mix-blend-mode:normal;stroke:url(#linearGradient45)"
      r="13.75" />
   <!-- Inner core -->
   <g
@@ -406,7 +417,7 @@
      stroke-linecap="round"
      stroke-linejoin="round"
      style="display:inline"
-     transform="matrix(0.09415541,0,0,0.09415541,-3.5388525,-3.5388525)">
+     transform="matrix(0.09856658,0,0,0.09856658,-4.641645,-4.641645)">
     <g
        id="copper-wire-coil-foreground-shadows"
        stroke="#120703"
@@ -495,7 +506,7 @@
          cy="250"
          r="103.5"
          id="copper-wire-wrap-loop-inner"
-         style="stroke-width:6.37244318;stroke-dasharray:none" />
+         style="stroke-width:6.37244;stroke-dasharray:none" />
       <path
          d="m 250,128 v 18"
          id="copper-wire-wrap-bridge-01" />
@@ -548,7 +559,8 @@
        id="copper-wire-coil-foreground-highlights"
        stroke="#ffdca3"
        stroke-width="1.5"
-       opacity="0.86">
+       opacity="0.86"
+       style="display:inline">
       <path
          d="m 164,164 a 121.5,121.5 0 0 1 86,-35.5"
          id="copper-wire-highlight-outer" />
@@ -565,6 +577,16 @@
   <!-- Right extension (90°) -->
   <!-- Bottom extension (180°) -->
   <!-- Left extension (270°) -->
+  <circle
+     cx="20"
+     cy="20"
+     r="9.1999998"
+     fill="none"
+     stroke="#000000"
+     stroke-width="0.32"
+     opacity="0.5"
+     id="circle16"
+     style="display:inline;opacity:1;stroke:#000000;stroke-width:1.32;stroke-dasharray:none;stroke-opacity:1" />
   <g
      id="conduit-cutouts"
      fill="none"
@@ -625,17 +647,7 @@
      filter="url(#neon-glow)"
      opacity="0.82"
      id="circle14"
-     style="display:inline;opacity:0.5;filter:url(#filter2)" />
-  <circle
-     cx="20"
-     cy="20"
-     r="9.1999998"
-     fill="none"
-     stroke="#000000"
-     stroke-width="0.32"
-     opacity="0.5"
-     id="circle16"
-     style="display:none;opacity:1;stroke:#000000;stroke-width:1.32;stroke-dasharray:none;stroke-opacity:1" />
+     style="display:inline;opacity:0.5;filter:url(#filter2);stroke-width:2.32;stroke-dasharray:none" />
   <g
      id="conduit-glow"
      fill="none"
