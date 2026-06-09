@@ -50,7 +50,7 @@
       "name": "TD.Scope",
       "description": "Expander: Waveform display for Temporal Deck.",
       "tags": [
-        "Visualizer",
+        "Visual",
         "Expander"
       ],
       "hidden": false
@@ -71,7 +71,7 @@
       "tags": [
         "Filter",
         "Distortion",
-        "Visualizer"
+        "Visual"
       ],
       "hidden": false
     },
