@@ -687,9 +687,9 @@
      fill="none"
      stroke="#000000"
      stroke-width="4"
-     stroke-linecap="round"
+     stroke-linecap="butt"
      opacity="0.9"
-     style="display:inline;stroke-width:4;stroke-linecap:round;stroke-dasharray:none">
+     style="display:inline;stroke-width:4;stroke-linecap:butt;stroke-dasharray:none">
     <path
        d="M 20,10.96 V 5.44"
        id="conduit-cutout-top" />
@@ -702,6 +702,34 @@
     <path
        d="M 10.96,20 H 5.44"
        id="conduit-cutout-left" />
+    <circle
+       cx="20"
+       cy="5.44"
+       r="2"
+       fill="#000000"
+       stroke="none"
+       id="conduit-cutout-cap-top" />
+    <circle
+       cx="34.56"
+       cy="20"
+       r="2"
+       fill="#000000"
+       stroke="none"
+       id="conduit-cutout-cap-right" />
+    <circle
+       cx="20"
+       cy="34.56"
+       r="2"
+       fill="#000000"
+       stroke="none"
+       id="conduit-cutout-cap-bottom" />
+    <circle
+       cx="5.44"
+       cy="20"
+       r="2"
+       fill="#000000"
+       stroke="none"
+       id="conduit-cutout-cap-left" />
   </g>
   <g
      id="conduits"
