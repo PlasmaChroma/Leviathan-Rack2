@@ -103,6 +103,114 @@
      stroke-width="1"
      id="circle5"
      style="display:inline" />
+  <g
+     id="carbon-fiber-face-grid"
+     stroke="none"
+     style="display:inline">
+    <g
+       id="carbon-grid-horizontal"
+       fill="#05070a"
+       opacity="0.34">
+      <path
+         d="m 13.4,2.65 h 13.2 v 0.72 H 13.4 Z" />
+      <path
+         d="M 8.8,4.85 H 31.2 V 5.57 H 8.8 Z" />
+      <path
+         d="M 6,7.05 H 34 V 7.77 H 6 Z" />
+      <path
+         d="M 4.2,9.25 H 35.8 V 9.97 H 4.2 Z" />
+      <path
+         d="M 3,11.45 H 37 v 0.72 H 3 Z" />
+      <path
+         d="M 2.2,13.65 H 37.8 V 14.37 H 2.2 Z" />
+      <path
+         d="M 1.7,15.85 H 38.3 V 16.57 H 1.7 Z" />
+      <path
+         d="M 1.4,18.05 H 38.6 V 18.77 H 1.4 Z" />
+      <path
+         d="M 1.4,20.25 H 38.6 V 20.97 H 1.4 Z" />
+      <path
+         d="M 1.6,22.45 H 38.4 V 23.17 H 1.6 Z" />
+      <path
+         d="M 2.1,24.65 H 37.9 V 25.37 H 2.1 Z" />
+      <path
+         d="M 2.9,26.85 H 37.1 V 27.57 H 2.9 Z" />
+      <path
+         d="M 4.1,29.05 H 35.9 V 29.77 H 4.1 Z" />
+      <path
+         d="M 5.8,31.25 H 34.2 V 31.97 H 5.8 Z" />
+      <path
+         d="M 8.3,33.45 H 31.7 V 34.17 H 8.3 Z" />
+      <path
+         d="M 12,35.65 H 28 v 0.72 H 12 Z" />
+    </g>
+    <g
+       id="carbon-grid-vertical"
+       fill="#2c3741"
+       opacity="0.42">
+      <path
+         d="m 2.65,13.4 h 0.72 v 13.2 H 2.65 Z" />
+      <path
+         d="M 4.85,8.8 H 5.57 V 31.2 H 4.85 Z" />
+      <path
+         d="M 7.05,6 H 7.77 V 34 H 7.05 Z" />
+      <path
+         d="M 9.25,4.2 H 9.97 V 35.8 H 9.25 Z" />
+      <path
+         d="m 11.45,3 h 0.72 v 34 h -0.72 z" />
+      <path
+         d="m 13.65,2.2 h 0.72 v 35.6 h -0.72 z" />
+      <path
+         d="m 15.85,1.7 h 0.72 v 36.6 h -0.72 z" />
+      <path
+         d="m 18.05,1.4 h 0.72 v 37.2 h -0.72 z" />
+      <path
+         d="m 20.25,1.4 h 0.72 v 37.2 h -0.72 z" />
+      <path
+         d="m 22.45,1.6 h 0.72 v 36.8 h -0.72 z" />
+      <path
+         d="m 24.65,2.1 h 0.72 v 35.8 h -0.72 z" />
+      <path
+         d="m 26.85,2.9 h 0.72 v 34.2 h -0.72 z" />
+      <path
+         d="m 29.05,4.1 h 0.72 v 31.8 h -0.72 z" />
+      <path
+         d="m 31.25,5.8 h 0.72 v 28.4 h -0.72 z" />
+      <path
+         d="m 33.45,8.3 h 0.72 v 23.4 h -0.72 z" />
+      <path
+         d="m 35.65,12 h 0.72 v 16 h -0.72 z" />
+    </g>
+    <g
+       id="carbon-grid-cell-shadows"
+       fill="#000000"
+       opacity="0.18">
+      <path
+         d="m 6.2,6.2 h 2.1 v 1.1 H 6.2 Z" />
+      <path
+         d="m 10.6,10.6 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 15,15 h 2.1 v 1.1 H 15 Z" />
+      <path
+         d="m 19.4,19.4 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 23.8,23.8 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 28.2,28.2 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 31.2,10.6 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 26.8,15 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 22.4,10.6 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 10.6,28.2 h 2.1 v 1.1 h -2.1 z" />
+      <path
+         d="m 15,23.8 h 2.1 v 1.1 H 15 Z" />
+      <path
+         d="m 6.2,19.4 h 2.1 v 1.1 H 6.2 Z" />
+    </g>
+  </g>
   <circle
      cx="20"
      cy="20"
@@ -252,7 +360,7 @@
      id="carbon-fiber-main-ring-wrap"
      fill="none"
      stroke-linecap="round"
-     style="display:inline">
+     style="display:none">
     <circle
        cx="20"
        cy="20"
