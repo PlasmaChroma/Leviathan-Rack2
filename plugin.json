@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -50,30 +50,10 @@
       "name": "TD.Scope",
       "description": "Expander: Waveform display for Temporal Deck.",
       "tags": [
-        "Visualizer",
+        "Visual",
         "Expander"
       ],
       "hidden": false
-    },
-    {
-      "slug": "Crownstep",
-      "name": "Crownstep",
-      "description": "Checkers-driven sequencer.",
-      "tags": [
-        "Sequencer"
-      ],
-      "hidden": true
-    },
-    {
-      "slug": "Sil",
-      "name": "Sil",
-      "description": "Automatic mastering module.",
-      "tags": [
-        "Dynamics",
-        "Distortion",
-        "EQ"
-      ],
-      "hidden": true
     },
     {
       "slug": "Undertow",
