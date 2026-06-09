@@ -22,7 +22,11 @@ struct MagitekOutputJack : app::SvgPort {
 struct GoldButton : app::SvgSwitch {
 	TransformWidget* faceTransform = nullptr;
 	TransparentWidget* pressOverlay = nullptr;
+	widget::FramebufferWidget* pressOverlayFb = nullptr;
 	TransparentWidget* dropShadow = nullptr;
+	widget::FramebufferWidget* dropShadowFb = nullptr;
+	TransparentWidget* fixedBezel = nullptr;
+	widget::FramebufferWidget* fixedBezelFb = nullptr;
 	float pressAmount = 0.f;
 
 	GoldButton();

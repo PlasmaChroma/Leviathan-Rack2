@@ -176,35 +176,51 @@ struct GoldButtonShadow : TransparentWidget {
 		const float p = clamp(pressAmount, 0.f, 1.f);
 		const Vec base = box.size.div(2.f);
 
-		const Vec castCenter = base.plus(Vec(crossfade(1.55f, 0.45f, p), crossfade(2.75f, 1.3f, p)));
-		const float castRx = box.size.x * crossfade(0.46f, 0.34f, p);
-		const float castRy = box.size.y * crossfade(0.31f, 0.22f, p);
+		const Vec castCenter = base.plus(Vec(crossfade(0.95f, 0.2f, p), crossfade(2.8f, 1.45f, p)));
+		const float castRx = box.size.x * crossfade(0.38f, 0.29f, p);
+		const float castRy = box.size.y * crossfade(0.32f, 0.23f, p);
 		NVGpaint castPaint = nvgRadialGradient(args.vg,
 			castCenter.x,
 			castCenter.y,
 			box.size.x * crossfade(0.12f, 0.07f, p),
-			box.size.x * crossfade(0.58f, 0.39f, p),
-			nvgRGBA(0, 0, 0, int(std::round(crossfade(86.f, 40.f, p)))),
+			box.size.x * crossfade(0.47f, 0.33f, p),
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(78.f, 50.f, p)))),
 			nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		nvgEllipse(args.vg, castCenter.x, castCenter.y, castRx, castRy);
 		nvgFillPaint(args.vg, castPaint);
 		nvgFill(args.vg);
 
-		const Vec contactCenter = base.plus(Vec(crossfade(0.55f, 0.18f, p), crossfade(1.55f, 1.0f, p)));
-		const float contactRx = box.size.x * crossfade(0.37f, 0.43f, p);
-		const float contactRy = box.size.y * crossfade(0.13f, 0.09f, p);
+		const Vec contactCenter = base.plus(Vec(crossfade(0.28f, 0.08f, p), crossfade(1.55f, 1.08f, p)));
+		const float contactRx = box.size.x * crossfade(0.30f, 0.38f, p);
+		const float contactRy = box.size.y * crossfade(0.11f, 0.085f, p);
 		NVGpaint contactPaint = nvgRadialGradient(args.vg,
 			contactCenter.x,
 			contactCenter.y,
 			box.size.x * crossfade(0.07f, 0.15f, p),
-			box.size.x * crossfade(0.39f, 0.46f, p),
-			nvgRGBA(0, 0, 0, int(std::round(crossfade(44.f, 118.f, p)))),
+			box.size.x * crossfade(0.33f, 0.40f, p),
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(54.f, 128.f, p)))),
 			nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		nvgEllipse(args.vg, contactCenter.x, contactCenter.y, contactRx, contactRy);
 		nvgFillPaint(args.vg, contactPaint);
 		nvgFill(args.vg);
+	}
+};
+
+struct GoldButtonFixedBezel : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const Vec c = box.size.div(2.f);
+		const float r = box.size.x * 0.50f;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, c.x, c.y, r);
+		nvgFillColor(args.vg, nvgRGB(17, 16, 19));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, c.x, c.y, r - 0.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 190));
+		nvgStrokeWidth(args.vg, 1.15f);
+		nvgStroke(args.vg);
 	}
 };
 
@@ -386,31 +402,58 @@ GoldButton::GoldButton() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	widget::FramebufferWidget* shadowLayerFb = new widget::FramebufferWidget();
+	shadowLayerFb->dirtyOnSubpixelChange = false;
+	shadowLayerFb->box.pos = Vec(-2.f, -1.f);
+	shadowLayerFb->box.size = box.size.plus(Vec(4.f, 5.f));
 	GoldButtonShadow* shadowWidget = new GoldButtonShadow();
-	shadowWidget->box.pos = Vec(-2.f, -1.f);
-	shadowWidget->box.size = box.size.plus(Vec(4.f, 5.f));
+	shadowWidget->box.size = shadowLayerFb->box.size;
+	shadowLayerFb->addChild(shadowWidget);
 	dropShadow = shadowWidget;
+	dropShadowFb = shadowLayerFb;
 	if (fb) {
-		addChildBelow(shadowWidget, fb);
+		addChildBelow(shadowLayerFb, fb);
 	}
 	else {
-		addChildBottom(shadowWidget);
+		addChildBottom(shadowLayerFb);
 	}
 
+	widget::FramebufferWidget* bezelFb = new widget::FramebufferWidget();
+	bezelFb->dirtyOnSubpixelChange = false;
+	bezelFb->box.size = box.size;
+	GoldButtonFixedBezel* bezel = new GoldButtonFixedBezel();
+	bezel->box.size = bezelFb->box.size;
+	bezelFb->addChild(bezel);
+	fixedBezel = bezel;
+	fixedBezelFb = bezelFb;
+	if (fb) {
+		addChildBelow(bezelFb, fb);
+	}
+	else {
+		addChild(bezelFb);
+	}
+
+	widget::FramebufferWidget* overlayFb = new widget::FramebufferWidget();
+	overlayFb->dirtyOnSubpixelChange = false;
+	overlayFb->box.size = box.size;
 	GoldButtonPressOverlay* overlay = new GoldButtonPressOverlay();
-	overlay->box.size = box.size;
+	overlay->box.size = overlayFb->box.size;
+	overlayFb->addChild(overlay);
 	pressOverlay = overlay;
-	addChild(overlay);
+	pressOverlayFb = overlayFb;
+	addChild(overlayFb);
 }
 
 void GoldButton::step() {
 	app::SvgSwitch::step();
 	engine::ParamQuantity* pq = getParamQuantity();
 	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
-	pressAmount += (target - pressAmount) * 0.45f;
+	const float oldPressAmount = pressAmount;
+	pressAmount += (target - pressAmount) * (target > pressAmount ? 0.34f : 0.42f);
 	if (std::fabs(target - pressAmount) < 0.001f) {
 		pressAmount = target;
 	}
+	const bool pressChanged = std::fabs(pressAmount - oldPressAmount) > 0.0001f;
 	if (faceTransform) {
 		faceTransform->identity();
 		const float scale = kGoldButtonSizePx / 64.f;
@@ -423,11 +466,19 @@ void GoldButton::step() {
 	if (auto* overlay = dynamic_cast<GoldButtonPressOverlay*>(pressOverlay)) {
 		overlay->pressAmount = pressAmount;
 	}
-	if (dropShadow) {
-		dropShadow->box.pos = Vec(-2.f, crossfade(-1.15f, -0.35f, pressAmount));
+	if (dropShadowFb) {
+		dropShadowFb->box.pos = Vec(-2.f, crossfade(-1.15f, -0.35f, pressAmount));
 	}
-	if (fb && pressAmount > 0.f && pressAmount < 1.f) {
-		fb->setDirty();
+	if (pressChanged) {
+		if (fb) {
+			fb->setDirty();
+		}
+		if (dropShadowFb) {
+			dropShadowFb->setDirty();
+		}
+		if (pressOverlayFb) {
+			pressOverlayFb->setDirty();
+		}
 	}
 }
 
