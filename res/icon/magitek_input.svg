@@ -432,7 +432,7 @@
      transform="matrix(0.09856658,0,0,0.09856658,-4.641645,-4.641645)">
     <g
        id="copper-wire-coil-foreground-shadows"
-       stroke="#120703"
+       stroke="#250b04"
        stroke-width="9"
        opacity="0.5">
       <circle
@@ -500,7 +500,7 @@
     </g>
     <g
        id="copper-wire-coil-foreground-wraps"
-       stroke="#c9742c"
+       stroke="#d56a25"
        stroke-width="6.2"
        opacity="0.98">
       <circle
@@ -569,7 +569,7 @@
     </g>
     <g
        id="copper-wire-coil-foreground-highlights"
-       stroke="#ffdca3"
+       stroke="#ffe6b7"
        stroke-width="1.5"
        opacity="0.86"
        style="display:inline">
