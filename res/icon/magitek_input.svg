@@ -22,8 +22,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="20.275"
-     inkscape:cx="18.199753"
-     inkscape:cy="17.632552"
+     inkscape:cx="-1.5289766"
+     inkscape:cy="20.197287"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -178,8 +178,8 @@
          id="stop58" />
       <stop
          offset="52%"
-         stop-color="#8168dc"
-         stop-opacity="0.22"
+         stop-color="#a67cff"
+         stop-opacity="0.3"
          id="stop59" />
       <stop
          offset="100%"
@@ -443,57 +443,18 @@
        stroke="none"
        id="conduit-cutout-cap-left" />
   </g>
-  <g
-     id="conduits"
-     fill="none"
-     stroke="#6240bf"
-     stroke-width="2"
-     stroke-linecap="round"
-     opacity="0.9"
-     style="display:inline;stroke-width:2;stroke-linecap:round;stroke-dasharray:none;opacity:1">
-    <path
-       d="M 20,10.96 V 5.44"
-       opacity="0.9"
-       id="rect12"
-       style="fill:#6240bf;fill-opacity:1;opacity:1" />
-    <path
-       d="M 29.04,20 H 34.56"
-       opacity="0.9"
-       id="rect13"
-       style="fill:#6240bf;fill-opacity:1;stroke:#6240bf;stroke-opacity:1;opacity:1" />
-    <path
-       d="M 20,29.04 V 34.56"
-       opacity="0.9"
-       id="rect14"
-       style="fill:#6240bf;fill-opacity:1;opacity:1" />
-    <path
-       d="M 10.96,20 H 5.44"
-       opacity="0.9"
-       id="rect15"
-       style="fill:#6240bf;fill-opacity:1;opacity:1" />
-  </g>
   <!-- Purple glow ring -->
   <circle
      cx="20"
      cy="20"
      r="8.3999996"
      fill="none"
-     stroke="#5740bf"
-     stroke-width="2.08"
+     stroke="#8c5cff"
+     stroke-width="2.72"
      filter="url(#neon-glow)"
-     opacity="0.6"
+     opacity="0.82"
      id="circle14"
      style="display:inline" />
-  <circle
-     cx="20"
-     cy="20"
-     r="8.3999996"
-     fill="none"
-     stroke="#6240bf"
-     stroke-width="1.28"
-     opacity="0.9"
-     id="main-ring"
-     style="display:inline;opacity:1" />
   <circle
      cx="20"
      cy="20"
@@ -503,7 +464,78 @@
      stroke-width="0.32"
      opacity="0.5"
      id="circle16"
-     style="display:inline" />
+     style="display:inline;opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:1.32;stroke-dasharray:none" />
+  <g
+     id="conduit-glow"
+     fill="none"
+     stroke="#8c5cff"
+     stroke-width="3.2"
+     stroke-linecap="round"
+     filter="url(#neon-glow)"
+     opacity="0.66"
+     style="display:inline;stroke-width:3.2;stroke-linecap:round;stroke-dasharray:none;opacity:0.66">
+    <path
+       d="M 20,10.96 V 5.44"
+       id="conduit-glow-top" />
+    <path
+       d="M 29.04,20 H 34.56"
+       id="conduit-glow-right" />
+    <path
+       d="M 20,29.04 V 34.56"
+       id="conduit-glow-bottom" />
+    <path
+       d="M 10.96,20 H 5.44"
+       id="conduit-glow-left" />
+  </g>
+  <g
+     id="conduits"
+     fill="none"
+     stroke="#9b6cff"
+     stroke-width="2.2"
+     stroke-linecap="round"
+     opacity="1"
+     style="display:inline;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:none;opacity:1">
+    <path
+       d="M 20,10.96 V 5.44"
+       opacity="1"
+       id="rect12"
+       style="fill:#9b6cff;fill-opacity:1;opacity:1;stroke:#9b6cff;stroke-opacity:1" />
+    <path
+       d="M 29.04,20 H 34.56"
+       opacity="1"
+       id="rect13"
+       style="fill:#9b6cff;fill-opacity:1;stroke:#9b6cff;stroke-opacity:1;opacity:1" />
+    <path
+       d="M 20,29.04 V 34.56"
+       opacity="1"
+       id="rect14"
+       style="fill:#9b6cff;fill-opacity:1;opacity:1;stroke:#9b6cff;stroke-opacity:1" />
+    <path
+       d="M 10.96,20 H 5.44"
+       opacity="1"
+       id="rect15"
+       style="fill:#9b6cff;fill-opacity:1;opacity:1;stroke:#9b6cff;stroke-opacity:1" />
+  </g>
+  <circle
+     cx="20"
+     cy="20"
+     r="8.3999996"
+     fill="none"
+     stroke="#a77aff"
+     stroke-width="1.52"
+     opacity="1"
+     id="main-ring"
+     style="display:inline;opacity:1;stroke-width:1.52;stroke-dasharray:none" />
+  <circle
+     cx="20"
+     cy="20"
+     r="8"
+     fill="none"
+     stroke="#d5c6ff"
+     stroke-width="0.32"
+     opacity="0.72"
+     id="main-ring-hot-edge"
+     style="display:inline;stroke-width:0.32;stroke-dasharray:none" />
   <circle
      cx="20"
      cy="20"
