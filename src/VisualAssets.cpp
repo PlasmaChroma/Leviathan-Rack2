@@ -271,8 +271,9 @@ static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 } // namespace
 
 MagitekInputJack::MagitekInputJack() {
+	constexpr float rotationRad = float(M_PI) / 4.f;
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_input.svg")));
-	setSvgPortSizePx(this, kMagitekPortSizePx);
+	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
 	installMagitekShadow(this, new MagitekInputShadow);
 }
 

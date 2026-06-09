@@ -9,6 +9,7 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
@@ -20,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="28.67318"
-     inkscape:cx="15.170972"
-     inkscape:cy="17.525088"
+     inkscape:zoom="20.275"
+     inkscape:cx="18.199753"
+     inkscape:cy="17.632552"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -32,6 +33,18 @@
      showgrid="false" />
   <defs
      id="defs5">
+    <linearGradient
+       id="linearGradient44"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#ccca74;stop-opacity:1;"
+         offset="0"
+         id="stop44" />
+      <stop
+         style="stop-color:#ba9b34;stop-opacity:1;"
+         offset="1"
+         id="stop45" />
+    </linearGradient>
     <radialGradient
        id="barrelShadow"
        cx="50%"
@@ -42,9 +55,10 @@
          stop-color="#000000"
          id="stop4" />
       <stop
-         offset="100%"
+         offset="1"
          stop-color="#15151c"
-         id="stop5" />
+         id="stop5"
+         style="stop-color:#484895;stop-opacity:1;" />
     </radialGradient>
     <radialGradient
        id="carbonFiberShade"
@@ -53,23 +67,23 @@
        r="55%">
       <stop
          offset="0%"
-         stop-color="#9aa7b2"
+         stop-color="#6f7d89"
          id="stop6" />
       <stop
          offset="58%"
-         stop-color="#3f4b56"
+         stop-color="#26313a"
          id="stop7" />
       <stop
          offset="70%"
-         stop-color="#6f7d89"
+         stop-color="#46545f"
          id="stop9" />
       <stop
          offset="86%"
-         stop-color="#222b34"
+         stop-color="#121a22"
          id="stop10" />
       <stop
          offset="100%"
-         stop-color="#10161c"
+         stop-color="#070b10"
          id="stop8" />
     </radialGradient>
     <filter
@@ -92,6 +106,15 @@
            id="feMergeNode9" />
       </feMerge>
     </filter>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient44"
+       id="linearGradient45"
+       x1="33.93"
+       y1="20"
+       x2="6.0699997"
+       y2="20"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- Outer ring -->
   <circle
@@ -103,114 +126,6 @@
      stroke-width="1"
      id="circle5"
      style="display:inline" />
-  <g
-     id="carbon-fiber-face-grid"
-     stroke="none"
-     style="display:inline">
-    <g
-       id="carbon-grid-horizontal"
-       fill="#0a0f14"
-       opacity="0.48">
-      <path
-         d="m 13.4,2.65 h 13.2 v 0.72 H 13.4 Z" />
-      <path
-         d="M 8.8,4.85 H 31.2 V 5.57 H 8.8 Z" />
-      <path
-         d="M 6,7.05 H 34 V 7.77 H 6 Z" />
-      <path
-         d="M 4.2,9.25 H 35.8 V 9.97 H 4.2 Z" />
-      <path
-         d="M 3,11.45 H 37 v 0.72 H 3 Z" />
-      <path
-         d="M 2.2,13.65 H 37.8 V 14.37 H 2.2 Z" />
-      <path
-         d="M 1.7,15.85 H 38.3 V 16.57 H 1.7 Z" />
-      <path
-         d="M 1.4,18.05 H 38.6 V 18.77 H 1.4 Z" />
-      <path
-         d="M 1.4,20.25 H 38.6 V 20.97 H 1.4 Z" />
-      <path
-         d="M 1.6,22.45 H 38.4 V 23.17 H 1.6 Z" />
-      <path
-         d="M 2.1,24.65 H 37.9 V 25.37 H 2.1 Z" />
-      <path
-         d="M 2.9,26.85 H 37.1 V 27.57 H 2.9 Z" />
-      <path
-         d="M 4.1,29.05 H 35.9 V 29.77 H 4.1 Z" />
-      <path
-         d="M 5.8,31.25 H 34.2 V 31.97 H 5.8 Z" />
-      <path
-         d="M 8.3,33.45 H 31.7 V 34.17 H 8.3 Z" />
-      <path
-         d="M 12,35.65 H 28 v 0.72 H 12 Z" />
-    </g>
-    <g
-       id="carbon-grid-vertical"
-       fill="#4e5d69"
-       opacity="0.38">
-      <path
-         d="m 2.65,13.4 h 0.72 v 13.2 H 2.65 Z" />
-      <path
-         d="M 4.85,8.8 H 5.57 V 31.2 H 4.85 Z" />
-      <path
-         d="M 7.05,6 H 7.77 V 34 H 7.05 Z" />
-      <path
-         d="M 9.25,4.2 H 9.97 V 35.8 H 9.25 Z" />
-      <path
-         d="m 11.45,3 h 0.72 v 34 h -0.72 z" />
-      <path
-         d="m 13.65,2.2 h 0.72 v 35.6 h -0.72 z" />
-      <path
-         d="m 15.85,1.7 h 0.72 v 36.6 h -0.72 z" />
-      <path
-         d="m 18.05,1.4 h 0.72 v 37.2 h -0.72 z" />
-      <path
-         d="m 20.25,1.4 h 0.72 v 37.2 h -0.72 z" />
-      <path
-         d="m 22.45,1.6 h 0.72 v 36.8 h -0.72 z" />
-      <path
-         d="m 24.65,2.1 h 0.72 v 35.8 h -0.72 z" />
-      <path
-         d="m 26.85,2.9 h 0.72 v 34.2 h -0.72 z" />
-      <path
-         d="m 29.05,4.1 h 0.72 v 31.8 h -0.72 z" />
-      <path
-         d="m 31.25,5.8 h 0.72 v 28.4 h -0.72 z" />
-      <path
-         d="m 33.45,8.3 h 0.72 v 23.4 h -0.72 z" />
-      <path
-         d="m 35.65,12 h 0.72 v 16 h -0.72 z" />
-    </g>
-    <g
-       id="carbon-grid-cell-shadows"
-       fill="#151d24"
-       opacity="0.24">
-      <path
-         d="m 6.2,6.2 h 2.1 v 1.1 H 6.2 Z" />
-      <path
-         d="m 10.6,10.6 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 15,15 h 2.1 v 1.1 H 15 Z" />
-      <path
-         d="m 19.4,19.4 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 23.8,23.8 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 28.2,28.2 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 31.2,10.6 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 26.8,15 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 22.4,10.6 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 10.6,28.2 h 2.1 v 1.1 h -2.1 z" />
-      <path
-         d="m 15,23.8 h 2.1 v 1.1 H 15 Z" />
-      <path
-         d="m 6.2,19.4 h 2.1 v 1.1 H 6.2 Z" />
-    </g>
-  </g>
   <circle
      cx="20"
      cy="20"
@@ -224,20 +139,21 @@
   <!-- Corner dots -->
   <g
      id="screws"
-     transform="rotate(45,20,20)">
+     transform="rotate(45,20,20)"
+     style="display:none">
     <g
        id="circle6"
-       transform="translate(20,4) scale(1.15)">
+       transform="matrix(1.15,0,0,1.15,20,4)">
       <circle
          cx="0"
          cy="0"
-         r="1.18"
+         r="1.1799999"
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
          id="torx-screw-head-1" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 0.12,0.16 0.18,0.34 0.09,0.43 C 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 C -0.2,-0.72 -0.12,-0.88 0,-0.88 Z"
+         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
          fill="#10161c"
          opacity="0.84"
          id="torx-screw-recess-1" />
@@ -252,17 +168,17 @@
     </g>
     <g
        id="circle7"
-       transform="translate(20,36) scale(1.15)">
+       transform="matrix(1.15,0,0,1.15,20,36)">
       <circle
          cx="0"
          cy="0"
-         r="1.18"
+         r="1.1799999"
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
          id="torx-screw-head-2" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 0.12,0.16 0.18,0.34 0.09,0.43 C 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 C -0.2,-0.72 -0.12,-0.88 0,-0.88 Z"
+         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
          fill="#10161c"
          opacity="0.84"
          id="torx-screw-recess-2" />
@@ -277,17 +193,17 @@
     </g>
     <g
        id="circle8"
-       transform="translate(4,20) scale(1.15)">
+       transform="matrix(1.15,0,0,1.15,4,20)">
       <circle
          cx="0"
          cy="0"
-         r="1.18"
+         r="1.1799999"
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
          id="torx-screw-head-3" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 0.12,0.16 0.18,0.34 0.09,0.43 C 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 C -0.2,-0.72 -0.12,-0.88 0,-0.88 Z"
+         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
          fill="#10161c"
          opacity="0.84"
          id="torx-screw-recess-3" />
@@ -302,17 +218,17 @@
     </g>
     <g
        id="circle9"
-       transform="translate(36,20) scale(1.15)">
+       transform="matrix(1.15,0,0,1.15,36,20)">
       <circle
          cx="0"
          cy="0"
-         r="1.18"
+         r="1.1799999"
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
          id="torx-screw-head-4" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 0.12,0.16 0.18,0.34 0.09,0.43 C 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 C -0.2,-0.72 -0.12,-0.88 0,-0.88 Z"
+         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
          fill="#10161c"
          opacity="0.84"
          id="torx-screw-recess-4" />
@@ -335,17 +251,17 @@
      stroke="#6f7680"
      stroke-width="1.5"
      id="circle10"
-     style="display:none;stroke-width:1.5;stroke-dasharray:none" />
+     style="display:inline;stroke-width:1.5;stroke-dasharray:none" />
   <circle
      cx="20"
      cy="20"
-     r="13.75"
      fill="none"
      stroke="#f8fbff"
      stroke-width="0.36"
      opacity="0.38"
      id="inner-metal-rise-highlight"
-     style="display:none" />
+     style="display:inline;opacity:0.262;mix-blend-mode:normal;stroke:url(#linearGradient45)"
+     r="13.75" />
   <!-- Inner core -->
   <circle
      cx="20"
@@ -355,436 +271,7 @@
      stroke="#111111"
      stroke-width="1"
      id="circle12"
-     style="display:inline;stroke:none" />
-  <g
-     id="carbon-fiber-main-ring-wrap"
-     fill="none"
-     stroke-linecap="round"
-     style="display:none">
-    <circle
-       cx="20"
-       cy="20"
-       r="10.9"
-       stroke="#0b0f14"
-       stroke-width="3.7"
-       opacity="0.74"
-       id="carbon-wrap-base" />
-    <circle
-       cx="20"
-       cy="20"
-       r="10.9"
-       stroke="#35404a"
-       stroke-width="0.45"
-       opacity="0.36"
-       id="carbon-wrap-metal-sheen" />
-    <g
-       id="carbon-wrap-weave-dark"
-       stroke="#05070a"
-       stroke-width="0.42"
-       opacity="0.76"
-       style="display:none">
-      <g
-         transform="rotate(0,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(30,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(60,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(90,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(120,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(150,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(180,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(210,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(240,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(270,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(300,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-      <g
-         transform="rotate(330,20,20)">
-        <path
-           d="m 16.35,8.65 2.2,2.8" />
-        <path
-           d="m 21.45,11.45 2.2,-2.8" />
-      </g>
-    </g>
-    <g
-       id="carbon-wrap-weave-light"
-       stroke="#5f6c78"
-       stroke-width="0.34"
-       opacity="0.52"
-       style="display:none">
-      <g
-         transform="rotate(15,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(45,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(75,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(105,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(135,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(165,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(195,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(225,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(255,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(285,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(315,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-      <g
-         transform="rotate(345,20,20)">
-        <path
-           d="m 16.75,9.15 1.9,2.35" />
-        <path
-           d="m 21.35,11.5 1.9,-2.35" />
-      </g>
-    </g>
-    <g
-       id="carbon-wrap-rect-weave"
-       stroke="none"
-       style="display:inline">
-      <g
-         id="carbon-wrap-rect-dark"
-         fill="#05070a"
-         opacity="0.82">
-        <g
-           transform="rotate(0,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(30,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(60,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(90,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(120,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(150,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(180,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(210,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(240,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(270,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(300,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-        <g
-           transform="rotate(330,20,20)">
-          <path
-             d="m 15.85,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 19.05,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 22.25,8.7 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 17.45,10.12 h 1.65 v 0.64 h -1.65 z" />
-          <path
-             d="m 20.65,10.12 h 1.65 v 0.64 h -1.65 z" />
-        </g>
-      </g>
-      <g
-         id="carbon-wrap-rect-light"
-         fill="#5f6c78"
-         opacity="0.46">
-        <g
-           transform="rotate(15,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-        <g
-           transform="rotate(75,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-        <g
-           transform="rotate(135,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-        <g
-           transform="rotate(195,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-        <g
-           transform="rotate(255,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-        <g
-           transform="rotate(315,20,20)">
-          <path
-             d="m 16.6,9.34 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 19.35,10.76 h 1.3 v 0.46 h -1.3 z" />
-          <path
-             d="m 22.1,9.34 h 1.3 v 0.46 h -1.3 z" />
-        </g>
-      </g>
-    </g>
-  </g>
+     style="display:inline;stroke:none;fill:#000000;fill-opacity:1" />
   <!-- Outer extensions at 90-degree angles (flush with yellow circle edge) -->
   <!-- Top extension (0°) -->
   <!-- Right extension (90°) -->
@@ -797,7 +284,7 @@
      stroke-width="4"
      stroke-linecap="butt"
      opacity="0.9"
-     style="display:inline;stroke-width:4;stroke-linecap:butt;stroke-dasharray:none">
+     style="display:inline;stroke-width:4;stroke-linecap:butt;stroke-dasharray:none;opacity:1">
     <path
        d="M 20,10.96 V 5.44"
        id="conduit-cutout-top" />
@@ -846,23 +333,27 @@
      stroke-width="2"
      stroke-linecap="round"
      opacity="0.9"
-     style="display:inline;stroke-width:2;stroke-linecap:round;stroke-dasharray:none">
+     style="display:inline;stroke-width:2;stroke-linecap:round;stroke-dasharray:none;opacity:1">
     <path
        d="M 20,10.96 V 5.44"
        opacity="0.9"
-       id="rect12" />
+       id="rect12"
+       style="fill:#6240bf;fill-opacity:1;opacity:1" />
     <path
        d="M 29.04,20 H 34.56"
        opacity="0.9"
-       id="rect13" />
+       id="rect13"
+       style="fill:#6240bf;fill-opacity:1;stroke:#6240bf;stroke-opacity:1;opacity:1" />
     <path
        d="M 20,29.04 V 34.56"
        opacity="0.9"
-       id="rect14" />
+       id="rect14"
+       style="fill:#6240bf;fill-opacity:1;opacity:1" />
     <path
        d="M 10.96,20 H 5.44"
        opacity="0.9"
-       id="rect15" />
+       id="rect15"
+       style="fill:#6240bf;fill-opacity:1;opacity:1" />
   </g>
   <!-- Purple glow ring -->
   <circle
