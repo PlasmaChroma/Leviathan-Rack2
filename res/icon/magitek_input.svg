@@ -47,45 +47,146 @@
     </linearGradient>
     <radialGradient
        id="barrelShadow"
-       cx="50%"
-       cy="50%"
-       r="50%">
+       cx="44%"
+       cy="38%"
+       r="58%">
       <stop
-         offset="70%"
-         stop-color="#000000"
+         offset="0%"
+         stop-color="#16192c"
+         id="stop46" />
+      <stop
+         offset="42%"
+         stop-color="#030406"
+         id="stop47" />
+      <stop
+         offset="74%"
+         stop-color="#070710"
          id="stop4" />
       <stop
          offset="1"
-         stop-color="#15151c"
+         stop-color="#484895"
          id="stop5"
          style="stop-color:#484895;stop-opacity:1;" />
     </radialGradient>
     <radialGradient
        id="carbonFiberShade"
-       cx="50%"
-       cy="50%"
-       r="55%">
+       cx="36%"
+       cy="30%"
+       r="76%">
       <stop
          offset="0%"
-         stop-color="#6f7d89"
+         stop-color="#a8b6c1"
          id="stop6" />
       <stop
-         offset="58%"
-         stop-color="#26313a"
+         offset="34%"
+         stop-color="#65737e"
          id="stop7" />
       <stop
-         offset="70%"
-         stop-color="#46545f"
+         offset="61%"
+         stop-color="#26313a"
          id="stop9" />
       <stop
-         offset="86%"
-         stop-color="#121a22"
+         offset="84%"
+         stop-color="#0b1118"
          id="stop10" />
       <stop
          offset="100%"
-         stop-color="#070b10"
+         stop-color="#020406"
          id="stop8" />
     </radialGradient>
+    <radialGradient
+       id="inputFaceUpperSheen"
+       cx="31%"
+       cy="24%"
+       r="74%">
+      <stop
+         offset="0%"
+         stop-color="#f0f6fb"
+         stop-opacity="0.5"
+         id="stop48" />
+      <stop
+         offset="28%"
+         stop-color="#aab8c3"
+         stop-opacity="0.18"
+         id="stop49" />
+      <stop
+         offset="72%"
+         stop-color="#0a1017"
+         stop-opacity="0"
+         id="stop50" />
+      <stop
+         offset="100%"
+         stop-color="#000000"
+         stop-opacity="0"
+         id="stop51" />
+    </radialGradient>
+    <radialGradient
+       id="inputFaceLowerShadow"
+       cx="66%"
+       cy="72%"
+       r="72%">
+      <stop
+         offset="0%"
+         stop-color="#000000"
+         stop-opacity="0.42"
+         id="stop52" />
+      <stop
+         offset="58%"
+         stop-color="#000000"
+         stop-opacity="0.18"
+         id="stop53" />
+      <stop
+         offset="100%"
+         stop-color="#000000"
+         stop-opacity="0"
+         id="stop54" />
+    </radialGradient>
+    <linearGradient
+       id="inputOuterBevel"
+       x1="7"
+       y1="6"
+       x2="33"
+       y2="34"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#eff6fb"
+         stop-opacity="0.6"
+         id="stop55" />
+      <stop
+         offset="46%"
+         stop-color="#6a7782"
+         stop-opacity="0.15"
+         id="stop56" />
+      <stop
+         offset="100%"
+         stop-color="#000000"
+         stop-opacity="0.7"
+         id="stop57" />
+    </linearGradient>
+    <linearGradient
+       id="inputInnerBevel"
+       x1="11"
+       y1="10"
+       x2="29"
+       y2="30"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#f6fbff"
+         stop-opacity="0.72"
+         id="stop58" />
+      <stop
+         offset="52%"
+         stop-color="#8168dc"
+         stop-opacity="0.22"
+         id="stop59" />
+      <stop
+         offset="100%"
+         stop-color="#000000"
+         stop-opacity="0.72"
+         id="stop60" />
+    </linearGradient>
     <filter
        id="neon-glow"
        x="-0.13047619"
@@ -129,11 +230,27 @@
   <circle
      cx="20"
      cy="20"
+     r="18.55"
+     fill="url(#inputFaceUpperSheen)"
+     stroke="none"
+     id="input-face-upper-sheen"
+     style="display:inline" />
+  <circle
+     cx="20"
+     cy="20"
+     r="18.85"
+     fill="url(#inputFaceLowerShadow)"
+     stroke="none"
+     id="input-face-lower-shadow"
+     style="display:inline" />
+  <circle
+     cx="20"
+     cy="20"
      r="18.200001"
      fill="none"
-     stroke="#dce7f0"
-     stroke-width="0.55"
-     opacity="0.42"
+     stroke="url(#inputOuterBevel)"
+     stroke-width="0.8"
+     opacity="0.68"
      id="circle5-carbon-lip"
      style="display:inline" />
   <!-- Corner dots -->
@@ -248,7 +365,7 @@
      cy="20"
      r="13"
      fill="url(#barrelShadow)"
-     stroke="#6f7680"
+     stroke="url(#inputInnerBevel)"
      stroke-width="1.5"
      id="circle10"
      style="display:inline;stroke-width:1.5;stroke-dasharray:none" />
