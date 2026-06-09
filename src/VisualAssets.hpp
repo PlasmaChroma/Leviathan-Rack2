@@ -19,6 +19,16 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
+struct GoldButton : app::SvgSwitch {
+	TransformWidget* faceTransform = nullptr;
+	TransparentWidget* pressOverlay = nullptr;
+	TransparentWidget* dropShadow = nullptr;
+	float pressAmount = 0.f;
+
+	GoldButton();
+	void step() override;
+};
+
 struct GearKnobInvertSized : app::SvgKnob {
 	struct ActiveRingWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;

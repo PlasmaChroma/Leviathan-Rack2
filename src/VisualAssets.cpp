@@ -83,7 +83,38 @@ void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 	}
 }
 
+TransformWidget* setSvgSwitchSizePx(app::SvgSwitch* button, float px) {
+	if (!button) {
+		return nullptr;
+	}
+	TransformWidget* scaleTw = nullptr;
+	const Vec size(px, px);
+	if (button->fb && button->sw) {
+		const Vec svgSize = button->sw->box.size;
+		const float svgMax = std::max(svgSize.x, svgSize.y);
+		if (svgMax > 0.f) {
+			const float scale = px / svgMax;
+			button->fb->removeChild(button->sw);
+			button->sw->box.pos = Vec(0.f, 0.f);
+			scaleTw = new TransformWidget();
+			scaleTw->addChild(button->sw);
+			scaleTw->scale(Vec(scale, scale));
+			scaleTw->box.size = svgSize.mult(scale);
+			button->fb->addChild(scaleTw);
+		}
+	}
+	button->box.size = size;
+	if (button->fb) {
+		button->fb->box.size = size;
+	}
+	if (button->shadow) {
+		button->shadow->box.size = size;
+	}
+	return scaleTw;
+}
+
 constexpr float kMagitekPortSizePx = 24.5f;
+constexpr float kGoldButtonSizePx = 24.f;
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -135,6 +166,68 @@ struct MagitekOutputShadow : TransparentWidget {
 		drawHex(args, radius * 1.22f, nvgRGBA(0, 0, 0, 28));
 		drawHex(args, radius * 1.04f, nvgRGBA(0, 0, 0, 62));
 		drawHex(args, radius * 0.86f, nvgRGBA(0, 0, 0, 132));
+	}
+};
+
+struct GoldButtonShadow : TransparentWidget {
+	float pressAmount = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		const float p = clamp(pressAmount, 0.f, 1.f);
+		const Vec base = box.size.div(2.f);
+
+		const Vec castCenter = base.plus(Vec(crossfade(1.55f, 0.45f, p), crossfade(2.75f, 1.3f, p)));
+		const float castRx = box.size.x * crossfade(0.46f, 0.34f, p);
+		const float castRy = box.size.y * crossfade(0.31f, 0.22f, p);
+		NVGpaint castPaint = nvgRadialGradient(args.vg,
+			castCenter.x,
+			castCenter.y,
+			box.size.x * crossfade(0.12f, 0.07f, p),
+			box.size.x * crossfade(0.58f, 0.39f, p),
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(86.f, 40.f, p)))),
+			nvgRGBA(0, 0, 0, 0));
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, castCenter.x, castCenter.y, castRx, castRy);
+		nvgFillPaint(args.vg, castPaint);
+		nvgFill(args.vg);
+
+		const Vec contactCenter = base.plus(Vec(crossfade(0.55f, 0.18f, p), crossfade(1.55f, 1.0f, p)));
+		const float contactRx = box.size.x * crossfade(0.37f, 0.43f, p);
+		const float contactRy = box.size.y * crossfade(0.13f, 0.09f, p);
+		NVGpaint contactPaint = nvgRadialGradient(args.vg,
+			contactCenter.x,
+			contactCenter.y,
+			box.size.x * crossfade(0.07f, 0.15f, p),
+			box.size.x * crossfade(0.39f, 0.46f, p),
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(44.f, 118.f, p)))),
+			nvgRGBA(0, 0, 0, 0));
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, contactCenter.x, contactCenter.y, contactRx, contactRy);
+		nvgFillPaint(args.vg, contactPaint);
+		nvgFill(args.vg);
+	}
+};
+
+struct GoldButtonPressOverlay : TransparentWidget {
+	float pressAmount = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		if (pressAmount <= 0.001f) {
+			return;
+		}
+		const Vec c = box.size.div(2.f);
+		const float radius = box.size.x * 0.47f;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, c.x, c.y, radius);
+		NVGpaint shade = nvgLinearGradient(args.vg,
+			c.x,
+			c.y - radius,
+			c.x,
+			c.y + radius,
+			nvgRGBA(0, 0, 0, int(72.f * pressAmount)),
+			nvgRGBA(255, 238, 160, int(28.f * pressAmount)));
+		nvgFillPaint(args.vg, shade);
+		nvgFill(args.vg);
 	}
 };
 
@@ -282,6 +375,60 @@ MagitekOutputJack::MagitekOutputJack() {
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
+}
+
+GoldButton::GoldButton() {
+	momentary = true;
+	std::shared_ptr<window::Svg> svg = visual_assets::loadPluginSvgCached("res/icon/gold_button.svg");
+	addFrame(svg);
+	addFrame(svg);
+	faceTransform = setSvgSwitchSizePx(this, kGoldButtonSizePx);
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+	GoldButtonShadow* shadowWidget = new GoldButtonShadow();
+	shadowWidget->box.pos = Vec(-2.f, -1.f);
+	shadowWidget->box.size = box.size.plus(Vec(4.f, 5.f));
+	dropShadow = shadowWidget;
+	if (fb) {
+		addChildBelow(shadowWidget, fb);
+	}
+	else {
+		addChildBottom(shadowWidget);
+	}
+
+	GoldButtonPressOverlay* overlay = new GoldButtonPressOverlay();
+	overlay->box.size = box.size;
+	pressOverlay = overlay;
+	addChild(overlay);
+}
+
+void GoldButton::step() {
+	app::SvgSwitch::step();
+	engine::ParamQuantity* pq = getParamQuantity();
+	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
+	pressAmount += (target - pressAmount) * 0.45f;
+	if (std::fabs(target - pressAmount) < 0.001f) {
+		pressAmount = target;
+	}
+	if (faceTransform) {
+		faceTransform->identity();
+		const float scale = kGoldButtonSizePx / 64.f;
+		faceTransform->translate(Vec(0.f, 1.35f * pressAmount));
+		faceTransform->scale(Vec(scale, scale));
+	}
+	if (auto* shadowWidget = dynamic_cast<GoldButtonShadow*>(dropShadow)) {
+		shadowWidget->pressAmount = pressAmount;
+	}
+	if (auto* overlay = dynamic_cast<GoldButtonPressOverlay*>(pressOverlay)) {
+		overlay->pressAmount = pressAmount;
+	}
+	if (dropShadow) {
+		dropShadow->box.pos = Vec(-2.f, crossfade(-1.15f, -0.35f, pressAmount));
+	}
+	if (fb && pressAmount > 0.f && pressAmount < 1.f) {
+		fb->setDirty();
+	}
 }
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {

@@ -1199,26 +1199,6 @@ struct IntegralFlux : Module {
 
 namespace {
 
-struct IMBigPushButton : CKD6 {
-	int* mode = NULL;
-	TransformWidget *tw;
-	IMBigPushButton() {
-		setSizeRatio(0.9f);
-	}
-	void setSizeRatio(float ratio) {
-		// Scale only the SVG child so hit area follows the visible button.
-		sw->box.size = sw->box.size.mult(ratio);
-		fb->removeChild(sw);
-		tw = new TransformWidget();
-		tw->addChild(sw);
-		tw->scale(Vec(ratio, ratio));
-		tw->box.size = sw->box.size;
-		fb->addChild(tw);
-		box.size = sw->box.size;
-		shadow->box.size = sw->box.size;
-	}
-};
-
 // Create a bigger basic button
 struct BigTL1105 : TL1105 {
     BigTL1105() {
@@ -1621,8 +1601,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
+		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
+		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
         addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
 		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
