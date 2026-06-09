@@ -21,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="20.275"
-     inkscape:cx="-1.5289766"
-     inkscape:cy="20.197287"
+     inkscape:zoom="40.55"
+     inkscape:cx="20.715166"
+     inkscape:cy="18.729963"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -189,10 +189,10 @@
     </linearGradient>
     <filter
        id="neon-glow"
-       x="-0.13047619"
-       y="-0.13047619"
-       width="1.2609524"
-       height="1.2609524">
+       x="-0.14952382"
+       y="-0.14952382"
+       width="1.2990476"
+       height="1.2990476">
       <feGaussianBlur
          stdDeviation="0.48"
          result="blur"
@@ -389,6 +389,165 @@
      stroke-width="1"
      id="circle12"
      style="display:inline;stroke:none;fill:#000000;fill-opacity:1" />
+  <g
+     id="copper-wire-coil-foreground"
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     style="display:inline"
+     transform="matrix(0.09870443,0,0,0.09870443,-4.6761075,-4.6761075)">
+    <g
+       id="copper-wire-coil-foreground-shadows"
+       stroke="#120703"
+       stroke-width="9"
+       opacity="0.5">
+      <circle
+         cx="250"
+         cy="250"
+         r="121.5"
+         id="copper-wire-shadow-loop-outer" />
+      <circle
+         cx="250"
+         cy="250"
+         r="112.5"
+         id="copper-wire-shadow-loop-mid" />
+      <circle
+         cx="250"
+         cy="250"
+         r="103.5"
+         id="copper-wire-shadow-loop-inner" />
+      <path
+         d="m 250,128 v 18"
+         id="copper-wire-shadow-bridge-01" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(30,250,250)"
+         id="copper-wire-shadow-bridge-02" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(60,250,250)"
+         id="copper-wire-shadow-bridge-03" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(90,250,250)"
+         id="copper-wire-shadow-bridge-04" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(120,250,250)"
+         id="copper-wire-shadow-bridge-05" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(150,250,250)"
+         id="copper-wire-shadow-bridge-06" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(180,250,250)"
+         id="copper-wire-shadow-bridge-07" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-150,250,250)"
+         id="copper-wire-shadow-bridge-08" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-120,250,250)"
+         id="copper-wire-shadow-bridge-09" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-90,250,250)"
+         id="copper-wire-shadow-bridge-10" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-60,250,250)"
+         id="copper-wire-shadow-bridge-11" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-30,250,250)"
+         id="copper-wire-shadow-bridge-12" />
+    </g>
+    <g
+       id="copper-wire-coil-foreground-wraps"
+       stroke="#c9742c"
+       stroke-width="6.2"
+       opacity="0.98">
+      <circle
+         cx="250"
+         cy="250"
+         r="121.5"
+         id="copper-wire-wrap-loop-outer" />
+      <circle
+         cx="250"
+         cy="250"
+         r="112.5"
+         id="copper-wire-wrap-loop-mid" />
+      <circle
+         cx="250"
+         cy="250"
+         r="103.5"
+         id="copper-wire-wrap-loop-inner" />
+      <path
+         d="m 250,128 v 18"
+         id="copper-wire-wrap-bridge-01" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(30,250,250)"
+         id="copper-wire-wrap-bridge-02" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(60,250,250)"
+         id="copper-wire-wrap-bridge-03" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(90,250,250)"
+         id="copper-wire-wrap-bridge-04" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(120,250,250)"
+         id="copper-wire-wrap-bridge-05" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(150,250,250)"
+         id="copper-wire-wrap-bridge-06" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(180,250,250)"
+         id="copper-wire-wrap-bridge-07" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-150,250,250)"
+         id="copper-wire-wrap-bridge-08" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-120,250,250)"
+         id="copper-wire-wrap-bridge-09" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-90,250,250)"
+         id="copper-wire-wrap-bridge-10" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-60,250,250)"
+         id="copper-wire-wrap-bridge-11" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-30,250,250)"
+         id="copper-wire-wrap-bridge-12" />
+    </g>
+    <g
+       id="copper-wire-coil-foreground-highlights"
+       stroke="#ffdca3"
+       stroke-width="1.5"
+       opacity="0.86">
+      <path
+         d="m 164,164 a 121.5,121.5 0 0 1 86,-35.5"
+         id="copper-wire-highlight-outer" />
+      <path
+         d="m 170,170 a 112.5,112.5 0 0 1 80,-32.5"
+         id="copper-wire-highlight-mid" />
+      <path
+         d="m 177,177 a 103.5,103.5 0 0 1 73,-30.5"
+         id="copper-wire-highlight-inner" />
+    </g>
+  </g>
   <!-- Outer extensions at 90-degree angles (flush with yellow circle edge) -->
   <!-- Top extension (0°) -->
   <!-- Right extension (90°) -->
