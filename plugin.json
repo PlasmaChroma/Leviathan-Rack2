@@ -18,10 +18,10 @@
       "name": "Integral Flux",
       "description": "Dual slope generator, variable curve slew, attenuverters, signal mixing, full audio-rate fidelity.",
       "tags": [
-        "Function Generator",
+        "Function generator",
         "Logic",
-        "Slew Limiter",
-        "Envelope Follower",
+        "Slew limiter",
+        "Envelope follower",
         "Dual"
       ]
     },
@@ -30,9 +30,9 @@
       "name": "Proc",
       "description": "Generator, slew limiter, and envelope follower.",
       "tags": [
-        "Function Generator",
-        "Slew Limiter",
-        "Envelope Follower"
+        "Function generator",
+        "Slew limiter",
+        "Envelope follower"
       ]
     },
     {
@@ -103,7 +103,7 @@
       "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
       "tags": [
         "Clock generator",
-        "Function Generator",
+        "Function generator",
         "Sequencer",
         "Random"
       ],

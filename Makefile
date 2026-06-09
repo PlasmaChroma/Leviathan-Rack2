@@ -54,9 +54,12 @@ RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
-.PHONY: generate-panel-anchor-atlas
+.PHONY: generate-panel-anchor-atlas validate-plugin-json
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
+
+validate-plugin-json:
+	python3 tools/validate_plugin_json_tags.py plugin.json
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32
