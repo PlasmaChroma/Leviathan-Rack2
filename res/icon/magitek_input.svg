@@ -21,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="40.55"
-     inkscape:cx="20.715166"
-     inkscape:cy="18.729963"
+     inkscape:zoom="28.67318"
+     inkscape:cx="27.761134"
+     inkscape:cy="19.129375"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -189,12 +189,12 @@
     </linearGradient>
     <filter
        id="neon-glow"
-       x="-0.14952382"
-       y="-0.14952382"
-       width="1.2990476"
-       height="1.2990476">
+       x="-0.072985359"
+       y="-0.072985359"
+       width="1.1459707"
+       height="1.1459707">
       <feGaussianBlur
-         stdDeviation="0.48"
+         stdDeviation="0.21888901"
          result="blur"
          id="feGaussianBlur8" />
       <feMerge
@@ -216,6 +216,26 @@
        x2="6.0699997"
        y2="20"
        gradientUnits="userSpaceOnUse" />
+    <filter
+       id="filter2"
+       x="-0.081432385"
+       y="-0.081432385"
+       width="1.1628648"
+       height="1.1628648">
+      <feGaussianBlur
+         stdDeviation="0.0033599998"
+         result="blur"
+         id="feGaussianBlur1" />
+      <feMerge
+         id="feMerge2">
+        <feMergeNode
+           in="blur"
+           id="feMergeNode1" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode2" />
+      </feMerge>
+    </filter>
   </defs>
   <!-- Outer ring -->
   <circle
@@ -225,7 +245,7 @@
      fill="url(#carbonFiberShade)"
      stroke="#05070a"
      stroke-width="1"
-     id="circle5"
+     id="backing-circle"
      style="display:inline" />
   <circle
      cx="20"
@@ -268,20 +288,20 @@
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
-         id="torx-screw-head-1" />
+         id="phillips-screw-head-1" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
+         d="m -0.18,-0.86 h 0.36 v 0.68 H 0.86 V 0.18 H 0.18 V 0.86 H -0.18 V 0.18 h -0.68 v -0.36 h 0.68 z"
          fill="#10161c"
          opacity="0.84"
-         id="torx-screw-recess-1" />
+         id="phillips-screw-recess-1" />
       <path
-         d="m -0.63,-0.31 c 0.2,-0.23 0.51,-0.36 0.82,-0.31"
+         d="m -0.62,-0.18 h 0.36 m 0.08,-0.44 v 0.36"
          fill="none"
          stroke="#dce7f0"
          stroke-width="0.16"
          stroke-linecap="round"
          opacity="0.42"
-         id="torx-screw-highlight-1" />
+         id="phillips-screw-highlight-1" />
     </g>
     <g
        id="circle7"
@@ -293,20 +313,20 @@
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
-         id="torx-screw-head-2" />
+         id="phillips-screw-head-2" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
+         d="m -0.18,-0.86 h 0.36 v 0.68 H 0.86 V 0.18 H 0.18 V 0.86 H -0.18 V 0.18 h -0.68 v -0.36 h 0.68 z"
          fill="#10161c"
          opacity="0.84"
-         id="torx-screw-recess-2" />
+         id="phillips-screw-recess-2" />
       <path
-         d="m -0.63,-0.31 c 0.2,-0.23 0.51,-0.36 0.82,-0.31"
+         d="m -0.62,-0.18 h 0.36 m 0.08,-0.44 v 0.36"
          fill="none"
          stroke="#dce7f0"
          stroke-width="0.16"
          stroke-linecap="round"
          opacity="0.42"
-         id="torx-screw-highlight-2" />
+         id="phillips-screw-highlight-2" />
     </g>
     <g
        id="circle8"
@@ -318,20 +338,20 @@
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
-         id="torx-screw-head-3" />
+         id="phillips-screw-head-3" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
+         d="m -0.18,-0.86 h 0.36 v 0.68 H 0.86 V 0.18 H 0.18 V 0.86 H -0.18 V 0.18 h -0.68 v -0.36 h 0.68 z"
          fill="#10161c"
          opacity="0.84"
-         id="torx-screw-recess-3" />
+         id="phillips-screw-recess-3" />
       <path
-         d="m -0.63,-0.31 c 0.2,-0.23 0.51,-0.36 0.82,-0.31"
+         d="m -0.62,-0.18 h 0.36 m 0.08,-0.44 v 0.36"
          fill="none"
          stroke="#dce7f0"
          stroke-width="0.16"
          stroke-linecap="round"
          opacity="0.42"
-         id="torx-screw-highlight-3" />
+         id="phillips-screw-highlight-3" />
     </g>
     <g
        id="circle9"
@@ -343,20 +363,20 @@
          fill="#9aa7b2"
          stroke="#1d2730"
          stroke-width="0.16"
-         id="torx-screw-head-4" />
+         id="phillips-screw-head-4" />
       <path
-         d="m 0,-0.88 c 0.12,0 0.2,0.16 0.24,0.34 0.16,-0.12 0.34,-0.18 0.43,-0.09 0.09,0.09 0.03,0.27 -0.09,0.43 0.18,0.04 0.34,0.12 0.34,0.24 0,0.12 -0.16,0.2 -0.34,0.24 C 0.7,0.44 0.76,0.62 0.67,0.71 0.58,0.8 0.4,0.74 0.24,0.62 0.2,0.8 0.12,0.96 0,0.96 -0.12,0.96 -0.2,0.8 -0.24,0.62 -0.4,0.74 -0.58,0.8 -0.67,0.71 -0.76,0.62 -0.7,0.44 -0.58,0.28 -0.76,0.24 -0.92,0.16 -0.92,0.04 c 0,-0.12 0.16,-0.2 0.34,-0.24 -0.12,-0.16 -0.18,-0.34 -0.09,-0.43 0.09,-0.09 0.27,-0.03 0.43,0.09 0.04,-0.18 0.12,-0.34 0.24,-0.34 z"
+         d="m -0.18,-0.86 h 0.36 v 0.68 H 0.86 V 0.18 H 0.18 V 0.86 H -0.18 V 0.18 h -0.68 v -0.36 h 0.68 z"
          fill="#10161c"
          opacity="0.84"
-         id="torx-screw-recess-4" />
+         id="phillips-screw-recess-4" />
       <path
-         d="m -0.63,-0.31 c 0.2,-0.23 0.51,-0.36 0.82,-0.31"
+         d="m -0.62,-0.18 h 0.36 m 0.08,-0.44 v 0.36"
          fill="none"
          stroke="#dce7f0"
          stroke-width="0.16"
          stroke-linecap="round"
          opacity="0.42"
-         id="torx-screw-highlight-4" />
+         id="phillips-screw-highlight-4" />
     </g>
   </g>
   <!-- Center shadow -->
@@ -380,22 +400,13 @@
      style="display:inline;opacity:0.262;mix-blend-mode:normal;stroke:url(#linearGradient45)"
      r="13.75" />
   <!-- Inner core -->
-  <circle
-     cx="20"
-     cy="20"
-     r="7.5"
-     fill="#040405"
-     stroke="#111111"
-     stroke-width="1"
-     id="circle12"
-     style="display:inline;stroke:none;fill:#000000;fill-opacity:1" />
   <g
      id="copper-wire-coil-foreground"
      fill="none"
      stroke-linecap="round"
      stroke-linejoin="round"
      style="display:inline"
-     transform="matrix(0.09870443,0,0,0.09870443,-4.6761075,-4.6761075)">
+     transform="matrix(0.09415541,0,0,0.09415541,-3.5388525,-3.5388525)">
     <g
        id="copper-wire-coil-foreground-shadows"
        stroke="#120703"
@@ -483,7 +494,8 @@
          cx="250"
          cy="250"
          r="103.5"
-         id="copper-wire-wrap-loop-inner" />
+         id="copper-wire-wrap-loop-inner"
+         style="stroke-width:6.37244318;stroke-dasharray:none" />
       <path
          d="m 250,128 v 18"
          id="copper-wire-wrap-bridge-01" />
@@ -560,28 +572,28 @@
      stroke-width="4"
      stroke-linecap="butt"
      opacity="0.9"
-     style="display:inline;stroke-width:4;stroke-linecap:butt;stroke-dasharray:none;opacity:1">
+     style="display:inline;opacity:1;stroke-width:4;stroke-linecap:butt;stroke-dasharray:none">
     <path
        d="M 20,10.96 V 5.44"
        id="conduit-cutout-top" />
     <path
-       d="M 29.04,20 H 34.56"
+       d="m 29.04,20 h 5.52"
        id="conduit-cutout-right" />
     <path
-       d="M 20,29.04 V 34.56"
+       d="m 20,29.04 v 5.52"
        id="conduit-cutout-bottom" />
     <path
        d="M 10.96,20 H 5.44"
        id="conduit-cutout-left" />
     <circle
        cx="20"
-       cy="5.44"
+       cy="5.4400001"
        r="2"
        fill="#000000"
        stroke="none"
        id="conduit-cutout-cap-top" />
     <circle
-       cx="34.56"
+       cx="34.560001"
        cy="20"
        r="2"
        fill="#000000"
@@ -589,13 +601,13 @@
        id="conduit-cutout-cap-right" />
     <circle
        cx="20"
-       cy="34.56"
+       cy="34.560001"
        r="2"
        fill="#000000"
        stroke="none"
        id="conduit-cutout-cap-bottom" />
     <circle
-       cx="5.44"
+       cx="5.4400001"
        cy="20"
        r="2"
        fill="#000000"
@@ -613,7 +625,7 @@
      filter="url(#neon-glow)"
      opacity="0.82"
      id="circle14"
-     style="display:inline" />
+     style="display:inline;opacity:0.5;filter:url(#filter2)" />
   <circle
      cx="20"
      cy="20"
@@ -623,7 +635,7 @@
      stroke-width="0.32"
      opacity="0.5"
      id="circle16"
-     style="display:inline;opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:1.32;stroke-dasharray:none" />
+     style="display:none;opacity:1;stroke:#000000;stroke-width:1.32;stroke-dasharray:none;stroke-opacity:1" />
   <g
      id="conduit-glow"
      fill="none"
@@ -704,5 +716,14 @@
      stroke-width="0.24"
      opacity="0.4"
      id="circle17"
-     style="display:inline" />
+     style="display:inline;opacity:0.5" />
+  <circle
+     cx="20"
+     cy="20"
+     r="7.2209935"
+     fill="#040405"
+     stroke="#111111"
+     stroke-width="0.962799"
+     id="central-cutout"
+     style="display:inline;fill:#000000;fill-opacity:1;stroke:none" />
 </svg>
