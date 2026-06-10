@@ -2,6 +2,7 @@
 #include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
+#include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -1230,23 +1231,17 @@ struct WavePreviewWidget : Widget {
 	static constexpr float TRAIL_FADE_SEC = 0.333f;
 	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
-	struct TrailFrame {
-		std::array<Vec, POINT_COUNT> points {};
-		double birthSec = 0.0;
-		bool active = false;
-	};
+	static constexpr int TRAIL_DRAW_STRIDE = 2;
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
-	std::array<TrailFrame, TRAIL_FRAME_COUNT> trailFrames {};
+	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> tracer;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
-	int nextTrailFrame = 0;
-	double lastTrailCaptureSec = -1.0;
 
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
@@ -1337,37 +1332,6 @@ struct WavePreviewWidget : Widget {
 		pointsValid = true;
 	}
 
-	void captureTrailFrame(double nowSec) {
-		if (!pointsValid) {
-			return;
-		}
-		if (lastTrailCaptureSec > 0.0 && (nowSec - lastTrailCaptureSec) < TRAIL_MIN_CAPTURE_INTERVAL_SEC) {
-			return;
-		}
-		TrailFrame& frame = trailFrames[nextTrailFrame];
-		frame.points = points;
-		frame.birthSec = nowSec;
-		frame.active = true;
-		nextTrailFrame = (nextTrailFrame + 1) % TRAIL_FRAME_COUNT;
-		lastTrailCaptureSec = nowSec;
-	}
-
-	void expireTrailFrames(double nowSec) {
-		for (TrailFrame& frame : trailFrames) {
-			if (frame.active && (nowSec - frame.birthSec) >= TRAIL_FADE_SEC) {
-				frame.active = false;
-			}
-		}
-	}
-
-	void clearTrailFrames() {
-		for (TrailFrame& frame : trailFrames) {
-			frame.active = false;
-		}
-		nextTrailFrame = 0;
-		lastTrailCaptureSec = -1.0;
-	}
-
 	void step() override {
 		Widget::step();
 		if (!modulePtr) {
@@ -1403,14 +1367,14 @@ struct WavePreviewWidget : Widget {
 		const double nowSec = system::getTime();
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		if (tracerEnabled) {
-			expireTrailFrames(nowSec);
+			tracer.expire(nowSec, TRAIL_FADE_SEC);
 		}
 		else {
-			clearTrailFrames();
+			tracer.clear();
 		}
 		if (!pointsValid || version != lastVersion) {
-			if (tracerEnabled) {
-				captureTrailFrame(nowSec);
+			if (tracerEnabled && pointsValid) {
+				tracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
 			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
@@ -1425,30 +1389,14 @@ struct WavePreviewWidget : Widget {
 			const double nowSec = system::getTime();
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 			if (tracerEnabled) {
-				for (const TrailFrame& frame : trailFrames) {
-					if (!frame.active) {
-						continue;
-					}
-					const float age = float(nowSec - frame.birthSec);
-					if (age < 0.f || age >= TRAIL_FADE_SEC) {
-						continue;
-					}
-					const float fade = 1.f - age / TRAIL_FADE_SEC;
-					const int alpha = clamp(int(118.f * fade), 0, 118);
-					if (alpha <= 0) {
-						continue;
-					}
-					nvgBeginPath(args.vg);
-					nvgMoveTo(args.vg, frame.points[0].x, frame.points[0].y);
-					for (int i = 1; i < POINT_COUNT; ++i) {
-						nvgLineTo(args.vg, frame.points[i].x, frame.points[i].y);
-					}
-					nvgStrokeColor(args.vg, nvgRGBA(255, 190, 80, alpha));
-					nvgStrokeWidth(args.vg, TRAIL_LINE_WIDTH);
-					nvgLineCap(args.vg, NVG_BUTT);
-					nvgLineJoin(args.vg, NVG_ROUND);
-					nvgStroke(args.vg);
-				}
+				WavePreviewTracerStyle style;
+				style.color = nvgRGBA(255, 190, 80, 255);
+				style.lineWidth = TRAIL_LINE_WIDTH;
+				style.fadeSec = TRAIL_FADE_SEC;
+				style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+				style.maxAlpha = 118.f;
+				style.drawStride = TRAIL_DRAW_STRIDE;
+				tracer.draw(args.vg, nowSec, style);
 			}
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, points[0].x, points[0].y);
