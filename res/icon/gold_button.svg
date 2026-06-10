@@ -9,13 +9,58 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg"
-   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-   xmlns:cc="http://creativecommons.org/ns#"
-   xmlns:dc="http://purl.org/dc/elements/1.1/">
+   xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs315" />
+     id="defs315">
+    <linearGradient
+       id="linearGradient2"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#b2965a;stop-opacity:1;"
+         offset="0.83789062"
+         id="stop3" />
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="1"
+         id="stop4" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#d8b66e;stop-opacity:1;"
+         offset="0.82421035"
+         id="stop1" />
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="radialGradient2"
+       cx="31.999996"
+       cy="31.700001"
+       fx="31.999994"
+       fy="31.700001"
+       r="28.15"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.1328115,-4.6003685e-4,4.5440143e-4,1.1189387,-4.2643667,-3.7556347)" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient2"
+       id="radialGradient4"
+       cx="32"
+       cy="31.700001"
+       fx="32"
+       fy="31.700001"
+       r="28.15"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.1328115,-4.6003752e-4,4.5440376e-4,1.1189387,-4.2643704,-3.7556346)" />
+  </defs>
   <sodipodi:namedview
      id="namedview315"
      pagecolor="#ffffff"
@@ -25,28 +70,30 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="17.920737"
-     inkscape:cx="40.232719"
-     inkscape:cy="29.044564"
+     inkscape:zoom="16"
+     inkscape:cx="21.0625"
+     inkscape:cy="32.46875"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg315" />
+     inkscape:current-layer="svg315"
+     showgrid="false" />
   <circle
      cx="32"
      cy="32"
      r="29.4"
      fill="#111013"
      id="outer-black"
-     style="display:inline;stroke-width:1;stroke-dasharray:none;stroke:none;stroke-opacity:1;opacity:0.66" />
+     style="display:inline;stroke-width:1;stroke-dasharray:none;stroke:none;stroke-opacity:1;opacity:0.66;fill:#000000;fill-opacity:1" />
   <circle
      cx="32"
      cy="31.7"
      r="28.15"
      fill="#2a2117"
-     id="circle4" />
+     id="circle4"
+     style="fill:url(#radialGradient2);stroke:url(#radialGradient4);stroke-width:3;stroke-dasharray:none" />
   <circle
      cx="32"
      cy="32"
@@ -303,9 +350,6 @@
      stroke-width="0.073"
      opacity="0.098"
      id="circle246" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -315,9 +359,6 @@
      stroke-width="0.084"
      opacity="0.121"
      id="circle250" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -327,9 +368,6 @@
      stroke-width="0.055"
      opacity="0.122"
      id="circle254" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -339,9 +377,6 @@
      stroke-width="0.086"
      opacity="0.098"
      id="circle258" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -351,9 +386,6 @@
      stroke-width="0.070"
      opacity="0.074"
      id="circle262" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -363,9 +395,6 @@
      stroke-width="0.063"
      opacity="0.073"
      id="circle266" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -375,9 +404,6 @@
      stroke-width="0.089"
      opacity="0.096"
      id="circle270" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -387,9 +413,6 @@
      stroke-width="0.057"
      opacity="0.120"
      id="circle274" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -399,9 +422,6 @@
      stroke-width="0.078"
      opacity="0.122"
      id="circle278" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -411,9 +431,6 @@
      stroke-width="0.080"
      opacity="0.100"
      id="circle282" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -423,9 +440,6 @@
      stroke-width="0.056"
      opacity="0.075"
      id="circle286" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -435,9 +449,6 @@
      stroke-width="0.089"
      opacity="0.072"
      id="circle290" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -447,9 +458,6 @@
      stroke-width="0.064"
      opacity="0.094"
      id="circle294" />
-
-
-
   <circle
      cx="32"
      cy="32"
@@ -459,19 +467,6 @@
      stroke-width="0.068"
      opacity="0.119"
      id="circle298" />
-
-
-
-  <circle
-     cx="32"
-     cy="32"
-     r="26.120"
-     fill="none"
-     stroke="#f6d990"
-     stroke-width="0.087"
-     opacity="0.123"
-     id="circle302" />
-
   <circle
      cx="32"
      cy="32"

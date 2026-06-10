@@ -196,6 +196,7 @@ struct IntegralFlux : Module {
 	int timingUpdateCounter = 0;
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
+	std::atomic<bool> previewTracerEnabled {true};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -989,6 +990,7 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -1021,6 +1023,11 @@ struct IntegralFlux : Module {
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
 		if (timingInterpJ) {
 			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerJ = json_object_get(rootJ, "previewTracerEnabled");
+		if (previewTracerJ) {
+			previewTracerEnabled.store(json_boolean_value(previewTracerJ), std::memory_order_relaxed);
 		}
 	}
 
@@ -1219,15 +1226,27 @@ struct WavePreviewWidget : Widget {
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
+	static constexpr int TRAIL_FRAME_COUNT = 11;
+	static constexpr float TRAIL_FADE_SEC = 0.333f;
+	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
+	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
+	struct TrailFrame {
+		std::array<Vec, POINT_COUNT> points {};
+		double birthSec = 0.0;
+		bool active = false;
+	};
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
+	std::array<TrailFrame, TRAIL_FRAME_COUNT> trailFrames {};
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
+	int nextTrailFrame = 0;
+	double lastTrailCaptureSec = -1.0;
 
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
@@ -1318,6 +1337,37 @@ struct WavePreviewWidget : Widget {
 		pointsValid = true;
 	}
 
+	void captureTrailFrame(double nowSec) {
+		if (!pointsValid) {
+			return;
+		}
+		if (lastTrailCaptureSec > 0.0 && (nowSec - lastTrailCaptureSec) < TRAIL_MIN_CAPTURE_INTERVAL_SEC) {
+			return;
+		}
+		TrailFrame& frame = trailFrames[nextTrailFrame];
+		frame.points = points;
+		frame.birthSec = nowSec;
+		frame.active = true;
+		nextTrailFrame = (nextTrailFrame + 1) % TRAIL_FRAME_COUNT;
+		lastTrailCaptureSec = nowSec;
+	}
+
+	void expireTrailFrames(double nowSec) {
+		for (TrailFrame& frame : trailFrames) {
+			if (frame.active && (nowSec - frame.birthSec) >= TRAIL_FADE_SEC) {
+				frame.active = false;
+			}
+		}
+	}
+
+	void clearTrailFrames() {
+		for (TrailFrame& frame : trailFrames) {
+			frame.active = false;
+		}
+		nextTrailFrame = 0;
+		lastTrailCaptureSec = -1.0;
+	}
+
 	void step() override {
 		Widget::step();
 		if (!modulePtr) {
@@ -1350,7 +1400,18 @@ struct WavePreviewWidget : Widget {
 		else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
 			dotVisible = true;
 		}
+		const double nowSec = system::getTime();
+		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+		if (tracerEnabled) {
+			expireTrailFrames(nowSec);
+		}
+		else {
+			clearTrailFrames();
+		}
 		if (!pointsValid || version != lastVersion) {
+			if (tracerEnabled) {
+				captureTrailFrame(nowSec);
+			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
 		}
@@ -1361,6 +1422,34 @@ struct WavePreviewWidget : Widget {
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		if (pointsValid) {
+			const double nowSec = system::getTime();
+			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+			if (tracerEnabled) {
+				for (const TrailFrame& frame : trailFrames) {
+					if (!frame.active) {
+						continue;
+					}
+					const float age = float(nowSec - frame.birthSec);
+					if (age < 0.f || age >= TRAIL_FADE_SEC) {
+						continue;
+					}
+					const float fade = 1.f - age / TRAIL_FADE_SEC;
+					const int alpha = clamp(int(118.f * fade), 0, 118);
+					if (alpha <= 0) {
+						continue;
+					}
+					nvgBeginPath(args.vg);
+					nvgMoveTo(args.vg, frame.points[0].x, frame.points[0].y);
+					for (int i = 1; i < POINT_COUNT; ++i) {
+						nvgLineTo(args.vg, frame.points[i].x, frame.points[i].y);
+					}
+					nvgStrokeColor(args.vg, nvgRGBA(255, 190, 80, alpha));
+					nvgStrokeWidth(args.vg, TRAIL_LINE_WIDTH);
+					nvgLineCap(args.vg, NVG_BUTT);
+					nvgLineJoin(args.vg, NVG_ROUND);
+					nvgStroke(args.vg);
+				}
+			}
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, points[0].x, points[0].y);
 			for (int i = 1; i < POINT_COUNT; ++i) {
@@ -1757,6 +1846,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Bandlimited CH1/CH4 Signal Outputs", "",
 				[=]() { return maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
 				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createCheckMenuItem("Preview Tracer", "",
+				[=]() { return maths->previewTracerEnabled.load(std::memory_order_relaxed); },
+				[=]() { maths->previewTracerEnabled.store(!maths->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
