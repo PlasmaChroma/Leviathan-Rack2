@@ -2,6 +2,7 @@
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
+#include "WavePreviewTracer.hpp"
 #include <array>
 
 namespace {
@@ -81,9 +82,23 @@ struct UndertowShapePreviewWidget final : Widget {
   static constexpr float DEFAULT_FREQUENCY_HZ = 261.63f;
   static constexpr float DEFAULT_SHAPE_AMOUNT = 0.f;
   static constexpr float DEFAULT_EDGE_HARDNESS = 0.5f;
+  static constexpr int TRAIL_FRAME_COUNT = 11;
+  static constexpr float TRAIL_FADE_SEC = 0.333f;
+  static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
+  static constexpr float TRAIL_LINE_WIDTH = 1.05f;
+  static constexpr int TRAIL_DRAW_STRIDE = 2;
   Undertow* module = nullptr;
   std::array<float, PREVIEW_POINT_COUNT> samples {};
+  std::array<Vec, PREVIEW_POINT_COUNT> points {};
+  WavePreviewTracer<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT> tracer;
   bool samplesInitialized = false;
+  bool pointsInitialized = false;
+  bool hasLastPreviewState = false;
+  float lastShapeAmount = DEFAULT_SHAPE_AMOUNT;
+  float lastEdgeHardness = DEFAULT_EDGE_HARDNESS;
+  bool lastAsymEnabled = false;
+  bool lastAsymOnRight = false;
+  Vec lastPointSize;
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
     refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
@@ -117,23 +132,79 @@ struct UndertowShapePreviewWidget final : Widget {
     samplesInitialized = true;
   }
 
+  void rebuildPoints() {
+    const float w = std::max(box.size.x, 1.f);
+    const float h = std::max(box.size.y, 1.f);
+    const float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
+    const float left = drawPad;
+    const float top = drawPad;
+    const float right = std::max(left + 1.f, w - drawPad);
+    const float bottom = std::max(top + 1.f, h - drawPad);
+    const float drawW = right - left;
+    const float drawH = bottom - top;
+    for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
+      const float xNorm = float(i) / float(PREVIEW_POINT_COUNT - 1);
+      const float x = left + xNorm * drawW;
+      const float yNorm = clamp(0.5f - 0.5f * (samples[size_t(i)] / 5.f), 0.f, 1.f);
+      points[size_t(i)] = Vec(x, top + yNorm * drawH);
+    }
+    pointsInitialized = true;
+    lastPointSize = box.size;
+  }
+
   void step() override {
     Widget::step();
+    const double nowSec = system::getTime();
     if (module) {
       const float shapeAmount = module->displayShapeAmount.load(std::memory_order_relaxed);
       const float edgeHardness = module->params[Undertow::EDGE_HARDNESS_PARAM].getValue();
       const bool asymEnabled = module->shapeEntryAsymmetry.load(std::memory_order_relaxed);
       const bool asymOnRight = module->shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
-      refreshSamples(shapeAmount, edgeHardness, asymEnabled, asymOnRight);
+      const bool curveChanged = !hasLastPreviewState ||
+                                std::fabs(shapeAmount - lastShapeAmount) > 1e-4f ||
+                                std::fabs(edgeHardness - lastEdgeHardness) > 1e-4f ||
+                                asymEnabled != lastAsymEnabled ||
+                                asymOnRight != lastAsymOnRight;
+      const bool sizeChanged = std::fabs(box.size.x - lastPointSize.x) > 0.5f ||
+                               std::fabs(box.size.y - lastPointSize.y) > 0.5f;
+      const bool tracerEnabled = module->previewTracerEnabled.load(std::memory_order_relaxed);
+      if (tracerEnabled) {
+        tracer.expire(nowSec, TRAIL_FADE_SEC);
+      }
+      else {
+        tracer.clear();
+      }
+      if (curveChanged) {
+        if (tracerEnabled && pointsInitialized) {
+          tracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+        }
+        refreshSamples(shapeAmount, edgeHardness, asymEnabled, asymOnRight);
+        rebuildPoints();
+        lastShapeAmount = shapeAmount;
+        lastEdgeHardness = edgeHardness;
+        lastAsymEnabled = asymEnabled;
+        lastAsymOnRight = asymOnRight;
+        hasLastPreviewState = true;
+      }
+      else if (!pointsInitialized || sizeChanged) {
+        rebuildPoints();
+      }
     }
     else if (!samplesInitialized) {
       refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
+      rebuildPoints();
+    }
+    else if (!pointsInitialized) {
+      rebuildPoints();
     }
   }
 
   void draw(const DrawArgs& args) override {
     if (!samplesInitialized) {
       refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
+    }
+    if (!pointsInitialized) {
+      rebuildPoints();
     }
 
     const float w = std::max(box.size.x, 1.f);
@@ -143,7 +214,6 @@ struct UndertowShapePreviewWidget final : Widget {
     const float top = drawPad;
     const float right = std::max(left + 1.f, w - drawPad);
     const float bottom = std::max(top + 1.f, h - drawPad);
-    const float drawW = right - left;
     const float drawH = bottom - top;
 
     nvgSave(args.vg);
@@ -156,17 +226,21 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgStrokeWidth(args.vg, 0.65f);
     nvgStroke(args.vg);
 
+    if (module && module->previewTracerEnabled.load(std::memory_order_relaxed)) {
+      WavePreviewTracerStyle style;
+      style.color = nvgRGBA(255, 190, 80, 255);
+      style.lineWidth = TRAIL_LINE_WIDTH;
+      style.fadeSec = TRAIL_FADE_SEC;
+      style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+      style.maxAlpha = 104.f;
+      style.drawStride = TRAIL_DRAW_STRIDE;
+      tracer.draw(args.vg, system::getTime(), style);
+    }
+
     nvgBeginPath(args.vg);
-    for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
-      const float xNorm = float(i) / float(PREVIEW_POINT_COUNT - 1);
-      const float x = left + xNorm * drawW;
-      const float yNorm = clamp(0.5f - 0.5f * (samples[size_t(i)] / 5.f), 0.f, 1.f);
-      const float y = top + yNorm * drawH;
-      if (i == 0) {
-        nvgMoveTo(args.vg, x, y);
-      } else {
-        nvgLineTo(args.vg, x, y);
-      }
+    nvgMoveTo(args.vg, points[0].x, points[0].y);
+    for (int i = 1; i < PREVIEW_POINT_COUNT; ++i) {
+      nvgLineTo(args.vg, points[size_t(i)].x, points[size_t(i)].y);
     }
     nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
     nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
@@ -335,6 +409,11 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { return m->analogCharacterEnabled.load(std::memory_order_relaxed); },
       [m]() { m->analogCharacterEnabled.store(!m->analogCharacterEnabled.load(std::memory_order_relaxed),
                                               std::memory_order_relaxed); }));
+    menu->addChild(createCheckMenuItem(
+      "Preview tracer", "",
+      [m]() { return m->previewTracerEnabled.load(std::memory_order_relaxed); },
+      [m]() { m->previewTracerEnabled.store(!m->previewTracerEnabled.load(std::memory_order_relaxed),
+                                            std::memory_order_relaxed); }));
     auto* edgeHardnessSlider = new ui::Slider();
     edgeHardnessSlider->box.size = Vec(180.f, 24.f);
     edgeHardnessSlider->quantity = new UndertowEdgeHardnessQuantity(m);
