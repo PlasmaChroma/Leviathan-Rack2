@@ -1250,6 +1250,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
 	static constexpr float GL_WAVE_LINE_WIDTH = 2.0f;
 	static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
+	static constexpr float GL_HIGH_ZOOM_WIDTH_TAPER = 0.08f;
 	static constexpr int TRAIL_DRAW_STRIDE = 2;
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
@@ -1266,7 +1267,6 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
 		this->channel = channel;
-		dirtyOnSubpixelChange = false;
 	}
 
 	bool useOpenGlRenderer() const {
@@ -1391,6 +1391,12 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		glDisable(GL_LINE_SMOOTH);
 
 		const double nowSec = system::getTime();
+		const float xScale = fbSize.x / std::max(box.size.x, 1.f);
+		const float yScale = fbSize.y / std::max(box.size.y, 1.f);
+		const float framebufferScale = std::max(0.1f, 0.5f * (xScale + yScale));
+		const float lineScale = framebufferScale < 1.f
+		                      ? std::sqrt(framebufferScale)
+		                      : 1.f / (1.f + (framebufferScale - 1.f) * GL_HIGH_ZOOM_WIDTH_TAPER);
 		const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		if (tracerEnabled) {
 			for (const auto& frame : curveTracer.frames) {
@@ -1402,10 +1408,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					continue;
 				}
 				const float fade = 1.f - age / TRAIL_FADE_SEC;
-				drawGlRibbon(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH, tracerColorWithAlpha(118.f * fade));
+				drawGlRibbon(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
 			}
 		}
-		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH, nvgRGBA(230, 230, 220, 255));
+		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
 		drawGlDot();
 	}
 
