@@ -194,10 +194,10 @@ struct WavePreviewBufferedTracer {
 		const int alphaScale = clamp(int(scale * 256.f), 0, 256);
 		bool any = false;
 		for (uint32_t& px : pixels) {
-			const uint32_t a = (px >> 24) & 0xffu;
-			if (a == 0u) {
+			if (px == 0u) {
 				continue;
 			}
+			const uint32_t a = (px >> 24) & 0xffu;
 			const uint32_t r = px & 0xffu;
 			const uint32_t g = (px >> 8) & 0xffu;
 			const uint32_t b = (px >> 16) & 0xffu;
