@@ -1570,6 +1570,7 @@ struct ProcWidget : ModuleWidget {
 				[=]() { return proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
 				[=]() { proc->bandlimitedSignalOutputs.store(!proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
+			menu->addChild(createMenuLabel("Preview Visual"));
 			menu->addChild(createCheckMenuItem("Preview Tracer", "",
 				[=]() { return proc->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { proc->previewTracerEnabled.store(!proc->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }

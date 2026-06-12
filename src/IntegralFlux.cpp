@@ -1834,6 +1834,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				[=]() { return maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
 				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
+			menu->addChild(createMenuLabel("Preview Visual"));
 			menu->addChild(createCheckMenuItem("Preview Tracer", "",
 				[=]() { return maths->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { maths->previewTracerEnabled.store(!maths->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }

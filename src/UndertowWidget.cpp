@@ -7,55 +7,6 @@
 
 namespace {
 
-struct UndertowEdgeHardnessQuantity final : Quantity {
-  Undertow* module = nullptr;
-
-  explicit UndertowEdgeHardnessQuantity(Undertow* module) : module(module) {}
-
-  void setValue(float value) override {
-    if (!module) {
-      return;
-    }
-    module->params[Undertow::EDGE_HARDNESS_PARAM].setValue(clamp(value, 0.f, 1.f));
-  }
-
-  float getValue() override {
-    return module ? module->params[Undertow::EDGE_HARDNESS_PARAM].getValue() : 0.5f;
-  }
-
-  float getDefaultValue() override {
-    return 0.5f;
-  }
-
-  float getMinValue() override {
-    return 0.f;
-  }
-
-  float getMaxValue() override {
-    return 1.f;
-  }
-
-  std::string getLabel() override {
-    return "Morph edge hardness";
-  }
-
-  std::string getUnit() override {
-    return "%";
-  }
-
-  float getDisplayValue() override {
-    return getValue() * 100.f;
-  }
-
-  void setDisplayValue(float displayValue) override {
-    setValue(displayValue / 100.f);
-  }
-
-  std::string getDisplayValueString() override {
-    return string::f("%.0f", getDisplayValue());
-  }
-};
-
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, const Vec& fallbackMm) {
   if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) {
     return true;
@@ -439,6 +390,7 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { return m->analogCharacterEnabled.load(std::memory_order_relaxed); },
       [m]() { m->analogCharacterEnabled.store(!m->analogCharacterEnabled.load(std::memory_order_relaxed),
                                               std::memory_order_relaxed); }));
+    menu->addChild(createMenuLabel("Preview Visual"));
     menu->addChild(createCheckMenuItem(
       "Preview tracer", "",
       [m]() { return m->previewTracerEnabled.load(std::memory_order_relaxed); },
@@ -454,10 +406,6 @@ struct UndertowWidget final : ModuleWidget {
         [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
         [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }));
     }));
-    auto* edgeHardnessSlider = new ui::Slider();
-    edgeHardnessSlider->box.size = Vec(180.f, 24.f);
-    edgeHardnessSlider->quantity = new UndertowEdgeHardnessQuantity(m);
-    menu->addChild(edgeHardnessSlider);
   }
 };
 
