@@ -1,6 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <chrono>
 #include <unordered_map>
@@ -9,6 +10,10 @@
 namespace {
 constexpr double kWyrmDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
 std::unordered_map<uint32_t, double> gWyrmDebugTerminalLastSubmitSec;
+
+inline unsigned char wyrmClampU8(int v) {
+	return (unsigned char) clamp(v, 0, 255);
+}
 }
 
 struct WyrmWaveEditor : TransparentWidget {
@@ -62,10 +67,30 @@ struct WyrmWaveEditor : TransparentWidget {
 	Vec cachedBodySize = Vec(-1.f, -1.f);
 	float cachedBodySlitherPhase = -1.f;
 	float cachedBodySlitherAmount = -1.f;
+	NVGcontext* waveMaterialContext = nullptr;
+	int waveMaterialImage = -1;
+	int waveMaterialW = 0;
+	int waveMaterialH = 0;
+	int waveMaterialCount = -1;
+	int waveMaterialUploadedW = 0;
+	int waveMaterialUploadedH = 0;
+	bool waveMaterialDirty = true;
+	std::vector<unsigned char> waveMaterialPixels;
 
 	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
 		module = m;
 		sand = sandState ? sandState : std::make_shared<WyrmSand>();
+	}
+
+	~WyrmWaveEditor() override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			waveMaterialContext,
+			waveMaterialImage,
+			waveMaterialUploadedW,
+			waveMaterialUploadedH,
+			nullptr,
+			false
+		);
 	}
 
 	bool sandEnabled() const {
@@ -254,6 +279,138 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (backendSetting != WYRMSAND_OPENGL_TEXTURE && backendSetting != WYRMSAND_SHADER_FEEDBACK) {
 			sand->draw(vg, box.size, sandEnabled(), backendSetting, detailSetting);
 		}
+	}
+
+	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
+		t = clamp01(t);
+		return nvgRGBAf(
+			a.r + (b.r - a.r) * t,
+			a.g + (b.g - a.g) * t,
+			a.b + (b.b - a.b) * t,
+			a.a + (b.a - a.a) * t
+		);
+	}
+
+	static void compositeOver(const NVGcolor& src, float* dst) {
+		const float outA = src.a + dst[3] * (1.f - src.a);
+		if (outA <= 1e-6f) {
+			dst[0] = dst[1] = dst[2] = dst[3] = 0.f;
+			return;
+		}
+		const float outR = src.r * src.a + dst[0] * dst[3] * (1.f - src.a);
+		const float outG = src.g * src.a + dst[1] * dst[3] * (1.f - src.a);
+		const float outB = src.b * src.a + dst[2] * dst[3] * (1.f - src.a);
+		dst[0] = outR / outA;
+		dst[1] = outG / outA;
+		dst[2] = outB / outA;
+		dst[3] = outA;
+	}
+
+	void rebuildWaveMaterialPixels(int count) {
+		const int w = std::max(1, int(std::ceil(box.size.x)));
+		const int h = std::max(1, int(std::ceil(box.size.y)));
+		count = std::max(1, count);
+		waveMaterialW = w;
+		waveMaterialH = h;
+		waveMaterialCount = count;
+		waveMaterialDirty = true;
+		waveMaterialPixels.assign(size_t(w) * size_t(h) * 4u, 0u);
+
+		const float inset = pointEdgeInset();
+		const float drawWidth = std::max(1.f, box.size.x - 2.f * inset);
+		const float dx = drawWidth / float(count);
+		const float midY = 0.5f * box.size.y;
+		const NVGcolor posNear = nvgRGBA(28, 204, 217, 46);
+		const NVGcolor posFar = nvgRGBA(42, 228, 255, 152);
+		const NVGcolor negNear = nvgRGBA(115, 72, 224, 50);
+		const NVGcolor negFar = nvgRGBA(150, 92, 255, 162);
+		const NVGcolor posShade = nvgRGBA(0, 56, 72, 132);
+		const NVGcolor negShade = nvgRGBA(40, 24, 112, 92);
+
+		for (int py = 0; py < h; ++py) {
+			const float y = std::min(box.size.y, float(py) + 0.5f);
+			const bool positive = y < midY;
+			const float t = positive
+				? clamp01((midY - y) / std::max(midY, 1.f))
+				: clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
+			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
+			for (int px = 0; px < w; ++px) {
+				const float x = std::min(box.size.x, float(px) + 0.5f);
+				const float columnF = (x - inset) / std::max(dx, 1e-6f);
+				const int column = int(std::floor(columnF));
+				float out[4] = {0.f, 0.f, 0.f, 0.f};
+				compositeOver(base, out);
+				if (column >= 0 && column < count && (column & 1) != 0) {
+					compositeOver(positive ? posShade : negShade, out);
+				}
+				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
+				waveMaterialPixels[offset + 0u] = wyrmClampU8(int(std::lround(out[0] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 1u] = wyrmClampU8(int(std::lround(out[1] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 2u] = wyrmClampU8(int(std::lround(out[2] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 3u] = wyrmClampU8(int(std::lround(out[3] * 255.f)));
+			}
+		}
+	}
+
+	int ensureWaveMaterialImage(NVGcontext* vg, int count) {
+		if (!vg || box.size.x <= 1.f || box.size.y <= 1.f || count <= 0) {
+			return -1;
+		}
+		const int targetW = std::max(1, int(std::ceil(box.size.x)));
+		const int targetH = std::max(1, int(std::ceil(box.size.y)));
+		if (waveMaterialW != targetW || waveMaterialH != targetH || waveMaterialCount != count || waveMaterialPixels.empty()) {
+			rebuildWaveMaterialPixels(count);
+		}
+		if (waveMaterialContext != vg) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				false
+			);
+			waveMaterialContext = vg;
+		}
+		if (waveMaterialImage >= 0 &&
+			!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, waveMaterialImage, waveMaterialUploadedW, waveMaterialUploadedH)) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				true
+			);
+			waveMaterialContext = vg;
+		}
+		if (waveMaterialImage < 0) {
+			waveMaterialImage = nvgCreateImageRGBA(vg, waveMaterialW, waveMaterialH, NVG_IMAGE_PREMULTIPLIED, waveMaterialPixels.data());
+			waveMaterialContext = vg;
+			waveMaterialUploadedW = waveMaterialW;
+			waveMaterialUploadedH = waveMaterialH;
+			waveMaterialDirty = false;
+		}
+		else if (waveMaterialUploadedW != waveMaterialW || waveMaterialUploadedH != waveMaterialH) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				true
+			);
+			waveMaterialImage = nvgCreateImageRGBA(vg, waveMaterialW, waveMaterialH, NVG_IMAGE_PREMULTIPLIED, waveMaterialPixels.data());
+			waveMaterialContext = vg;
+			waveMaterialUploadedW = waveMaterialW;
+			waveMaterialUploadedH = waveMaterialH;
+			waveMaterialDirty = false;
+		}
+		else if (waveMaterialDirty) {
+			nvgUpdateImage(vg, waveMaterialImage, waveMaterialPixels.data());
+			waveMaterialDirty = false;
+		}
+		return waveMaterialImage;
 	}
 
 	int rockIndexAt(Vec pos) const {
@@ -667,6 +824,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 
 			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
+			const int waveMaterialImageHandle = drawWaveArea ? ensureWaveMaterialImage(args.vg, count) : -1;
+			const bool useWaveMaterialImage = waveMaterialImageHandle >= 0;
 			auto emitPolarityFill = [&](bool positive) {
 				if (!drawWaveArea) {
 					return;
@@ -716,17 +875,23 @@ struct WyrmWaveEditor : TransparentWidget {
 				if (open) {
 					closeAt(cachedBodyPathPoints[cachedBodySamples - 1]);
 				}
-				const NVGpaint gradient = positive
-					? nvgLinearGradient(args.vg, 0.f, midY, 0.f, 0.f, nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152))
-					: nvgLinearGradient(args.vg, 0.f, midY, 0.f, box.size.y, nvgRGBA(115, 72, 224, 50), nvgRGBA(150, 92, 255, 162));
-				nvgFillPaint(args.vg, gradient);
+				if (useWaveMaterialImage) {
+					const NVGpaint material = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, waveMaterialImageHandle, 1.f);
+					nvgFillPaint(args.vg, material);
+				}
+				else {
+					const NVGpaint gradient = positive
+						? nvgLinearGradient(args.vg, 0.f, midY, 0.f, 0.f, nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152))
+						: nvgLinearGradient(args.vg, 0.f, midY, 0.f, box.size.y, nvgRGBA(115, 72, 224, 50), nvgRGBA(150, 92, 255, 162));
+					nvgFillPaint(args.vg, gradient);
+				}
 				nvgFill(args.vg);
 			};
 			emitPolarityFill(true);
 			emitPolarityFill(false);
 
 			auto emitAlternatingPolarityShade = [&](bool positive) {
-				if (!drawWaveArea || count <= 0) {
+				if (!drawWaveArea || useWaveMaterialImage || count <= 0) {
 					return;
 				}
 				auto inside = [&](const Vec& p) {
@@ -767,16 +932,21 @@ struct WyrmWaveEditor : TransparentWidget {
 				std::vector<Vec> columnPoints;
 				columnPoints.reserve(16);
 				nvgBeginPath(args.vg);
+				int sampleCursor = 0;
 				for (int column = 1; column < count; column += 2) {
 					const float x0 = pointEdgeInset() + float(column) * dx;
 					const float x1 = std::min(pointEdgeInset() + float(column + 1) * dx, pointEdgeInset() + pointDrawWidth());
 					columnPoints.clear();
 					columnPoints.push_back(sampleBodyPointAtX(x0));
-					for (int sample = 0; sample < cachedBodySamples; ++sample) {
+					while (sampleCursor < cachedBodySamples && cachedBodyPathPoints[sampleCursor].x <= x0) {
+						++sampleCursor;
+					}
+					for (int sample = sampleCursor; sample < cachedBodySamples; ++sample) {
 						const Vec p = cachedBodyPathPoints[sample];
-						if (p.x > x0 && p.x < x1) {
-							columnPoints.push_back(p);
+						if (p.x >= x1) {
+							break;
 						}
+						columnPoints.push_back(p);
 					}
 					columnPoints.push_back(sampleBodyPointAtX(x1));
 
