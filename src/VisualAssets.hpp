@@ -40,6 +40,9 @@ struct DynamicRingJack : app::SvgPort {
 	float glowAmount = 0.42f;
 	float ringAmount = 0.82f;
 	bool connectedGlow = true;
+	widget::FramebufferWidget* ringFb = nullptr;
+	TransparentWidget* ringLayer = nullptr;
+	bool cachedConnected = false;
 
 	DynamicRingJack();
 	explicit DynamicRingJack(const char* coreSvgPath);
@@ -47,7 +50,9 @@ struct DynamicRingJack : app::SvgPort {
 	void setRingColor(NVGcolor color);
 	void setGlowAmount(float amount);
 	void setCoreStyle(CoreStyle coreStyle);
-	void draw(const DrawArgs& args) override;
+	void markRingDirty();
+	void drawRingLayer(const DrawArgs& args);
+	void step() override;
 };
 
 struct DynamicRingInputJack : DynamicRingJack {

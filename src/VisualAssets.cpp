@@ -84,6 +84,16 @@ const char* dynamicRingJackCorePath(DynamicRingJack::CoreStyle coreStyle) {
 	}
 }
 
+struct DynamicRingLayer : TransparentWidget {
+	DynamicRingJack* jack = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (jack) {
+			jack->drawRingLayer(args);
+		}
+	}
+};
+
 void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 	if (!port) {
 		return;
@@ -441,6 +451,16 @@ DynamicRingJack::DynamicRingJack(const char* coreSvgPath) {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+
+	ringFb = new widget::FramebufferWidget();
+	ringFb->dirtyOnSubpixelChange = false;
+	ringFb->box.size = box.size;
+	DynamicRingLayer* layer = new DynamicRingLayer();
+	layer->jack = this;
+	layer->box.size = box.size;
+	ringLayer = layer;
+	ringFb->addChild(layer);
+	addChild(ringFb);
 }
 
 DynamicRingJack::DynamicRingJack(CoreStyle coreStyle)
@@ -449,10 +469,12 @@ DynamicRingJack::DynamicRingJack(CoreStyle coreStyle)
 
 void DynamicRingJack::setRingColor(NVGcolor color) {
 	ringColor = color;
+	markRingDirty();
 }
 
 void DynamicRingJack::setGlowAmount(float amount) {
 	glowAmount = clamp(amount, 0.f, 1.f);
+	markRingDirty();
 }
 
 void DynamicRingJack::setCoreStyle(CoreStyle coreStyle) {
@@ -461,14 +483,25 @@ void DynamicRingJack::setCoreStyle(CoreStyle coreStyle) {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	if (ringFb) {
+		ringFb->box.size = box.size;
+	}
+	if (ringLayer) {
+		ringLayer->box.size = box.size;
+	}
+	markRingDirty();
 }
 
-void DynamicRingJack::draw(const DrawArgs& args) {
+void DynamicRingJack::markRingDirty() {
+	if (ringFb) {
+		ringFb->setDirty();
+	}
+}
+
+void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 	const Vec center = box.size.div(2.f);
 	const float s = std::min(box.size.x, box.size.y);
-	engine::Port* port = getPort();
-	const bool connected = port && port->isConnected();
-	const float connectedBoost = (connectedGlow && connected) ? 1.18f : 1.f;
+	const float connectedBoost = (connectedGlow && cachedConnected) ? 1.18f : 1.f;
 	NVGcolor color = ringColor;
 
 	auto withAlpha = [](NVGcolor c, float alpha) {
@@ -476,15 +509,13 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 		return c;
 	};
 
-	SvgPort::draw(args);
-
-	const float glowOuter = s * 0.45f;
-	const float glowInner = s * 0.25f;
-	const float ringOuter = s * 0.405f;
-	const float ringInner = s * 0.315f;
+	const float glowOuter = s * 0.405f;
+	const float glowInner = s * 0.10f;
+	const float ringOuter = s * 0.35f;
+	const float ringInner = s * 0.265f;
 	const float ringMid = 0.5f * (ringOuter + ringInner);
-	const float socketOuter = s * 0.255f;
-	const float socketInner = s * 0.15f;
+	const float socketOuter = s * 0.247f;
+	const float socketInner = s * 0.19f;
 
 	NVGpaint glow = nvgRadialGradient(
 		args.vg,
@@ -504,13 +535,19 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 	nvgCircle(args.vg, center.x, center.y, ringOuter);
 	nvgCircle(args.vg, center.x, center.y, ringInner);
 	nvgPathWinding(args.vg, NVG_HOLE);
-	nvgFillColor(args.vg, withAlpha(color, ringAmount * 0.72f));
+	nvgFillColor(args.vg, withAlpha(color, ringAmount * 0.62f));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, ringMid);
-	nvgStrokeWidth(args.vg, std::max(0.8f, s * 0.036f));
+	nvgStrokeWidth(args.vg, std::max(0.7f, s * 0.032f));
 	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.98f));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, ringOuter - s * 0.015f);
+	nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.018f));
+	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.42f));
 	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
@@ -525,7 +562,7 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 		center.y - s * 0.055f,
 		s * 0.025f,
 		socketOuter,
-		nvgRGBA(52, 56, 66, 255),
+		nvgRGBA(38, 42, 50, 255),
 		nvgRGBA(0, 1, 4, 255)
 	);
 	nvgBeginPath(args.vg);
@@ -535,7 +572,7 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, socketInner);
-	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 238));
+	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
@@ -543,6 +580,25 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 	nvgStrokeWidth(args.vg, std::max(0.42f, s * 0.014f));
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 36));
 	nvgStroke(args.vg);
+}
+
+void DynamicRingJack::step() {
+	engine::Port* port = getPort();
+	const bool connected = port && port->isConnected();
+	if (connected != cachedConnected) {
+		cachedConnected = connected;
+		if (connectedGlow) {
+			markRingDirty();
+		}
+	}
+	if (ringFb && (ringFb->box.size.x != box.size.x || ringFb->box.size.y != box.size.y)) {
+		ringFb->box.size = box.size;
+		if (ringLayer) {
+			ringLayer->box.size = box.size;
+		}
+		markRingDirty();
+	}
+	SvgPort::step();
 }
 
 DynamicRingInputJack::DynamicRingInputJack()
