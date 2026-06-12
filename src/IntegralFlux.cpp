@@ -1281,17 +1281,42 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		glColor4f(c.r, c.g, c.b, c.a);
 	}
 
-	static void drawGlLineStrip(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidthPx, NVGcolor color) {
+	static Vec ribbonNormal(const Vec& prev, const Vec& current, const Vec& next) {
+		Vec tangent = next - prev;
+		float len2 = tangent.x * tangent.x + tangent.y * tangent.y;
+		if (len2 < 1e-8f) {
+			tangent = next - current;
+			len2 = tangent.x * tangent.x + tangent.y * tangent.y;
+		}
+		if (len2 < 1e-8f) {
+			tangent = current - prev;
+			len2 = tangent.x * tangent.x + tangent.y * tangent.y;
+		}
+		if (len2 < 1e-8f) {
+			return Vec(0.f, -1.f);
+		}
+		const float invLen = 1.f / std::sqrt(len2);
+		return Vec(-tangent.y * invLen, tangent.x * invLen);
+	}
+
+	static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
 		stride = std::max(stride, 1);
-		glLineWidth(lineWidthPx);
+		const float halfWidth = 0.5f * lineWidth;
 		glColorFromNvg(color);
-		glBegin(GL_LINE_STRIP);
-		glVertex2f(linePoints[0].x, linePoints[0].y);
-		for (int i = stride; i < POINT_COUNT; i += stride) {
-			glVertex2f(linePoints[i].x, linePoints[i].y);
+		glBegin(GL_TRIANGLE_STRIP);
+		for (int i = 0; i < POINT_COUNT; i += stride) {
+			const int prevIndex = std::max(0, i - stride);
+			const int nextIndex = std::min(POINT_COUNT - 1, i + stride);
+			const Vec n = ribbonNormal(linePoints[prevIndex], linePoints[i], linePoints[nextIndex]);
+			glVertex2f(linePoints[i].x + n.x * halfWidth, linePoints[i].y + n.y * halfWidth);
+			glVertex2f(linePoints[i].x - n.x * halfWidth, linePoints[i].y - n.y * halfWidth);
 		}
 		if ((POINT_COUNT - 1) % stride != 0) {
-			glVertex2f(linePoints[POINT_COUNT - 1].x, linePoints[POINT_COUNT - 1].y);
+			const int i = POINT_COUNT - 1;
+			const int prevIndex = std::max(0, i - stride);
+			const Vec n = ribbonNormal(linePoints[prevIndex], linePoints[i], linePoints[i]);
+			glVertex2f(linePoints[i].x + n.x * halfWidth, linePoints[i].y + n.y * halfWidth);
+			glVertex2f(linePoints[i].x - n.x * halfWidth, linePoints[i].y - n.y * halfWidth);
 		}
 		glEnd();
 	}
@@ -1363,14 +1388,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		glDisable(GL_SCISSOR_TEST);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glEnable(GL_LINE_SMOOTH);
-		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+		glDisable(GL_LINE_SMOOTH);
 
 		const double nowSec = system::getTime();
-		const float xScale = fbSize.x / std::max(box.size.x, 1.f);
-		const float yScale = fbSize.y / std::max(box.size.y, 1.f);
-		const float framebufferScale = std::max(0.1f, 0.5f * (xScale + yScale));
-		const float lineScale = std::sqrt(framebufferScale);
 		const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		if (tracerEnabled) {
 			for (const auto& frame : curveTracer.frames) {
@@ -1382,10 +1402,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					continue;
 				}
 				const float fade = 1.f - age / TRAIL_FADE_SEC;
-				drawGlLineStrip(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
+				drawGlRibbon(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH, tracerColorWithAlpha(118.f * fade));
 			}
 		}
-		drawGlLineStrip(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
+		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH, nvgRGBA(230, 230, 220, 255));
 		drawGlDot();
 	}
 
