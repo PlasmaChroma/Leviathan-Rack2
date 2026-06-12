@@ -199,7 +199,7 @@ struct IntegralFlux : Module {
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
-	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_FRAME_CACHE};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
 	std::atomic<int> previewRenderMode {0};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
@@ -1048,7 +1048,7 @@ struct IntegralFlux : Module {
 			previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
 		}
 		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
-			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed);
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
 			previewRenderMode.store(0, std::memory_order_relaxed);
 		}
 	}

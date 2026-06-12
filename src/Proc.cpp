@@ -161,7 +161,7 @@ struct Proc : Module {
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
-	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_FRAME_CACHE};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -981,7 +981,7 @@ struct Proc : Module {
 			                             std::memory_order_relaxed);
 		}
 		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
-			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed);
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
 		}
 	}
 
