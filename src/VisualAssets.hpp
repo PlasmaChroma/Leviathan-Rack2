@@ -21,11 +21,7 @@ struct MagitekOutputJack : app::SvgPort {
 
 namespace levi_jack {
 
-NVGcolor audio();
-NVGcolor cv();
-NVGcolor gate();
-NVGcolor clock();
-NVGcolor danger();
+NVGcolor input();
 NVGcolor output();
 
 } // namespace levi_jack

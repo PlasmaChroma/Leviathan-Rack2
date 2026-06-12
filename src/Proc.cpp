@@ -1539,35 +1539,35 @@ struct ProcWidget : ModuleWidget {
 		previewBuildTimer.markAnchorsDone();
 
 		auto* signalIn = createInputCentered<DynamicRingInputJack>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT);
-		signalIn->setRingColor(levi_jack::cv());
+		signalIn->setRingColor(levi_jack::input());
 		addInput(signalIn);
 		auto* trigIn = createInputCentered<DynamicRingInputJack>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT);
-		trigIn->setRingColor(levi_jack::cv());
+		trigIn->setRingColor(levi_jack::input());
 		addInput(trigIn);
 		auto* haltIn = createInputCentered<DynamicRingInputJack>(mm2px(haltInPos), module, Proc::HALT_INPUT);
-		haltIn->setRingColor(levi_jack::cv());
+		haltIn->setRingColor(levi_jack::input());
 		addInput(haltIn);
 		auto* riseCvIn = createInputCentered<DynamicRingInputJack>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT);
-		riseCvIn->setRingColor(levi_jack::cv());
+		riseCvIn->setRingColor(levi_jack::input());
 		addInput(riseCvIn);
 		auto* bothCvIn = createInputCentered<DynamicRingInputJack>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT);
-		bothCvIn->setRingColor(levi_jack::cv());
+		bothCvIn->setRingColor(levi_jack::input());
 		addInput(bothCvIn);
 		auto* fallCvIn = createInputCentered<DynamicRingInputJack>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT);
-		fallCvIn->setRingColor(levi_jack::cv());
+		fallCvIn->setRingColor(levi_jack::input());
 		addInput(fallCvIn);
 
 		auto* eorOut = createOutputCentered<DynamicRingOutputJack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT);
-		eorOut->setRingColor(levi_jack::audio());
+		eorOut->setRingColor(levi_jack::output());
 		addOutput(eorOut);
 		auto* eocOut = createOutputCentered<DynamicRingOutputJack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT);
-		eocOut->setRingColor(levi_jack::audio());
+		eocOut->setRingColor(levi_jack::output());
 		addOutput(eocOut);
 		auto* out = createOutputCentered<DynamicRingOutputJack>(mm2px(outPos), module, Proc::MAIN_OUTPUT);
-		out->setRingColor(levi_jack::audio());
+		out->setRingColor(levi_jack::output());
 		addOutput(out);
 		auto* negOut = createOutputCentered<DynamicRingOutputJack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT);
-		negOut->setRingColor(levi_jack::audio());
+		negOut->setRingColor(levi_jack::output());
 		addOutput(negOut);
 
 		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));

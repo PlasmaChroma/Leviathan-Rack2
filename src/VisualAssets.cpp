@@ -46,28 +46,12 @@ uint64_t eclipseShadowDrawCount() {
 
 namespace levi_jack {
 
-NVGcolor audio() {
-	return nvgRGB(0x00, 0xe6, 0xff);
-}
-
-NVGcolor cv() {
+NVGcolor input() {
 	return nvgRGB(0x8a, 0x55, 0xff);
 }
 
-NVGcolor gate() {
-	return nvgRGB(0x33, 0xff, 0xaa);
-}
-
-NVGcolor clock() {
-	return nvgRGB(0x44, 0x88, 0xff);
-}
-
-NVGcolor danger() {
-	return nvgRGB(0xff, 0x44, 0x66);
-}
-
 NVGcolor output() {
-	return nvgRGB(0xf4, 0xf1, 0xe8);
+	return nvgRGB(0x00, 0xe6, 0xff);
 }
 
 } // namespace levi_jack
@@ -604,7 +588,7 @@ void DynamicRingJack::step() {
 
 DynamicRingInputJack::DynamicRingInputJack()
 : DynamicRingJack(INPUT_CORE) {
-	setRingColor(levi_jack::audio());
+	setRingColor(levi_jack::input());
 }
 
 DynamicRingOutputJack::DynamicRingOutputJack()
