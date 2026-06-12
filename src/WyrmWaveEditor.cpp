@@ -716,7 +716,10 @@ struct WyrmWaveEditor : TransparentWidget {
 				if (open) {
 					closeAt(cachedBodyPathPoints[cachedBodySamples - 1]);
 				}
-				nvgFillColor(args.vg, positive ? nvgRGBA(28, 204, 217, 116) : nvgRGBA(115, 72, 224, 124));
+				const NVGpaint gradient = positive
+					? nvgLinearGradient(args.vg, 0.f, midY, 0.f, 0.f, nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152))
+					: nvgLinearGradient(args.vg, 0.f, midY, 0.f, box.size.y, nvgRGBA(115, 72, 224, 50), nvgRGBA(150, 92, 255, 162));
+				nvgFillPaint(args.vg, gradient);
 				nvgFill(args.vg);
 			};
 			emitPolarityFill(true);
