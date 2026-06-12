@@ -74,6 +74,16 @@ NVGcolor output() {
 
 namespace {
 
+const char* dynamicRingJackCorePath(DynamicRingJack::CoreStyle coreStyle) {
+	switch (coreStyle) {
+		case DynamicRingJack::OUTPUT_CORE:
+			return "res/icon/dynamic_jack_core_output.svg";
+		case DynamicRingJack::INPUT_CORE:
+		default:
+			return "res/icon/dynamic_jack_core_input.svg";
+	}
+}
+
 void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 	if (!port) {
 		return;
@@ -421,12 +431,20 @@ MagitekOutputJack::MagitekOutputJack() {
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
-DynamicRingJack::DynamicRingJack() {
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/dynamic_jack_core.svg"));
+DynamicRingJack::DynamicRingJack()
+: DynamicRingJack(INPUT_CORE) {
+}
+
+DynamicRingJack::DynamicRingJack(const char* coreSvgPath) {
+	setSvg(visual_assets::loadPluginSvgCached(coreSvgPath));
 	setSvgPortSizePx(this, kMagitekPortSizePx);
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+}
+
+DynamicRingJack::DynamicRingJack(CoreStyle coreStyle)
+: DynamicRingJack(dynamicRingJackCorePath(coreStyle)) {
 }
 
 void DynamicRingJack::setRingColor(NVGcolor color) {
@@ -435,6 +453,14 @@ void DynamicRingJack::setRingColor(NVGcolor color) {
 
 void DynamicRingJack::setGlowAmount(float amount) {
 	glowAmount = clamp(amount, 0.f, 1.f);
+}
+
+void DynamicRingJack::setCoreStyle(CoreStyle coreStyle) {
+	setSvg(visual_assets::loadPluginSvgCached(dynamicRingJackCorePath(coreStyle)));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
 }
 
 void DynamicRingJack::draw(const DrawArgs& args) {
@@ -452,13 +478,13 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 
 	SvgPort::draw(args);
 
-	const float glowOuter = s * 0.34f;
-	const float glowInner = s * 0.18f;
-	const float ringOuter = s * 0.318f;
-	const float ringInner = s * 0.242f;
+	const float glowOuter = s * 0.45f;
+	const float glowInner = s * 0.25f;
+	const float ringOuter = s * 0.405f;
+	const float ringInner = s * 0.315f;
 	const float ringMid = 0.5f * (ringOuter + ringInner);
-	const float socketOuter = s * 0.205f;
-	const float socketInner = s * 0.122f;
+	const float socketOuter = s * 0.255f;
+	const float socketInner = s * 0.15f;
 
 	NVGpaint glow = nvgRadialGradient(
 		args.vg,
@@ -519,11 +545,13 @@ void DynamicRingJack::draw(const DrawArgs& args) {
 	nvgStroke(args.vg);
 }
 
-DynamicRingInputJack::DynamicRingInputJack() {
+DynamicRingInputJack::DynamicRingInputJack()
+: DynamicRingJack(INPUT_CORE) {
 	setRingColor(levi_jack::audio());
 }
 
-DynamicRingOutputJack::DynamicRingOutputJack() {
+DynamicRingOutputJack::DynamicRingOutputJack()
+: DynamicRingJack(OUTPUT_CORE) {
 	setRingColor(levi_jack::output());
 	setGlowAmount(0.34f);
 }

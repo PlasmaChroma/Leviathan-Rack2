@@ -31,14 +31,22 @@ NVGcolor output();
 } // namespace levi_jack
 
 struct DynamicRingJack : app::SvgPort {
+	enum CoreStyle {
+		INPUT_CORE,
+		OUTPUT_CORE
+	};
+
 	NVGcolor ringColor = nvgRGB(0x00, 0xe6, 0xff);
 	float glowAmount = 0.42f;
 	float ringAmount = 0.82f;
 	bool connectedGlow = true;
 
 	DynamicRingJack();
+	explicit DynamicRingJack(const char* coreSvgPath);
+	explicit DynamicRingJack(CoreStyle coreStyle);
 	void setRingColor(NVGcolor color);
 	void setGlowAmount(float amount);
+	void setCoreStyle(CoreStyle coreStyle);
 	void draw(const DrawArgs& args) override;
 };
 
