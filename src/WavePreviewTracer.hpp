@@ -2,6 +2,7 @@
 
 #include "NvgGraphicsLifecycle.hpp"
 #include "plugin.hpp"
+#include "WavePreviewSimplifier.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -102,13 +103,13 @@ struct WavePreviewTracer {
 			NVGcolor color = style.color;
 			color.a *= float(alpha) / 255.f;
 			nvgBeginPath(vg);
-			nvgMoveTo(vg, frame.points[0].x, frame.points[0].y);
-			for (size_t i = size_t(stride); i < PointCount; i += size_t(stride)) {
-				nvgLineTo(vg, frame.points[i].x, frame.points[i].y);
-			}
-			if ((PointCount - 1) % size_t(stride) != 0) {
-				nvgLineTo(vg, frame.points[PointCount - 1].x, frame.points[PointCount - 1].y);
-			}
+			wave_preview::simplifyPath(frame.points.data(), PointCount, stride, 0.02f, [vg](const Vec& pt, bool isMove) {
+				if (isMove) {
+					nvgMoveTo(vg, pt.x, pt.y);
+				} else {
+					nvgLineTo(vg, pt.x, pt.y);
+				}
+			});
 			nvgStrokeColor(vg, color);
 			nvgStrokeWidth(vg, style.lineWidth);
 			nvgLineCap(vg, NVG_BUTT);
@@ -269,15 +270,20 @@ struct WavePreviewBufferedTracer {
 		const uint32_t r = uint32_t(clamp(int(style.color.r * float(alpha)), 0, 255));
 		const uint32_t g = uint32_t(clamp(int(style.color.g * float(alpha)), 0, 255));
 		const uint32_t b = uint32_t(clamp(int(style.color.b * float(alpha)), 0, 255));
-		Vec prev = points[0].mult(rasterScale);
-		for (size_t i = size_t(stride); i < PointCount; i += size_t(stride)) {
-			const Vec p = points[i].mult(rasterScale);
-			drawLine(prev, p, radius, r, g, b, alpha);
-			prev = p;
-		}
-		if ((PointCount - 1) % size_t(stride) != 0) {
-			drawLine(prev, points[PointCount - 1].mult(rasterScale), radius, r, g, b, alpha);
-		}
+		Vec prev;
+		bool hasPrev = false;
+		wave_preview::simplifyPath(points.data(), PointCount, stride, 0.02f, [&](const Vec& pt, bool isMove) {
+			Vec scaled = pt.mult(rasterScale);
+			if (isMove) {
+				prev = scaled;
+				hasPrev = true;
+			} else {
+				if (hasPrev) {
+					drawLine(prev, scaled, radius, r, g, b, alpha);
+				}
+				prev = scaled;
+			}
+		});
 		lastCaptureSec = nowSec;
 		pixelsDirty = true;
 		hasVisiblePixels = true;

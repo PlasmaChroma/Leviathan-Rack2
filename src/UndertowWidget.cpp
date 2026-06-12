@@ -218,11 +218,15 @@ struct UndertowShapePreviewWidget final : Widget {
       }
     }
 
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, points[0].x, points[0].y);
-    for (int i = 1; i < PREVIEW_POINT_COUNT; ++i) {
-      nvgLineTo(args.vg, points[size_t(i)].x, points[size_t(i)].y);
-    }
+    auto vg = args.vg;
+    nvgBeginPath(vg);
+    wave_preview::simplifyPath(points.data(), PREVIEW_POINT_COUNT, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
+      if (isMove) {
+        nvgMoveTo(vg, pt.x, pt.y);
+      } else {
+        nvgLineTo(vg, pt.x, pt.y);
+      }
+    });
     nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
     nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
     nvgLineCap(args.vg, NVG_BUTT);
