@@ -77,6 +77,7 @@ struct Undertow final : Module {
   std::atomic<bool> shapeEntryAsymmetryOnRight {false};
   std::atomic<bool> analogCharacterEnabled {true};
   std::atomic<bool> previewTracerEnabled {true};
+  std::atomic<int> previewTracerCacheMode {1};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<float> displayShapeAmount {0.f};
 

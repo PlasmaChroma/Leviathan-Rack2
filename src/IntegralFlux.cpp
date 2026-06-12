@@ -198,6 +198,7 @@ struct IntegralFlux : Module {
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_FRAME_CACHE};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -992,6 +993,7 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -1029,6 +1031,13 @@ struct IntegralFlux : Module {
 		json_t* previewTracerJ = json_object_get(rootJ, "previewTracerEnabled");
 		if (previewTracerJ) {
 			previewTracerEnabled.store(json_boolean_value(previewTracerJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+		if (previewTracerModeJ) {
+			const int mode = int(json_integer_value(previewTracerModeJ));
+			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+			                             std::memory_order_relaxed);
 		}
 	}
 
@@ -1235,7 +1244,8 @@ struct WavePreviewWidget : Widget {
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
-	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> tracer;
+	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
+	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
@@ -1366,15 +1376,33 @@ struct WavePreviewWidget : Widget {
 		}
 		const double nowSec = system::getTime();
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
-		if (tracerEnabled) {
-			tracer.expire(nowSec, TRAIL_FADE_SEC);
+		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+		if (!tracerEnabled) {
+			curveTracer.clear();
+			frameTracer.clear();
+		}
+		else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
+			frameTracer.clear();
 		}
 		else {
-			tracer.clear();
+			curveTracer.clear();
 		}
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
-				tracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					style.lineRadiusPx = 1;
+					frameTracer.capture(points, nowSec, box.size, style);
+				}
 			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
@@ -1389,14 +1417,27 @@ struct WavePreviewWidget : Widget {
 			const double nowSec = system::getTime();
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 			if (tracerEnabled) {
-				WavePreviewTracerStyle style;
-				style.color = nvgRGBA(255, 190, 80, 255);
-				style.lineWidth = TRAIL_LINE_WIDTH;
-				style.fadeSec = TRAIL_FADE_SEC;
-				style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
-				style.maxAlpha = 118.f;
-				style.drawStride = TRAIL_DRAW_STRIDE;
-				tracer.draw(args.vg, nowSec, style);
+				const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					WavePreviewTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.lineWidth = TRAIL_LINE_WIDTH;
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					curveTracer.draw(args.vg, nowSec, style);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					style.lineRadiusPx = 1;
+					frameTracer.draw(args.vg, nowSec, box.size, style);
+				}
 			}
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, points[0].x, points[0].y);
@@ -1798,6 +1839,18 @@ struct IntegralFluxWidget : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Preview Tracer", "",
 				[=]() { return maths->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { maths->previewTracerEnabled.store(!maths->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createSubmenuItem("Tracer Quality", "",
+				[=](Menu* submenu) {
+					submenu->addChild(createCheckMenuItem("Curve cache", "",
+						[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+						[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+					));
+					submenu->addChild(createCheckMenuItem("Frame cache", "",
+						[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+						[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
+					));
+				}
 			));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",

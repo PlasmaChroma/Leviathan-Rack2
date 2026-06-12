@@ -90,7 +90,8 @@ struct UndertowShapePreviewWidget final : Widget {
   Undertow* module = nullptr;
   std::array<float, PREVIEW_POINT_COUNT> samples {};
   std::array<Vec, PREVIEW_POINT_COUNT> points {};
-  WavePreviewTracer<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT> tracer;
+  WavePreviewTracer<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
+  WavePreviewBufferedTracer<PREVIEW_POINT_COUNT> frameTracer;
   bool samplesInitialized = false;
   bool pointsInitialized = false;
   bool hasLastPreviewState = false;
@@ -168,15 +169,33 @@ struct UndertowShapePreviewWidget final : Widget {
       const bool sizeChanged = std::fabs(box.size.x - lastPointSize.x) > 0.5f ||
                                std::fabs(box.size.y - lastPointSize.y) > 0.5f;
       const bool tracerEnabled = module->previewTracerEnabled.load(std::memory_order_relaxed);
-      if (tracerEnabled) {
-        tracer.expire(nowSec, TRAIL_FADE_SEC);
+      const int tracerMode = module->previewTracerCacheMode.load(std::memory_order_relaxed);
+      if (!tracerEnabled) {
+        curveTracer.clear();
+        frameTracer.clear();
+      }
+      else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+        curveTracer.expire(nowSec, TRAIL_FADE_SEC);
+        frameTracer.clear();
       }
       else {
-        tracer.clear();
+        curveTracer.clear();
       }
       if (curveChanged) {
         if (tracerEnabled && pointsInitialized) {
-          tracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+          if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+          }
+          else {
+            WavePreviewBufferedTracerStyle style;
+            style.color = nvgRGBA(255, 190, 80, 255);
+            style.fadeSec = TRAIL_FADE_SEC;
+            style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+            style.maxAlpha = 104.f;
+            style.drawStride = TRAIL_DRAW_STRIDE;
+            style.lineRadiusPx = 1;
+            frameTracer.capture(points, nowSec, box.size, style);
+          }
         }
         refreshSamples(shapeAmount, edgeHardness, asymEnabled, asymOnRight);
         rebuildPoints();
@@ -227,14 +246,27 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgStroke(args.vg);
 
     if (module && module->previewTracerEnabled.load(std::memory_order_relaxed)) {
-      WavePreviewTracerStyle style;
-      style.color = nvgRGBA(255, 190, 80, 255);
-      style.lineWidth = TRAIL_LINE_WIDTH;
-      style.fadeSec = TRAIL_FADE_SEC;
-      style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
-      style.maxAlpha = 104.f;
-      style.drawStride = TRAIL_DRAW_STRIDE;
-      tracer.draw(args.vg, system::getTime(), style);
+      const int tracerMode = module->previewTracerCacheMode.load(std::memory_order_relaxed);
+      if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+        WavePreviewTracerStyle style;
+        style.color = nvgRGBA(255, 190, 80, 255);
+        style.lineWidth = TRAIL_LINE_WIDTH;
+        style.fadeSec = TRAIL_FADE_SEC;
+        style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+        style.maxAlpha = 104.f;
+        style.drawStride = TRAIL_DRAW_STRIDE;
+        curveTracer.draw(args.vg, system::getTime(), style);
+      }
+      else {
+        WavePreviewBufferedTracerStyle style;
+        style.color = nvgRGBA(255, 190, 80, 255);
+        style.fadeSec = TRAIL_FADE_SEC;
+        style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+        style.maxAlpha = 104.f;
+        style.drawStride = TRAIL_DRAW_STRIDE;
+        style.lineRadiusPx = 1;
+        frameTracer.draw(args.vg, system::getTime(), box.size, style);
+      }
     }
 
     nvgBeginPath(args.vg);
@@ -414,6 +446,16 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { return m->previewTracerEnabled.load(std::memory_order_relaxed); },
       [m]() { m->previewTracerEnabled.store(!m->previewTracerEnabled.load(std::memory_order_relaxed),
                                             std::memory_order_relaxed); }));
+    menu->addChild(createSubmenuItem("Tracer Quality", "", [m](Menu* submenu) {
+      submenu->addChild(createCheckMenuItem(
+        "Curve cache", "",
+        [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+        [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }));
+      submenu->addChild(createCheckMenuItem(
+        "Frame cache", "",
+        [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+        [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }));
+    }));
     auto* edgeHardnessSlider = new ui::Slider();
     edgeHardnessSlider->box.size = Vec(180.f, 24.f);
     edgeHardnessSlider->quantity = new UndertowEdgeHardnessQuantity(m);

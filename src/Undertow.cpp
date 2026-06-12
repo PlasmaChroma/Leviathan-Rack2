@@ -250,6 +250,8 @@ json_t* Undertow::dataToJson() {
                       json_boolean(analogCharacterEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "previewTracerEnabled",
                       json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "previewTracerCacheMode",
+                      json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
   json_object_set_new(root, "shapeEdgeHardness", json_real(params[EDGE_HARDNESS_PARAM].getValue()));
   return root;
 }
@@ -269,6 +271,10 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* previewTracerEnabledJ = json_object_get(root, "previewTracerEnabled")) {
     previewTracerEnabled.store(json_boolean_value(previewTracerEnabledJ), std::memory_order_relaxed);
+  }
+  if (json_t* previewTracerModeJ = json_object_get(root, "previewTracerCacheMode")) {
+    const int mode = int(json_integer_value(previewTracerModeJ));
+    previewTracerCacheMode.store(mode == 0 ? 0 : 1, std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
     params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));

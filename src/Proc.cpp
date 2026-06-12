@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
+#include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -159,6 +160,8 @@ struct Proc : Module {
 	int timingUpdateCounter = 0;
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
+	std::atomic<bool> previewTracerEnabled {true};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_FRAME_CACHE};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -931,6 +934,8 @@ struct Proc : Module {
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -962,6 +967,18 @@ struct Proc : Module {
 		json_t* timingInterpJ = json_object_get(rootJ, "timingInterpolate");
 		if (timingInterpJ) {
 			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerJ = json_object_get(rootJ, "previewTracerEnabled");
+		if (previewTracerJ) {
+			previewTracerEnabled.store(json_boolean_value(previewTracerJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+		if (previewTracerModeJ) {
+			const int mode = int(json_integer_value(previewTracerModeJ));
+			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+			                             std::memory_order_relaxed);
 		}
 	}
 
@@ -1116,7 +1133,14 @@ struct WavePreviewWidget : Widget {
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
+	static constexpr int TRAIL_FRAME_COUNT = 11;
+	static constexpr float TRAIL_FADE_SEC = 0.333f;
+	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
+	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
+	static constexpr int TRAIL_DRAW_STRIDE = 2;
 	std::array<Vec, POINT_COUNT> points {};
+	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
+	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
@@ -1243,7 +1267,36 @@ struct WavePreviewWidget : Widget {
 		} else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
 			dotVisible = true;
 		}
+		const double nowSec = system::getTime();
+		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+		if (!tracerEnabled) {
+			curveTracer.clear();
+			frameTracer.clear();
+		}
+		else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
+			frameTracer.clear();
+		}
+		else {
+			curveTracer.clear();
+		}
 		if (!pointsValid || version != lastVersion) {
+			if (tracerEnabled && pointsValid) {
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					style.lineRadiusPx = 1;
+					frameTracer.capture(points, nowSec, box.size, style);
+				}
+			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
 		}
@@ -1254,6 +1307,33 @@ struct WavePreviewWidget : Widget {
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		if (pointsValid) {
+			ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
+			Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
+			const double nowSec = system::getTime();
+			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+			if (tracerEnabled) {
+				const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					WavePreviewTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.lineWidth = TRAIL_LINE_WIDTH;
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					curveTracer.draw(args.vg, nowSec, style);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					style.lineRadiusPx = 1;
+					frameTracer.draw(args.vg, nowSec, box.size, style);
+				}
+			}
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, points[0].x, points[0].y);
 			for (int i = 1; i < POINT_COUNT; ++i) {
@@ -1491,6 +1571,22 @@ struct ProcWidget : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Bandlimited Signal Outputs", "",
 				[=]() { return proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
 				[=]() { proc->bandlimitedSignalOutputs.store(!proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createCheckMenuItem("Preview Tracer", "",
+				[=]() { return proc->previewTracerEnabled.load(std::memory_order_relaxed); },
+				[=]() { proc->previewTracerEnabled.store(!proc->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			menu->addChild(createSubmenuItem("Tracer Quality", "",
+				[=](Menu* submenu) {
+					submenu->addChild(createCheckMenuItem("Curve cache", "",
+						[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+						[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+					));
+					submenu->addChild(createCheckMenuItem("Frame cache", "",
+						[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+						[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
+					));
+				}
 			));
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",

@@ -1,8 +1,16 @@
 #pragma once
 
+#include "NvgGraphicsLifecycle.hpp"
 #include "plugin.hpp"
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <vector>
+
+enum WavePreviewTracerCacheMode {
+	WAVE_PREVIEW_TRACER_CURVE_CACHE = 0,
+	WAVE_PREVIEW_TRACER_FRAME_CACHE = 1,
+};
 
 struct WavePreviewTracerStyle {
 	NVGcolor color = nvgRGBA(255, 190, 80, 255);
@@ -11,6 +19,15 @@ struct WavePreviewTracerStyle {
 	float minCaptureIntervalSec = 1.f / 24.f;
 	float maxAlpha = 118.f;
 	int drawStride = 2;
+};
+
+struct WavePreviewBufferedTracerStyle {
+	NVGcolor color = nvgRGBA(255, 190, 80, 255);
+	float fadeSec = 0.333f;
+	float minCaptureIntervalSec = 1.f / 24.f;
+	float maxAlpha = 118.f;
+	int drawStride = 2;
+	int lineRadiusPx = 1;
 };
 
 template <size_t PointCount, size_t FrameCount>
@@ -88,5 +105,198 @@ struct WavePreviewTracer {
 			nvgLineJoin(vg, NVG_ROUND);
 			nvgStroke(vg);
 		}
+	}
+};
+
+template <size_t PointCount>
+struct WavePreviewBufferedTracer {
+	static_assert(PointCount > 0, "WavePreviewBufferedTracer requires at least one point");
+
+	NVGcontext* imageVg = nullptr;
+	int imageHandle = -1;
+	int imageW = 0;
+	int imageH = 0;
+	std::vector<uint32_t> pixels;
+	double lastCaptureSec = -1.0;
+	double lastFadeSec = -1.0;
+	bool pixelsDirty = false;
+	bool hasVisiblePixels = false;
+
+	~WavePreviewBufferedTracer() {
+		// NanoVG image handles are context-owned; do not delete from an unknown
+		// context during widget teardown.
+		imageVg = nullptr;
+		imageHandle = -1;
+	}
+
+	void clearPixels() {
+		std::fill(pixels.begin(), pixels.end(), 0u);
+		pixelsDirty = true;
+		hasVisiblePixels = false;
+	}
+
+	void clear() {
+		clearPixels();
+		lastCaptureSec = -1.0;
+		lastFadeSec = -1.0;
+	}
+
+	void resetImage(NVGcontext* vg, bool deleteCurrentHandle) {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(imageVg, imageHandle, imageW, imageH, vg, deleteCurrentHandle);
+		pixels.clear();
+		pixelsDirty = false;
+		hasVisiblePixels = false;
+		lastCaptureSec = -1.0;
+		lastFadeSec = -1.0;
+	}
+
+	void ensureSize(int w, int h) {
+		w = std::max(w, 1);
+		h = std::max(h, 1);
+		if (w == imageW && h == imageH && pixels.size() == size_t(w * h)) {
+			return;
+		}
+		imageW = w;
+		imageH = h;
+		pixels.assign(size_t(w * h), 0u);
+		pixelsDirty = true;
+		hasVisiblePixels = false;
+		lastCaptureSec = -1.0;
+		lastFadeSec = -1.0;
+	}
+
+	void fade(double nowSec, float fadeSec) {
+		if (!hasVisiblePixels) {
+			lastFadeSec = nowSec;
+			return;
+		}
+		if (lastFadeSec < 0.0) {
+			lastFadeSec = nowSec;
+			return;
+		}
+		const float dt = std::max(0.f, float(nowSec - lastFadeSec));
+		lastFadeSec = nowSec;
+		if (dt <= 0.f) {
+			return;
+		}
+		const float targetRemaining = 0.03f;
+		const float scale = std::pow(targetRemaining, dt / std::max(fadeSec, 1e-6f));
+		const int alphaScale = clamp(int(scale * 256.f), 0, 256);
+		bool any = false;
+		for (uint32_t& px : pixels) {
+			const uint32_t a = (px >> 24) & 0xffu;
+			if (a == 0u) {
+				continue;
+			}
+			const uint32_t r = px & 0xffu;
+			const uint32_t g = (px >> 8) & 0xffu;
+			const uint32_t b = (px >> 16) & 0xffu;
+			const uint32_t na = (a * uint32_t(alphaScale)) >> 8;
+			const uint32_t nr = (r * uint32_t(alphaScale)) >> 8;
+			const uint32_t ng = (g * uint32_t(alphaScale)) >> 8;
+			const uint32_t nb = (b * uint32_t(alphaScale)) >> 8;
+			if (na > 1u) {
+				any = true;
+				px = (na << 24) | (nb << 16) | (ng << 8) | nr;
+			}
+			else {
+				px = 0u;
+			}
+		}
+		hasVisiblePixels = any;
+		pixelsDirty = true;
+	}
+
+	void blendPixel(int x, int y, uint32_t srcR, uint32_t srcG, uint32_t srcB, uint32_t srcA) {
+		if (x < 0 || y < 0 || x >= imageW || y >= imageH || srcA == 0u) {
+			return;
+		}
+		uint32_t& dst = pixels[size_t(y * imageW + x)];
+		const uint32_t da = (dst >> 24) & 0xffu;
+		const uint32_t dr = dst & 0xffu;
+		const uint32_t dg = (dst >> 8) & 0xffu;
+		const uint32_t db = (dst >> 16) & 0xffu;
+		const uint32_t inv = 255u - srcA;
+		const uint32_t outA = std::min(255u, srcA + ((da * inv + 127u) / 255u));
+		const uint32_t outR = std::min(255u, srcR + ((dr * inv + 127u) / 255u));
+		const uint32_t outG = std::min(255u, srcG + ((dg * inv + 127u) / 255u));
+		const uint32_t outB = std::min(255u, srcB + ((db * inv + 127u) / 255u));
+		dst = (outA << 24) | (outB << 16) | (outG << 8) | outR;
+	}
+
+	void stampPoint(int x, int y, int radius, uint32_t r, uint32_t g, uint32_t b, uint32_t a) {
+		for (int oy = -radius; oy <= radius; ++oy) {
+			for (int ox = -radius; ox <= radius; ++ox) {
+				if (ox * ox + oy * oy <= radius * radius) {
+					blendPixel(x + ox, y + oy, r, g, b, a);
+				}
+			}
+		}
+	}
+
+	void drawLine(Vec a, Vec b, int radius, uint32_t r, uint32_t g, uint32_t bl, uint32_t alpha) {
+		const float dx = b.x - a.x;
+		const float dy = b.y - a.y;
+		const int steps = std::max(1, int(std::ceil(std::max(std::fabs(dx), std::fabs(dy)))));
+		for (int i = 0; i <= steps; ++i) {
+			const float t = float(i) / float(steps);
+			stampPoint(int(std::round(a.x + dx * t)), int(std::round(a.y + dy * t)), radius, r, g, bl, alpha);
+		}
+	}
+
+	void capture(const std::array<Vec, PointCount>& points,
+	             double nowSec,
+	             const Vec& size,
+	             const WavePreviewBufferedTracerStyle& style) {
+		ensureSize(int(std::ceil(std::max(size.x, 1.f))), int(std::ceil(std::max(size.y, 1.f))));
+		if (lastCaptureSec > 0.0 && (nowSec - lastCaptureSec) < style.minCaptureIntervalSec) {
+			return;
+		}
+		const int stride = std::max(style.drawStride, 1);
+		const int radius = std::max(style.lineRadiusPx, 0);
+		const uint32_t alpha = uint32_t(clamp(int(style.maxAlpha), 0, 255));
+		const uint32_t r = uint32_t(clamp(int(style.color.r * float(alpha)), 0, 255));
+		const uint32_t g = uint32_t(clamp(int(style.color.g * float(alpha)), 0, 255));
+		const uint32_t b = uint32_t(clamp(int(style.color.b * float(alpha)), 0, 255));
+		Vec prev = points[0];
+		for (size_t i = size_t(stride); i < PointCount; i += size_t(stride)) {
+			drawLine(prev, points[i], radius, r, g, b, alpha);
+			prev = points[i];
+		}
+		if ((PointCount - 1) % size_t(stride) != 0) {
+			drawLine(prev, points[PointCount - 1], radius, r, g, b, alpha);
+		}
+		lastCaptureSec = nowSec;
+		pixelsDirty = true;
+		hasVisiblePixels = true;
+	}
+
+	void draw(NVGcontext* vg, double nowSec, const Vec& size, const WavePreviewBufferedTracerStyle& style) {
+		if (!vg) {
+			return;
+		}
+		if (imageVg != vg) {
+			resetImage(vg, false);
+		}
+		ensureSize(int(std::ceil(std::max(size.x, 1.f))), int(std::ceil(std::max(size.y, 1.f))));
+		fade(nowSec, style.fadeSec);
+		if (imageHandle < 0 || !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, imageW, imageH)) {
+			imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED,
+			                                 reinterpret_cast<const unsigned char*>(pixels.data()));
+			imageVg = vg;
+			pixelsDirty = false;
+		}
+		else if (pixelsDirty) {
+			nvgUpdateImage(vg, imageHandle, reinterpret_cast<const unsigned char*>(pixels.data()));
+			pixelsDirty = false;
+		}
+		if (imageHandle < 0 || !hasVisiblePixels) {
+			return;
+		}
+		NVGpaint paint = nvgImagePattern(vg, 0.f, 0.f, float(imageW), float(imageH), 0.f, imageHandle, 1.f);
+		nvgBeginPath(vg);
+		nvgRect(vg, 0.f, 0.f, size.x, size.y);
+		nvgFillPaint(vg, paint);
+		nvgFill(vg);
 	}
 };
