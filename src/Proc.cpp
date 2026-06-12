@@ -980,6 +980,9 @@ struct Proc : Module {
 			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
 			                             std::memory_order_relaxed);
 		}
+		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed);
+		}
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1575,18 +1578,20 @@ struct ProcWidget : ModuleWidget {
 				[=]() { return proc->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { proc->previewTracerEnabled.store(!proc->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
-			menu->addChild(createSubmenuItem("Tracer Quality", "",
-				[=](Menu* submenu) {
-					submenu->addChild(createCheckMenuItem("Curve cache", "",
-						[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
-						[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
-					));
-					submenu->addChild(createCheckMenuItem("Frame cache", "",
-						[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
-						[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
-					));
-				}
-			));
+			if (isDragonKingPreviewWidgetOptionsEnabled()) {
+				menu->addChild(createSubmenuItem("Tracer Quality", "",
+					[=](Menu* submenu) {
+						submenu->addChild(createCheckMenuItem("Curve cache", "",
+							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+							[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+						));
+						submenu->addChild(createCheckMenuItem("Frame cache", "",
+							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+							[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
+						));
+					}
+				));
+			}
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
 				[=]() { return proc->timingInterpolate.load(std::memory_order_relaxed); },

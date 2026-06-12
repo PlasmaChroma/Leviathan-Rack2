@@ -1,5 +1,6 @@
 #include "Undertow.hpp"
 #include "UndertowShape.hpp"
+#include "WavePreviewTracer.hpp"
 
 namespace {
 
@@ -274,7 +275,12 @@ void Undertow::dataFromJson(json_t* root) {
   }
   if (json_t* previewTracerModeJ = json_object_get(root, "previewTracerCacheMode")) {
     const int mode = int(json_integer_value(previewTracerModeJ));
-    previewTracerCacheMode.store(mode == 0 ? 0 : 1, std::memory_order_relaxed);
+    previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE
+                                                                          : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+                                 std::memory_order_relaxed);
+  }
+  if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+    previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
     params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));

@@ -100,13 +100,23 @@ struct WyrmEditorIconButton : TransparentWidget {
 	Wyrm* module = nullptr;
 	Kind kind = LOCK;
 	bool hovered = false;
+	std::shared_ptr<window::Svg> lockClosedNormalSvg;
+	std::shared_ptr<window::Svg> lockClosedHighlightedSvg;
+	std::shared_ptr<window::Svg> lockOpenNormalSvg;
+	std::shared_ptr<window::Svg> lockOpenHighlightedSvg;
 	std::shared_ptr<window::Svg> resetNormalSvg;
 	std::shared_ptr<window::Svg> resetHighlightedSvg;
 
 	WyrmEditorIconButton(Wyrm* module, Kind kind) {
 		this->module = module;
 		this->kind = kind;
-		if (kind == RESET) {
+		if (kind == LOCK) {
+			lockClosedNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-normal.svg"));
+			lockClosedHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-highlighted.svg"));
+			lockOpenNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-normal.svg"));
+			lockOpenHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-highlighted.svg"));
+		}
+		else {
 			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
 			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
 		}
@@ -145,59 +155,7 @@ struct WyrmEditorIconButton : TransparentWidget {
 		e.consume(this);
 	}
 
-	void drawLockIcon(const DrawArgs& args, NVGcolor color) {
-		const float w = box.size.x;
-		const float h = box.size.y;
-		const float cx = 0.5f * w;
-		const float bodyW = 0.54f * w;
-		const float bodyH = 0.32f * h;
-		const float bodyX = cx - 0.5f * bodyW;
-		const float bodyY = 0.51f * h;
-		const float bodyR = 0.06f * w;
-		const float shackleW = 0.34f * w;
-		const float shackleTop = 0.19f * h;
-		const float shackleY = bodyY + 0.03f * h;
-		const bool locked = module && module->editorLocked.load(std::memory_order_relaxed);
-
-		nvgStrokeWidth(args.vg, 2.3f);
-		nvgStrokeColor(args.vg, color);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgLineJoin(args.vg, NVG_ROUND);
-
-		nvgBeginPath(args.vg);
-		if (locked) {
-			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
-			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.18f * h);
-			nvgQuadTo(args.vg, cx, shackleTop, cx + 0.5f * shackleW, shackleTop + 0.18f * h);
-			nvgLineTo(args.vg, cx + 0.5f * shackleW, shackleY);
-		}
-		else {
-			const float detachedY = shackleY - 0.22f * h;
-			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
-			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.02f * h);
-			nvgQuadTo(args.vg, cx, shackleTop - 0.16f * h, cx + 0.5f * shackleW, shackleTop + 0.02f * h);
-			nvgLineTo(args.vg, cx + 0.5f * shackleW, detachedY);
-		}
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, bodyX, bodyY, bodyW, bodyH, bodyR);
-		nvgFillColor(args.vg, color);
-		nvgFill(args.vg);
-
-		NVGcolor cutout = nvgRGBA(14, 14, 14, 255);
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, cx, bodyY + 0.40f * bodyH, 0.054f * w);
-		nvgFillColor(args.vg, cutout);
-		nvgFill(args.vg);
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, cx - 0.024f * w, bodyY + 0.40f * bodyH, 0.048f * w, 0.22f * bodyH, 0.9f);
-		nvgFillColor(args.vg, cutout);
-		nvgFill(args.vg);
-	}
-
-	void drawResetIcon(const DrawArgs& args) {
-		std::shared_ptr<window::Svg> svg = hovered ? resetHighlightedSvg : resetNormalSvg;
+	void drawSvgIcon(const DrawArgs& args, const std::shared_ptr<window::Svg>& svg) {
 		if (!svg) {
 			return;
 		}
@@ -215,11 +173,21 @@ struct WyrmEditorIconButton : TransparentWidget {
 		nvgRestore(args.vg);
 	}
 
+	void drawLockIcon(const DrawArgs& args) {
+		const bool locked = module && module->editorLocked.load(std::memory_order_relaxed);
+		const std::shared_ptr<window::Svg>& svg = locked
+			? (hovered ? lockClosedHighlightedSvg : lockClosedNormalSvg)
+			: (hovered ? lockOpenHighlightedSvg : lockOpenNormalSvg);
+		drawSvgIcon(args, svg);
+	}
+
+	void drawResetIcon(const DrawArgs& args) {
+		drawSvgIcon(args, hovered ? resetHighlightedSvg : resetNormalSvg);
+	}
+
 	void draw(const DrawArgs& args) override {
-		const int level = hovered ? 218 : 118;
-		NVGcolor color = nvgRGBA(level, level, level, 255);
 		if (kind == LOCK) {
-			drawLockIcon(args, color);
+			drawLockIcon(args);
 		}
 		else {
 			drawResetIcon(args);
@@ -342,6 +310,16 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
+
+		const float editorButtonRowY = 0.5f * (lockPos.y + waveformSelectPos.y);
+		const float editorButtonInsetMm = 1.4f;
+		const float editorIconPitchMm = 5.9f;
+		const float editorWaveButtonPitchMm = 5.5f;
+		const float editorLeftCenterX = editorRectMm.pos.x + editorButtonInsetMm + 2.6f;
+		const float editorRightCenterX = editorRectMm.pos.x + editorRectMm.size.x - editorButtonInsetMm - 2.6f;
+		waveformSelectPos = Vec(editorLeftCenterX + 0.5f * editorWaveButtonPitchMm, editorButtonRowY);
+		lockPos = Vec(editorRightCenterX - editorIconPitchMm, editorButtonRowY);
+		resetPos = Vec(editorRightCenterX, editorButtonRowY);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
@@ -386,21 +364,21 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<EclipseKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
 		addParam(createParamCentered<EclipseKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
 		));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
 		));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+		addOutput(createOutputCentered<MagitekOutputJack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
+		addOutput(createOutputCentered<MagitekOutputJack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
 	}
 
 	void step() override {

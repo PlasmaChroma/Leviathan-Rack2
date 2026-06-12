@@ -1047,6 +1047,10 @@ struct IntegralFlux : Module {
 		if (previewRenderModeJ) {
 			previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
 		}
+		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed);
+			previewRenderMode.store(0, std::memory_order_relaxed);
+		}
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -2009,34 +2013,38 @@ struct IntegralFluxWidget : ModuleWidget {
 				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			menu->addChild(createMenuLabel("Preview Visual"));
-			menu->addChild(createSubmenuItem("Render", "",
-				[=](Menu* submenu) {
-					submenu->addChild(createCheckMenuItem("NanoVG", "",
-						[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 0; },
-						[=]() { maths->previewRenderMode.store(0, std::memory_order_relaxed); }
-					));
-					submenu->addChild(createCheckMenuItem("OpenGL", "",
-						[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 1; },
-						[=]() { maths->previewRenderMode.store(1, std::memory_order_relaxed); }
-					));
-				}
-			));
+			if (isDragonKingPreviewWidgetOptionsEnabled()) {
+				menu->addChild(createSubmenuItem("Render", "",
+					[=](Menu* submenu) {
+						submenu->addChild(createCheckMenuItem("NanoVG", "",
+							[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 0; },
+							[=]() { maths->previewRenderMode.store(0, std::memory_order_relaxed); }
+						));
+						submenu->addChild(createCheckMenuItem("OpenGL", "",
+							[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 1; },
+							[=]() { maths->previewRenderMode.store(1, std::memory_order_relaxed); }
+						));
+					}
+				));
+			}
 			menu->addChild(createCheckMenuItem("Preview Tracer", "",
 				[=]() { return maths->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { maths->previewTracerEnabled.store(!maths->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
-			menu->addChild(createSubmenuItem("Tracer Quality", "",
-				[=](Menu* submenu) {
-					submenu->addChild(createCheckMenuItem("Curve cache", "",
-						[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
-						[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
-					));
-					submenu->addChild(createCheckMenuItem("Frame cache", "",
-						[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
-						[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
-					));
-				}
-			));
+			if (isDragonKingPreviewWidgetOptionsEnabled()) {
+				menu->addChild(createSubmenuItem("Tracer Quality", "",
+					[=](Menu* submenu) {
+						submenu->addChild(createCheckMenuItem("Curve cache", "",
+							[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+							[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+						));
+						submenu->addChild(createCheckMenuItem("Frame cache", "",
+							[=]() { return maths->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+							[=]() { maths->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
+						));
+					}
+				));
+			}
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
 				[=]() { return maths->timingInterpolate.load(std::memory_order_relaxed); },

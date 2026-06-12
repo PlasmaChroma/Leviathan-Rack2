@@ -45,6 +45,7 @@ struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
 // Runtime feature flags loaded from `res/dragonking.txt`.
 bool isDragonKingDebugEnabled();
+bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();

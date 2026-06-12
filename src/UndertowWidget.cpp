@@ -396,16 +396,18 @@ struct UndertowWidget final : ModuleWidget {
       [m]() { return m->previewTracerEnabled.load(std::memory_order_relaxed); },
       [m]() { m->previewTracerEnabled.store(!m->previewTracerEnabled.load(std::memory_order_relaxed),
                                             std::memory_order_relaxed); }));
-    menu->addChild(createSubmenuItem("Tracer Quality", "", [m](Menu* submenu) {
-      submenu->addChild(createCheckMenuItem(
-        "Curve cache", "",
-        [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
-        [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }));
-      submenu->addChild(createCheckMenuItem(
-        "Frame cache", "",
-        [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
-        [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }));
-    }));
+    if (isDragonKingPreviewWidgetOptionsEnabled()) {
+      menu->addChild(createSubmenuItem("Tracer Quality", "", [m](Menu* submenu) {
+        submenu->addChild(createCheckMenuItem(
+          "Curve cache", "",
+          [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+          [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }));
+        submenu->addChild(createCheckMenuItem(
+          "Frame cache", "",
+          [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+          [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }));
+      }));
+    }
   }
 };
 

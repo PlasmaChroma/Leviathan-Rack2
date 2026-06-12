@@ -822,9 +822,9 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), module, Bifurx::TITO_XM_LIGHT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<DarkPJ301MPort>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<DarkPJ301MPort>(mm2px(fmP), module, Bifurx::FM_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<DarkPJ301MPort>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<DarkPJ301MPort>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));
+		addInput(createInputCentered<MagitekInputJack>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
+		addOutput(createOutputCentered<MagitekOutputJack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
 	}
 
 	void step() override {
