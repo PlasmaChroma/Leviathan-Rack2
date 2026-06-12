@@ -19,6 +19,37 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
+namespace levi_jack {
+
+NVGcolor audio();
+NVGcolor cv();
+NVGcolor gate();
+NVGcolor clock();
+NVGcolor danger();
+NVGcolor output();
+
+} // namespace levi_jack
+
+struct DynamicRingJack : app::SvgPort {
+	NVGcolor ringColor = nvgRGB(0x00, 0xe6, 0xff);
+	float glowAmount = 0.42f;
+	float ringAmount = 0.82f;
+	bool connectedGlow = true;
+
+	DynamicRingJack();
+	void setRingColor(NVGcolor color);
+	void setGlowAmount(float amount);
+	void draw(const DrawArgs& args) override;
+};
+
+struct DynamicRingInputJack : DynamicRingJack {
+	DynamicRingInputJack();
+};
+
+struct DynamicRingOutputJack : DynamicRingJack {
+	DynamicRingOutputJack();
+};
+
 struct GoldButton : app::SvgSwitch {
 	TransformWidget* faceTransform = nullptr;
 	TransparentWidget* pressOverlay = nullptr;

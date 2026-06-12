@@ -44,6 +44,34 @@ uint64_t eclipseShadowDrawCount() {
 
 } // namespace visual_assets
 
+namespace levi_jack {
+
+NVGcolor audio() {
+	return nvgRGB(0x00, 0xe6, 0xff);
+}
+
+NVGcolor cv() {
+	return nvgRGB(0x8a, 0x55, 0xff);
+}
+
+NVGcolor gate() {
+	return nvgRGB(0x33, 0xff, 0xaa);
+}
+
+NVGcolor clock() {
+	return nvgRGB(0x44, 0x88, 0xff);
+}
+
+NVGcolor danger() {
+	return nvgRGB(0xff, 0x44, 0x66);
+}
+
+NVGcolor output() {
+	return nvgRGB(0xf4, 0xf1, 0xe8);
+}
+
+} // namespace levi_jack
+
 namespace {
 
 void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
@@ -391,6 +419,113 @@ MagitekOutputJack::MagitekOutputJack() {
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
 	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
+}
+
+DynamicRingJack::DynamicRingJack() {
+	setSvg(visual_assets::loadPluginSvgCached("res/icon/dynamic_jack_core.svg"));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+}
+
+void DynamicRingJack::setRingColor(NVGcolor color) {
+	ringColor = color;
+}
+
+void DynamicRingJack::setGlowAmount(float amount) {
+	glowAmount = clamp(amount, 0.f, 1.f);
+}
+
+void DynamicRingJack::draw(const DrawArgs& args) {
+	const Vec center = box.size.div(2.f);
+	const float s = std::min(box.size.x, box.size.y);
+	engine::Port* port = getPort();
+	const bool connected = port && port->isConnected();
+	const float connectedBoost = (connectedGlow && connected) ? 1.18f : 1.f;
+	NVGcolor color = ringColor;
+
+	auto withAlpha = [](NVGcolor c, float alpha) {
+		c.a = clamp(alpha, 0.f, 1.f);
+		return c;
+	};
+
+	SvgPort::draw(args);
+
+	const float glowOuter = s * 0.34f;
+	const float glowInner = s * 0.18f;
+	const float ringOuter = s * 0.318f;
+	const float ringInner = s * 0.242f;
+	const float ringMid = 0.5f * (ringOuter + ringInner);
+	const float socketOuter = s * 0.205f;
+	const float socketInner = s * 0.122f;
+
+	NVGpaint glow = nvgRadialGradient(
+		args.vg,
+		center.x,
+		center.y,
+		glowInner,
+		glowOuter,
+		withAlpha(color, glowAmount * 0.50f * connectedBoost),
+		withAlpha(color, 0.f)
+	);
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, glowOuter);
+	nvgFillPaint(args.vg, glow);
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, ringOuter);
+	nvgCircle(args.vg, center.x, center.y, ringInner);
+	nvgPathWinding(args.vg, NVG_HOLE);
+	nvgFillColor(args.vg, withAlpha(color, ringAmount * 0.72f));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, ringMid);
+	nvgStrokeWidth(args.vg, std::max(0.8f, s * 0.036f));
+	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.98f));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, ringOuter - s * 0.012f, -0.78f * M_PI, -0.18f * M_PI, NVG_CW);
+	nvgStrokeWidth(args.vg, std::max(0.48f, s * 0.016f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 72));
+	nvgStroke(args.vg);
+
+	NVGpaint socketBevel = nvgRadialGradient(
+		args.vg,
+		center.x - s * 0.045f,
+		center.y - s * 0.055f,
+		s * 0.025f,
+		socketOuter,
+		nvgRGBA(52, 56, 66, 255),
+		nvgRGBA(0, 1, 4, 255)
+	);
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketOuter);
+	nvgFillPaint(args.vg, socketBevel);
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketInner);
+	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 238));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, socketOuter - s * 0.024f, -0.82f * M_PI, -0.30f * M_PI, NVG_CW);
+	nvgStrokeWidth(args.vg, std::max(0.42f, s * 0.014f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 36));
+	nvgStroke(args.vg);
+}
+
+DynamicRingInputJack::DynamicRingInputJack() {
+	setRingColor(levi_jack::audio());
+}
+
+DynamicRingOutputJack::DynamicRingOutputJack() {
+	setRingColor(levi_jack::output());
+	setGlowAmount(0.34f);
 }
 
 GoldButton::GoldButton() {
