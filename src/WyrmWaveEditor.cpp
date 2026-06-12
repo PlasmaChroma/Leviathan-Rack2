@@ -709,13 +709,6 @@ struct WyrmWaveEditor : TransparentWidget {
 				PerfClock::now() - sandDrawStart).count()) * 0.001f;
 		}
 
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 0.f, 0.5f * box.size.y);
-		nvgLineTo(args.vg, box.size.x, 0.5f * box.size.y);
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 120));
-			nvgStroke(args.vg);
-
 			const bool hasModule = (module != nullptr);
 			const uint32_t drawWaveVersion = hasModule ? module->waveVersion.load(std::memory_order_acquire) : 0u;
 			const int drawRockStateIndex = hasModule ? module->activeRockStateIndex.load(std::memory_order_acquire) : -1;
@@ -980,6 +973,13 @@ struct WyrmWaveEditor : TransparentWidget {
 			};
 			emitAlternatingPolarityShade(true);
 			emitAlternatingPolarityShade(false);
+
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, 0.f, midY);
+			nvgLineTo(args.vg, box.size.x, midY);
+			nvgStrokeWidth(args.vg, 1.f);
+			nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 150));
+			nvgStroke(args.vg);
 
 			auto emitRoundedBodyPath = [&]() {
 				const float roundCosThreshold = -0.25f;
