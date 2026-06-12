@@ -802,7 +802,7 @@ struct WyrmWaveEditor : TransparentWidget {
 						closeAt(columnPoints.back());
 					}
 				}
-				nvgFillColor(args.vg, positive ? nvgRGBA(6, 110, 132, 54) : nvgRGBA(48, 30, 128, 62));
+				nvgFillColor(args.vg, positive ? nvgRGBA(0, 56, 72, 132) : nvgRGBA(40, 24, 112, 92));
 				nvgFill(args.vg);
 			};
 			emitAlternatingPolarityShade(true);
