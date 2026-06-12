@@ -74,6 +74,15 @@ struct WavePreviewTracer {
 		lastCaptureSec = -1.0;
 	}
 
+	bool hasActiveFrames() const {
+		for (const Frame& frame : frames) {
+			if (frame.active) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void draw(NVGcontext* vg, double nowSec, const WavePreviewTracerStyle& style) const {
 		const int stride = std::max(style.drawStride, 1);
 		const float fadeSec = std::max(style.fadeSec, 1e-6f);

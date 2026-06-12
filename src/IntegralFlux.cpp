@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <unordered_map>
 
@@ -199,6 +200,7 @@ struct IntegralFlux : Module {
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
 	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_FRAME_CACHE};
+	std::atomic<int> previewRenderMode {0};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -994,6 +996,7 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewRenderMode", json_integer(previewRenderMode.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -1038,6 +1041,11 @@ struct IntegralFlux : Module {
 			const int mode = int(json_integer_value(previewTracerModeJ));
 			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
 			                             std::memory_order_relaxed);
+		}
+
+		json_t* previewRenderModeJ = json_object_get(rootJ, "previewRenderMode");
+		if (previewRenderModeJ) {
+			previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
 		}
 	}
 
@@ -1224,7 +1232,7 @@ struct BigTL1105 : TL1105 {
     }
 };
 
-struct WavePreviewWidget : Widget {
+struct WavePreviewWidget : widget::OpenGlWidget {
 	// Preview boxes are small; this density materially lowers per-frame NanoVG work
 	// while remaining visually smooth at current panel scale.
 	static constexpr int POINT_COUNT = 128;
@@ -1240,6 +1248,8 @@ struct WavePreviewWidget : Widget {
 	static constexpr float TRAIL_FADE_SEC = 0.333f;
 	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
+	static constexpr float GL_WAVE_LINE_WIDTH = 2.0f;
+	static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
 	static constexpr int TRAIL_DRAW_STRIDE = 2;
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
@@ -1256,6 +1266,145 @@ struct WavePreviewWidget : Widget {
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
 		this->channel = channel;
+		dirtyOnSubpixelChange = false;
+	}
+
+	bool useOpenGlRenderer() const {
+		return modulePtr && modulePtr->previewRenderMode.load(std::memory_order_relaxed) == 1;
+	}
+
+	static NVGcolor tracerColorWithAlpha(float alpha) {
+		return nvgRGBA(255, 190, 80, clamp(int(alpha), 0, 255));
+	}
+
+	static void glColorFromNvg(NVGcolor c) {
+		glColor4f(c.r, c.g, c.b, c.a);
+	}
+
+	static void drawGlLineStrip(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidthPx, NVGcolor color) {
+		stride = std::max(stride, 1);
+		glLineWidth(lineWidthPx);
+		glColorFromNvg(color);
+		glBegin(GL_LINE_STRIP);
+		glVertex2f(linePoints[0].x, linePoints[0].y);
+		for (int i = stride; i < POINT_COUNT; i += stride) {
+			glVertex2f(linePoints[i].x, linePoints[i].y);
+		}
+		if ((POINT_COUNT - 1) % stride != 0) {
+			glVertex2f(linePoints[POINT_COUNT - 1].x, linePoints[POINT_COUNT - 1].y);
+		}
+		glEnd();
+	}
+
+	void drawGlDot() {
+		if (!pointsValid || !dotVisible) {
+			return;
+		}
+		float w = std::max(box.size.x, 1.f);
+		float h = std::max(box.size.y, 1.f);
+		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
+		float left = drawPad;
+		float top = drawPad;
+		float right = std::max(left + 1.f, w - drawPad);
+		float bottom = std::max(top + 1.f, h - drawPad);
+		float drawW = right - left;
+		float drawH = bottom - top;
+		float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
+		float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
+		int i0 = 0;
+		for (int i = 1; i < POINT_COUNT; ++i) {
+			if (points[i].x >= targetX) {
+				i0 = i - 1;
+				break;
+			}
+			i0 = i - 1;
+		}
+		int i1 = std::min(i0 + 1, POINT_COUNT - 1);
+		float x = targetX;
+		float y = points[i0].y;
+		if (i1 != i0 && points[i1].x > points[i0].x) {
+			float t = clamp((targetX - points[i0].x) / (points[i1].x - points[i0].x), 0.f, 1.f);
+			y = points[i0].y + (points[i1].y - points[i0].y) * t;
+		}
+		y = y * 0.9f + targetY * 0.1f;
+		glColor4f(0.f, 0.f, 0.f, 0.86f);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(x, y);
+		for (int i = 0; i <= 24; ++i) {
+			float a = 6.28318530718f * float(i) / 24.f;
+			glVertex2f(x + std::cos(a) * (DOT_RADIUS + 0.55f), y + std::sin(a) * (DOT_RADIUS + 0.55f));
+		}
+		glEnd();
+		glColor4f(1.f, 0.91f, 0.28f, 1.f);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(x, y);
+		for (int i = 0; i <= 24; ++i) {
+			float a = 6.28318530718f * float(i) / 24.f;
+			glVertex2f(x + std::cos(a) * DOT_RADIUS, y + std::sin(a) * DOT_RADIUS);
+		}
+		glEnd();
+	}
+
+	void drawFramebuffer() override {
+		math::Vec fbSize = getFramebufferSize();
+		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+		glClearColor(0.f, 0.f, 0.f, 0.f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		if (!pointsValid || !useOpenGlRenderer()) {
+			return;
+		}
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SCISSOR_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnable(GL_LINE_SMOOTH);
+		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
+		const double nowSec = system::getTime();
+		const float xScale = fbSize.x / std::max(box.size.x, 1.f);
+		const float yScale = fbSize.y / std::max(box.size.y, 1.f);
+		const float framebufferScale = std::max(0.1f, 0.5f * (xScale + yScale));
+		const float lineScale = std::sqrt(framebufferScale);
+		const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+		if (tracerEnabled) {
+			for (const auto& frame : curveTracer.frames) {
+				if (!frame.active) {
+					continue;
+				}
+				const float age = float(nowSec - frame.birthSec);
+				if (age < 0.f || age >= TRAIL_FADE_SEC) {
+					continue;
+				}
+				const float fade = 1.f - age / TRAIL_FADE_SEC;
+				drawGlLineStrip(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
+			}
+		}
+		drawGlLineStrip(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
+		drawGlDot();
+	}
+
+	void drawFrequencyLabel(const DrawArgs& args) {
+		char freqText[32];
+		if (lastFreqHz < 1.f) {
+			std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
+		}
+		else if (lastFreqHz >= 1000.f) {
+			std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
+		}
+		else {
+			std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
+		}
+		nvgFontSize(args.vg, LABEL_FONT_SIZE);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
 
 	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
@@ -1343,7 +1492,10 @@ struct WavePreviewWidget : Widget {
 	}
 
 	void step() override {
-		Widget::step();
+		const bool openGlRenderer = useOpenGlRenderer();
+		if (!openGlRenderer) {
+			Widget::step();
+		}
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1376,7 +1528,8 @@ struct WavePreviewWidget : Widget {
 		}
 		const double nowSec = system::getTime();
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
-		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+		const int tracerMode = openGlRenderer ? WAVE_PREVIEW_TRACER_CURVE_CACHE
+		                                      : modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
 		if (!tracerEnabled) {
 			curveTracer.clear();
 			frameTracer.clear();
@@ -1406,9 +1559,18 @@ struct WavePreviewWidget : Widget {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
 		}
+		if (openGlRenderer) {
+			setDirty();
+			FramebufferWidget::step();
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
+		if (useOpenGlRenderer()) {
+			widget::OpenGlWidget::draw(args);
+			drawFrequencyLabel(args);
+			return;
+		}
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
@@ -1495,22 +1657,8 @@ struct WavePreviewWidget : Widget {
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
 
-		char freqText[32];
-		if (lastFreqHz < 1.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
-		}
-		else if (lastFreqHz >= 1000.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
-		}
-		else {
-			std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
-		}
-		nvgFontSize(args.vg, LABEL_FONT_SIZE);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 		// Keep label outside preview box to avoid occluding waveform.
-		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
+		drawFrequencyLabel(args);
 	}
 };
 
@@ -1835,6 +1983,18 @@ struct IntegralFluxWidget : ModuleWidget {
 				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			menu->addChild(createMenuLabel("Preview Visual"));
+			menu->addChild(createSubmenuItem("Render", "",
+				[=](Menu* submenu) {
+					submenu->addChild(createCheckMenuItem("NanoVG", "",
+						[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 0; },
+						[=]() { maths->previewRenderMode.store(0, std::memory_order_relaxed); }
+					));
+					submenu->addChild(createCheckMenuItem("OpenGL", "",
+						[=]() { return maths->previewRenderMode.load(std::memory_order_relaxed) == 1; },
+						[=]() { maths->previewRenderMode.store(1, std::memory_order_relaxed); }
+					));
+				}
+			));
 			menu->addChild(createCheckMenuItem("Preview Tracer", "",
 				[=]() { return maths->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { maths->previewTracerEnabled.store(!maths->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
