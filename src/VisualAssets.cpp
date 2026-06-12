@@ -451,6 +451,7 @@ DynamicRingJack::DynamicRingJack(const char* coreSvgPath) {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	installMagitekShadow(this, new MagitekInputShadow);
 
 	ringFb = new widget::FramebufferWidget();
 	ringFb->dirtyOnSubpixelChange = false;
