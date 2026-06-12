@@ -310,16 +310,6 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
-
-		const float editorButtonRowY = 0.5f * (lockPos.y + waveformSelectPos.y);
-		const float editorButtonInsetMm = 1.4f;
-		const float editorIconPitchMm = 5.9f;
-		const float editorWaveButtonPitchMm = 5.5f;
-		const float editorLeftCenterX = editorRectMm.pos.x + editorButtonInsetMm + 2.6f;
-		const float editorRightCenterX = editorRectMm.pos.x + editorRectMm.size.x - editorButtonInsetMm - 2.6f;
-		waveformSelectPos = Vec(editorLeftCenterX + 0.5f * editorWaveButtonPitchMm, editorButtonRowY);
-		lockPos = Vec(editorRightCenterX - editorIconPitchMm, editorButtonRowY);
-		resetPos = Vec(editorRightCenterX, editorButtonRowY);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 

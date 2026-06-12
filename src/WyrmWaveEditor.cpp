@@ -569,36 +569,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
 			const float dx = pointStep(count);
 			const float graphColumnWidth = std::min(2.0f, dx);
-			if (hasModule) {
-				const bool displayCacheValid =
-					cachedDisplayWaveValid &&
-					cachedDisplayWaveCount == count &&
-					cachedDisplayWaveVersion == drawWaveVersion &&
-					cachedDisplayRockStateIndex == drawRockStateIndex &&
-					std::fabs(cachedDisplaySize.x - box.size.x) <= 1e-4f &&
-					std::fabs(cachedDisplaySize.y - box.size.y) <= 1e-4f &&
-					std::fabs(cachedDisplaySlitherPhase - drawSlitherPhase) <= 1e-6f &&
-					std::fabs(cachedDisplaySlitherAmount - drawSlitherAmount) <= 1e-6f;
-				if (!displayCacheValid) {
-					for (int i = 0; i < count; ++i) {
-						cachedDisplayWaveValues[i] = displayWavePoint(i);
-					}
-					cachedDisplayWaveCount = count;
-					cachedDisplayWaveVersion = drawWaveVersion;
-					cachedDisplayRockStateIndex = drawRockStateIndex;
-					cachedDisplaySize = box.size;
-					cachedDisplaySlitherPhase = drawSlitherPhase;
-					cachedDisplaySlitherAmount = drawSlitherAmount;
-					cachedDisplayWaveValid = true;
-				}
-			}
-			auto waveValueAt = [&](int i) {
-				if (hasModule) {
-					return cachedDisplayWaveValues[i];
-				}
-				const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
-				return std::sin(2.f * float(M_PI) * phase);
-			};
 		std::array<float, kWyrmPointCountMax> bodyPoints {};
 		if (hasModule) {
 			for (int i = 0; i < module->pointCount; ++i) {
@@ -632,8 +602,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoveredColumn = mouseInside ? indexFromX(mouseLocal.x) : -1;
-		float hoveredColumnCenterX = 0.f;
-		bool hoveredColumnCenterValid = false;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
 		const bool drawHoverNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
 		if (hasModule && mouseInside && drawHoverNanoVG) {
@@ -649,8 +617,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFill(args.vg);
 
 			const float guideX = 0.5f * (x0 + x1);
-			hoveredColumnCenterX = guideX;
-			hoveredColumnCenterValid = true;
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, guideX - 0.5f * graphColumnWidth, 0.f, graphColumnWidth, box.size.y);
 			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
@@ -665,46 +631,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const float midY = 0.5f * box.size.y;
-			auto xAt = [&](int i) {
-				return pointX(i, count);
-			};
 			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
-			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
-			const bool drawWaveColumns = (!sandEnabled()) && (!module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG);
-			if (drawWaveColumns) {
-			nvgBeginPath(args.vg);
-			for (int i = 0; i < count; ++i) {
-				const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
-				const bool hotColumn = (i == hoveredColumn);
-				float x = xAt(i);
-				if (hotColumn && hoveredColumnCenterValid) {
-					x = hoveredColumnCenterX;
-				}
-				const float yTop = std::min(midY, y);
-				const float yBottom = std::max(midY, y);
-				if (!hotColumn) {
-					nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-				}
-			}
-			nvgFillColor(args.vg, nvgRGBA(34, 27, 70, 196));
-			nvgFill(args.vg);
-
-			if (hoveredColumn >= 0 && hoveredColumn < count) {
-				nvgBeginPath(args.vg);
-				const float y = (0.5f - 0.5f * waveValueAt(hoveredColumn)) * box.size.y;
-				float x = xAt(hoveredColumn);
-				if (hoveredColumnCenterValid) {
-					x = hoveredColumnCenterX;
-				}
-				const float yTop = std::min(midY, y);
-				const float yBottom = std::max(midY, y);
-				nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-				nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
-				nvgFill(args.vg);
-				}
-			}
-
 			const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
+			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
 			if (drawBodyNanoVG) {
 				const bool bodyCacheValid =
 					hasModule &&
@@ -736,6 +665,148 @@ struct WyrmWaveEditor : TransparentWidget {
 					cachedBodyPathValid = hasModule;
 				}
 			}
+
+			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
+			auto emitPolarityFill = [&](bool positive) {
+				if (!drawWaveArea) {
+					return;
+				}
+				auto inside = [&](const Vec& p) {
+					return positive ? (p.y < midY - 1e-4f) : (p.y > midY + 1e-4f);
+				};
+				auto zeroCrossing = [&](const Vec& a, const Vec& b) {
+					const float dy = b.y - a.y;
+					const float t = (std::fabs(dy) > 1e-6f) ? clamp((midY - a.y) / dy, 0.f, 1.f) : 0.f;
+					return Vec(a.x + (b.x - a.x) * t, midY);
+				};
+				bool open = false;
+				auto beginAt = [&](const Vec& p) {
+					nvgMoveTo(args.vg, p.x, midY);
+					nvgLineTo(args.vg, p.x, p.y);
+					open = true;
+				};
+				auto closeAt = [&](const Vec& p) {
+					nvgLineTo(args.vg, p.x, p.y);
+					nvgLineTo(args.vg, p.x, midY);
+					nvgClosePath(args.vg);
+					open = false;
+				};
+
+				nvgBeginPath(args.vg);
+				for (int i = 0; i < cachedBodySamples - 1; ++i) {
+					const Vec p0 = cachedBodyPathPoints[i];
+					const Vec p1 = cachedBodyPathPoints[i + 1];
+					const bool in0 = inside(p0);
+					const bool in1 = inside(p1);
+					if (in0 && !open) {
+						beginAt(p0);
+					}
+					if (in0 && in1) {
+						nvgLineTo(args.vg, p1.x, p1.y);
+					}
+					else if (in0 && !in1) {
+						closeAt(zeroCrossing(p0, p1));
+					}
+					else if (!in0 && in1) {
+						const Vec cross = zeroCrossing(p0, p1);
+						beginAt(cross);
+						nvgLineTo(args.vg, p1.x, p1.y);
+					}
+				}
+				if (open) {
+					closeAt(cachedBodyPathPoints[cachedBodySamples - 1]);
+				}
+				nvgFillColor(args.vg, positive ? nvgRGBA(28, 204, 217, 116) : nvgRGBA(115, 72, 224, 124));
+				nvgFill(args.vg);
+			};
+			emitPolarityFill(true);
+			emitPolarityFill(false);
+
+			auto emitAlternatingPolarityShade = [&](bool positive) {
+				if (!drawWaveArea || count <= 0) {
+					return;
+				}
+				auto inside = [&](const Vec& p) {
+					return positive ? (p.y < midY - 1e-4f) : (p.y > midY + 1e-4f);
+				};
+				auto zeroCrossing = [&](const Vec& a, const Vec& b) {
+					const float dy = b.y - a.y;
+					const float t = (std::fabs(dy) > 1e-6f) ? clamp((midY - a.y) / dy, 0.f, 1.f) : 0.f;
+					return Vec(a.x + (b.x - a.x) * t, midY);
+				};
+				auto sampleBodyPointAtX = [&](float x) {
+					const float phase = clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 1.f);
+					const float sampleIndex = phase * float(cachedBodySamples) - 0.5f;
+					if (sampleIndex <= 0.f) {
+						return Vec(x, cachedBodyPathPoints[0].y);
+					}
+					if (sampleIndex >= float(cachedBodySamples - 1)) {
+						return Vec(x, cachedBodyPathPoints[cachedBodySamples - 1].y);
+					}
+					const int i0 = clamp(int(std::floor(sampleIndex)), 0, cachedBodySamples - 2);
+					const float t = sampleIndex - float(i0);
+					const float y = cachedBodyPathPoints[i0].y + (cachedBodyPathPoints[i0 + 1].y - cachedBodyPathPoints[i0].y) * t;
+					return Vec(x, y);
+				};
+				bool open = false;
+				auto beginAt = [&](const Vec& p) {
+					nvgMoveTo(args.vg, p.x, midY);
+					nvgLineTo(args.vg, p.x, p.y);
+					open = true;
+				};
+				auto closeAt = [&](const Vec& p) {
+					nvgLineTo(args.vg, p.x, p.y);
+					nvgLineTo(args.vg, p.x, midY);
+					nvgClosePath(args.vg);
+					open = false;
+				};
+
+				std::vector<Vec> columnPoints;
+				columnPoints.reserve(16);
+				nvgBeginPath(args.vg);
+				for (int column = 1; column < count; column += 2) {
+					const float x0 = pointEdgeInset() + float(column) * dx;
+					const float x1 = std::min(pointEdgeInset() + float(column + 1) * dx, pointEdgeInset() + pointDrawWidth());
+					columnPoints.clear();
+					columnPoints.push_back(sampleBodyPointAtX(x0));
+					for (int sample = 0; sample < cachedBodySamples; ++sample) {
+						const Vec p = cachedBodyPathPoints[sample];
+						if (p.x > x0 && p.x < x1) {
+							columnPoints.push_back(p);
+						}
+					}
+					columnPoints.push_back(sampleBodyPointAtX(x1));
+
+					open = false;
+					for (size_t i = 0; i + 1 < columnPoints.size(); ++i) {
+						const Vec p0 = columnPoints[i];
+						const Vec p1 = columnPoints[i + 1];
+						const bool in0 = inside(p0);
+						const bool in1 = inside(p1);
+						if (in0 && !open) {
+							beginAt(p0);
+						}
+						if (in0 && in1) {
+							nvgLineTo(args.vg, p1.x, p1.y);
+						}
+						else if (in0 && !in1) {
+							closeAt(zeroCrossing(p0, p1));
+						}
+						else if (!in0 && in1) {
+							const Vec cross = zeroCrossing(p0, p1);
+							beginAt(cross);
+							nvgLineTo(args.vg, p1.x, p1.y);
+						}
+					}
+					if (open) {
+						closeAt(columnPoints.back());
+					}
+				}
+				nvgFillColor(args.vg, positive ? nvgRGBA(6, 110, 132, 54) : nvgRGBA(48, 30, 128, 62));
+				nvgFill(args.vg);
+			};
+			emitAlternatingPolarityShade(true);
+			emitAlternatingPolarityShade(false);
 
 			auto emitRoundedBodyPath = [&]() {
 				const float roundCosThreshold = -0.25f;

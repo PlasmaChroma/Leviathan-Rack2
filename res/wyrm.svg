@@ -474,20 +474,20 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_LOCK_BUTTON"
-   cx="320"
-   cy="7550"
+   cx="5522"
+   cy="7535"
    r="160"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_RESET_BUTTON"
-   cx="755"
-   cy="7550"
+   cx="6112"
+   cy="7535"
    r="160"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_WAVEFORM_SELECT"
-   cx="1476"
-   cy="7570.0098"
+   cx="1275"
+   cy="7535"
    r="160"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
