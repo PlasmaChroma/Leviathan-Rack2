@@ -1293,7 +1293,6 @@ struct WavePreviewWidget : Widget {
 					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
 					style.maxAlpha = 118.f;
 					style.drawStride = TRAIL_DRAW_STRIDE;
-					style.lineRadiusPx = 1;
 					frameTracer.capture(points, nowSec, box.size, style);
 				}
 			}
@@ -1330,7 +1329,6 @@ struct WavePreviewWidget : Widget {
 					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
 					style.maxAlpha = 118.f;
 					style.drawStride = TRAIL_DRAW_STRIDE;
-					style.lineRadiusPx = 1;
 					frameTracer.draw(args.vg, nowSec, box.size, style);
 				}
 			}

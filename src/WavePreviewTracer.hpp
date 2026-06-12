@@ -26,6 +26,7 @@ struct WavePreviewBufferedTracerStyle {
 	float fadeSec = 0.333f;
 	float minCaptureIntervalSec = 1.f / 24.f;
 	float maxAlpha = 118.f;
+	float rasterScale = 2.f;
 	int drawStride = 2;
 	int lineRadiusPx = 1;
 };
@@ -248,23 +249,25 @@ struct WavePreviewBufferedTracer {
 	             double nowSec,
 	             const Vec& size,
 	             const WavePreviewBufferedTracerStyle& style) {
-		ensureSize(int(std::ceil(std::max(size.x, 1.f))), int(std::ceil(std::max(size.y, 1.f))));
+		const float rasterScale = clamp(style.rasterScale, 1.f, 4.f);
+		ensureSize(int(std::ceil(std::max(size.x, 1.f) * rasterScale)), int(std::ceil(std::max(size.y, 1.f) * rasterScale)));
 		if (lastCaptureSec > 0.0 && (nowSec - lastCaptureSec) < style.minCaptureIntervalSec) {
 			return;
 		}
 		const int stride = std::max(style.drawStride, 1);
-		const int radius = std::max(style.lineRadiusPx, 0);
+		const int radius = std::max(int(std::round(float(style.lineRadiusPx) * rasterScale)), 0);
 		const uint32_t alpha = uint32_t(clamp(int(style.maxAlpha), 0, 255));
 		const uint32_t r = uint32_t(clamp(int(style.color.r * float(alpha)), 0, 255));
 		const uint32_t g = uint32_t(clamp(int(style.color.g * float(alpha)), 0, 255));
 		const uint32_t b = uint32_t(clamp(int(style.color.b * float(alpha)), 0, 255));
-		Vec prev = points[0];
+		Vec prev = points[0].mult(rasterScale);
 		for (size_t i = size_t(stride); i < PointCount; i += size_t(stride)) {
-			drawLine(prev, points[i], radius, r, g, b, alpha);
-			prev = points[i];
+			const Vec p = points[i].mult(rasterScale);
+			drawLine(prev, p, radius, r, g, b, alpha);
+			prev = p;
 		}
 		if ((PointCount - 1) % size_t(stride) != 0) {
-			drawLine(prev, points[PointCount - 1], radius, r, g, b, alpha);
+			drawLine(prev, points[PointCount - 1].mult(rasterScale), radius, r, g, b, alpha);
 		}
 		lastCaptureSec = nowSec;
 		pixelsDirty = true;
@@ -278,7 +281,8 @@ struct WavePreviewBufferedTracer {
 		if (imageVg != vg) {
 			resetImage(vg, false);
 		}
-		ensureSize(int(std::ceil(std::max(size.x, 1.f))), int(std::ceil(std::max(size.y, 1.f))));
+		const float rasterScale = clamp(style.rasterScale, 1.f, 4.f);
+		ensureSize(int(std::ceil(std::max(size.x, 1.f) * rasterScale)), int(std::ceil(std::max(size.y, 1.f) * rasterScale)));
 		fade(nowSec, style.fadeSec);
 		if (imageHandle < 0 || !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, imageW, imageH)) {
 			imageHandle = nvgCreateImageRGBA(vg, imageW, imageH, NVG_IMAGE_PREMULTIPLIED,
@@ -293,7 +297,7 @@ struct WavePreviewBufferedTracer {
 		if (imageHandle < 0 || !hasVisiblePixels) {
 			return;
 		}
-		NVGpaint paint = nvgImagePattern(vg, 0.f, 0.f, float(imageW), float(imageH), 0.f, imageHandle, 1.f);
+		NVGpaint paint = nvgImagePattern(vg, 0.f, 0.f, size.x, size.y, 0.f, imageHandle, 1.f);
 		nvgBeginPath(vg);
 		nvgRect(vg, 0.f, 0.f, size.x, size.y);
 		nvgFillPaint(vg, paint);
