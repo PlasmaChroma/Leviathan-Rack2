@@ -1724,6 +1724,17 @@ struct IntegralFluxEclipseKnob : EclipseKnob {
 	}
 };
 
+struct IntegralFluxEclipse2Knob : Eclipse2Knob {
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		Eclipse2Knob::draw(args);
+		gIntegralFluxEclipseDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
+
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
@@ -1902,10 +1913,15 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setProgressRingBipolar(true);
 			addParam(knob);
 		};
+		auto addBipolarEclipse2Knob = [&](Vec posMm, int paramId) {
+			IntegralFluxEclipse2Knob* knob = createParamCentered<IntegralFluxEclipse2Knob>(mm2px(posMm), module, paramId);
+			knob->setProgressRingBipolar(true);
+			addParam(knob);
+		};
 		addBipolarEclipseKnob(attenuate1KnobPos, IntegralFlux::ATTENUATE_1_PARAM);
-		addBipolarEclipseKnob(attenuate2KnobPos, IntegralFlux::ATTENUATE_2_PARAM);
+		addBipolarEclipse2Knob(attenuate2KnobPos, IntegralFlux::ATTENUATE_2_PARAM);
 		addBipolarEclipseKnob(attenuate3KnobPos, IntegralFlux::ATTENUATE_3_PARAM);
-		addBipolarEclipseKnob(attenuate4KnobPos, IntegralFlux::ATTENUATE_4_PARAM);
+		addBipolarEclipse2Knob(attenuate4KnobPos, IntegralFlux::ATTENUATE_4_PARAM);
 
 		addInput(createInputCentered<MagitekInputJack>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
 		addInput(createInputCentered<MagitekInputJack>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));

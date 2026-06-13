@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 120 120"
+   width="120"
+   height="120"
+   version="1.1"
+   id="svg35"
+   sodipodi:docname="Eclipse2Knob.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview35"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showguides="false"
+     inkscape:zoom="19.583333"
+     inkscape:cx="66.53617"
+     inkscape:cy="36.53617"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg35" />
+  <defs
+     id="defs22">
+    <!-- Metallic outer bezel gradient -->
+    <linearGradient
+       id="metalBezelGrad"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="100%">
+      <stop
+         offset="0%"
+         stop-color="#55585d"
+         id="stop1" />
+      <stop
+         offset="30%"
+         stop-color="#2d2f32"
+         id="stop2" />
+      <stop
+         offset="50%"
+         stop-color="#1b1c1e"
+         stop-opacity="1"
+         id="stop3" />
+      <stop
+         offset="75%"
+         stop-color="#3e4146"
+         id="stop4" />
+      <stop
+         offset="100%"
+         stop-color="#141517"
+         id="stop5" />
+    </linearGradient>
+    <!-- Dark knob face radial gradient -->
+    <radialGradient
+       id="knobFaceGrad"
+       cx="60"
+       cy="60"
+       r="46"
+       fx="50"
+       fy="50"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#2a2c30"
+         id="stop6" />
+      <stop
+         offset="70%"
+         stop-color="#141518"
+         id="stop7" />
+      <stop
+         offset="100%"
+         stop-color="#090a0c"
+         id="stop8" />
+    </radialGradient>
+    <!-- Recessed center cap radial gradient -->
+    <radialGradient
+       id="centerCapGrad"
+       cx="60"
+       cy="60"
+       r="38"
+       fx="55"
+       fy="55"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#1f2125"
+         id="stop9" />
+      <stop
+         offset="85%"
+         stop-color="#0f1012"
+         id="stop10" />
+      <stop
+         offset="100%"
+         stop-color="#050607"
+         id="stop11" />
+    </radialGradient>
+    <!-- Bezel specular highlight gradient -->
+    <linearGradient
+       id="specularGrad"
+       x1="0%"
+       y1="0%"
+       x2="0%"
+       y2="100%">
+      <stop
+         offset="0%"
+         stop-color="#ffffff"
+         stop-opacity="0.28"
+         id="stop12" />
+      <stop
+         offset="100%"
+         stop-color="#000000"
+         stop-opacity="0.8"
+         id="stop13" />
+    </linearGradient>
+    <!-- Glowing Orange Gradient for the needle -->
+    <linearGradient
+       id="needleGlowGrad"
+       x1="0%"
+       y1="100%"
+       x2="0%"
+       y2="0%">
+      <stop
+         offset="0%"
+         stop-color="#ff7a18"
+         stop-opacity="0.8"
+         id="stop14" />
+      <stop
+         offset="60%"
+         stop-color="#ffa33b"
+         stop-opacity="0.95"
+         id="stop15" />
+      <stop
+         offset="100%"
+         stop-color="#ffea9f"
+         stop-opacity="1.0"
+         id="stop16" />
+    </linearGradient>
+    <!-- Metallic Cap for the center pin -->
+    <linearGradient
+       id="centerPinGrad"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="100%">
+      <stop
+         offset="0"
+         stop-color="#ffd59a"
+         id="stop17"
+         style="stop-color:#fffae7;stop-opacity:1;" />
+      <stop
+         offset="0.79838717"
+         stop-color="#e08224"
+         id="stop18"
+         style="stop-color:#ffea9f;stop-opacity:1;" />
+      <stop
+         offset="0.89932597"
+         stop-color="#7e3309"
+         id="stop19"
+         style="stop-color:#ce7d07;stop-opacity:1;" />
+    </linearGradient>
+    <!-- Specular highlight for center pin -->
+    <radialGradient
+       id="pinSpec"
+       cx="0.0025530532"
+       cy="-0.099574603"
+       r="8.8399999"
+       fx="0.0025530532"
+       fy="-0.099574603"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#ffffff"
+         stop-opacity="0.6"
+         id="stop20"
+         style="stop-color:#ffffff;stop-opacity:0.51358694;" />
+      <stop
+         offset="1"
+         stop-color="#ffa33b"
+         stop-opacity="0.2"
+         id="stop21"
+         style="stop-color:#fffae7;stop-opacity:1;" />
+    </radialGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#centerPinGrad"
+       id="linearGradient35"
+       x1="-0.06044054"
+       y1="-28.380558"
+       x2="0.13265467"
+       y2="5.5605674"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <!-- Outer Bezel -->
+  <circle
+     cx="60"
+     cy="60"
+     r="54"
+     fill="url(#metalBezelGrad)"
+     stroke="#0b0c0d"
+     stroke-width="1.2"
+     id="circle22" />
+  <!-- Outer Bezel Specular Ring -->
+  <circle
+     cx="60"
+     cy="60"
+     r="52.2"
+     fill="none"
+     stroke="url(#specularGrad)"
+     stroke-width="0.8"
+     id="circle23" />
+  <!-- Inner Bezel Groove (Shadow) -->
+  <circle
+     cx="60"
+     cy="60"
+     r="47.5"
+     fill="none"
+     stroke="#08090a"
+     stroke-width="1.0"
+     id="circle24" />
+  <!-- Main Knob Face -->
+  <circle
+     cx="60"
+     cy="60"
+     r="46.5"
+     fill="url(#knobFaceGrad)"
+     id="circle25" />
+  <circle
+     cx="60"
+     cy="60"
+     r="46.5"
+     fill="none"
+     stroke="#25272b"
+     stroke-width="0.8"
+     id="circle26" />
+  <!-- Shiny Outer Edge of the Face -->
+  <circle
+     cx="60"
+     cy="60"
+     r="44.5"
+     fill="none"
+     stroke="#121316"
+     stroke-width="0.5"
+     id="circle27" />
+  <!-- Recessed Inner Cap -->
+  <circle
+     cx="60"
+     cy="60"
+     r="37.5"
+     fill="url(#centerCapGrad)"
+     stroke="#070809"
+     stroke-width="1.5"
+     id="circle28" />
+  <!-- Inner Highlight Ring -->
+  <circle
+     cx="60"
+     cy="60"
+     r="36"
+     fill="none"
+     stroke="#2b2d33"
+     stroke-width="0.6"
+     id="circle29" />
+  <!-- Pointer Needle & Center Pin (Grouped to rotate together with background cap) -->
+  <g
+     id="pointer-group"
+     transform="translate(60,60)">
+    <!-- Glowing Pointer Shadow/Aura -->
+    <line
+       x1="0"
+       y1="2"
+       x2="0"
+       y2="-36"
+       stroke="#ff5f00"
+       stroke-width="5.5"
+       stroke-linecap="round"
+       opacity="0.38"
+       id="line29"
+       style="fill:none" />
+    <line
+       x1="0"
+       y1="2"
+       x2="0"
+       y2="-36"
+       stroke="#ffa300"
+       stroke-width="3.8"
+       stroke-linecap="round"
+       opacity="0.65"
+       id="line30"
+       style="fill:none" />
+    <!-- Core Pointer Needle -->
+    <line
+       x1="0"
+       y1="1"
+       x2="0"
+       y2="-35.5"
+       stroke="url(#needleGlowGrad)"
+       stroke-width="2.5"
+       stroke-linecap="round"
+       id="line31"
+       style="fill:none" />
+    <!-- Specular core line -->
+    <line
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="-34.5"
+       stroke="#ffffff"
+       stroke-width="0.8"
+       stroke-linecap="round"
+       opacity="0.75"
+       id="line32"
+       style="fill:none;fill-opacity:1" />
+    <!-- Needle Base Ring (Bulb) -->
+    <circle
+       cx="0"
+       cy="0"
+       r="8"
+       fill="#1b1c1f"
+       stroke="#0b0c0d"
+       stroke-width="0.8"
+       id="circle32"
+       style="display:none" />
+    <circle
+       cx="0"
+       cy="0"
+       r="6.8000002"
+       fill="url(#centerPinGrad)"
+       id="circle33"
+       style="display:inline;opacity:0.819;fill:url(#linearGradient35)" />
+    <circle
+       cx="0"
+       cy="0"
+       r="6.8000002"
+       fill="url(#pinSpec)"
+       id="circle34"
+       style="display:none;fill:url(#pinSpec)" />
+    <!-- Center pin screw hole -->
+    <circle
+       cx="0"
+       cy="0"
+       r="2.2"
+       fill="#0b0c0d"
+       id="circle35"
+       style="display:none" />
+  </g>
+</svg>

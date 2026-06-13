@@ -151,6 +151,7 @@ struct EclipseKnob : app::SvgKnob {
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
 		bool rotateWithValue = true;
+		float scaleFactor = 1.0f;
 
 		SvgLayer();
 		void setSvg(std::shared_ptr<window::Svg> svg);
@@ -164,6 +165,7 @@ struct EclipseKnob : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		float scaleFactor = 1.0f;
 
 		ShadowWidget();
 		void setSvg(std::shared_ptr<window::Svg> svg);
@@ -183,6 +185,31 @@ struct EclipseKnob : app::SvgKnob {
 	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
 	float normalizedParamValue();
 };
+
+struct Eclipse2Knob : app::SvgKnob {
+	struct ProgressLedRingWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		float centerNorm = 0.5f;
+		bool bipolar = false;
+		int numLeds = 25;
+
+		void draw(const DrawArgs& args) override;
+	};
+
+	ProgressLedRingWidget* progressRing = nullptr;
+	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
+	EclipseKnob::SvgLayer* backLayer = nullptr;
+
+	Eclipse2Knob();
+	void onChange(const ChangeEvent& e) override;
+
+	void setBackSvg(std::shared_ptr<window::Svg> svg);
+	void setProgressRingBipolar(bool bipolar, float centerNorm = 0.5f);
+	float normalizedParamValue();
+};
+
 
 struct LeviathanHaloKnob : app::SvgKnob {
 	struct LightArcWidget : TransparentWidget {

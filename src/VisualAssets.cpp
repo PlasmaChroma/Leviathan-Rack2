@@ -1075,6 +1075,7 @@ EclipseKnob::SvgLayer::SvgLayer() {
 	cachedSvgSw = new widget::SvgWidget();
 	cachedSvgFb->addChild(cachedSvgSw);
 	addChild(cachedSvgFb);
+	scaleFactor = 1.0f;
 }
 
 void EclipseKnob::SvgLayer::setSvg(std::shared_ptr<window::Svg> svg) {
@@ -1092,7 +1093,7 @@ void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (svgSize.x <= 1.f || svgSize.y <= 1.f || diameterPx <= 1.f) return;
 
-	const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
+	const float scale = (diameterPx / std::max(svgSize.x, svgSize.y)) * scaleFactor;
 	const Vec center = box.size.mult(0.5f);
 	const float angle = rotateWithValue ? crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)) : 0.f;
 
@@ -1111,6 +1112,7 @@ EclipseKnob::ShadowWidget::ShadowWidget() {
 	cachedSvgSw = new widget::SvgWidget();
 	cachedSvgFb->addChild(cachedSvgSw);
 	addChild(cachedSvgFb);
+	scaleFactor = 1.0f;
 }
 
 void EclipseKnob::ShadowWidget::setSvg(std::shared_ptr<window::Svg> svg) {
@@ -1131,7 +1133,7 @@ void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
 	const bool measure = isDragonKingDebugEnabled();
 	const std::chrono::steady_clock::time_point start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 	const float angle = crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
-	const float scale = diameterPx / std::max(svgSize.x, svgSize.y);
+	const float scale = (diameterPx / std::max(svgSize.x, svgSize.y)) * scaleFactor;
 	const Vec center = box.size.mult(0.5f);
 	struct ShadowPass {
 		float offsetX;
@@ -1148,7 +1150,7 @@ void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
 	for (const ShadowPass& pass : passes) {
 		nvgSave(args.vg);
 		nvgGlobalAlpha(args.vg, pass.alpha);
-		nvgTranslate(args.vg, center.x + pass.offsetX, center.y + pass.offsetY);
+		nvgTranslate(args.vg, center.x + pass.offsetX * scaleFactor, center.y + pass.offsetY * scaleFactor);
 		nvgRotate(args.vg, angle);
 		nvgScale(args.vg, scale * pass.scaleMul, scale * pass.scaleMul);
 		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
@@ -1254,6 +1256,216 @@ float EclipseKnob::normalizedParamValue() {
 }
 
 void EclipseKnob::setProgressRingBipolar(bool bipolar, float centerNorm) {
+	if (!progressRing) return;
+	progressRing->bipolar = bipolar;
+	progressRing->centerNorm = clamp(centerNorm, 0.f, 1.f);
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	// LEDs are positioned slightly outside the bezel with a clean gap, scaled to fit inside bounds
+	const float radiusPx = diameterPx * (54.5f / 120.f);
+	const float largeRadiusPx = std::max(0.58f, diameterPx * (2.2f / 120.f));
+	const float smallRadiusPx = std::max(0.44f, largeRadiusPx * 0.76f);
+
+	const float startNorm = bipolar ? centerNorm : 0.f;
+	const float minLitNorm = std::min(startNorm, valueNorm);
+	const float maxLitNorm = std::max(startNorm, valueNorm);
+
+	nvgSave(args.vg);
+
+	// 1. Draw Recessed Dark Track Ring
+	const float startArcAngle = minAngle - 0.5f * M_PI;
+	const float endArcAngle = maxAngle - 0.5f * M_PI;
+
+	// Subtle outer drop shadow for track depth
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(3, 2, 2, 96));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 3.4f);
+	nvgLineCap(args.vg, NVG_ROUND);
+	nvgStroke(args.vg);
+
+	// Sharp black border stroke around the track
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 255));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 1.2f);
+	nvgLineCap(args.vg, NVG_ROUND);
+	nvgStroke(args.vg);
+
+	// Core dark track channel
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(14, 12, 11, 230));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f);
+	nvgLineCap(args.vg, NVG_ROUND);
+	nvgStroke(args.vg);
+
+	// Light specular accent inside the track (warm bronze glint)
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 220, 150, 16));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f - 0.7f);
+	nvgLineCap(args.vg, NVG_ROUND);
+	nvgStroke(args.vg);
+
+	for (int i = 0; i < numLeds; ++i) {
+		const float ledNorm = float(i) / float(numLeds - 1);
+		const float angle = minAngle + ledNorm * (maxAngle - minAngle);
+
+		const float x = center.x + radiusPx * std::sin(angle);
+		const float y = center.y - radiusPx * std::cos(angle);
+
+		const bool isLarge = (i % 2 == 0);
+		const float r = isLarge ? largeRadiusPx : smallRadiusPx;
+
+		bool active = false;
+		if (bipolar) {
+			active = (ledNorm >= minLitNorm && ledNorm <= maxLitNorm) && (std::fabs(valueNorm - centerNorm) > 0.005f);
+		}
+		else {
+			active = (ledNorm <= valueNorm);
+		}
+
+		if (active) {
+			// Glow aura (wider, brighter and more opaque)
+			NVGpaint glow = nvgRadialGradient(
+				args.vg,
+				x, y,
+				r * 0.5f,
+				r * 3.5f,
+				nvgRGBA(255, 175, 30, 230),
+				nvgRGBA(255, 80, 0, 0)
+			);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r * 3.5f);
+			nvgFillPaint(args.vg, glow);
+			nvgFill(args.vg);
+
+			// Core LED dot (brighter pale yellow-cream)
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r);
+			nvgFillColor(args.vg, nvgRGBA(255, 250, 195, 255));
+			nvgFill(args.vg);
+
+			// Intense central light source hotspot (pure white)
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r * 0.45f);
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+			nvgFill(args.vg);
+
+			// Edge accent (brighter gold-orange)
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 150, 20, 220));
+			nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.4f / 120.f)));
+			nvgStroke(args.vg);
+		}
+		else {
+			// Inactive dot (dark amber/bronze)
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r);
+			nvgFillColor(args.vg, nvgRGBA(76, 52, 28, 92));
+			nvgFill(args.vg);
+
+			// Dark outline
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, r);
+			nvgStrokeColor(args.vg, nvgRGBA(12, 8, 4, 110));
+			nvgStrokeWidth(args.vg, std::max(0.3f, diameterPx * (0.3f / 120.f)));
+			nvgStroke(args.vg);
+		}
+	}
+
+	nvgRestore(args.vg);
+}
+
+Eclipse2Knob::Eclipse2Knob() {
+	minAngle = -0.83 * M_PI;
+	maxAngle = 0.83 * M_PI;
+
+	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/Eclipse2Knob.svg");
+	app::SvgKnob::setSvg(backSvg);
+	box.size = Vec(28.f, 28.f);
+	if (fb) {
+		fb->box.size = box.size;
+	}
+	if (sw) {
+		sw->hide();
+	}
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+
+	shadowLayer = new EclipseKnob::ShadowWidget();
+	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/Eclipse2KnobShadow.svg"));
+	shadowLayer->box.size = box.size;
+	shadowLayer->minAngle = minAngle;
+	shadowLayer->maxAngle = maxAngle;
+	shadowLayer->valueNorm = normalizedParamValue();
+	shadowLayer->scaleFactor = 0.85f; // Scale down shadow to prevent clipping
+	fb->addChild(shadowLayer);
+
+	setBackSvg(backSvg);
+
+	progressRing = new ProgressLedRingWidget();
+	progressRing->box.size = box.size;
+	progressRing->minAngle = minAngle;
+	progressRing->maxAngle = maxAngle;
+	progressRing->valueNorm = normalizedParamValue();
+	fb->addChild(progressRing);
+}
+
+void Eclipse2Knob::onChange(const ChangeEvent& e) {
+	app::SvgKnob::onChange(e);
+	const float valueNorm = normalizedParamValue();
+	if (shadowLayer) {
+		shadowLayer->valueNorm = valueNorm;
+	}
+	if (backLayer) {
+		backLayer->valueNorm = valueNorm;
+	}
+	if (progressRing) {
+		progressRing->valueNorm = valueNorm;
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+void Eclipse2Knob::setBackSvg(std::shared_ptr<window::Svg> svg) {
+	if (!svg || !fb) return;
+	if (!backLayer) {
+		backLayer = new EclipseKnob::SvgLayer();
+		backLayer->minAngle = minAngle;
+		backLayer->maxAngle = maxAngle;
+		backLayer->valueNorm = normalizedParamValue();
+		backLayer->rotateWithValue = true; // Background/bezel/pointer rotates together
+		backLayer->scaleFactor = 0.85f; // Scale down background to prevent clipping
+		fb->addChild(backLayer);
+	}
+	backLayer->setSvg(svg);
+	backLayer->box.size = box.size;
+}
+
+float Eclipse2Knob::normalizedParamValue() {
+	engine::ParamQuantity* pq = getParamQuantity();
+	if (!pq) return 0.5f;
+	const float minValue = pq->getMinValue();
+	const float maxValue = pq->getMaxValue();
+	const float range = maxValue - minValue;
+	if (range <= 1e-6f) return 0.5f;
+	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
+void Eclipse2Knob::setProgressRingBipolar(bool bipolar, float centerNorm) {
 	if (!progressRing) return;
 	progressRing->bipolar = bipolar;
 	progressRing->centerNorm = clamp(centerNorm, 0.f, 1.f);
