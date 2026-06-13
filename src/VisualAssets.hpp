@@ -212,6 +212,14 @@ struct Eclipse2Knob : app::SvgKnob {
 
 
 struct LeviathanHaloKnob : app::SvgKnob {
+	struct GlowArcWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		void draw(const DrawArgs& args) override;
+	};
+
 	struct LightArcWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
@@ -221,6 +229,7 @@ struct LeviathanHaloKnob : app::SvgKnob {
 	};
 
 	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
+	GlowArcWidget* glowArc = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;

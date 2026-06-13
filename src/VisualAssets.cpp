@@ -1476,6 +1476,66 @@ void Eclipse2Knob::setProgressRingBipolar(bool bipolar, float centerNorm) {
 	}
 }
 
+void LeviathanHaloKnob::GlowArcWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float radiusPx = diameterPx * (15.95f / 46.f);
+	const float startAngle = -0.5f * M_PI + minAngle;
+	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	if (activeAngle <= startAngle + 0.006f) return;
+
+	nvgSave(args.vg);
+
+	auto drawGlowArc = [&](float glowRadiusPx, float width, NVGpaint paint) {
+		const float sweep = activeAngle - startAngle;
+		const float delta = width / (2.f * glowRadiusPx);
+		nvgBeginPath(args.vg);
+		if (sweep <= 2.f * delta) {
+			if (sweep > 0.001f) {
+				const float midAngle = startAngle + 0.5f * sweep;
+				nvgArc(args.vg, center.x, center.y, glowRadiusPx, midAngle - 0.001f, midAngle + 0.001f, NVG_CW);
+				nvgStrokePaint(args.vg, paint);
+				nvgStrokeWidth(args.vg, width * (sweep / (2.f * delta)));
+				nvgStroke(args.vg);
+			}
+			return;
+		}
+		nvgArc(args.vg, center.x, center.y, glowRadiusPx, startAngle + delta, activeAngle - delta, NVG_CW);
+		nvgStrokePaint(args.vg, paint);
+		nvgStrokeWidth(args.vg, width);
+		nvgStroke(args.vg);
+	};
+
+	nvgLineCap(args.vg, NVG_ROUND);
+
+	NVGpaint glowPaintWide = nvgLinearGradient(args.vg,
+		center.x - radiusPx, center.y,
+		center.x + radiusPx, center.y,
+		nvgRGBA(255, 90, 5, 12),
+		nvgRGBA(255, 200, 60, 10));
+
+	NVGpaint glowPaintMedium = nvgLinearGradient(args.vg,
+		center.x - radiusPx, center.y,
+		center.x + radiusPx, center.y,
+		nvgRGBA(255, 110, 10, 32),
+		nvgRGBA(255, 215, 80, 24));
+
+	NVGpaint glowPaintTight = nvgLinearGradient(args.vg,
+		center.x - radiusPx, center.y,
+		center.x + radiusPx, center.y,
+		nvgRGBA(255, 130, 15, 72),
+		nvgRGBA(255, 230, 100, 56));
+
+	// Draw glow passes at radiusPx so they cast outwards uniformly, masked by the knob body on the inside
+	drawGlowArc(radiusPx, std::max(11.0f, diameterPx * (12.0f / 46.f)), glowPaintWide);
+	drawGlowArc(radiusPx, std::max(7.0f, diameterPx * (7.5f / 46.f)), glowPaintMedium);
+	drawGlowArc(radiusPx, std::max(4.2f, diameterPx * (4.5f / 46.f)), glowPaintTight);
+
+	nvgRestore(args.vg);
+}
+
 void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
@@ -1488,26 +1548,6 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 
-	// Helper to draw a stroked arc for the glow passes
-	auto drawGlowArc = [&](float width, NVGcolor color) {
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, activeAngle, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, width);
-		nvgStroke(args.vg);
-	};
-
-	nvgLineCap(args.vg, NVG_BUTT);
-
-	// 1. Wide ambient reddish-orange glow
-	drawGlowArc(std::max(8.0f, diameterPx * (9.0f / 46.f)), nvgRGBA(255, 100, 10, 16));
-
-	// 2. Medium warm golden-orange glow
-	drawGlowArc(std::max(5.0f, diameterPx * (5.5f / 46.f)), nvgRGBA(255, 145, 25, 45));
-
-	// 3. Bright tight amber-yellow glow
-	drawGlowArc(std::max(3.2f, diameterPx * (3.5f / 46.f)), nvgRGBA(255, 185, 40, 90));
-
 	auto beginArcBand = [&](float bandRadiusPx, float bandWidthPx) {
 		const float halfWidthPx = 0.5f * bandWidthPx;
 		nvgBeginPath(args.vg);
@@ -1516,7 +1556,7 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 		nvgClosePath(args.vg);
 	};
 
-	// 4. Main solid gradient band
+	// 1. Main solid gradient band (flat ends representing the physical material)
 	beginArcBand(radiusPx, std::max(1.5f, diameterPx * (2.25f / 46.f)));
 	NVGpaint arcPaint = nvgLinearGradient(args.vg,
 		center.x - radiusPx,
@@ -1528,7 +1568,7 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	nvgFillPaint(args.vg, arcPaint);
 	nvgFill(args.vg);
 
-	// 5. Thin bright highlight inner band
+	// 2. Thin bright highlight inner band (flat ends)
 	beginArcBand(radiusPx - diameterPx * (0.46f / 46.f), std::max(0.35f, diameterPx * (0.38f / 46.f)));
 	nvgFillColor(args.vg, nvgRGBA(255, 248, 199, 120));
 	nvgFill(args.vg);
@@ -1560,6 +1600,13 @@ LeviathanHaloKnob::LeviathanHaloKnob() {
 	shadowLayer->maxAngle = maxAngle;
 	shadowLayer->valueNorm = normalizedParamValue();
 	fb->addChild(shadowLayer);
+
+	glowArc = new GlowArcWidget();
+	glowArc->box.size = box.size;
+	glowArc->minAngle = minAngle;
+	glowArc->maxAngle = maxAngle;
+	glowArc->valueNorm = normalizedParamValue();
+	fb->addChild(glowArc);
 
 	backLayer = new EclipseKnob::SvgLayer();
 	backLayer->setSvg(backSvg);
@@ -1598,6 +1645,9 @@ void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
 	}
 	if (shadowLayer) {
 		shadowLayer->valueNorm = valueNorm;
+	}
+	if (glowArc) {
+		glowArc->valueNorm = valueNorm;
 	}
 	if (lightArc) {
 		lightArc->valueNorm = valueNorm;
