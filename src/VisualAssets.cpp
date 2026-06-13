@@ -1316,6 +1316,28 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
+	// Active track background glow (linking the active LEDs together)
+	const float activeStartAngle = (minAngle + minLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
+	const float activeEndAngle = (minAngle + maxLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
+	const float activeSweep = activeEndAngle - activeStartAngle;
+	if (activeSweep > 0.008f) {
+		// Wide soft glow bloom
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 175, 40, 22));
+		nvgStrokeWidth(args.vg, largeRadiusPx * 6.5f);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+
+		// Tighter core glow bloom
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 215, 95, 45));
+		nvgStrokeWidth(args.vg, largeRadiusPx * 4.2f);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	}
+
 	for (int i = 0; i < numLeds; ++i) {
 		const float ledNorm = float(i) / float(numLeds - 1);
 		const float angle = minAngle + ledNorm * (maxAngle - minAngle);
@@ -1337,24 +1359,24 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		if (active) {
 			const float litR = r * 0.88f;
 
-			// Glow aura (focused, brighter and more opaque, warm gold-cream)
+			// Glow aura (focused, brighter and more opaque, warm gold-orange)
 			NVGpaint glow = nvgRadialGradient(
 				args.vg,
 				x, y,
 				litR * 0.5f,
 				litR * 2.8f,
-				nvgRGBA(255, 235, 160, 220),
-				nvgRGBA(255, 210, 120, 0)
+				nvgRGBA(255, 220, 110, 220),
+				nvgRGBA(255, 110, 10, 0)
 			);
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, litR * 2.8f);
 			nvgFillPaint(args.vg, glow);
 			nvgFill(args.vg);
 
-			// Core LED dot (brighter pale yellow-cream, matching EclipseKnob active)
+			// Core LED dot (brighter warm gold-cream)
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, litR);
-			nvgFillColor(args.vg, nvgRGBA(255, 242, 184, 255));
+			nvgFillColor(args.vg, nvgRGBA(255, 240, 175, 255));
 			nvgFill(args.vg);
 
 			// Intense central light source hotspot (pure white)
@@ -1363,10 +1385,10 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 			nvgFill(args.vg);
 
-			// Edge accent (matching EclipseKnob active stroke)
+			// Edge accent (matching active stroke, bright warm orange)
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, litR);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 242, 184, 230));
+			nvgStrokeColor(args.vg, nvgRGBA(255, 175, 30, 230));
 			nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.4f / 120.f)));
 			nvgStroke(args.vg);
 		}
@@ -1481,7 +1503,7 @@ void LeviathanHaloKnob::GlowArcWidget::draw(const DrawArgs& args) {
 	if (diameterPx <= 1.f) return;
 
 	const Vec center = box.size.mult(0.5f);
-	const float radiusPx = diameterPx * (15.95f / 46.f);
+	const float radiusPx = diameterPx * (17.00f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	if (activeAngle <= startAngle + 0.006f) return;
@@ -1513,25 +1535,26 @@ void LeviathanHaloKnob::GlowArcWidget::draw(const DrawArgs& args) {
 	NVGpaint glowPaintWide = nvgLinearGradient(args.vg,
 		center.x - radiusPx, center.y,
 		center.x + radiusPx, center.y,
-		nvgRGBA(255, 90, 5, 12),
-		nvgRGBA(255, 200, 60, 10));
+		nvgRGBA(255, 90, 5, 24),
+		nvgRGBA(255, 200, 60, 20));
 
 	NVGpaint glowPaintMedium = nvgLinearGradient(args.vg,
 		center.x - radiusPx, center.y,
 		center.x + radiusPx, center.y,
-		nvgRGBA(255, 110, 10, 32),
-		nvgRGBA(255, 215, 80, 24));
+		nvgRGBA(255, 110, 10, 56),
+		nvgRGBA(255, 215, 80, 42));
 
 	NVGpaint glowPaintTight = nvgLinearGradient(args.vg,
 		center.x - radiusPx, center.y,
 		center.x + radiusPx, center.y,
-		nvgRGBA(255, 130, 15, 72),
-		nvgRGBA(255, 230, 100, 56));
+		nvgRGBA(255, 130, 15, 110),
+		nvgRGBA(255, 230, 100, 85));
 
-	// Draw glow passes at radiusPx so they cast outwards uniformly, masked by the knob body on the inside
-	drawGlowArc(radiusPx, std::max(11.0f, diameterPx * (12.0f / 46.f)), glowPaintWide);
-	drawGlowArc(radiusPx, std::max(7.0f, diameterPx * (7.5f / 46.f)), glowPaintMedium);
-	drawGlowArc(radiusPx, std::max(4.2f, diameterPx * (4.5f / 46.f)), glowPaintTight);
+	// Draw glow passes at radiusPx so they cast outwards uniformly, masked by the knob body on the inside.
+	// Widen tight/medium passes to reach the channel between the inner (18.95px) and outer (21.05px) purple semi-arcs.
+	drawGlowArc(radiusPx, std::max(7.5f, diameterPx * (8.0f / 46.f)), glowPaintWide);
+	drawGlowArc(radiusPx, std::max(6.5f, diameterPx * (7.2f / 46.f)), glowPaintMedium);
+	drawGlowArc(radiusPx, std::max(5.0f, diameterPx * (5.6f / 46.f)), glowPaintTight);
 
 	nvgRestore(args.vg);
 }
@@ -1541,7 +1564,7 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	if (diameterPx <= 1.f) return;
 
 	const Vec center = box.size.mult(0.5f);
-	const float radiusPx = diameterPx * (15.95f / 46.f);
+	const float radiusPx = diameterPx * (17.00f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	if (activeAngle <= startAngle + 0.006f) return;
@@ -1556,21 +1579,21 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 		nvgClosePath(args.vg);
 	};
 
-	// 1. Main solid gradient band (flat ends representing the physical material)
+	// 1. Main solid gradient band (flat ends representing the physical material, brighter and fully opaque)
 	beginArcBand(radiusPx, std::max(1.5f, diameterPx * (2.25f / 46.f)));
 	NVGpaint arcPaint = nvgLinearGradient(args.vg,
 		center.x - radiusPx,
 		center.y,
 		center.x + radiusPx,
 		center.y,
-		nvgRGBA(255, 142, 34, 252),
-		nvgRGBA(255, 223, 116, 248));
+		nvgRGBA(255, 175, 45, 255),
+		nvgRGBA(255, 242, 160, 255));
 	nvgFillPaint(args.vg, arcPaint);
 	nvgFill(args.vg);
 
-	// 2. Thin bright highlight inner band (flat ends)
+	// 2. Thin bright highlight inner band (flat ends, pure white hot core highlight)
 	beginArcBand(radiusPx - diameterPx * (0.46f / 46.f), std::max(0.35f, diameterPx * (0.38f / 46.f)));
-	nvgFillColor(args.vg, nvgRGBA(255, 248, 199, 120));
+	nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 180));
 	nvgFill(args.vg);
 
 	nvgRestore(args.vg);

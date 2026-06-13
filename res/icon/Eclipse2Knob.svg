@@ -22,15 +22,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="6.9237539"
-     inkscape:cx="31.19695"
-     inkscape:cy="50.189537"
+     inkscape:zoom="2.4479167"
+     inkscape:cx="-44.119149"
+     inkscape:cy="89.259574"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg34" />
+     inkscape:current-layer="pointer-group" />
   <defs
      id="defs14">
     <linearGradient
@@ -397,52 +397,52 @@
        transform="translate(-60,-46.2)" />
     <line
        x1="0"
-       y1="5.3519168"
+       y1="6.4209599"
        x2="0"
-       y2="-36.172974"
+       y2="-23.148399"
        stroke="#ff5f00"
        stroke-width="6.51655"
        stroke-linecap="round"
        opacity="0.38"
        id="line27"
-       style="stroke-width:7.42617;stroke-dasharray:none" />
+       style="stroke-width:6.26659;stroke-dasharray:none" />
     <line
        x1="0"
-       y1="5.3519168"
+       y1="6.4209599"
        x2="0"
-       y2="-36.172974"
+       y2="-23.148399"
        stroke="#ffa300"
        stroke-width="4.50234"
        stroke-linecap="round"
        opacity="0.65"
        id="line28"
-       style="stroke-width:6.3542;stroke-dasharray:none" />
+       style="stroke-width:5.36201;stroke-dasharray:none" />
     <!-- Core Pointer Needle -->
     <line
        x1="0"
-       y1="4.5323458"
+       y1="5.8373537"
        x2="0"
-       y2="-35.353401"
+       y2="-22.564793"
        stroke="url(#needleGlowGrad)"
        stroke-width="2.96207"
        stroke-linecap="round"
        id="line29"
-       style="stroke:#d5b070;stroke-width:5.70131;stroke-dasharray:none;stroke-opacity:1" />
+       style="stroke:#d5b070;stroke-width:4.81107;stroke-dasharray:none;stroke-opacity:1" />
     <g
        id="center_circle"
        style="display:inline;fill:url(#radialGradient35);fill-opacity:1;stroke:none"
        transform="translate(0,13.8)">
       <line
          x1="0"
-         y1="-8.0338879"
+         y1="-7.0840964"
          x2="0"
-         y2="-47.841343"
+         y2="-35.430492"
          stroke="#ffffff"
          stroke-width="0.947862"
          stroke-linecap="round"
          opacity="0.75"
          id="line30"
-         style="fill:url(#radialGradient44);stroke-width:5.02984;stroke-dasharray:none" />
+         style="fill:url(#radialGradient44);stroke-width:4.24444;stroke-dasharray:none" />
       <circle
          cx="0"
          cy="0"
