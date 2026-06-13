@@ -47,7 +47,7 @@ uint64_t eclipseShadowDrawCount() {
 namespace levi_jack {
 
 NVGcolor input() {
-	return nvgRGB(0x8a, 0x55, 0xff);
+	return nvgRGB(0x8f, 0x3d, 0xff);
 }
 
 NVGcolor output() {
@@ -494,10 +494,10 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 		return c;
 	};
 
-	const float glowOuter = s * 0.405f;
-	const float glowInner = s * 0.10f;
-	const float ringOuter = s * 0.35f;
-	const float ringInner = s * 0.265f;
+	const float glowOuter = s * 0.382f;
+	const float glowInner = s * 0.18f;
+	const float ringOuter = s * 0.352f;
+	const float ringInner = s * 0.282f;
 	const float ringMid = 0.5f * (ringOuter + ringInner);
 	const float socketOuter = s * 0.247f;
 	const float socketInner = s * 0.19f;
@@ -508,7 +508,7 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 		center.y,
 		glowInner,
 		glowOuter,
-		withAlpha(color, glowAmount * 0.50f * connectedBoost),
+		withAlpha(color, glowAmount * 0.58f * connectedBoost),
 		withAlpha(color, 0.f)
 	);
 	nvgBeginPath(args.vg);
@@ -520,7 +520,7 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 	nvgCircle(args.vg, center.x, center.y, ringOuter);
 	nvgCircle(args.vg, center.x, center.y, ringInner);
 	nvgPathWinding(args.vg, NVG_HOLE);
-	nvgFillColor(args.vg, withAlpha(color, ringAmount * 0.62f));
+	nvgFillColor(args.vg, withAlpha(color, ringAmount * 0.74f));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
@@ -530,9 +530,15 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, ringInner + s * 0.010f);
+	nvgStrokeWidth(args.vg, std::max(0.45f, s * 0.015f));
+	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.55f));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, ringOuter - s * 0.015f);
 	nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.018f));
-	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.42f));
+	nvgStrokeColor(args.vg, withAlpha(color, ringAmount * 0.54f));
 	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
@@ -547,7 +553,7 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 		center.y - s * 0.055f,
 		s * 0.025f,
 		socketOuter,
-		nvgRGBA(38, 42, 50, 255),
+		nvgRGBA(30, 35, 45, 255),
 		nvgRGBA(0, 1, 4, 255)
 	);
 	nvgBeginPath(args.vg);
@@ -588,7 +594,9 @@ void DynamicRingJack::step() {
 
 DynamicRingInputJack::DynamicRingInputJack()
 : DynamicRingJack(INPUT_CORE) {
+	ringAmount = 1.f;
 	setRingColor(levi_jack::input());
+	setGlowAmount(0.36f);
 }
 
 DynamicRingOutputJack::DynamicRingOutputJack()
@@ -1017,7 +1025,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const float topAngle = -0.5f * float(M_PI);
 
 	nvgSave(args.vg);
-	nvgLineCap(args.vg, NVG_BUTT);
+	nvgLineCap(args.vg, NVG_ROUND);
 
 	const float ringMinAngle = -0.5f * float(M_PI) + minAngle;
 	const float ringMaxAngle = -0.5f * float(M_PI) + maxAngle;

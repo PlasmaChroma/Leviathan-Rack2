@@ -1704,11 +1704,11 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
-struct IntegralFluxGearKnob : BigClockworkGearKnob {
+struct IntegralFluxGearKnob : LeviathanHaloKnob {
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point drawStart = PerfClock::now();
-		BigClockworkGearKnob::draw(args);
+		LeviathanHaloKnob::draw(args);
 		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - drawStart).count());
 	}
@@ -1748,7 +1748,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		setPanel(createPanel(panelPath));
 		previewBuildTimer.markPanelDone();
 
-        // use Rogan1PSBlue for the rise/fall knobs
+        // use LeviathanHaloKnob for the rise/fall/shape knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
         // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons

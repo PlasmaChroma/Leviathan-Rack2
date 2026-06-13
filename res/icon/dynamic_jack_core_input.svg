@@ -1,138 +1,24 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg
-   width="32"
-   height="32"
-   viewBox="0 0 32 32"
-   version="1.1"
-   id="svg18"
-   sodipodi:docname="dynamic_jack_core_input.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <sodipodi:namedview
-     id="namedview18"
-     pagecolor="#ffffff"
-     bordercolor="#666666"
-     borderopacity="1.0"
-     inkscape:showpageshadow="2"
-     inkscape:pageopacity="0.0"
-     inkscape:pagecheckerboard="0"
-     inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="12.671875"
-     inkscape:cx="-5.1689272"
-     inkscape:cy="29.869297"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="1978"
-     inkscape:window-y="27"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="svg18" />
-  <defs
-     id="defs12">
-    <radialGradient
-       id="outerMetal"
-       cx="36%"
-       cy="28%"
-       r="78%">
-      <stop
-         offset="0"
-         stop-color="#fffef4"
-         id="stop1" />
-      <stop
-         offset="0.2"
-         stop-color="#dedacf"
-         id="stop2" />
-      <stop
-         offset="0.48"
-         stop-color="#92959a"
-         id="stop3" />
-      <stop
-         offset="0.76"
-         stop-color="#3d4149"
-         id="stop4" />
-      <stop
-         offset="1"
-         stop-color="#12151b"
-         id="stop5" />
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="outerMetal" cx="35%" cy="25%" r="78%">
+      <stop offset="0" stop-color="#b8bec7"/>
+      <stop offset="0.20" stop-color="#656b76"/>
+      <stop offset="0.48" stop-color="#252b35"/>
+      <stop offset="0.78" stop-color="#10151d"/>
+      <stop offset="1" stop-color="#02040a"/>
     </radialGradient>
-    <radialGradient
-       id="innerWell"
-       cx="42%"
-       cy="34%"
-       r="74%">
-      <stop
-         offset="0"
-         stop-color="#30353e"
-         id="stop6" />
-      <stop
-         offset="0.38"
-         stop-color="#151922"
-         id="stop7" />
-      <stop
-         offset="0.75"
-         stop-color="#06080d"
-         id="stop8" />
-      <stop
-         offset="1"
-         stop-color="#010206"
-         id="stop9" />
+    <radialGradient id="innerWell" cx="43%" cy="34%" r="74%">
+      <stop offset="0" stop-color="#202632"/>
+      <stop offset="0.40" stop-color="#0b1019"/>
+      <stop offset="0.76" stop-color="#02040a"/>
+      <stop offset="1" stop-color="#000000"/>
     </radialGradient>
-    <linearGradient
-       id="lowerShade"
-       x1="9"
-       y1="8"
-       x2="23"
-       y2="25"
-       gradientUnits="userSpaceOnUse">
-      <stop
-         offset="0"
-         stop-color="#ffffff"
-         stop-opacity="0.2"
-         id="stop10" />
-      <stop
-         offset="0.5"
-         stop-color="#000000"
-         stop-opacity="0"
-         id="stop11" />
-      <stop
-         offset="1"
-         stop-color="#000000"
-         stop-opacity="0.62"
-         id="stop12"
-         style="stop-color:#676767;stop-opacity:0.75344044;" />
-    </linearGradient>
   </defs>
-  <circle
-     cx="16"
-     cy="16"
-     r="15.15"
-     fill="#020307"
-     id="circle12" />
-  <circle
-     cx="16"
-     cy="16"
-     r="14.05"
-     fill="url(#outerMetal)"
-     id="circle13" />
-  <circle
-     cx="16"
-     cy="16"
-     r="11.65"
-     fill="#06080d"
-     id="circle14" />
-  <circle
-     cx="16"
-     cy="16"
-     r="10.55"
-     fill="url(#innerWell)"
-     id="circle15" />
-  <circle
-     cx="16"
-     cy="16"
-     r="14.05"
-     fill="url(#lowerShade)"
-     opacity="0.42"
-     id="circle16" />
+  <circle cx="16" cy="16" r="15.25" fill="#010208"/>
+  <circle cx="16" cy="16" r="14.10" fill="url(#outerMetal)"/>
+  <circle cx="16" cy="16" r="12.20" fill="#02040a" opacity="0.96"/>
+  <circle cx="16" cy="16" r="10.75" fill="url(#innerWell)"/>
+  <circle cx="16" cy="16" r="14.10" fill="none" stroke="#313846" stroke-width="0.55" opacity="0.72"/>
+  <path d="M 5.55 11.25 C 7.70 5.95 12.75 3.55 17.75 4.05" fill="none" stroke="#d9def0" stroke-width="0.55" stroke-linecap="round" opacity="0.30"/>
 </svg>
