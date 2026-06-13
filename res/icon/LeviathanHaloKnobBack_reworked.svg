@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="18.061967"
-     inkscape:cx="14.810126"
-     inkscape:cy="27.59943"
+     inkscape:zoom="25.543479"
+     inkscape:cx="16.697021"
+     inkscape:cy="24.957446"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -51,10 +51,11 @@
   <circle
      cx="23"
      cy="21"
-     r="18.7"
+     r="18.700001"
      fill="#0a0d18"
      opacity="0.16"
-     id="circle2" />
+     id="circle2"
+     style="display:none" />
   <!-- static halo rings: open solid arc paths only -->
   <g
      fill="none"
@@ -209,14 +210,8 @@
        d="M33.188 5.268 L33.811 4.185"
        id="path33" />
     <path
-       d="M38.620 9.800 L39.574 8.994"
-       id="path34" />
-    <path
        d="M42.182 15.912 L43.355 15.479"
        id="path35" />
-    <path
-       d="M43.450 22.872 L44.700 22.864"
-       id="path36" />
     <path
        d="M42.270 29.847 L43.448 30.265"
        id="path37" />
@@ -265,21 +260,6 @@
     <path
        d="M40.170 10.996 L40.744 10.595"
        id="path51" />
-    <path
-       d="M42.781 16.099 L43.442 15.869"
-       id="path52" />
-    <path
-       d="M43.911 21.719 L44.609 21.676"
-       id="path53" />
-    <path
-       d="M43.475 27.435 L44.159 27.583"
-       id="path54" />
-    <path
-       d="M41.507 32.818 L42.125 33.146"
-       id="path55" />
-    <path
-       d="M38.153 37.467 L38.659 37.950"
-       id="path56" />
   </g>
   <!-- dark bowl under foreground cap -->
   <circle
