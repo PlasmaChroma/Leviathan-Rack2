@@ -184,6 +184,25 @@ struct EclipseKnob : app::SvgKnob {
 	float normalizedParamValue();
 };
 
+struct LeviathanHaloKnob : app::SvgKnob {
+	struct LightArcWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
+		void draw(const DrawArgs& args) override;
+	};
+
+	EclipseKnob::SvgLayer* backLayer = nullptr;
+	EclipseKnob::SvgLayer* centerLayer = nullptr;
+	LightArcWidget* lightArc = nullptr;
+
+	LeviathanHaloKnob();
+	void onChange(const ChangeEvent& e) override;
+
+	float normalizedParamValue();
+};
+
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {
 		std::shared_ptr<window::Svg> svg;

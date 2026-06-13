@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="46" height="46" viewBox="0 0 46 46" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="capGrad" cx="18" cy="15" r="23" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#272d31"/>
+      <stop offset="0.48" stop-color="#101419"/>
+      <stop offset="1" stop-color="#030409"/>
+    </radialGradient>
+    <linearGradient id="needleGrad" x1="23" y1="8" x2="23" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff1b5"/>
+      <stop offset="0.42" stop-color="#ffb741"/>
+      <stop offset="1" stop-color="#b95a19"/>
+    </linearGradient>
+    <filter id="amberGlow" x="-0.8" y="-0.8" width="2.6" height="2.6">
+      <feGaussianBlur stdDeviation="0.9"/>
+    </filter>
+  </defs>
+  <circle cx="23" cy="23" r="13.7" fill="url(#capGrad)" stroke="#161d28" stroke-width="0.82"/>
+  <circle cx="23" cy="23" r="12.75" fill="none" stroke="#04050a" stroke-width="0.94"/>
+  <path d="M23 22.45V8.05" stroke="#f7b84a" stroke-width="1.15" stroke-linecap="round" filter="url(#amberGlow)" opacity="0.62"/>
+  <path d="M23 22.45V8.05" stroke="url(#needleGrad)" stroke-width="0.72" stroke-linecap="round"/>
+  <circle cx="23" cy="23" r="1.65" fill="#ffd77b" filter="url(#amberGlow)" opacity="0.82"/>
+  <circle cx="23" cy="23" r="1.12" fill="url(#needleGrad)" stroke="#ffe2a0" stroke-width="0.24"/>
+  <g transform="translate(23 31.55)" fill="none" stroke="#59616d" stroke-width="0.56" stroke-linecap="round" stroke-linejoin="round" opacity="0.64">
+    <path d="M0 -3.9v5.8"/>
+    <path d="M-3.0 -2.5l3.0 2.0 3.0 -2.0"/>
+    <path d="M-3.8 -5.0l3.8 2.6 3.8 -2.6"/>
+    <path d="M-2.2 -7.1l2.2 1.9 2.2 -1.9"/>
+  </g>
+</svg>

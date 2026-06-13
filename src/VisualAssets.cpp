@@ -1254,6 +1254,117 @@ void EclipseKnob::setProgressRingBipolar(bool bipolar, float centerNorm) {
 	}
 }
 
+void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float radiusPx = diameterPx * (15.95f / 46.f);
+	const float startAngle = -0.5f * M_PI + minAngle;
+	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	if (activeAngle <= startAngle + 0.006f) return;
+
+	nvgSave(args.vg);
+	nvgLineCap(args.vg, NVG_ROUND);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, activeAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 151, 33, 32));
+	nvgStrokeWidth(args.vg, std::max(2.2f, diameterPx * (3.05f / 46.f)));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, activeAngle, NVG_CW);
+	NVGpaint arcPaint = nvgLinearGradient(args.vg,
+		center.x - radiusPx,
+		center.y,
+		center.x + radiusPx,
+		center.y,
+		nvgRGBA(255, 223, 116, 248),
+		nvgRGBA(255, 142, 34, 252));
+	nvgStrokePaint(args.vg, arcPaint);
+	nvgStrokeWidth(args.vg, std::max(1.5f, diameterPx * (2.25f / 46.f)));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, radiusPx - diameterPx * (0.46f / 46.f), startAngle, activeAngle, NVG_CW);
+	nvgStrokeColor(args.vg, nvgRGBA(255, 248, 199, 92));
+	nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.38f / 46.f)));
+	nvgStroke(args.vg);
+
+	nvgRestore(args.vg);
+}
+
+LeviathanHaloKnob::LeviathanHaloKnob() {
+	minAngle = -0.83 * M_PI;
+	maxAngle = 0.83 * M_PI;
+
+	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobBack_reworked.svg");
+	app::SvgKnob::setSvg(backSvg);
+	box.size = Vec(46.f, 46.f);
+	if (fb) {
+		fb->box.size = box.size;
+	}
+	if (sw) {
+		sw->hide();
+	}
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+
+	backLayer = new EclipseKnob::SvgLayer();
+	backLayer->setSvg(backSvg);
+	backLayer->box.size = box.size;
+	backLayer->minAngle = minAngle;
+	backLayer->maxAngle = maxAngle;
+	backLayer->valueNorm = normalizedParamValue();
+	backLayer->rotateWithValue = false;
+	fb->addChild(backLayer);
+
+	lightArc = new LightArcWidget();
+	lightArc->box.size = box.size;
+	lightArc->minAngle = minAngle;
+	lightArc->maxAngle = maxAngle;
+	lightArc->valueNorm = normalizedParamValue();
+	fb->addChild(lightArc);
+
+	centerLayer = new EclipseKnob::SvgLayer();
+	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobCenter_reworked.svg"));
+	centerLayer->box.size = box.size;
+	centerLayer->minAngle = minAngle;
+	centerLayer->maxAngle = maxAngle;
+	centerLayer->valueNorm = normalizedParamValue();
+	centerLayer->rotateWithValue = true;
+	fb->addChild(centerLayer);
+}
+
+void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
+	app::SvgKnob::onChange(e);
+	const float valueNorm = normalizedParamValue();
+	if (backLayer) {
+		backLayer->valueNorm = valueNorm;
+	}
+	if (centerLayer) {
+		centerLayer->valueNorm = valueNorm;
+	}
+	if (lightArc) {
+		lightArc->valueNorm = valueNorm;
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+float LeviathanHaloKnob::normalizedParamValue() {
+	engine::ParamQuantity* pq = getParamQuantity();
+	if (!pq) return 0.5f;
+	const float minValue = pq->getMinValue();
+	const float maxValue = pq->getMaxValue();
+	const float range = maxValue - minValue;
+	if (range <= 1e-6f) return 0.5f;
+	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
 ClockworkGearKnob::CogwheelWidget::CogwheelWidget() {
 	cachedSvgFb = new widget::FramebufferWidget();
 	cachedSvgFb->dirtyOnSubpixelChange = false;
