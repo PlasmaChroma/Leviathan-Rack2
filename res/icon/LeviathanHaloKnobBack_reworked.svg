@@ -29,18 +29,6 @@
       <stop offset="0.47" stop-color="#0a0d14"/>
       <stop offset="1" stop-color="#010209"/>
     </radialGradient>
-    <clipPath id="outerTopArcCut">
-      <rect x="0" y="0" width="46" height="41.10"/>
-    </clipPath>
-    <clipPath id="innerTopArcCut">
-      <rect x="0" y="0" width="46" height="39.30"/>
-    </clipPath>
-    <clipPath id="upperRightArcCut">
-      <rect x="19.90" y="0" width="20.10" height="37.30"/>
-    </clipPath>
-    <clipPath id="upperLeftArcCut">
-      <rect x="6.00" y="10.90" width="9.10" height="26.40"/>
-    </clipPath>
   </defs>
 
   <rect x="0" y="0" width="46" height="46" fill="none"/>
@@ -48,25 +36,16 @@
 
   <!-- static halo rings -->
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <g clip-path="url(#outerTopArcCut)">
-      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="#080d1a" stroke-width="1.62" opacity="0.82"/>
-      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="#c875ff" stroke-width="1.58" opacity="0.34"/>
-      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="url(#violetRing)" stroke-width="0.82" opacity="1"/>
-    </g>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#080d1a" stroke-width="1.62" opacity="0.82"/>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#c875ff" stroke-width="1.58" opacity="0.34"/>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="url(#violetRing)" stroke-width="0.82" opacity="1"/>
 
-    <g clip-path="url(#innerTopArcCut)">
-      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="#050711" stroke-width="1.50" opacity="0.94"/>
-      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="#b66cff" stroke-width="1.10" opacity="0.30"/>
-      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="url(#innerViolet)" stroke-width="0.56" opacity="0.96"/>
-    </g>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#050711" stroke-width="1.50" opacity="0.94"/>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#b66cff" stroke-width="1.10" opacity="0.30"/>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="url(#innerViolet)" stroke-width="0.56" opacity="0.96"/>
 
-    <g clip-path="url(#upperRightArcCut)">
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#b264ff" stroke-width="1.14" opacity="0.24"/>
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#d3a1ff" stroke-width="0.50" opacity="0.78"/>
-    </g>
-    <g clip-path="url(#upperLeftArcCut)">
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#d3a1ff" stroke-width="0.46" opacity="0.52"/>
-    </g>
+    <path d="M 14.55 37.30 A 16.60 16.60 0 1 1 31.45 37.30" stroke="#b264ff" stroke-width="1.14" opacity="0.24"/>
+    <path d="M 14.55 37.30 A 16.60 16.60 0 1 1 31.45 37.30" stroke="#d3a1ff" stroke-width="0.50" opacity="0.78"/>
   </g>
 
   <!-- ticks, with cardinal marks brighter and minor marks thinner -->
