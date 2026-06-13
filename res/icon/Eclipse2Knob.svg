@@ -9,11 +9,10 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
-     id="namedview35"
+     id="namedview1"
      pagecolor="#ffffff"
      bordercolor="#000000"
      borderopacity="0.25"
@@ -21,10 +20,10 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     showguides="false"
-     inkscape:zoom="19.583333"
-     inkscape:cx="66.53617"
-     inkscape:cy="36.53617"
+     showgrid="false"
+     inkscape:zoom="13.847508"
+     inkscape:cx="59.794153"
+     inkscape:cy="45.315013"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -57,10 +56,6 @@
          offset="75%"
          stop-color="#3e4146"
          id="stop4" />
-      <stop
-         offset="100%"
-         stop-color="#141517"
-         id="stop5" />
     </linearGradient>
     <!-- Dark knob face radial gradient -->
     <radialGradient
@@ -127,17 +122,14 @@
     <!-- Glowing Orange Gradient for the needle -->
     <linearGradient
        id="needleGlowGrad"
-       x1="0%"
-       y1="100%"
-       x2="0%"
-       y2="0%">
+       x1="0.19698237"
+       y1="0.95362538"
+       x2="-0.94392574"
+       y2="-9.5422316"
+       gradientTransform="scale(0.25318484,3.9496835)"
+       gradientUnits="userSpaceOnUse">
       <stop
-         offset="0%"
-         stop-color="#ff7a18"
-         stop-opacity="0.8"
-         id="stop14" />
-      <stop
-         offset="60%"
+         offset="0"
          stop-color="#ffa33b"
          stop-opacity="0.95"
          id="stop15" />
@@ -150,57 +142,27 @@
     <!-- Metallic Cap for the center pin -->
     <linearGradient
        id="centerPinGrad"
-       x1="0%"
-       y1="0%"
-       x2="100%"
-       y2="100%">
-      <stop
-         offset="0"
-         stop-color="#ffd59a"
-         id="stop17"
-         style="stop-color:#fffae7;stop-opacity:1;" />
-      <stop
-         offset="0.79838717"
-         stop-color="#e08224"
-         id="stop18"
-         style="stop-color:#ffea9f;stop-opacity:1;" />
-      <stop
-         offset="0.89932597"
-         stop-color="#7e3309"
-         id="stop19"
-         style="stop-color:#ce7d07;stop-opacity:1;" />
-    </linearGradient>
-    <!-- Specular highlight for center pin -->
-    <radialGradient
-       id="pinSpec"
-       cx="0.0025530532"
-       cy="-0.099574603"
-       r="8.8399999"
-       fx="0.0025530532"
-       fy="-0.099574603"
-       gradientUnits="userSpaceOnUse">
-      <stop
-         offset="0"
-         stop-color="#ffffff"
-         stop-opacity="0.6"
-         id="stop20"
-         style="stop-color:#ffffff;stop-opacity:0.51358694;" />
-      <stop
-         offset="1"
-         stop-color="#ffa33b"
-         stop-opacity="0.2"
-         id="stop21"
-         style="stop-color:#fffae7;stop-opacity:1;" />
-    </radialGradient>
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#centerPinGrad"
-       id="linearGradient35"
        x1="-0.06044054"
        y1="-28.380558"
        x2="0.13265467"
        y2="5.5605674"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#fffae7"
+         stop-opacity="1"
+         id="stop17" />
+      <stop
+         offset="0.79838717"
+         stop-color="#ffea9f"
+         stop-opacity="1"
+         id="stop18" />
+      <stop
+         offset="0.89932597"
+         stop-color="#ce7d07"
+         stop-opacity="1"
+         id="stop19" />
+    </linearGradient>
   </defs>
   <!-- Outer Bezel -->
   <circle
@@ -277,81 +239,57 @@
      transform="translate(60,60)">
     <!-- Glowing Pointer Shadow/Aura -->
     <line
-       x1="0"
+       x1="-0.062765889"
        y1="2"
-       x2="0"
+       x2="-0.062765889"
        y2="-36"
        stroke="#ff5f00"
        stroke-width="5.5"
        stroke-linecap="round"
        opacity="0.38"
        id="line29"
-       style="fill:none" />
+       style="opacity:0.5;stroke-width:9.1;stroke-dasharray:none;stroke:#ffb93c;stroke-opacity:1;fill:none" />
     <line
-       x1="0"
+       x1="-0.062765889"
        y1="2"
-       x2="0"
+       x2="-0.062765889"
        y2="-36"
        stroke="#ffa300"
        stroke-width="3.8"
        stroke-linecap="round"
        opacity="0.65"
        id="line30"
-       style="fill:none" />
+       style="stroke-width:7;stroke-dasharray:none;stroke:#ffa200;stroke-opacity:1;fill:none" />
     <!-- Core Pointer Needle -->
     <line
-       x1="0"
-       y1="1"
-       x2="0"
-       y2="-35.5"
+       x1="-0.062765889"
+       y1="1.25"
+       x2="-0.062765889"
+       y2="-35.25"
        stroke="url(#needleGlowGrad)"
        stroke-width="2.5"
        stroke-linecap="round"
        id="line31"
-       style="fill:none" />
+       style="stroke:url(#needleGlowGrad);stroke-width:5.3;stroke-dasharray:none;fill:none" />
     <!-- Specular core line -->
     <line
-       x1="0"
-       y1="0"
-       x2="0"
-       y2="-34.5"
+       x1="-0.062765889"
+       y1="0.25"
+       x2="-0.062765889"
+       y2="-34.25"
        stroke="#ffffff"
        stroke-width="0.8"
        stroke-linecap="round"
        opacity="0.75"
        id="line32"
-       style="fill:none;fill-opacity:1" />
-    <!-- Needle Base Ring (Bulb) -->
-    <circle
-       cx="0"
-       cy="0"
-       r="8"
-       fill="#1b1c1f"
-       stroke="#0b0c0d"
-       stroke-width="0.8"
-       id="circle32"
-       style="display:none" />
+       style="stroke-width:3.6;stroke-dasharray:none;fill:none" />
     <circle
        cx="0"
        cy="0"
        r="6.8000002"
        fill="url(#centerPinGrad)"
+       opacity="0.819"
        id="circle33"
-       style="display:inline;opacity:0.819;fill:url(#linearGradient35)" />
-    <circle
-       cx="0"
-       cy="0"
-       r="6.8000002"
-       fill="url(#pinSpec)"
-       id="circle34"
-       style="display:none;fill:url(#pinSpec)" />
-    <!-- Center pin screw hole -->
-    <circle
-       cx="0"
-       cy="0"
-       r="2.2"
-       fill="#0b0c0d"
-       id="circle35"
        style="display:none" />
   </g>
 </svg>

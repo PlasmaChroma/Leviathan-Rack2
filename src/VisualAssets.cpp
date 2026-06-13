@@ -1271,8 +1271,8 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	const Vec center = box.size.mult(0.5f);
 	// LEDs are positioned slightly outside the bezel with a clean gap, scaled to fit inside bounds
 	const float radiusPx = diameterPx * (54.5f / 120.f);
-	const float largeRadiusPx = std::max(0.58f, diameterPx * (2.2f / 120.f));
-	const float smallRadiusPx = std::max(0.44f, largeRadiusPx * 0.76f);
+	const float largeRadiusPx = std::max(0.48f, diameterPx * (1.8f / 120.f));
+	const float smallRadiusPx = std::max(0.36f, largeRadiusPx * 0.76f);
 
 	const float startNorm = bipolar ? centerNorm : 0.f;
 	const float minLitNorm = std::min(startNorm, valueNorm);
@@ -1335,35 +1335,37 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		}
 
 		if (active) {
-			// Glow aura (wider, brighter and more opaque)
+			const float litR = r * 0.88f;
+
+			// Glow aura (focused, brighter and more opaque)
 			NVGpaint glow = nvgRadialGradient(
 				args.vg,
 				x, y,
-				r * 0.5f,
-				r * 3.5f,
+				litR * 0.5f,
+				litR * 2.6f,
 				nvgRGBA(255, 175, 30, 230),
 				nvgRGBA(255, 80, 0, 0)
 			);
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, r * 3.5f);
+			nvgCircle(args.vg, x, y, litR * 2.6f);
 			nvgFillPaint(args.vg, glow);
 			nvgFill(args.vg);
 
 			// Core LED dot (brighter pale yellow-cream)
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, r);
+			nvgCircle(args.vg, x, y, litR);
 			nvgFillColor(args.vg, nvgRGBA(255, 250, 195, 255));
 			nvgFill(args.vg);
 
 			// Intense central light source hotspot (pure white)
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, r * 0.45f);
+			nvgCircle(args.vg, x, y, litR * 0.45f);
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 			nvgFill(args.vg);
 
 			// Edge accent (brighter gold-orange)
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, r);
+			nvgCircle(args.vg, x, y, litR);
 			nvgStrokeColor(args.vg, nvgRGBA(255, 150, 20, 220));
 			nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.4f / 120.f)));
 			nvgStroke(args.vg);
