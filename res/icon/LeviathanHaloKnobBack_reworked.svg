@@ -7,17 +7,17 @@
       <stop offset="1" stop-color="#000000" stop-opacity="0.0"/>
     </radialGradient>
     <linearGradient id="violetRing" x1="4" y1="7" x2="42" y2="39" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#85a6e8"/>
-      <stop offset="0.23" stop-color="#8f7df2"/>
-      <stop offset="0.48" stop-color="#5c3eb4"/>
-      <stop offset="0.74" stop-color="#a98cff"/>
-      <stop offset="1" stop-color="#3b266d"/>
+      <stop offset="0" stop-color="#eadbff"/>
+      <stop offset="0.24" stop-color="#c991ff"/>
+      <stop offset="0.50" stop-color="#8f45ff"/>
+      <stop offset="0.76" stop-color="#d3a7ff"/>
+      <stop offset="1" stop-color="#6b35d8"/>
     </linearGradient>
     <linearGradient id="innerViolet" x1="11" y1="7" x2="35" y2="38" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#b5b7ff"/>
-      <stop offset="0.38" stop-color="#8262ef"/>
-      <stop offset="0.74" stop-color="#4d279d"/>
-      <stop offset="1" stop-color="#1b1437"/>
+      <stop offset="0" stop-color="#f4eaff"/>
+      <stop offset="0.36" stop-color="#bd7dff"/>
+      <stop offset="0.72" stop-color="#8437ef"/>
+      <stop offset="1" stop-color="#362066"/>
     </linearGradient>
     <linearGradient id="blueTick" x1="5" y1="5" x2="42" y2="42" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#93c5ff"/>
@@ -50,22 +50,22 @@
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
     <g clip-path="url(#outerTopArcCut)">
       <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="#080d1a" stroke-width="1.62" opacity="0.82"/>
-      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="#789dff" stroke-width="1.18" opacity="0.24"/>
-      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="url(#violetRing)" stroke-width="0.72" opacity="0.94"/>
+      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="#c875ff" stroke-width="1.58" opacity="0.34"/>
+      <ellipse cx="23" cy="23" rx="21.05" ry="21.05" stroke="url(#violetRing)" stroke-width="0.82" opacity="1"/>
     </g>
 
     <g clip-path="url(#innerTopArcCut)">
       <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="#050711" stroke-width="1.50" opacity="0.94"/>
-      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="#9c8aff" stroke-width="0.86" opacity="0.20"/>
-      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="url(#innerViolet)" stroke-width="0.44" opacity="0.88"/>
+      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="#b66cff" stroke-width="1.10" opacity="0.30"/>
+      <ellipse cx="23" cy="23" rx="18.95" ry="18.92" stroke="url(#innerViolet)" stroke-width="0.56" opacity="0.96"/>
     </g>
 
     <g clip-path="url(#upperRightArcCut)">
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#7e63ff" stroke-width="1.10" opacity="0.16"/>
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#8d73ff" stroke-width="0.46" opacity="0.62"/>
+      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#b264ff" stroke-width="1.14" opacity="0.24"/>
+      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#d3a1ff" stroke-width="0.50" opacity="0.78"/>
     </g>
     <g clip-path="url(#upperLeftArcCut)">
-      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#8d73ff" stroke-width="0.42" opacity="0.34"/>
+      <ellipse cx="23" cy="23" rx="16.60" ry="16.60" stroke="#d3a1ff" stroke-width="0.46" opacity="0.52"/>
     </g>
   </g>
 
