@@ -25,7 +25,7 @@
      showgrid="false"
      inkscape:zoom="25.543479"
      inkscape:cx="16.697021"
-     inkscape:cy="24.957446"
+     inkscape:cy="21.825532"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -333,74 +333,4 @@
        opacity="0.62"
        id="path63" />
   </g>
-  <circle
-     cx="34.78"
-     cy="8.39"
-     r="0.58"
-     fill="#dbe7ff"
-     opacity="0.75"
-     id="circle63" />
-  <circle
-     cx="34.78"
-     cy="8.39"
-     r="0.22"
-     fill="#ffffff"
-     opacity="0.98"
-     id="circle64" />
-  <circle
-     cx="39.12"
-     cy="13.66"
-     r="0.98"
-     fill="#7047dd"
-     opacity="0.34"
-     id="circle65" />
-  <circle
-     cx="39.12"
-     cy="13.66"
-     r="0.40"
-     fill="#c5b2ff"
-     opacity="0.86"
-     id="circle66" />
-  <circle
-     cx="8.05"
-     cy="37.38"
-     r="0.76"
-     fill="#476cc4"
-     opacity="0.30"
-     id="circle67" />
-  <circle
-     cx="8.05"
-     cy="37.38"
-     r="0.32"
-     fill="#a9c4ff"
-     opacity="0.68"
-     id="circle68" />
-  <circle
-     cx="1.468"
-     cy="16.826"
-     r="0.420"
-     fill="#83b8ff"
-     opacity="0.520"
-     id="circle69" />
-  <circle
-     cx="43.463"
-     cy="13.889"
-     r="0.390"
-     fill="#bba4ff"
-     opacity="0.580"
-     id="circle70" />
-  <circle
-     cx="12.15"
-     cy="5.25"
-     r="0.34"
-     fill="#9dc6ff"
-     opacity="0.54"
-     id="circle71" />
-  <circle
-     cx="41.85"
-     cy="27.95"
-     r="0.34"
-     fill="#a58cff"
-     opacity="0.52"
-     id="circle72" />
 </svg>
