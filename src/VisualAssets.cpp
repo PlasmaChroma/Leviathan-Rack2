@@ -1017,7 +1017,7 @@ void EclipseKnob::ProgressRingWidget::draw(const DrawArgs& args) {
 	const float topAngle = -0.5f * float(M_PI);
 
 	nvgSave(args.vg);
-	nvgLineCap(args.vg, NVG_ROUND);
+	nvgLineCap(args.vg, NVG_BUTT);
 
 	const float ringMinAngle = -0.5f * float(M_PI) + minAngle;
 	const float ringMaxAngle = -0.5f * float(M_PI) + maxAngle;
@@ -1265,16 +1265,20 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	if (activeAngle <= startAngle + 0.006f) return;
 
 	nvgSave(args.vg);
-	nvgLineCap(args.vg, NVG_ROUND);
+	auto beginArcBand = [&](float bandRadiusPx, float bandWidthPx) {
+		const float halfWidthPx = 0.5f * bandWidthPx;
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, bandRadiusPx + halfWidthPx, startAngle, activeAngle, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, bandRadiusPx - halfWidthPx, activeAngle, startAngle, NVG_CCW);
+		nvgClosePath(args.vg);
+	};
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, activeAngle, NVG_CW);
+	beginArcBand(radiusPx, std::max(2.2f, diameterPx * (3.05f / 46.f)));
 	nvgStrokeColor(args.vg, nvgRGBA(255, 151, 33, 32));
-	nvgStrokeWidth(args.vg, std::max(2.2f, diameterPx * (3.05f / 46.f)));
-	nvgStroke(args.vg);
+	nvgFillColor(args.vg, nvgRGBA(255, 151, 33, 32));
+	nvgFill(args.vg);
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, activeAngle, NVG_CW);
+	beginArcBand(radiusPx, std::max(1.5f, diameterPx * (2.25f / 46.f)));
 	NVGpaint arcPaint = nvgLinearGradient(args.vg,
 		center.x - radiusPx,
 		center.y,
@@ -1282,15 +1286,12 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 		center.y,
 		nvgRGBA(255, 223, 116, 248),
 		nvgRGBA(255, 142, 34, 252));
-	nvgStrokePaint(args.vg, arcPaint);
-	nvgStrokeWidth(args.vg, std::max(1.5f, diameterPx * (2.25f / 46.f)));
-	nvgStroke(args.vg);
+	nvgFillPaint(args.vg, arcPaint);
+	nvgFill(args.vg);
 
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx - diameterPx * (0.46f / 46.f), startAngle, activeAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(255, 248, 199, 92));
-	nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.38f / 46.f)));
-	nvgStroke(args.vg);
+	beginArcBand(radiusPx - diameterPx * (0.46f / 46.f), std::max(0.35f, diameterPx * (0.38f / 46.f)));
+	nvgFillColor(args.vg, nvgRGBA(255, 248, 199, 92));
+	nvgFill(args.vg);
 
 	nvgRestore(args.vg);
 }

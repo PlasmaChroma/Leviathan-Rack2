@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="36.123933"
-     inkscape:cx="18.311959"
-     inkscape:cy="17.619897"
+     inkscape:zoom="18.061967"
+     inkscape:cx="17.467644"
+     inkscape:cy="23.00414"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -59,73 +59,76 @@
      fill="none"
      stroke-linecap="round"
      stroke-linejoin="round"
-     id="g12">
+     id="g12"
+     style="display:inline">
     <path
-       d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13"
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
        stroke="#060914"
        stroke-width="1.82"
        opacity="0.92"
        id="path2" />
     <path
-       d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13"
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
        stroke="#7d43e8"
        stroke-width="0.76"
        opacity="0.62"
        id="path3" />
     <path
-       d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13"
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
        stroke="#b58aff"
        stroke-width="0.64"
        opacity="0.86"
        id="path4" />
     <path
-       d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13"
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
        stroke="#ebe0ff"
        stroke-width="0.22"
        opacity="0.56"
        id="path5" />
     <path
-       d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30"
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
        stroke="#040811"
        stroke-width="1.58"
        opacity="1"
        id="path6" />
     <path
-       d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30"
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
        stroke="#8842ef"
        stroke-width="0.58"
        opacity="0.62"
        id="path7" />
     <path
-       d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30"
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
        stroke="#c18cff"
        stroke-width="0.38"
-       opacity="0.90"
+       opacity="0.9"
        id="path8" />
     <path
-       d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30"
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
        stroke="#f0dcff"
-       stroke-width="0.20"
+       stroke-width="0.2"
        opacity="0.58"
        id="path9" />
     <path
-       d="M 14.55 37.30 A 16.60 16.60 0 1 1 31.45 37.30"
+       d="m 14.55,37.3 a 16.6,16.6 0 1 1 16.9,0"
        stroke="#010103"
        stroke-width="2.22"
        opacity="1"
        id="path10" />
     <path
-       d="M 14.88 36.73 A 15.95 15.95 0 1 1 31.12 36.73"
+       d="m 14.88,36.73 a 15.95,15.95 0 1 1 16.24,0"
        stroke="#7a35e6"
        stroke-width="1.18"
        opacity="0.52"
-       id="path11" />
+       id="path11"
+       style="display:none" />
     <path
-       d="M 14.88 36.73 A 15.95 15.95 0 1 1 31.12 36.73"
+       d="m 14.88,36.73 a 15.95,15.95 0 1 1 16.24,0"
        stroke="#c79aff"
        stroke-width="0.44"
        opacity="0.88"
-       id="path12" />
+       id="path12"
+       style="display:none" />
   </g>
   <!-- cardinal ticks -->
   <g

@@ -21,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="51.086956"
-     inkscape:cx="26.895319"
-     inkscape:cy="17.313617"
+     inkscape:zoom="18.061967"
+     inkscape:cx="10.657754"
+     inkscape:cy="23.059505"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -127,17 +127,13 @@
          stop-color="#fff4c7"
          id="stop12" />
       <stop
-         offset="0.35"
+         offset="0.83046877"
          stop-color="#ffd37a"
          id="stop13" />
       <stop
-         offset="0.78"
+         offset="1"
          stop-color="#f1a22f"
          id="stop14" />
-      <stop
-         offset="1"
-         stop-color="#9b3b18"
-         id="stop15" />
     </linearGradient>
     <linearGradient
        id="glyphStroke"
@@ -260,7 +256,7 @@
   <g
      id="central_pin"
      style="display:inline"
-     transform="translate(0,-0.99999925)">
+     transform="matrix(0.90825685,0,0,0.90825685,2.1100925,0.88440484)">
     <circle
        cx="23"
        cy="22.719999"
@@ -287,7 +283,7 @@
   </g>
   <!-- small Vahdrim'Keth glyph on lower cap, scaled from res/icon/Vahdrim'Keth.svg -->
   <g
-     transform="matrix(0.006,0,0,0.006,19.96,28.96)"
+     transform="matrix(0.006,0,0,0.006,19.96,28.259868)"
      fill="#66707d"
      fill-rule="nonzero"
      opacity="0.75"
