@@ -37,12 +37,14 @@
   <!-- static halo rings -->
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#080d1a" stroke-width="1.62" opacity="0.82"/>
-    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#c875ff" stroke-width="1.58" opacity="0.34"/>
-    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="url(#violetRing)" stroke-width="0.82" opacity="1"/>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#a84dff" stroke-width="2.18" opacity="0.42"/>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#d9a6ff" stroke-width="1.08" opacity="0.98"/>
+    <path d="M 12.30 41.13 A 21.05 21.05 0 1 1 33.70 41.13" stroke="#f1dcff" stroke-width="0.42" opacity="0.92"/>
 
     <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#050711" stroke-width="1.50" opacity="0.94"/>
-    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#b66cff" stroke-width="1.10" opacity="0.30"/>
-    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="url(#innerViolet)" stroke-width="0.56" opacity="0.96"/>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#9f46ff" stroke-width="1.72" opacity="0.38"/>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#ca86ff" stroke-width="0.82" opacity="0.96"/>
+    <path d="M 13.37 39.30 A 18.95 18.92 0 1 1 32.63 39.30" stroke="#efd8ff" stroke-width="0.32" opacity="0.82"/>
 
     <path d="M 14.55 37.30 A 16.60 16.60 0 1 1 31.45 37.30" stroke="#b264ff" stroke-width="1.14" opacity="0.24"/>
     <path d="M 14.55 37.30 A 16.60 16.60 0 1 1 31.45 37.30" stroke="#d3a1ff" stroke-width="0.50" opacity="0.78"/>
