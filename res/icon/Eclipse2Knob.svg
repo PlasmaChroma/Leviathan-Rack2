@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="4.8958333"
-     inkscape:cx="27.574468"
-     inkscape:cy="62.195745"
+     inkscape:zoom="6.9237539"
+     inkscape:cx="31.19695"
+     inkscape:cy="50.189537"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -33,6 +33,18 @@
      inkscape:current-layer="svg34" />
   <defs
      id="defs14">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#060708;stop-opacity:1;"
+         offset="0.71484375"
+         id="stop15" />
+      <stop
+         style="stop-color:#ffac06;stop-opacity:0;"
+         offset="1"
+         id="stop16" />
+    </linearGradient>
     <linearGradient
        id="linearGradient44"
        inkscape:collect="always">
@@ -115,19 +127,25 @@
        cx="60"
        cy="60"
        r="38"
-       gradientUnits="userSpaceOnUse">
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.73386518,-0.67929515,0.6718925,0.72586786,-24.345461,57.205637)"
+       fx="60"
+       fy="60">
       <stop
-         offset="0%"
-         stop-color="#41444d"
-         id="stop6" />
-      <stop
-         offset="70%"
+         offset="0"
          stop-color="#1f2126"
-         id="stop7" />
+         id="stop17"
+         style="stop-color:#bab698;stop-opacity:0.80978262;" />
       <stop
-         offset="100%"
-         stop-color="#0e0f11"
-         id="stop8" />
+         offset="0.42783439"
+         stop-color="#1f2126"
+         id="stop7"
+         style="stop-color:#242422;stop-opacity:0.5;" />
+      <stop
+         offset="1"
+         stop-color="#41444d"
+         id="stop6"
+         style="stop-color:#41444d;stop-opacity:0.52989131;" />
     </radialGradient>
     <!-- Bezel specular highlight gradient (2 stops) -->
     <linearGradient
@@ -137,10 +155,11 @@
        x2="0%"
        y2="100%">
       <stop
-         offset="0%"
+         offset="0"
          stop-color="#ffffff"
          stop-opacity="0.25"
-         id="stop9" />
+         id="stop9"
+         style="stop-color:#171717;stop-opacity:0.57065219;" />
       <stop
          offset="100%"
          stop-color="#000000"
@@ -213,6 +232,26 @@
        fx="0"
        fy="0"
        r="8" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="radialGradient16"
+       cx="60"
+       cy="60"
+       fx="60"
+       fy="60"
+       r="37.900002"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.54308649,-0.81807604,0.83641564,0.5552614,-22.770128,75.768879)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#centerCapGrad"
+       id="linearGradient16"
+       x1="59.682976"
+       y1="98.09362"
+       x2="80.582977"
+       y2="28.994919"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- Outer Bezel -->
   <circle
@@ -222,7 +261,8 @@
      fill="url(#metalBezelGrad)"
      stroke="#0b0c0d"
      stroke-width="1.2"
-     id="circle14" />
+     id="circle14"
+     style="stroke:#484848;stroke-opacity:1" />
   <!-- Outer Bezel Specular Ring -->
   <circle
      cx="60"
@@ -247,7 +287,8 @@
      cy="60"
      r="46.5"
      fill="url(#knobFaceGrad)"
-     id="circle17" />
+     id="circle17"
+     style="stroke-width:1;stroke-dasharray:none" />
   <circle
      cx="60"
      cy="60"
@@ -265,7 +306,8 @@
      stroke="#ffffff"
      stroke-width="0.35"
      opacity="0.08"
-     id="circle19" />
+     id="circle19"
+     style="stroke:#000000;stroke-opacity:1;opacity:1" />
   <circle
      cx="60"
      cy="60"
@@ -274,7 +316,8 @@
      stroke="#ffffff"
      stroke-width="0.25"
      opacity="0.05"
-     id="circle20" />
+     id="circle20"
+     style="stroke:#000000;stroke-opacity:1;opacity:1;stroke-width:3.85;stroke-dasharray:none" />
   <!-- Shiny Outer Edge of the Face -->
   <circle
      cx="60"
@@ -291,16 +334,18 @@
      r="37.8"
      fill="#000000"
      opacity="0.45"
-     id="circle22" />
+     id="circle22"
+     style="opacity:0.443" />
   <!-- Raised Center Dome (using brighter gradient) -->
   <circle
-     cx="60"
-     cy="60"
-     r="37.5"
      fill="url(#centerCapGrad)"
      stroke="#060708"
      stroke-width="0.8"
-     id="circle23" />
+     id="circle23"
+     style="opacity:0.55345912;fill:url(#linearGradient16);stroke-width:0.8;stroke-dasharray:none;stroke:url(#radialGradient16)"
+     r="37.5"
+     cy="60"
+     cx="60" />
   <!-- Shiny highlight rim on the edge of the raised dome -->
   <!-- Symmetric concentric brushed-metal highlights on Center Dome -->
   <circle
@@ -311,7 +356,8 @@
      stroke="#ffffff"
      stroke-width="0.2"
      opacity="0.04"
-     id="circle26" />
+     id="circle26"
+     style="opacity:0.087" />
   <!-- Inner Bezel Ring -->
   <!-- Pointer Needle & Center Pin (Grouped to rotate together with background cap) -->
   <g
