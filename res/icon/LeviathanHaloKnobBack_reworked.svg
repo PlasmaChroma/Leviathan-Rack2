@@ -30,16 +30,16 @@
       <stop offset="1" stop-color="#010209"/>
     </radialGradient>
     <clipPath id="outerTopArcCut">
-      <rect x="0" y="0" width="46" height="31.25"/>
+      <rect x="0" y="0" width="46" height="41.10"/>
     </clipPath>
     <clipPath id="innerTopArcCut">
-      <rect x="0" y="0" width="46" height="29.10"/>
+      <rect x="0" y="0" width="46" height="39.30"/>
     </clipPath>
     <clipPath id="upperRightArcCut">
-      <rect x="19.90" y="0" width="20.10" height="31.20"/>
+      <rect x="19.90" y="0" width="20.10" height="37.30"/>
     </clipPath>
     <clipPath id="upperLeftArcCut">
-      <rect x="6.00" y="10.90" width="5.40" height="19.80"/>
+      <rect x="6.00" y="10.90" width="9.10" height="26.40"/>
     </clipPath>
   </defs>
 
