@@ -1270,7 +1270,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 
 	const Vec center = box.size.mult(0.5f);
 	// LEDs are positioned slightly outside the bezel with a clean gap, scaled to fit inside bounds
-	const float radiusPx = diameterPx * (54.5f / 120.f);
+	const float radiusPx = diameterPx * (45.0f / 120.f);
 	const float largeRadiusPx = std::max(0.48f, diameterPx * (1.8f / 120.f));
 	const float smallRadiusPx = std::max(0.36f, largeRadiusPx * 0.76f);
 
@@ -1288,15 +1288,15 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(3, 2, 2, 96));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 3.4f);
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 4.8f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
-	// Sharp black border stroke around the track
+	// Sharp black border stroke around the track (thickened and slightly transparent)
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 255));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 1.2f);
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 180));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 2.4f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
@@ -1395,7 +1395,7 @@ Eclipse2Knob::Eclipse2Knob() {
 
 	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/Eclipse2Knob.svg");
 	app::SvgKnob::setSvg(backSvg);
-	box.size = Vec(28.f, 28.f);
+	box.size = Vec(34.f, 34.f);
 	if (fb) {
 		fb->box.size = box.size;
 	}
@@ -1412,7 +1412,7 @@ Eclipse2Knob::Eclipse2Knob() {
 	shadowLayer->minAngle = minAngle;
 	shadowLayer->maxAngle = maxAngle;
 	shadowLayer->valueNorm = normalizedParamValue();
-	shadowLayer->scaleFactor = 0.85f; // Scale down shadow to prevent clipping
+	shadowLayer->scaleFactor = 0.70f; // Scale down shadow to prevent clipping in 34x34 box
 	fb->addChild(shadowLayer);
 
 	setBackSvg(backSvg);
@@ -1450,7 +1450,7 @@ void Eclipse2Knob::setBackSvg(std::shared_ptr<window::Svg> svg) {
 		backLayer->maxAngle = maxAngle;
 		backLayer->valueNorm = normalizedParamValue();
 		backLayer->rotateWithValue = true; // Background/bezel/pointer rotates together
-		backLayer->scaleFactor = 0.85f; // Scale down background to prevent clipping
+		backLayer->scaleFactor = 0.70f; // Scale down background to prevent clipping in 34x34 box
 		fb->addChild(backLayer);
 	}
 	backLayer->setSvg(svg);
