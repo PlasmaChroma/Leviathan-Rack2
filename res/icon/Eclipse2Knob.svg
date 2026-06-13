@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="2.4479167"
-     inkscape:cx="-44.119149"
-     inkscape:cy="89.259574"
+     inkscape:zoom="4.8958333"
+     inkscape:cx="32.680851"
+     inkscape:cy="44.425532"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -96,10 +96,6 @@
          offset="0%"
          stop-color="#52555a"
          id="stop1" />
-      <stop
-         offset="50%"
-         stop-color="#1b1c1e"
-         id="stop2" />
       <stop
          offset="100%"
          stop-color="#3b3e43"
@@ -262,7 +258,7 @@
      stroke="#0b0c0d"
      stroke-width="1.2"
      id="circle14"
-     style="stroke:#484848;stroke-opacity:1" />
+     style="stroke:#484848;stroke-opacity:1;fill:#454340;fill-opacity:1" />
   <!-- Outer Bezel Specular Ring -->
   <circle
      cx="60"
@@ -342,7 +338,7 @@
      stroke="#060708"
      stroke-width="0.8"
      id="circle23"
-     style="opacity:0.55345912;fill:url(#linearGradient16);stroke-width:0.8;stroke-dasharray:none;stroke:url(#radialGradient16)"
+     style="opacity:0.329;fill:url(#linearGradient16);stroke-width:0.8;stroke-dasharray:none;stroke:url(#radialGradient16)"
      r="37.5"
      cy="60"
      cx="60" />

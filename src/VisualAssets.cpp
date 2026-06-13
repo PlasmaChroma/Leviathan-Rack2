@@ -1437,14 +1437,14 @@ Eclipse2Knob::Eclipse2Knob() {
 	shadowLayer->scaleFactor = 0.70f; // Scale down shadow to prevent clipping in 34x34 box
 	fb->addChild(shadowLayer);
 
-	setBackSvg(backSvg);
-
 	progressRing = new ProgressLedRingWidget();
 	progressRing->box.size = box.size;
 	progressRing->minAngle = minAngle;
 	progressRing->maxAngle = maxAngle;
 	progressRing->valueNorm = normalizedParamValue();
 	fb->addChild(progressRing);
+
+	setBackSvg(backSvg);
 }
 
 void Eclipse2Knob::onChange(const ChangeEvent& e) {
