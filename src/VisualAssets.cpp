@@ -1941,8 +1941,10 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	drawGuideArc(guideRadius, guideWidth, nvgRGBA(126, 194, 225, 62));
 	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), nvgRGBA(150, 94, 230, 58));
 	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), nvgRGBA(185, 218, 240, 44));
-	drawPartialGuideArc(startAngle, activeAngle, dipRadius - 0.10f * scale, std::max(0.14f, 0.20f * scale), nvgRGBA(54, 226, 244, 52));
-	drawPartialGuideArc(activeAngle, endAngle, dipRadius - 0.10f * scale, std::max(0.14f, 0.20f * scale), nvgRGBA(154, 102, 238, 46));
+	drawPartialGuideArc(startAngle, activeAngle, dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), nvgRGBA(18, 176, 196, 48));
+	drawPartialGuideArc(activeAngle, endAngle, dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), nvgRGBA(132, 76, 226, 68));
+	drawPartialGuideArc(startAngle, activeAngle, dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(124, 246, 255, 38));
+	drawPartialGuideArc(activeAngle, endAngle, dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(204, 156, 255, 48));
 	drawGuideArc(dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
 
 	drawSegmentedValueArc();
@@ -1961,6 +1963,37 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	nvgCircle(args.vg, center.x, center.y, diameterPx * (16.8f / 46.f));
 	nvgFillPaint(args.vg, capShadow);
 	nvgFill(args.vg);
+
+	nvgRestore(args.vg);
+}
+
+void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float scale = diameterPx / 46.f;
+	const float rimRadius = diameterPx * (14.62f / 46.f);
+	const float startAngle = -0.5f * M_PI + minAngle;
+	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float endAngle = -0.5f * M_PI + maxAngle;
+
+	auto strokeArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
+		if (a1 <= a0) return;
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
+		nvgStrokeColor(args.vg, color);
+		nvgStrokeWidth(args.vg, widthPx);
+		nvgLineCap(args.vg, NVG_BUTT);
+		nvgStroke(args.vg);
+	};
+
+	nvgSave(args.vg);
+
+	strokeArc(startAngle, activeAngle, rimRadius, std::max(0.30f, 0.42f * scale), nvgRGBA(58, 210, 230, 68));
+	strokeArc(activeAngle, endAngle, rimRadius, std::max(0.30f, 0.42f * scale), nvgRGBA(168, 106, 255, 82));
+	strokeArc(startAngle, activeAngle, rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(192, 255, 255, 44));
+	strokeArc(activeAngle, endAngle, rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(222, 188, 255, 54));
 
 	nvgRestore(args.vg);
 }
@@ -2184,6 +2217,13 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	centerLayer->rotateWithValue = true;
 	fb->addChild(centerLayer);
 
+	capReflection = new CapReflectionWidget();
+	capReflection->box.size = box.size;
+	capReflection->minAngle = minAngle;
+	capReflection->maxAngle = maxAngle;
+	capReflection->valueNorm = normalizedParamValue();
+	fb->addChild(capReflection);
+
 }
 
 void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
@@ -2194,6 +2234,9 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	}
 	if (centerLayer) {
 		centerLayer->valueNorm = valueNorm;
+	}
+	if (capReflection) {
+		capReflection->valueNorm = valueNorm;
 	}
 	if (shadowLayer) {
 		shadowLayer->valueNorm = valueNorm;
