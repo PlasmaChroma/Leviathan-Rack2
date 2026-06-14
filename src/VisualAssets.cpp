@@ -1772,6 +1772,126 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float scale = diameterPx / 46.f;
+	const float mainRadius = diameterPx * (17.00f / 46.f);
+	const float startAngle = -0.5f * M_PI + minAngle;
+	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float endAngle = -0.5f * M_PI + maxAngle;
+
+	nvgSave(args.vg);
+
+	auto drawGlowStroke = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
+		if (a1 <= a0) return;
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
+		nvgStrokeColor(args.vg, color);
+		nvgStrokeWidth(args.vg, widthPx);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	};
+
+	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(0, 210, 255, 42));
+	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(110, 54, 210, 28));
+	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(0, 225, 255, 72));
+	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(142, 72, 235, 46));
+	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(30, 245, 255, 118));
+	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(178, 96, 255, 72));
+
+	nvgRestore(args.vg);
+}
+
+void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float scale = diameterPx / 46.f;
+	const float startAngle = -0.5f * M_PI + minAngle;
+	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
+	const float endAngle = -0.5f * M_PI + maxAngle;
+	const float mainRadius = diameterPx * (17.00f / 46.f);
+	const float mainWidth = std::max(1.65f, diameterPx * (2.45f / 46.f));
+	const float guideRadius = diameterPx * (20.05f / 46.f);
+	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
+
+	nvgSave(args.vg);
+
+	auto drawGuideArc = [&](float radiusPx, float widthPx, NVGcolor color) {
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, endAngle, NVG_CW);
+		nvgStrokeColor(args.vg, color);
+		nvgStrokeWidth(args.vg, widthPx);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	};
+
+	auto drawSegmentBand = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor fill, NVGcolor innerHighlight) {
+		if (a1 <= a0) return;
+		const float halfWidthPx = 0.5f * widthPx;
+
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx, a0, a1, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx, a1, a0, NVG_CCW);
+		nvgClosePath(args.vg);
+
+		NVGpaint segmentPaint = nvgLinearGradient(args.vg,
+			center.x + std::cos(a0) * radiusPx,
+			center.y + std::sin(a0) * radiusPx,
+			center.x + std::cos(a1) * radiusPx,
+			center.y + std::sin(a1) * radiusPx,
+			fill,
+			innerHighlight);
+		nvgFillPaint(args.vg, segmentPaint);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx * 0.52f, a0, a1, NVG_CW);
+		nvgStrokeColor(args.vg, innerHighlight);
+		nvgStrokeWidth(args.vg, std::max(0.22f, widthPx * 0.16f));
+		nvgLineCap(args.vg, NVG_BUTT);
+		nvgStroke(args.vg);
+	};
+
+	auto drawSegmentedValueArc = [&]() {
+		const int segmentCount = 16;
+		const float aStart = startAngle;
+		const float aEnd = endAngle;
+		const float total = aEnd - aStart;
+		const float gap = std::max(0.010f, total * 0.012f);
+		const float step = total / float(segmentCount);
+		const NVGcolor litCore = nvgRGBA(0, 232, 255, 250);
+		const NVGcolor litHot = nvgRGBA(140, 255, 255, 218);
+		const NVGcolor unlitCore = nvgRGBA(82, 42, 146, 190);
+		const NVGcolor unlitHot = nvgRGBA(142, 92, 220, 155);
+		for (int i = 0; i < segmentCount; ++i) {
+			const float s0 = aStart + step * float(i) + 0.5f * gap;
+			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
+			if (activeAngle <= s0) {
+				drawSegmentBand(s0, s1, mainRadius, mainWidth, unlitCore, unlitHot);
+			}
+			else if (activeAngle >= s1) {
+				drawSegmentBand(s0, s1, mainRadius, mainWidth, litCore, litHot);
+			}
+			else {
+				drawSegmentBand(s0, activeAngle, mainRadius, mainWidth, litCore, litHot);
+				drawSegmentBand(activeAngle, s1, mainRadius, mainWidth, unlitCore, unlitHot);
+			}
+		}
+	};
+
+	drawGuideArc(guideRadius, guideWidth, nvgRGBA(188, 148, 255, 100));
+	drawGuideArc(mainRadius - mainWidth * 0.70f, std::max(0.18f, 0.24f * scale), nvgRGBA(125, 210, 255, 52));
+
+	drawSegmentedValueArc();
+
+	nvgRestore(args.vg);
+}
+
 void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
@@ -1917,6 +2037,107 @@ void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
 }
 
 float LeviathanHaloKnob::normalizedParamValue() {
+	engine::ParamQuantity* pq = getParamQuantity();
+	if (!pq) return 0.5f;
+	const float minValue = pq->getMinValue();
+	const float maxValue = pq->getMaxValue();
+	const float range = maxValue - minValue;
+	if (range <= 1e-6f) return 0.5f;
+	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
+}
+
+LeviathanHaloKnob2::LeviathanHaloKnob2() {
+	minAngle = -0.83 * M_PI;
+	maxAngle = 0.83 * M_PI;
+
+	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
+	app::SvgKnob::setSvg(backSvg);
+	box.size = Vec(46.f, 46.f);
+	if (fb) {
+		fb->box.size = box.size;
+	}
+	if (sw) {
+		sw->hide();
+	}
+	if (shadow) {
+		shadow->opacity = 0.f;
+	}
+
+	shadowLayer = new EclipseKnob::ShadowWidget();
+	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobShadow.svg"));
+	shadowLayer->box.size = box.size;
+	shadowLayer->minAngle = minAngle;
+	shadowLayer->maxAngle = maxAngle;
+	shadowLayer->valueNorm = normalizedParamValue();
+	fb->addChild(shadowLayer);
+
+	glowArc = new GlowArcWidget();
+	glowArc->box.size = box.size;
+	glowArc->minAngle = minAngle;
+	glowArc->maxAngle = maxAngle;
+	glowArc->valueNorm = normalizedParamValue();
+	fb->addChild(glowArc);
+
+	backLayer = new EclipseKnob::SvgLayer();
+	backLayer->setSvg(backSvg);
+	backLayer->box.size = box.size;
+	backLayer->minAngle = minAngle;
+	backLayer->maxAngle = maxAngle;
+	backLayer->valueNorm = normalizedParamValue();
+	backLayer->rotateWithValue = false;
+	fb->addChild(backLayer);
+
+	lightArc = new LightArcWidget();
+	lightArc->box.size = box.size;
+	lightArc->minAngle = minAngle;
+	lightArc->maxAngle = maxAngle;
+	lightArc->valueNorm = normalizedParamValue();
+	fb->addChild(lightArc);
+
+	centerLayer = new EclipseKnob::SvgLayer();
+	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg"));
+	centerLayer->box.size = box.size;
+	centerLayer->minAngle = minAngle;
+	centerLayer->maxAngle = maxAngle;
+	centerLayer->valueNorm = normalizedParamValue();
+	centerLayer->rotateWithValue = true;
+	fb->addChild(centerLayer);
+
+	rimHighlight = new LeviathanHaloKnob::RimHighlightWidget();
+	rimHighlight->box.size = box.size;
+	rimHighlight->minAngle = minAngle;
+	rimHighlight->maxAngle = maxAngle;
+	rimHighlight->valueNorm = normalizedParamValue();
+	fb->addChild(rimHighlight);
+}
+
+void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
+	app::SvgKnob::onChange(e);
+	const float valueNorm = normalizedParamValue();
+	if (backLayer) {
+		backLayer->valueNorm = valueNorm;
+	}
+	if (centerLayer) {
+		centerLayer->valueNorm = valueNorm;
+	}
+	if (shadowLayer) {
+		shadowLayer->valueNorm = valueNorm;
+	}
+	if (glowArc) {
+		glowArc->valueNorm = valueNorm;
+	}
+	if (lightArc) {
+		lightArc->valueNorm = valueNorm;
+	}
+	if (rimHighlight) {
+		rimHighlight->valueNorm = valueNorm;
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+float LeviathanHaloKnob2::normalizedParamValue() {
 	engine::ParamQuantity* pq = getParamQuantity();
 	if (!pq) return 0.5f;
 	const float minValue = pq->getMinValue();

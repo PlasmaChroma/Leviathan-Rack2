@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="46"
+   height="46"
+   viewBox="0 0 46 46"
+   version="1.1"
+   id="svg72"
+   sodipodi:docname="HaloKnobBack.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs72" />
+  <sodipodi:namedview
+     id="namedview72"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="25.543479"
+     inkscape:cx="12.840851"
+     inkscape:cy="24.370212"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg72" />
+  <rect
+     x="0"
+     y="0"
+     width="46"
+     height="46"
+     fill="none"
+     id="rect1" />
+  <!-- flat fallback vignette -->
+  <circle
+     cx="23"
+     cy="23"
+     r="22.799999"
+     fill="#050713"
+     opacity="0.42"
+     id="circle1"
+     style="display:none" />
+  <circle
+     cx="23"
+     cy="21"
+     r="18.700001"
+     fill="#0a0d18"
+     opacity="0.16"
+     id="circle2"
+     style="display:none" />
+  <!-- static halo rings: open solid arc paths only -->
+  <g
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     id="g12"
+     style="display:inline">
+    <path
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
+       stroke="#060914"
+       stroke-width="1.82"
+       opacity="0.92"
+       id="path2" />
+    <path
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
+       stroke="#7d43e8"
+       stroke-width="0.76"
+       opacity="0.62"
+       id="path3" />
+    <path
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
+       stroke="#b58aff"
+       stroke-width="0.64"
+       opacity="0.86"
+       id="path4" />
+    <path
+       d="m 12.3,41.13 a 21.05,21.05 0 1 1 21.4,0"
+       stroke="#ebe0ff"
+       stroke-width="0.22"
+       opacity="0.56"
+       id="path5" />
+    <path
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
+       stroke="#040811"
+       stroke-width="1.58"
+       opacity="1"
+       id="path6" />
+    <path
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
+       stroke="#8842ef"
+       stroke-width="0.58"
+       opacity="0.62"
+       id="path7" />
+    <path
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
+       stroke="#c18cff"
+       stroke-width="0.38"
+       opacity="0.9"
+       id="path8" />
+    <path
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
+       stroke="#f0dcff"
+       stroke-width="0.2"
+       opacity="0.58"
+       id="path9" />
+    <path
+       d="m 14.55,37.3 a 16.6,16.6 0 1 1 16.9,0"
+       stroke="#010103"
+       stroke-width="2.22"
+       opacity="1"
+       id="path10"
+       style="stroke-linecap:butt;stroke-width:3.22;stroke-dasharray:none" />
+    <path
+       d="m 14.88,36.73 a 15.95,15.95 0 1 1 16.24,0"
+       stroke="#7a35e6"
+       stroke-width="1.18"
+       opacity="0.52"
+       id="path11"
+       style="display:none" />
+    <path
+       d="m 14.88,36.73 a 15.95,15.95 0 1 1 16.24,0"
+       stroke="#c79aff"
+       stroke-width="0.44"
+       opacity="0.88"
+       id="path12"
+       style="display:none" />
+  </g>
+  <!-- cardinal ticks -->
+  <g
+     stroke="#a377cd"
+     stroke-width="0.78"
+     stroke-linecap="round"
+     opacity="0.22"
+     fill="none"
+     id="g24"
+     style="display:none">
+    <path
+       d="M3.162 26.533 L0.996 26.919"
+       id="path19" />
+    <path
+       d="M38.614 10.264 L40.319 8.873"
+       id="path20" />
+    <path
+       d="M42.838 26.533 L45.004 26.919"
+       id="path21" />
+    <path
+       d="M 8.2179149,10.958894 5.681,8.873"
+       id="path24"
+       sodipodi:nodetypes="cc"
+       style="display:inline" />
+  </g>
+  <g
+     stroke="#d6b6f9"
+     stroke-width="0.42"
+     stroke-linecap="round"
+     opacity="0.84"
+     fill="none"
+     id="g18"
+     style="display:none">
+    <path
+       d="M3.162 26.533 L0.996 26.919"
+       id="path13" />
+    <path
+       d="M 8.2179149,10.939319 5.681,8.873"
+       id="path14"
+       sodipodi:nodetypes="cc" />
+    <path
+       d="M38.614 10.264 L40.319 8.873"
+       id="path15" />
+    <path
+       d="M42.838 26.533 L45.004 26.919"
+       id="path16" />
+  </g>
+  <!-- minor ticks -->
+  <g
+     stroke="#d6b6f9"
+     stroke-width="0.42"
+     stroke-linecap="round"
+     opacity="0.72"
+     fill="none"
+     id="g38"
+     style="display:none">
+    <path
+       d="M7.216 36.002 L6.251 36.797"
+       id="path25" />
+    <path
+       d="M3.730 29.847 L2.552 30.265"
+       id="path26" />
+    <path
+       d="M2.550 22.872 L1.300 22.864"
+       id="path27" />
+    <path
+       d="M3.818 15.912 L2.645 15.479"
+       id="path28" />
+    <path
+       d="M12.812 5.268 L12.189 4.185"
+       id="path30" />
+    <path
+       d="M19.463 2.858 L19.247 1.627"
+       id="path31" />
+    <path
+       d="M26.537 2.858 L26.753 1.627"
+       id="path32" />
+    <path
+       d="M33.188 5.268 L33.811 4.185"
+       id="path33" />
+    <path
+       d="M42.182 15.912 L43.355 15.479"
+       id="path35" />
+    <path
+       d="M42.270 29.847 L43.448 30.265"
+       id="path37" />
+    <path
+       d="M38.784 36.002 L39.749 36.797"
+       id="path38" />
+  </g>
+  <g
+     stroke="#d6b6f9"
+     stroke-width="0.34"
+     stroke-linecap="round"
+     opacity="0.46"
+     fill="none"
+     id="g56"
+     style="display:none">
+    <path
+       d="M7.847 37.467 L7.341 37.950"
+       id="path39"
+       inkscape:label="path39" />
+    <path
+       d="M4.493 32.818 L3.875 33.146"
+       id="path40" />
+    <path
+       d="M2.525 27.435 L1.841 27.583"
+       id="path41" />
+    <path
+       d="M2.089 21.719 L1.391 21.676"
+       id="path42" />
+    <path
+       d="M9.726 6.792 L9.283 6.250"
+       id="path45" />
+    <path
+       d="M14.616 3.801 L14.336 3.159"
+       id="path46" />
+    <path
+       d="M20.134 2.247 L20.038 1.554"
+       id="path47" />
+    <path
+       d="M25.866 2.247 L25.962 1.554"
+       id="path48" />
+    <path
+       d="M31.384 3.801 L31.664 3.159"
+       id="path49" />
+    <path
+       d="M36.274 6.792 L36.717 6.250"
+       id="path50" />
+    <path
+       d="M40.170 10.996 L40.744 10.595"
+       id="path51" />
+  </g>
+  <!-- dark bowl under foreground cap -->
+  <g
+     id="Underknob"
+     transform="matrix(1.0771208,0,0,1.0771208,-1.7737784,-1.7737784)">
+    <circle
+       cx="23"
+       cy="23"
+       r="15.55"
+       fill="#01020a"
+       opacity="0.88"
+       id="circle56"
+       style="display:inline" />
+    <circle
+       cx="23"
+       cy="23"
+       r="15.05"
+       fill="#080c12"
+       stroke="#02030a"
+       stroke-width="1.02"
+       id="circle57"
+       style="display:inline" />
+    <circle
+       cx="23"
+       cy="23"
+       r="13.55"
+       fill="#02040b"
+       opacity="0.62"
+       id="circle58"
+       style="display:none" />
+    <circle
+       cx="23"
+       cy="23"
+       r="14.2"
+       fill="none"
+       stroke="#17202c"
+       stroke-width="0.38"
+       opacity="0.82"
+       id="circle59"
+       style="display:none" />
+    <path
+       d="m 36.491,28.451 -0.51,1.122 -0.604,1.076 -0.692,1.02 -0.776,0.959 -0.854,0.889 -0.927,0.813 -0.992,0.732 -1.05,0.646 -1.102,0.554 -1.144,0.459 -1.179,0.361 -1.206,0.259 -1.223,0.157 L 23,37.55 21.768,37.498 20.545,37.341 19.339,37.082 18.16,36.721 17.016,36.262 15.914,35.708 14.864,35.062 13.872,34.33 12.945,33.517 12.091,32.628 11.315,31.669 10.623,30.649 10.019,29.573 9.509,28.451"
+       stroke="#010106"
+       stroke-width="1"
+       fill="none"
+       opacity="0.86"
+       stroke-linecap="round"
+       id="path59"
+       style="display:none" />
+    <path
+       d="m 10.372,16.841 0.643,-1.173 0.752,-1.107 0.854,-1.03 0.947,-0.945 1.034,-0.85 1.109,-0.748 1.176,-0.638 1.231,-0.525 1.275,-0.404 1.308,-0.282 1.329,-0.155 1.338,-0.029 1.334,0.098 1.319,0.226 1.292,0.349 1.252,0.471 1.202,0.588 1.14,0.699 1.069,0.805 0.988,0.903 0.897,0.993 0.798,1.073 0.693,1.145 0.581,1.205"
+       stroke="#2b3542"
+       stroke-width="0.28"
+       fill="none"
+       opacity="0.38"
+       stroke-linecap="round"
+       id="path60"
+       style="display:none" />
+  </g>
+  <!-- simple glints and orb details -->
+  <g
+     stroke-linecap="round"
+     fill="none"
+     id="g63"
+     style="display:none">
+    <path
+       d="M23.006 0.614 L23.002 4.157"
+       stroke="#d6b6f9"
+       stroke-width="0.42"
+       opacity="0.84"
+       id="path61" />
+    <path
+       d="M1.45 23 L4.08 23"
+       stroke="#d6b6f9"
+       stroke-width="0.38"
+       opacity="0.62"
+       id="path62" />
+    <path
+       d="M41.92 23 L44.55 23"
+       stroke="#d6b6f9"
+       stroke-width="0.38"
+       opacity="0.62"
+       id="path63" />
+  </g>
+</svg>

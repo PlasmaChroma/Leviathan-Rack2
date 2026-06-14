@@ -812,7 +812,7 @@ struct BifurxWidget final : ModuleWidget {
 		addParam(modeMenuButton);
 		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mP.plus(Vec(-2.5f, 0.f))), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mP.plus(Vec(2.5f, 0.f))), module, Bifurx::MODE_RIGHT_PARAM));
 		const Vec freqCenterPx = mm2px(fP);
-		addParam(createParamCentered<Eclipse2Knob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<BigClockworkGearKnob>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<Eclipse2Knob>(mm2px(rP), module, Bifurx::RESO_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<LeviathanHaloKnob2>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<Eclipse2Knob>(mm2px(rP), module, Bifurx::RESO_PARAM));
 		{
 			Eclipse2Knob* balanceKnob = createParamCentered<Eclipse2Knob>(mm2px(bP), module, Bifurx::BALANCE_PARAM);
 			balanceKnob->setProgressRingBipolar(true);
