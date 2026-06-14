@@ -1683,22 +1683,22 @@ void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, center.x, center.y);
-	nvgRotate(args.vg, 0.12f * crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)));
+	nvgRotate(args.vg, 0.03f * crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)));
 	nvgTranslate(args.vg, -center.x, -center.y);
 	nvgLineCap(args.vg, NVG_ROUND);
 
-	strokeArc(rimRadiusPx, -0.74f * M_PI, 0.25f * M_PI, std::max(0.48f, 0.74f * scale), withAlpha(54, 34, 106, 72.f + 54.f * violetReveal));
-	strokeArc(rimRadiusPx, -0.66f * M_PI, 0.18f * M_PI, std::max(0.30f, 0.42f * scale), withAlpha(126, 78, 224, 54.f + 72.f * violetReveal));
-	strokeArc(innerRimRadiusPx, -0.68f * M_PI, 0.13f * M_PI, std::max(0.20f, 0.30f * scale), withAlpha(25, 38, 112, 48.f + 52.f * blueReveal));
-	strokeArc(rimRadiusPx, -0.54f * M_PI, -0.03f * M_PI, std::max(0.16f, 0.22f * scale), withAlpha(222, 202, 255, 44.f + 84.f * lavenderReveal));
-	strokeArc(rimRadiusPx + 0.34f * scale, -0.15f * M_PI, 0.05f * M_PI, std::max(0.14f, 0.20f * scale), withAlpha(245, 232, 255, 58.f + 76.f * lavenderReveal));
+	strokeArc(rimRadiusPx, -0.74f * M_PI, 0.25f * M_PI, std::max(0.48f, 0.74f * scale), withAlpha(62, 44, 126, 76.f + 42.f * violetReveal));
+	strokeArc(rimRadiusPx, -0.66f * M_PI, 0.18f * M_PI, std::max(0.30f, 0.42f * scale), withAlpha(118, 84, 196, 62.f + 54.f * violetReveal));
+	strokeArc(innerRimRadiusPx, -0.68f * M_PI, 0.13f * M_PI, std::max(0.20f, 0.30f * scale), withAlpha(82, 68, 166, 52.f + 42.f * blueReveal));
+	strokeArc(rimRadiusPx, -0.54f * M_PI, -0.03f * M_PI, std::max(0.16f, 0.22f * scale), withAlpha(178, 148, 232, 54.f + 60.f * lavenderReveal));
+	strokeArc(rimRadiusPx + 0.34f * scale, -0.15f * M_PI, 0.05f * M_PI, std::max(0.14f, 0.20f * scale), withAlpha(218, 198, 252, 64.f + 58.f * lavenderReveal));
 
 	nvgRestore(args.vg);
 
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
-	strokeArc(rimRadiusPx, -0.58f * M_PI, 0.20f * M_PI, std::max(0.16f, 0.22f * scale), nvgRGBA(196, 154, 255, 46));
-	strokeArc(innerRimRadiusPx, -0.62f * M_PI, 0.10f * M_PI, std::max(0.14f, 0.18f * scale), nvgRGBA(80, 92, 176, 34));
+	strokeArc(rimRadiusPx, -0.58f * M_PI, 0.20f * M_PI, std::max(0.16f, 0.22f * scale), nvgRGBA(178, 142, 232, 44));
+	strokeArc(innerRimRadiusPx, -0.62f * M_PI, 0.10f * M_PI, std::max(0.14f, 0.18f * scale), nvgRGBA(96, 82, 174, 34));
 	nvgRestore(args.vg);
 }
 

@@ -24,7 +24,7 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="25.543479"
-     inkscape:cx="12.801702"
+     inkscape:cx="12.840851"
      inkscape:cy="24.370212"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
@@ -271,7 +271,8 @@
        r="15.55"
        fill="#01020a"
        opacity="0.88"
-       id="circle56" />
+       id="circle56"
+       style="display:inline" />
     <circle
        cx="23"
        cy="23"
@@ -279,14 +280,16 @@
        fill="#080c12"
        stroke="#02030a"
        stroke-width="1.02"
-       id="circle57" />
+       id="circle57"
+       style="display:inline" />
     <circle
        cx="23"
        cy="23"
        r="13.55"
        fill="#02040b"
        opacity="0.62"
-       id="circle58" />
+       id="circle58"
+       style="display:none" />
     <circle
        cx="23"
        cy="23"
@@ -295,7 +298,8 @@
        stroke="#17202c"
        stroke-width="0.38"
        opacity="0.82"
-       id="circle59" />
+       id="circle59"
+       style="display:none" />
     <path
        d="m 36.491,28.451 -0.51,1.122 -0.604,1.076 -0.692,1.02 -0.776,0.959 -0.854,0.889 -0.927,0.813 -0.992,0.732 -1.05,0.646 -1.102,0.554 -1.144,0.459 -1.179,0.361 -1.206,0.259 -1.223,0.157 L 23,37.55 21.768,37.498 20.545,37.341 19.339,37.082 18.16,36.721 17.016,36.262 15.914,35.708 14.864,35.062 13.872,34.33 12.945,33.517 12.091,32.628 11.315,31.669 10.623,30.649 10.019,29.573 9.509,28.451"
        stroke="#010106"
@@ -303,7 +307,8 @@
        fill="none"
        opacity="0.86"
        stroke-linecap="round"
-       id="path59" />
+       id="path59"
+       style="display:none" />
     <path
        d="m 10.372,16.841 0.643,-1.173 0.752,-1.107 0.854,-1.03 0.947,-0.945 1.034,-0.85 1.109,-0.748 1.176,-0.638 1.231,-0.525 1.275,-0.404 1.308,-0.282 1.329,-0.155 1.338,-0.029 1.334,0.098 1.319,0.226 1.292,0.349 1.252,0.471 1.202,0.588 1.14,0.699 1.069,0.805 0.988,0.903 0.897,0.993 0.798,1.073 0.693,1.145 0.581,1.205"
        stroke="#2b3542"
@@ -311,7 +316,8 @@
        fill="none"
        opacity="0.38"
        stroke-linecap="round"
-       id="path60" />
+       id="path60"
+       style="display:none" />
   </g>
   <!-- simple glints and orb details -->
   <g
