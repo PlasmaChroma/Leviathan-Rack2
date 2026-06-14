@@ -283,6 +283,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		bool foreground = false;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -297,6 +298,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 
 	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
 	GlowArcWidget* glowArc = nullptr;
+	GlowArcWidget* foregroundGlowArc = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;

@@ -1795,12 +1795,20 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	};
 
-	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(0, 210, 255, 42));
-	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(110, 54, 210, 28));
-	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(0, 225, 255, 72));
-	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(142, 72, 235, 46));
-	drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(30, 245, 255, 118));
-	drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(178, 96, 255, 72));
+	if (foreground) {
+		drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(3.0f, 3.6f * scale), nvgRGBA(70, 250, 255, 74));
+		drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(3.0f, 3.6f * scale), nvgRGBA(226, 158, 255, 70));
+		drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(1.8f, 2.2f * scale), nvgRGBA(190, 255, 255, 54));
+		drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(1.8f, 2.2f * scale), nvgRGBA(246, 214, 255, 48));
+	}
+	else {
+		drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(0, 210, 255, 42));
+		drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(7.5f, 8.0f * scale), nvgRGBA(150, 72, 255, 40));
+		drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(0, 225, 255, 72));
+		drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(5.8f, 6.5f * scale), nvgRGBA(184, 98, 255, 70));
+		drawGlowStroke(startAngle, activeAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(30, 245, 255, 118));
+		drawGlowStroke(activeAngle, endAngle, mainRadius, std::max(4.5f, 5.4f * scale), nvgRGBA(222, 152, 255, 104));
+	}
 
 	nvgRestore(args.vg);
 }
@@ -1866,8 +1874,8 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const float step = total / float(segmentCount);
 		const NVGcolor litCore = nvgRGBA(0, 232, 255, 250);
 		const NVGcolor litHot = nvgRGBA(140, 255, 255, 218);
-		const NVGcolor unlitCore = nvgRGBA(82, 42, 146, 190);
-		const NVGcolor unlitHot = nvgRGBA(142, 92, 220, 155);
+		const NVGcolor unlitCore = nvgRGBA(150, 76, 255, 230);
+		const NVGcolor unlitHot = nvgRGBA(224, 172, 255, 194);
 		for (int i = 0; i < segmentCount; ++i) {
 			const float s0 = aStart + step * float(i) + 0.5f * gap;
 			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
@@ -1970,13 +1978,6 @@ LeviathanHaloKnob::LeviathanHaloKnob() {
 	shadowLayer->valueNorm = normalizedParamValue();
 	fb->addChild(shadowLayer);
 
-	glowArc = new GlowArcWidget();
-	glowArc->box.size = box.size;
-	glowArc->minAngle = minAngle;
-	glowArc->maxAngle = maxAngle;
-	glowArc->valueNorm = normalizedParamValue();
-	fb->addChild(glowArc);
-
 	backLayer = new EclipseKnob::SvgLayer();
 	backLayer->setSvg(backSvg);
 	backLayer->box.size = box.size;
@@ -1985,6 +1986,13 @@ LeviathanHaloKnob::LeviathanHaloKnob() {
 	backLayer->valueNorm = normalizedParamValue();
 	backLayer->rotateWithValue = false;
 	fb->addChild(backLayer);
+
+	glowArc = new GlowArcWidget();
+	glowArc->box.size = box.size;
+	glowArc->minAngle = minAngle;
+	glowArc->maxAngle = maxAngle;
+	glowArc->valueNorm = normalizedParamValue();
+	fb->addChild(glowArc);
 
 	lightArc = new LightArcWidget();
 	lightArc->box.size = box.size;
@@ -2071,13 +2079,6 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	shadowLayer->valueNorm = normalizedParamValue();
 	fb->addChild(shadowLayer);
 
-	glowArc = new GlowArcWidget();
-	glowArc->box.size = box.size;
-	glowArc->minAngle = minAngle;
-	glowArc->maxAngle = maxAngle;
-	glowArc->valueNorm = normalizedParamValue();
-	fb->addChild(glowArc);
-
 	backLayer = new EclipseKnob::SvgLayer();
 	backLayer->setSvg(backSvg);
 	backLayer->box.size = box.size;
@@ -2087,12 +2088,27 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	backLayer->rotateWithValue = false;
 	fb->addChild(backLayer);
 
+	glowArc = new GlowArcWidget();
+	glowArc->box.size = box.size;
+	glowArc->minAngle = minAngle;
+	glowArc->maxAngle = maxAngle;
+	glowArc->valueNorm = normalizedParamValue();
+	fb->addChild(glowArc);
+
 	lightArc = new LightArcWidget();
 	lightArc->box.size = box.size;
 	lightArc->minAngle = minAngle;
 	lightArc->maxAngle = maxAngle;
 	lightArc->valueNorm = normalizedParamValue();
 	fb->addChild(lightArc);
+
+	foregroundGlowArc = new GlowArcWidget();
+	foregroundGlowArc->box.size = box.size;
+	foregroundGlowArc->minAngle = minAngle;
+	foregroundGlowArc->maxAngle = maxAngle;
+	foregroundGlowArc->valueNorm = normalizedParamValue();
+	foregroundGlowArc->foreground = true;
+	fb->addChild(foregroundGlowArc);
 
 	centerLayer = new EclipseKnob::SvgLayer();
 	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg"));
@@ -2125,6 +2141,9 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	}
 	if (glowArc) {
 		glowArc->valueNorm = valueNorm;
+	}
+	if (foregroundGlowArc) {
+		foregroundGlowArc->valueNorm = valueNorm;
 	}
 	if (lightArc) {
 		lightArc->valueNorm = valueNorm;
