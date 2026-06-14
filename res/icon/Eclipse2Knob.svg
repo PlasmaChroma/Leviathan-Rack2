@@ -23,8 +23,8 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="6.923754"
-     inkscape:cx="46.867639"
-     inkscape:cy="38.201819"
+     inkscape:cx="30.258152"
+     inkscape:cy="56.6889"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -38,7 +38,7 @@
        inkscape:collect="always">
       <stop
          style="stop-color:#060708;stop-opacity:1;"
-         offset="0.71484375"
+         offset="0.3241699"
          id="stop15" />
       <stop
          style="stop-color:#ffac06;stop-opacity:0;"
@@ -133,7 +133,7 @@
          id="stop17"
          style="stop-color:#bab698;stop-opacity:0.80978262;" />
       <stop
-         offset="0.42783439"
+         offset="0.3930316"
          stop-color="#1f2126"
          id="stop7"
          style="stop-color:#242422;stop-opacity:0.5;" />
@@ -228,15 +228,15 @@
        fy="60"
        r="37.900002"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0.54308649,-0.81807604,0.83641564,0.5552614,-22.770128,75.768879)" />
+       gradientTransform="matrix(0.57734172,-0.79246779,0.99737059,0.72662092,-34.482739,63.950814)" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#centerCapGrad"
        id="linearGradient16"
-       x1="59.682976"
-       y1="98.09362"
-       x2="80.582977"
-       y2="28.994919"
+       x1="58.383102"
+       y1="97.5159"
+       x2="81.881248"
+       y2="29.965471"
        gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- Outer Bezel -->
@@ -359,7 +359,7 @@
        stroke-width="0.3"
        opacity="0.07"
        id="circle25"
-       style="display:inline"
+       style="display:inline;stroke-width:1.5;stroke-dasharray:none"
        transform="translate(-60,-46.2)" />
     <circle
        cx="0"

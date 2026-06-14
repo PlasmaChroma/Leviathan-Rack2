@@ -276,7 +276,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addSmallKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<EclipseKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<Eclipse2Knob>(mm2px(posMm), module, paramId));
     };
     auto addTinyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;

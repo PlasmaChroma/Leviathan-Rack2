@@ -3339,16 +3339,16 @@ struct TemporalDeckWidget : ModuleWidget {
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
-    addParam(createParamCentered<EclipseKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
     {
-      EclipseKnob* rateKnob = createParamCentered<EclipseKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM);
+      Eclipse2Knob* rateKnob = createParamCentered<Eclipse2Knob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM);
       rateKnob->setProgressRingBipolar(true);
       addParam(rateKnob);
     }
-    addParam(createParamCentered<EclipseKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<EclipseKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
     {
-      EclipseKnob* sensitivityKnob = createParamCentered<EclipseKnob>(mm2px(sensitivityKnobMm), module,
+      Eclipse2Knob* sensitivityKnob = createParamCentered<Eclipse2Knob>(mm2px(sensitivityKnobMm), module,
                                                                      TemporalDeck::SCRATCH_SENSITIVITY_PARAM);
       sensitivityKnob->setProgressRingBipolar(true);
       addParam(sensitivityKnob);

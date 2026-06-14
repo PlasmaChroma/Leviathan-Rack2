@@ -349,10 +349,10 @@ struct WyrmWidget : ModuleWidget {
 
 		addParam(createParamCentered<BigClockworkGearKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
 		addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
-		addParam(createParamCentered<EclipseKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
 		addInput(createInputCentered<MagitekInputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<MagitekInputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));

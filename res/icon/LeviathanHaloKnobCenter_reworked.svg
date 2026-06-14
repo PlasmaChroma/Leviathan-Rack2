@@ -21,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="144.49574"
-     inkscape:cx="23.433217"
-     inkscape:cy="19.367354"
+     inkscape:zoom="12.771739"
+     inkscape:cx="30.614468"
+     inkscape:cy="35.508084"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -180,7 +180,8 @@
        y1="24.929705"
        x2="22.985535"
        y2="20.540773"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.87373743,0,0,0.87373743,2.9040364,2.5934333)" />
   </defs>
   <!-- rotating outer amber crescent: glow is approximated with translucent duplicate strokes for NanoSVG/Rack safety -->
   <!-- cap and bevel -->
@@ -264,12 +265,12 @@
      transform="matrix(0.90825685,0,0,0.90825685,2.1100925,-0.21559501)">
     <circle
        cx="23"
-       cy="22.719999"
-       r="2.1800001"
+       cy="22.44475"
+       r="1.9047475"
        fill="#ffbd48"
        opacity="0.16"
        id="circle29"
-       style="fill:url(#linearGradient20);fill-opacity:1;opacity:1;stroke:none" />
+       style="opacity:1;fill:url(#linearGradient20);fill-opacity:1;stroke:none;stroke-width:0.873737" />
     <circle
        cx="23"
        cy="22.719999"
