@@ -1665,16 +1665,40 @@ void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 		nvgStrokeWidth(args.vg, widthPx);
 		nvgStroke(args.vg);
 	};
+	auto withAlpha = [](int r, int g, int b, float alpha) {
+		return nvgRGBA(r, g, b, clamp((int)std::round(alpha), 0, 255));
+	};
+	auto wrap01 = [](float x) {
+		x -= std::floor(x);
+		return x;
+	};
+	auto triangle = [&](float phaseOffset) {
+		const float p = wrap01(valueNorm + phaseOffset);
+		return 1.f - std::fabs(2.f * p - 1.f);
+	};
+
+	const float violetReveal = triangle(0.10f);
+	const float blueReveal = triangle(0.43f);
+	const float lavenderReveal = triangle(0.76f);
+
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, center.x, center.y);
+	nvgRotate(args.vg, 0.42f * crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)));
+	nvgTranslate(args.vg, -center.x, -center.y);
+	nvgLineCap(args.vg, NVG_ROUND);
+
+	strokeArc(rimRadiusPx, -0.74f * M_PI, 0.25f * M_PI, std::max(0.48f, 0.74f * scale), withAlpha(54, 34, 106, 72.f + 54.f * violetReveal));
+	strokeArc(rimRadiusPx, -0.66f * M_PI, 0.18f * M_PI, std::max(0.30f, 0.42f * scale), withAlpha(126, 78, 224, 54.f + 72.f * violetReveal));
+	strokeArc(innerRimRadiusPx, -0.68f * M_PI, 0.13f * M_PI, std::max(0.20f, 0.30f * scale), withAlpha(25, 38, 112, 48.f + 52.f * blueReveal));
+	strokeArc(rimRadiusPx, -0.54f * M_PI, -0.03f * M_PI, std::max(0.16f, 0.22f * scale), withAlpha(222, 202, 255, 44.f + 84.f * lavenderReveal));
+	strokeArc(rimRadiusPx + 0.34f * scale, -0.15f * M_PI, 0.05f * M_PI, std::max(0.14f, 0.20f * scale), withAlpha(245, 232, 255, 58.f + 76.f * lavenderReveal));
+
+	nvgRestore(args.vg);
 
 	nvgSave(args.vg);
 	nvgLineCap(args.vg, NVG_ROUND);
-
-	strokeArc(rimRadiusPx, -0.73f * M_PI, 0.26f * M_PI, std::max(0.54f, 0.86f * scale), nvgRGBA(54, 34, 106, 116));
-	strokeArc(rimRadiusPx, -0.66f * M_PI, 0.20f * M_PI, std::max(0.34f, 0.48f * scale), nvgRGBA(134, 86, 232, 132));
-	strokeArc(rimRadiusPx, -0.55f * M_PI, -0.02f * M_PI, std::max(0.18f, 0.24f * scale), nvgRGBA(221, 198, 255, 122));
-	strokeArc(innerRimRadiusPx, -0.66f * M_PI, 0.16f * M_PI, std::max(0.22f, 0.32f * scale), nvgRGBA(25, 36, 102, 88));
-	strokeArc(rimRadiusPx + 0.34f * scale, -0.15f * M_PI, 0.05f * M_PI, std::max(0.16f, 0.22f * scale), nvgRGBA(245, 232, 255, 142));
-
+	strokeArc(rimRadiusPx, -0.58f * M_PI, 0.20f * M_PI, std::max(0.16f, 0.22f * scale), nvgRGBA(196, 154, 255, 46));
+	strokeArc(innerRimRadiusPx, -0.62f * M_PI, 0.10f * M_PI, std::max(0.14f, 0.18f * scale), nvgRGBA(80, 92, 176, 34));
 	nvgRestore(args.vg);
 }
 
@@ -1737,6 +1761,9 @@ LeviathanHaloKnob::LeviathanHaloKnob() {
 
 	rimHighlight = new RimHighlightWidget();
 	rimHighlight->box.size = box.size;
+	rimHighlight->minAngle = minAngle;
+	rimHighlight->maxAngle = maxAngle;
+	rimHighlight->valueNorm = normalizedParamValue();
 	fb->addChild(rimHighlight);
 }
 
@@ -1757,6 +1784,9 @@ void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
 	}
 	if (lightArc) {
 		lightArc->valueNorm = valueNorm;
+	}
+	if (rimHighlight) {
+		rimHighlight->valueNorm = valueNorm;
 	}
 	if (fb) {
 		fb->setDirty();

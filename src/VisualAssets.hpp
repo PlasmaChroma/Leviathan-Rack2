@@ -237,6 +237,10 @@ struct LeviathanHaloKnob : app::SvgKnob {
 	};
 
 	struct RimHighlightWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+
 		void draw(const DrawArgs& args) override;
 	};
 
