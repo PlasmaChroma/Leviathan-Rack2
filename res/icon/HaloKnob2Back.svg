@@ -5,14 +5,39 @@
    viewBox="0 0 46 46"
    version="1.1"
    id="svg72"
-   sodipodi:docname="HaloKnobBack.svg"
+   sodipodi:docname="HaloKnob2Back.svg"
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs72" />
+     id="defs72">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0.75390625"
+         id="stop1" />
+      <stop
+         style="stop-color:#808080;stop-opacity:0;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="radialGradient2"
+       cx="23"
+       cy="21.694125"
+       fx="23"
+       fy="21.694125"
+       r="19.741009"
+       gradientTransform="matrix(1,0,0,0.93186094,0,1.4782173)"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
   <sodipodi:namedview
      id="namedview72"
      pagecolor="#ffffff"
@@ -24,14 +49,14 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="25.543479"
-     inkscape:cx="12.840851"
+     inkscape:cx="12.88"
      inkscape:cy="24.370212"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg72" />
+     inkscape:current-layer="g12" />
   <rect
      x="0"
      y="0"
@@ -88,30 +113,6 @@
        opacity="0.56"
        id="path5" />
     <path
-       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
-       stroke="#040811"
-       stroke-width="1.58"
-       opacity="1"
-       id="path6" />
-    <path
-       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
-       stroke="#8842ef"
-       stroke-width="0.58"
-       opacity="0.62"
-       id="path7" />
-    <path
-       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
-       stroke="#c18cff"
-       stroke-width="0.38"
-       opacity="0.9"
-       id="path8" />
-    <path
-       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
-       stroke="#f0dcff"
-       stroke-width="0.2"
-       opacity="0.58"
-       id="path9" />
-    <path
        d="m 14.55,37.3 a 16.6,16.6 0 1 1 16.9,0"
        stroke="#010103"
        stroke-width="2.22"
@@ -132,6 +133,13 @@
        opacity="0.88"
        id="path12"
        style="display:none" />
+    <path
+       d="m 13.37,39.3 a 18.95,18.92 0 1 1 19.26,0"
+       stroke="#040811"
+       stroke-width="1.58"
+       opacity="1"
+       id="path6"
+       style="display:inline;fill:url(#radialGradient2);stroke:none" />
   </g>
   <!-- cardinal ticks -->
   <g

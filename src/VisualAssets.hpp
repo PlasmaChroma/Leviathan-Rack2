@@ -302,7 +302,6 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;
-	LeviathanHaloKnob::RimHighlightWidget* rimHighlight = nullptr;
 
 	LeviathanHaloKnob2();
 	void onChange(const ChangeEvent& e) override;
