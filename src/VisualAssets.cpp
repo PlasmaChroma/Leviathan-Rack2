@@ -1649,11 +1649,40 @@ void LeviathanHaloKnob::LightArcWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	const float scale = diameterPx / 46.f;
+	const float rimRadiusPx = diameterPx * (14.18f / 46.f);
+	const float innerRimRadiusPx = diameterPx * (13.54f / 46.f);
+
+	auto strokeArc = [&](float radiusPx, float startRad, float endRad, float widthPx, NVGcolor color) {
+		nvgBeginPath(args.vg);
+		nvgArc(args.vg, center.x, center.y, radiusPx, startRad, endRad, NVG_CW);
+		nvgStrokeColor(args.vg, color);
+		nvgStrokeWidth(args.vg, widthPx);
+		nvgStroke(args.vg);
+	};
+
+	nvgSave(args.vg);
+	nvgLineCap(args.vg, NVG_ROUND);
+
+	strokeArc(rimRadiusPx, -0.73f * M_PI, 0.26f * M_PI, std::max(0.54f, 0.86f * scale), nvgRGBA(54, 34, 106, 116));
+	strokeArc(rimRadiusPx, -0.66f * M_PI, 0.20f * M_PI, std::max(0.34f, 0.48f * scale), nvgRGBA(134, 86, 232, 132));
+	strokeArc(rimRadiusPx, -0.55f * M_PI, -0.02f * M_PI, std::max(0.18f, 0.24f * scale), nvgRGBA(221, 198, 255, 122));
+	strokeArc(innerRimRadiusPx, -0.66f * M_PI, 0.16f * M_PI, std::max(0.22f, 0.32f * scale), nvgRGBA(25, 36, 102, 88));
+	strokeArc(rimRadiusPx + 0.34f * scale, -0.15f * M_PI, 0.05f * M_PI, std::max(0.16f, 0.22f * scale), nvgRGBA(245, 232, 255, 142));
+
+	nvgRestore(args.vg);
+}
+
 LeviathanHaloKnob::LeviathanHaloKnob() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
 
-	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobBack_reworked.svg");
+	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobBack.svg");
 	app::SvgKnob::setSvg(backSvg);
 	box.size = Vec(46.f, 46.f);
 	if (fb) {
@@ -1698,13 +1727,17 @@ LeviathanHaloKnob::LeviathanHaloKnob() {
 	fb->addChild(lightArc);
 
 	centerLayer = new EclipseKnob::SvgLayer();
-	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobCenter_reworked.svg"));
+	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg"));
 	centerLayer->box.size = box.size;
 	centerLayer->minAngle = minAngle;
 	centerLayer->maxAngle = maxAngle;
 	centerLayer->valueNorm = normalizedParamValue();
 	centerLayer->rotateWithValue = true;
 	fb->addChild(centerLayer);
+
+	rimHighlight = new RimHighlightWidget();
+	rimHighlight->box.size = box.size;
+	fb->addChild(rimHighlight);
 }
 
 void LeviathanHaloKnob::onChange(const ChangeEvent& e) {

@@ -236,11 +236,16 @@ struct LeviathanHaloKnob : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
+	struct RimHighlightWidget : TransparentWidget {
+		void draw(const DrawArgs& args) override;
+	};
+
 	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
 	GlowArcWidget* glowArc = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;
+	RimHighlightWidget* rimHighlight = nullptr;
 
 	LeviathanHaloKnob();
 	void onChange(const ChangeEvent& e) override;
