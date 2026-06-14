@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="4.8958333"
-     inkscape:cx="32.680851"
-     inkscape:cy="44.425532"
+     inkscape:zoom="1.7309385"
+     inkscape:cx="-53.728079"
+     inkscape:cy="33.218974"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -372,25 +372,23 @@
        style="display:inline"
        transform="translate(-60,-46.2)" />
     <circle
-       cx="60"
-       cy="60"
-       r="36"
+       cx="0"
+       cy="13.8"
+       r="37.023014"
        fill="none"
        stroke="#2b2d33"
        stroke-width="0.6"
        id="circle27"
-       style="stroke-width:1.9;stroke-dasharray:none"
-       transform="translate(-60,-46.2)" />
+       style="stroke-width:1.95397;stroke-dasharray:none" />
     <circle
-       cx="60"
-       cy="60"
-       r="37.1"
+       cx="0"
+       cy="13.8"
+       r="38.192642"
        fill="none"
        stroke="#ffffff"
-       stroke-width="0.5"
+       stroke-width="0.514718"
        opacity="0.22"
-       id="circle24"
-       transform="translate(-60,-46.2)" />
+       id="circle24" />
     <line
        x1="0"
        y1="6.4209599"

@@ -21,9 +21,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="18.061967"
-     inkscape:cx="10.657754"
-     inkscape:cy="23.059505"
+     inkscape:zoom="144.49574"
+     inkscape:cx="23.433217"
+     inkscape:cy="19.367354"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -33,6 +33,18 @@
      showgrid="false" />
   <defs
      id="defs17">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#d89b22;stop-opacity:1;"
+         offset="0"
+         id="stop20" />
+      <stop
+         style="stop-color:#fcecb2;stop-opacity:1;"
+         offset="1"
+         id="stop15" />
+    </linearGradient>
     <linearGradient
        id="linearGradient21"
        x1="23"
@@ -153,15 +165,6 @@
     </linearGradient>
     <linearGradient
        inkscape:collect="always"
-       xlink:href="#linearGradient21"
-       id="linearGradient1"
-       gradientUnits="userSpaceOnUse"
-       x1="23"
-       y1="7"
-       x2="23"
-       y2="25" />
-    <linearGradient
-       inkscape:collect="always"
        xlink:href="#needleStroke"
        id="linearGradient2"
        gradientUnits="userSpaceOnUse"
@@ -169,6 +172,15 @@
        y1="7"
        x2="23"
        y2="25" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient20"
+       x1="22.999226"
+       y1="24.929705"
+       x2="22.985535"
+       y2="20.540773"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- rotating outer amber crescent: glow is approximated with translucent duplicate strokes for NanoSVG/Rack safety -->
   <!-- cap and bevel -->
@@ -230,28 +242,21 @@
        stroke-width="2.7"
        opacity="0.13"
        id="path26"
-       style="opacity:0.658;stroke-linecap:round" />
+       style="opacity:0.66;stroke-linecap:round" />
     <path
        d="M 23,21.88 V 7.55"
        stroke="#ffd778"
        stroke-width="1.65"
        opacity="0.3"
        id="path27"
-       style="opacity:0.725;fill:none" />
+       style="opacity:0.725;fill:none;stroke-width:2.15428707;stroke-dasharray:none" />
     <path
-       d="M 23,21.88 V 7.55"
-       stroke="url(#needleStroke)"
-       stroke-width="0.88"
-       opacity="1"
-       id="path28"
-       style="display:none;fill:none;stroke:url(#linearGradient1)" />
-    <path
-       d="M 23,21.64 V 8.1"
+       d="M 23,22.685301 V 8.1639453"
        stroke="#fff2bd"
        stroke-width="0.28"
        opacity="0.88"
        id="path29"
-       style="fill:none" />
+       style="fill:none;stroke-width:1.85524;stroke-dasharray:none" />
   </g>
   <g
      id="central_pin"
@@ -263,14 +268,16 @@
        r="2.1800001"
        fill="#ffbd48"
        opacity="0.16"
-       id="circle29" />
+       id="circle29"
+       style="fill:url(#linearGradient20);fill-opacity:1;opacity:1;stroke:none" />
     <circle
        cx="23"
        cy="22.719999"
-       r="1.52"
        fill="#ffd478"
        opacity="0.36"
-       id="circle30" />
+       id="circle30"
+       r="1.795197"
+       style="display:none;stroke-width:1.18106" />
     <circle
        cx="23"
        cy="22.719999"
@@ -279,7 +286,7 @@
        stroke="#ffe8a4"
        stroke-width="0.24"
        id="circle31"
-       style="fill:url(#linearGradient2)" />
+       style="display:none;fill:url(#linearGradient2)" />
   </g>
   <!-- small Vahdrim'Keth glyph on lower cap, scaled from res/icon/Vahdrim'Keth.svg -->
   <g
