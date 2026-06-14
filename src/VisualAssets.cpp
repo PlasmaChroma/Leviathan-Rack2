@@ -1683,7 +1683,7 @@ void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, center.x, center.y);
-	nvgRotate(args.vg, 0.42f * crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)));
+	nvgRotate(args.vg, 0.12f * crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)));
 	nvgTranslate(args.vg, -center.x, -center.y);
 	nvgLineCap(args.vg, NVG_ROUND);
 
