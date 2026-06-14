@@ -22,15 +22,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="1.7309385"
-     inkscape:cx="-53.728079"
-     inkscape:cy="33.218974"
+     inkscape:zoom="6.923754"
+     inkscape:cx="46.867639"
+     inkscape:cy="38.201819"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="pointer-group" />
+     inkscape:current-layer="svg34" />
   <defs
      id="defs14">
     <linearGradient
@@ -49,20 +49,20 @@
        id="linearGradient44"
        inkscape:collect="always">
       <stop
-         style="stop-color:#f4ebdb;stop-opacity:1;"
+         style="stop-color:#f4daa1;stop-opacity:1;"
          offset="0"
          id="stop41" />
       <stop
          style="stop-color:#e4cda5;stop-opacity:1;"
-         offset="0.3383579"
+         offset="0.31515604"
          id="stop42" />
       <stop
          style="stop-color:#d3830d;stop-opacity:1;"
-         offset="0.51653492"
+         offset="0.66502678"
          id="stop43" />
       <stop
          style="stop-color:#804425;stop-opacity:1;"
-         offset="0.9256857"
+         offset="1"
          id="stop44" />
     </linearGradient>
     <linearGradient
@@ -218,16 +218,6 @@
        x2="0.056332324"
        y2="8.1242056"
        gradientUnits="userSpaceOnUse" />
-    <radialGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient34"
-       id="radialGradient44"
-       gradientUnits="userSpaceOnUse"
-       cx="0"
-       cy="0"
-       fx="0"
-       fy="0"
-       r="8" />
     <radialGradient
        inkscape:collect="always"
        xlink:href="#linearGradient1"
@@ -399,7 +389,7 @@
        stroke-linecap="round"
        opacity="0.38"
        id="line27"
-       style="stroke-width:6.26659;stroke-dasharray:none" />
+       style="stroke-width:11.367;stroke-dasharray:none" />
     <line
        x1="0"
        y1="6.4209599"
@@ -410,7 +400,7 @@
        stroke-linecap="round"
        opacity="0.65"
        id="line28"
-       style="stroke-width:5.36201;stroke-dasharray:none" />
+       style="stroke-width:10.262;stroke-dasharray:none" />
     <!-- Core Pointer Needle -->
     <line
        x1="0"
@@ -421,7 +411,7 @@
        stroke-width="2.96207"
        stroke-linecap="round"
        id="line29"
-       style="stroke:#d5b070;stroke-width:4.81107;stroke-dasharray:none;stroke-opacity:1" />
+       style="stroke:#d5b070;stroke-width:9.111;stroke-dasharray:none;stroke-opacity:1" />
     <g
        id="center_circle"
        style="display:inline;fill:url(#radialGradient35);fill-opacity:1;stroke:none"
@@ -436,7 +426,7 @@
          stroke-linecap="round"
          opacity="0.75"
          id="line30"
-         style="fill:url(#radialGradient44);stroke-width:4.24444;stroke-dasharray:none" />
+         style="display:inline;fill:none;fill-opacity:1;stroke-width:8.244;stroke-dasharray:none;stroke:#ffe8b1;stroke-opacity:1" />
       <circle
          cx="0"
          cy="0"
