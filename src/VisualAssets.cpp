@@ -1272,7 +1272,6 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	// LEDs are positioned slightly outside the bezel with a clean gap, scaled to fit inside bounds
 	const float radiusPx = diameterPx * (45.0f / 120.f);
 	const float largeRadiusPx = std::max(0.48f, diameterPx * (1.8f / 120.f));
-	const float smallRadiusPx = std::max(0.36f, largeRadiusPx * 0.76f);
 
 	const float startNorm = bipolar ? centerNorm : 0.f;
 	const float minLitNorm = std::min(startNorm, valueNorm);
@@ -1288,15 +1287,15 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(3, 2, 2, 96));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 4.8f);
+	nvgStrokeWidth(args.vg, largeRadiusPx * 4.4f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
 	// Sharp black border stroke around the track (thickened and slightly transparent)
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 180));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f + 2.4f);
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 245));
+	nvgStrokeWidth(args.vg, largeRadiusPx * 3.4f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
@@ -1304,7 +1303,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(14, 12, 11, 230));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f);
+	nvgStrokeWidth(args.vg, largeRadiusPx * 2.4f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
@@ -1312,7 +1311,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
 	nvgStrokeColor(args.vg, nvgRGBA(255, 220, 150, 16));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.8f - 0.7f);
+	nvgStrokeWidth(args.vg, largeRadiusPx * 1.8f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
 
@@ -1324,7 +1323,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		// Wide soft glow bloom
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 175, 40, 22));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 175, 40, 36));
 		nvgStrokeWidth(args.vg, largeRadiusPx * 6.5f);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
@@ -1332,7 +1331,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		// Tighter core glow bloom
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 215, 95, 45));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 215, 95, 76));
 		nvgStrokeWidth(args.vg, largeRadiusPx * 4.2f);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
@@ -1345,15 +1344,14 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		const float x = center.x + radiusPx * std::sin(angle);
 		const float y = center.y - radiusPx * std::cos(angle);
 
-		const bool isLarge = (i % 2 == 0);
-		const float r = isLarge ? largeRadiusPx : smallRadiusPx;
+		const float r = largeRadiusPx;
 
 		bool active = false;
 		if (bipolar) {
 			active = (ledNorm >= minLitNorm && ledNorm <= maxLitNorm) && (std::fabs(valueNorm - centerNorm) > 0.005f);
 		}
 		else {
-			active = (ledNorm <= valueNorm);
+			active = (valueNorm > 0.f) && (ledNorm <= valueNorm);
 		}
 
 		if (active) {
@@ -1363,32 +1361,32 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 			NVGpaint glow = nvgRadialGradient(
 				args.vg,
 				x, y,
-				litR * 0.5f,
-				litR * 2.8f,
-				nvgRGBA(255, 220, 110, 220),
+				litR * 0.4f,
+				litR * 3.2f,
+				nvgRGBA(255, 235, 140, 255),
 				nvgRGBA(255, 110, 10, 0)
 			);
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, litR * 2.8f);
+			nvgCircle(args.vg, x, y, litR * 3.2f);
 			nvgFillPaint(args.vg, glow);
 			nvgFill(args.vg);
 
 			// Core LED dot (brighter warm gold-cream)
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, litR);
-			nvgFillColor(args.vg, nvgRGBA(255, 240, 175, 255));
+			nvgFillColor(args.vg, nvgRGBA(255, 252, 200, 255));
 			nvgFill(args.vg);
 
 			// Intense central light source hotspot (pure white)
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, litR * 0.45f);
+			nvgCircle(args.vg, x, y, litR * 0.55f);
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 			nvgFill(args.vg);
 
 			// Edge accent (matching active stroke, bright warm orange)
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, x, y, litR);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 175, 30, 230));
+			nvgStrokeColor(args.vg, nvgRGBA(255, 200, 50, 245));
 			nvgStrokeWidth(args.vg, std::max(0.35f, diameterPx * (0.4f / 120.f)));
 			nvgStroke(args.vg);
 		}
@@ -1411,6 +1409,60 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+void Eclipse2Knob::ShadowWidget::draw(const DrawArgs& args) {
+	const float diameterPx = std::min(box.size.x, box.size.y);
+	if (diameterPx <= 1.f) return;
+
+	const Vec center = box.size.mult(0.5f);
+	// Knob visual radius at 0.70f scale factor:
+	const float knobRadius = diameterPx * 0.315f;
+
+	nvgSave(args.vg);
+
+	// Multi-pass soft diffused radial gradient shadows for realistic depth:
+	// Pass 1: Wide, very soft ambient shadow (ambient occlusion)
+	{
+		const float offsetX = diameterPx * (0.4f / 34.f);
+		const float offsetY = diameterPx * (0.8f / 34.f);
+		const float blurRadius = knobRadius * 1.5f;
+		NVGpaint shadowPaint = nvgRadialGradient(
+			args.vg,
+			center.x + offsetX,
+			center.y + offsetY,
+			knobRadius * 0.5f,
+			blurRadius,
+			nvgRGBA(0, 0, 0, 80), // soft black center
+			nvgRGBA(0, 0, 0, 0)   // fading to transparent
+		);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x + offsetX, center.y + offsetY, blurRadius);
+		nvgFillPaint(args.vg, shadowPaint);
+		nvgFill(args.vg);
+	}
+
+	// Pass 2: Tighter, slightly darker contact shadow
+	{
+		const float offsetX = diameterPx * (0.25f / 34.f);
+		const float offsetY = diameterPx * (0.5f / 34.f);
+		const float blurRadius = knobRadius * 1.15f;
+		NVGpaint shadowPaint = nvgRadialGradient(
+			args.vg,
+			center.x + offsetX,
+			center.y + offsetY,
+			knobRadius * 0.8f,
+			blurRadius,
+			nvgRGBA(0, 0, 0, 136), // black center
+			nvgRGBA(0, 0, 0, 0)
+		);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x + offsetX, center.y + offsetY, blurRadius);
+		nvgFillPaint(args.vg, shadowPaint);
+		nvgFill(args.vg);
+	}
+
+	nvgRestore(args.vg);
+}
+
 Eclipse2Knob::Eclipse2Knob() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
@@ -1428,13 +1480,11 @@ Eclipse2Knob::Eclipse2Knob() {
 		shadow->opacity = 0.f;
 	}
 
-	shadowLayer = new EclipseKnob::ShadowWidget();
-	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/Eclipse2KnobShadow.svg"));
+	shadowLayer = new ShadowWidget();
 	shadowLayer->box.size = box.size;
 	shadowLayer->minAngle = minAngle;
 	shadowLayer->maxAngle = maxAngle;
 	shadowLayer->valueNorm = normalizedParamValue();
-	shadowLayer->scaleFactor = 0.70f; // Scale down shadow to prevent clipping in 34x34 box
 	fb->addChild(shadowLayer);
 
 	progressRing = new ProgressLedRingWidget();

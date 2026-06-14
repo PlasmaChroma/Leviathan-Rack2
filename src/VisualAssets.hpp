@@ -187,6 +187,14 @@ struct EclipseKnob : app::SvgKnob {
 };
 
 struct Eclipse2Knob : app::SvgKnob {
+	struct ShadowWidget : TransparentWidget {
+		float valueNorm = 0.5f;
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+
+		void draw(const DrawArgs& args) override;
+	};
+
 	struct ProgressLedRingWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
@@ -199,7 +207,7 @@ struct Eclipse2Knob : app::SvgKnob {
 	};
 
 	ProgressLedRingWidget* progressRing = nullptr;
-	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
+	ShadowWidget* shadowLayer = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 
 	Eclipse2Knob();
