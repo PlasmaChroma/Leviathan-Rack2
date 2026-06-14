@@ -1782,6 +1782,13 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
+	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+	if (bloom <= 0.001f) return;
+
+	auto bloomColor = [&](NVGcolor color) {
+		color.a *= bloom;
+		return color;
+	};
 
 	nvgSave(args.vg);
 
@@ -1808,11 +1815,10 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	auto drawSegmentedGlow = [&](float widthPx, NVGcolor cyan, NVGcolor purple) {
 		const int segmentCount = 16;
 		const float total = endAngle - startAngle;
-		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(segmentCount);
 		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i) + 0.5f * gap;
-			const float s1 = startAngle + step * float(i + 1) - 0.5f * gap;
+			const float s0 = startAngle + step * float(i);
+			const float s1 = startAngle + step * float(i + 1);
 			NVGcolor color = purple;
 			if (activeAngle >= s1) {
 				color = cyan;
@@ -1826,13 +1832,13 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	};
 
 	if (foreground) {
-		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), nvgRGBA(70, 250, 255, 48), nvgRGBA(192, 123, 255, 44));
-		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), nvgRGBA(190, 255, 255, 36), nvgRGBA(226, 190, 255, 32));
+		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), bloomColor(nvgRGBA(70, 250, 255, 48)), bloomColor(nvgRGBA(192, 123, 255, 44)));
+		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), bloomColor(nvgRGBA(190, 255, 255, 36)), bloomColor(nvgRGBA(226, 190, 255, 32)));
 	}
 	else {
-		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), nvgRGBA(0, 210, 255, 34), nvgRGBA(126, 70, 230, 30));
-		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), nvgRGBA(0, 225, 255, 58), nvgRGBA(154, 84, 245, 50));
-		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), nvgRGBA(30, 245, 255, 88), nvgRGBA(192, 123, 255, 72));
+		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), bloomColor(nvgRGBA(0, 210, 255, 34)), bloomColor(nvgRGBA(126, 70, 230, 30)));
+		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), bloomColor(nvgRGBA(0, 225, 255, 58)), bloomColor(nvgRGBA(154, 84, 245, 50)));
+		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), bloomColor(nvgRGBA(30, 245, 255, 88)), bloomColor(nvgRGBA(192, 123, 255, 72)));
 	}
 
 	nvgRestore(args.vg);
@@ -1851,6 +1857,12 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
+	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+
+	auto bloomColor = [&](NVGcolor color) {
+		color.a *= bloom;
+		return color;
+	};
 
 	nvgSave(args.vg);
 
@@ -1965,7 +1977,6 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	auto drawSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
 		const int segmentCount = 16;
 		const float total = endAngle - startAngle;
-		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(segmentCount);
 		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
 			t = clamp(t, 0.f, 1.f);
@@ -1977,8 +1988,8 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 			return out;
 		};
 		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i) + 0.5f * gap;
-			const float s1 = startAngle + step * float(i + 1) - 0.5f * gap;
+			const float s0 = startAngle + step * float(i);
+			const float s1 = startAngle + step * float(i + 1);
 			NVGcolor color = purple;
 			if (activeAngle >= s1) {
 				color = cyan;
@@ -2010,8 +2021,10 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	drawGuideArc(guideRadius, guideWidth, nvgRGBA(126, 194, 225, 62));
 	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), nvgRGBA(150, 94, 230, 58));
 	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), nvgRGBA(185, 218, 240, 44));
-	drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), nvgRGBA(18, 176, 196, 48), nvgRGBA(132, 76, 226, 68));
-	drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(124, 246, 255, 38), nvgRGBA(204, 156, 255, 48));
+	if (bloom > 0.001f) {
+		drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(nvgRGBA(18, 176, 196, 48)), bloomColor(nvgRGBA(132, 76, 226, 68)));
+		drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(nvgRGBA(124, 246, 255, 38)), bloomColor(nvgRGBA(204, 156, 255, 48)));
+	}
 	drawGuideArc(dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
 
 	drawSegmentedValueArc();
@@ -2044,6 +2057,13 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
+	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+	if (bloom <= 0.001f) return;
+
+	auto bloomColor = [&](NVGcolor color) {
+		color.a *= bloom;
+		return color;
+	};
 
 	auto strokeArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
 		if (a1 <= a0) return;
@@ -2068,11 +2088,10 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	auto strokeSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
 		const int segmentCount = 16;
 		const float total = endAngle - startAngle;
-		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(segmentCount);
 		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i) + 0.5f * gap;
-			const float s1 = startAngle + step * float(i + 1) - 0.5f * gap;
+			const float s0 = startAngle + step * float(i);
+			const float s1 = startAngle + step * float(i + 1);
 			NVGcolor color = purple;
 			if (activeAngle >= s1) {
 				color = cyan;
@@ -2087,8 +2106,8 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 
-	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), nvgRGBA(58, 210, 230, 68), nvgRGBA(168, 106, 255, 82));
-	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), nvgRGBA(192, 255, 255, 44), nvgRGBA(222, 188, 255, 54));
+	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), bloomColor(nvgRGBA(58, 210, 230, 68)), bloomColor(nvgRGBA(168, 106, 255, 82)));
+	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), bloomColor(nvgRGBA(192, 255, 255, 44)), bloomColor(nvgRGBA(222, 188, 255, 54)));
 
 	nvgRestore(args.vg);
 }
@@ -2263,6 +2282,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	lastBloomAmount = settings::haloBrightness;
 
 	shadowLayer = new EclipseKnob::ShadowWidget();
 	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobShadow.svg"));
@@ -2319,6 +2339,17 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	capReflection->valueNorm = normalizedParamValue();
 	fb->addChild(capReflection);
 
+}
+
+void LeviathanHaloKnob2::step() {
+	app::SvgKnob::step();
+	const float bloomAmount = settings::haloBrightness;
+	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastBloomAmount = bloomAmount;
+		if (fb) {
+			fb->setDirty();
+		}
+	}
 }
 
 void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {

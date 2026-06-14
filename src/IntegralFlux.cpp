@@ -1714,6 +1714,16 @@ struct IntegralFluxGearKnob : LeviathanHaloKnob {
 	}
 };
 
+struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		LeviathanHaloKnob2::draw(args);
+		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
 // Deprecated old EclipseKnob wrapper, replaced by Eclipse2Knob
 
 struct IntegralFluxEclipse2Knob : Eclipse2Knob {
@@ -1750,7 +1760,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		setPanel(createPanel(panelPath));
 		previewBuildTimer.markPanelDone();
 
-        // use LeviathanHaloKnob for the rise/fall/shape knobs
+        // use LeviathanHaloKnob2 for surge/sink and LeviathanHaloKnob for shape knobs
         // use LargeLight<RedLight> for the cycle and EOR LEDs
         // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons
@@ -1864,10 +1874,10 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
-        addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
+        addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
+		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
+		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
+		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
 		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<IntegralFluxGearKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		{

@@ -311,8 +311,10 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;
 	CapReflectionWidget* capReflection = nullptr;
+	float lastBloomAmount = -1.f;
 
 	LeviathanHaloKnob2();
+	void step() override;
 	void onChange(const ChangeEvent& e) override;
 
 	float normalizedParamValue();
