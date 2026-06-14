@@ -774,8 +774,8 @@ struct BifurxWidget final : ModuleWidget {
 		try { setPanel(createPanel(panelPath)); }
 		catch (const std::exception& e) { setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg"))); box.size = mm2px(Vec(kDefaultPanelWidthMm, kDefaultPanelHeightMm)); }
 		previewBuildTimer.markPanelDone();
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
 		math::Rect sRect(Vec(1.32f, 75.43f), Vec(68.45f, 21.41f)); panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &sRect);
 		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new widget::FramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
@@ -818,8 +818,8 @@ struct BifurxWidget final : ModuleWidget {
 			balanceKnob->setProgressRingBipolar(true);
 			addParam(balanceKnob);
 		}
-		addParam(createParamCentered<Eclipse2Knob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
-		addParam(createLightParamCentered<VCVLightSlider<GreenRedLight>>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<LeviathanSlider>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
+		addParam(createLightParamCentered<LeviathanSlider>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), module, Bifurx::TITO_XM_LIGHT));
 		addInput(createInputCentered<MagitekInputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<MagitekInputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));

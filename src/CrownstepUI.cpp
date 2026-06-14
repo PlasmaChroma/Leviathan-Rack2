@@ -1,6 +1,7 @@
 #include "CrownstepShared.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "VisualAssets.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -3877,10 +3878,10 @@ struct CrownstepWidget final : ModuleWidget {
 		}
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-			addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-			addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+			addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+			addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 			math::Rect boardRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {

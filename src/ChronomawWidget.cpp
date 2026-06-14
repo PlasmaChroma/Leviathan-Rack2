@@ -1542,10 +1542,10 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	setPanel(createPanel(panelPath));
 	previewBuildTimer.markPanelDone();
 
-	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-	addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0)));
-	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-	addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+	addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
+	addChild(createWidget<TorxScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0)));
+	addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+	addChild(createWidget<TorxScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 	Vec runPos(27.0f, 16.0f);
 	Vec bpmPos(47.0f, 16.0f);

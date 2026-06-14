@@ -411,6 +411,53 @@ static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 
 } // namespace
 
+TorxScrew::TorxScrew() {
+	box.size = Vec(RACK_GRID_WIDTH, RACK_GRID_WIDTH);
+	fb = new widget::FramebufferWidget();
+	fb->dirtyOnSubpixelChange = false;
+	sw = new widget::SvgWidget();
+	sw->setSvg(visual_assets::loadPluginSvgCached("res/icon/torx.svg"));
+	fb->box.size = sw->box.size;
+	fb->addChild(sw);
+	addChild(fb);
+}
+
+void TorxScrew::draw(const DrawArgs& args) {
+	if (!sw || sw->box.size.x <= 1.f || sw->box.size.y <= 1.f) return;
+	const float scale = std::min(box.size.x / sw->box.size.x, box.size.y / sw->box.size.y);
+	const Vec center = box.size.mult(0.5f);
+	const Vec svgCenter = sw->box.size.mult(0.5f);
+
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, center.x, center.y);
+	nvgScale(args.vg, scale, scale);
+	nvgTranslate(args.vg, -svgCenter.x, -svgCenter.y);
+	Widget::draw(args);
+	nvgRestore(args.vg);
+}
+
+LeviathanSlider::LeviathanSlider() {
+	constexpr float anchorWidthPx = 11.33858f;
+	constexpr float anchorHeightPx = 98.26772f;
+	constexpr float handleTravelInsetPx = 17.5f;
+
+	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
+	box.size = Vec(anchorWidthPx, anchorHeightPx);
+	if (fb) {
+		fb->box.size = box.size;
+	}
+	if (background) {
+		background->box.pos = Vec(
+			0.5f * (anchorWidthPx - background->box.size.x),
+			0.5f * (anchorHeightPx - background->box.size.y)
+		);
+	}
+	setHandlePosCentered(
+		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
+		math::Vec(anchorWidthPx * 0.5f, handleTravelInsetPx)
+	);
+}
+
 MagitekInputJack::MagitekInputJack() {
 	constexpr float rotationRad = float(M_PI) / 4.f;
 	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_input.svg")));

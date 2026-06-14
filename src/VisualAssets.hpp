@@ -19,6 +19,27 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
+struct TorxScrew : TransparentWidget {
+	widget::FramebufferWidget* fb = nullptr;
+	widget::SvgWidget* sw = nullptr;
+
+	TorxScrew();
+	void draw(const DrawArgs& args) override;
+};
+
+template <typename TBase = GrayModuleLightWidget>
+struct TLeviathanCyanPurpleLight : TBase {
+	TLeviathanCyanPurpleLight() {
+		this->addBaseColor(nvgRGB(0x00, 0xc6, 0xe4));
+		this->addBaseColor(nvgRGB(0xa8, 0x62, 0xff));
+	}
+};
+using LeviathanCyanPurpleLight = TLeviathanCyanPurpleLight<>;
+
+struct LeviathanSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
+	LeviathanSlider();
+};
+
 namespace levi_jack {
 
 NVGcolor input();

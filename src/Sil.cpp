@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
+#include "VisualAssets.hpp"
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
 #include <vector>
@@ -2521,10 +2522,10 @@ struct SilWidget : ModuleWidget {
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/sil.svg")));
 		previewBuildTimer.markPanelDone();
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		math::Rect histRect;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "HISTOGRAM", &histRect)) {

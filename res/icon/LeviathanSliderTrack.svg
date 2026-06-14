@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="8"
+   height="80"
+   viewBox="0 0 7.9999999 79.999997"
+   version="1.1"
+   id="svg13"
+   sodipodi:docname="LeviathanSliderTrack.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview13"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="95.657045"
+     inkscape:cx="4.9029321"
+     inkscape:cy="77.709906"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg13" />
+  <defs
+     id="defs6">
+    <linearGradient
+       id="slotFill"
+       x1="2.2"
+       y1="1.8"
+       x2="9.1000004"
+       y2="96.400002"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.75459268,0,0,0.83944738,-0.20486569,-1.1510652)">
+      <stop
+         offset="0"
+         stop-color="#070a11"
+         id="stop1" />
+      <stop
+         offset="0.48"
+         stop-color="#010206"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#000001"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="railFill"
+       x1="4"
+       y1="5.6999998"
+       x2="7.4000001"
+       y2="92.599998"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.69925365,0,0,0.81410254,0.03572818,0.05766324)">
+      <stop
+         offset="0"
+         stop-color="#070612"
+         id="stop4" />
+      <stop
+         offset="0.45"
+         stop-color="#010104"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#090612"
+         id="stop6" />
+    </linearGradient>
+  </defs>
+  <rect
+     x="0.035728216"
+     y="0.057663467"
+     width="7.9285436"
+     height="80"
+     fill="none"
+     id="rect6"
+     style="stroke-width:0.754496" />
+  <rect
+     x="0.57406592"
+     y="0.057663467"
+     width="6.9232178"
+     height="80"
+     rx="3.4616089"
+     ry="1.1521817"
+     fill="#020309"
+     stroke="none"
+     id="rect7"
+     style="display:inline;stroke-width:0.70504" />
+  <rect
+     x="1.1986767"
+     y="0.73769081"
+     width="5.7499962"
+     height="78.714973"
+     rx="2.7316251"
+     ry="0.6890859"
+     fill="url(#slotFill)"
+     stroke="#111625"
+     stroke-width="0.334276"
+     stroke-opacity="0.46"
+     id="rect9"
+     style="fill:url(#slotFill);stroke:#212b48;stroke-opacity:0.46" />
+  <rect
+     x="2.4691308"
+     y="4.4131117"
+     width="3.062731"
+     height="71.282814"
+     rx="1.3915148"
+     ry="1.620064"
+     fill="url(#railFill)"
+     stroke="#05050d"
+     stroke-width="0.467787"
+     stroke-opacity="0.9"
+     id="rect10"
+     style="fill:url(#railFill)" />
+  <path
+     d="M 2.9166532,5.5528559 V 74.58875"
+     fill="none"
+     stroke="#080615"
+     stroke-width="0.437609"
+     stroke-linecap="round"
+     opacity="0.82"
+     id="path10" />
+  <path
+     d="M 5.1053171,5.8377918 V 74.222404"
+     fill="none"
+     stroke="#24163f"
+     stroke-width="0.331978"
+     stroke-linecap="round"
+     opacity="0.34"
+     id="path11" />
+  <path
+     d="M 1.7558922,3.6804205 V 76.5833"
+     fill="none"
+     stroke="#252f43"
+     stroke-width="0.25653"
+     stroke-linecap="round"
+     opacity="0.28"
+     id="path12" />
+  <path
+     d="M 6.3010409,4.0467668 V 76.216955"
+     fill="none"
+     stroke="#000000"
+     stroke-width="0.331978"
+     stroke-linecap="round"
+     opacity="0.72"
+     id="path13"
+     style="display:inline;opacity:0.718" />
+</svg>

@@ -22,8 +22,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="12.771739"
-     inkscape:cx="30.614468"
-     inkscape:cy="35.508084"
+     inkscape:cx="12.605958"
+     inkscape:cy="29.08766"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -252,16 +252,16 @@
        id="path27"
        style="opacity:0.725;fill:none;stroke-width:2.15428707;stroke-dasharray:none" />
     <path
-       d="M 23,22.685301 V 8.1639453"
+       d="M 23,21.74965 V 7.6704959"
        stroke="#fff2bd"
        stroke-width="0.28"
        opacity="0.88"
        id="path29"
-       style="fill:none;stroke-width:1.85524;stroke-dasharray:none" />
+       style="fill:none;stroke-width:1.82677;stroke-dasharray:none" />
   </g>
   <g
      id="central_pin"
-     style="display:inline"
+     style="display:none"
      transform="matrix(0.90825685,0,0,0.90825685,2.1100925,-0.21559501)">
     <circle
        cx="23"
