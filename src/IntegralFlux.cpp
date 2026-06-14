@@ -1726,6 +1726,36 @@ struct IntegralFluxEclipse2Knob : Eclipse2Knob {
 	}
 };
 
+struct IntegralFluxTorxScrew : TransparentWidget {
+	widget::FramebufferWidget* fb = nullptr;
+	widget::SvgWidget* sw = nullptr;
+
+	IntegralFluxTorxScrew() {
+		box.size = Vec(RACK_GRID_WIDTH, RACK_GRID_WIDTH);
+		fb = new widget::FramebufferWidget();
+		fb->dirtyOnSubpixelChange = false;
+		sw = new widget::SvgWidget();
+		sw->setSvg(visual_assets::loadPluginSvgCached("res/icon/torx.svg"));
+		fb->box.size = sw->box.size;
+		fb->addChild(sw);
+		addChild(fb);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!sw || sw->box.size.x <= 1.f || sw->box.size.y <= 1.f) return;
+		const float scale = std::min(box.size.x / sw->box.size.x, box.size.y / sw->box.size.y);
+		const Vec center = box.size.mult(0.5f);
+		const Vec svgCenter = sw->box.size.mult(0.5f);
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgScale(args.vg, scale, scale);
+		nvgTranslate(args.vg, -svgCenter.x, -svgCenter.y);
+		Widget::draw(args);
+		nvgRestore(args.vg);
+	}
+};
+
 
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
@@ -1756,10 +1786,10 @@ struct IntegralFluxWidget : ModuleWidget {
         // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<IntegralFluxTorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<IntegralFluxTorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<IntegralFluxTorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<IntegralFluxTorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		Vec cycle1ButtonPos(31.875f, 20.938f);
 		Vec cycle4ButtonPos(69.552f, 20.938f);

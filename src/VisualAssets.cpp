@@ -499,8 +499,10 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 	const float ringOuter = s * 0.352f;
 	const float ringInner = s * 0.282f;
 	const float ringMid = 0.5f * (ringOuter + ringInner);
-	const float socketOuter = s * 0.247f;
-	const float socketInner = s * 0.19f;
+	const float socketOuter = s * 0.286f;
+	const float socketInner = s * 0.224f;
+	const float socketCore = s * 0.182f;
+	const float socketMid = 0.5f * (socketInner + socketCore);
 
 	NVGpaint glow = nvgRadialGradient(
 		args.vg,
@@ -553,7 +555,7 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 		center.y - s * 0.055f,
 		s * 0.025f,
 		socketOuter,
-		nvgRGBA(30, 35, 45, 255),
+		nvgRGBA(58, 62, 74, 255),
 		nvgRGBA(0, 1, 4, 255)
 	);
 	nvgBeginPath(args.vg);
@@ -562,14 +564,88 @@ void DynamicRingJack::drawRingLayer(const DrawArgs& args) {
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketOuter - s * 0.006f);
+	nvgStrokeWidth(args.vg, std::max(0.68f, s * 0.023f));
+	nvgStrokeColor(args.vg, nvgRGBA(204, 210, 236, 148));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketInner + s * 0.018f);
+	nvgStrokeWidth(args.vg, std::max(0.74f, s * 0.025f));
+	nvgStrokeColor(args.vg, nvgRGBA(82, 90, 116, 150));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketInner + s * 0.004f);
+	nvgStrokeWidth(args.vg, std::max(0.42f, s * 0.014f));
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 140));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, socketInner);
+	nvgFillColor(args.vg, nvgRGBA(1, 2, 6, 255));
+	nvgFill(args.vg);
+
+	NVGpaint socketDepth = nvgRadialGradient(
+		args.vg,
+		center.x - s * 0.024f,
+		center.y - s * 0.030f,
+		s * 0.016f,
+		socketInner,
+		nvgRGBA(24, 26, 36, 255),
+		nvgRGBA(0, 0, 0, 255)
+	);
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketInner);
+	nvgFillPaint(args.vg, socketDepth);
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketInner);
+	nvgCircle(args.vg, center.x, center.y, socketCore);
+	nvgPathWinding(args.vg, NVG_HOLE);
+	nvgFillColor(args.vg, nvgRGBA(22, 25, 34, 184));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketMid);
+	nvgStrokeWidth(args.vg, std::max(0.88f, s * 0.030f));
+	nvgStrokeColor(args.vg, nvgRGBA(50, 56, 76, 156));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketCore);
 	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, socketOuter - s * 0.024f, -0.82f * M_PI, -0.30f * M_PI, NVG_CW);
-	nvgStrokeWidth(args.vg, std::max(0.42f, s * 0.014f));
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 36));
+	nvgCircle(args.vg, center.x, center.y, socketCore + s * 0.006f);
+	nvgStrokeWidth(args.vg, std::max(0.44f, s * 0.015f));
+	nvgStrokeColor(args.vg, nvgRGBA(2, 3, 9, 172));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, center.x, center.y, socketCore + s * 0.021f);
+	nvgStrokeWidth(args.vg, std::max(0.34f, s * 0.012f));
+	nvgStrokeColor(args.vg, nvgRGBA(64, 72, 98, 146));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, socketOuter - s * 0.020f, -0.86f * M_PI, -0.24f * M_PI, NVG_CW);
+	nvgStrokeWidth(args.vg, std::max(0.68f, s * 0.023f));
+	nvgStrokeColor(args.vg, nvgRGBA(212, 218, 244, 104));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, socketInner + s * 0.010f, 0.22f * M_PI, 0.76f * M_PI, NVG_CW);
+	nvgStrokeWidth(args.vg, std::max(0.62f, s * 0.021f));
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 236));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, center.x, center.y, socketCore + s * 0.018f, -0.78f * M_PI, -0.38f * M_PI, NVG_CW);
+	nvgStrokeWidth(args.vg, std::max(0.44f, s * 0.015f));
+	nvgStrokeColor(args.vg, nvgRGBA(148, 158, 194, 122));
 	nvgStroke(args.vg);
 }
 
