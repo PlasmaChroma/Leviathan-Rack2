@@ -253,9 +253,17 @@ struct IntegralFlux : Module {
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
 	}
 
+	static float fastTanh(float x) {
+		const float x2 = x * x;
+		if (x2 < 9.f) {
+			return x * (27.f + x2) / (27.f + 9.f * x2);
+		}
+		return (x > 0.f) ? 1.f : -1.f;
+	}
+
 	static float softClamp8(float v) {
 		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * std::tanh(v / 8.0f);
+		return 8.0f * fastTanh(v / 8.0f);
 	}
 
 	float injectAlphaBaseForSampleTime(float sampleTime) {
