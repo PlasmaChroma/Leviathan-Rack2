@@ -263,10 +263,10 @@ struct UndertowWidget final : ModuleWidget {
     previewBuildTimer.markPanelDone();
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 
-    auto addLargeKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
+    auto addFrequencyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<BigClockworkGearKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(posMm), module, paramId));
     };
     auto addFineKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
@@ -325,7 +325,7 @@ struct UndertowWidget final : ModuleWidget {
     addOutputPort(Undertow::SINE_OUTPUT, "SINE_OUTPUT", Vec(7.800f, 112.800f));
 
     // Main controls: coarse/fine frequency, morph amount, and lin FM amount.
-    addLargeKnob(Undertow::COARSE_PARAM, "COARSE_PARAM", Vec(8.600f, 21.000f));
+    addFrequencyKnob(Undertow::COARSE_PARAM, "COARSE_PARAM", Vec(8.600f, 21.000f));
     addFineKnob(Undertow::FINE_PARAM, "FINE_PARAM", Vec(30.167f, 21.000f));
     addSmallKnob(Undertow::LIN_FM_PARAM, "LIN_FM_PARAM", Vec(8.600f, 76.200f));
     addSmallKnob(Undertow::SHAPE_PARAM, "SHAPE_PARAM", Vec(30.167f, 76.200f));
