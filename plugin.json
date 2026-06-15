@@ -107,7 +107,7 @@
         "Sequencer",
         "Random"
       ],
-      "hidden": false
+      "hidden": true
     },
     {
       "slug": "Bulkhead",
@@ -116,7 +116,7 @@
       "tags": [
         "Reverb"
       ],
-      "hidden": false
+      "hidden": true
     },
     {
       "slug": "Undertow",

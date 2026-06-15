@@ -358,21 +358,21 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
-		addInput(createInputCentered<MagitekInputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
-		addInput(createInputCentered<MagitekInputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
-		addInput(createInputCentered<MagitekInputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
 		));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
 		));
-		addInput(createInputCentered<MagitekInputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
-		addInput(createInputCentered<MagitekInputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
-		addInput(createInputCentered<MagitekInputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
 
-		addOutput(createOutputCentered<MagitekOutputJack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
-		addOutput(createOutputCentered<MagitekOutputJack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
 	}
 
 	void step() override {
