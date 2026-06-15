@@ -19,6 +19,14 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
+struct Magitek2InputJack : app::SvgPort {
+	Magitek2InputJack();
+};
+
+struct Magitek2OutputJack : app::SvgPort {
+	Magitek2OutputJack();
+};
+
 struct TorxScrew : TransparentWidget {
 	widget::FramebufferWidget* fb = nullptr;
 	widget::SvgWidget* sw = nullptr;

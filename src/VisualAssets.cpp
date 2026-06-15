@@ -472,6 +472,18 @@ MagitekOutputJack::MagitekOutputJack() {
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
+Magitek2InputJack::Magitek2InputJack() {
+	setSvg(visual_assets::loadPluginSvgCached("res/icon/magitek2_input.svg"));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+	installMagitekShadow(this, new MagitekInputShadow);
+}
+
+Magitek2OutputJack::Magitek2OutputJack() {
+	setSvg(visual_assets::loadPluginSvgCached("res/icon/magitek2_output.svg"));
+	setSvgPortSizePx(this, kMagitekPortSizePx);
+	installMagitekShadow(this, new MagitekInputShadow);
+}
+
 DynamicRingJack::DynamicRingJack()
 : DynamicRingJack(INPUT_CORE) {
 }
