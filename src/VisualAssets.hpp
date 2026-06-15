@@ -19,11 +19,11 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
-struct Magitek2InputJack : app::SvgPort {
+struct Magitek2InputJack : app::PortWidget {
 	Magitek2InputJack();
 };
 
-struct Magitek2OutputJack : app::SvgPort {
+struct Magitek2OutputJack : app::PortWidget {
 	Magitek2OutputJack();
 };
 

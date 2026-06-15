@@ -1,4 +1,5 @@
 #include "VisualAssets.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -7,6 +8,8 @@
 #include <iomanip>
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace visual_assets {
 
@@ -201,6 +204,82 @@ struct MagitekOutputShadow : TransparentWidget {
 	}
 };
 
+struct MagitekRasterImage : TransparentWidget {
+	std::string path;
+
+	explicit MagitekRasterImage(std::string path)
+		: path(std::move(path)) {
+	}
+
+	int loadMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecycleImage, const std::string& fullPath) {
+		struct Entry {
+			NVGcontext* vg = nullptr;
+			int handle = -1;
+			int lifecycleHandle = -1;
+			std::weak_ptr<window::Image> lifecycleImage;
+		};
+		struct Cache {
+			std::unordered_map<std::string, Entry> entries;
+			NVGcontext* activeVg = nullptr;
+			unsigned long long useCounter = 0ull;
+		};
+		static Cache cache;
+
+		if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
+			return -1;
+		}
+		if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
+			cache.entries.clear();
+		}
+
+		auto it = cache.entries.find(fullPath);
+		if (it != cache.entries.end()) {
+			std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
+			if (it->second.vg == vg && it->second.handle >= 0 &&
+				it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
+				return it->second.handle;
+			}
+			if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
+				nvgDeleteImage(vg, it->second.handle);
+			}
+			cache.entries.erase(it);
+		}
+
+		int handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+		if (handle < 0) {
+			return -1;
+		}
+
+		Entry entry;
+		entry.vg = vg;
+		entry.handle = handle;
+		entry.lifecycleHandle = lifecycleImage->handle;
+		entry.lifecycleImage = lifecycleImage;
+		cache.entries[fullPath] = entry;
+		return handle;
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (path.empty()) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(pluginInstance, path);
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int imageHandle = loadMipmapHandle(args.vg, image, fullPath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+};
+
 struct GoldButtonShadow : TransparentWidget {
 	float pressAmount = 0.f;
 
@@ -313,6 +392,31 @@ void installMagitekShadow(app::SvgPort* port, Widget* customShadow) {
 	else {
 		port->addChildBottom(shadowFb);
 	}
+}
+
+void installMagitekRasterPort(app::PortWidget* port, const char* imagePath) {
+	if (!port) {
+		return;
+	}
+	port->box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
+
+	widget::FramebufferWidget* shadowFb = new widget::FramebufferWidget();
+	shadowFb->dirtyOnSubpixelChange = false;
+	const Vec bleed(8.f, 8.f);
+	shadowFb->box.pos = bleed.mult(-0.5f);
+	shadowFb->box.size = port->box.size.plus(bleed);
+	MagitekInputShadow* shadow = new MagitekInputShadow;
+	shadow->box.size = shadowFb->box.size;
+	shadowFb->addChild(shadow);
+	port->addChild(shadowFb);
+
+	widget::FramebufferWidget* imageFb = new widget::FramebufferWidget();
+	imageFb->dirtyOnSubpixelChange = false;
+	imageFb->box.size = port->box.size;
+	MagitekRasterImage* image = new MagitekRasterImage(imagePath ? imagePath : "");
+	image->box.size = port->box.size;
+	imageFb->addChild(image);
+	port->addChild(imageFb);
 }
 
 struct ClockworkDragDebugRecorder {
@@ -473,15 +577,11 @@ MagitekOutputJack::MagitekOutputJack() {
 }
 
 Magitek2InputJack::Magitek2InputJack() {
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/magitek2_input.svg"));
-	setSvgPortSizePx(this, kMagitekPortSizePx);
-	installMagitekShadow(this, new MagitekInputShadow);
+	installMagitekRasterPort(this, "res/icon/magitek2_input_softalpha_256.png");
 }
 
 Magitek2OutputJack::Magitek2OutputJack() {
-	setSvg(visual_assets::loadPluginSvgCached("res/icon/magitek2_output.svg"));
-	setSvgPortSizePx(this, kMagitekPortSizePx);
-	installMagitekShadow(this, new MagitekInputShadow);
+	installMagitekRasterPort(this, "res/icon/magitek2_output_softalpha_256.png");
 }
 
 DynamicRingJack::DynamicRingJack()
