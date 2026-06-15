@@ -245,6 +245,8 @@ struct IntegralFlux : Module {
 	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
+	float cachedInjectSampleTime = -1.f;
+	float cachedInjectAlphaBase = 0.f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
@@ -254,6 +256,14 @@ struct IntegralFlux : Module {
 	static float softClamp8(float v) {
 		// Smoothly approaches +/-8V while staying linear near zero.
 		return 8.0f * std::tanh(v / 8.0f);
+	}
+
+	float injectAlphaBaseForSampleTime(float sampleTime) {
+		if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
+			cachedInjectSampleTime = sampleTime;
+			cachedInjectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
+		}
+		return cachedInjectAlphaBase;
 	}
 
 	static float bothHzFromCv(float v) {
@@ -1060,7 +1070,7 @@ struct IntegralFlux : Module {
 		const bool bandlimitedSignalEnabled = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
 		const bool bandlimitedGateEnabled = bandlimitedGateOutputs.load(std::memory_order_relaxed);
 		const bool timingInterpolateEnabled = timingInterpolate.load(std::memory_order_relaxed);
-		const float injectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-args.sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
+		const float injectAlphaBase = injectAlphaBaseForSampleTime(args.sampleTime);
 		applyRequestedTimingUpdateDiv();
 		// Static config structs remove repeated branching and keep CH1/CH4 path unified.
 		static const OuterChannelConfig ch1Cfg {
@@ -1260,8 +1270,12 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
-	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
-	uint32_t lastVersion = 0;
+		WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+		std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
+		std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
+		float cachedLutCurveSigned = 0.f;
+		bool cachedLutsValid = false;
+		uint32_t lastVersion = 0;
 	bool pointsValid = false;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
@@ -1303,7 +1317,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return Vec(-tangent.y * invLen, tangent.x * invLen);
 	}
 
-	static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
+		static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
 		stride = std::max(stride, 1);
 		const float halfWidth = 0.5f * lineWidth;
 		glColorFromNvg(color);
@@ -1322,10 +1336,22 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			glVertex2f(linePoints[i].x + n.x * halfWidth, linePoints[i].y + n.y * halfWidth);
 			glVertex2f(linePoints[i].x - n.x * halfWidth, linePoints[i].y - n.y * halfWidth);
 		}
-		glEnd();
-	}
+			glEnd();
+		}
 
-	void drawGlDot() {
+		static const std::array<Vec, 25>& glDotUnitCircle() {
+			static const std::array<Vec, 25> unit = []() {
+				std::array<Vec, 25> points {};
+				for (int i = 0; i <= 24; ++i) {
+					const float a = 6.28318530718f * float(i) / 24.f;
+					points[size_t(i)] = Vec(std::cos(a), std::sin(a));
+				}
+				return points;
+			}();
+			return unit;
+		}
+
+		void drawGlDot() {
 		if (!pointsValid || !dotVisible) {
 			return;
 		}
@@ -1356,23 +1382,22 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			y = points[i0].y + (points[i1].y - points[i0].y) * t;
 		}
 		y = y * 0.9f + targetY * 0.1f;
-		glColor4f(0.f, 0.f, 0.f, 0.86f);
-		glBegin(GL_TRIANGLE_FAN);
-		glVertex2f(x, y);
-		for (int i = 0; i <= 24; ++i) {
-			float a = 6.28318530718f * float(i) / 24.f;
-			glVertex2f(x + std::cos(a) * (DOT_RADIUS + 0.55f), y + std::sin(a) * (DOT_RADIUS + 0.55f));
+			glColor4f(0.f, 0.f, 0.f, 0.86f);
+			glBegin(GL_TRIANGLE_FAN);
+			glVertex2f(x, y);
+			const std::array<Vec, 25>& unitCircle = glDotUnitCircle();
+			for (const Vec& p : unitCircle) {
+				glVertex2f(x + p.x * (DOT_RADIUS + 0.55f), y + p.y * (DOT_RADIUS + 0.55f));
+			}
+			glEnd();
+			glColor4f(1.f, 0.91f, 0.28f, 1.f);
+			glBegin(GL_TRIANGLE_FAN);
+			glVertex2f(x, y);
+			for (const Vec& p : unitCircle) {
+				glVertex2f(x + p.x * DOT_RADIUS, y + p.y * DOT_RADIUS);
+			}
+			glEnd();
 		}
-		glEnd();
-		glColor4f(1.f, 0.91f, 0.28f, 1.f);
-		glBegin(GL_TRIANGLE_FAN);
-		glVertex2f(x, y);
-		for (int i = 0; i <= 24; ++i) {
-			float a = 6.28318530718f * float(i) / 24.f;
-			glVertex2f(x + std::cos(a) * DOT_RADIUS, y + std::sin(a) * DOT_RADIUS);
-		}
-		glEnd();
-	}
 
 	void drawFramebuffer() override {
 		math::Vec fbSize = getFramebufferSize();
@@ -1465,7 +1490,17 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return lut[i0] + (lut[i1] - lut[i0]) * f;
 	}
 
-	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
+		void ensureSegmentLuts(float curveSigned) {
+			if (cachedLutsValid && std::fabs(curveSigned - cachedLutCurveSigned) <= 1e-6f) {
+				return;
+			}
+			buildSegmentLut(cachedRiseLut, curveSigned, true);
+			buildSegmentLut(cachedFallLut, curveSigned, false);
+			cachedLutCurveSigned = curveSigned;
+			cachedLutsValid = true;
+		}
+
+		void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
 		float h = std::max(box.size.y, 1.f);
 		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
@@ -1483,10 +1518,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		float fallWidth = std::max(right - peakX, 1e-4f);
 		// Reserved hook if we later render interactive-state emphasis.
 		(void) interactiveRecent;
-		std::array<float, PREVIEW_LUT_SIZE> riseLut {};
-		std::array<float, PREVIEW_LUT_SIZE> fallLut {};
-		buildSegmentLut(riseLut, curveSigned, true);
-		buildSegmentLut(fallLut, curveSigned, false);
+			ensureSegmentLuts(curveSigned);
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
@@ -1494,12 +1526,12 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			float y = -1.f;
 			if (x <= peakX) {
 				float t = (x - left) / riseWidth;
-				float v = sampleSegmentLut(riseLut, t);
+					float v = sampleSegmentLut(cachedRiseLut, t);
 				y = -1.f + 2.f * v;
 			}
 			else {
 				float t = (x - peakX) / fallWidth;
-				float v = sampleSegmentLut(fallLut, t);
+					float v = sampleSegmentLut(cachedFallLut, t);
 				y = -1.f + 2.f * v;
 			}
 			float py = top + (0.5f - 0.5f * y) * drawH;
@@ -1704,15 +1736,62 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
-struct IntegralFluxGearKnob : BigClockworkGearKnob {
+static math::Rect rectMm2px(math::Rect rect) {
+	rect.pos = mm2px(rect.pos);
+	rect.size = mm2px(rect.size);
+	return rect;
+}
+
+struct PreviewRecessFrameWidget : TransparentWidget {
 	void draw(const DrawArgs& args) override {
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
-		BigClockworkGearKnob::draw(args);
-		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
+		const float w = box.size.x;
+		const float h = box.size.y;
+		if (w <= 2.f || h <= 2.f) return;
+
+		nvgSave(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, w, h);
+		NVGpaint wellPaint = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, h, nvgRGB(1, 2, 5), nvgRGB(5, 8, 12));
+		nvgFillPaint(args.vg, wellPaint);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.7f, 0.7f, w - 1.4f, h - 1.4f);
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(28, 202, 216, 115));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 1.4f, h - 1.2f);
+		nvgLineTo(args.vg, w - 1.2f, h - 1.2f);
+		nvgLineTo(args.vg, w - 1.2f, 1.4f);
+		nvgStrokeWidth(args.vg, 1.2f);
+		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 54));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 1.4f, h - 1.4f);
+		nvgLineTo(args.vg, 1.4f, 1.4f);
+		nvgLineTo(args.vg, w - 1.4f, 1.4f);
+		nvgStrokeWidth(args.vg, 1.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 155));
+		nvgStroke(args.vg);
+
+		nvgRestore(args.vg);
 	}
 };
+
+static void addCachedPreviewRecessFrame(ModuleWidget* parent, math::Rect frameRectPx) {
+	if (!parent || frameRectPx.size.x <= 1.f || frameRectPx.size.y <= 1.f) return;
+	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
+	fb->dirtyOnSubpixelChange = false;
+	fb->box = frameRectPx;
+	PreviewRecessFrameWidget* frame = new PreviewRecessFrameWidget();
+	frame->box.size = frameRectPx.size;
+	fb->addChild(frame);
+	parent->addChild(fb);
+}
 
 struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	IntegralFluxHalo2Knob() = default;
@@ -1892,13 +1971,17 @@ struct IntegralFluxWidget : ModuleWidget {
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+				addCachedPreviewRecessFrame(this, rectMm2px(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch1Preview->box.pos = mm2px(previewRectMm.pos);
 				ch1Preview->box.size = mm2px(previewRectMm.size);
 			}
 			else {
-				ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-				ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+				math::Rect previewFallbackMm(Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
+				addCachedPreviewRecessFrame(this, rectMm2px(previewFallbackMm));
+				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
+				ch1Preview->box.pos = mm2px(previewFallbackMm.pos);
+				ch1Preview->box.size = mm2px(previewFallbackMm.size);
 			}
 			addChild(ch1Preview);
 		}
@@ -1906,13 +1989,17 @@ struct IntegralFluxWidget : ModuleWidget {
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
+				addCachedPreviewRecessFrame(this, rectMm2px(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch4Preview->box.pos = mm2px(previewRectMm.pos);
 				ch4Preview->box.size = mm2px(previewRectMm.size);
 			}
 			else {
-				ch4Preview->box.pos = mm2px(Vec(77.52500000f, 68.96600100f));
-				ch4Preview->box.size = mm2px(Vec(20.78393300f, 11.24562000f));
+				math::Rect previewFallbackMm(Vec(77.52500000f, 68.96600100f), Vec(20.78393300f, 11.24562000f));
+				addCachedPreviewRecessFrame(this, rectMm2px(previewFallbackMm));
+				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
+				ch4Preview->box.pos = mm2px(previewFallbackMm.pos);
+				ch4Preview->box.size = mm2px(previewFallbackMm.size);
 			}
 			addChild(ch4Preview);
 		}
@@ -1971,7 +2058,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		visual_assets::resetEclipseShadowDrawMetrics();
 		const PerfClock::time_point perfStart = PerfClock::now();
 		ModuleWidget::draw(args);
-		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
+		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
 		if (!flux) {
 			return;
 		}
@@ -2022,7 +2109,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		IntegralFlux* maths = dynamic_cast<IntegralFlux*>(module);
+		IntegralFlux* maths = static_cast<IntegralFlux*>(module);
 		assert(menu);
 
 		menu->addChild(new MenuSeparator());
