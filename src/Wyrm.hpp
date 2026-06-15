@@ -69,22 +69,6 @@ constexpr float kWyrmSlitherMaxOffset = 0.42f;
 constexpr float kWyrmRockClearance = 0.012f;
 constexpr float kWyrmRockValueScale = 0.5f;
 
-inline float clamp01(float x) {
-	return levi_math::clamp01(x);
-}
-
-inline float wrap01(float x) {
-	return levi_math::wrap01(x);
-}
-
-inline float wrap01Fast(float x) {
-	return levi_math::wrap01Fast(x);
-}
-
-inline float smoother01(float x) {
-	return levi_math::smoothstep01(x);
-}
-
 inline float hashUnit(uint32_t seed) {
 	seed ^= seed >> 16;
 	seed *= 0x7feb352du;
@@ -94,18 +78,10 @@ inline float hashUnit(uint32_t seed) {
 	return float(seed & 0x00ffffffu) / float(0x01000000u);
 }
 
-inline float fastTanh(float x) {
-	return levi_math::fastTanh(x);
-}
-
-inline float softClip(float x) {
-	return levi_math::softClip(x);
-}
-
 inline float wyrmBaseFrequencyFromKnob(float knobNorm, bool lfoMode) {
 	const float minFreq = lfoMode ? kWyrmLfoMinHz : kWyrmAudioMinHz;
 	const float maxFreq = lfoMode ? kWyrmLfoMaxHz : kWyrmAudioMaxHz;
-	return minFreq * std::pow(maxFreq / minFreq, clamp01(knobNorm));
+	return minFreq * std::pow(maxFreq / minFreq, levi_math::clamp01(knobNorm));
 }
 
 inline float wyrmKnobValueForFrequency(float hz, bool lfoMode) {
@@ -126,7 +102,7 @@ inline float foldWave(float x, float amount) {
 
 inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points, int pointCount, float phase) {
 	const int count = clamp(pointCount, 2, kWyrmPointCountMax);
-	const float p = wrap01(phase) * float(count);
+	const float p = levi_math::wrap01(phase) * float(count);
 	const int i1 = int(std::floor(p)) % count;
 	const int i0 = (i1 + count - 1) % count;
 	const int i2 = (i1 + 1) % count;
@@ -155,7 +131,7 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {
 	const float shapedAmount = amount * amount;
-	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (wrap01(phase) - wrap01(travelPhase)));
+	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (levi_math::wrap01(phase) - levi_math::wrap01(travelPhase)));
 }
 
 inline float slitherSpeedFactor(float speedKnob) {
@@ -168,7 +144,7 @@ inline float slitherSpeedFactor(float speedKnob) {
 		}
 		return t;
 	}();
-	const float k = clamp01(speedKnob) * float(lut.size() - 1u);
+	const float k = levi_math::clamp01(speedKnob) * float(lut.size() - 1u);
 	const int i0 = clamp(int(std::floor(k)), 0, int(lut.size() - 1u));
 	const int i1 = std::min(i0 + 1, int(lut.size() - 1u));
 	const float t = k - float(i0);

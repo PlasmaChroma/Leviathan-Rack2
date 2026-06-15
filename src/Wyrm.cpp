@@ -160,12 +160,12 @@ void Wyrm::setFactoryShape(int shapeId) {
 				static constexpr float phaseOffsets[] = {-0.032f, -0.016f, 0.f, 0.016f, 0.032f};
 				float baseSum = 0.f;
 				for (float offset : phaseOffsets) {
-					const float ph = wrap01(p + offset);
+					const float ph = levi_math::wrap01(p + offset);
 					baseSum += 2.f * ph - 1.f;
 				}
 				const float base = baseSum / float(sizeof(phaseOffsets) / sizeof(phaseOffsets[0]));
-				const float inner1 = 2.f * wrap01(p * 2.f + 0.13f) - 1.f;
-				const float inner2 = 2.f * wrap01(p * 3.f - 0.21f) - 1.f;
+				const float inner1 = 2.f * levi_math::wrap01(p * 2.f + 0.13f) - 1.f;
+				const float inner2 = 2.f * levi_math::wrap01(p * 3.f - 0.21f) - 1.f;
 				v = base + 0.22f * inner1 + 0.11f * inner2;
 				v = clamp(v * 1.05f, -1.f, 1.f);
 			} break;
@@ -248,7 +248,7 @@ float Wyrm::lookupWave(float ph, float phaseStep) const {
 }
 
 float Wyrm::rockDx(float ph, const WyrmRock& rock) const {
-	float dx = wrap01(ph) - wrap01(rock.phase);
+	float dx = levi_math::wrap01(ph) - levi_math::wrap01(rock.phase);
 	if (dx > 0.5f) {
 		dx -= 1.f;
 	}
@@ -322,7 +322,7 @@ void Wyrm::publishRockState() {
 		const WyrmRock& rock = next.rocks[i];
 		const float clearancePhase = kWyrmRockClearance * rock.radiusPhase / std::max(rock.radiusValue, 1e-4f);
 		const float rx = rock.radiusPhase + std::max(0.f, clearancePhase);
-		next.wrappedPhase[i] = wrap01(rock.phase);
+		next.wrappedPhase[i] = levi_math::wrap01(rock.phase);
 		next.defaultClearancePhase[i] = clearancePhase;
 		next.defaultRx[i] = rx;
 		next.defaultInvRx[i] = 1.f / std::max(rx, 1e-4f);
@@ -383,7 +383,7 @@ bool Wyrm::cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockI
 		cache.radiusValue == rock.radiusValue;
 	if (!cacheMatches) {
 		const float rx = state.defaultRx[rockIndex];
-		const float dxRaw = wrap01(ph) - state.wrappedPhase[rockIndex];
+		const float dxRaw = levi_math::wrap01(ph) - state.wrappedPhase[rockIndex];
 		float dx = dxRaw;
 		if (dx > 0.5f) dx -= 1.f;
 		else if (dx < -0.5f) dx += 1.f;
@@ -401,7 +401,7 @@ bool Wyrm::cachedRockBoundsAtPhase(const WyrmRockStateSnapshot& state, int rockI
 		return true;
 	}
 	const float rx = state.defaultRx[rockIndex];
-	float dx = wrap01(ph) - state.wrappedPhase[rockIndex];
+	float dx = levi_math::wrap01(ph) - state.wrappedPhase[rockIndex];
 	if (dx > 0.5f) dx -= 1.f;
 	else if (dx < -0.5f) dx += 1.f;
 	if (std::fabs(dx) >= rx) {
@@ -593,7 +593,7 @@ void Wyrm::sculptWaveAroundRock(int rockIndex, const WyrmRock* previousRock) {
 	for (int i = 0; i < pointCount; ++i) {
 		const int j = (i + 1) % pointCount;
 		for (float t : {0.25f, 0.5f, 0.75f}) {
-			const float ph = wrap01((float(i) + 0.5f + t) / float(pointCount));
+			const float ph = levi_math::wrap01((float(i) + 0.5f + t) / float(pointCount));
 			if (std::fabs(rockDx(ph, rock)) > rx + pointSpacing) {
 				continue;
 			}
@@ -768,7 +768,7 @@ float Wyrm::resolveAgainstRocks(const WyrmRockStateSnapshot& state, float anchor
 		return clamp(desiredY, -1.f, 1.f);
 	}
 	const bool useCachedDefault = (clearanceValue == kWyrmRockClearance && clearancePhase < 0.f);
-	const float phWrapped = wrap01(ph);
+	const float phWrapped = levi_math::wrap01(ph);
 	std::array<uint8_t, kWyrmMaxRocks> rockHasBounds {};
 	std::array<float, kWyrmMaxRocks> rockLower {};
 	std::array<float, kWyrmMaxRocks> rockUpper {};
@@ -948,7 +948,7 @@ void Wyrm::dataFromJson(json_t* root) {
 			json_t* radiusPhaseJ = json_object_get(rockJ, "radiusPhase");
 			json_t* radiusValueJ = json_object_get(rockJ, "radiusValue");
 			json_t* seedJ = json_object_get(rockJ, "seed");
-			if (phaseJ) rocks[i].phase = wrap01(float(json_number_value(phaseJ)));
+			if (phaseJ) rocks[i].phase = levi_math::wrap01(float(json_number_value(phaseJ)));
 			if (valueJ) rocks[i].value = clamp(float(json_number_value(valueJ)), -1.f, 1.f);
 			if (radiusPhaseJ) rocks[i].radiusPhase = clamp(float(json_number_value(radiusPhaseJ)), 0.02f, 0.09f);
 			if (radiusValueJ) rocks[i].radiusValue = clamp(float(json_number_value(radiusValueJ)), 0.06f, 0.24f);
@@ -982,7 +982,7 @@ void Wyrm::process(const ProcessArgs& args) {
 	outputs[OUT_OUTPUT].setChannels(channels);
 	outputs[RAW_OUTPUT].setChannels(channels);
 
-	const float knobNorm = clamp01(params[FREQ_PARAM].getValue());
+	const float knobNorm = levi_math::clamp01(params[FREQ_PARAM].getValue());
 	const bool lfoModeNow = params[LFO_MODE_PARAM].getValue() > 0.5f;
 	const bool softSyncModeNow = params[SYNC_MODE_PARAM].getValue() > 0.5f;
 	lfoMode.store(lfoModeNow, std::memory_order_relaxed);
@@ -992,8 +992,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
-	const float slitherAmountKnob = clamp01(params[SLITHER_PARAM].getValue());
-	const float slitherSpeedKnob = clamp01(params[SLITHER_SPEED_PARAM].getValue());
+	const float slitherAmountKnob = levi_math::clamp01(params[SLITHER_PARAM].getValue());
+	const float slitherSpeedKnob = levi_math::clamp01(params[SLITHER_SPEED_PARAM].getValue());
 	const WyrmRockStateSnapshot& activeRockStateNow = getActiveRockState();
 	const bool hasRocks = activeRockStateNow.rockCount > 0;
 	const bool voctPoly = inputs[VOCT_INPUT].getChannels() > 1;
@@ -1084,8 +1084,8 @@ void Wyrm::process(const ProcessArgs& args) {
 			}
 		}
 		if (canUsePlainFastPath) {
-			phase[c] = wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * fastPathPhaseStep) : fastPathPhaseStep));
-			slitherPhase[c] = wrap01Fast(slitherPhase[c] + fastPathSlitherStep);
+			phase[c] = levi_math::wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * fastPathPhaseStep) : fastPathPhaseStep));
+			slitherPhase[c] = levi_math::wrap01Fast(slitherPhase[c] + fastPathSlitherStep);
 			if (c == 0) {
 				displayFrequencyHz.store(fastPathDisplayHzNoFm, std::memory_order_relaxed);
 				displaySlitherAmount.store(monoSlitherAmount, std::memory_order_relaxed);
@@ -1111,10 +1111,10 @@ void Wyrm::process(const ProcessArgs& args) {
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
 		}
 		const float phaseStep = hz * args.sampleTime;
-		phase[c] = wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
+		phase[c] = levi_math::wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
 		const float slitherBaseHz = lfoModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
-		slitherPhase[c] = wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
+		slitherPhase[c] = levi_math::wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
@@ -1129,7 +1129,7 @@ void Wyrm::process(const ProcessArgs& args) {
 		const float foldAmt = foldCvPoly ? effectiveFoldAmt(c) : monoFoldAmt;
 		float folded = raw;
 		if (foldAmt > 1e-5f) {
-			folded = clamp(finiteOr(softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
+			folded = clamp(finiteOr(levi_math::softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
 		}
 		outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 		outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);

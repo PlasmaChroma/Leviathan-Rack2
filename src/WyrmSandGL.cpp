@@ -208,7 +208,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		lastUiPhaseUpdateSec = nowSec;
 		float phase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
-		phase = wrap01(phase + 0.65f * speedFactor * elapsed);
+		phase = levi_math::wrap01(phase + 0.65f * speedFactor * elapsed);
 		module->uiSlitherPhase.store(phase, std::memory_order_relaxed);
 	}
 
@@ -238,7 +238,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
-		t = clamp01(t);
+		t = levi_math::clamp01(t);
 		return nvgRGBAf(
 			a.r + (b.r - a.r) * t,
 			a.g + (b.g - a.g) * t,
@@ -290,8 +290,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			const float y = std::min(size.y, float(py) + 0.5f);
 			const bool positive = y < midY;
 			const float t = positive
-				? clamp01((midY - y) / std::max(midY, 1.f))
-				: clamp01((y - midY) / std::max(size.y - midY, 1.f));
+				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+				: levi_math::clamp01((y - midY) / std::max(size.y - midY, 1.f));
 			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
 			for (int px = 0; px < w; ++px) {
 				const float x = std::min(size.x, float(px) + 0.5f);
@@ -333,7 +333,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	static float displayWaveValueAtIndex(Wyrm* module, int index, Vec size) {
-		const float amount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float phase = (float(index) + 0.5f) / float(std::max(1, module->pointCount));
 		float clearance = 0.f;
@@ -346,7 +346,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	static Vec bodyPointForPhase(Wyrm* module, const std::array<float, kWyrmPointCountMax>& points, float phase, Vec size) {
-		const float amount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float raw = catmullPeriodic(points, module->pointCount, phase);
 		float clearance = 0.f;
@@ -649,7 +649,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
 		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
-		const float slitherAmount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float slitherAmount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const bool cacheValid =
 			cachedBodySamplesValid &&

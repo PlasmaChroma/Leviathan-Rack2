@@ -1,4 +1,5 @@
 #include "CrownstepShared.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "VisualAssets.hpp"
@@ -813,10 +814,6 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			outsideDist[idx] = d;
 		}
 	}
-	auto smoothstep01 = [](float t) {
-		t = clamp(t, 0.f, 1.f);
-		return t * t * (3.f - 2.f * t);
-	};
 	// Distance windows in raster pixels. Bias toward a slightly broader bright band
 	// so the contour reads bold without needing a washed-out high alpha.
 	const float bandInPx = 2.0f;
@@ -834,11 +831,11 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			continue;
 		}
 		float d = outsideDist[i];
-		float bandEnter = smoothstep01((d - bandInPx) / 1.6f);
-		float bandExit = smoothstep01((bandOutPx - d) / 1.6f);
+		float bandEnter = levi_math::smoothstep01((d - bandInPx) / 1.6f);
+		float bandExit = levi_math::smoothstep01((bandOutPx - d) / 1.6f);
 		float bandA = clamp(bandEnter * bandExit, 0.f, 1.f);
-		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
-		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
+		float shellEnter = levi_math::smoothstep01((d - shellInPx) / 1.8f);
+		float shellExit = levi_math::smoothstep01((shellOutPx - d) / 1.8f);
 		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
 		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
 			const HighlightPalette palette = HIGHLIGHT_PALETTES[size_t(colorIndex)];

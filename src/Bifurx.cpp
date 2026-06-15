@@ -33,18 +33,13 @@ constexpr float kSelfOscAmpDampingHot = 0.120f;
 constexpr float kSvfSelfOscDampingMin = 0.0005f;
 
 float levelDriveGain(float knob) {
-	const float x = bifurx::clamp01(knob);
+	const float x = levi_math::clamp01(knob);
 	// Midpoint should be exactly unity so the default LEVEL setting is neutral.
 	return 0.075f + 0.95f * x + 3.6f * x * x * x;
 }
 
-float smoothstep01(float x) {
-	const float t = bifurx::clamp01(x);
-	return t * t * (3.f - 2.f * t);
-}
-
 float levelInputGain(float knob) {
-	const float x = bifurx::clamp01(knob);
+	const float x = levi_math::clamp01(knob);
 	if (x <= 0.5f) {
 		return 2.f * x;
 	}
@@ -53,12 +48,12 @@ float levelInputGain(float knob) {
 }
 
 float levelDriveAmount(float knob) {
-	const float x = bifurx::clamp01(knob);
+	const float x = levi_math::clamp01(knob);
 	constexpr float kLevelDriveStart = 0.62f;
 	if (x <= kLevelDriveStart) {
 		return 0.f;
 	}
-	const float hot = bifurx::clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
+	const float hot = levi_math::clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
 	return hot * hot;
 }
 
@@ -80,7 +75,7 @@ float applyLevelInputStage(float in, float levelKnob) {
 		return clean;
 	}
 	const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
-	const float driven = 5.f * bifurx::softClip((clean * driveGain) / 5.f);
+	const float driven = 5.f * levi_math::softClip((clean * driveGain) / 5.f);
 	return bifurx::mixf(clean, driven, driveAmount);
 }
 
@@ -91,7 +86,7 @@ float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEna
 		return out;
 	}
 	constexpr float kSoftLimitVolts = 10.f;
-	return kSoftLimitVolts * bifurx::softClip(out / kSoftLimitVolts);
+	return kSoftLimitVolts * levi_math::softClip(out / kSoftLimitVolts);
 }
 
 float onePoleAlpha(float dt, float tauSeconds) {
@@ -107,7 +102,7 @@ float logPosition(float hz, float minHz, float maxHz) {
 }
 
 float logFrequencyAt(float x01, float minHz, float maxHz) {
-	return minHz * std::pow(maxHz / minHz, bifurx::clamp01(x01));
+	return minHz * std::pow(maxHz / minHz, levi_math::clamp01(x01));
 }
 
 float bifurxFrequencyHzFromParam(float paramValue) {
@@ -172,7 +167,7 @@ float softLimitExpectedCurveDb(float db) {
 }
 
 float resoToDamping(float resoNorm) {
-	const float r = bifurx::clamp01(resoNorm);
+	const float r = levi_math::clamp01(resoNorm);
 	return 2.f - 1.97f * std::pow(r, 1.18f);
 }
 
@@ -185,17 +180,17 @@ float signedWeight(float balance, bool upperPeak) {
 }
 
 float cascadeWideMorph(float spanNorm) {
-	const float x = bifurx::clamp01((bifurx::clamp01(spanNorm) - 0.03f) / 0.97f);
+	const float x = levi_math::clamp01((levi_math::clamp01(spanNorm) - 0.03f) / 0.97f);
 	return std::pow(x, 0.58f);
 }
 
 float highHighSpanCompGain(float wideMorph) {
-	const float x = bifurx::clamp01((wideMorph - 0.75f) / 0.25f);
+	const float x = levi_math::clamp01((wideMorph - 0.75f) / 0.25f);
 	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
-	const float clampedT = bifurx::clamp01(t);
+	const float clampedT = levi_math::clamp01(t);
 	NVGcolor out;
 	out.r = bifurx::mixf(a.r, b.r, clampedT);
 	out.g = bifurx::mixf(a.g, b.g, clampedT);
@@ -205,7 +200,7 @@ NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
 }
 
 float displayOnlyColorTone(float energy, float shapeControl) {
-	const float e = bifurx::clamp01(energy);
+	const float e = levi_math::clamp01(energy);
 	const float ctl = clamp(shapeControl, -1.f, 1.f);
 	if (ctl < 0.f) {
 		// Cool side: blend linear -> squared to delay hot color.
@@ -324,8 +319,8 @@ SvfOutputs TptSvf::processSelfOscWithCoeffs(
 
 	const float drive = std::max(oscDrive, 1e-4f);
 	const float amp = v1 * drive;
-	const float ampDamping = mixf(kSelfOscAmpDampingClean, kSelfOscAmpDampingHot, clamp01(oscHeat));
-	const float kEff = coeffs.k - kSelfOscPush * clamp01(oscOnset) + ampDamping * amp * amp;
+	const float ampDamping = mixf(kSelfOscAmpDampingClean, kSelfOscAmpDampingHot, levi_math::clamp01(oscHeat));
+	const float kEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * amp * amp;
 	v1 = m / std::max(onePlusG2 + coeffs.g * kEff, 1e-5f);
 
 	const float v2 = ic2eq + coeffs.g * v1;
@@ -336,7 +331,7 @@ SvfOutputs TptSvf::processSelfOscWithCoeffs(
 	out.bp = v1;
 	out.lp = v2;
 	const float outAmp = v1 * drive;
-	const float outKEff = coeffs.k - kSelfOscPush * clamp01(oscOnset) + ampDamping * outAmp * outAmp;
+	const float outKEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * outAmp * outAmp;
 	out.hp = input - outKEff * v1 - v2;
 	out.notch = out.lp + out.hp;
 	return out;
@@ -374,7 +369,7 @@ SvfOutputs processCharacterStage(
 		}
 		return core.process(input, sampleRate, cutoff, damping);
 	}
-	const float oscNorm = smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
+	const float oscNorm = levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
 	if (oscNorm <= 0.f) {
 		if (cachedCoeffsOrNull) {
 			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
@@ -382,8 +377,8 @@ SvfOutputs processCharacterStage(
 		return core.process(input, sampleRate, cutoff, damping);
 	}
 	const float oscOnset = std::sqrt(std::max(oscNorm, 0.f));
-	const float oscHeat = smoothstep01((clamp01(resoNorm) - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
-	const float oscDrive = mixf(0.75f, 2.6f, oscHeat) * mixf(0.85f, 1.35f, clamp01((drive - 1.f) / 2.f));
+	const float oscHeat = levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
+	const float oscDrive = mixf(0.75f, 2.6f, oscHeat) * mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
 	const float selfDamping = mixf(damping, kSvfSelfOscDampingMin, oscOnset);
 	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, selfDamping, kSvfSelfOscDampingMin);
 	SvfOutputs out = core.processSelfOscWithCoeffs(coeffs, input, oscOnset, oscHeat, oscDrive);
@@ -901,7 +896,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	const float drivenIn = applyLevelInputStage(in, level);
 	const bool highResonanceSelfOscEnabledNow = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
 	const float oscNorm = highResonanceSelfOscEnabledNow
-		? smoothstep01((clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart))
+		? levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart))
 		: 0.f;
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
 	if ((highResonanceSelfOscEnabledNow && oscNorm > 0.f) || controlDividerTick) {
@@ -1094,7 +1089,7 @@ inline void prepareOverlayTargetsFromSpectra(
 	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
-		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
+		const float subsonicWeight = levi_math::clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
 		if (moduleResponseEnabled) {
@@ -1408,7 +1403,7 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	// Browser preview is static art: synthesize deterministic response shading.
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		const float x01 = float(i) / float(kCurvePointCount - 1);
-		const float curveNorm = clamp01((state.curveTargetDb[i] - kResponseMinDb) / (kResponseMaxDb - kResponseMinDb));
+		const float curveNorm = levi_math::clamp01((state.curveTargetDb[i] - kResponseMinDb) / (kResponseMaxDb - kResponseMinDb));
 		const float bed = -35.f + 15.f * curveNorm;
 		const float ridge = 1.8f * std::sin(2.f * kPi * (2.6f * x01 + 0.11f));
 		state.overlayTargetOutputDbfs[i] = bed + ridge;

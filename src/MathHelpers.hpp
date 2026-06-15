@@ -22,6 +22,11 @@ inline float softClip(float x) {
 	return fastTanh(x);
 }
 
+inline float softLimit(float x, float limit) {
+	const float safeLimit = (limit > 1e-6f) ? limit : 1e-6f;
+	return safeLimit * fastTanh(x / safeLimit);
+}
+
 inline float smoothstep01(float x) {
 	x = clamp01(x);
 	return x * x * (3.f - 2.f * x);

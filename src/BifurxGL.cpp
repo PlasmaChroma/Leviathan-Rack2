@@ -742,10 +742,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			for (int i = 0; i < kCurvePointCount - 1; i++) {
 				const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
 				const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
-				const float energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
+				const float energy = levi_math::clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 				if (energy <= 0.005f) continue;
 				
-				float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
+				float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
 				const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
 				NVGcolor expectedWhite = palette.white;
 				NVGcolor expectedCyan = palette.high;
@@ -756,8 +756,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				}
 				else {
 					NVGcolor tint = expectedWhite; 
-					if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); 
-					if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
+					if (posA > 0.f) tint = mixColor(tint, expectedCyan, levi_math::clamp01(posA * 1.40f)); 
+					if (negA > 0.f) tint = mixColor(tint, expectedPurple, levi_math::clamp01(negA * 1.25f));
 					fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
 				}
 				

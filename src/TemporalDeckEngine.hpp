@@ -1308,10 +1308,6 @@ struct TemporalDeckEngine {
     }
   }
 
-  static float fastTanh(float x) {
-    return levi_math::fastTanh(x);
-  }
-
   void refreshCartridgeCache() {
     if (cachedCartridgeCharacter == cartridgeCharacter) {
       return;
@@ -1332,7 +1328,7 @@ struct TemporalDeckEngine {
     cachedTiltRightGain = 1.f + cachedStereoTilt * 0.5f;
     cachedAirMixGain = 1.f + cachedCartridgeParams.presenceGain;
     cachedBodyMixGain = cachedCartridgeParams.bodyGain - cachedCartridgeParams.presenceGain;
-    cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
+    cachedDriveNorm = std::max(levi_math::fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
     cachedPlaybackColorMix = playbackColorMixForCartridge(cartridgeCharacter);
     cachedScratchCompensation = std::max(cachedCartridgeParams.scratchCompensation, 0.f);
@@ -1403,7 +1399,7 @@ struct TemporalDeckEngine {
       float voiced = air * cachedAirMixGain + body * cachedBodyMixGain;
       if (cachedDriveEnabled) {
         float dry = voiced;
-        float sat = fastTanh(voiced * p.drive) / cachedDriveNorm;
+        float sat = levi_math::fastTanh(voiced * p.drive) / cachedDriveNorm;
         voiced = crossfade(dry, sat, cachedSaturationMix);
       }
       return voiced;

@@ -129,7 +129,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	float phaseFromX(float x) const {
 		if (box.size.x <= 1.f) return 0.f;
-		return wrap01(clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 0.9999f));
+		return levi_math::wrap01(clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 0.9999f));
 	}
 
 	float yFromValue(float value) const {
@@ -210,14 +210,14 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastVisualUpdateSec = nowSec;
 		if (!module) return;
 		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
-		visualSlitherPhase = wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
+		visualSlitherPhase = levi_math::wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
 	}
 
 	float effectiveSlitherAmount() const {
 		if (!module) {
 			return 0.f;
 		}
-		return clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		return levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 	}
 
 	float slitherOffsetForIndex(int index) const {
@@ -282,7 +282,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
-		t = clamp01(t);
+		t = levi_math::clamp01(t);
 		return nvgRGBAf(
 			a.r + (b.r - a.r) * t,
 			a.g + (b.g - a.g) * t,
@@ -331,8 +331,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			const float y = std::min(box.size.y, float(py) + 0.5f);
 			const bool positive = y < midY;
 			const float t = positive
-				? clamp01((midY - y) / std::max(midY, 1.f))
-				: clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
+				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+				: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
 			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
 			for (int px = 0; px < w; ++px) {
 				const float x = std::min(box.size.x, float(px) + 0.5f);
@@ -436,7 +436,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float phase = phaseFromX(adjusted.x);
 		const float value = valueFromY(adjusted.y);
 		auto shortestPhaseDelta = [](float from, float to) {
-			float d = wrap01(to) - wrap01(from);
+			float d = levi_math::wrap01(to) - levi_math::wrap01(from);
 			if (d > 0.5f) d -= 1.f;
 			if (d < -0.5f) d += 1.f;
 			return d;
@@ -454,7 +454,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		WyrmRock prevStepRock = previousRock;
 		for (int s = 1; s <= steps; ++s) {
 			const float t = float(s) / float(steps);
-			rock.phase = wrap01(previousRock.phase + dPhase * t);
+			rock.phase = levi_math::wrap01(previousRock.phase + dPhase * t);
 			rock.value = clamp(previousRock.value + dValue * t, -1.f, 1.f);
 			module->rebuildRockBoundaryCache(rockIndex);
 			if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {

@@ -1,4 +1,5 @@
 #include "VisualAssets.hpp"
+#include "MathHelpers.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 
 #include <chrono>
@@ -1988,12 +1989,8 @@ void LeviathanHaloKnob::RimHighlightWidget::draw(const DrawArgs& args) {
 	auto withAlpha = [](int r, int g, int b, float alpha) {
 		return nvgRGBA(r, g, b, clamp((int)std::round(alpha), 0, 255));
 	};
-	auto wrap01 = [](float x) {
-		x -= std::floor(x);
-		return x;
-	};
 	auto triangle = [&](float phaseOffset) {
-		const float p = wrap01(valueNorm + phaseOffset);
+		const float p = levi_math::wrap01(valueNorm + phaseOffset);
 		return 1.f - std::fabs(2.f * p - 1.f);
 	};
 

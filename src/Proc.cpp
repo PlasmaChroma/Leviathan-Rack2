@@ -212,11 +212,6 @@ struct Proc : Module {
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
-	static float softClamp8(float v) {
-		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * levi_math::fastTanh(v / 8.0f);
-	}
-
 	static float bothHzFromCv(float v) {
 		float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
 		float r = rack::dsp::exp2_taylor5(x);
@@ -224,7 +219,7 @@ struct Proc : Module {
 	}
 
 	static float bothTimeScaleFromCv(float v) {
-		float vs = softClamp8(v);
+		float vs = levi_math::softLimit(v, 8.f);
 		float f = bothHzFromCv(vs);
 		// Neutral reference is constant for the life of the module, compute once.
 		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
@@ -604,7 +599,7 @@ struct Proc : Module {
 
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
-		float stageCvSoft = softClamp8(stageCv);
+		float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
 		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 

@@ -546,8 +546,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	}
 
 	auto drawExpectedGuideStroke = [&](float x, float y, float curveDbVal) {
-		const float posAmt = clamp01(curveDbVal / 18.f), negAmt = clamp01(-curveDbVal / 18.f), emph = std::max(posAmt, negAmt);
-		NVGcolor tint = expectedWhite; if (posAmt > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posAmt * 1.35f)); if (negAmt > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negAmt * 1.25f));
+		const float posAmt = levi_math::clamp01(curveDbVal / 18.f), negAmt = levi_math::clamp01(-curveDbVal / 18.f), emph = std::max(posAmt, negAmt);
+		NVGcolor tint = expectedWhite; if (posAmt > 0.f) tint = mixColor(tint, expectedCyan, levi_math::clamp01(posAmt * 1.35f)); if (negAmt > 0.f) tint = mixColor(tint, expectedPurple, levi_math::clamp01(negAmt * 1.25f));
 		tint.a = 0.025f + 0.095f * emph; nvgBeginPath(args.vg); nvgMoveTo(args.vg, x, spectrumBottomY); nvgLineTo(args.vg, x, y); nvgStrokeColor(args.vg, tint); nvgStrokeWidth(args.vg, 1.05f); nvgStroke(args.vg);
 	};
 	if (!displayOnlyMode) {
@@ -575,15 +575,15 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
 		for (int i = 0; i < kCurvePointCount - 1; ++i) {
 			const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
-			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
+			const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]), energy = levi_math::clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
 			if (energy <= 0.005f) continue;
 			NVGcolor fill;
 			if (displayOnlyMode) {
 				fill = mixColor(expectedPurple, expectedCyan, displayOnlyColorTone(energy, displayOnlyShapeControl));
 			}
 			else {
-				const float posA = clamp01(avgD / 18.f), negA = clamp01(-avgD / 18.f);
-				NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, clamp01(negA * 1.25f));
+				const float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
+				NVGcolor tint = expectedWhite; if (posA > 0.f) tint = mixColor(tint, expectedCyan, levi_math::clamp01(posA * 1.40f)); if (negA > 0.f) tint = mixColor(tint, expectedPurple, levi_math::clamp01(negA * 1.25f));
 				fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
 			}
 			fill.a = 1.f;

@@ -93,11 +93,6 @@ constexpr float kPeakMarkerOutlineStrokeWidth = 0.8f;
 constexpr float kPeakMarkerEdgePadding = 0.4f;
 constexpr float kPeakMarkerBottomLanePadding = 0.f;
 
-// Utility functions
-inline float clamp01(float v) {
-	return levi_math::clamp01(v);
-}
-
 inline float fastExp2(float x) {
 	return rack::dsp::exp2_taylor5(clamp(x, -24.f, 24.f));
 }
@@ -125,24 +120,15 @@ inline float amplitudeRatioDb(float numerator, float denominator) {
 std::string bifurxUserRootPath();
 
 inline float shapedSpan(float value) {
-	return std::pow(clamp01(value), 1.45f);
+	return std::pow(levi_math::clamp01(value), 1.45f);
 }
 
 float levelDriveGain(float knob);
-float smoothstep01(float x);
 float levelInputGain(float knob);
 float levelDriveAmount(float knob);
 float levelOutputClipWet(float knob);
 float applyLevelInputStage(float in, float levelKnob);
 float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
-
-inline float fastTanh(float x) {
-	return levi_math::fastTanh(x);
-}
-
-inline float softClip(float x) {
-	return levi_math::softClip(x);
-}
 
 inline float sanitizeFinite(float x, float fallback = 0.f) {
 	return std::isfinite(x) ? x : fallback;

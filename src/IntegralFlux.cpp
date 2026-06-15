@@ -254,11 +254,6 @@ struct IntegralFlux : Module {
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
 	}
 
-	static float softClamp8(float v) {
-		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * levi_math::fastTanh(v / 8.0f);
-	}
-
 	float injectAlphaBaseForSampleTime(float sampleTime) {
 		if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
 			cachedInjectSampleTime = sampleTime;
@@ -274,7 +269,7 @@ struct IntegralFlux : Module {
 	}
 
 	static float bothTimeScaleFromCv(float v) {
-		float vs = softClamp8(v);
+		float vs = levi_math::softLimit(v, 8.f);
 		float f = bothHzFromCv(vs);
 		// Neutral reference is constant for the life of the module, compute once.
 		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
@@ -649,7 +644,7 @@ struct IntegralFlux : Module {
 
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
-		float stageCvSoft = softClamp8(stageCv);
+		float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
 		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
@@ -855,7 +850,7 @@ struct IntegralFlux : Module {
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// Map patched input into the same normalized domain as the internal integrator state.
-				float inSoft = softClamp8(signalIn);
+				float inSoft = levi_math::softLimit(signalIn, 8.f);
 				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
 				injectAlpha = injectAlphaBase;
 			}
