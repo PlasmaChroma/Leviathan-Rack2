@@ -1782,7 +1782,10 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
 
 	auto bloomColor = [&](NVGcolor color) {
@@ -1857,7 +1860,10 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
-	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 
 	auto bloomColor = [&](NVGcolor color) {
 		color.a *= bloom;
@@ -1939,9 +1945,9 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const float total = aEnd - aStart;
 		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(segmentCount);
-		const NVGcolor litCore = nvgRGBA(0, 208, 230, 236);
+		const NVGcolor litCore = nvgRGBA(26, 249, 252, 236);
 		const NVGcolor litHot = nvgRGBA(122, 252, 255, 188);
-		const NVGcolor unlitCore = nvgRGBA(0x9a, 0x55, 0xff, 216);
+		const NVGcolor unlitCore = nvgRGBA(140, 99, 250, 216);
 		const NVGcolor unlitHot = nvgRGBA(0xc0, 0x7b, 0xff, 168);
 		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
 			t = clamp(t, 0.f, 1.f);
@@ -2057,7 +2063,10 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloom = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
 
 	auto bloomColor = [&](NVGcolor color) {
