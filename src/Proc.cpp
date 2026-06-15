@@ -1450,6 +1450,11 @@ struct AmpVoltageReadoutWidget : Widget {
 	}
 };
 
+struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
+	ProcCurveHalo2Knob() : LeviathanHaloKnob2(LeviathanHaloKnob2::brightOrangeConfig()) {
+	}
+};
+
 struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
@@ -1512,9 +1517,9 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
 		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<LeviathanHaloKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<LeviathanHaloKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<LeviathanHaloKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(risePos), module, Proc::RISE_PARAM));
+		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		addParam(createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
 		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();

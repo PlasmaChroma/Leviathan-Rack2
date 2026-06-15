@@ -1728,37 +1728,7 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 };
 
 struct IntegralFluxCurveHalo2Knob : IntegralFluxHalo2Knob {
-	IntegralFluxCurveHalo2Knob() : IntegralFluxHalo2Knob(makeConfig()) {
-	}
-
-	static Config makeConfig() {
-		Config config;
-		config.ledArc.activeColor = nvgRGBA(255, 214, 36, 255);
-		config.ledArc.activeHighlightColor = nvgRGBA(255, 252, 176, 232);
-		config.ledArc.inactiveColor = nvgRGBA(142, 72, 18, 216);
-		config.ledArc.inactiveHighlightColor = nvgRGBA(206, 112, 36, 168);
-		config.bloom.backgroundOuterActiveColor = nvgRGBA(255, 178, 0, 50);
-		config.bloom.backgroundOuterInactiveColor = nvgRGBA(118, 54, 12, 30);
-		config.bloom.backgroundMidActiveColor = nvgRGBA(255, 202, 18, 80);
-		config.bloom.backgroundMidInactiveColor = nvgRGBA(146, 68, 14, 50);
-		config.bloom.backgroundInnerActiveColor = nvgRGBA(255, 228, 48, 122);
-		config.bloom.backgroundInnerInactiveColor = nvgRGBA(190, 88, 18, 72);
-		config.bloom.foregroundOuterActiveColor = nvgRGBA(255, 230, 72, 74);
-		config.bloom.foregroundOuterInactiveColor = nvgRGBA(190, 94, 24, 44);
-		config.bloom.foregroundInnerActiveColor = nvgRGBA(255, 255, 196, 62);
-		config.bloom.foregroundInnerInactiveColor = nvgRGBA(226, 132, 46, 32);
-		config.bloom.reflectionOuterActiveColor = nvgRGBA(255, 202, 28, 70);
-		config.bloom.reflectionOuterInactiveColor = nvgRGBA(128, 58, 12, 68);
-		config.bloom.reflectionInnerActiveColor = nvgRGBA(255, 244, 92, 62);
-		config.bloom.reflectionInnerInactiveColor = nvgRGBA(204, 112, 28, 48);
-		config.bloom.guideOuterColor = nvgRGBA(255, 218, 68, 84);
-		config.bloom.guideMidColor = nvgRGBA(170, 78, 18, 58);
-		config.bloom.guideInnerColor = nvgRGBA(255, 246, 154, 68);
-		config.bloom.capReflectionOuterActiveColor = nvgRGBA(255, 214, 40, 96);
-		config.bloom.capReflectionOuterInactiveColor = nvgRGBA(172, 82, 20, 82);
-		config.bloom.capReflectionInnerActiveColor = nvgRGBA(255, 255, 184, 72);
-		config.bloom.capReflectionInnerInactiveColor = nvgRGBA(224, 136, 50, 54);
-		return config;
+	IntegralFluxCurveHalo2Knob() : IntegralFluxHalo2Knob(LeviathanHaloKnob2::brightOrangeConfig()) {
 	}
 };
 

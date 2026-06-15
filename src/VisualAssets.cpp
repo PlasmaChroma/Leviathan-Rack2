@@ -1400,7 +1400,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	const float minLitNorm = std::min(startNorm, valueNorm);
 	const float maxLitNorm = std::max(startNorm, valueNorm);
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	auto bloomColor = [&](NVGcolor color) {
@@ -1805,7 +1805,7 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
@@ -1880,12 +1880,12 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float mainRadius = diameterPx * (18.15f / 46.f);
 	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
-	const float segmentWidth = mainWidth + 0.55f * scale;
+	const float segmentWidth = mainWidth + 0.95f * scale;
 	const float segmentRadius = mainRadius - 0.5f * (segmentWidth - mainWidth);
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 
@@ -2088,7 +2088,7 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
@@ -2300,6 +2300,36 @@ float LeviathanHaloKnob::normalizedParamValue() {
 }
 
 LeviathanHaloKnob2::LeviathanHaloKnob2() : LeviathanHaloKnob2(Config()) {
+}
+
+LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
+	Config config;
+	config.ledArc.activeColor = nvgRGBA(255, 214, 36, 255);
+	config.ledArc.activeHighlightColor = nvgRGBA(255, 252, 176, 232);
+	config.ledArc.inactiveColor = nvgRGBA(142, 72, 18, 216);
+	config.ledArc.inactiveHighlightColor = nvgRGBA(206, 112, 36, 168);
+	config.bloom.backgroundOuterActiveColor = nvgRGBA(255, 178, 0, 50);
+	config.bloom.backgroundOuterInactiveColor = nvgRGBA(118, 54, 12, 30);
+	config.bloom.backgroundMidActiveColor = nvgRGBA(255, 202, 18, 80);
+	config.bloom.backgroundMidInactiveColor = nvgRGBA(146, 68, 14, 50);
+	config.bloom.backgroundInnerActiveColor = nvgRGBA(255, 228, 48, 122);
+	config.bloom.backgroundInnerInactiveColor = nvgRGBA(190, 88, 18, 72);
+	config.bloom.foregroundOuterActiveColor = nvgRGBA(255, 230, 72, 74);
+	config.bloom.foregroundOuterInactiveColor = nvgRGBA(190, 94, 24, 44);
+	config.bloom.foregroundInnerActiveColor = nvgRGBA(255, 255, 196, 62);
+	config.bloom.foregroundInnerInactiveColor = nvgRGBA(226, 132, 46, 32);
+	config.bloom.reflectionOuterActiveColor = nvgRGBA(255, 202, 28, 70);
+	config.bloom.reflectionOuterInactiveColor = nvgRGBA(128, 58, 12, 68);
+	config.bloom.reflectionInnerActiveColor = nvgRGBA(255, 244, 92, 62);
+	config.bloom.reflectionInnerInactiveColor = nvgRGBA(204, 112, 28, 48);
+	config.bloom.guideOuterColor = nvgRGBA(255, 218, 68, 84);
+	config.bloom.guideMidColor = nvgRGBA(170, 78, 18, 58);
+	config.bloom.guideInnerColor = nvgRGBA(255, 246, 154, 68);
+	config.bloom.capReflectionOuterActiveColor = nvgRGBA(255, 214, 40, 96);
+	config.bloom.capReflectionOuterInactiveColor = nvgRGBA(172, 82, 20, 82);
+	config.bloom.capReflectionInnerActiveColor = nvgRGBA(255, 255, 184, 72);
+	config.bloom.capReflectionInnerInactiveColor = nvgRGBA(224, 136, 50, 54);
+	return config;
 }
 
 LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {

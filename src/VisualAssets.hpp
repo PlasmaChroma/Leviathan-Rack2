@@ -361,6 +361,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 	void step() override;
 	void onChange(const ChangeEvent& e) override;
 
+	static Config brightOrangeConfig();
 	float normalizedParamValue();
 };
 
