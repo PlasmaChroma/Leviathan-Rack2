@@ -1857,13 +1857,13 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	};
 
 	if (foreground) {
-		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), bloomColor(nvgRGBA(70, 250, 255, 48)), bloomColor(nvgRGBA(192, 123, 255, 44)));
-		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), bloomColor(nvgRGBA(190, 255, 255, 36)), bloomColor(nvgRGBA(226, 190, 255, 32)));
+		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), bloomColor(config.foregroundOuterActiveColor), bloomColor(config.foregroundOuterInactiveColor));
+		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), bloomColor(config.foregroundInnerActiveColor), bloomColor(config.foregroundInnerInactiveColor));
 	}
 	else {
-		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), bloomColor(nvgRGBA(0, 210, 255, 34)), bloomColor(nvgRGBA(126, 70, 230, 30)));
-		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), bloomColor(nvgRGBA(0, 225, 255, 58)), bloomColor(nvgRGBA(154, 84, 245, 50)));
-		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), bloomColor(nvgRGBA(30, 245, 255, 88)), bloomColor(nvgRGBA(192, 123, 255, 72)));
+		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), bloomColor(config.backgroundOuterActiveColor), bloomColor(config.backgroundOuterInactiveColor));
+		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), bloomColor(config.backgroundMidActiveColor), bloomColor(config.backgroundMidInactiveColor));
+		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), bloomColor(config.backgroundInnerActiveColor), bloomColor(config.backgroundInnerInactiveColor));
 	}
 
 	nvgRestore(args.vg);
@@ -2046,12 +2046,12 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float dipRadius = mainRadius - mainWidth * 1.03f - 0.46f * scale;
 	drawArcBand(startAngle, endAngle, mainRadius, mainWidth + 0.92f * scale, nvgRGBA(0, 0, 4, 248));
 	drawArcBand(startAngle, endAngle, dipRadius, std::max(0.55f, 0.82f * scale), nvgRGBA(0, 1, 8, 216));
-	drawGuideArc(guideRadius, guideWidth, nvgRGBA(126, 194, 225, 62));
-	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), nvgRGBA(150, 94, 230, 58));
-	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), nvgRGBA(185, 218, 240, 44));
+	drawGuideArc(guideRadius, guideWidth, bloomConfig.guideOuterColor);
+	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), bloomConfig.guideMidColor);
+	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), bloomConfig.guideInnerColor);
 	if (bloom > 0.001f) {
-		drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(nvgRGBA(18, 176, 196, 48)), bloomColor(nvgRGBA(132, 76, 226, 68)));
-		drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(nvgRGBA(124, 246, 255, 38)), bloomColor(nvgRGBA(204, 156, 255, 48)));
+		drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(bloomConfig.reflectionOuterActiveColor), bloomColor(bloomConfig.reflectionOuterInactiveColor));
+		drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(bloomConfig.reflectionInnerActiveColor), bloomColor(bloomConfig.reflectionInnerInactiveColor));
 	}
 	drawGuideArc(dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
 
@@ -2137,8 +2137,8 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 
-	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), bloomColor(nvgRGBA(58, 210, 230, 68)), bloomColor(nvgRGBA(168, 106, 255, 82)));
-	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), bloomColor(nvgRGBA(192, 255, 255, 44)), bloomColor(nvgRGBA(222, 188, 255, 54)));
+	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), bloomColor(config.capReflectionOuterActiveColor), bloomColor(config.capReflectionOuterInactiveColor));
+	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), bloomColor(config.capReflectionInnerActiveColor), bloomColor(config.capReflectionInnerInactiveColor));
 
 	nvgRestore(args.vg);
 }
@@ -2340,6 +2340,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	glowArc->minAngle = minAngle;
 	glowArc->maxAngle = maxAngle;
 	glowArc->valueNorm = normalizedParamValue();
+	glowArc->config = this->config.bloom;
 	fb->addChild(glowArc);
 
 	lightArc = new LightArcWidget();
@@ -2348,6 +2349,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	lightArc->maxAngle = maxAngle;
 	lightArc->valueNorm = normalizedParamValue();
 	lightArc->config = this->config.ledArc;
+	lightArc->bloomConfig = this->config.bloom;
 	fb->addChild(lightArc);
 
 	foregroundGlowArc = new GlowArcWidget();
@@ -2356,6 +2358,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	foregroundGlowArc->maxAngle = maxAngle;
 	foregroundGlowArc->valueNorm = normalizedParamValue();
 	foregroundGlowArc->foreground = true;
+	foregroundGlowArc->config = this->config.bloom;
 	fb->addChild(foregroundGlowArc);
 
 	centerLayer = new EclipseKnob::SvgLayer();
@@ -2372,6 +2375,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	capReflection->minAngle = minAngle;
 	capReflection->maxAngle = maxAngle;
 	capReflection->valueNorm = normalizedParamValue();
+	capReflection->config = this->config.bloom;
 	fb->addChild(capReflection);
 
 }

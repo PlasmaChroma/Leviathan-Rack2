@@ -288,8 +288,33 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		NVGcolor inactiveHighlightColor = nvgRGBA(0xc0, 0x7b, 0xff, 168);
 	};
 
+	struct BloomConfig {
+		NVGcolor backgroundOuterActiveColor = nvgRGBA(0, 210, 255, 34);
+		NVGcolor backgroundOuterInactiveColor = nvgRGBA(126, 70, 230, 30);
+		NVGcolor backgroundMidActiveColor = nvgRGBA(0, 225, 255, 58);
+		NVGcolor backgroundMidInactiveColor = nvgRGBA(154, 84, 245, 50);
+		NVGcolor backgroundInnerActiveColor = nvgRGBA(30, 245, 255, 88);
+		NVGcolor backgroundInnerInactiveColor = nvgRGBA(192, 123, 255, 72);
+		NVGcolor foregroundOuterActiveColor = nvgRGBA(70, 250, 255, 48);
+		NVGcolor foregroundOuterInactiveColor = nvgRGBA(192, 123, 255, 44);
+		NVGcolor foregroundInnerActiveColor = nvgRGBA(190, 255, 255, 36);
+		NVGcolor foregroundInnerInactiveColor = nvgRGBA(226, 190, 255, 32);
+		NVGcolor reflectionOuterActiveColor = nvgRGBA(18, 176, 196, 48);
+		NVGcolor reflectionOuterInactiveColor = nvgRGBA(132, 76, 226, 68);
+		NVGcolor reflectionInnerActiveColor = nvgRGBA(124, 246, 255, 38);
+		NVGcolor reflectionInnerInactiveColor = nvgRGBA(204, 156, 255, 48);
+		NVGcolor guideOuterColor = nvgRGBA(126, 194, 225, 62);
+		NVGcolor guideMidColor = nvgRGBA(150, 94, 230, 58);
+		NVGcolor guideInnerColor = nvgRGBA(185, 218, 240, 44);
+		NVGcolor capReflectionOuterActiveColor = nvgRGBA(58, 210, 230, 68);
+		NVGcolor capReflectionOuterInactiveColor = nvgRGBA(168, 106, 255, 82);
+		NVGcolor capReflectionInnerActiveColor = nvgRGBA(192, 255, 255, 44);
+		NVGcolor capReflectionInnerInactiveColor = nvgRGBA(222, 188, 255, 54);
+	};
+
 	struct Config {
 		LedArcConfig ledArc;
+		BloomConfig bloom;
 	};
 
 	struct GlowArcWidget : TransparentWidget {
@@ -297,6 +322,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
 		bool foreground = false;
+		BloomConfig config;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -306,6 +332,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
 		LedArcConfig config;
+		BloomConfig bloomConfig;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -314,6 +341,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		BloomConfig config;
 
 		void draw(const DrawArgs& args) override;
 	};

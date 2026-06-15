@@ -49,14 +49,14 @@
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
      inkscape:zoom="25.543479"
-     inkscape:cx="12.88"
+     inkscape:cx="12.919149"
      inkscape:cy="24.370212"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g12" />
+     inkscape:current-layer="svg72" />
   <rect
      x="0"
      y="0"
@@ -111,14 +111,15 @@
        stroke="#ebe0ff"
        stroke-width="0.22"
        opacity="0.56"
-       id="path5" />
+       id="path5"
+       style="display:inline" />
     <path
        d="m 14.55,37.3 a 16.6,16.6 0 1 1 16.9,0"
        stroke="#010103"
        stroke-width="2.22"
        opacity="1"
        id="path10"
-       style="stroke-linecap:butt;stroke-width:3.22;stroke-dasharray:none" />
+       style="display:none;stroke-width:3.22;stroke-linecap:butt;stroke-dasharray:none" />
     <path
        d="m 14.88,36.73 a 15.95,15.95 0 1 1 16.24,0"
        stroke="#7a35e6"
@@ -139,7 +140,7 @@
        stroke-width="1.58"
        opacity="1"
        id="path6"
-       style="display:inline;fill:url(#radialGradient2);stroke:none" />
+       style="display:none;fill:url(#radialGradient2);stroke:none" />
   </g>
   <!-- cardinal ticks -->
   <g
@@ -276,7 +277,8 @@
   <!-- dark bowl under foreground cap -->
   <g
      id="Underknob"
-     transform="matrix(1.0771208,0,0,1.0771208,-1.7737784,-1.7737784)">
+     transform="matrix(1.0771208,0,0,1.0771208,-1.7737784,-1.7737784)"
+     style="display:none">
     <circle
        cx="23"
        cy="23"
