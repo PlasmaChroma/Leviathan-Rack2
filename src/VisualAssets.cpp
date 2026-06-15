@@ -1399,6 +1399,14 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	const float startNorm = bipolar ? centerNorm : 0.f;
 	const float minLitNorm = std::min(startNorm, valueNorm);
 	const float maxLitNorm = std::max(startNorm, valueNorm);
+	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+	const float bloomLow = bloomRaw + 1.5552f * bloomRaw * (1.f - bloomRaw);
+	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+	auto bloomColor = [&](NVGcolor color) {
+		color.a *= bloom;
+		return color;
+	};
 
 	nvgSave(args.vg);
 
@@ -1442,11 +1450,11 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 	const float activeStartAngle = (minAngle + minLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
 	const float activeEndAngle = (minAngle + maxLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
 	const float activeSweep = activeEndAngle - activeStartAngle;
-	if (activeSweep > 0.008f) {
+	if (activeSweep > 0.008f && bloom > 0.001f) {
 		// Wide soft glow bloom
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 175, 40, 36));
+		nvgStrokeColor(args.vg, bloomColor(nvgRGBA(255, 175, 40, 36)));
 		nvgStrokeWidth(args.vg, largeRadiusPx * 6.5f);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
@@ -1454,7 +1462,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		// Tighter core glow bloom
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg, center.x, center.y, radiusPx, activeStartAngle, activeEndAngle, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 215, 95, 76));
+		nvgStrokeColor(args.vg, bloomColor(nvgRGBA(255, 215, 95, 76)));
 		nvgStrokeWidth(args.vg, largeRadiusPx * 4.2f);
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
@@ -1480,19 +1488,21 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 		if (active) {
 			const float litR = r * 0.88f;
 
-			// Glow aura (focused, brighter and more opaque, warm gold-orange)
-			NVGpaint glow = nvgRadialGradient(
-				args.vg,
-				x, y,
-				litR * 0.4f,
-				litR * 3.2f,
-				nvgRGBA(255, 235, 140, 255),
-				nvgRGBA(255, 110, 10, 0)
-			);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, litR * 3.2f);
-			nvgFillPaint(args.vg, glow);
-			nvgFill(args.vg);
+			if (bloom > 0.001f) {
+				// Glow aura (focused, brighter and more opaque, warm gold-orange)
+				NVGpaint glow = nvgRadialGradient(
+					args.vg,
+					x, y,
+					litR * 0.4f,
+					litR * 3.2f,
+					bloomColor(nvgRGBA(255, 235, 140, 255)),
+					nvgRGBA(255, 110, 10, 0)
+				);
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, x, y, litR * 3.2f);
+				nvgFillPaint(args.vg, glow);
+				nvgFill(args.vg);
+			}
 
 			// Core LED dot (brighter warm gold-cream)
 			nvgBeginPath(args.vg);
@@ -1602,6 +1612,7 @@ Eclipse2Knob::Eclipse2Knob() {
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
+	lastBloomAmount = settings::haloBrightness;
 
 	shadowLayer = new ShadowWidget();
 	shadowLayer->box.size = box.size;
@@ -1618,6 +1629,17 @@ Eclipse2Knob::Eclipse2Knob() {
 	fb->addChild(progressRing);
 
 	setBackSvg(backSvg);
+}
+
+void Eclipse2Knob::step() {
+	app::SvgKnob::step();
+	const float bloomAmount = settings::haloBrightness;
+	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastBloomAmount = bloomAmount;
+		if (fb) {
+			fb->setDirty();
+		}
+	}
 }
 
 void Eclipse2Knob::onChange(const ChangeEvent& e) {

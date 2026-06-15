@@ -230,8 +230,10 @@ struct Eclipse2Knob : app::SvgKnob {
 	ProgressLedRingWidget* progressRing = nullptr;
 	ShadowWidget* shadowLayer = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
+	float lastBloomAmount = -1.f;
 
 	Eclipse2Knob();
+	void step() override;
 	void onChange(const ChangeEvent& e) override;
 
 	void setBackSvg(std::shared_ptr<window::Svg> svg);
