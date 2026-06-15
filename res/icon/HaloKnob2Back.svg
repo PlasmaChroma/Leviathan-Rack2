@@ -6,7 +6,7 @@
    version="1.1"
    id="svg72"
    sodipodi:docname="HaloKnob2Back.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -48,13 +48,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="false"
-     inkscape:zoom="25.543479"
-     inkscape:cx="12.919149"
-     inkscape:cy="24.370212"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:zoom="18.061967"
+     inkscape:cx="27.04578"
+     inkscape:cy="23.447058"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="1978"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg72" />
   <rect
@@ -63,7 +63,8 @@
      width="46"
      height="46"
      fill="none"
-     id="rect1" />
+     id="rect1"
+     style="display:none" />
   <!-- flat fallback vignette -->
   <circle
      cx="23"
@@ -142,6 +143,113 @@
        id="path6"
        style="display:none;fill:url(#radialGradient2);stroke:none" />
   </g>
+  <!-- percent ticks along the static halo arc -->
+  <g
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     id="halo2_percent_ticks"
+     style="display:inline">
+    <g
+       stroke="#02030a"
+       stroke-width="1.08"
+       opacity="0.82"
+       id="halo2_percent_ticks_outline">
+      <path
+         d="M 4.951,33.237 L 3.211,34.223"
+         id="halo2_tick_10_outline" />
+      <path
+         d="M 2.250,22.880 L 0.250,22.869"
+         id="halo2_tick_20_outline" />
+      <path
+         d="M 5.070,12.556 L 3.342,11.549"
+         id="halo2_tick_30_outline" />
+      <path
+         d="M 12.660,5.010 L 11.663,3.276"
+         id="halo2_tick_40_outline" />
+      <path
+         d="M 23.000,2.250 L 23.000,0.250"
+         id="halo2_tick_50_outline" />
+      <path
+         d="M 33.340,5.010 L 34.337,3.276"
+         id="halo2_tick_60_outline" />
+      <path
+         d="M 40.930,12.556 L 42.658,11.549"
+         id="halo2_tick_70_outline" />
+      <path
+         d="M 43.750,22.880 L 45.750,22.869"
+         id="halo2_tick_80_outline" />
+      <path
+         d="M 41.049,33.237 L 42.789,34.223"
+         id="halo2_tick_90_outline" />
+    </g>
+    <g
+       stroke="#7d43e8"
+       stroke-width="0.58"
+       opacity="0.58"
+       id="halo2_percent_ticks_purple">
+      <path
+         d="M 4.951,33.237 L 3.211,34.223"
+         id="halo2_tick_10_purple" />
+      <path
+         d="M 2.250,22.880 L 0.250,22.869"
+         id="halo2_tick_20_purple" />
+      <path
+         d="M 5.070,12.556 L 3.342,11.549"
+         id="halo2_tick_30_purple" />
+      <path
+         d="M 12.660,5.010 L 11.663,3.276"
+         id="halo2_tick_40_purple" />
+      <path
+         d="M 23.000,2.250 L 23.000,0.250"
+         id="halo2_tick_50_purple" />
+      <path
+         d="M 33.340,5.010 L 34.337,3.276"
+         id="halo2_tick_60_purple" />
+      <path
+         d="M 40.930,12.556 L 42.658,11.549"
+         id="halo2_tick_70_purple" />
+      <path
+         d="M 43.750,22.880 L 45.750,22.869"
+         id="halo2_tick_80_purple" />
+      <path
+         d="M 41.049,33.237 L 42.789,34.223"
+         id="halo2_tick_90_purple" />
+    </g>
+    <g
+       stroke="#b58aff"
+       stroke-width="0.24"
+       opacity="0.72"
+       id="halo2_percent_ticks_highlight">
+      <path
+         d="M 4.951,33.237 L 3.211,34.223"
+         id="halo2_tick_10_highlight" />
+      <path
+         d="M 2.250,22.880 L 0.250,22.869"
+         id="halo2_tick_20_highlight" />
+      <path
+         d="M 5.070,12.556 L 3.342,11.549"
+         id="halo2_tick_30_highlight" />
+      <path
+         d="M 12.660,5.010 L 11.663,3.276"
+         id="halo2_tick_40_highlight" />
+      <path
+         d="M 23.000,2.250 L 23.000,0.250"
+         id="halo2_tick_50_highlight" />
+      <path
+         d="M 33.340,5.010 L 34.337,3.276"
+         id="halo2_tick_60_highlight" />
+      <path
+         d="M 40.930,12.556 L 42.658,11.549"
+         id="halo2_tick_70_highlight" />
+      <path
+         d="M 43.750,22.880 L 45.750,22.869"
+         id="halo2_tick_80_highlight" />
+      <path
+         d="M 41.049,33.237 L 42.789,34.223"
+         id="halo2_tick_90_highlight" />
+    </g>
+  </g>
   <!-- cardinal ticks -->
   <g
      stroke="#a377cd"
@@ -166,114 +274,7 @@
        sodipodi:nodetypes="cc"
        style="display:inline" />
   </g>
-  <g
-     stroke="#d6b6f9"
-     stroke-width="0.42"
-     stroke-linecap="round"
-     opacity="0.84"
-     fill="none"
-     id="g18"
-     style="display:none">
-    <path
-       d="M3.162 26.533 L0.996 26.919"
-       id="path13" />
-    <path
-       d="M 8.2179149,10.939319 5.681,8.873"
-       id="path14"
-       sodipodi:nodetypes="cc" />
-    <path
-       d="M38.614 10.264 L40.319 8.873"
-       id="path15" />
-    <path
-       d="M42.838 26.533 L45.004 26.919"
-       id="path16" />
-  </g>
   <!-- minor ticks -->
-  <g
-     stroke="#d6b6f9"
-     stroke-width="0.42"
-     stroke-linecap="round"
-     opacity="0.72"
-     fill="none"
-     id="g38"
-     style="display:none">
-    <path
-       d="M7.216 36.002 L6.251 36.797"
-       id="path25" />
-    <path
-       d="M3.730 29.847 L2.552 30.265"
-       id="path26" />
-    <path
-       d="M2.550 22.872 L1.300 22.864"
-       id="path27" />
-    <path
-       d="M3.818 15.912 L2.645 15.479"
-       id="path28" />
-    <path
-       d="M12.812 5.268 L12.189 4.185"
-       id="path30" />
-    <path
-       d="M19.463 2.858 L19.247 1.627"
-       id="path31" />
-    <path
-       d="M26.537 2.858 L26.753 1.627"
-       id="path32" />
-    <path
-       d="M33.188 5.268 L33.811 4.185"
-       id="path33" />
-    <path
-       d="M42.182 15.912 L43.355 15.479"
-       id="path35" />
-    <path
-       d="M42.270 29.847 L43.448 30.265"
-       id="path37" />
-    <path
-       d="M38.784 36.002 L39.749 36.797"
-       id="path38" />
-  </g>
-  <g
-     stroke="#d6b6f9"
-     stroke-width="0.34"
-     stroke-linecap="round"
-     opacity="0.46"
-     fill="none"
-     id="g56"
-     style="display:none">
-    <path
-       d="M7.847 37.467 L7.341 37.950"
-       id="path39"
-       inkscape:label="path39" />
-    <path
-       d="M4.493 32.818 L3.875 33.146"
-       id="path40" />
-    <path
-       d="M2.525 27.435 L1.841 27.583"
-       id="path41" />
-    <path
-       d="M2.089 21.719 L1.391 21.676"
-       id="path42" />
-    <path
-       d="M9.726 6.792 L9.283 6.250"
-       id="path45" />
-    <path
-       d="M14.616 3.801 L14.336 3.159"
-       id="path46" />
-    <path
-       d="M20.134 2.247 L20.038 1.554"
-       id="path47" />
-    <path
-       d="M25.866 2.247 L25.962 1.554"
-       id="path48" />
-    <path
-       d="M31.384 3.801 L31.664 3.159"
-       id="path49" />
-    <path
-       d="M36.274 6.792 L36.717 6.250"
-       id="path50" />
-    <path
-       d="M40.170 10.996 L40.744 10.595"
-       id="path51" />
-  </g>
   <!-- dark bowl under foreground cap -->
   <g
      id="Underknob"
@@ -334,28 +335,4 @@
        style="display:none" />
   </g>
   <!-- simple glints and orb details -->
-  <g
-     stroke-linecap="round"
-     fill="none"
-     id="g63"
-     style="display:none">
-    <path
-       d="M23.006 0.614 L23.002 4.157"
-       stroke="#d6b6f9"
-       stroke-width="0.42"
-       opacity="0.84"
-       id="path61" />
-    <path
-       d="M1.45 23 L4.08 23"
-       stroke="#d6b6f9"
-       stroke-width="0.38"
-       opacity="0.62"
-       id="path62" />
-    <path
-       d="M41.92 23 L44.55 23"
-       stroke="#d6b6f9"
-       stroke-width="0.38"
-       opacity="0.62"
-       id="path63" />
-  </g>
 </svg>
