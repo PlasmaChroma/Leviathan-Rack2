@@ -48,46 +48,6 @@ struct LeviathanSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
 	LeviathanSlider();
 };
 
-namespace levi_jack {
-
-NVGcolor input();
-NVGcolor output();
-
-} // namespace levi_jack
-
-struct DynamicRingJack : app::SvgPort {
-	enum CoreStyle {
-		INPUT_CORE,
-		OUTPUT_CORE
-	};
-
-	NVGcolor ringColor = nvgRGB(0x00, 0xe6, 0xff);
-	float glowAmount = 0.42f;
-	float ringAmount = 0.82f;
-	bool connectedGlow = true;
-	widget::FramebufferWidget* ringFb = nullptr;
-	TransparentWidget* ringLayer = nullptr;
-	bool cachedConnected = false;
-
-	DynamicRingJack();
-	explicit DynamicRingJack(const char* coreSvgPath);
-	explicit DynamicRingJack(CoreStyle coreStyle);
-	void setRingColor(NVGcolor color);
-	void setGlowAmount(float amount);
-	void setCoreStyle(CoreStyle coreStyle);
-	void markRingDirty();
-	void drawRingLayer(const DrawArgs& args);
-	void step() override;
-};
-
-struct DynamicRingInputJack : DynamicRingJack {
-	DynamicRingInputJack();
-};
-
-struct DynamicRingOutputJack : DynamicRingJack {
-	DynamicRingOutputJack();
-};
-
 struct GoldButton : app::SvgSwitch {
 	TransformWidget* faceTransform = nullptr;
 	TransparentWidget* pressOverlay = nullptr;

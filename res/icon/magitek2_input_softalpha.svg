@@ -34,12 +34,38 @@
       <stop offset="100%" stop-color="#f4c765"/>
     </linearGradient>
     <linearGradient id="violetGlow" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f7d7ff"/>
-      <stop offset="42%" stop-color="#a676ff"/>
-      <stop offset="76%" stop-color="#6e3aff"/>
-      <stop offset="100%" stop-color="#2a087e"/>
+      <stop offset="0%" stop-color="#ffe8ff"/>
+      <stop offset="38%" stop-color="#b985ff"/>
+      <stop offset="74%" stop-color="#7440ff"/>
+      <stop offset="100%" stop-color="#2c0888"/>
     </linearGradient>
+
+    <!-- Raster-path only: subtle real SVG bloom for the purple socket ring. -->
+    <filter id="purpleBloomSoft" x="-38%" y="-38%" width="176%" height="176%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="0.85" result="softBlur"/>
+      <feColorMatrix in="softBlur" type="matrix"
+        values="1.05 0    0    0 0.010
+                0    0.62 0    0 0.000
+                0    0    1.42 0 0.038
+                0    0    0    0.58 0" result="violetBloom"/>
+    </filter>
+
+
+    <!-- SVG-to-PNG softalpha perimeter: fades the entire rendered jack into transparency at the last ~2px. -->
+    <radialGradient id="edgeFeatherAlphaInput" gradientUnits="userSpaceOnUse" cx="32" cy="32" r="31.6">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="91%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="95%" stop-color="#ffffff" stop-opacity="0.82"/>
+      <stop offset="98.5%" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="edgeFeatherMaskInput" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-2" y="-2" width="68" height="68">
+      <rect x="-2" y="-2" width="68" height="68" fill="#000000"/>
+      <circle cx="32" cy="32" r="31.6" fill="url(#edgeFeatherAlphaInput)"/>
+    </mask>
   </defs>
+
+  <g id="softalpha-export-feather" mask="url(#edgeFeatherMaskInput)">
 
   <!-- transparent outside; dark body begins here with alpha-feathered perimeter for cleaner SVG-to-PNG rasterization -->
   <circle cx="32" cy="32" r="30.55" fill="url(#softOuterAlphaInput)"/>
@@ -78,14 +104,19 @@
   <path d="M 32.0 50.1 L 32.0 56.8" fill="none" stroke="#4a21ff" stroke-width="1.15" stroke-linecap="round" opacity="0.68"/>
   <path d="M 30.9 55.2 L 33.1 55.2" fill="none" stroke="#6c53ff" stroke-width="0.75" stroke-linecap="round" opacity="0.70"/>
 
-  <!-- purple inner luminous socket ring: fake bloom via stacked strokes -->
-  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#7d34ff" stroke-width="6.00" opacity="0.12"/>
-  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#9b68ff" stroke-width="4.20" opacity="0.22"/>
-  <circle cx="32" cy="32" r="15.80" fill="none" stroke="url(#violetGlow)" stroke-width="2.70" opacity="0.98"/>
-  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#f2d4ff" stroke-width="0.70" opacity="0.86"/>
-  <path d="M 20.828 20.828 A 15.800 15.800 0 0 1 42.976 20.634" fill="none" stroke="#ffffff" stroke-width="0.80" stroke-linecap="round" opacity="0.55"/>
-  <path d="M 45.399 40.373 A 15.800 15.800 0 0 1 31.173 47.778" fill="none" stroke="#5e22f5" stroke-width="0.95" stroke-linecap="round" opacity="0.62"/>
-  <path d="M 24.879 47.271 A 16.850 16.850 0 0 1 15.406 34.926" fill="none" stroke="#2f0c8b" stroke-width="0.75" stroke-linecap="round" opacity="0.75"/>
+  <!-- purple inner luminous socket ring: slight lift + controlled raster bloom -->
+  <g filter="url(#purpleBloomSoft)" opacity="0.72">
+    <circle cx="32" cy="32" r="15.80" fill="none" stroke="#8640ff" stroke-width="4.80" opacity="0.26"/>
+    <circle cx="32" cy="32" r="15.80" fill="none" stroke="#bf86ff" stroke-width="2.35" opacity="0.18"/>
+    <path d="M 20.828 20.828 A 15.800 15.800 0 0 1 42.976 20.634" fill="none" stroke="#e8beff" stroke-width="1.20" stroke-linecap="round" opacity="0.18"/>
+  </g>
+  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#7d34ff" stroke-width="6.00" opacity="0.145"/>
+  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#a56eff" stroke-width="4.20" opacity="0.255"/>
+  <circle cx="32" cy="32" r="15.80" fill="none" stroke="url(#violetGlow)" stroke-width="2.72" opacity="1.00"/>
+  <circle cx="32" cy="32" r="15.80" fill="none" stroke="#f7dcff" stroke-width="0.62" opacity="0.78"/>
+  <path d="M 20.828 20.828 A 15.800 15.800 0 0 1 42.976 20.634" fill="none" stroke="#fff7ff" stroke-width="0.74" stroke-linecap="round" opacity="0.50"/>
+  <path d="M 45.399 40.373 A 15.800 15.800 0 0 1 31.173 47.778" fill="none" stroke="#6d2cff" stroke-width="0.95" stroke-linecap="round" opacity="0.65"/>
+  <path d="M 24.879 47.271 A 16.850 16.850 0 0 1 15.406 34.926" fill="none" stroke="#321092" stroke-width="0.75" stroke-linecap="round" opacity="0.74"/>
 
   <!-- center void and bevel lip -->
   <circle cx="32" cy="32" r="13.35" fill="#000000" opacity="0.98"/>
@@ -106,4 +137,5 @@
   <path d="M 46.849 46.849 A 21.000 21.000 0 0 1 44.929 48.548" fill="none" stroke="#050307" stroke-width="2.1" stroke-linecap="round" opacity="0.82"/>
   <path d="M 14.191 20.872 A 21.000 21.000 0 0 1 15.680 18.784" fill="none" stroke="#050307" stroke-width="2.0" stroke-linecap="round" opacity="0.82"/>
   <path d="M 18.223 47.849 A 21.000 21.000 0 0 1 16.394 46.052" fill="none" stroke="#050307" stroke-width="1.9" stroke-linecap="round" opacity="0.76"/>
+  </g>
 </svg>
