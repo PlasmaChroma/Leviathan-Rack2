@@ -1967,10 +1967,10 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const float total = aEnd - aStart;
 		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(segmentCount);
-		const NVGcolor litCore = nvgRGBA(26, 249, 252, 236);
-		const NVGcolor litHot = nvgRGBA(122, 252, 255, 188);
-		const NVGcolor unlitCore = nvgRGBA(140, 99, 250, 216);
-		const NVGcolor unlitHot = nvgRGBA(0xc0, 0x7b, 0xff, 168);
+		const NVGcolor litCore = config.activeColor;
+		const NVGcolor litHot = config.activeHighlightColor;
+		const NVGcolor unlitCore = config.inactiveColor;
+		const NVGcolor unlitHot = config.inactiveHighlightColor;
 		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
 			t = clamp(t, 0.f, 1.f);
 			NVGcolor out;
@@ -2297,7 +2297,10 @@ float LeviathanHaloKnob::normalizedParamValue() {
 	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
 }
 
-LeviathanHaloKnob2::LeviathanHaloKnob2() {
+LeviathanHaloKnob2::LeviathanHaloKnob2() : LeviathanHaloKnob2(Config()) {
+}
+
+LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
 
@@ -2344,6 +2347,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2() {
 	lightArc->minAngle = minAngle;
 	lightArc->maxAngle = maxAngle;
 	lightArc->valueNorm = normalizedParamValue();
+	lightArc->config = this->config.ledArc;
 	fb->addChild(lightArc);
 
 	foregroundGlowArc = new GlowArcWidget();

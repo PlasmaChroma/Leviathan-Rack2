@@ -281,6 +281,17 @@ struct LeviathanHaloKnob : app::SvgKnob {
 };
 
 struct LeviathanHaloKnob2 : app::SvgKnob {
+	struct LedArcConfig {
+		NVGcolor activeColor = nvgRGBA(26, 249, 252, 236);
+		NVGcolor activeHighlightColor = nvgRGBA(122, 252, 255, 188);
+		NVGcolor inactiveColor = nvgRGBA(140, 99, 250, 216);
+		NVGcolor inactiveHighlightColor = nvgRGBA(0xc0, 0x7b, 0xff, 168);
+	};
+
+	struct Config {
+		LedArcConfig ledArc;
+	};
+
 	struct GlowArcWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
@@ -294,6 +305,7 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		LedArcConfig config;
 
 		void draw(const DrawArgs& args) override;
 	};
@@ -313,9 +325,11 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	LightArcWidget* lightArc = nullptr;
 	CapReflectionWidget* capReflection = nullptr;
+	Config config;
 	float lastBloomAmount = -1.f;
 
 	LeviathanHaloKnob2();
+	explicit LeviathanHaloKnob2(Config config);
 	void step() override;
 	void onChange(const ChangeEvent& e) override;
 
