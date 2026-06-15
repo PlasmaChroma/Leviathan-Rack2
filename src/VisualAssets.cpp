@@ -1880,6 +1880,8 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float mainRadius = diameterPx * (18.15f / 46.f);
 	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
+	const float segmentWidth = mainWidth + 0.55f * scale;
+	const float segmentRadius = mainRadius - 0.5f * (segmentWidth - mainWidth);
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
@@ -1984,18 +1986,18 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 			const float s0 = aStart + step * float(i) + 0.5f * gap;
 			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
 			if (activeAngle <= s0) {
-				drawSegmentBand(s0, s1, mainRadius, mainWidth, unlitCore, unlitHot);
+				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, unlitCore, unlitHot);
 			}
 			else if (activeAngle >= s1) {
-				drawSegmentBand(s0, s1, mainRadius, mainWidth, litCore, litHot);
+				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, litCore, litHot);
 			}
 			else {
 				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
 				drawSegmentBand(
 					s0,
 					s1,
-					mainRadius,
-					mainWidth,
+					segmentRadius,
+					segmentWidth,
 					blendColor(unlitCore, litCore, segmentProgress),
 					blendColor(unlitHot, litHot, segmentProgress));
 			}
@@ -2034,9 +2036,9 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const float terminatorSweep = 0.055f;
 		const float a0 = angle + std::min(0.f, direction) * terminatorSweep;
 		const float a1 = angle + std::max(0.f, direction) * terminatorSweep;
-		drawArcBand(a0, a1, mainRadius, mainWidth + 1.15f * scale, nvgRGBA(0, 1, 8, 230));
+		drawArcBand(a0, a1, segmentRadius, segmentWidth + 1.15f * scale, nvgRGBA(0, 1, 8, 230));
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, mainRadius - mainWidth * 0.30f, a0, a1, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, segmentRadius - segmentWidth * 0.30f, a0, a1, NVG_CW);
 		nvgStrokeColor(args.vg, nvgRGBA(155, 170, 190, 48));
 		nvgStrokeWidth(args.vg, std::max(0.16f, 0.22f * scale));
 		nvgLineCap(args.vg, NVG_BUTT);
