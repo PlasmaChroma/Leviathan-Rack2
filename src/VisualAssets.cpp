@@ -1917,7 +1917,7 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
@@ -1997,7 +1997,7 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 
@@ -2200,7 +2200,7 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
 	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
 	if (bloom <= 0.001f) return;
