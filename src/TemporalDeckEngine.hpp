@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MathHelpers.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 
@@ -1308,9 +1309,7 @@ struct TemporalDeckEngine {
   }
 
   static float fastTanh(float x) {
-    x = clamp(x, -3.f, 3.f);
-    float x2 = x * x;
-    return x * (27.f + x2) / (27.f + 9.f * x2);
+    return levi_math::fastTanh(x);
   }
 
   void refreshCartridgeCache() {

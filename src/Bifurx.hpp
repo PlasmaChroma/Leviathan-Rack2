@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
@@ -94,7 +95,7 @@ constexpr float kPeakMarkerBottomLanePadding = 0.f;
 
 // Utility functions
 inline float clamp01(float v) {
-	return clamp(v, 0.f, 1.f);
+	return levi_math::clamp01(v);
 }
 
 inline float fastExp2(float x) {
@@ -136,15 +137,11 @@ float applyLevelInputStage(float in, float levelKnob);
 float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
 
 inline float fastTanh(float x) {
-	const float x2 = x * x;
-	if (x2 < 9.f) {
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-	return (x > 0.f) ? 1.f : -1.f;
+	return levi_math::fastTanh(x);
 }
 
 inline float softClip(float x) {
-	return fastTanh(x);
+	return levi_math::softClip(x);
 }
 
 inline float sanitizeFinite(float x, float fallback = 0.f) {

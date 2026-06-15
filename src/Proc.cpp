@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
@@ -213,7 +214,7 @@ struct Proc : Module {
 
 	static float softClamp8(float v) {
 		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * std::tanh(v / 8.0f);
+		return 8.0f * levi_math::fastTanh(v / 8.0f);
 	}
 
 	static float bothHzFromCv(float v) {
