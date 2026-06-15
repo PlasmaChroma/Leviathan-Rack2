@@ -577,11 +577,11 @@ MagitekOutputJack::MagitekOutputJack() {
 }
 
 Magitek2InputJack::Magitek2InputJack() {
-	installMagitekRasterPort(this, "res/icon/magitek2_input_softalpha_256.png");
+	installMagitekRasterPort(this, "res/icon/magitek2_input_rackfinal_256.png");
 }
 
 Magitek2OutputJack::Magitek2OutputJack() {
-	installMagitekRasterPort(this, "res/icon/magitek2_output_softalpha_256.png");
+	installMagitekRasterPort(this, "res/icon/magitek2_output_rackfinal_256.png");
 }
 
 DynamicRingJack::DynamicRingJack()
