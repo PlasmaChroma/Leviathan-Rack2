@@ -9,6 +9,8 @@ namespace panel_svg {
 struct SvgRectMatch {
 	std::string id;
 	math::Rect rect;
+	bool hasFillColor = false;
+	NVGcolor fillColor {};
 };
 
 bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect);

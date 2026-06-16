@@ -37,6 +37,17 @@ namespace {
 
 struct SvgRect3DEffectWidget : TransparentWidget {
 	float edgeMarginPx = 0.f;
+	NVGcolor baseColor = nvgRGB(87, 64, 191);
+
+	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t, float alphaScale = 1.f) {
+		t = clamp(t, 0.f, 1.f);
+		NVGcolor out;
+		out.r = a.r + (b.r - a.r) * t;
+		out.g = a.g + (b.g - a.g) * t;
+		out.b = a.b + (b.b - a.b) * t;
+		out.a = clamp((a.a + (b.a - a.a) * t) * alphaScale, 0.f, 1.f);
+		return out;
+	}
 
 	void draw(const DrawArgs& args) override {
 		const float x = edgeMarginPx;
@@ -48,26 +59,29 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 		}
 
 		const float radius = clamp(std::min(w, h) * 0.055f, 2.f, 8.f);
-		const float bevel = clamp(std::min(w, h) * 0.030f, 1.0f, 4.2f);
+		const float bevel = clamp(std::min(w, h) * 0.014f, 0.55f, 2.0f);
+		const NVGcolor lightColor = mixColor(baseColor, nvgRGB(255, 255, 255), 0.42f, 0.72f);
+		const NVGcolor shadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.56f, 0.80f);
+		const NVGcolor innerShadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.40f, 0.44f);
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x, y, w, h, radius);
-		nvgStrokeWidth(args.vg, bevel * 1.65f);
+		nvgStrokeWidth(args.vg, bevel * 1.05f);
 		NVGpaint outerPaint = nvgLinearGradient(
 			args.vg,
 			x,
 			y,
 			x + w,
 			y + h,
-			nvgRGBA(255, 255, 255, 62),
-			nvgRGBA(0, 0, 0, 116));
+			lightColor,
+			shadowColor);
 		nvgStrokePaint(args.vg, outerPaint);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + bevel * 0.42f, y + bevel * 0.42f, std::max(0.f, w - bevel * 0.84f), std::max(0.f, h - bevel * 0.84f), std::max(0.f, radius - bevel * 0.42f));
-		nvgStrokeWidth(args.vg, std::max(0.65f, bevel * 0.48f));
-		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 84));
+		nvgStrokeWidth(args.vg, std::max(0.32f, bevel * 0.24f));
+		nvgStrokeColor(args.vg, innerShadowColor);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
@@ -75,30 +89,44 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 		nvgLineTo(args.vg, x + w - radius, y);
 		nvgMoveTo(args.vg, x, y + radius);
 		nvgLineTo(args.vg, x, y + h - radius);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 118));
-		nvgStrokeWidth(args.vg, std::max(0.75f, bevel * 0.55f));
+		nvgStrokeColor(args.vg, lightColor);
+		nvgStrokeWidth(args.vg, std::max(0.34f, bevel * 0.30f));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x + w, y + radius);
 		nvgLineTo(args.vg, x + w, y + h - radius);
+		NVGpaint rightPaint = nvgLinearGradient(
+			args.vg,
+			x + w,
+			y + radius,
+			x + w,
+			y + h - radius,
+			mixColor(baseColor, nvgRGB(0, 0, 0), 0.34f, 0.50f),
+			shadowColor);
+		nvgStrokePaint(args.vg, rightPaint);
+		nvgStrokeWidth(args.vg, std::max(0.36f, bevel * 0.32f));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x + radius, y + h);
 		nvgLineTo(args.vg, x + w - radius, y + h);
-		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 156));
-		nvgStrokeWidth(args.vg, std::max(0.85f, bevel * 0.62f));
+		nvgStrokeColor(args.vg, shadowColor);
+		nvgStrokeWidth(args.vg, std::max(0.36f, bevel * 0.32f));
 		nvgStroke(args.vg);
 
 		nvgSave(args.vg);
 		nvgIntersectScissor(args.vg, x - edgeMarginPx, y - edgeMarginPx, w + 2.f * edgeMarginPx, h + 2.f * edgeMarginPx);
 		nvgBeginPath(args.vg);
-		nvgRect(args.vg, x + radius * 0.4f, y - bevel * 0.55f, std::max(1.f, w - radius * 0.8f), bevel * 1.25f);
+		const float sheenInset = std::min(w * 0.18f, radius + bevel * 2.2f);
+		nvgRect(args.vg, x + sheenInset, y - bevel * 0.45f, std::max(1.f, w - 2.f * sheenInset), bevel * 0.90f);
 		NVGpaint sheenPaint = nvgLinearGradient(
 			args.vg,
 			x,
 			y - bevel,
 			x,
 			y + bevel,
-			nvgRGBA(255, 255, 255, 72),
+			mixColor(baseColor, nvgRGB(255, 255, 255), 0.62f, 0.52f),
 			nvgRGBA(255, 255, 255, 0));
 		nvgFillPaint(args.vg, sheenPaint);
 		nvgFill(args.vg);
@@ -109,12 +137,21 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 } // namespace
 
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
+	return createSvgRect3DEffectWidget(rectMm, nvgRGB(87, 64, 191));
+}
+
+Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor) {
+	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
 	SvgRect3DEffectWidget* widget = new SvgRect3DEffectWidget();
-	const float marginMm = 0.45f;
+	const float marginMm = 0.22f;
 	widget->edgeMarginPx = mm2px(Vec(marginMm, 0.f)).x;
-	widget->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
 	widget->box.size = mm2px(rectMm.size.plus(Vec(2.f * marginMm, 2.f * marginMm)));
-	return widget;
+	widget->baseColor = baseColor;
+	fb->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
+	fb->box.size = widget->box.size;
+	fb->dirtyOnSubpixelChange = false;
+	fb->addChild(widget);
+	return fb;
 }
 
 void resetEclipseShadowDrawMetrics() {

@@ -1467,7 +1467,12 @@ struct ProcWidget : ModuleWidget {
 		std::vector<panel_svg::SvgRectMatch> enhanceRects;
 		if (panel_svg::findRectsWithIdSubstringMm(panelPath, "ENHANCE", &enhanceRects)) {
 			for (const panel_svg::SvgRectMatch& match : enhanceRects) {
-				addChild(visual_assets::createSvgRect3DEffectWidget(match.rect));
+				if (match.hasFillColor) {
+					addChild(visual_assets::createSvgRect3DEffectWidget(match.rect, match.fillColor));
+				}
+				else {
+					addChild(visual_assets::createSvgRect3DEffectWidget(match.rect));
+				}
 			}
 		}
 

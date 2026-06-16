@@ -2,6 +2,7 @@
 #include "PanelAnchorAtlas.hpp"
 
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -58,6 +59,133 @@ bool parseAttrString(const std::string& tag, const char* attr, std::string* outV
 	}
 	*outValue = attrMatch.str(1);
 	return true;
+}
+
+bool parseStyleValue(const std::string& tag, const std::string& key, std::string* outValue) {
+	if (!outValue) {
+		return false;
+	}
+	std::string style;
+	if (!parseAttrString(tag, "style", &style)) {
+		return false;
+	}
+	const std::string needle = key + ":";
+	size_t pos = style.find(needle);
+	if (pos == std::string::npos) {
+		return false;
+	}
+	pos += needle.size();
+	size_t end = style.find(';', pos);
+	std::string value = style.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+	while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+		value.erase(value.begin());
+	}
+	while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+		value.pop_back();
+	}
+	*outValue = value;
+	return !outValue->empty();
+}
+
+bool parseHexColor(const std::string& value, NVGcolor* outColor) {
+	if (!outColor || value.size() < 7u || value[0] != '#') {
+		return false;
+	}
+	std::string hex = value.substr(1, 6);
+	for (char c : hex) {
+		if (!std::isxdigit(static_cast<unsigned char>(c))) {
+			return false;
+		}
+	}
+	unsigned long rgb = std::strtoul(hex.c_str(), nullptr, 16);
+	*outColor = nvgRGB(int((rgb >> 16) & 0xffu), int((rgb >> 8) & 0xffu), int(rgb & 0xffu));
+	return true;
+}
+
+bool parseUrlId(const std::string& value, std::string* outId) {
+	if (!outId) {
+		return false;
+	}
+	const std::regex urlRegex("url\\s*\\(\\s*#([^\\)\\s]+)\\s*\\)", std::regex::icase);
+	std::smatch match;
+	if (!std::regex_search(value, match, urlRegex)) {
+		return false;
+	}
+	*outId = match.str(1);
+	return !outId->empty();
+}
+
+bool gradientFirstStopColor(const std::string& svgText, const std::string& gradientId, NVGcolor* outColor, int depth = 0) {
+	if (!outColor || gradientId.empty() || depth > 4) {
+		return false;
+	}
+	const std::string escapedId = escapeRegexLiteral(gradientId);
+	const std::regex selfClosingGradientRegex("<linearGradient\\b[^>]*\\bid\\s*=\\s*\"" + escapedId + "\"[^>]*/>", std::regex::icase);
+	std::smatch selfClosingMatch;
+	if (std::regex_search(svgText, selfClosingMatch, selfClosingGradientRegex)) {
+		const std::string gradientTag = selfClosingMatch.str(0);
+		std::string href;
+		if ((parseAttrString(gradientTag, "xlink:href", &href) || parseAttrString(gradientTag, "href", &href))
+			&& !href.empty() && href[0] == '#') {
+			return gradientFirstStopColor(svgText, href.substr(1), outColor, depth + 1);
+		}
+	}
+	const std::regex gradientRegex("<linearGradient\\b[^>]*\\bid\\s*=\\s*\"" + escapedId + "\"[^>]*>([\\s\\S]*?)</linearGradient>", std::regex::icase);
+	std::smatch gradientMatch;
+	if (!std::regex_search(svgText, gradientMatch, gradientRegex)) {
+		return false;
+	}
+	const std::string gradientTagAndBody = gradientMatch.str(0);
+	const std::string gradientBody = gradientMatch.str(1);
+
+	std::string href;
+	if (parseAttrString(gradientTagAndBody, "xlink:href", &href) || parseAttrString(gradientTagAndBody, "href", &href)) {
+		if (!href.empty() && href[0] == '#') {
+			NVGcolor inheritedColor;
+			if (gradientFirstStopColor(svgText, href.substr(1), &inheritedColor, depth + 1)) {
+				*outColor = inheritedColor;
+				return true;
+			}
+		}
+	}
+
+	const std::regex stopRegex("<stop\\b[^>]*>", std::regex::icase);
+	auto stopBegin = std::sregex_iterator(gradientBody.begin(), gradientBody.end(), stopRegex);
+	auto stopEnd = std::sregex_iterator();
+	for (auto it = stopBegin; it != stopEnd; ++it) {
+		const std::string stopTag = it->str(0);
+		std::string offset;
+		if (parseAttrString(stopTag, "offset", &offset) && offset != "0" && offset != "0%") {
+			continue;
+		}
+		std::string colorText;
+		if ((parseStyleValue(stopTag, "stop-color", &colorText) || parseAttrString(stopTag, "stop-color", &colorText))
+			&& parseHexColor(colorText, outColor)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool rectFillColor(const std::string& svgText, const std::string& rectTag, NVGcolor* outColor) {
+	if (!outColor) {
+		return false;
+	}
+	std::string fill;
+	if (!parseStyleValue(rectTag, "fill", &fill)) {
+		parseAttrString(rectTag, "fill", &fill);
+	}
+	if (fill.empty()) {
+		return false;
+	}
+	if (parseHexColor(fill, outColor)) {
+		return true;
+	}
+	std::string gradientId;
+	if (parseUrlId(fill, &gradientId)) {
+		return gradientFirstStopColor(svgText, gradientId, outColor);
+	}
+	return false;
 }
 
 bool parseRectTagMm(const std::string& rectTag, math::Rect* outRect) {
@@ -254,7 +382,11 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		}
 		const SvgAffine rectTransform = multiplyAffine(transformStack.back(), transformForTag(rectTag));
 		rect = transformRectMm(rect, rectTransform);
-		outRects->push_back({id, rect});
+		SvgRectMatch match;
+		match.id = id;
+		match.rect = rect;
+		match.hasFillColor = rectFillColor(svgText, rectTag, &match.fillColor);
+		outRects->push_back(match);
 	}
 	return !outRects->empty();
 }

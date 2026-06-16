@@ -89,6 +89,13 @@ TestResult testPointParsesRectCenter() {
 TestResult testFindsRectsByIdSubstring() {
   const std::string path = makeTempSvgPath("panel_svg_rect_substring");
   const std::string svg = R"SVG(<svg xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="baseGradient">
+        <stop offset="0" style="stop-color:#5740bf;stop-opacity:1"/>
+        <stop offset="1" style="stop-color:#5740bf;stop-opacity:0"/>
+      </linearGradient>
+      <linearGradient id="derivedGradient" xlink:href="#baseGradient"/>
+    </defs>
     <rect id="FRAME_LEFT" x="10" y="20" width="30" height="40"/>
     <g transform="matrix(1,0,0,1,-50,-75)">
       <rect
@@ -96,7 +103,8 @@ TestResult testFindsRectsByIdSubstring() {
         y="275"
         width="840"
         height="930"
-        id="frame_left_ENHANCE" />
+        id="frame_left_ENHANCE"
+        style="fill:url(#derivedGradient)" />
     </g>
   </svg>)SVG";
   if (!writeTextFile(path, svg)) {
@@ -111,10 +119,19 @@ TestResult testFindsRectsByIdSubstring() {
     && nearlyEqual(matches[0].rect.pos.x, 1.0f)
     && nearlyEqual(matches[0].rect.pos.y, 2.0f)
     && nearlyEqual(matches[0].rect.size.x, 8.4f)
-    && nearlyEqual(matches[0].rect.size.y, 9.3f);
+    && nearlyEqual(matches[0].rect.size.y, 9.3f)
+    && matches[0].hasFillColor
+    && nearlyEqual(matches[0].fillColor.r, 0x57 / 255.f, 1e-5f)
+    && nearlyEqual(matches[0].fillColor.g, 0x40 / 255.f, 1e-5f)
+    && nearlyEqual(matches[0].fillColor.b, 0xbf / 255.f, 1e-5f);
   return {"Rect substring finder returns matching rect geometry", pass,
           "ok=" + std::to_string(ok ? 1 : 0) +
-            " count=" + std::to_string(matches.size())};
+            " count=" + std::to_string(matches.size()) +
+            " color=" + (matches.empty() ? std::string("n/a") :
+              (std::to_string(matches[0].hasFillColor ? 1 : 0) + "," +
+               std::to_string(matches[0].fillColor.r) + "," +
+               std::to_string(matches[0].fillColor.g) + "," +
+               std::to_string(matches[0].fillColor.b)))};
 }
 
 TestResult testCircleParsesWithExplicitScale() {
