@@ -1259,9 +1259,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
 	static constexpr float GL_WAVE_LINE_WIDTH = 2.0f;
-	static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
-	static constexpr float GL_HIGH_ZOOM_WIDTH_TAPER = 0.08f;
-	static constexpr int TRAIL_DRAW_STRIDE = 2;
+		static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
+		static constexpr float GL_HIGH_ZOOM_WIDTH_TAPER = 0.08f;
+		static constexpr int TRAIL_DRAW_STRIDE = 2;
+		static constexpr int TRAIL_CAPTURE_STRIDE = 1;
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
@@ -1605,7 +1606,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_DRAW_STRIDE);
+						curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 				}
 				else {
 					WavePreviewBufferedTracerStyle style;
@@ -1613,7 +1614,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					style.fadeSec = TRAIL_FADE_SEC;
 					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
 					style.maxAlpha = 118.f;
-					style.drawStride = TRAIL_DRAW_STRIDE;
+						style.drawStride = TRAIL_CAPTURE_STRIDE;
 					frameTracer.capture(points, nowSec, box.size, style);
 				}
 			}

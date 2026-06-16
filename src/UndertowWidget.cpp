@@ -38,6 +38,7 @@ struct UndertowShapePreviewWidget final : Widget {
   static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
   static constexpr float TRAIL_LINE_WIDTH = 1.05f;
   static constexpr int TRAIL_DRAW_STRIDE = 2;
+  static constexpr int TRAIL_CAPTURE_STRIDE = 1;
   Undertow* module = nullptr;
   std::array<float, PREVIEW_POINT_COUNT> samples {};
   std::array<Vec, PREVIEW_POINT_COUNT> points {};
@@ -135,7 +136,7 @@ struct UndertowShapePreviewWidget final : Widget {
       if (curveChanged) {
         if (tracerEnabled && pointsInitialized) {
           if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_DRAW_STRIDE);
+            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
           }
           else {
             WavePreviewBufferedTracerStyle style;
@@ -143,7 +144,7 @@ struct UndertowShapePreviewWidget final : Widget {
             style.fadeSec = TRAIL_FADE_SEC;
             style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
             style.maxAlpha = 104.f;
-            style.drawStride = TRAIL_DRAW_STRIDE;
+            style.drawStride = TRAIL_CAPTURE_STRIDE;
             frameTracer.capture(points, nowSec, box.size, style);
           }
         }
