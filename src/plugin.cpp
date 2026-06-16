@@ -82,6 +82,7 @@ void ModuleTeardownTimer::begin(int id) {
 	moduleId = id;
 	active = true;
 	startedAt = std::chrono::steady_clock::now();
+	INFO("Leviathan: module teardown begin: %s id=%d", moduleName ? moduleName : "unknown", moduleId);
 }
 
 ModuleTeardownTimer::~ModuleTeardownTimer() {

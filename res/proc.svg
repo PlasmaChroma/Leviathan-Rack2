@@ -20,12 +20,20 @@
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
    id="defs1"><linearGradient
+   id="linearGradient3"
+   inkscape:collect="always"><stop
+     style="stop-color:#1cccd9;stop-opacity:1;"
+     offset="0"
+     id="stop19" /><stop
+     style="stop-color:#1cccd9;stop-opacity:0.5;"
+     offset="1"
+     id="stop24" /></linearGradient><linearGradient
    id="linearGradient2"
    inkscape:collect="always"><stop
      style="stop-color:#5740bf;stop-opacity:1;"
      offset="0"
      id="stop17" /><stop
-     style="stop-color:#5740bf;stop-opacity:0.32880434;"
+     style="stop-color:#5740bf;stop-opacity:0.5;"
      offset="1"
      id="stop18" /></linearGradient><linearGradient
    id="linearGradient22"
@@ -251,6 +259,14 @@
    y1="2067.5444"
    x2="4959.5674"
    y2="7872.3066"
+   gradientUnits="userSpaceOnUse" /><linearGradient
+   inkscape:collect="always"
+   xlink:href="#linearGradient3"
+   id="linearGradient24"
+   x1="1234.876"
+   y1="10191.739"
+   x2="4814.7979"
+   y2="13061.613"
    gradientUnits="userSpaceOnUse" /></defs>
   <sodipodi:namedview
    id="namedview488"
@@ -262,9 +278,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="28.45555"
-   inkscape:cy="266.02975"
+   inkscape:zoom="2.385554"
+   inkscape:cx="26.40896"
+   inkscape:cy="262.20325"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -383,7 +399,7 @@
    stroke-opacity="0.06"
    stroke-width="28.0455"
    id="outputs_ENHANCE"
-   style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+   style="opacity:0.33;fill:url(#linearGradient24);fill-opacity:0.5" />
         
       </g>
       

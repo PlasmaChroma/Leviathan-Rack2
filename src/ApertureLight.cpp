@@ -26,7 +26,7 @@ float apertureBloomAmount() {
 	}
 	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	return bloomLow * (1.0f + 0.90f * bloomRamp * bloomRamp);
+	return bloomLow * (1.18f + 1.05f * bloomRamp * bloomRamp);
 }
 
 void setApertureBaseColor(LeviathanApertureLight* light, NVGcolor color) {
@@ -54,32 +54,32 @@ void LeviathanApertureLight::applySize(ApertureLightSize size) {
 		socketRadius = 3.2f;
 		lensRadius = 2.2f;
 		coreRadius = 1.4f;
-		bloomRadius = 5.5f;
-		bloomAlpha = 0.20f;
+		bloomRadius = 6.8f;
+		bloomAlpha = 0.24f;
 		break;
 	case ApertureLightSize::Small:
 		box.size = Vec(14.f, 14.f);
 		socketRadius = 4.8f;
 		lensRadius = 3.3f;
 		coreRadius = 2.1f;
-		bloomRadius = 8.0f;
-		bloomAlpha = 0.22f;
+		bloomRadius = 9.8f;
+		bloomAlpha = 0.26f;
 		break;
 	case ApertureLightSize::Medium:
 		box.size = Vec(20.f, 20.f);
 		socketRadius = 7.0f;
 		lensRadius = 5.0f;
 		coreRadius = 3.2f;
-		bloomRadius = 11.5f;
-		bloomAlpha = 0.24f;
+		bloomRadius = 14.2f;
+		bloomAlpha = 0.28f;
 		break;
 	case ApertureLightSize::Large:
 		box.size = Vec(28.f, 28.f);
 		socketRadius = 10.0f;
 		lensRadius = 7.2f;
 		coreRadius = 4.5f;
-		bloomRadius = 16.5f;
-		bloomAlpha = 0.26f;
+		bloomRadius = 20.5f;
+		bloomAlpha = 0.30f;
 		break;
 	}
 }
@@ -325,7 +325,7 @@ VioletApertureLight::VioletApertureLight() {
 }
 
 AmberApertureLight::AmberApertureLight() {
-	setApertureBaseColor(this, nvgRGB(255, 176, 38));
+	setApertureBaseColor(this, nvgRGB(255, 195, 62));
 }
 
 BlueApertureLight::BlueApertureLight() {
