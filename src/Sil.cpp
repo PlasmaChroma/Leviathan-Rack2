@@ -2599,10 +2599,10 @@ struct SilWidget : ModuleWidget {
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputLPos), module, Sil::INPUT_L_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(inputRPos), module, Sil::INPUT_R_INPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputLPos), module, Sil::OUTPUT_L_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRPos), module, Sil::OUTPUT_R_OUTPUT));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
 			mm2px(masteringButtonPos), module, Sil::MASTERING_ENABLED_PARAM, Sil::MASTERING_ENABLED_LIGHT
 		));

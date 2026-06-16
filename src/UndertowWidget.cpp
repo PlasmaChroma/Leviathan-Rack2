@@ -292,12 +292,12 @@ struct UndertowWidget final : ModuleWidget {
     auto addInputPort = [&](int inputId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addInput(createInputCentered<DarkPJ301MPort>(mm2px(posMm), module, inputId));
+      addInput(createInputCentered<Magitek2InputJack>(mm2px(posMm), module, inputId));
     };
     auto addOutputPort = [&](int outputId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addOutput(createOutputCentered<BananutBlack>(mm2px(posMm), module, outputId));
+      addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(posMm), module, outputId));
     };
     auto addTinyLight = [&](int lightId, const char* anchorId, const Vec& fallbackMm, NVGcolor color) {
       Vec posMm;

@@ -658,24 +658,40 @@ static std::string vinylExpansionBaseUrl() {
   const char *branch = isDragonKingDebugEnabled() ? "test" : "main";
   return std::string("https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/") + branch + "/Vinyl";
 }
-static std::atomic<int> gExpandedVinylSyncDepth {0};
-static std::atomic<bool> gExpandedVinylDownloadRunning {false};
-static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
-static std::mutex gExpandedVinylDownloadResultMutex;
-static std::string gExpandedVinylDownloadResultError;
-static std::atomic<int> gExpandedVinylDownloadCurrentIndex {0};
-static std::atomic<int> gExpandedVinylDownloadTotalFiles {0};
-static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
-static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
-static std::mutex gExpandedVinylDownloadThreadMutex;
-static std::thread gExpandedVinylDownloadThread;
-static std::atomic<bool> gExpandedVinylDownloadThreadFinished {false};
+struct ExpandedVinylDownloadState {
+  std::atomic<int> syncDepth {0};
+  std::atomic<bool> running {false};
+  std::atomic<bool> resultPending {false};
+  std::mutex resultMutex;
+  std::string resultError;
+  std::atomic<int> currentIndex {0};
+  std::atomic<int> totalFiles {0};
+  std::atomic<uint64_t> syncNonceSeq {0};
+  std::atomic<uint64_t> loadSalt {0};
+  std::mutex threadMutex;
+  std::thread thread;
+  std::atomic<bool> threadFinished {false};
+};
+
+static ExpandedVinylDownloadState &expandedVinylDownloadState() {
+  // The worker can still be inside Rack's blocking network download API while
+  // the process is closing, so this state is intentionally process-lifetime.
+  static ExpandedVinylDownloadState *state = new ExpandedVinylDownloadState();
+  return *state;
+}
 
 struct ScopedExpandedVinylDownloadThreadCleanup {
   ~ScopedExpandedVinylDownloadThreadCleanup() {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-    if (gExpandedVinylDownloadThread.joinable()) {
-      gExpandedVinylDownloadThread.join();
+    ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+    std::lock_guard<std::mutex> lock(state.threadMutex);
+    if (!state.thread.joinable()) {
+      return;
+    }
+    if (state.threadFinished.load(std::memory_order_acquire)) {
+      state.thread.join();
+    } else {
+      WARN("TemporalDeck: Vinyl expansion sync still running during shutdown; detaching worker");
+      state.thread.detach();
     }
   }
 };
@@ -683,16 +699,17 @@ struct ScopedExpandedVinylDownloadThreadCleanup {
 static ScopedExpandedVinylDownloadThreadCleanup gScopedExpandedVinylDownloadThreadCleanup;
 
 static bool isExpandedVinylSyncActive() {
-  return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
+  return expandedVinylDownloadState().syncDepth.load(std::memory_order_relaxed) > 0;
 }
 
 static bool isExpandedVinylDownloadRunning() {
-  return gExpandedVinylDownloadRunning.load(std::memory_order_relaxed);
+  return expandedVinylDownloadState().running.load(std::memory_order_relaxed);
 }
 
 static std::string expandedVinylSyncLabel() {
-  int current = gExpandedVinylDownloadCurrentIndex.load(std::memory_order_relaxed);
-  int total = gExpandedVinylDownloadTotalFiles.load(std::memory_order_relaxed);
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  int current = state.currentIndex.load(std::memory_order_relaxed);
+  int total = state.totalFiles.load(std::memory_order_relaxed);
   if (current > 0 && total > 0) {
     current = std::min(current, total);
     return string::f("SYNC (%d/%d)", current, total);
@@ -701,14 +718,15 @@ static std::string expandedVinylSyncLabel() {
 }
 
 static void finalizeExpandedVinylDownloadThreadIfFinished() {
-  if (!gExpandedVinylDownloadThreadFinished.load(std::memory_order_acquire)) {
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  if (!state.threadFinished.load(std::memory_order_acquire)) {
     return;
   }
-  std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-  if (gExpandedVinylDownloadThread.joinable()) {
-    gExpandedVinylDownloadThread.join();
+  std::lock_guard<std::mutex> lock(state.threadMutex);
+  if (state.thread.joinable()) {
+    state.thread.join();
   }
-  gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
+  state.threadFinished.store(false, std::memory_order_release);
 }
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
@@ -1517,7 +1535,7 @@ static std::string expandedArtLoadPath(const std::string &absolutePath) {
   if (!entry) {
     return absolutePath;
   }
-  uint64_t salt = gExpandedVinylLoadSalt.load(std::memory_order_relaxed);
+  uint64_t salt = expandedVinylDownloadState().loadSalt.load(std::memory_order_relaxed);
   if (salt == 0) {
     return absolutePath;
   }
@@ -1762,14 +1780,15 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
 
 static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCountOut) {
   struct ScopedExpandedVinylSync {
-    ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_add(1, std::memory_order_relaxed); }
-    ~ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_sub(1, std::memory_order_relaxed); }
+    ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_add(1, std::memory_order_relaxed); }
+    ~ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_sub(1, std::memory_order_relaxed); }
   } scopedExpandedVinylSync;
 
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
   const std::string finalRoot = expandedVinylRootPath();
   const std::string tempRoot = finalRoot + ".tmp";
   long long syncMs = (long long)std::llround(system::getUnixTime() * 1000.0);
-  uint64_t syncSeq = gExpandedVinylSyncNonceSeq.fetch_add(1, std::memory_order_relaxed);
+  uint64_t syncSeq = state.syncNonceSeq.fetch_add(1, std::memory_order_relaxed);
   const std::string cacheBuster = string::f("tdcb=%lld_%llu", syncMs, (unsigned long long)syncSeq);
   system::removeRecursively(tempRoot);
   if (!system::createDirectories(tempRoot)) {
@@ -1832,8 +1851,8 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
 
   int totalFilesToDownload = int(missingFiles.size() + staleFiles.size());
-  gExpandedVinylDownloadTotalFiles.store(totalFilesToDownload, std::memory_order_relaxed);
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  state.totalFiles.store(totalFilesToDownload, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
   int currentFetchIndex = 0;
 
   auto downloadQueued = [&](const std::vector<const VinylDownloadPlan::FileItem *> &queue) -> bool {
@@ -1841,7 +1860,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
       if (!item) {
         continue;
       }
-      gExpandedVinylDownloadCurrentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
+      state.currentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
       std::string encodedFile = network::encodeUrl(item->file);
       std::string fileUrl = baseUrl + "/" + encodedFile + "?" + cacheBuster;
       std::string filePath = system::join(tempRoot, item->file);
@@ -1860,7 +1879,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     return false;
   }
   // All files fetched; keep plain SYNC while finalizing install.
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
 
   system::removeRecursively(finalRoot);
   if (!system::rename(tempRoot, finalRoot)) {
@@ -1877,46 +1896,48 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   if (fileCountOut) {
     *fileCountOut = int(plan.files.size());
   }
-  gExpandedVinylLoadSalt.fetch_add(1, std::memory_order_relaxed);
+  state.loadSalt.fetch_add(1, std::memory_order_relaxed);
   invalidateVinylInventoryCache();
   return true;
 }
 
 static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
   finalizeExpandedVinylDownloadThreadIfFinished();
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
   bool expected = false;
-  if (!gExpandedVinylDownloadRunning.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+  if (!state.running.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
     if (errorOut) {
       *errorOut = "Vinyl expansion sync already in progress";
     }
     return false;
   }
-  gExpandedVinylDownloadResultPending.store(false, std::memory_order_relaxed);
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-  gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
+  state.resultPending.store(false, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
+  state.totalFiles.store(0, std::memory_order_relaxed);
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-    gExpandedVinylDownloadResultError.clear();
+    std::lock_guard<std::mutex> lock(state.resultMutex);
+    state.resultError.clear();
   }
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-    if (gExpandedVinylDownloadThread.joinable()) {
-      gExpandedVinylDownloadThread.join();
+    std::lock_guard<std::mutex> lock(state.threadMutex);
+    if (state.thread.joinable()) {
+      state.thread.join();
     }
-    gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
-    gExpandedVinylDownloadThread = std::thread([]() {
+    state.threadFinished.store(false, std::memory_order_release);
+    state.thread = std::thread([]() {
+      ExpandedVinylDownloadState &threadState = expandedVinylDownloadState();
       std::string error;
       int fileCount = 0;
       bool ok = downloadExpandedVinylInventory(&error, &fileCount);
       {
-        std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-        gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+        std::lock_guard<std::mutex> lock(threadState.resultMutex);
+        threadState.resultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
       }
-      gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-      gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
-      gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
-      gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
-      gExpandedVinylDownloadThreadFinished.store(true, std::memory_order_release);
+      threadState.currentIndex.store(0, std::memory_order_relaxed);
+      threadState.totalFiles.store(0, std::memory_order_relaxed);
+      threadState.running.store(false, std::memory_order_relaxed);
+      threadState.resultPending.store(true, std::memory_order_relaxed);
+      threadState.threadFinished.store(true, std::memory_order_release);
     });
   }
   return true;
@@ -1924,14 +1945,15 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
 
 static void pumpExpandedVinylDownloadNotifications() {
   finalizeExpandedVinylDownloadThreadIfFinished();
-  if (!gExpandedVinylDownloadResultPending.exchange(false, std::memory_order_relaxed)) {
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  if (!state.resultPending.exchange(false, std::memory_order_relaxed)) {
     return;
   }
   std::string error;
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-    error = gExpandedVinylDownloadResultError;
-    gExpandedVinylDownloadResultError.clear();
+    std::lock_guard<std::mutex> lock(state.resultMutex);
+    error = state.resultError;
+    state.resultError.clear();
   }
   if (!error.empty()) {
     WARN("TemporalDeck: Vinyl library sync failed: %s", error.c_str());
