@@ -135,7 +135,7 @@ struct UndertowShapePreviewWidget final : Widget {
       if (curveChanged) {
         if (tracerEnabled && pointsInitialized) {
           if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_DRAW_STRIDE);
           }
           else {
             WavePreviewBufferedTracerStyle style;

@@ -1313,41 +1313,48 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return Vec(-tangent.y * invLen, tangent.x * invLen);
 	}
 
-		static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
+	static void drawGlRibbonPoints(const Vec* linePoints, int pointCount, int stride, float lineWidth, NVGcolor color) {
+		if (!linePoints || pointCount <= 0) {
+			return;
+		}
 		stride = std::max(stride, 1);
 		const float halfWidth = 0.5f * lineWidth;
 		glColorFromNvg(color);
 		glBegin(GL_TRIANGLE_STRIP);
-		for (int i = 0; i < POINT_COUNT; i += stride) {
+		for (int i = 0; i < pointCount; i += stride) {
 			const int prevIndex = std::max(0, i - stride);
-			const int nextIndex = std::min(POINT_COUNT - 1, i + stride);
+			const int nextIndex = std::min(pointCount - 1, i + stride);
 			const Vec n = ribbonNormal(linePoints[prevIndex], linePoints[i], linePoints[nextIndex]);
 			glVertex2f(linePoints[i].x + n.x * halfWidth, linePoints[i].y + n.y * halfWidth);
 			glVertex2f(linePoints[i].x - n.x * halfWidth, linePoints[i].y - n.y * halfWidth);
 		}
-		if ((POINT_COUNT - 1) % stride != 0) {
-			const int i = POINT_COUNT - 1;
+		if ((pointCount - 1) % stride != 0) {
+			const int i = pointCount - 1;
 			const int prevIndex = std::max(0, i - stride);
 			const Vec n = ribbonNormal(linePoints[prevIndex], linePoints[i], linePoints[i]);
 			glVertex2f(linePoints[i].x + n.x * halfWidth, linePoints[i].y + n.y * halfWidth);
 			glVertex2f(linePoints[i].x - n.x * halfWidth, linePoints[i].y - n.y * halfWidth);
 		}
-			glEnd();
-		}
+		glEnd();
+	}
 
-		static const std::array<Vec, 25>& glDotUnitCircle() {
-			static const std::array<Vec, 25> unit = []() {
-				std::array<Vec, 25> points {};
-				for (int i = 0; i <= 24; ++i) {
-					const float a = 6.28318530718f * float(i) / 24.f;
-					points[size_t(i)] = Vec(std::cos(a), std::sin(a));
-				}
-				return points;
-			}();
-			return unit;
-		}
+	static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
+		drawGlRibbonPoints(linePoints.data(), POINT_COUNT, stride, lineWidth, color);
+	}
 
-		void drawGlDot() {
+	static const std::array<Vec, 25>& glDotUnitCircle() {
+		static const std::array<Vec, 25> unit = []() {
+			std::array<Vec, 25> points {};
+			for (int i = 0; i <= 24; ++i) {
+				const float a = 6.28318530718f * float(i) / 24.f;
+				points[size_t(i)] = Vec(std::cos(a), std::sin(a));
+			}
+			return points;
+		}();
+		return unit;
+	}
+
+	void drawGlDot() {
 		if (!pointsValid || !dotVisible) {
 			return;
 		}
@@ -1378,22 +1385,22 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			y = points[i0].y + (points[i1].y - points[i0].y) * t;
 		}
 		y = y * 0.9f + targetY * 0.1f;
-			glColor4f(0.f, 0.f, 0.f, 0.86f);
-			glBegin(GL_TRIANGLE_FAN);
-			glVertex2f(x, y);
-			const std::array<Vec, 25>& unitCircle = glDotUnitCircle();
-			for (const Vec& p : unitCircle) {
-				glVertex2f(x + p.x * (DOT_RADIUS + 0.55f), y + p.y * (DOT_RADIUS + 0.55f));
-			}
-			glEnd();
-			glColor4f(1.f, 0.91f, 0.28f, 1.f);
-			glBegin(GL_TRIANGLE_FAN);
-			glVertex2f(x, y);
-			for (const Vec& p : unitCircle) {
-				glVertex2f(x + p.x * DOT_RADIUS, y + p.y * DOT_RADIUS);
-			}
-			glEnd();
+		glColor4f(0.f, 0.f, 0.f, 0.86f);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(x, y);
+		const std::array<Vec, 25>& unitCircle = glDotUnitCircle();
+		for (const Vec& p : unitCircle) {
+			glVertex2f(x + p.x * (DOT_RADIUS + 0.55f), y + p.y * (DOT_RADIUS + 0.55f));
 		}
+		glEnd();
+		glColor4f(1.f, 0.91f, 0.28f, 1.f);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(x, y);
+		for (const Vec& p : unitCircle) {
+			glVertex2f(x + p.x * DOT_RADIUS, y + p.y * DOT_RADIUS);
+		}
+		glEnd();
+	}
 
 	void drawFramebuffer() override {
 		math::Vec fbSize = getFramebufferSize();
@@ -1433,7 +1440,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					continue;
 				}
 				const float fade = 1.f - age / TRAIL_FADE_SEC;
-				drawGlRibbon(frame.points, TRAIL_DRAW_STRIDE, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
+				drawGlRibbonPoints(frame.points.data(), int(frame.pointCount), 1, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
 			}
 		}
 		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
@@ -1535,17 +1542,13 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			points[i] = Vec(x, py);
 		}
 
-		// Preserve full crest height under extreme rise/fall asymmetry by pinning
-		// both vertices that bracket the true peak location.
-		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
-		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
-		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
-		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex0] = Vec(peakPx0, top);
-		points[peakIndex1] = Vec(peakPx1, top);
-		points.front() = Vec(left, bottom);
-		points.back() = Vec(right, bottom);
+			// Preserve full crest height without flattening the apex into a
+			// two-point plateau when the true peak falls between sample columns.
+			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
+			points[peakIndex] = Vec(peakX, top);
+			points.front() = Vec(left, bottom);
+			points.back() = Vec(right, bottom);
 		pointsValid = true;
 	}
 
@@ -1602,7 +1605,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_DRAW_STRIDE);
 				}
 				else {
 					WavePreviewBufferedTracerStyle style;

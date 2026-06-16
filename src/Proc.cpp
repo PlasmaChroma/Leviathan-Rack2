@@ -1220,17 +1220,13 @@ struct WavePreviewWidget : Widget {
 			points[i] = Vec(x, py);
 		}
 
-		// Preserve full crest height under extreme rise/fall asymmetry by pinning
-		// both vertices that bracket the true peak location.
-		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
-		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
-		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
-		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex0] = Vec(peakPx0, top);
-		points[peakIndex1] = Vec(peakPx1, top);
-		points.front() = Vec(left, bottom);
-		points.back() = Vec(right, bottom);
+			// Preserve full crest height without flattening the apex into a
+			// two-point plateau when the true peak falls between sample columns.
+			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
+			points[peakIndex] = Vec(peakX, top);
+			points.front() = Vec(left, bottom);
+			points.back() = Vec(right, bottom);
 		pointsValid = true;
 	}
 
@@ -1284,7 +1280,7 @@ struct WavePreviewWidget : Widget {
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC);
+					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_DRAW_STRIDE);
 				}
 				else {
 					WavePreviewBufferedTracerStyle style;

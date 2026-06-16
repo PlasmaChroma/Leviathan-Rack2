@@ -39,6 +39,7 @@ struct WavePreviewTracer {
 
 	struct Frame {
 		std::array<Vec, PointCount> points {};
+		size_t pointCount = 0;
 		double birthSec = 0.0;
 		bool active = false;
 	};
@@ -47,14 +48,20 @@ struct WavePreviewTracer {
 	int nextFrame = 0;
 	double lastCaptureSec = -1.0;
 
-	void capture(const std::array<Vec, PointCount>& points, double nowSec, float minCaptureIntervalSec) {
+	void capture(const std::array<Vec, PointCount>& points, double nowSec, float minCaptureIntervalSec, int drawStride, float tolerance = 0.02f) {
 		if (lastCaptureSec > 0.0 && (nowSec - lastCaptureSec) < minCaptureIntervalSec) {
 			return;
 		}
 		Frame& frame = frames[nextFrame];
-		frame.points = points;
+		frame.pointCount = 0;
+		const int stride = std::max(drawStride, 1);
+		wave_preview::simplifyPath(points.data(), PointCount, stride, tolerance, [&frame](const Vec& pt, bool) {
+			if (frame.pointCount < PointCount) {
+				frame.points[frame.pointCount++] = pt;
+			}
+		});
 		frame.birthSec = nowSec;
-		frame.active = true;
+		frame.active = frame.pointCount > 0;
 		nextFrame = (nextFrame + 1) % int(FrameCount);
 		lastCaptureSec = nowSec;
 	}
@@ -85,7 +92,6 @@ struct WavePreviewTracer {
 	}
 
 	void draw(NVGcontext* vg, double nowSec, const WavePreviewTracerStyle& style) const {
-		const int stride = std::max(style.drawStride, 1);
 		const float fadeSec = std::max(style.fadeSec, 1e-6f);
 		for (const Frame& frame : frames) {
 			if (!frame.active) {
@@ -103,13 +109,15 @@ struct WavePreviewTracer {
 			NVGcolor color = style.color;
 			color.a *= float(alpha) / 255.f;
 			nvgBeginPath(vg);
-			wave_preview::simplifyPath(frame.points.data(), PointCount, stride, 0.02f, [vg](const Vec& pt, bool isMove) {
-				if (isMove) {
+			for (size_t i = 0; i < frame.pointCount; ++i) {
+				const Vec& pt = frame.points[i];
+				if (i == 0) {
 					nvgMoveTo(vg, pt.x, pt.y);
-				} else {
+				}
+				else {
 					nvgLineTo(vg, pt.x, pt.y);
 				}
-			});
+			}
 			nvgStrokeColor(vg, color);
 			nvgStrokeWidth(vg, style.lineWidth);
 			nvgLineCap(vg, NVG_BUTT);
