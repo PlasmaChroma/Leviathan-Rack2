@@ -1565,12 +1565,12 @@ struct ProcWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outPos), module, Proc::MAIN_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
+		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
+		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
