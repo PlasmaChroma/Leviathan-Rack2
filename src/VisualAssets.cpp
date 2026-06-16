@@ -296,6 +296,7 @@ struct MagitekOutputShadow : TransparentWidget {
 
 struct MagitekRasterImage : TransparentWidget {
 	std::string path;
+	const float* rotationRad = nullptr;
 
 	explicit MagitekRasterImage(std::string path)
 		: path(std::move(path)) {
@@ -362,11 +363,26 @@ struct MagitekRasterImage : TransparentWidget {
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}
-		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillPaint(args.vg, paint);
-		nvgFill(args.vg);
+		const float rotation = rotationRad ? *rotationRad : 0.f;
+		const Vec center = box.size.div(2.f);
+		nvgSave(args.vg);
+		if (std::fabs(rotation) > 1e-6f) {
+			nvgTranslate(args.vg, center.x, center.y);
+			nvgRotate(args.vg, rotation);
+			NVGpaint paint = nvgImagePattern(args.vg, -center.x, -center.y, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, -center.x, -center.y, box.size.x, box.size.y);
+			nvgFillPaint(args.vg, paint);
+			nvgFill(args.vg);
+		}
+		else {
+			NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			nvgFillPaint(args.vg, paint);
+			nvgFill(args.vg);
+		}
+		nvgRestore(args.vg);
 	}
 };
 
@@ -482,31 +498,6 @@ void installMagitekShadow(app::SvgPort* port, Widget* customShadow) {
 	else {
 		port->addChildBottom(shadowFb);
 	}
-}
-
-void installMagitekRasterPort(app::PortWidget* port, const char* imagePath) {
-	if (!port) {
-		return;
-	}
-	port->box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
-
-	widget::FramebufferWidget* shadowFb = new widget::FramebufferWidget();
-	shadowFb->dirtyOnSubpixelChange = false;
-	const Vec bleed(8.f, 8.f);
-	shadowFb->box.pos = bleed.mult(-0.5f);
-	shadowFb->box.size = port->box.size.plus(bleed);
-	MagitekInputShadow* shadow = new MagitekInputShadow;
-	shadow->box.size = shadowFb->box.size;
-	shadowFb->addChild(shadow);
-	port->addChild(shadowFb);
-
-	widget::FramebufferWidget* imageFb = new widget::FramebufferWidget();
-	imageFb->dirtyOnSubpixelChange = false;
-	imageFb->box.size = port->box.size;
-	MagitekRasterImage* image = new MagitekRasterImage(imagePath ? imagePath : "");
-	image->box.size = port->box.size;
-	imageFb->addChild(image);
-	port->addChild(imageFb);
 }
 
 struct ClockworkDragDebugRecorder {
@@ -666,12 +657,67 @@ MagitekOutputJack::MagitekOutputJack() {
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
-Magitek2InputJack::Magitek2InputJack() {
-	installMagitekRasterPort(this, "res/icon/magitek2_input_rackfinal_256.png");
+Magitek2RasterJack::Magitek2RasterJack(const char* imagePath) {
+	box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
+
+	shadowFb = new widget::FramebufferWidget();
+	shadowFb->dirtyOnSubpixelChange = false;
+	const Vec bleed(8.f, 8.f);
+	shadowFb->box.pos = bleed.mult(-0.5f);
+	shadowFb->box.size = box.size.plus(bleed);
+	MagitekInputShadow* shadow = new MagitekInputShadow;
+	shadow->box.size = shadowFb->box.size;
+	shadowFb->addChild(shadow);
+	addChild(shadowFb);
+
+	MagitekRasterImage* image = new MagitekRasterImage(imagePath ? imagePath : "");
+	image->box.size = box.size;
+	image->rotationRad = &hoverSpinRad;
+	addChild(image);
+
+	lastSpinUpdateSec = system::getTime();
 }
 
-Magitek2OutputJack::Magitek2OutputJack() {
-	installMagitekRasterPort(this, "res/icon/magitek2_output_rackfinal_256.png");
+Magitek2InputJack::Magitek2InputJack()
+	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png") {
+}
+
+Magitek2OutputJack::Magitek2OutputJack()
+	: Magitek2RasterJack("res/icon/magitek2_output_rackfinal_256.png") {
+}
+
+void Magitek2RasterJack::onEnter(const event::Enter& e) {
+	hovered = true;
+	PortWidget::onEnter(e);
+}
+
+void Magitek2RasterJack::onLeave(const event::Leave& e) {
+	hovered = false;
+	PortWidget::onLeave(e);
+}
+
+void Magitek2RasterJack::step() {
+	const double nowSec = system::getTime();
+	const double dt = std::max(0.0, nowSec - lastSpinUpdateSec);
+	lastSpinUpdateSec = nowSec;
+	constexpr float hoverSpinRateRadPerSec = 0.333f;
+
+	engine::Port* port = getPort();
+	const bool connected = port && port->isConnected();
+	if (hovered && !connected) {
+		hoverSpinRad += float(dt * hoverSpinRateRadPerSec);
+		if (hoverSpinRad > float(M_PI) * 2.f) {
+			hoverSpinRad = std::fmod(hoverSpinRad, float(M_PI) * 2.f);
+		}
+	}
+	else {
+		hoverSpinRad *= 0.88f;
+		if (std::fabs(hoverSpinRad) < 1e-4f) {
+			hoverSpinRad = 0.f;
+		}
+	}
+
+	PortWidget::step();
 }
 
 GoldButton::GoldButton() {

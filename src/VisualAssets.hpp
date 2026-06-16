@@ -22,11 +22,23 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
-struct Magitek2InputJack : app::PortWidget {
+struct Magitek2RasterJack : app::PortWidget {
+	explicit Magitek2RasterJack(const char* imagePath);
+	void step() override;
+	void onEnter(const event::Enter& e) override;
+	void onLeave(const event::Leave& e) override;
+
+	widget::FramebufferWidget* shadowFb = nullptr;
+	float hoverSpinRad = 0.f;
+	double lastSpinUpdateSec = 0.0;
+	bool hovered = false;
+};
+
+struct Magitek2InputJack : Magitek2RasterJack {
 	Magitek2InputJack();
 };
 
-struct Magitek2OutputJack : app::PortWidget {
+struct Magitek2OutputJack : Magitek2RasterJack {
 	Magitek2OutputJack();
 };
 
