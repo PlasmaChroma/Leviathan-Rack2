@@ -46,17 +46,41 @@ The light should not look like a flat filled circle. It should look like light e
 
 ---
 
-## Recommended Footprint
+## Recommended Footprints & Sizes
 
-Create a default “standard micro” size suitable for replacing existing Rack LEDs.
+Define preset configurations or helper classes to support different sizes of aperture lights (e.g., Tiny, Small, Medium, and Large) depending on panel density and UI roles:
 
-```text
-Widget bounding box: 14 x 14 px
-Socket radius:       ~4.8 px
-Inner lens radius:   ~3.3 px
-Core radius:         ~2.1 px
-Bloom radius:        ~8.0 px
-```
+### 1. Tiny (Micro) Size
+Designed for dense indicator grids, step sequencers, or small telemetry matrices.
+* **Widget bounding box**: 10 x 10 px
+* **Socket radius**:       ~3.2 px
+* **Inner lens radius**:   ~2.2 px
+* **Core radius**:         ~1.4 px
+* **Bloom radius**:        ~5.5 px
+
+### 2. Small (Default / Standard Micro) Size
+Suitable for replacing existing standard VCV Rack LEDs (like gate/trigger indicators).
+* **Widget bounding box**: 14 x 14 px
+* **Socket radius**:       ~4.8 px
+* **Inner lens radius**:   ~3.3 px
+* **Core radius**:         ~2.1 px
+* **Bloom radius**:        ~8.0 px
+
+### 3. Medium Size
+Suitable for primary status indicators, LFO rate clocks, or power indicators that need to be prominent.
+* **Widget bounding box**: 20 x 20 px
+* **Socket radius**:       ~7.0 px
+* **Inner lens radius**:   ~5.0 px
+* **Core radius**:         ~3.2 px
+* **Bloom radius**:        ~11.5 px
+
+### 4. Large Size
+Designed for focal status displays, master indicators, or larger decorative control-center jewels.
+* **Widget bounding box**: 28 x 28 px
+* **Socket radius**:       ~10.0 px
+* **Inner lens radius**:   ~7.2 px
+* **Core radius**:         ~4.5 px
+* **Bloom radius**:        ~16.5 px
 
 The bloom may extend close to the widget bounds but should not require a huge bounding box. For dense panels, the bloom must remain tasteful.
 
@@ -354,6 +378,41 @@ Acceptable:
 * Small bounded overdraw.
 
 Do not use framebuffer caching in the first implementation unless the codebase already has a clean pattern for it. Get the visual working first.
+
+### Framebuffer Caching & Optimization Strategies
+
+For modules featuring a high density of LEDs (e.g., step sequencers, grid matrices, or telemetry displays), drawing multiple radial gradients dynamically per light can quickly bottleneck the GPU. Consider the following caching strategies when optimizing the implementation:
+
+#### 1. Per-Light Framebuffer Cache (Using `rack::widget::FramebufferWidget`)
+A straightforward approach is to wrap the static or entire light component in a framebuffer.
+* **Static Layer Cache**: Separate the light into a static background widget (socket, rim, unlit lens) wrapped in a `FramebufferWidget`, and draw the dynamic light overlay (bloom, core, specular) dynamically on top.
+* **Dirty Thresholding**: If caching the entire light, only flag the framebuffer as dirty (`fb->dirty = true`) when the light's actual brightness value changes by more than a small threshold (e.g., $|t_{current} - t_{last}| > 0.005$). This avoids redrawing during static or idle module states.
+* **Trade-offs**: High memory footprint (each light instance allocates a separate GPU texture, e.g., $16 \times 16$ or $32 \times 32$ pixels) and FBO binding/switching overhead on the GPU when redrawing.
+
+#### 2. Shared Texture Atlas / Global Static Cache (Recommended)
+Instead of allocating a framebuffer texture for every individual light widget, use a shared static cache:
+* **Pre-rendered Assets**: At startup or lazily on demand, render the static unlit states (socket, rim, unlit lens) for each color/size variant to a shared texture/FBO.
+* **Drawing via Image Patterns**: In each light instance's `draw()` method, draw the static background by referencing the shared texture via `nvgImagePattern`.
+* **Trade-offs**: Extremely low memory usage (only one texture per color/size combination) and zero FBO binding switches during the main rendering pass, while completely eliminating the CPU overhead of drawing multiple static circles and gradients per frame.
+
+#### 3. Discrete Brightness State Cache
+For maximum performance under extreme light counts:
+* **Quantized States**: Pre-render the entire light (including bloom, core, highlight) at a fixed set of discrete brightness steps (e.g., 16 steps from 0% to 100% brightness) into a shared texture sheet.
+* **Texture Quad Rendering**: Select and draw the corresponding sub-rect of the shared texture matching the closest brightness level.
+* **Trade-offs**: Simplifies light rendering to a single textured quad draw call, but limits smooth color transitions if the step size is too coarse.
+
+#### 4. Handling Global View Settings (Rack Bloom Slider)
+Because VCV Rack features a global "light bloom" slider under the **View** menu, custom light bloom visuals must dynamically react to this setting:
+* **Global Access**: Read the slider value using `rack::settings::haloBrightness`.
+* **Visual Scaling**: Multiply the rendered bloom transparency/alpha or radius by `settings::haloBrightness` to respect the user's preference (e.g., `bloomAlpha *= settings::haloBrightness`).
+* **Cache Invalidation**: If any caching strategies are utilized (especially if caching the dynamic light bloom state), you must track the last known bloom setting (e.g., `float lastBloomAmount = settings::haloBrightness`) in the widget's state or step loop and invalidate the cached framebuffer or texture if it changes:
+  ```cpp
+  const float bloomAmount = rack::settings::haloBrightness;
+  if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+      lastBloomAmount = bloomAmount;
+      fb->setDirty(); // Or invalidate custom shared caches
+  }
+  ```
 
 ---
 
