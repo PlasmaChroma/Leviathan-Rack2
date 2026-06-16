@@ -33,6 +33,90 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 	return svg;
 }
 
+namespace {
+
+struct SvgRect3DEffectWidget : TransparentWidget {
+	float edgeMarginPx = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		const float x = edgeMarginPx;
+		const float y = edgeMarginPx;
+		const float w = box.size.x - 2.f * edgeMarginPx;
+		const float h = box.size.y - 2.f * edgeMarginPx;
+		if (w <= 1.f || h <= 1.f) {
+			return;
+		}
+
+		const float radius = clamp(std::min(w, h) * 0.055f, 2.f, 8.f);
+		const float bevel = clamp(std::min(w, h) * 0.030f, 1.0f, 4.2f);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x, y, w, h, radius);
+		nvgStrokeWidth(args.vg, bevel * 1.65f);
+		NVGpaint outerPaint = nvgLinearGradient(
+			args.vg,
+			x,
+			y,
+			x + w,
+			y + h,
+			nvgRGBA(255, 255, 255, 62),
+			nvgRGBA(0, 0, 0, 116));
+		nvgStrokePaint(args.vg, outerPaint);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + bevel * 0.42f, y + bevel * 0.42f, std::max(0.f, w - bevel * 0.84f), std::max(0.f, h - bevel * 0.84f), std::max(0.f, radius - bevel * 0.42f));
+		nvgStrokeWidth(args.vg, std::max(0.65f, bevel * 0.48f));
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 84));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x + radius, y);
+		nvgLineTo(args.vg, x + w - radius, y);
+		nvgMoveTo(args.vg, x, y + radius);
+		nvgLineTo(args.vg, x, y + h - radius);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 118));
+		nvgStrokeWidth(args.vg, std::max(0.75f, bevel * 0.55f));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x + w, y + radius);
+		nvgLineTo(args.vg, x + w, y + h - radius);
+		nvgMoveTo(args.vg, x + radius, y + h);
+		nvgLineTo(args.vg, x + w - radius, y + h);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 156));
+		nvgStrokeWidth(args.vg, std::max(0.85f, bevel * 0.62f));
+		nvgStroke(args.vg);
+
+		nvgSave(args.vg);
+		nvgIntersectScissor(args.vg, x - edgeMarginPx, y - edgeMarginPx, w + 2.f * edgeMarginPx, h + 2.f * edgeMarginPx);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x + radius * 0.4f, y - bevel * 0.55f, std::max(1.f, w - radius * 0.8f), bevel * 1.25f);
+		NVGpaint sheenPaint = nvgLinearGradient(
+			args.vg,
+			x,
+			y - bevel,
+			x,
+			y + bevel,
+			nvgRGBA(255, 255, 255, 72),
+			nvgRGBA(255, 255, 255, 0));
+		nvgFillPaint(args.vg, sheenPaint);
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+} // namespace
+
+Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
+	SvgRect3DEffectWidget* widget = new SvgRect3DEffectWidget();
+	const float marginMm = 0.45f;
+	widget->edgeMarginPx = mm2px(Vec(marginMm, 0.f)).x;
+	widget->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
+	widget->box.size = mm2px(rectMm.size.plus(Vec(2.f * marginMm, 2.f * marginMm)));
+	return widget;
+}
+
 void resetEclipseShadowDrawMetrics() {
 	gEclipseShadowDrawNs = 0u;
 	gEclipseShadowDrawCount = 0u;

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <atomic>
 #include <limits>
+#include <vector>
 
 
 struct Proc : Module {
@@ -1462,6 +1463,13 @@ struct ProcWidget : ModuleWidget {
 		addChild(createWidget<TorxScrew>(Vec(0.f, 0)));
 		//addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<TorxScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+
+		std::vector<panel_svg::SvgRectMatch> enhanceRects;
+		if (panel_svg::findRectsWithIdSubstringMm(panelPath, "ENHANCE", &enhanceRects)) {
+			for (const panel_svg::SvgRectMatch& match : enhanceRects) {
+				addChild(visual_assets::createSvgRect3DEffectWidget(match.rect));
+			}
+		}
 
 		Vec cyclePos(33.075f, 20.138f);
 		Vec risePos(32.907f, 36.293f);

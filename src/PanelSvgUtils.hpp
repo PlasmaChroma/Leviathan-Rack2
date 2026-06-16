@@ -2,9 +2,17 @@
 
 #include "plugin.hpp"
 
+#include <vector>
+
 namespace panel_svg {
 
+struct SvgRectMatch {
+	std::string id;
+	math::Rect rect;
+};
+
 bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect);
+bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& idSubstring, std::vector<SvgRectMatch>* outRects);
 bool loadPointFromSvgMm(const std::string& svgPath, const std::string& elementId, Vec* outPointMm);
 bool loadCircleFromSvg(
 	const std::string& svgPath,

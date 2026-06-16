@@ -86,6 +86,37 @@ TestResult testPointParsesRectCenter() {
             " y=" + std::to_string(point.y)};
 }
 
+TestResult testFindsRectsByIdSubstring() {
+  const std::string path = makeTempSvgPath("panel_svg_rect_substring");
+  const std::string svg = R"SVG(<svg xmlns="http://www.w3.org/2000/svg">
+    <rect id="FRAME_LEFT" x="10" y="20" width="30" height="40"/>
+    <g transform="matrix(1,0,0,1,-50,-75)">
+      <rect
+        x="150"
+        y="275"
+        width="840"
+        height="930"
+        id="frame_left_ENHANCE" />
+    </g>
+  </svg>)SVG";
+  if (!writeTextFile(path, svg)) {
+    return {"Rect substring finder", false, "failed to write temp SVG"};
+  }
+
+  std::vector<panel_svg::SvgRectMatch> matches;
+  bool ok = panel_svg::findRectsWithIdSubstringMm(path, "ENHANCE", &matches);
+  bool pass = ok
+    && matches.size() == 1u
+    && matches[0].id == "frame_left_ENHANCE"
+    && nearlyEqual(matches[0].rect.pos.x, 1.0f)
+    && nearlyEqual(matches[0].rect.pos.y, 2.0f)
+    && nearlyEqual(matches[0].rect.size.x, 8.4f)
+    && nearlyEqual(matches[0].rect.size.y, 9.3f);
+  return {"Rect substring finder returns matching rect geometry", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) +
+            " count=" + std::to_string(matches.size())};
+}
+
 TestResult testCircleParsesWithExplicitScale() {
   const std::string path = makeTempSvgPath("panel_svg_circle_scaled");
   const std::string svg =
@@ -143,6 +174,7 @@ int main() {
   tests.push_back(testRectParsesInMillimeters());
   tests.push_back(testPointParsesCircleCenter());
   tests.push_back(testPointParsesRectCenter());
+  tests.push_back(testFindsRectsByIdSubstring());
   tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
