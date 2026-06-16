@@ -57,14 +57,16 @@ Designed for dense indicator grids, step sequencers, or small telemetry matrices
 * **Inner lens radius**:   ~2.2 px
 * **Core radius**:         ~1.4 px
 * **Bloom radius**:        ~5.5 px
+* **Bloom alpha**:         ~0.20
 
 ### 2. Small (Default / Standard Micro) Size
-Suitable for replacing existing standard VCV Rack LEDs (like gate/trigger indicators).
+Suitable for replacing existing standard VCV Rack LEDs (like gate/trigger indicators) when there is enough clearance for the aperture socket and halo.
 * **Widget bounding box**: 14 x 14 px
 * **Socket radius**:       ~4.8 px
 * **Inner lens radius**:   ~3.3 px
 * **Core radius**:         ~2.1 px
 * **Bloom radius**:        ~8.0 px
+* **Bloom alpha**:         ~0.22
 
 ### 3. Medium Size
 Suitable for primary status indicators, LFO rate clocks, or power indicators that need to be prominent.
@@ -73,6 +75,7 @@ Suitable for primary status indicators, LFO rate clocks, or power indicators tha
 * **Inner lens radius**:   ~5.0 px
 * **Core radius**:         ~3.2 px
 * **Bloom radius**:        ~11.5 px
+* **Bloom alpha**:         ~0.24
 
 ### 4. Large Size
 Designed for focal status displays, master indicators, or larger decorative control-center jewels.
@@ -81,8 +84,9 @@ Designed for focal status displays, master indicators, or larger decorative cont
 * **Inner lens radius**:   ~7.2 px
 * **Core radius**:         ~4.5 px
 * **Bloom radius**:        ~16.5 px
+* **Bloom alpha**:         ~0.26
 
-The bloom may extend close to the widget bounds but should not require a huge bounding box. For dense panels, the bloom must remain tasteful.
+The bloom intentionally extends close to, and slightly beyond, the nominal half-size of each widget. That is acceptable for direct NanoVG drawing because widget drawing is not clipped by default, but it matters if this is later cached in a framebuffer: any cached texture that includes the bloom must add padding or reduce the bloom radius to avoid clipping. For dense panels, use Tiny or reduce `bloomRadius`/`bloomAlpha` after visual inspection.
 
 ---
 
@@ -211,7 +215,9 @@ Use shaped curves rather than linear brightness.
 Given:
 
 ```cpp
-float t = clamp(getBrightness(), 0.f, 1.f);
+engine::Light* light = getLight(0);
+float t = light ? light->getBrightness() : 0.f;
+t = clamp(t, 0.f, 1.f);
 ```
 
 Compute:
@@ -228,7 +234,7 @@ Behavior:
 * Medium brightness should feel saturated but not overblown.
 * Peak brightness should get a controlled “energy jewel” effect.
 
-If the actual Rack base class exposes brightness differently, adapt this to local API conventions.
+In this Rack SDK, `ModuleLightWidget`/`MultiLightWidget` does not expose a direct `getBrightness()` helper. Prefer `getLight(0)->getBrightness()` for a single-color aperture light, or adapt explicitly if implementing a multi-color variant.
 
 ---
 
@@ -435,7 +441,7 @@ For maximum performance under extreme light counts:
 #### 4. Handling Global View Settings (Rack Bloom Slider)
 VCV Rack exposes a global "light bloom" slider under the **View** menu via `rack::settings::haloBrightness` (range `0.0` to `1.0`). Custom light widgets must respect this setting:
 * **Global Access**: Read the slider value using `rack::settings::haloBrightness`.
-* **Visual Scaling**: Scale the bloom halo alpha by the slider value (e.g., `bloomAlpha * settings::haloBrightness * glow`). The existing codebase uses a shaped ramp for richer response — see the `bloomRaw → bloomLow → bloomRamp → bloom` pattern in [VisualAssets.cpp](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/VisualAssets.cpp#L1348-L1351) for reference.
+* **Visual Scaling**: Scale the bloom halo alpha by the slider value (e.g., `bloomAlpha * settings::haloBrightness * glow`). The existing codebase uses a shaped ramp for richer response — see the `bloomRaw -> bloomLow -> bloomRamp -> bloom` pattern in [VisualAssets.cpp](../src/VisualAssets.cpp) for reference.
 * **Full Suppression at Zero**: When `haloBrightness` is `0.0`, skip the bloom halo draw entirely. The socket, rim, lens, core, and specular should still render — only the outer glow halo is suppressed. This matches Rack's standard light behavior where "bloom off" removes halos but leaves the light itself visible.
 * **Cache Invalidation**: If any caching strategy includes the bloom halo in the cached texture, track the last known bloom setting and invalidate when it changes:
   ```cpp
@@ -463,7 +469,7 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
     float lensRadius = 3.3f;
     float coreRadius = 2.1f;
     float bloomRadius = 8.0f;
-    float bloomAlpha = 0.24f;
+    float bloomAlpha = 0.22f;
 
     LeviathanApertureLight() {
         box.size = rack::math::Vec(14.f, 14.f);
@@ -475,7 +481,8 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
         const float cx = box.size.x * 0.5f;
         const float cy = box.size.y * 0.5f;
 
-        float t = getBrightness();
+        rack::engine::Light* light = getLight(0);
+        float t = light ? light->getBrightness() : 0.f;
         t = rack::math::clamp(t, 0.f, 1.f);
 
         const float glow = std::pow(t, 0.55f);
@@ -498,29 +505,31 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
 
     void drawSocket(NVGcontext* vg, float cx, float cy) {
         // Outer recess shadow
+        const float shadowPad = socketRadius * 0.25f;
         nvgBeginPath(vg);
-        nvgCircle(vg, cx, cy, socketRadius + 1.2f);
+        nvgCircle(vg, cx, cy, socketRadius + shadowPad);
         nvgFillColor(vg, nvgRGBA(0, 0, 0, 160));
         nvgFill(vg);
 
         // Main dark rim
+        const float rimShift = socketRadius * 0.21f;
         NVGpaint rim = nvgRadialGradient(
             vg,
-            cx - 1.0f, cy - 1.0f,
+            cx - rimShift, cy - rimShift,
             socketRadius * 0.3f,
-            socketRadius + 0.8f,
+            socketRadius + socketRadius * 0.17f,
             nvgRGBA(70, 76, 84, 160),
             nvgRGBA(5, 7, 10, 240)
         );
 
         nvgBeginPath(vg);
-        nvgCircle(vg, cx, cy, socketRadius + 0.5f);
+        nvgCircle(vg, cx, cy, socketRadius + socketRadius * 0.10f);
         nvgFillPaint(vg, rim);
         nvgFill(vg);
 
         // Inner dark cut
         nvgBeginPath(vg);
-        nvgCircle(vg, cx, cy, lensRadius + 0.7f);
+        nvgCircle(vg, cx, cy, lensRadius + socketRadius * 0.15f);
         nvgFillColor(vg, nvgRGBA(2, 3, 5, 240));
         nvgFill(vg);
     }
@@ -535,8 +544,8 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
 
         NVGpaint glass = nvgRadialGradient(
             vg,
-            cx - 0.8f, cy - 0.9f,
-            0.5f,
+            cx - lensRadius * 0.24f, cy - lensRadius * 0.27f,
+            lensRadius * 0.15f,
             lensRadius,
             glassCenter,
             nvgRGBA(1, 2, 4, 220)
@@ -566,7 +575,7 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
         NVGpaint bloom = nvgRadialGradient(
             vg,
             cx, cy,
-            1.0f,
+            std::max(0.5f, coreRadius * 0.45f),
             bloomRadius,
             inner,
             outer
@@ -595,15 +604,15 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
 
         NVGpaint corePaint = nvgRadialGradient(
             vg,
-            cx - 0.35f, cy - 0.45f,
-            0.2f,
-            coreRadius + 1.2f,
+            cx - lensRadius * 0.11f, cy - lensRadius * 0.14f,
+            std::max(0.1f, coreRadius * 0.10f),
+            coreRadius + lensRadius * 0.36f,
             center,
             edge
         );
 
         nvgBeginPath(vg);
-        nvgCircle(vg, cx, cy, coreRadius + 1.0f);
+        nvgCircle(vg, cx, cy, coreRadius + lensRadius * 0.30f);
         nvgFillPaint(vg, corePaint);
         nvgFill(vg);
     }
@@ -612,8 +621,10 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
         if (hot <= 0.001f)
             return;
 
+        const float offset = lensRadius * 0.35f;
+        const float radius = lensRadius * 0.23f;
         nvgBeginPath(vg);
-        nvgCircle(vg, cx - 1.15f, cy - 1.2f, 0.75f);
+        nvgCircle(vg, cx - offset, cy - offset, radius);
         nvgFillColor(vg, nvgRGBAf(1.f, 1.f, 1.f, 0.55f * hot));
         nvgFill(vg);
     }
