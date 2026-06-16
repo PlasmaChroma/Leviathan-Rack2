@@ -137,7 +137,30 @@ float bloomRadius;
 float bloomAlpha;
 ```
 
-Provide sane defaults.
+Provide sane defaults (Small size values).
+
+### Size Presets
+
+Provide a static helper or enum to configure the widget for each supported size:
+
+```cpp
+enum class ApertureLightSize { Tiny, Small, Medium, Large };
+
+void applySize(ApertureLightSize size);
+```
+
+Or provide size-specific subclasses / factory helpers:
+
+```cpp
+struct TinyApertureLight  : LeviathanApertureLight { TinyApertureLight();  };
+struct SmallApertureLight : LeviathanApertureLight { SmallApertureLight(); }; // default
+struct MediumApertureLight: LeviathanApertureLight { MediumApertureLight();};
+struct LargeApertureLight : LeviathanApertureLight { LargeApertureLight(); };
+```
+
+The exact API shape (enum, subclass, or template parameter) should match what feels most natural in the codebase. The important thing is that each preset sets `box.size`, `socketRadius`, `lensRadius`, `coreRadius`, `bloomRadius`, and `bloomAlpha` to the values from the Recommended Footprints section.
+
+### Color Aliases
 
 Suggested aliases:
 
@@ -152,6 +175,8 @@ using WhiteApertureLight   = LeviathanApertureLightColor<...>;
 ```
 
 If templated color aliases are awkward in the existing codebase, use static constructors or subclasses instead.
+
+Color and size should be independently selectable — e.g., a `TealApertureLight` should default to Small but allow `applySize(ApertureLightSize::Large)` after construction.
 
 The important thing is that module code should be able to do something close to:
 
@@ -294,7 +319,7 @@ Alpha should be controlled by `hot`.
 
 At low brightness this should be almost invisible.
 
-Suggested:
+Suggested (Small size baseline):
 
 ```cpp
 highlight radius: 0.7f to 1.0f
@@ -302,11 +327,17 @@ position: cx - 1.1f, cy - 1.2f
 alpha: 0.25f * hot to 0.55f * hot
 ```
 
+For other sizes, scale the offset and radius proportionally relative to `lensRadius` (e.g., `offset = lensRadius * 0.33f`).
+
 ### 7. Optional crescent shadow
 
 If easy, add a very subtle crescent/dark arc over the lower-right of the lens to sell aperture depth.
 
 This should be optional and cheap. Do not spend a lot of time here in pass one.
+
+### Scaling Note
+
+All pixel offsets in this section (shadow offsets, gradient center shifts, specular positions, padding constants like `+1.2f`) are written for the **Small (14 px)** size. When implementing multiple sizes, express these as proportional fractions of the relevant radius (e.g., `socketRadius * 0.25f`) rather than hardcoded pixel values. This ensures the visual quality is preserved across Tiny through Large.
 
 ---
 
@@ -402,15 +433,19 @@ For maximum performance under extreme light counts:
 * **Trade-offs**: Simplifies light rendering to a single textured quad draw call, but limits smooth color transitions if the step size is too coarse.
 
 #### 4. Handling Global View Settings (Rack Bloom Slider)
-Because VCV Rack features a global "light bloom" slider under the **View** menu, custom light bloom visuals must dynamically react to this setting:
+VCV Rack exposes a global "light bloom" slider under the **View** menu via `rack::settings::haloBrightness` (range `0.0` to `1.0`). Custom light widgets must respect this setting:
 * **Global Access**: Read the slider value using `rack::settings::haloBrightness`.
-* **Visual Scaling**: Multiply the rendered bloom transparency/alpha or radius by `settings::haloBrightness` to respect the user's preference (e.g., `bloomAlpha *= settings::haloBrightness`).
-* **Cache Invalidation**: If any caching strategies are utilized (especially if caching the dynamic light bloom state), you must track the last known bloom setting (e.g., `float lastBloomAmount = settings::haloBrightness`) in the widget's state or step loop and invalidate the cached framebuffer or texture if it changes:
+* **Visual Scaling**: Scale the bloom halo alpha by the slider value (e.g., `bloomAlpha * settings::haloBrightness * glow`). The existing codebase uses a shaped ramp for richer response — see the `bloomRaw → bloomLow → bloomRamp → bloom` pattern in [VisualAssets.cpp](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/VisualAssets.cpp#L1348-L1351) for reference.
+* **Full Suppression at Zero**: When `haloBrightness` is `0.0`, skip the bloom halo draw entirely. The socket, rim, lens, core, and specular should still render — only the outer glow halo is suppressed. This matches Rack's standard light behavior where "bloom off" removes halos but leaves the light itself visible.
+* **Cache Invalidation**: If any caching strategy includes the bloom halo in the cached texture, track the last known bloom setting and invalidate when it changes:
   ```cpp
-  const float bloomAmount = rack::settings::haloBrightness;
-  if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
-      lastBloomAmount = bloomAmount;
-      fb->setDirty(); // Or invalidate custom shared caches
+  void step() override {
+      ModuleLightWidget::step();
+      const float bloomAmount = rack::settings::haloBrightness;
+      if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+          lastBloomAmount = bloomAmount;
+          if (fb) fb->setDirty();
+      }
   }
   ```
 
@@ -447,11 +482,15 @@ struct LeviathanApertureLight : rack::app::ModuleLightWidget {
         const float core = std::pow(t, 0.85f);
         const float hot  = std::pow(t, 3.0f);
 
+        // Read global bloom slider from View menu
+        const float haloBrt = rack::settings::haloBrightness;
+
         drawSocket(vg, cx, cy);
         drawUnlitLens(vg, cx, cy);
 
         if (t > 0.001f) {
-            drawBloom(vg, cx, cy, glow);
+            if (haloBrt > 0.001f)
+                drawBloom(vg, cx, cy, glow * haloBrt);
             drawCore(vg, cx, cy, core, hot);
             drawSpecular(vg, cx, cy, hot);
         }
@@ -614,28 +653,34 @@ The implementation is successful when:
 8. It remains readable at normal Rack zoom.
 9. It does not visibly harm UI performance when used for a modest number of indicators.
 10. The code is reusable across modules and not hardcoded to a single module.
+11. The bloom halo respects `settings::haloBrightness` (scales down, fully suppressed at zero).
+12. All four size presets (Tiny, Small, Medium, Large) render correctly with proportional geometry.
 
 ---
 
 ## First-Pass Tuning Values
 
-Start with these:
+Starting values for each size preset:
 
 ```cpp
-box.size      = Vec(14.f, 14.f);
-socketRadius  = 4.8f;
-lensRadius    = 3.3f;
-coreRadius    = 2.1f;
-bloomRadius   = 8.0f;
-bloomAlpha    = 0.22f;
+// Tiny
+box.size = Vec(10.f, 10.f); socketRadius = 3.2f; lensRadius = 2.2f;
+coreRadius = 1.4f; bloomRadius = 5.5f; bloomAlpha = 0.20f;
+
+// Small (default)
+box.size = Vec(14.f, 14.f); socketRadius = 4.8f; lensRadius = 3.3f;
+coreRadius = 2.1f; bloomRadius = 8.0f; bloomAlpha = 0.22f;
+
+// Medium
+box.size = Vec(20.f, 20.f); socketRadius = 7.0f; lensRadius = 5.0f;
+coreRadius = 3.2f; bloomRadius = 11.5f; bloomAlpha = 0.24f;
+
+// Large
+box.size = Vec(28.f, 28.f); socketRadius = 10.0f; lensRadius = 7.2f;
+coreRadius = 4.5f; bloomRadius = 16.5f; bloomAlpha = 0.26f;
 ```
 
-If it looks too small:
-
-```cpp
-socketRadius += 0.5f;
-lensRadius   += 0.3f;
-```
+Adjustment guidelines (apply proportionally across sizes):
 
 If it looks too bright:
 
@@ -645,7 +690,7 @@ bloomAlpha *= 0.75f;
 
 If it looks too much like a normal LED:
 
-```cpp
+```text
 darken socket;
 increase rim contrast slightly;
 add subtle crescent shadow;
@@ -654,7 +699,7 @@ make bloom very slightly elliptical;
 
 If it is too expensive or visually noisy:
 
-```cpp
+```text
 reduce bloomRadius;
 reduce bloomAlpha;
 remove crescent;
@@ -673,11 +718,11 @@ Do not implement yet:
 * Animated breathing modes.
 * Signal-responsive color cycling.
 * SVG-backed light variants.
-* Framebuffer caching unless already trivial.
+* Framebuffer caching (guidance is documented above for future optimization, but the first pass should draw directly and only add caching once visuals and correctness are proven).
 * Global theme system.
 * Huge API for every future light type.
 
-The only goal is to get one excellent, reusable Aperture Light working.
+The first-pass goal is to get one excellent, reusable Aperture Light working across all four size presets with correct bloom slider integration.
 
 ---
 
