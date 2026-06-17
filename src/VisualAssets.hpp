@@ -330,7 +330,6 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
-	EclipseKnob::ShadowWidget* shadowLayer = nullptr;
 	GlowArcWidget* glowArc = nullptr;
 	GlowArcWidget* foregroundGlowArc = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;

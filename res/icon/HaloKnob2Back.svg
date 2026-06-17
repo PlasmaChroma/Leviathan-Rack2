@@ -65,6 +65,27 @@
      fill="none"
      id="rect1"
      style="display:none" />
+  <g
+     id="halo2_baked_shadow"
+     fill="#000000"
+     stroke="none"
+     style="display:inline">
+    <circle
+       cx="23.22"
+       cy="23.32"
+       r="15.60"
+       opacity="0.243" />
+    <circle
+       cx="23.52"
+       cy="23.70"
+       r="15.69"
+       opacity="0.416" />
+    <circle
+       cx="23.90"
+       cy="24.18"
+       r="15.83"
+       opacity="0.227" />
+  </g>
   <!-- flat fallback vignette -->
   <circle
      cx="23"

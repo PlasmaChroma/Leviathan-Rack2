@@ -2261,9 +2261,6 @@ void LeviathanHaloKnob::onChange(const ChangeEvent& e) {
 	if (centerLayer) {
 		centerLayer->valueNorm = valueNorm;
 	}
-	if (shadowLayer) {
-		shadowLayer->valueNorm = valueNorm;
-	}
 	if (glowArc) {
 		glowArc->valueNorm = valueNorm;
 	}
@@ -2338,14 +2335,6 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 		shadow->opacity = 0.f;
 	}
 	lastBloomAmount = settings::haloBrightness;
-
-	shadowLayer = new EclipseKnob::ShadowWidget();
-	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanHaloKnobShadow.svg"));
-	shadowLayer->box.size = box.size;
-	shadowLayer->minAngle = minAngle;
-	shadowLayer->maxAngle = maxAngle;
-	shadowLayer->valueNorm = normalizedParamValue();
-	fb->addChild(shadowLayer);
 
 	backLayer = new EclipseKnob::SvgLayer();
 	backLayer->setSvg(backSvg);
@@ -2423,9 +2412,6 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	}
 	if (capReflection) {
 		capReflection->valueNorm = valueNorm;
-	}
-	if (shadowLayer) {
-		shadowLayer->valueNorm = valueNorm;
 	}
 	if (glowArc) {
 		glowArc->valueNorm = valueNorm;
