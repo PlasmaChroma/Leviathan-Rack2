@@ -23,13 +23,14 @@ struct MagitekOutputJack : app::SvgPort {
 };
 
 struct Magitek2RasterJack : app::PortWidget {
-	explicit Magitek2RasterJack(const char* imagePath);
+	explicit Magitek2RasterJack(const char* imagePath, float spinDirection = 1.f);
 	void step() override;
 	void onEnter(const event::Enter& e) override;
 	void onLeave(const event::Leave& e) override;
 
 	widget::FramebufferWidget* shadowFb = nullptr;
 	float hoverSpinRad = 0.f;
+	float spinDirection = 1.f;
 	double lastSpinUpdateSec = 0.0;
 	bool hovered = false;
 };

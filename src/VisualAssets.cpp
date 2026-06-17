@@ -657,8 +657,9 @@ MagitekOutputJack::MagitekOutputJack() {
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
-Magitek2RasterJack::Magitek2RasterJack(const char* imagePath) {
+Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, float spinDirection) {
 	box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
+	this->spinDirection = spinDirection;
 
 	shadowFb = new widget::FramebufferWidget();
 	shadowFb->dirtyOnSubpixelChange = false;
@@ -679,7 +680,7 @@ Magitek2RasterJack::Magitek2RasterJack(const char* imagePath) {
 }
 
 Magitek2InputJack::Magitek2InputJack()
-	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png") {
+	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png", -1.f) {
 }
 
 Magitek2OutputJack::Magitek2OutputJack()
@@ -705,8 +706,8 @@ void Magitek2RasterJack::step() {
 	engine::Port* port = getPort();
 	const bool connected = port && port->isConnected();
 	if (hovered && !connected) {
-		hoverSpinRad += float(dt * hoverSpinRateRadPerSec);
-		if (hoverSpinRad > float(M_PI) * 2.f) {
+		hoverSpinRad += float(dt * hoverSpinRateRadPerSec * spinDirection);
+		if (std::fabs(hoverSpinRad) > float(M_PI) * 2.f) {
 			hoverSpinRad = std::fmod(hoverSpinRad, float(M_PI) * 2.f);
 		}
 	}
