@@ -2345,6 +2345,8 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	maxAngle = 0.83 * M_PI;
 
 	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
+	centerNormalSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg");
+	centerLitSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenterLit.svg");
 	app::SvgKnob::setSvg(backSvg);
 	box.size = Vec(46.f, 46.f);
 	if (fb) {
@@ -2394,7 +2396,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	fb->addChild(foregroundGlowArc);
 
 	centerLayer = new EclipseKnob::SvgLayer();
-	centerLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg"));
+	centerLayer->setSvg(centerNormalSvg);
 	centerLayer->box.size = box.size;
 	centerLayer->minAngle = minAngle;
 	centerLayer->maxAngle = maxAngle;
@@ -2412,6 +2414,22 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 
 }
 
+void LeviathanHaloKnob2::updateCenterSvg() {
+	const bool shouldLight = hovered || dragging;
+	if (centerLit == shouldLight) {
+		return;
+	}
+	centerLit = shouldLight;
+	if (centerLayer) {
+		centerLayer->setSvg(centerLit ? centerLitSvg : centerNormalSvg);
+		centerLayer->box.size = box.size;
+		centerLayer->valueNorm = normalizedParamValue();
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
 void LeviathanHaloKnob2::step() {
 	app::SvgKnob::step();
 	const float bloomAmount = settings::haloBrightness;
@@ -2421,6 +2439,30 @@ void LeviathanHaloKnob2::step() {
 			fb->setDirty();
 		}
 	}
+}
+
+void LeviathanHaloKnob2::onEnter(const event::Enter& e) {
+	hovered = true;
+	updateCenterSvg();
+	app::SvgKnob::onEnter(e);
+}
+
+void LeviathanHaloKnob2::onLeave(const event::Leave& e) {
+	hovered = false;
+	updateCenterSvg();
+	app::SvgKnob::onLeave(e);
+}
+
+void LeviathanHaloKnob2::onDragStart(const event::DragStart& e) {
+	dragging = true;
+	updateCenterSvg();
+	app::SvgKnob::onDragStart(e);
+}
+
+void LeviathanHaloKnob2::onDragEnd(const event::DragEnd& e) {
+	dragging = false;
+	updateCenterSvg();
+	app::SvgKnob::onDragEnd(e);
 }
 
 void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {

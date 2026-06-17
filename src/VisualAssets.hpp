@@ -322,32 +322,42 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
-	struct CapReflectionWidget : TransparentWidget {
-		float minAngle = -0.83f * M_PI;
-		float maxAngle = 0.83f * M_PI;
-		float valueNorm = 0.5f;
-		BloomConfig config;
+		struct CapReflectionWidget : TransparentWidget {
+			float minAngle = -0.83f * M_PI;
+			float maxAngle = 0.83f * M_PI;
+			float valueNorm = 0.5f;
+			BloomConfig config;
 
-		void draw(const DrawArgs& args) override;
+			void draw(const DrawArgs& args) override;
+		};
+
+		GlowArcWidget* glowArc = nullptr;
+		GlowArcWidget* foregroundGlowArc = nullptr;
+		EclipseKnob::SvgLayer* backLayer = nullptr;
+		EclipseKnob::SvgLayer* centerLayer = nullptr;
+		std::shared_ptr<window::Svg> centerNormalSvg;
+		std::shared_ptr<window::Svg> centerLitSvg;
+		LightArcWidget* lightArc = nullptr;
+		CapReflectionWidget* capReflection = nullptr;
+		Config config;
+		float lastBloomAmount = -1.f;
+		bool hovered = false;
+		bool dragging = false;
+		bool centerLit = false;
+
+		LeviathanHaloKnob2();
+		explicit LeviathanHaloKnob2(Config config);
+		void step() override;
+		void onChange(const ChangeEvent& e) override;
+		void onEnter(const event::Enter& e) override;
+		void onLeave(const event::Leave& e) override;
+		void onDragStart(const event::DragStart& e) override;
+		void onDragEnd(const event::DragEnd& e) override;
+
+		static Config brightOrangeConfig();
+		float normalizedParamValue();
+		void updateCenterSvg();
 	};
-
-	GlowArcWidget* glowArc = nullptr;
-	GlowArcWidget* foregroundGlowArc = nullptr;
-	EclipseKnob::SvgLayer* backLayer = nullptr;
-	EclipseKnob::SvgLayer* centerLayer = nullptr;
-	LightArcWidget* lightArc = nullptr;
-	CapReflectionWidget* capReflection = nullptr;
-	Config config;
-	float lastBloomAmount = -1.f;
-
-	LeviathanHaloKnob2();
-	explicit LeviathanHaloKnob2(Config config);
-	void step() override;
-	void onChange(const ChangeEvent& e) override;
-
-	static Config brightOrangeConfig();
-	float normalizedParamValue();
-};
 
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {
