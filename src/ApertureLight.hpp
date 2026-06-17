@@ -2,6 +2,12 @@
 
 #include "plugin.hpp"
 
+namespace rack {
+namespace widget {
+struct FramebufferWidget;
+}
+}
+
 enum class ApertureLightSize {
 	Tiny,
 	Small,
@@ -18,12 +24,28 @@ struct LeviathanApertureLight : app::ModuleLightWidget {
 	float bloomAlpha = 0.22f;
 
 	LeviathanApertureLight();
+	~LeviathanApertureLight() override;
 	void applySize(ApertureLightSize size);
+	void invalidateStaticBackgroundCache();
+	void invalidateBloomCache();
 	void drawBackground(const DrawArgs& args) override;
 	void drawLight(const DrawArgs& args) override;
 	void drawHalo(const DrawArgs& args) override;
 
 private:
+	struct StaticBackgroundWidget;
+	struct BloomWidget;
+	widget::FramebufferWidget* staticBackgroundFb = nullptr;
+	StaticBackgroundWidget* staticBackgroundWidget = nullptr;
+	widget::FramebufferWidget* bloomFb = nullptr;
+	BloomWidget* bloomWidget = nullptr;
+	float bloomCacheBleedPx = 0.f;
+	float bloomCacheGlow = -1.f;
+
+	void syncStaticBackgroundCache();
+	void syncBloomCache();
+	void drawStaticBackground(NVGcontext* vg);
+	void drawBloomCache(NVGcontext* vg);
 	void drawSocket(NVGcontext* vg, float cx, float cy);
 	void drawUnlitLens(NVGcontext* vg, float cx, float cy);
 	void drawBloom(NVGcontext* vg, float cx, float cy, float glow);

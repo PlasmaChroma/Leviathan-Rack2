@@ -19,6 +19,7 @@ constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = debug_terminal::k
 std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxApertureDrawNsThisFrame = 0u;
 }
 
 struct IntegralFlux : Module {
@@ -1826,6 +1827,17 @@ struct IntegralFluxEclipse2Knob : Eclipse2Knob {
 	}
 };
 
+template <typename TBase>
+struct IntegralFluxTimedApertureLight : TBase {
+	void draw(const typename TBase::DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		TBase::draw(args);
+		gIntegralFluxApertureDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
@@ -1834,6 +1846,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	float eclipseShadowDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
 	uint64_t eclipseShadowDrawsSinceSubmit = 0u;
 
 	void step() override {
@@ -2047,20 +2060,21 @@ struct IntegralFluxWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(invOutputPos), module, IntegralFlux::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(ch4UnityOutputPos), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycle1LightPos), module, IntegralFlux::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycle4LightPos), module, IntegralFlux::CYCLE_4_LED_LIGHT));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(eor1LightPos), module, IntegralFlux::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(eoc4LightPos), module, IntegralFlux::EOC_CH_4_LIGHT));
-		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(unity1LightPos), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
-		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<AmberApertureLight>>>(mm2px(cycle1LightPos), module, IntegralFlux::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<AmberApertureLight>>>(mm2px(cycle4LightPos), module, IntegralFlux::CYCLE_4_LED_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<AmberApertureLight>>>(mm2px(eor1LightPos), module, IntegralFlux::EOR_CH_1_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<AmberApertureLight>>>(mm2px(eoc4LightPos), module, IntegralFlux::EOC_CH_4_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(unity1LightPos), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<MagentaApertureLight>>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
+		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
 	}
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		gIntegralFluxGearDrawNsThisFrame = 0u;
 		gIntegralFluxEclipseDrawNsThisFrame = 0u;
+		gIntegralFluxApertureDrawNsThisFrame = 0u;
 		visual_assets::resetEclipseShadowDrawMetrics();
 		const PerfClock::time_point perfStart = PerfClock::now();
 		ModuleWidget::draw(args);
@@ -2076,6 +2090,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
 		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
 		eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
+		apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
 		const uint64_t eclipseShadowDraws = visual_assets::eclipseShadowDrawCount();
 		if (eclipseShadowDraws > 0u) {
 			const float eclipseShadowDrawUs = float(visual_assets::eclipseShadowDrawNs()) * 1e-3f;
@@ -2099,6 +2114,7 @@ struct IntegralFluxWidget : ModuleWidget {
 					debug_terminal::consumeAudioProcessTiming(flux->perfAudioProcessMinNs, flux->perfAudioProcessMaxNs),
 					uiStepUsRange.consume(),
 					uiDrawUsRange.consume(),
+					apertureDrawUsRange.consume(),
 					gearDrawUsEma,
 					eclipseDrawUsEma,
 					eclipseShadowDrawUsEma,

@@ -535,13 +535,14 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
                                TimingRangeUs stepUs,
                                TimingRangeUs drawUs,
+                               TimingRangeUs apertureUs,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
                                uint64_t eclipseShadowDraws) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
-  char dataBuf[384];
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
+  char dataBuf[448];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -554,6 +555,10 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",");
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "aperture_us", apertureUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",

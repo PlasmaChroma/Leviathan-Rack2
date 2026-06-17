@@ -36,15 +36,64 @@ void setApertureBaseColor(LeviathanApertureLight* light, NVGcolor color) {
 	light->baseColor = color;
 	light->baseColors.clear();
 	light->addBaseColor(color);
+	light->invalidateStaticBackgroundCache();
+	light->invalidateBloomCache();
 }
 
 } // namespace
 
+struct LeviathanApertureLight::StaticBackgroundWidget : Widget {
+	LeviathanApertureLight* owner = nullptr;
+
+	explicit StaticBackgroundWidget(LeviathanApertureLight* owner) : owner(owner) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (owner) {
+			owner->drawStaticBackground(args.vg);
+		}
+	}
+};
+
+struct LeviathanApertureLight::BloomWidget : Widget {
+	LeviathanApertureLight* owner = nullptr;
+
+	explicit BloomWidget(LeviathanApertureLight* owner) : owner(owner) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (owner) {
+			owner->drawBloomCache(args.vg);
+		}
+	}
+};
+
 LeviathanApertureLight::LeviathanApertureLight() {
+	staticBackgroundFb = new widget::FramebufferWidget();
+	staticBackgroundFb->dirtyOnSubpixelChange = false;
+	staticBackgroundFb->hide();
+	staticBackgroundWidget = new StaticBackgroundWidget(this);
+	staticBackgroundFb->addChild(staticBackgroundWidget);
+	addChild(staticBackgroundFb);
+
+	bloomFb = new widget::FramebufferWidget();
+	bloomFb->dirtyOnSubpixelChange = false;
+	bloomFb->hide();
+	bloomWidget = new BloomWidget(this);
+	bloomFb->addChild(bloomWidget);
+	addChild(bloomFb);
+
 	applySize(ApertureLightSize::Small);
 	addBaseColor(baseColor);
 	bgColor = color::BLACK_TRANSPARENT;
 	borderColor = color::BLACK_TRANSPARENT;
+}
+
+LeviathanApertureLight::~LeviathanApertureLight() {
+	staticBackgroundFb = nullptr;
+	staticBackgroundWidget = nullptr;
+	bloomFb = nullptr;
+	bloomWidget = nullptr;
 }
 
 void LeviathanApertureLight::applySize(ApertureLightSize size) {
@@ -82,15 +131,73 @@ void LeviathanApertureLight::applySize(ApertureLightSize size) {
 		bloomAlpha = 0.30f;
 		break;
 	}
+	syncStaticBackgroundCache();
+	syncBloomCache();
 }
 
-void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
-	NVGcontext* vg = args.vg;
+void LeviathanApertureLight::invalidateStaticBackgroundCache() {
+	if (staticBackgroundFb) {
+		staticBackgroundFb->setDirty();
+	}
+}
+
+void LeviathanApertureLight::invalidateBloomCache() {
+	bloomCacheGlow = -1.f;
+	if (bloomFb) {
+		bloomFb->setDirty();
+	}
+}
+
+void LeviathanApertureLight::syncStaticBackgroundCache() {
+	if (!staticBackgroundFb || !staticBackgroundWidget) {
+		return;
+	}
+	staticBackgroundFb->box.pos = Vec(0.f, 0.f);
+	staticBackgroundFb->box.size = box.size;
+	staticBackgroundWidget->box.pos = Vec(0.f, 0.f);
+	staticBackgroundWidget->box.size = box.size;
+	staticBackgroundFb->setDirty();
+}
+
+void LeviathanApertureLight::syncBloomCache() {
+	if (!bloomFb || !bloomWidget) {
+		return;
+	}
+	const float bloomExtent = bloomRadius * 1.35f;
+	const float halfW = box.size.x * 0.5f;
+	const float halfH = box.size.y * 0.5f;
+	bloomCacheBleedPx = std::max(0.f, bloomExtent - std::min(halfW, halfH));
+	bloomCacheBleedPx = std::ceil(bloomCacheBleedPx + 1.f);
+	bloomFb->box.pos = Vec(-bloomCacheBleedPx, -bloomCacheBleedPx);
+	bloomFb->box.size = box.size.plus(Vec(2.f * bloomCacheBleedPx, 2.f * bloomCacheBleedPx));
+	bloomWidget->box.pos = Vec(0.f, 0.f);
+	bloomWidget->box.size = bloomFb->box.size;
+	invalidateBloomCache();
+}
+
+void LeviathanApertureLight::drawStaticBackground(NVGcontext* vg) {
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
 
 	drawSocket(vg, cx, cy);
 	drawUnlitLens(vg, cx, cy);
+}
+
+void LeviathanApertureLight::drawBloomCache(NVGcontext* vg) {
+	const float cx = box.size.x * 0.5f + bloomCacheBleedPx;
+	const float cy = box.size.y * 0.5f + bloomCacheBleedPx;
+	drawBloom(vg, cx, cy, bloomCacheGlow);
+}
+
+void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
+	if (!staticBackgroundFb || !staticBackgroundWidget) {
+		drawStaticBackground(args.vg);
+		return;
+	}
+	if (!staticBackgroundFb->box.size.equals(box.size)) {
+		syncStaticBackgroundCache();
+	}
+	staticBackgroundFb->draw(args);
 }
 
 void LeviathanApertureLight::drawLight(const DrawArgs& args) {
@@ -106,7 +213,23 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 	const float bloom = apertureBloomAmount();
 
 	if (t > 0.001f && bloom > 0.f) {
-		drawBloom(vg, cx, cy, glow * bloom);
+		const float effectiveBloom = glow * bloom;
+		if (bloomFb && bloomWidget) {
+			if (!bloomFb->box.size.equals(box.size.plus(Vec(2.f * bloomCacheBleedPx, 2.f * bloomCacheBleedPx)))) {
+				syncBloomCache();
+			}
+			if (std::fabs(effectiveBloom - bloomCacheGlow) > 0.0005f) {
+				bloomCacheGlow = effectiveBloom;
+				bloomFb->setDirty();
+			}
+			nvgSave(vg);
+			nvgTranslate(vg, -bloomCacheBleedPx, -bloomCacheBleedPx);
+			bloomFb->draw(args);
+			nvgRestore(vg);
+		}
+		else {
+			drawBloom(vg, cx, cy, effectiveBloom);
+		}
 	}
 	if (t > 0.001f) {
 		drawCore(vg, cx, cy, core, hot);
