@@ -4,6 +4,7 @@
 #include <nanovg_gl.h>
 #include <cstddef>
 #include <unordered_map>
+#include <array>
 
 namespace bifurx {
 
@@ -27,10 +28,28 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	std::vector<GlVertex> fillSoftCapVertices;
 	std::vector<GlVertex> fillCrestLineVertices;
 	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
-	std::vector<GlVertex> cyanVertices;
-	std::vector<GlVertex> cyanHaloVertices;
 	std::vector<GlStrokeQuadVertex> strokeQuadVertices;
 	std::vector<BifurxCurvePoint> overlayCurvePoints;
+	std::vector<uint16_t> curveTexels; // RGBA16 normalized, kCurvePointCount wide, reused each frame
+
+	GLuint textureProgram = 0;
+	GLuint textureVertex = 0;
+	GLuint textureFragment = 0;
+	GLuint textureVbo = 0;
+	GLuint curveTex = 0;
+	bool textureShaderInitAttempted = false;
+	bool textureShaderReady = false;
+	GLint textureUniformViewport = -1;
+	GLint textureUniformCurveTex = -1;
+	GLint textureUniformExpectedWhite = -1;
+	GLint textureUniformExpectedCyan = -1;
+	GLint textureUniformExpectedPurple = -1;
+	GLint textureUniformDisplayOnlyMode = -1;
+	GLint textureUniformDisplayOnlyShapeControl = -1;
+	GLint textureUniformSpectrumTopY = -1;
+	GLint textureUniformSpectrumBottomY = -1;
+	GLint textureUniformPlotWidth = -1;
+	GLint textureUniformPlotHeight = -1;
 
 	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
 	GLuint vbo = 0;
@@ -73,10 +92,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
 		fillCrestLineVertices.reserve(overlaySegmentCount * 2);
 		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
-		cyanVertices.reserve(size_t(kCurvePointCount));
-		cyanHaloVertices.reserve(size_t(kCurvePointCount));
 		strokeQuadVertices.reserve(size_t(kCurvePointCount) * 24u);
 		overlayCurvePoints.reserve(refinedPointReserve);
+		curveTexels.resize(size_t(kCurvePointCount) * 4u, 0); // 4 channels per pixel (RGBA16)
 	}
 
 	void releaseShaderResources(bool deleteGlObjects) {
@@ -112,6 +130,26 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDeleteShader(strokeShaderFragment);
 		}
 		strokeShaderFragment = 0;
+		if (deleteGlObjects && textureVbo) {
+			glDeleteBuffers(1, &textureVbo);
+		}
+		textureVbo = 0;
+		if (deleteGlObjects && curveTex) {
+			glDeleteTextures(1, &curveTex);
+		}
+		curveTex = 0;
+		if (deleteGlObjects && textureProgram) {
+			glDeleteProgram(textureProgram);
+		}
+		textureProgram = 0;
+		if (deleteGlObjects && textureVertex) {
+			glDeleteShader(textureVertex);
+		}
+		textureVertex = 0;
+		if (deleteGlObjects && textureFragment) {
+			glDeleteShader(textureFragment);
+		}
+		textureFragment = 0;
 		shaderUniformViewport = -1;
 		shaderVboCapacityBytes = 0;
 		shaderReady = false;
@@ -120,6 +158,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		strokeUniformViewport = -1;
 		strokeShaderReady = false;
 		strokeShaderInitAttempted = false;
+		textureShaderReady = false;
+		textureShaderInitAttempted = false;
 	}
 
 	~BifurxSpectrumGLWidget() {
@@ -391,6 +431,206 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		return true;
 	}
 
+	bool ensureTextureShaderReady() {
+		if (textureShaderInitAttempted) {
+			return textureShaderReady;
+		}
+		textureShaderInitAttempted = true;
+
+		static const char* const kVertexShaderSrc = R"GLSL(
+			#version 120
+			attribute vec2 aPos;
+			uniform vec2 uViewport;
+			varying vec2 vLocalPos;
+			void main() {
+				vec2 ndc = vec2((aPos.x / uViewport.x) * 2.0 - 1.0, 1.0 - (aPos.y / uViewport.y) * 2.0);
+				gl_Position = vec4(ndc, 0.0, 1.0);
+				vLocalPos = aPos;
+			}
+		)GLSL";
+
+		static const char* const kFragmentShaderSrc = R"GLSL(
+			#version 120
+			varying vec2 vLocalPos;
+			uniform sampler2D uCurveTex;
+			uniform vec4 uExpectedWhite;
+			uniform vec4 uExpectedCyan;
+			uniform vec4 uExpectedPurple;
+			uniform float uDisplayOnlyMode;
+			uniform float uDisplayOnlyShapeControl;
+			uniform float uSpectrumTopY;
+			uniform float uSpectrumBottomY;
+			uniform float uPlotWidth;
+			uniform float uPlotHeight;
+
+			vec4 mixColor(vec4 c1, vec4 c2, float t) {
+				return mix(c1, c2, t);
+			}
+
+			float displayOnlyColorTone(float energy, float shape) {
+				float tone = 0.5 + 0.5 * shape;
+				float factor = 1.0 - energy;
+				return clamp(tone - 0.25 * factor, 0.0, 1.0);
+			}
+
+			void main() {
+				float x01 = clamp(vLocalPos.x / uPlotWidth, 0.0, 1.0);
+				vec4 texColor = texture2D(uCurveTex, vec2(x01, 0.5));
+				float curveY = texColor.r * uPlotHeight;
+				float avgD = texColor.g * 36.0 - 18.0;
+				float energy = texColor.b;
+
+				if (energy <= 0.005) {
+					discard;
+				}
+
+				vec4 fill;
+				if (uDisplayOnlyMode > 0.5) {
+					float tone = displayOnlyColorTone(energy, uDisplayOnlyShapeControl);
+					fill = mixColor(uExpectedPurple, uExpectedCyan, tone);
+				} else {
+					float posA = clamp(avgD / 18.0, 0.0, 1.0);
+					float negA = clamp(-avgD / 18.0, 0.0, 1.0);
+					vec4 tint = uExpectedWhite;
+					if (posA > 0.0) {
+						tint = mixColor(tint, uExpectedCyan, clamp(posA * 1.40, 0.0, 1.0));
+					}
+					if (negA > 0.0) {
+						tint = mixColor(tint, uExpectedPurple, clamp(negA * 1.25, 0.0, 1.0));
+					}
+					fill = mixColor(uExpectedWhite, tint, 0.55 + 0.45 * energy);
+				}
+
+				float topAlpha = clamp(0.78 + 0.18 * energy, 0.78, 0.96);
+				float capAlphaNear = clamp(0.08 + 0.18 * energy, 0.0, 0.26);
+				float capAlphaFar = clamp(0.03 + 0.10 * energy, 0.0, 0.13);
+
+				float fillAlpha = 0.0;
+				if (vLocalPos.y < uSpectrumTopY || vLocalPos.y > uSpectrumBottomY) {
+					discard;
+				}
+
+				float signedDist = vLocalPos.y - curveY;
+				float aaPx = clamp(fwidth(signedDist), 0.85, 2.2);
+				float bodyT = (uSpectrumBottomY > curveY) ? clamp(signedDist / (uSpectrumBottomY - curveY), 0.0, 1.0) : 1.0;
+				float bodyAlpha = mix(topAlpha, 1.0, bodyT);
+				float crestDist = max(-signedDist, 0.0);
+				float alphaNear = capAlphaNear * clamp(1.0 - crestDist / 1.8, 0.0, 1.0);
+				float alphaFar = capAlphaFar * clamp(1.0 - crestDist / 3.4, 0.0, 1.0);
+				float featherAlpha = alphaNear + alphaFar;
+				float bodyCoverage = smoothstep(-aaPx, aaPx, signedDist);
+				fillAlpha = mix(featherAlpha, bodyAlpha, bodyCoverage);
+
+				float crestAlpha = clamp(0.16 + 0.18 * energy, 0.0, 0.34);
+				float crestRadius = 1.05 + 0.45 * energy;
+				vec4 crestColor = mixColor(fill, vec4(236.0/255.0, 244.0/255.0, 250.0/255.0, 1.0), 0.18);
+
+				float dist = abs(vLocalPos.y - curveY);
+				float sigma = max(crestRadius * 0.56, 0.001);
+				float crestCoverage = exp(-0.5 * (dist * dist) / (sigma * sigma));
+				float crestAlphaOut = clamp(crestAlpha * crestCoverage, 0.0, 1.0);
+
+				vec4 cFill = vec4(fill.rgb, fillAlpha);
+				vec4 cCrest = vec4(crestColor.rgb, crestAlphaOut);
+
+				float blendedAlpha = cCrest.a + cFill.a * (1.0 - cCrest.a);
+				vec3 blendedColor = (blendedAlpha > 0.0001)
+					? (cCrest.rgb * cCrest.a + cFill.rgb * cFill.a * (1.0 - cCrest.a)) / blendedAlpha
+					: vec3(0.0);
+				gl_FragColor = vec4(blendedColor, blendedAlpha);
+			}
+		)GLSL";
+
+		auto compileShader = [](GLenum type, const char* src) -> GLuint {
+			GLuint shader = glCreateShader(type);
+			if (!shader) {
+				WARN("BifurxGL texture shader: glCreateShader failed for type=%u", unsigned(type));
+				return 0;
+			}
+			glShaderSource(shader, 1, &src, nullptr);
+			glCompileShader(shader);
+			GLint status = GL_FALSE;
+			glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+			if (status != GL_TRUE) {
+				GLint logLen = 0;
+				glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+				std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+				GLsizei written = 0;
+				glGetShaderInfoLog(shader, GLsizei(logBuf.size()), &written, logBuf.data());
+				WARN("BifurxGL texture shader compile failed (type=%u): %s", unsigned(type), logBuf.data());
+				glDeleteShader(shader);
+				return 0;
+			}
+			return shader;
+		};
+
+		textureVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+		textureFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+		if (!textureVertex || !textureFragment) {
+			if (textureVertex) { glDeleteShader(textureVertex); textureVertex = 0; }
+			if (textureFragment) { glDeleteShader(textureFragment); textureFragment = 0; }
+			return false;
+		}
+
+		textureProgram = glCreateProgram();
+		if (!textureProgram) {
+			glDeleteShader(textureVertex);
+			glDeleteShader(textureFragment);
+			textureVertex = 0;
+			textureFragment = 0;
+			return false;
+		}
+
+		glAttachShader(textureProgram, textureVertex);
+		glAttachShader(textureProgram, textureFragment);
+		glBindAttribLocation(textureProgram, 0, "aPos");
+		glLinkProgram(textureProgram);
+		GLint linkStatus = GL_FALSE;
+		glGetProgramiv(textureProgram, GL_LINK_STATUS, &linkStatus);
+		if (linkStatus != GL_TRUE) {
+			GLint logLen = 0;
+			glGetProgramiv(textureProgram, GL_INFO_LOG_LENGTH, &logLen);
+			std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+			GLsizei written = 0;
+			glGetProgramInfoLog(textureProgram, GLsizei(logBuf.size()), &written, logBuf.data());
+			WARN("BifurxGL texture shader link failed: %s", logBuf.data());
+			glDeleteProgram(textureProgram);
+			glDeleteShader(textureVertex);
+			glDeleteShader(textureFragment);
+			textureProgram = 0;
+			textureVertex = 0;
+			textureFragment = 0;
+			return false;
+		}
+
+		textureUniformViewport = glGetUniformLocation(textureProgram, "uViewport");
+		textureUniformCurveTex = glGetUniformLocation(textureProgram, "uCurveTex");
+		textureUniformExpectedWhite = glGetUniformLocation(textureProgram, "uExpectedWhite");
+		textureUniformExpectedCyan = glGetUniformLocation(textureProgram, "uExpectedCyan");
+		textureUniformExpectedPurple = glGetUniformLocation(textureProgram, "uExpectedPurple");
+		textureUniformDisplayOnlyMode = glGetUniformLocation(textureProgram, "uDisplayOnlyMode");
+		textureUniformDisplayOnlyShapeControl = glGetUniformLocation(textureProgram, "uDisplayOnlyShapeControl");
+		textureUniformSpectrumTopY = glGetUniformLocation(textureProgram, "uSpectrumTopY");
+		textureUniformSpectrumBottomY = glGetUniformLocation(textureProgram, "uSpectrumBottomY");
+		textureUniformPlotWidth = glGetUniformLocation(textureProgram, "uPlotWidth");
+		textureUniformPlotHeight = glGetUniformLocation(textureProgram, "uPlotHeight");
+
+		glGenBuffers(1, &textureVbo);
+		glGenTextures(1, &curveTex);
+
+		glBindTexture(GL_TEXTURE_2D, curveTex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		// Pre-allocate storage once; drawFramebuffer updates it with glTexSubImage2D.
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, kCurvePointCount, 1, 0, GL_RGBA, GL_UNSIGNED_SHORT, nullptr);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		textureShaderReady = true;
+		return true;
+	}
+
 	void appendStrokePolyline(const std::vector<GlVertex>& lineVerts, float radius, std::vector<GlStrokeQuadVertex>* out) {
 		if (!out) return;
 		if (lineVerts.size() < 2) return;
@@ -517,6 +757,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			strokeShaderVboCapacityBytes = bytes;
 		}
 		else {
+			glBufferData(GL_ARRAY_BUFFER, strokeShaderVboCapacityBytes, nullptr, GL_DYNAMIC_DRAW);
 			glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
 		}
 		glEnableVertexAttribArray(0);
@@ -547,6 +788,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			shaderVboCapacityBytes = bytes;
 		}
 		else {
+			glBufferData(GL_ARRAY_BUFFER, shaderVboCapacityBytes, nullptr, GL_DYNAMIC_DRAW);
 			glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
 		}
 		glEnableVertexAttribArray(0);
@@ -584,6 +826,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			strokeShaderVboCapacityBytes = 0;
 			strokeShaderReady = false;
 			strokeShaderInitAttempted = false;
+		}
+		if (textureShaderReady &&
+			(!gl_lifecycle::isValidProgramBufferPair(textureProgram, textureVbo) || !glIsTexture(curveTex))) {
+			textureProgram = 0;
+			textureVbo = 0;
+			curveTex = 0;
+			textureVertex = 0;
+			textureFragment = 0;
+			textureShaderReady = false;
+			textureShaderInitAttempted = false;
 		}
 	}
 
@@ -723,117 +975,159 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		
 		const float displayMaxDbfs = state.displayTopDbfs;
 		const float displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
-		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 		auto spectrumYForDbfs = [&](float dbfs) { return rescale(clamp(dbfs, displayMinDbfs, displayMaxDbfs), displayMinDbfs, displayMaxDbfs, spectrumBottomY, spectrumTopY); };
 		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
-			fillVertices.clear();
-			fillSoftCapVertices.clear();
-			fillCrestLineVertices.clear();
-			fillCrestStrokeVertices.clear();
-			cyanVertices.clear();
-			cyanHaloVertices.clear();
-			const bool showModuleResponse = !displayOnlyMode && module && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
-			const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
+		const bool useShaderRenderer = module->useGlShaderRenderer.load(std::memory_order_relaxed) && ensureTextureShaderReady();
+		shaderRendererActiveLastFrame = useShaderRenderer;
+		shaderRendererFallbackLastFrame = module->useGlShaderRenderer.load(std::memory_order_relaxed) && !useShaderRenderer;
 
-		// 1. FFT Fill Overlay
-		if (state.hasOverlay) {
-			for (int i = 0; i < kCurvePointCount - 1; i++) {
-				const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
-				const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
-				const float energy = levi_math::clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
-				if (energy <= 0.005f) continue;
-				
-				float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
+		fillVertices.clear();
+		fillSoftCapVertices.clear();
+		fillCrestLineVertices.clear();
+		fillCrestStrokeVertices.clear();
+		const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
+
+		if (useShaderRenderer) {
+			if (state.hasOverlay) {
+				// 1. Fill persistent texel buffer (no heap allocation)
+				for (int i = 0; i < kCurvePointCount; ++i) {
+					const float y = spectrumYForDbfs(state.overlayOutputDbfs[i]);
+					const float normY   = clamp(y / h, 0.f, 1.f);
+					const float normD   = clamp((state.overlayModuleDb[i] + 18.f) / 36.f, 0.f, 1.f);
+					const float energy  = clamp((state.overlayOutputDbfs[i] - displayMinDbfs) / (displayMaxDbfs - displayMinDbfs), 0.f, 1.f);
+					const size_t base = size_t(i) * 4u;
+					curveTexels[base + 0] = static_cast<uint16_t>(normY  * 65535.f + 0.5f);
+					curveTexels[base + 1] = static_cast<uint16_t>(normD  * 65535.f + 0.5f);
+					curveTexels[base + 2] = static_cast<uint16_t>(energy * 65535.f + 0.5f);
+					curveTexels[base + 3] = 65535;
+				}
+
+				// 2. Update pre-allocated texture (no storage reallocation)
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, curveTex);
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kCurvePointCount, 1, GL_RGBA, GL_UNSIGNED_SHORT, curveTexels.data());
+
+				// 3. Set up uniforms and program
+				glUseProgram(textureProgram);
+				glUniform2f(textureUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
+				glUniform1i(textureUniformCurveTex, 0);
+
 				const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
-				NVGcolor expectedWhite = palette.white;
-				NVGcolor expectedCyan = palette.high;
-				NVGcolor expectedPurple = palette.low;
-				NVGcolor fill;
-				if (displayOnlyMode) {
-					fill = mixColor(expectedPurple, expectedCyan, displayOnlyColorTone(energy, displayOnlyShapeControl));
-				}
-				else {
-					NVGcolor tint = expectedWhite; 
-					if (posA > 0.f) tint = mixColor(tint, expectedCyan, levi_math::clamp01(posA * 1.40f)); 
-					if (negA > 0.f) tint = mixColor(tint, expectedPurple, levi_math::clamp01(negA * 1.25f));
-					fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
-				}
-				
-				float x0 = w * (float(i) / float(kCurvePointCount - 1));
-				float x1 = w * (float(i + 1) / float(kCurvePointCount - 1));
-				float y0 = spectrumYForDbfs(state.overlayOutputDbfs[i]);
-				float y1 = spectrumYForDbfs(state.overlayOutputDbfs[i + 1]);
-				const float topAlpha = clamp(0.78f + 0.18f * energy, 0.78f, 0.96f);
+				glUniform4f(textureUniformExpectedWhite, palette.white.r, palette.white.g, palette.white.b, palette.white.a);
+				glUniform4f(textureUniformExpectedCyan, palette.high.r, palette.high.g, palette.high.b, palette.high.a);
+				glUniform4f(textureUniformExpectedPurple, palette.low.r, palette.low.g, palette.low.b, palette.low.a);
+				glUniform1f(textureUniformDisplayOnlyMode, displayOnlyMode ? 1.f : 0.f);
+				glUniform1f(textureUniformDisplayOnlyShapeControl, displayOnlyShapeControl);
+				glUniform1f(textureUniformSpectrumTopY, spectrumTopY);
+				glUniform1f(textureUniformSpectrumBottomY, spectrumBottomY);
+				glUniform1f(textureUniformPlotWidth, w);
+				glUniform1f(textureUniformPlotHeight, h);
 
-				fillVertices.push_back({x0, y0, fill.r, fill.g, fill.b, topAlpha});
-				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
-				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-				fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
-				fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
-				fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+				// 4. Draw quad
+				struct SimpleVertex {
+					float x, y;
+				};
+				std::array<SimpleVertex, 4> quadVerts = {{
+					{0.f, 0.f},
+					{w, 0.f},
+					{0.f, spectrumBottomY},
+					{w, spectrumBottomY}
+				}};
 
-				// Feather the crest to mimic NanoVG's softer anti-aliased top blend.
-				const float featherPxNear = 1.8f;
-				const float capAlphaNear = clamp(0.08f + 0.18f * energy, 0.f, 0.26f);
-				fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaNear});
-				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
-				fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
-				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
-				fillSoftCapVertices.push_back({x1, y1 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
-				fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+				glBindBuffer(GL_ARRAY_BUFFER, textureVbo);
+				// Orphan VBO before upload
+				glBufferData(GL_ARRAY_BUFFER, sizeof(quadVerts), nullptr, GL_DYNAMIC_DRAW);
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(quadVerts), quadVerts.data());
 
-				const float featherPxFar = 3.4f;
-				const float capAlphaFar = clamp(0.03f + 0.10f * energy, 0.f, 0.13f);
-				fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaFar});
-				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
-				fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
-				fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
-				fillSoftCapVertices.push_back({x1, y1 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
-				fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+				glEnableVertexAttribArray(0);
+				glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (const GLvoid*)0);
 
-				const float crestAlpha = clamp(0.16f + 0.18f * energy, 0.f, 0.34f);
-				const float crestRadius = 1.05f + 0.45f * energy;
-				const NVGcolor crest = mixColor(fill, nvgRGB(236, 244, 250), 0.18f);
-				fillCrestLineVertices.push_back({x0, y0, crest.r, crest.g, crest.b, crestAlpha});
-				fillCrestLineVertices.push_back({x1, y1, crest.r, crest.g, crest.b, crestAlpha});
-				appendStrokeSegment(
-					{x0, y0, crest.r, crest.g, crest.b, crestAlpha},
-					{x1, y1, crest.r, crest.g, crest.b, crestAlpha},
-					crestRadius,
-					&fillCrestStrokeVertices
-				);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+				glDisableVertexAttribArray(0);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glBindTexture(GL_TEXTURE_2D, 0);
+				glUseProgram(0);
 			}
+			lastDrawVertexCount = 4;
 		}
+		else {
+			// CPU geometry generation logic fallback
+			if (state.hasOverlay) {
+				for (int i = 0; i < kCurvePointCount - 1; i++) {
+					const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
+					const float avgO = 0.5f * (state.overlayOutputDbfs[i] + state.overlayOutputDbfs[i + 1]);
+					const float energy = levi_math::clamp01(rescale(avgO, displayMinDbfs, displayMaxDbfs, 0.f, 1.f));
+					if (energy <= 0.005f) continue;
+					
+					float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
+					const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+					NVGcolor expectedWhite = palette.white;
+					NVGcolor expectedCyan = palette.high;
+					NVGcolor expectedPurple = palette.low;
+					NVGcolor fill;
+					if (displayOnlyMode) {
+						fill = mixColor(expectedPurple, expectedCyan, displayOnlyColorTone(energy, displayOnlyShapeControl));
+					}
+					else {
+						NVGcolor tint = expectedWhite; 
+						if (posA > 0.f) tint = mixColor(tint, expectedCyan, levi_math::clamp01(posA * 1.40f)); 
+						if (negA > 0.f) tint = mixColor(tint, expectedPurple, levi_math::clamp01(negA * 1.25f));
+						fill = mixColor(expectedWhite, tint, 0.55f + 0.45f * energy);
+					}
+					
+					float x0 = w * (float(i) / float(kCurvePointCount - 1));
+					float x1 = w * (float(i + 1) / float(kCurvePointCount - 1));
+					float y0 = spectrumYForDbfs(state.overlayOutputDbfs[i]);
+					float y1 = spectrumYForDbfs(state.overlayOutputDbfs[i + 1]);
+					const float topAlpha = clamp(0.78f + 0.18f * energy, 0.78f, 0.96f);
 
-		// 2. Cyan Module Response
-		if (state.hasOverlay && showModuleResponse) {
-			const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
-			NVGcolor expectedWhite = palette.white;
-			NVGcolor expectedCyan = palette.high;
-			NVGcolor cyanColor = mixColor(expectedWhite, expectedCyan, 0.35f);
-			cyanColor = mixColor(cyanColor, nvgRGB(236, 244, 250), 0.10f);
-			cyanColor.a = 0.98f;
-			NVGcolor cyanHaloColor = cyanColor;
-			cyanHaloColor.a = 0.24f;
-			for (int i = 0; i < kCurvePointCount; i++) {
-				float x = w * (float(i) / float(kCurvePointCount - 1));
-				float y = responseYForDb(state.overlayModuleDb[i]);
-				cyanVertices.push_back({x, y, cyanColor.r, cyanColor.g, cyanColor.b, cyanColor.a});
-				cyanHaloVertices.push_back({x, y, cyanHaloColor.r, cyanHaloColor.g, cyanHaloColor.b, cyanHaloColor.a});
+					fillVertices.push_back({x0, y0, fill.r, fill.g, fill.b, topAlpha});
+					fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
+					fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+					fillVertices.push_back({x1, y1, fill.r, fill.g, fill.b, topAlpha});
+					fillVertices.push_back({x1, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+					fillVertices.push_back({x0, spectrumBottomY, fill.r, fill.g, fill.b, 1.0f});
+
+					// Feather the crest to mimic NanoVG's softer anti-aliased top blend.
+					const float featherPxNear = 1.8f;
+					const float capAlphaNear = clamp(0.08f + 0.18f * energy, 0.f, 0.26f);
+					fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaNear});
+					fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
+					fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+					fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaNear});
+					fillSoftCapVertices.push_back({x1, y1 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+					fillSoftCapVertices.push_back({x0, y0 - featherPxNear, fill.r, fill.g, fill.b, 0.0f});
+
+					const float featherPxFar = 3.4f;
+					const float capAlphaFar = clamp(0.03f + 0.10f * energy, 0.f, 0.13f);
+					fillSoftCapVertices.push_back({x0, y0, fill.r, fill.g, fill.b, capAlphaFar});
+					fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
+					fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+					fillSoftCapVertices.push_back({x1, y1, fill.r, fill.g, fill.b, capAlphaFar});
+					fillSoftCapVertices.push_back({x1, y1 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+					fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
+
+					const float crestAlpha = clamp(0.16f + 0.18f * energy, 0.f, 0.34f);
+					const float crestRadius = 1.05f + 0.45f * energy;
+					const NVGcolor crest = mixColor(fill, nvgRGB(236, 244, 250), 0.18f);
+					fillCrestLineVertices.push_back({x0, y0, crest.r, crest.g, crest.b, crestAlpha});
+					fillCrestLineVertices.push_back({x1, y1, crest.r, crest.g, crest.b, crestAlpha});
+					appendStrokeSegment(
+						{x0, y0, crest.r, crest.g, crest.b, crestAlpha},
+						{x1, y1, crest.r, crest.g, crest.b, crestAlpha},
+						crestRadius,
+						&fillCrestStrokeVertices
+					);
+				}
 			}
-		}
 
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		const bool useShaderRenderer = module->useGlShaderRenderer.load(std::memory_order_relaxed) && ensureShaderReady();
-		shaderRendererActiveLastFrame = useShaderRenderer;
-		shaderRendererFallbackLastFrame = module->useGlShaderRenderer.load(std::memory_order_relaxed) && !useShaderRenderer;
-		if (useShaderRenderer) {
-			drawVertsShader(fillVertices, GL_TRIANGLES, 1.f, w, h);
-			drawVertsShader(fillSoftCapVertices, GL_TRIANGLES, 1.f, w, h);
-		}
-		else {
 			glEnableClientState(GL_VERTEX_ARRAY);
 			glEnableClientState(GL_COLOR_ARRAY);
 
@@ -858,10 +1152,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_VERTEX_ARRAY);
 		}
-		if (useShaderRenderer && ensureStrokeShaderReady()) {
-			drawStrokeQuadsShader(fillCrestStrokeVertices, w, h);
-		}
-			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size() + cyanVertices.size());
+		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size());
 
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		{
