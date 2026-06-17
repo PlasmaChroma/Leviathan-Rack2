@@ -373,7 +373,10 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		}
 		const std::string rectTag = tag;
 		std::string id;
-		if (!parseAttrString(rectTag, "id", &id) || id.find(idSubstring) == std::string::npos) {
+		std::string label;
+		parseAttrString(rectTag, "id", &id);
+		parseAttrString(rectTag, "inkscape:label", &label);
+		if (id.find(idSubstring) == std::string::npos && label.find(idSubstring) == std::string::npos) {
 			continue;
 		}
 		math::Rect rect;
@@ -383,7 +386,7 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		const SvgAffine rectTransform = multiplyAffine(transformStack.back(), transformForTag(rectTag));
 		rect = transformRectMm(rect, rectTransform);
 		SvgRectMatch match;
-		match.id = id;
+		match.id = !id.empty() ? id : label;
 		match.rect = rect;
 		match.hasFillColor = rectFillColor(svgText, rectTag, &match.fillColor);
 		outRects->push_back(match);

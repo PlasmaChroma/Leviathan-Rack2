@@ -1,6 +1,7 @@
 #include "VisualAssets.hpp"
 #include "MathHelpers.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "PanelSvgUtils.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -152,6 +153,27 @@ Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor) {
 	fb->dirtyOnSubpixelChange = false;
 	fb->addChild(widget);
 	return fb;
+}
+
+int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {
+	if (!parent || svgPath.empty() || idSubstring.empty()) {
+		return 0;
+	}
+	std::vector<panel_svg::SvgRectMatch> rects;
+	if (!panel_svg::findRectsWithIdSubstringMm(svgPath, idSubstring, &rects)) {
+		return 0;
+	}
+	int added = 0;
+	for (const panel_svg::SvgRectMatch& match : rects) {
+		if (match.hasFillColor) {
+			parent->addChild(createSvgRect3DEffectWidget(match.rect, match.fillColor));
+		}
+		else {
+			parent->addChild(createSvgRect3DEffectWidget(match.rect));
+		}
+		++added;
+	}
+	return added;
 }
 
 void resetEclipseShadowDrawMetrics() {

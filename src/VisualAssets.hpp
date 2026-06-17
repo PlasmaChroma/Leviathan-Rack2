@@ -8,6 +8,7 @@ namespace visual_assets {
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
+int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");
 void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();
 uint64_t eclipseShadowDrawCount();

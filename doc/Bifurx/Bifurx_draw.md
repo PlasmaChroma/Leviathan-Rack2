@@ -2,16 +2,16 @@
 
 ## Executive summary
 
-The central finding is that Bifurx’s current OpenGL path is **not primarily a “heavy shader” problem**. It is a **CPU-driven geometry expansion and dynamic-buffer streaming problem with extra blended overdraw and a split GL + NanoVG composition path**. In the provided source, the FFT overlay and response fill are generated on the CPU into several transient vertex arrays every frame, then uploaded with `glBufferData`/`glBufferSubData` and drawn in multiple passes. The actual GLSL programs are modest: the main fill shader is nearly a passthrough, while the stroke shader adds a Gaussian-like alpha falloff via `exp`, `abs`, division, and clamp. That means draw-time spikes are more likely to come from **buffer update synchronization, repeated small draw phases, blend-heavy overdraw, and mixed backend rendering** than from raw shader ALU alone. fileciteturn0file1L139-L158 fileciteturn0file1L283-L295 fileciteturn0file1L694-L864 citeturn1search4turn10search0
+The central finding from the initial investigation was that Bifurx’s OpenGL path was **not primarily a “heavy shader” problem**. The original renderer was a **CPU-driven geometry expansion and dynamic-buffer streaming problem with extra blended overdraw and a split GL + NanoVG composition path**. The FFT overlay and response fill were generated on the CPU into several transient vertex arrays every frame, then uploaded with `glBufferData`/`glBufferSubData` and drawn in multiple passes. The implemented shader path now removes that CPU-expanded FFT fill in normal `OpenGL SHDR` mode, but the broader diagnosis still matters for the remaining hybrid GL + NanoVG work and for the legacy/fallback path. fileciteturn0file1L139-L158 fileciteturn0file1L283-L295 fileciteturn0file1L694-L864 citeturn1search4turn10search0
 
-The current architecture also keeps the FFT and overlay preparation on the CPU, either on the UI thread or in a worker thread, using `dsp::RealFFT` and per-bin smoothing/sampling before the GL stage ever runs. That is a good baseline for portability, but it means the GPU is mostly acting as a rasterizer for already-expanded geometry. In practical terms: **today’s draw spikes will usually be solved faster by reducing CPU-side vertex generation and avoiding implicit sync on dynamic VBO updates than by shaving a few shader instructions.** fileciteturn0file11L153-L234 fileciteturn0file8L1456-L1501 fileciteturn0file13L53-L121
+The current architecture still keeps the FFT and overlay preparation on the CPU, either on the UI thread or in a worker thread, using `dsp::RealFFT` and per-bin smoothing/sampling before the GL stage ever runs. That is a good baseline for portability. The new shader renderer now uploads the finished curve as a tiny texture instead of tessellating the FFT fill on the CPU, so remaining draw spikes are more likely to come from texture/VBO upload synchronization, fragment overdraw, or the mixed GL + NanoVG composition boundary. fileciteturn0file11L153-L234 fileciteturn0file8L1456-L1501 fileciteturn0file13L53-L121
 
 The most valuable optimization sequence is therefore:
 
-1. **Replace CPU-expanded fill geometry with a texture-driven or SSBO-driven shader path** that draws the FFT fill in one pass from a tiny uploaded spectrum/curve dataset rather than thousands of expanded vertices.
-2. **Replace `glBufferSubData` streaming with orphaning or a mapped ring buffer**, and use fences only where the implementation needs them.
+1. **Replace CPU-expanded fill geometry with a texture-driven or SSBO-driven shader path** that draws the FFT fill in one pass from a tiny uploaded spectrum/curve dataset rather than thousands of expanded vertices. Implemented for the shader renderer with an RGBA16 curve texture and one quad draw.
+2. **Replace `glBufferSubData` streaming with orphaning or a mapped ring buffer**, and use fences only where the implementation needs them. Implemented for the existing dynamic VBO helper paths.
 3. **Unify OpenGL and NanoVG responsibilities**, especially for the FFT/module-response overlay, so one backend does one visual layer.
-4. **Collapse multi-pass feather/crest rendering into analytic AA in a single fragment pass** where feasible.
+4. **Collapse multi-pass feather/crest rendering into analytic AA in a single fragment pass** where feasible. Implemented for the shader-rendered FFT fill and crest.
 5. **Add adaptive LOD/progressive update policies** for interaction spikes.
 6. **Treat GPU FFT as an optional advanced path**, not the first optimization, unless you intend to move the whole visualization pipeline onto the GPU. fileciteturn0file1L509-L564 fileciteturn0file1L738-L864 fileciteturn0file10L870-L877 citeturn1search4turn8search1turn9search1turn11search0turn8search0
 
@@ -19,17 +19,17 @@ For most desktop targets, a realistic expectation is that the first three change
 
 ## What the current Bifurx pipeline is doing
 
-Bifurx’s GL widget maintains several CPU-side vectors for fill triangles, feather triangles, crest lines, crest stroke quads, and cyan/module-response vertices. Their capacities are reserved up front, which avoids allocator churn, but the vectors are still cleared and rebuilt each frame inside `drawFramebuffer()`. The renderer then uploads vertex data to one of two dynamic VBOs and issues separate draws for fill, soft-cap feathering, and stroke quads. In the shader path, attribute arrays are also re-enabled and rebound every draw. fileciteturn0file1L25-L79 fileciteturn0file1L509-L564 fileciteturn0file1L729-L864
+Bifurx’s GL widget now has two plot-body paths. The default shader renderer uploads a `513 x 1` RGBA16 curve texture containing normalized curve height, module delta, and energy, then renders the FFT fill, feathering, and crest with a single 4-vertex quad. The legacy/fallback renderer still maintains CPU-side vectors for fill triangles, feather triangles, crest lines, and crest stroke quads; those dynamic VBO uploads now orphan before `glBufferSubData` to reduce synchronization hazards. fileciteturn0file1L25-L79 fileciteturn0file1L509-L564 fileciteturn0file1L729-L864
 
-The FFT fill overlay is built segment-by-segment in CPU code. For each adjacent point pair, Bifurx computes average module delta, average output dBFS, derives energy, mixes colors, computes two strip triangles for the solid fill, two extra feather layers, and a separate crest segment plus an expanded stroke quad. That is a classic CPU tessellation pattern: good for compatibility, but prone to CPU cost and dynamic-buffer streaming hazards. fileciteturn0file1L738-L805
+In the fallback path, the FFT fill overlay is still built segment-by-segment in CPU code. For each adjacent point pair, Bifurx computes average module delta, average output dBFS, derives energy, mixes colors, computes two strip triangles for the solid fill, two extra feather layers, and a separate crest segment plus an expanded stroke quad. That remains useful for compatibility, but the shader path avoids this tessellation in normal operation. fileciteturn0file1L738-L805
 
-The current shader complexity is modest. The fill shader uses a 2D position and 4D color attribute, converts to NDC using one viewport uniform, and outputs the interpolated color directly. The stroke shader adds a smoothed alpha coverage based on side distance and radius, with one exponential. In other words, **the fragment math exists, but the renderer is not dominated by complicated shading logic** the way a full image-processing path would be. fileciteturn0file1L139-L158 fileciteturn0file1L264-L295
+The shader path is intentionally compact. It samples one curve texture, reconstructs curve height and tint, clips to the plot area, computes fill/feather/crest analytically, and uses derivative-based edge antialiasing around sharp spectrum peaks. The legacy fill and stroke shaders remain modest helper paths for fallback rendering. fileciteturn0file1L139-L158 fileciteturn0file1L264-L295
 
 The FFT and response data are currently prepared on the CPU. `prepareCurveSnapshot()` in `BifurxRenderPrep.cpp` applies a Hann window, runs one FFT for output, and—when module response is enabled—two more FFTs for response output and raw input. It then performs power conversion, smoothing, and resampling back onto the curve positions. The same logic also exists in the direct UI-thread path (`updateOverlayCache()`), while the worker service can offload it and reuse curve results across snapshots. This means Bifurx already has a strong CPU-side preprocessing pipeline; the GPU is mostly consuming finished visualization primitives. fileciteturn0file11L196-L234 fileciteturn0file8L1456-L1501 fileciteturn0file13L93-L121
 
-A particularly important detail is that the OpenGL mode still draws additional overlay content through NanoVG. In `BifurxUI.cpp`, when the module is in `RENDER_OPENGL`, the widget still calls `drawNanoVG()`. That NanoVG overlay draws the cyan module-response line, markers, labels, and refined expected-curve strokes. So the “OpenGL renderer” is currently a **hybrid**: GL renders parts of the fill, then NanoVG renders additional spectrum/UI layers over it. This split backend increases state churn, duplicates some visual responsibilities, and makes frame analysis noisier. fileciteturn0file10L870-L877 fileciteturn0file1L878-L1030
+A particularly important detail is that the OpenGL mode still draws additional overlay content through NanoVG. In `BifurxUI.cpp`, when the module is in `RENDER_OPENGL`, the widget still calls `drawNanoVG()`. That NanoVG overlay draws the cyan module-response line, markers, labels, and refined expected-curve strokes. So the “OpenGL renderer” is still a **hybrid**: GL renders the shader-driven fill/crest, then NanoVG renders additional spectrum/UI layers over it. This split backend increases state churn and makes frame analysis noisier. fileciteturn0file10L870-L877 fileciteturn0file1L878-L1030
 
-Another revealing detail: the code constructs `cyanVertices` and `cyanHaloVertices` in `drawFramebuffer()`, but the shader path shown in the provided file does not actually draw them there; the visible cyan line is drawn in NanoVG instead. So some CPU work is already being spent on geometry that is not the active rendering path. Even when that cost is small, it is exactly the kind of hidden redundancy that shows up as p99 volatility. fileciteturn0file1L808-L864 fileciteturn0file1L904-L919
+Earlier versions constructed `cyanVertices` and `cyanHaloVertices` in `drawFramebuffer()` even though the visible cyan line was drawn in NanoVG. That redundant CPU geometry work has been removed. The remaining plot-body split is now architectural rather than an obviously unused loop: the module-response line and expected curve still live in NanoVG while the FFT fill lives in GL. fileciteturn0file1L808-L864 fileciteturn0file1L904-L919
 
 The current data flow is best summarized like this:
 
@@ -38,13 +38,13 @@ flowchart LR
     A[Audio / analysis frames] --> B[CPU FFT + smoothing]
     B --> C[CPU curve + overlay target arrays]
     C --> D[UI thread animation interpolation]
-    D --> E[CPU vertex expansion<br/>fill + feather + crest]
-    E --> F[glBufferData / glBufferSubData]
-    F --> G[OpenGL draw passes]
-    G --> H[NanoVG overlay pass<br/>cyan line, labels, markers]
+    D --> E[RGBA16 curve texture upload]
+    E --> F[OpenGL shader quad<br/>fill + feather + crest]
+    F --> G[NanoVG overlay pass<br/>response line, expected curve, labels, markers]
+    D --> H[Legacy fallback<br/>CPU geometry + orphaned VBO upload]
 ```
 
-That architecture is portable and straightforward, but it leaves performance exposed in exactly the places where OpenGL drivers are most likely to introduce stalls: **streaming writes to in-use buffers, repeated state rebinding, and alpha-blended overdraw.** citeturn1search4turn10search0turn10search3
+That architecture is much lighter than the original CPU-expanded shader path, but it still leaves performance exposed in a few places worth measuring: **texture/VBO upload synchronization, repeated state rebinding, alpha-blended overdraw, and the GL + NanoVG composition boundary.** citeturn1search4turn10search0turn10search3
 
 ## Profiling methodology and the exact metrics to collect
 
@@ -136,7 +136,7 @@ The table below ranks the most valuable changes for Bifurx as it exists now.
 
 ### Why the top choices win
 
-The first recommendation—**texture-driven fill**—works because the current renderer is building many triangles only to approximate what is fundamentally a 1D sampled signal stretched across a 2D plot. You can instead upload a compact 1D curve texture (or SSBO on GL 4.3+) containing output dBFS and module delta, and let the fragment shader reconstruct fill height, color, feather, and crest in one pass over a rectangle. That replaces the current per-frame CPU segment expansion and reduces draw calls from multiple passes to one or two. Since the existing fill shader is already simple, this is the natural next step. fileciteturn0file1L738-L805 fileciteturn0file1L829-L864 citeturn8search0turn12search2turn12search3
+The first recommendation—**texture-driven fill**—works because the original renderer built many triangles only to approximate what is fundamentally a 1D sampled signal stretched across a 2D plot. The implemented shader path now uploads a compact 1D curve texture containing normalized output height, module delta, and energy, then lets the fragment shader reconstruct fill height, color, feather, and crest in one pass over a rectangle. That replaces the old per-frame CPU segment expansion and reduces draw calls from multiple passes to one primary plot-body pass. fileciteturn0file1L738-L805 fileciteturn0file1L829-L864 citeturn8search0turn12search2turn12search3
 
 The second recommendation—**fix the streaming pattern**—comes directly from Khronos guidance. Buffer streaming is efficient only when you avoid implicit synchronization. The current code chooses between `glBufferData(..., verts.data(), GL_DYNAMIC_DRAW)` when capacity grows and `glBufferSubData` otherwise. That is legal, but repeated `glBufferSubData` into a buffer still in use by prior draws is a classic way to get intermittent stalls. The Khronos buffer-streaming docs, `glMapBufferRange` docs, and `glBufferStorage` docs all point toward either orphaning, unsynchronized mapping with discipline, or persistent mapping with proper fences. fileciteturn0file1L509-L564 citeturn1search4turn9search1turn8search1turn1search0
 
@@ -250,7 +250,7 @@ This shift removes most per-frame vertex generation and lets buffer traffic scal
 
 ### Orphaned streaming VBO for the legacy CPU-geometry path
 
-If you keep the current geometry model, at least stop writing into a likely-in-use buffer with plain `glBufferSubData`:
+For the legacy geometry fallback, avoid writing into a likely-in-use buffer with plain `glBufferSubData`:
 
 ```cpp
 void uploadDynamicVerts(GLuint vbo, const void* data, size_t bytes) {
@@ -321,9 +321,9 @@ void submitChunk(const RingChunk& c, const void* src, size_t bytes) {
 
 Use `glFenceSync` after submitting each chunk or frame-range and wait only before reusing the same chunk. Khronos’ sync-object and buffer-storage guidance makes this the best spike-resistant streaming model once you can require the feature. citeturn8search1turn1search0turn1search1
 
-### Unify the module-response line into GL and remove duplicate plot work from NanoVG
+### Unify the module-response line into GL and reduce split plot work
 
-The current GL path builds cyan vertices but relies on NanoVG for the visible line. Move that line into GL so the plot body is rendered by a single backend:
+The old redundant cyan-vertex build has been removed, but the visible module-response line still comes from NanoVG. Moving that line into GL would make the plot body more consistently one backend:
 
 ```cpp
 // Build one polyline source once per frame from overlayModuleDb.
@@ -346,7 +346,7 @@ if (useUnifiedPlotGl) {
 }
 ```
 
-This is a medium-effort change with disproportionate payoff because it reduces backend switching and makes GPU timing scopes far cleaner. fileciteturn0file1L808-L864 fileciteturn0file10L870-L877
+This is a medium-effort change with disproportionate payoff because it reduces backend switching and makes GPU timing scopes far cleaner. The expected-curve stroke can remain NanoVG if preserving vector scaling and antialiasing is more valuable than complete backend unification. fileciteturn0file1L808-L864 fileciteturn0file10L870-L877
 
 ### Adaptive LOD and progressive rendering
 
@@ -430,7 +430,7 @@ The benchmark harness should output these charts for each build variant:
 - **Pareto chart** of visual error versus frame time for LOD modes.
 - **Worker queue latency and snapshot age** over time when worker mode is enabled.
 
-A useful target is to compare “current”, “orphaned streaming”, “single-pass texture fill”, and “single-pass + unified GL overlay” side by side. Use p95 and p99, not only averages. Khronos’ timer-query guidance supports this methodology directly because those queries measure actual device time for a scoped command set. citeturn0search1turn13search6
+A useful target is to compare “OpenGL fixed fallback”, “OpenGL shader texture fill”, and “OpenGL shader texture fill + unified GL response line” side by side. Use p95 and p99, not only averages. Khronos’ timer-query guidance supports this methodology directly because those queries measure actual device time for a scoped command set. citeturn0search1turn13search6
 
 ### Suggested acceptance thresholds
 
@@ -453,7 +453,7 @@ If your DAW host must tolerate many plugin UIs, I would be stricter and require 
 
 Use image-based A/B testing on captured frames:
 
-1. Capture a reference frame from the current renderer.
+1. Capture a reference frame from the fixed/fallback renderer.
 2. Capture the candidate frame with the same data.
 3. Compare:
    - per-pixel absolute difference,
@@ -470,9 +470,9 @@ If you move the fill to a texture-driven shader, the acceptance question is not 
 
 ```mermaid
 flowchart TD
-    A[Baseline instrumentation] --> B[Orphaned VBO streaming]
-    B --> C[Unify GL scope timing]
-    C --> D[Texture-driven fill pass]
+    A[Baseline instrumentation] --> B[Orphaned VBO streaming<br/>implemented]
+    B --> C[Texture-driven fill pass<br/>implemented]
+    C --> D[Unify GL scope timing]
     D --> E[Move module-response line into GL]
     E --> F[Adaptive LOD policy]
     F --> G[Optional compute FFT / SSBO path]
@@ -486,7 +486,7 @@ Create a profiling branch that adds timer queries, bytes-uploaded counters, draw
 
 #### Safer streaming
 
-Patch `drawVertsShader()` and `drawStrokeQuadsShader()` to orphan before upload. If p99 improves substantially, keep that change even if you later redesign the renderer. This is a small, high-confidence patch with minimal visual risk. Roll back only if a specific driver regresses. fileciteturn0file1L509-L564 citeturn1search4
+`drawVertsShader()` and `drawStrokeQuadsShader()` now orphan before upload. Keep that change even if the renderer is redesigned further. Roll back only if a specific driver regresses. fileciteturn0file1L509-L564 citeturn1search4
 
 #### Plot-body unification
 
@@ -494,11 +494,11 @@ Move the cyan module-response line out of NanoVG and into GL. Keep text/labels/m
 
 #### Texture-driven fill
 
-Introduce a modern path behind a feature flag:
-- static quad geometry,
-- one tiny curve texture update per analysis frame,
-- one fragment-driven fill pass,
-- optional second pass only for exceptional effects.
+The modern path is now active behind the existing shader-renderer toggle:
+- one tiny RGBA16 curve texture update per draw,
+- one fragment-driven fill/feather/crest pass,
+- derivative-based edge AA for sharp spectrum peaks,
+- top plot clipping and corrected crest-over-fill compositing.
 
 Keep the existing CPU-geometry renderer as a fallback during rollout. Validate image differences before enabling it by default. citeturn12search2turn12search3turn2search43
 
@@ -530,11 +530,11 @@ This report is grounded in the provided source and primary OpenGL/vendor referen
 
 The target OpenGL version and host constraints were intentionally unspecified. That matters because compute shaders and SSBOs depend on 4.3-class functionality, while persistent mapped buffers depend on 4.4 or `ARB_buffer_storage`. If Bifurx must support older plugin-host environments or conservative driver stacks, the modernization should stop at **orphaned streaming + texture-driven fill + unified GL overlay**, which already captures most of the practical benefit. citeturn11search0turn8search0turn8search1
 
-The most important unresolved measurement question is this: **are the worst spikes caused by CPU-side geometry construction, by VBO update synchronization, or by the hybrid GL/NanoVG composition boundary?** The instrumentation plan above will answer that precisely within one profiling run, and the migration plan is structured so that each of those causes can be isolated quickly.
+The most important unresolved measurement question is now this: **are any remaining worst spikes caused by texture/VBO upload synchronization, fragment overdraw, or the hybrid GL/NanoVG composition boundary?** The original CPU-side FFT-fill geometry expansion has been removed from the shader path, so instrumentation should focus on validating the new path rather than re-proving the old bottleneck.
 
 ## Summary of Work Done (June 2026)
 
-We implemented the recommended buffer and shader pipeline optimizations, resolving CPU-side rendering overhead and frame-rate spikes while preserving the split NanoVG path for rendering curve outlines to maintain correct high-DPI scaling:
+We implemented the recommended buffer and shader pipeline optimizations while preserving the split NanoVG path for response/expected-curve overlays and labels:
 
 1. **Unused CPU Geometry Calculation Cleanup:**
    * Removed the loop calculating `cyanVertices` and `cyanHaloVertices` (the module-response line) inside `drawFramebuffer()`. This data is only rendered via the vector NanoVG path, so removing the CPU arrays eliminates redundant processing every frame.
@@ -544,8 +544,11 @@ We implemented the recommended buffer and shader pipeline optimizations, resolvi
 
 3. **Texture-Driven Single-Pass Spectrum Fill Shader:**
    * Implemented a fully functional shader-driven rendering path (`ensureTextureShaderReady`) that replaces CPU geometry expansion for the FFT fill.
-   * Instead of generating over 12,000 vertices on the CPU every frame for the solid fill, feathering, and crest line, the CPU uploads a `513 x 1` RGBA texture containing the normalized curve values (height, module delta, and energy).
+   * Instead of generating over 12,000 vertices on the CPU every frame for the solid fill, feathering, and crest line, the CPU uploads a `513 x 1` RGBA16 texture containing normalized curve values (height, module delta, and energy).
    * Renders the entire background spectrum with a single 4-vertex quad.
    * The fragment shader samples the texture and analytically computes the solid fill height, dual-pass soft-cap feathering, and crest line stroke in a single GPU pass.
-   * Keeps the expectation curve stroke in NanoVG to maintain perfect vector scaling and antialiasing at any window zoom or DPI level.
+   * Uses `fwidth`/`smoothstep` edge antialiasing to smooth steep spectrum peaks.
+   * Clips against both `spectrumTopY` and `spectrumBottomY`.
+   * Uses corrected crest-over-fill compositing so the single-pass shader better approximates the previous layered draw behavior.
+   * Keeps the expectation curve stroke and module-response line in NanoVG for now to maintain vector scaling and antialiasing at any window zoom or DPI level.
    * Automatically falls back to the legacy CPU geometry pipeline if the shader fails to compile or the user disables the shader renderer.
