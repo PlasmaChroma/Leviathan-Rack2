@@ -149,7 +149,6 @@ def build_module_table(module_name, rows, selected=False, collapsed=False):
 
     table = Table(title=_module_title(module_name, len(rows), selected=selected, collapsed=False))
     table.add_column("ID", no_wrap=True)
-    table.add_column("Stream", no_wrap=True)
     columns = _module_columns(rows)
     for _, label in columns:
         table.add_column(label, justify="right", no_wrap=True)
@@ -157,7 +156,7 @@ def build_module_table(module_name, rows, selected=False, collapsed=False):
 
     for row in rows:
         metrics = row["data"]
-        cells = [row["instance"], row["stream"]]
+        cells = [row["instance"]]
         for key, _ in columns:
             if module_name == "Bifurx" and key == "vw_mode":
                 cells.append(_format_bifurx_vw_mode(metrics.get(key)))
@@ -264,11 +263,11 @@ def _truncate(text, width):
 
 def _plain_module_lines(module_name, rows):
     columns = _module_columns(rows)
-    header = ["ID", "Stream"] + [label for _, label in columns] + ["Age"]
+    header = ["ID"] + [label for _, label in columns] + ["Age"]
     table_rows = []
     for row in rows:
         data = row["data"]
-        values = [row["instance"], row["stream"]]
+        values = [row["instance"]]
         for key, _ in columns:
             values.append(_format_metric(data.get(key)))
         values.append("%.2fs" % row["age_sec"])
@@ -279,10 +278,10 @@ def _plain_module_lines(module_name, rows):
         for i, value in enumerate(values):
             widths[i] = max(widths[i], len(str(value)))
 
-    max_widths = [14, 10] + [10 for _ in columns] + [8]
+    max_widths = [14] + [10 for _ in columns] + [8]
     widths = [min(widths[i], max_widths[i]) for i in range(len(widths))]
 
-    align_right = [False, False] + [True for _ in columns] + [True]
+    align_right = [False] + [True for _ in columns] + [True]
 
     def format_row(values):
       cells = []

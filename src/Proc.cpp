@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
@@ -7,9 +8,16 @@
 #include <array>
 #include <cstdio>
 #include <atomic>
+#include <chrono>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
+namespace {
+std::atomic<uint32_t> gProcDebugInstanceCounter {1u};
+constexpr double kProcDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+std::unordered_map<uint32_t, double> gProcDebugTerminalLastSubmitSec;
+}
 
 struct Proc : Module {
 	ModuleTeardownTimer teardownTimer {"Proc"};
@@ -164,6 +172,9 @@ struct Proc : Module {
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
 	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	std::atomic<uint64_t> perfAudioSampledCount {0};
+	std::atomic<uint64_t> perfAudioProcessNs {0};
+	uint32_t debugInstanceId = 0u;
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -901,6 +912,7 @@ struct Proc : Module {
 	}
 
 	Proc() {
+		debugInstanceId = gProcDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(CYCLE_PARAM, 0.f, 1.f, 0.f, "Cycle");
@@ -983,6 +995,8 @@ struct Proc : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto processStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
 			CYCLE_PARAM,
@@ -1088,6 +1102,12 @@ struct Proc : Module {
 			lights[EOC_LIGHT].setBrightness(channel.eocGateState ? 1.f : 0.f);
 			lights[MAIN_LIGHT].setBrightness(clamp(std::fabs(outRendered) / FG_V_MAX, 0.f, 1.f));
 			lights[NEG_LIGHT].setBrightness(clamp(std::fabs(negOut) / FG_V_MAX, 0.f, 1.f));
+		}
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::steady_clock::now() - processStart).count());
+			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
 		}
 	}
 };
@@ -1450,6 +1470,58 @@ struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
 };
 
 struct ProcWidget : ModuleWidget {
+	float uiStepUsEma = 0.f;
+	float uiDrawUsEma = 0.f;
+
+	void step() override {
+		const auto stepStart = std::chrono::steady_clock::now();
+		ModuleWidget::step();
+		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
+		uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+	}
+
+	void draw(const DrawArgs& args) override {
+		const auto drawStart = std::chrono::steady_clock::now();
+		ModuleWidget::draw(args);
+		Proc* proc = static_cast<Proc*>(module);
+		if (!proc) {
+			return;
+		}
+
+		if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+			char debugIdLabel[32];
+			std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", proc->debugInstanceId);
+			const float x = box.size.x - mm2px(0.9f);
+			const float y = mm2px(2.5f);
+			nvgSave(args.vg);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 6.8f);
+			nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+			nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+			nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+			nvgText(args.vg, x, y, debugIdLabel, nullptr);
+			nvgRestore(args.vg);
+		}
+
+		const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
+		uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+
+		if (isDragonKingDebugEnabled()) {
+			const double nowSec = system::getTime();
+			double& lastSubmitSec = gProcDebugTerminalLastSubmitSec[proc->debugInstanceId];
+			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kProcDebugTerminalSubmitIntervalSec) {
+				lastSubmitSec = nowSec;
+				const uint64_t audioSampledCount = proc->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				const uint64_t audioProcessNs = proc->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				const float processUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+				debug_terminal::submitProcMetrics(proc->debugInstanceId, processUs, uiStepUsEma, uiDrawUsEma);
+			}
+		}
+	}
+
 	ProcWidget(Proc* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Proc", module);

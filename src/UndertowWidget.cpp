@@ -1,11 +1,17 @@
 #include "Undertow.hpp"
 #include "UndertowShape.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
+#include <chrono>
+#include <unordered_map>
 
 namespace {
+
+constexpr double kUndertowDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+std::unordered_map<uint32_t, double> gUndertowDebugTerminalLastSubmitSec;
 
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, const Vec& fallbackMm) {
   if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) {
@@ -254,6 +260,9 @@ struct UndertowShapePreviewWidget final : Widget {
 };
 
 struct UndertowWidget final : ModuleWidget {
+  float uiStepUsEma = 0.f;
+  float uiDrawUsEma = 0.f;
+
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("Undertow", module);
@@ -303,8 +312,10 @@ struct UndertowWidget final : ModuleWidget {
     auto addTinyLight = [&](int lightId, const char* anchorId, const Vec& fallbackMm, NVGcolor color) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      auto* light = createLightCentered<SmallSimpleLight<WhiteLight>>(mm2px(posMm), module, lightId);
-      light->baseColors[0] = color;
+      auto* light = createLightCentered<TinyAperture<WhiteApertureLight>>(mm2px(posMm), module, lightId);
+      light->baseColor = color;
+      light->baseColors.clear();
+      light->addBaseColor(color);
       addChild(light);
     };
 
@@ -346,6 +357,55 @@ struct UndertowWidget final : ModuleWidget {
     addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(36.089f, 42.817f), nvgRGB(255, 235, 120));
 
     previewBuildTimer.markAnchorsDone();
+  }
+
+  void step() override {
+    const auto stepStart = std::chrono::steady_clock::now();
+    ModuleWidget::step();
+    const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
+    uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+  }
+
+  void draw(const DrawArgs& args) override {
+    const auto drawStart = std::chrono::steady_clock::now();
+    ModuleWidget::draw(args);
+    auto* undertow = static_cast<Undertow*>(module);
+    if (!undertow) {
+      return;
+    }
+
+    if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+      char debugIdLabel[32];
+      std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", undertow->debugInstanceId);
+      const float x = box.size.x - mm2px(0.9f);
+      const float y = mm2px(2.5f);
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 6.8f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+      nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+      nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+      nvgText(args.vg, x, y, debugIdLabel, nullptr);
+      nvgRestore(args.vg);
+    }
+
+    const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
+    uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+
+    if (isDragonKingDebugEnabled()) {
+      const double nowSec = system::getTime();
+      double& lastSubmitSec = gUndertowDebugTerminalLastSubmitSec[undertow->debugInstanceId];
+      if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kUndertowDebugTerminalSubmitIntervalSec) {
+        lastSubmitSec = nowSec;
+        const uint64_t audioSampledCount = undertow->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+        const uint64_t audioProcessNs = undertow->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+        const float processUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+        debug_terminal::submitUndertowMetrics(undertow->debugInstanceId, processUs, uiStepUsEma, uiDrawUsEma);
+      }
+    }
   }
 
   void appendContextMenu(Menu* menu) override {

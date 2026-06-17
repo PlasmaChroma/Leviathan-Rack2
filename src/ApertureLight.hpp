@@ -96,6 +96,10 @@ struct GreenApertureLight : LeviathanApertureLight {
 	GreenApertureLight();
 };
 
+struct RedApertureLight : LeviathanApertureLight {
+	RedApertureLight();
+};
+
 struct MagentaApertureLight : LeviathanApertureLight {
 	MagentaApertureLight();
 };

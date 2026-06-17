@@ -24,9 +24,9 @@ float apertureBloomAmount() {
 	if (bloomRaw <= 0.001f) {
 		return 0.f;
 	}
-	const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+	const float bloomLow = bloomRaw + 2.22f * bloomRaw * (1.f - bloomRaw);
 	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	return bloomLow * (1.18f + 1.05f * bloomRamp * bloomRamp);
+	return bloomLow * (1.44f + 1.05f * bloomRamp * bloomRamp);
 }
 
 void setApertureBaseColor(LeviathanApertureLight* light, NVGcolor color) {
@@ -334,6 +334,10 @@ BlueApertureLight::BlueApertureLight() {
 
 GreenApertureLight::GreenApertureLight() {
 	setApertureBaseColor(this, nvgRGB(134, 255, 107));
+}
+
+RedApertureLight::RedApertureLight() {
+	setApertureBaseColor(this, nvgRGB(255, 84, 84));
 }
 
 MagentaApertureLight::MagentaApertureLight() {

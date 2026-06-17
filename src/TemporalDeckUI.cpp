@@ -3517,10 +3517,10 @@ struct TemporalDeckWidget : ModuleWidget {
         double &lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
         if (lastSubmitSec < 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
           lastSubmitSec = nowSec;
-          const float uiTotalMs = (uiStepUsEma + uiDrawUsEma) * 0.001f;
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
-                                                      uiTotalMs,
                                                       deckModule->consumeAudioProcessUs(),
+                                                      uiStepUsEma,
+                                                      uiDrawUsEma,
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);

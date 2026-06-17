@@ -1848,7 +1848,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		previewBuildTimer.markPanelDone();
 
         // use LeviathanHaloKnob2 for surge/sink and curve shape knobs
-        // use LargeLight<RedLight> for the cycle and EOR LEDs
+        // use SmallAperture LEDs for the indicator lights
         // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons
 
@@ -2041,14 +2041,14 @@ struct IntegralFluxWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(invOutputPos), module, IntegralFlux::INV_OUT_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(ch4UnityOutputPos), module, IntegralFlux::CH_4_UNITY_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycle1LightPos), module, IntegralFlux::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycle4LightPos), module, IntegralFlux::CYCLE_4_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(eor1LightPos), module, IntegralFlux::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(eoc4LightPos), module, IntegralFlux::EOC_CH_4_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(unity1LightPos), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycle1LightPos), module, IntegralFlux::CYCLE_1_LED_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycle4LightPos), module, IntegralFlux::CYCLE_4_LED_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(eor1LightPos), module, IntegralFlux::EOR_CH_1_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(eoc4LightPos), module, IntegralFlux::EOC_CH_4_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(unity1LightPos), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
+		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -2088,7 +2088,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 				const uint64_t eclipseShadowDrawsToSubmit = eclipseShadowDrawsSinceSubmit;
 				eclipseShadowDrawsSinceSubmit = 0u;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs, gearDrawUsEma, eclipseDrawUsEma, eclipseShadowDrawUsEma, eclipseShadowDrawsToSubmit);
+				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, audioUs, uiStepMsEma * 1000.f, uiDrawMsEma * 1000.f, gearDrawUsEma, eclipseDrawUsEma, eclipseShadowDrawUsEma, eclipseShadowDrawsToSubmit);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];

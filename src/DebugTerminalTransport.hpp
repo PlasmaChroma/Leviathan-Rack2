@@ -5,7 +5,9 @@
 namespace debug_terminal {
 
 void submitTDScopeUiMetrics(uint32_t instanceId,
-                            float uiMs,
+                            float processUs,
+                            float stepUs,
+                            float drawUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -15,19 +17,19 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             uint64_t drawCalls);
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
-                                 float uiMs,
-                                 float audioUs,
+                                 float processUs,
+                                 float stepUs,
+                                 float drawUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid);
 
 void submitBifurxUiMetrics(uint32_t instanceId,
-                           float uiMs,
-                           float uiDrawMs,
-                           float uiSyncMs,
-                           float uiLocalPrepMs,
+                           float processUs,
+                           float stepUs,
+                           float drawUs,
+                           float uiLocalPrepUs,
                            bool renderOpengl,
-                           float audioUs,
                            float curvePrepUs,
                            float overlayPrepUs,
                            int visualWorkerMode,
@@ -35,23 +37,35 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float visualWorkerQueueMs);
 
 void submitWyrmMetrics(uint32_t instanceId,
-                       float uiMs,
+                       float processUs,
+                       float stepUs,
+                       float drawUs,
                        float editorDrawUs,
                        float sandUpdateUs,
                        float sandDrawUs,
                        float sandGlUs,
-                       float audioUs,
                        int channels,
                        int bodySamples,
                        uint64_t bodySampleCacheHits,
                        uint64_t bodySampleCacheMisses);
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
-                               float uiMs,
-                               float audioUs,
+                               float processUs,
+                               float stepUs,
+                               float drawUs,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
                                uint64_t eclipseShadowDraws);
+
+void submitProcMetrics(uint32_t instanceId,
+                       float processUs,
+                       float stepUs,
+                       float drawUs);
+
+void submitUndertowMetrics(uint32_t instanceId,
+                           float processUs,
+                           float stepUs,
+                           float drawUs);
 
 } // namespace debug_terminal

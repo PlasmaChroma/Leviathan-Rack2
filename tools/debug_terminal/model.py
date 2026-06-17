@@ -45,7 +45,6 @@ class DebugState(object):
 
         row_key = (event["plugin"], event["module"], event["instance"], event["stream"])
         data = dict(event["data"])
-        ui_ms_value = data.get("ui_ms")
         vw_age_value = data.get("vw_age_ms")
         vw_queue_value = data.get("vw_queue_ms")
         row = {
@@ -64,11 +63,6 @@ class DebugState(object):
                 self._events_total += 1
                 return
             prev_row = self._rows.get(row_key)
-            ui_ms_history = prev_row.get("ui_ms_history") if prev_row else None
-            if ui_ms_history is None:
-                ui_ms_history = deque()
-            if isinstance(ui_ms_value, (int, float)):
-                ui_ms_history.append((now, float(ui_ms_value)))
             vw_age_history = prev_row.get("vw_age_history") if prev_row else None
             if vw_age_history is None:
                 vw_age_history = deque()
@@ -80,13 +74,10 @@ class DebugState(object):
             if isinstance(vw_queue_value, (int, float)):
                 vw_queue_history.append((now, float(vw_queue_value)))
             cutoff_sec = now - 1.0
-            while ui_ms_history and ui_ms_history[0][0] < cutoff_sec:
-                ui_ms_history.popleft()
             while vw_age_history and vw_age_history[0][0] < cutoff_sec:
                 vw_age_history.popleft()
             while vw_queue_history and vw_queue_history[0][0] < cutoff_sec:
                 vw_queue_history.popleft()
-            row["ui_ms_history"] = ui_ms_history
             row["vw_age_history"] = vw_age_history
             row["vw_queue_history"] = vw_queue_history
             row["columns"] = list(schema["columns"])
@@ -126,14 +117,6 @@ class DebugState(object):
                 snap = dict(row)
                 snap["data"] = dict(row["data"])
                 snap["columns"] = list(schema["columns"])
-                ui_ms_history = row.get("ui_ms_history")
-                if ui_ms_history:
-                    cutoff_sec = now - 1.0
-                    while ui_ms_history and ui_ms_history[0][0] < cutoff_sec:
-                        ui_ms_history.popleft()
-                    if ui_ms_history:
-                        ui_ms_values = [value for _, value in ui_ms_history]
-                        snap["data"]["ui_ms"] = "%.2f to %.2f" % (min(ui_ms_values), max(ui_ms_values))
                 vw_age_history = row.get("vw_age_history")
                 if vw_age_history:
                     cutoff_sec = now - 1.0

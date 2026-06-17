@@ -80,6 +80,9 @@ struct Undertow final : Module {
   std::atomic<int> previewTracerCacheMode {0};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<float> displayShapeAmount {0.f};
+  std::atomic<uint64_t> perfAudioSampledCount {0};
+  std::atomic<uint64_t> perfAudioProcessNs {0};
+  uint32_t debugInstanceId = 0u;
 
   Undertow();
   ~Undertow() override;

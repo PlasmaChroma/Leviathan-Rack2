@@ -365,7 +365,9 @@ static void submitUiMetricSchema(const char *module, const char *columnsJson) {
 } // namespace
 
 void submitTDScopeUiMetrics(uint32_t instanceId,
-                            float uiMs,
+                            float processUs,
+                            float stepUs,
+                            float drawUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -374,12 +376,14 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             uint64_t drawSeq,
                             uint64_t drawCalls) {
   submitUiMetricSchema("TDScope",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw Seq\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
-                std::max(0.f, uiMs),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs),
                 std::max(0, rows),
                 std::max(0.f, densityPct),
                 std::max(0.f, zoom),
@@ -392,19 +396,21 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 }
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
-                                 float uiMs,
-                                 float audioUs,
+                                 float processUs,
+                                 float stepUs,
+                                 float drawUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
   submitUiMetricSchema("TemporalDeck",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
-                std::max(0.f, uiMs),
-                std::max(0.f, audioUs),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs),
                 std::max(0.f, scopePreviewUs),
                 std::max(0, scopeStride),
                 scopeMetricValid ? 1 : 0);
@@ -413,29 +419,27 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 }
 
 void submitBifurxUiMetrics(uint32_t instanceId,
-                           float uiMs,
-                           float uiDrawMs,
-                           float uiSyncMs,
-                           float uiLocalPrepMs,
+                           float processUs,
+                           float stepUs,
+                           float drawUs,
+                           float uiLocalPrepUs,
                            bool renderOpengl,
-                           float audioUs,
                            float curvePrepUs,
                            float overlayPrepUs,
                            int visualWorkerMode,
                            float visualWorkerAgeMs,
                            float visualWorkerQueueMs) {
   submitUiMetricSchema("Bifurx",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"ui_draw_ms\",\"label\":\"Draw (ms)\"},{\"key\":\"ui_sync_ms\",\"label\":\"Sync (ms)\"},{\"key\":\"ui_local_prep_ms\",\"label\":\"Prep (ms)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"vw_mode\",\"label\":\"VW\"},{\"key\":\"vw_age_ms\",\"label\":\"VW age (ms)\"},{\"key\":\"vw_queue_ms\",\"label\":\"VW q (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ui_local_prep_us\",\"label\":\"Prep (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"vw_mode\",\"label\":\"VW\"},{\"key\":\"vw_age_ms\",\"label\":\"VW age (ms)\"},{\"key\":\"vw_queue_ms\",\"label\":\"VW q (ms)\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ui_draw_ms\":%.4f,\"ui_sync_ms\":%.4f,\"ui_local_prep_ms\":%.4f,\"opengl\":%d,\"audio_us\":%.3f,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
-                std::max(0.f, uiMs),
-                std::max(0.f, uiDrawMs),
-                std::max(0.f, uiSyncMs),
-                std::max(0.f, uiLocalPrepMs),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"ui_local_prep_us\":%.3f,\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs),
+                std::max(0.f, uiLocalPrepUs),
                 renderOpengl ? 1 : 0,
-                std::max(0.f, audioUs),
                 std::max(0.f, curvePrepUs),
                 std::max(0.f, overlayPrepUs),
                 visualWorkerMode,
@@ -446,28 +450,30 @@ void submitBifurxUiMetrics(uint32_t instanceId,
 }
 
 void submitWyrmMetrics(uint32_t instanceId,
-                       float uiMs,
+                       float processUs,
+                       float stepUs,
+                       float drawUs,
                        float editorDrawUs,
                        float sandUpdateUs,
                        float sandDrawUs,
                        float sandGlUs,
-                       float audioUs,
                        int channels,
                        int bodySamples,
                        uint64_t bodySampleCacheHits,
                        uint64_t bodySampleCacheMisses) {
   submitUiMetricSchema("Wyrm",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"ed_us\",\"label\":\"Ed (us)\"},{\"key\":\"sand_up_us\",\"label\":\"SUp (us)\"},{\"key\":\"sand_dr_us\",\"label\":\"SDr (us)\"},{\"key\":\"sand_gl_us\",\"label\":\"SGL (us)\"},{\"key\":\"audio_us\",\"label\":\"Aud (us)\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ed_us\",\"label\":\"Ed (us)\"},{\"key\":\"sand_up_us\",\"label\":\"SUp (us)\"},{\"key\":\"sand_dr_us\",\"label\":\"SDr (us)\"},{\"key\":\"sand_gl_us\",\"label\":\"SGL (us)\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
-                std::max(0.f, uiMs),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs),
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, sandUpdateUs),
                 std::max(0.f, sandDrawUs),
                 std::max(0.f, sandGlUs),
-                std::max(0.f, audioUs),
                 std::max(0, channels),
                 std::max(0, bodySamples),
                 static_cast<unsigned long long>(bodySampleCacheHits),
@@ -477,26 +483,62 @@ void submitWyrmMetrics(uint32_t instanceId,
 }
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
-                               float uiMs,
-                               float audioUs,
+                               float processUs,
+                               float stepUs,
+                               float drawUs,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
                                uint64_t eclipseShadowDraws) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"ui_ms\",\"label\":\"UI (ms)\"},{\"key\":\"audio_us\",\"label\":\"Audio (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Ecl.G (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Ecl.G (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
   char dataBuf[384];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",
-                std::max(0.f, uiMs),
-                std::max(0.f, audioUs),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs),
                 std::max(0.f, gearUs),
                 std::max(0.f, eclipseUs),
                 std::max(0.f, eclipseShadowUs),
                 (unsigned long long) eclipseShadowDraws);
   double ts = system::getTime();
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitProcMetrics(uint32_t instanceId,
+                       float processUs,
+                       float stepUs,
+                       float drawUs) {
+  submitUiMetricSchema("Proc",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
+  char dataBuf[160];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs));
+  double ts = system::getTime();
+  transport().submit("Proc", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitUndertowMetrics(uint32_t instanceId,
+                           float processUs,
+                           float stepUs,
+                           float drawUs) {
+  submitUiMetricSchema("Undertow",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
+  char dataBuf[160];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f}",
+                std::max(0.f, processUs),
+                std::max(0.f, stepUs),
+                std::max(0.f, drawUs));
+  double ts = system::getTime();
+  transport().submit("Undertow", instanceId, "ui", "metric", dataBuf, ts);
 }
 
 } // namespace debug_terminal

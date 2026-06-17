@@ -462,19 +462,17 @@ void BifurxSpectrumWidget::step() {
 			const int vwMode = effectiveVisualWorkerMode();
 			const float uiSyncMs = std::max(0.f, lastStepMsEma);
 			const float uiDrawMs = std::max(0.f, lastDrawMsEma);
-			const float uiTotalMs = uiSyncMs + uiDrawMs;
-			const float uiLocalPrepMs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
-				? 0.001f * (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
+			const float uiLocalPrepUs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
+				? (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
 				: 0.f;
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
 				debugId,
-				uiTotalMs,
-				uiDrawMs,
-				uiSyncMs,
-				uiLocalPrepMs,
-				false, // opengl
 				audioUs,
+				uiSyncMs * 1000.f,
+				uiDrawMs * 1000.f,
+				uiLocalPrepUs,
+				false, // opengl
 				lastCurvePrepUs,
 				lastOverlayPrepUs,
 				vwMode,

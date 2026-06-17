@@ -664,16 +664,17 @@ struct WyrmWaveEditor : TransparentWidget {
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
 					const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 					const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
-					const float totalUiUs = lastStepUsEma + lastEditorDrawUs + sandGlUs;
+					const float drawUs = lastEditorDrawUs + sandGlUs;
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
-					debugId,
-					totalUiUs * 0.001f,
-					lastEditorDrawUs,
-					lastSandUpdateUs,
-					lastSandDrawUs,
-						sandGlUs,
+						debugId,
 						audioUs,
+						lastStepUsEma,
+						drawUs,
+						lastEditorDrawUs,
+						lastSandUpdateUs,
+						lastSandDrawUs,
+						sandGlUs,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,

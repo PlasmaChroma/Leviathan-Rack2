@@ -210,7 +210,9 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                               (uiStepUsEma + uiDrawUsEma) * 0.001f,
+                                               0.f,
+                                               uiStepUsEma,
+                                               uiDrawUsEma,
                                                densityRows,
                                                densityPct,
                                                rackZoom,
