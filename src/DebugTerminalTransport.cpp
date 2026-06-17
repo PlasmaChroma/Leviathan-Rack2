@@ -491,7 +491,7 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                float eclipseShadowUs,
                                uint64_t eclipseShadowDraws) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"gear_us\",\"label\":\"Gear (us)\"},{\"key\":\"eclipse_us\",\"label\":\"Ecl.G (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
   char dataBuf[384];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),

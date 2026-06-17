@@ -23,8 +23,9 @@
 ## Unknown Title
 - Module that spawns a dragon that fucks with controls
 
-## Slider Element
+## UI Elements
 - Add a gear effect that works similar to the ClockWork Knob
+- Glow the Vahdrim Keth rune when mousing over haloknob2
 
 ## Make Noise Dual Oscillator?
 - Probably very hard to implement without the actual module in hand
