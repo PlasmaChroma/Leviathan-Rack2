@@ -7,7 +7,7 @@
 
 namespace bifurx {
 
-static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
@@ -60,6 +60,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	float lastStepMsEma = 0.f;
+	debug_terminal::UiTimingRangeAccumulator stepUsRange;
+	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
@@ -653,32 +655,30 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStepStart).count()) * 1e-6f;
 		lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
+		stepUsRange.add(stepMs * 1000.f);
 
 		if (isDragonKingDebugEnabled() && module && module->renderMode == Bifurx::RENDER_OPENGL) {
 			double nowSec = system::getTime();
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-				const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				module->perfAudioControlsNs.store(0, std::memory_order_release);
 				module->perfAudioCoreNs.store(0, std::memory_order_release);
 				module->perfAudioPreviewNs.store(0, std::memory_order_release);
 				module->perfAudioAnalysisNs.store(0, std::memory_order_release);
 				module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 				const int vwMode = effectiveVisualWorkerMode();
-				const float uiSyncMs = std::max(0.f, lastStepMsEma);
-				const float uiDrawMs = std::max(0.f, lastDrawMsEma);
 				const float uiLocalPrepUs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
 					? (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
 					: 0.f;
 				lastSubmitSec = nowSec;
 				debug_terminal::submitBifurxUiMetrics(
 					debugId,
-					audioUs,
-					uiSyncMs * 1000.f,
-					uiDrawMs * 1000.f,
+					debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessRangeMinNs, module->perfAudioProcessRangeMaxNs),
+					stepUsRange.consume(),
+					drawUsRange.consume(),
 					uiLocalPrepUs,
 					true, // opengl
 					lastCurvePrepUs,
@@ -867,6 +867,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		{
 			const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
 			lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
+			drawUsRange.add(drawMs * 1000.f);
 		}
 	}
 

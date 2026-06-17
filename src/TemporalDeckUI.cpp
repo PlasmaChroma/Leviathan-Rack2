@@ -35,7 +35,7 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
 static bool isTDScopeModule(const engine::Module *neighbor);
-static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 struct TemporalDeckWidget;
 
@@ -3281,6 +3281,8 @@ struct TemporalDeckWidget : ModuleWidget {
   ScopeDragTraceRecorder scopeDragTraceRecorder;
   float uiStepUsEma = 0.f;
   float uiDrawUsEma = 0.f;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarRightEndMm = 97.413935f;
 
@@ -3483,6 +3485,7 @@ struct TemporalDeckWidget : ModuleWidget {
       float drawUs =
         std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
       uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+      uiDrawUsRange.add(drawUs);
       deckModule->setUiDrawCostUs(drawUs);
     };
 
@@ -3519,8 +3522,8 @@ struct TemporalDeckWidget : ModuleWidget {
           lastSubmitSec = nowSec;
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
                                                       deckModule->consumeAudioProcessUs(),
-                                                      uiStepUsEma,
-                                                      uiDrawUsEma,
+                                                      uiStepUsRange.consume(),
+                                                      uiDrawUsRange.consume(),
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);
@@ -3568,6 +3571,7 @@ struct TemporalDeckWidget : ModuleWidget {
     float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
                      std::chrono::steady_clock::now() - stepStart).count();
     uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+    uiStepUsRange.add(stepUs);
   }
 
   ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }

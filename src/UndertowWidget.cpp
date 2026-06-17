@@ -10,7 +10,7 @@
 
 namespace {
 
-constexpr double kUndertowDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kUndertowDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gUndertowDebugTerminalLastSubmitSec;
 
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, const Vec& fallbackMm) {
@@ -262,6 +262,8 @@ struct UndertowShapePreviewWidget final : Widget {
 struct UndertowWidget final : ModuleWidget {
   float uiStepUsEma = 0.f;
   float uiDrawUsEma = 0.f;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
@@ -365,6 +367,7 @@ struct UndertowWidget final : ModuleWidget {
     const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
     uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+    uiStepUsRange.add(stepUs);
   }
 
   void draw(const DrawArgs& args) override {
@@ -394,16 +397,20 @@ struct UndertowWidget final : ModuleWidget {
     const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
     uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+    uiDrawUsRange.add(drawUs);
 
     if (isDragonKingDebugEnabled()) {
       const double nowSec = system::getTime();
       double& lastSubmitSec = gUndertowDebugTerminalLastSubmitSec[undertow->debugInstanceId];
       if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kUndertowDebugTerminalSubmitIntervalSec) {
         lastSubmitSec = nowSec;
-        const uint64_t audioSampledCount = undertow->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-        const uint64_t audioProcessNs = undertow->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-        const float processUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-        debug_terminal::submitUndertowMetrics(undertow->debugInstanceId, processUs, uiStepUsEma, uiDrawUsEma);
+        undertow->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+        undertow->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+        debug_terminal::submitUndertowMetrics(
+          undertow->debugInstanceId,
+          debug_terminal::consumeAudioProcessTiming(undertow->perfAudioProcessMinNs, undertow->perfAudioProcessMaxNs),
+          uiStepUsRange.consume(),
+          uiDrawUsRange.consume());
       }
     }
   }

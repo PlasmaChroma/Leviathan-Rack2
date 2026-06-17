@@ -15,7 +15,7 @@
 
 namespace {
 std::atomic<uint32_t> gProcDebugInstanceCounter {1u};
-constexpr double kProcDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kProcDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gProcDebugTerminalLastSubmitSec;
 }
 
@@ -174,6 +174,8 @@ struct Proc : Module {
 	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	uint32_t debugInstanceId = 0u;
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
@@ -1108,6 +1110,7 @@ struct Proc : Module {
 				std::chrono::steady_clock::now() - processStart).count());
 			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
 			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+			debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
 		}
 	}
 };
@@ -1472,6 +1475,8 @@ struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
 struct ProcWidget : ModuleWidget {
 	float uiStepUsEma = 0.f;
 	float uiDrawUsEma = 0.f;
+	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 
 	void step() override {
 		const auto stepStart = std::chrono::steady_clock::now();
@@ -1479,6 +1484,7 @@ struct ProcWidget : ModuleWidget {
 		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
 		uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+		uiStepUsRange.add(stepUs);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1508,16 +1514,21 @@ struct ProcWidget : ModuleWidget {
 		const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
 		uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+		uiDrawUsRange.add(drawUs);
 
 		if (isDragonKingDebugEnabled()) {
 			const double nowSec = system::getTime();
 			double& lastSubmitSec = gProcDebugTerminalLastSubmitSec[proc->debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kProcDebugTerminalSubmitIntervalSec) {
 				lastSubmitSec = nowSec;
-				const uint64_t audioSampledCount = proc->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = proc->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const float processUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				debug_terminal::submitProcMetrics(proc->debugInstanceId, processUs, uiStepUsEma, uiDrawUsEma);
+				proc->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				proc->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+				debug_terminal::submitProcMetrics(
+					proc->debugInstanceId,
+					debug_terminal::consumeAudioProcessTiming(proc->perfAudioProcessMinNs, proc->perfAudioProcessMaxNs),
+					uiStepUsRange.consume(),
+					uiDrawUsRange.consume()
+				);
 			}
 		}
 	}

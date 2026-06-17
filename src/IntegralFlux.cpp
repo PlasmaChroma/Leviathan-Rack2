@@ -15,7 +15,7 @@
 
 namespace {
 std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
-constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
@@ -193,6 +193,8 @@ struct IntegralFlux : Module {
 	std::atomic<bool> bandlimitedSignalOutputs {true};
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<float> perfUiRenderMs {0.f};
 	uint32_t debugInstanceId = 0u;
 	int timingUpdateDiv = 1;
@@ -1228,6 +1230,7 @@ struct IntegralFlux : Module {
 				PerfClock::now() - perfStart).count();
 			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
 			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+			debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
 		}
 	}
 };
@@ -1829,6 +1832,8 @@ struct IntegralFluxWidget : ModuleWidget {
 	float gearDrawUsEma = 0.f;
 	float eclipseDrawUsEma = 0.f;
 	float eclipseShadowDrawUsEma = 0.f;
+	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	uint64_t eclipseShadowDrawsSinceSubmit = 0u;
 
 	void step() override {
@@ -1838,6 +1843,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - stepStart).count()) * 1e-6f;
 		uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
+		uiStepUsRange.add(stepMs * 1000.f);
 	}
 
 	IntegralFluxWidget(IntegralFlux* module) {
@@ -2065,6 +2071,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStart).count()) * 1e-6f;
 		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
+		uiDrawUsRange.add(drawMs * 1000.f);
 		const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
 		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
 		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
@@ -2083,12 +2090,19 @@ struct IntegralFluxWidget : ModuleWidget {
 			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[flux->debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
 				lastSubmitSec = nowSec;
-				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
+				flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+				flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const uint64_t eclipseShadowDrawsToSubmit = eclipseShadowDrawsSinceSubmit;
 				eclipseShadowDrawsSinceSubmit = 0u;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, audioUs, uiStepMsEma * 1000.f, uiDrawMsEma * 1000.f, gearDrawUsEma, eclipseDrawUsEma, eclipseShadowDrawUsEma, eclipseShadowDrawsToSubmit);
+				debug_terminal::submitIntegralFluxMetrics(
+					flux->debugInstanceId,
+					debug_terminal::consumeAudioProcessTiming(flux->perfAudioProcessMinNs, flux->perfAudioProcessMaxNs),
+					uiStepUsRange.consume(),
+					uiDrawUsRange.consume(),
+					gearDrawUsEma,
+					eclipseDrawUsEma,
+					eclipseShadowDrawUsEma,
+					eclipseShadowDrawsToSubmit);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];

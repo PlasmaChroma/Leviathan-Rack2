@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "DebugTerminalTransport.hpp"
 
 #include <chrono>
 
@@ -1149,6 +1150,7 @@ void Wyrm::process(const ProcessArgs& args) {
 				PerfClock::now() - perfStart).count());
 			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
 			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+			debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
 		}
 	}
 }

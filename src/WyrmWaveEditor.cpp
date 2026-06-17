@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-constexpr double kWyrmDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kWyrmDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gWyrmDebugTerminalLastSubmitSec;
 
 inline unsigned char wyrmClampU8(int v) {
@@ -45,6 +45,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool lastEditorLocked = false;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
+	debug_terminal::UiTimingRangeAccumulator stepUsRange;
+	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	float lastSandUpdateUs = 0.f;
 	float lastSandDrawUs = 0.f;
 	int lastBodySampleCount = 0;
@@ -658,19 +660,17 @@ struct WyrmWaveEditor : TransparentWidget {
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
 				if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
-					const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-					const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+					module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+					module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
-					const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 					const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
-					const float drawUs = lastEditorDrawUs + sandGlUs;
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
 						debugId,
-						audioUs,
-						lastStepUsEma,
-						drawUs,
+						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs),
+						stepUsRange.consume(),
+						drawUsRange.consume(),
 						lastEditorDrawUs,
 						lastSandUpdateUs,
 						lastSandDrawUs,
@@ -685,6 +685,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - stepStart).count()) * 0.001f;
 		lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
+		stepUsRange.add(stepUs);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1128,6 +1129,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			lastSandUpdateUs = sandUpdateUs;
 			lastSandDrawUs = sandDrawUs;
 			lastBodySampleCount = bodySampleCount;
+			drawUsRange.add(editorDrawUs + module->perfSandGlUs.load(std::memory_order_relaxed));
 		}
 	}
 };

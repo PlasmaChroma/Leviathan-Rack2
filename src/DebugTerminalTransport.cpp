@@ -362,12 +362,25 @@ static void submitUiMetricSchema(const char *module, const char *columnsJson) {
   transport().submit(module, 0u, "ui", "schema", dataBuf, system::getTime());
 }
 
+static void appendRange(char *buf, size_t size, const char *key, TimingRangeUs range) {
+  const size_t len = std::strlen(buf);
+  if (len >= size) {
+    return;
+  }
+  std::snprintf(buf + len,
+                size - len,
+                "\"%s\":\"%.2f-%.2f\"",
+                key ? key : "",
+                std::max(0.f, range.min),
+                std::max(0.f, range.max));
+}
+
 } // namespace
 
 void submitTDScopeUiMetrics(uint32_t instanceId,
-                            float processUs,
-                            float stepUs,
-                            float drawUs,
+                            TimingRangeUs processUs,
+                            TimingRangeUs stepUs,
+                            TimingRangeUs drawUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -380,10 +393,19 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
                 std::max(0, rows),
                 std::max(0.f, densityPct),
                 std::max(0.f, zoom),
@@ -396,9 +418,9 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 }
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
-                                 float processUs,
-                                 float stepUs,
-                                 float drawUs,
+                                 TimingRangeUs processUs,
+                                 TimingRangeUs stepUs,
+                                 TimingRangeUs drawUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
@@ -407,10 +429,19 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
                 std::max(0.f, scopePreviewUs),
                 std::max(0, scopeStride),
                 scopeMetricValid ? 1 : 0);
@@ -419,9 +450,9 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
 }
 
 void submitBifurxUiMetrics(uint32_t instanceId,
-                           float processUs,
-                           float stepUs,
-                           float drawUs,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs,
                            float uiLocalPrepUs,
                            bool renderOpengl,
                            float curvePrepUs,
@@ -434,10 +465,19 @@ void submitBifurxUiMetrics(uint32_t instanceId,
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"ui_local_prep_us\":%.3f,\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"ui_local_prep_us\":%.3f,\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
                 std::max(0.f, uiLocalPrepUs),
                 renderOpengl ? 1 : 0,
                 std::max(0.f, curvePrepUs),
@@ -450,9 +490,9 @@ void submitBifurxUiMetrics(uint32_t instanceId,
 }
 
 void submitWyrmMetrics(uint32_t instanceId,
-                       float processUs,
-                       float stepUs,
-                       float drawUs,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs,
                        float editorDrawUs,
                        float sandUpdateUs,
                        float sandDrawUs,
@@ -466,10 +506,19 @@ void submitWyrmMetrics(uint32_t instanceId,
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, sandUpdateUs),
                 std::max(0.f, sandDrawUs),
@@ -483,9 +532,9 @@ void submitWyrmMetrics(uint32_t instanceId,
 }
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
-                               float processUs,
-                               float stepUs,
-                               float drawUs,
+                               TimingRangeUs processUs,
+                               TimingRangeUs stepUs,
+                               TimingRangeUs drawUs,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
@@ -495,10 +544,19 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
   char dataBuf[384];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f,\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",
                 std::max(0.f, gearUs),
                 std::max(0.f, eclipseUs),
                 std::max(0.f, eclipseShadowUs),
@@ -508,35 +566,53 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
 }
 
 void submitProcMetrics(uint32_t instanceId,
-                       float processUs,
-                       float stepUs,
-                       float drawUs) {
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs) {
   submitUiMetricSchema("Proc",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
   char dataBuf[160];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs));
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                "}");
   double ts = system::getTime();
   transport().submit("Proc", instanceId, "ui", "metric", dataBuf, ts);
 }
 
 void submitUndertowMetrics(uint32_t instanceId,
-                           float processUs,
-                           float stepUs,
-                           float drawUs) {
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs) {
   submitUiMetricSchema("Undertow",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
   char dataBuf[160];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"process_us\":%.3f,\"step_us\":%.3f,\"draw_us\":%.3f}",
-                std::max(0.f, processUs),
-                std::max(0.f, stepUs),
-                std::max(0.f, drawUs));
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                "}");
   double ts = system::getTime();
   transport().submit("Undertow", instanceId, "ui", "metric", dataBuf, ts);
 }

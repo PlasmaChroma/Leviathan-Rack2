@@ -3,6 +3,7 @@
 #include "plugin.hpp"
 #include <atomic>
 #include <cmath>
+#include <limits>
 
 constexpr float kUndertowMinHz = 10.f;
 constexpr float kUndertowMaxHz = 10000.f;
@@ -82,6 +83,8 @@ struct Undertow final : Module {
   std::atomic<float> displayShapeAmount {0.f};
   std::atomic<uint64_t> perfAudioSampledCount {0};
   std::atomic<uint64_t> perfAudioProcessNs {0};
+  std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> perfAudioProcessMaxNs {0};
   uint32_t debugInstanceId = 0u;
 
   Undertow();

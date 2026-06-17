@@ -916,6 +916,8 @@ struct TemporalDeck::Impl {
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<uint64_t> perfAudioSampledCount{0u};
   std::atomic<uint64_t> perfAudioProcessNs{0u};
+  std::atomic<uint64_t> perfAudioProcessMinNs{std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> perfAudioProcessMaxNs{0u};
   uint32_t debugInstanceId = 0u;
   std::atomic<float> uiDrawCostUs{0.f};
   std::atomic<float> uiScopePreviewCostUs{0.f};
@@ -2221,6 +2223,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       uint64_t(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(processEnd - processStart).count()));
     impl->perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
     impl->perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+    debug_terminal::recordAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs, elapsedNs);
   }
 }
 
@@ -2256,13 +2259,10 @@ float TemporalDeck::getUiSampleRate() const {
   return impl->uiSampleRate.load(std::memory_order_relaxed);
 }
 
-float TemporalDeck::consumeAudioProcessUs() {
-  const uint64_t sampleCount = impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
-  const uint64_t processNs = impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
-  if (sampleCount == 0u || processNs == 0u) {
-    return 0.f;
-  }
-  return float(double(processNs) / double(sampleCount) * 0.001);
+debug_terminal::TimingRangeUs TemporalDeck::consumeAudioProcessUs() {
+  impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
+  impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
+  return debug_terminal::consumeAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs);
 }
 
 float TemporalDeck::getUiScopePreviewCostUs() const {

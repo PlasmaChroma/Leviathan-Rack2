@@ -45,8 +45,6 @@ class DebugState(object):
 
         row_key = (event["plugin"], event["module"], event["instance"], event["stream"])
         data = dict(event["data"])
-        vw_age_value = data.get("vw_age_ms")
-        vw_queue_value = data.get("vw_queue_ms")
         row = {
             "plugin": event["plugin"],
             "module": event["module"],
@@ -63,6 +61,9 @@ class DebugState(object):
                 self._events_total += 1
                 return
             prev_row = self._rows.get(row_key)
+            cutoff_sec = now - 1.0
+            vw_age_value = data.get("vw_age_ms")
+            vw_queue_value = data.get("vw_queue_ms")
             vw_age_history = prev_row.get("vw_age_history") if prev_row else None
             if vw_age_history is None:
                 vw_age_history = deque()
@@ -73,7 +74,6 @@ class DebugState(object):
                 vw_queue_history = deque()
             if isinstance(vw_queue_value, (int, float)):
                 vw_queue_history.append((now, float(vw_queue_value)))
-            cutoff_sec = now - 1.0
             while vw_age_history and vw_age_history[0][0] < cutoff_sec:
                 vw_age_history.popleft()
             while vw_queue_history and vw_queue_history[0][0] < cutoff_sec:

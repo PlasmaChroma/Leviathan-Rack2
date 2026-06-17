@@ -14,6 +14,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -704,6 +705,8 @@ struct Bifurx : Module {
 	std::atomic<bool> perfDebugLogging {false};
 	std::atomic<uint64_t> perfAudioSampledCount{0};
 	std::atomic<uint64_t> perfAudioProcessNs{0};
+	std::atomic<uint64_t> perfAudioProcessRangeMinNs{std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessRangeMaxNs{0};
 	std::atomic<uint64_t> perfAudioControlsNs{0};
 	std::atomic<uint64_t> perfAudioCoreNs{0};
 	std::atomic<uint64_t> perfAudioPreviewNs{0};

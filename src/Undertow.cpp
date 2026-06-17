@@ -1,4 +1,5 @@
 #include "Undertow.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "UndertowShape.hpp"
 #include "WavePreviewTracer.hpp"
 
@@ -251,6 +252,7 @@ void Undertow::process(const ProcessArgs& args) {
       std::chrono::steady_clock::now() - processStart).count());
     perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
     perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+    debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
   }
 }
 

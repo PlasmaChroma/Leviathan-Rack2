@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugTerminalTransport.hpp"
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
 #include <cstdint>
@@ -141,7 +142,7 @@ struct TemporalDeck final : Module {
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
   float getUiSampleRate() const;
-  float consumeAudioProcessUs();
+  debug_terminal::TimingRangeUs consumeAudioProcessUs();
   uint32_t getDebugInstanceId() const;
   float getUiDrawCostUs() const;
   void setUiDrawCostUs(float costUs);

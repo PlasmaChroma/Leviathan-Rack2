@@ -4,7 +4,7 @@
 #include <cstdio>
 
 namespace {
-constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 
 struct TDScopeBrightnessQuantity final : Quantity {
   TDScope *module = nullptr;
@@ -74,6 +74,8 @@ struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
   math::Rect scopeRectPx;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
   static constexpr float kTopBarYmm = 9.522227f;
   static constexpr float kTopBarLeftStartMm = 2.2491839f;
 
@@ -141,6 +143,7 @@ struct TDScopeWidget : ModuleWidget {
       const float prevStepUs = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
       const float emaStepUs = (prevStepUs > 0.f) ? (prevStepUs + (stepUs - prevStepUs) * 0.18f) : stepUs;
       scopeModule->uiDebugModuleUiStepUsEma.store(std::max(0.f, emaStepUs), std::memory_order_relaxed);
+      uiStepUsRange.add(stepUs);
     }
   }
 
@@ -193,6 +196,7 @@ struct TDScopeWidget : ModuleWidget {
       const float prevUs = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
       const float emaUs = (prevUs > 0.f) ? (prevUs + (drawUs - prevUs) * 0.18f) : drawUs;
       scopeModule->uiDebugModuleUiDrawUsEma.store(std::max(0.f, emaUs), std::memory_order_relaxed);
+      uiDrawUsRange.add(drawUs);
     }
 
     if (scopeModule && isDragonKingDebugEnabled()) {
@@ -200,8 +204,6 @@ struct TDScopeWidget : ModuleWidget {
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
-        float uiDrawUsEma = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
-        float uiStepUsEma = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
@@ -210,9 +212,10 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                               0.f,
-                                               uiStepUsEma,
-                                               uiDrawUsEma,
+                                               debug_terminal::consumeAudioProcessTiming(scopeModule->perfAudioProcessMinNs,
+                                                                                         scopeModule->perfAudioProcessMaxNs),
+                                               uiStepUsRange.consume(),
+                                               uiDrawUsRange.consume(),
                                                densityRows,
                                                densityPct,
                                                rackZoom,

@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 constexpr int kWyrmPointCountDefault = 128;
@@ -259,6 +260,8 @@ struct Wyrm : Module {
 	dsp::ClockDivider perfMeasureDivider;
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<int> perfChannels {1};
 	std::atomic<bool> perfFmConnected {false};
 	std::atomic<bool> perfFoldActive {false};

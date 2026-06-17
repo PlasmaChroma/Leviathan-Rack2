@@ -56,6 +56,15 @@
       "hidden": false
     },
     {
+      "slug": "Undertow",
+      "name": "Undertow",
+      "description": "Compact sub-harmonic oscillator with sine, morph, and sub outputs.",
+      "tags": [
+        "Oscillator"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Crownstep",
       "name": "Crownstep",
       "description": "Checkers-driven sequencer.",
@@ -117,15 +126,6 @@
         "Reverb"
       ],
       "hidden": true
-    },
-    {
-      "slug": "Undertow",
-      "name": "Undertow",
-      "description": "Compact sub-harmonic oscillator with sine, morph, and sub outputs.",
-      "tags": [
-        "Oscillator"
-      ],
-      "hidden": false
     }
   ]
 }

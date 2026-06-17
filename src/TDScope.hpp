@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 struct TDScope;
 
@@ -75,6 +77,8 @@ struct TDScope final : Module {
   std::atomic<float> uiDebugModuleUiStepUsEma {0.f};
   std::atomic<float> uiDebugScopeDensityPct {100.f};
   std::atomic<int> uiDebugScopeDensityRows {0};
+  std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> perfAudioProcessMaxNs {0};
   uint32_t debugInstanceId = 0u;
   double uiDebugTerminalLastSubmitSec = -1.0;
   float uiPublishTimerSec = 0.f;
@@ -408,6 +412,7 @@ struct TDScope final : Module {
   }
 
   void process(const ProcessArgs &args) override {
+    const auto processStart = std::chrono::steady_clock::now();
     bool validMessage = false;
     bool previewValidNow = false;
     const temporaldeck_expander::HostToDisplay *latestMsg = nullptr;
@@ -567,5 +572,8 @@ struct TDScope final : Module {
     bool ready = linkActive && previewVisible;
     lights[LINK_LIGHT].setBrightness(linkActive && !ready ? 1.f : 0.f);
     lights[PREVIEW_LIGHT].setBrightness(ready ? 1.f : 0.f);
+    const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now() - processStart).count());
+    debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
   }
 };
