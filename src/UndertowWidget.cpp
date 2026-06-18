@@ -324,6 +324,7 @@ struct UndertowWidget final : ModuleWidget {
     {
       math::Rect previewRectMm;
       if (panel_svg::loadRectFromSvgMm(panelPath, "wave_preview", &previewRectMm)) {
+        addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
         previewRectMm = insetRectMm(previewRectMm, 0.2f);
         auto* previewWidget = new UndertowShapePreviewWidget(module);
         previewWidget->box.pos = mm2px(previewRectMm.pos);

@@ -1780,63 +1780,6 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
-static math::Rect rectMm2px(math::Rect rect) {
-	rect.pos = mm2px(rect.pos);
-	rect.size = mm2px(rect.size);
-	return rect;
-}
-
-struct PreviewRecessFrameWidget : TransparentWidget {
-	void draw(const DrawArgs& args) override {
-		const float w = box.size.x;
-		const float h = box.size.y;
-		if (w <= 2.f || h <= 2.f) return;
-
-		nvgSave(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, w, h);
-		NVGpaint wellPaint = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, h, nvgRGB(1, 2, 5), nvgRGB(5, 8, 12));
-		nvgFillPaint(args.vg, wellPaint);
-		nvgFill(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.7f, 0.7f, w - 1.4f, h - 1.4f);
-		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStrokeColor(args.vg, nvgRGBA(28, 202, 216, 115));
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 1.4f, h - 1.2f);
-		nvgLineTo(args.vg, w - 1.2f, h - 1.2f);
-		nvgLineTo(args.vg, w - 1.2f, 1.4f);
-		nvgStrokeWidth(args.vg, 1.2f);
-		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 54));
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 1.4f, h - 1.4f);
-		nvgLineTo(args.vg, 1.4f, 1.4f);
-		nvgLineTo(args.vg, w - 1.4f, 1.4f);
-		nvgStrokeWidth(args.vg, 1.7f);
-		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 155));
-		nvgStroke(args.vg);
-
-		nvgRestore(args.vg);
-	}
-};
-
-static void addCachedPreviewRecessFrame(ModuleWidget* parent, math::Rect frameRectPx) {
-	if (!parent || frameRectPx.size.x <= 1.f || frameRectPx.size.y <= 1.f) return;
-	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
-	fb->dirtyOnSubpixelChange = false;
-	fb->box = frameRectPx;
-	PreviewRecessFrameWidget* frame = new PreviewRecessFrameWidget();
-	frame->box.size = frameRectPx.size;
-	fb->addChild(frame);
-	parent->addChild(fb);
-}
-
 struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	IntegralFluxHalo2Knob() = default;
 	explicit IntegralFluxHalo2Knob(Config config) : LeviathanHaloKnob2(config) {}
@@ -2036,14 +1979,14 @@ struct IntegralFluxWidget : ModuleWidget {
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
-				addCachedPreviewRecessFrame(this, rectMm2px(previewRectMm));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch1Preview->box.pos = mm2px(previewRectMm.pos);
 				ch1Preview->box.size = mm2px(previewRectMm.size);
 			}
 			else {
 				math::Rect previewFallbackMm(Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
-				addCachedPreviewRecessFrame(this, rectMm2px(previewFallbackMm));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
 				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
 				ch1Preview->box.pos = mm2px(previewFallbackMm.pos);
 				ch1Preview->box.size = mm2px(previewFallbackMm.size);
@@ -2054,14 +1997,14 @@ struct IntegralFluxWidget : ModuleWidget {
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
-				addCachedPreviewRecessFrame(this, rectMm2px(previewRectMm));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch4Preview->box.pos = mm2px(previewRectMm.pos);
 				ch4Preview->box.size = mm2px(previewRectMm.size);
 			}
 			else {
 				math::Rect previewFallbackMm(Vec(77.52500000f, 68.96600100f), Vec(20.78393300f, 11.24562000f));
-				addCachedPreviewRecessFrame(this, rectMm2px(previewFallbackMm));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
 				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
 				ch4Preview->box.pos = mm2px(previewFallbackMm.pos);
 				ch4Preview->box.size = mm2px(previewFallbackMm.size);

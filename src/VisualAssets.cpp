@@ -135,6 +135,142 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 	}
 };
 
+int loadRasterMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecycleImage, const std::string& fullPath) {
+	struct Entry {
+		NVGcontext* vg = nullptr;
+		int handle = -1;
+		int lifecycleHandle = -1;
+		std::weak_ptr<window::Image> lifecycleImage;
+	};
+	struct Cache {
+		std::unordered_map<std::string, Entry> entries;
+		NVGcontext* activeVg = nullptr;
+		unsigned long long useCounter = 0ull;
+	};
+	static Cache cache;
+
+	if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
+		return -1;
+	}
+	if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
+		cache.entries.clear();
+	}
+
+	auto it = cache.entries.find(fullPath);
+	if (it != cache.entries.end()) {
+		std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
+		if (it->second.vg == vg && it->second.handle >= 0 &&
+			it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
+			return it->second.handle;
+		}
+		if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
+			nvgDeleteImage(vg, it->second.handle);
+		}
+		cache.entries.erase(it);
+	}
+
+	int handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+	if (handle < 0) {
+		return -1;
+	}
+
+	Entry entry;
+	entry.vg = vg;
+	entry.handle = handle;
+	entry.lifecycleHandle = lifecycleImage->handle;
+	entry.lifecycleImage = lifecycleImage;
+	cache.entries[fullPath] = entry;
+	return handle;
+}
+
+struct AspectFitRasterImageWidget : TransparentWidget {
+	std::string path;
+	float opacity = 1.f;
+
+	AspectFitRasterImageWidget(std::string path, float opacity)
+		: path(std::move(path)), opacity(opacity) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (path.empty() || box.size.x <= 1.f || box.size.y <= 1.f) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(pluginInstance, path);
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int imageHandle = loadRasterMipmapHandle(args.vg, image, fullPath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+
+		int imageW = 0;
+		int imageH = 0;
+		nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
+		if (imageW <= 0 || imageH <= 0) {
+			return;
+		}
+
+		const float aspect = float(imageW) / float(imageH);
+		float drawW = box.size.x;
+		float drawH = drawW / aspect;
+		if (drawH > box.size.y) {
+			drawH = box.size.y;
+			drawW = drawH * aspect;
+		}
+		const float x = 0.5f * (box.size.x - drawW);
+		const float y = 0.5f * (box.size.y - drawH);
+		NVGpaint paint = nvgImagePattern(args.vg, x, y, drawW, drawH, 0.f, imageHandle, clamp(opacity, 0.f, 1.f));
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x, y, drawW, drawH);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+};
+
+struct PreviewFrameEnhancementWidget : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		if (w <= 2.f || h <= 2.f) {
+			return;
+		}
+
+		nvgSave(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, w, h);
+		NVGpaint wellPaint = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, h, nvgRGB(1, 2, 5), nvgRGB(5, 8, 12));
+		nvgFillPaint(args.vg, wellPaint);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.7f, 0.7f, w - 1.4f, h - 1.4f);
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(28, 202, 216, 115));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 1.4f, h - 1.2f);
+		nvgLineTo(args.vg, w - 1.2f, h - 1.2f);
+		nvgLineTo(args.vg, w - 1.2f, 1.4f);
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 42));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 1.4f, h - 1.4f);
+		nvgLineTo(args.vg, 1.4f, 1.4f);
+		nvgLineTo(args.vg, w - 1.4f, 1.4f);
+		nvgStrokeWidth(args.vg, 1.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 155));
+		nvgStroke(args.vg);
+
+		nvgRestore(args.vg);
+	}
+};
+
 } // namespace
 
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
@@ -153,6 +289,37 @@ Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor) {
 	fb->dirtyOnSubpixelChange = false;
 	fb->addChild(widget);
 	return fb;
+}
+
+Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
+	if (rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
+		return new Widget();
+	}
+	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
+	fb->dirtyOnSubpixelChange = false;
+	fb->box.pos = mm2px(rectMm.pos);
+	fb->box.size = mm2px(rectMm.size);
+
+	PreviewFrameEnhancementWidget* frame = new PreviewFrameEnhancementWidget();
+	frame->box.size = fb->box.size;
+	fb->addChild(frame);
+	return fb;
+}
+
+Widget* createLeviathanFooterLogoWidget(math::Rect boundsMm) {
+	Widget* root = new Widget();
+	root->box.pos = mm2px(boundsMm.pos);
+	root->box.size = mm2px(boundsMm.size);
+
+	AspectFitRasterImageWidget* full = new AspectFitRasterImageWidget("res/icon/leviathan_footer_full.png", 1.f);
+	full->box.size = root->box.size;
+	root->addChild(full);
+
+	AspectFitRasterImageWidget* glow = new AspectFitRasterImageWidget("res/icon/leviathan_footer_glow.png", 1.f);
+	glow->box.size = root->box.size;
+	root->addChild(glow);
+
+	return root;
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {

@@ -1613,13 +1613,17 @@ struct ProcWidget : ModuleWidget {
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
 				// Keep the legacy SVG id until proc.svg is cleaned up as well.
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				previewWidget->box.pos = mm2px(previewRectMm.pos);
 				previewWidget->box.size = mm2px(previewRectMm.size);
 			}
 			else {
-				previewWidget->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-				previewWidget->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+				math::Rect previewFallbackMm(Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
+				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
+				previewWidget->box.pos = mm2px(previewFallbackMm.pos);
+				previewWidget->box.size = mm2px(previewFallbackMm.size);
 			}
 			addChild(previewWidget);
 		}
