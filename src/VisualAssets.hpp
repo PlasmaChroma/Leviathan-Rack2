@@ -8,6 +8,7 @@ namespace visual_assets {
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
+Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
 Widget* createLeviathanFooterLogoWidget(math::Rect boundsMm);
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");

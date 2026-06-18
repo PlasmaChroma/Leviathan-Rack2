@@ -39,6 +39,7 @@ namespace {
 struct SvgRect3DEffectWidget : TransparentWidget {
 	float edgeMarginPx = 0.f;
 	NVGcolor baseColor = nvgRGB(87, 64, 191);
+	NVGcolor shadowBaseColor = nvgRGB(87, 64, 191);
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t, float alphaScale = 1.f) {
 		t = clamp(t, 0.f, 1.f);
@@ -62,8 +63,8 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 		const float radius = clamp(std::min(w, h) * 0.055f, 2.f, 8.f);
 		const float bevel = clamp(std::min(w, h) * 0.010f, 0.38f, 1.35f);
 		const NVGcolor lightColor = mixColor(baseColor, nvgRGB(255, 255, 255), 0.18f, 0.46f);
-		const NVGcolor shadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.56f, 0.80f);
-		const NVGcolor innerShadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.40f, 0.44f);
+		const NVGcolor shadowColor = mixColor(shadowBaseColor, nvgRGB(0, 0, 0), 0.56f, 0.80f);
+		const NVGcolor innerShadowColor = mixColor(shadowBaseColor, nvgRGB(0, 0, 0), 0.40f, 0.44f);
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x, y, w, h, radius);
@@ -252,12 +253,17 @@ Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
 }
 
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor) {
+	return createSvgRect3DEffectWidget(rectMm, baseColor, baseColor);
+}
+
+Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor) {
 	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
 	SvgRect3DEffectWidget* widget = new SvgRect3DEffectWidget();
 	const float marginMm = 0.22f;
 	widget->edgeMarginPx = mm2px(Vec(marginMm, 0.f)).x;
 	widget->box.size = mm2px(rectMm.size.plus(Vec(2.f * marginMm, 2.f * marginMm)));
 	widget->baseColor = baseColor;
+	widget->shadowBaseColor = shadowBaseColor;
 	fb->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
 	fb->box.size = widget->box.size;
 	fb->dirtyOnSubpixelChange = false;
@@ -308,7 +314,10 @@ int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const 
 	}
 	int added = 0;
 	for (const panel_svg::SvgRectMatch& match : rects) {
-		if (match.hasFillColor) {
+		if (match.hasFillColor && match.hasFillGradientEndColor) {
+			parent->addChild(createSvgRect3DEffectWidget(match.rect, match.fillColor, match.fillGradientEndColor));
+		}
+		else if (match.hasFillColor) {
 			parent->addChild(createSvgRect3DEffectWidget(match.rect, match.fillColor));
 		}
 		else {

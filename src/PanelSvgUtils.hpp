@@ -11,6 +11,8 @@ struct SvgRectMatch {
 	math::Rect rect;
 	bool hasFillColor = false;
 	NVGcolor fillColor {};
+	bool hasFillGradientEndColor = false;
+	NVGcolor fillGradientEndColor {};
 };
 
 bool loadRectFromSvgMm(const std::string& svgPath, const std::string& rectId, math::Rect* outRect);

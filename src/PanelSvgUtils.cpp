@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -115,6 +116,13 @@ bool parseUrlId(const std::string& value, std::string* outId) {
 	return !outId->empty();
 }
 
+struct GradientResolvedColors {
+	bool hasStartColor = false;
+	NVGcolor startColor {};
+	bool hasEndColor = false;
+	NVGcolor endColor {};
+};
+
 bool gradientFirstStopColor(const std::string& svgText, const std::string& gradientId, NVGcolor* outColor, int depth = 0) {
 	if (!outColor || gradientId.empty() || depth > 4) {
 		return false;
@@ -167,25 +175,104 @@ bool gradientFirstStopColor(const std::string& svgText, const std::string& gradi
 	return false;
 }
 
-bool rectFillColor(const std::string& svgText, const std::string& rectTag, NVGcolor* outColor) {
-	if (!outColor) {
+bool gradientLastStopColor(const std::string& svgText, const std::string& gradientId, NVGcolor* outColor, int depth = 0) {
+	if (!outColor || gradientId.empty() || depth > 4) {
 		return false;
+	}
+	const std::string escapedId = escapeRegexLiteral(gradientId);
+	const std::regex selfClosingGradientRegex("<linearGradient\\b[^>]*\\bid\\s*=\\s*\"" + escapedId + "\"[^>]*/>", std::regex::icase);
+	std::smatch selfClosingMatch;
+	if (std::regex_search(svgText, selfClosingMatch, selfClosingGradientRegex)) {
+		const std::string gradientTag = selfClosingMatch.str(0);
+		std::string href;
+		if ((parseAttrString(gradientTag, "xlink:href", &href) || parseAttrString(gradientTag, "href", &href))
+			&& !href.empty() && href[0] == '#') {
+			return gradientLastStopColor(svgText, href.substr(1), outColor, depth + 1);
+		}
+	}
+	const std::regex gradientRegex("<linearGradient\\b[^>]*\\bid\\s*=\\s*\"" + escapedId + "\"[^>]*>([\\s\\S]*?)</linearGradient>", std::regex::icase);
+	std::smatch gradientMatch;
+	if (!std::regex_search(svgText, gradientMatch, gradientRegex)) {
+		return false;
+	}
+	const std::string gradientTagAndBody = gradientMatch.str(0);
+	const std::string gradientBody = gradientMatch.str(1);
+
+	bool hasLastColor = false;
+	NVGcolor lastColor {};
+	const std::regex stopRegex("<stop\\b[^>]*>", std::regex::icase);
+	auto stopBegin = std::sregex_iterator(gradientBody.begin(), gradientBody.end(), stopRegex);
+	auto stopEnd = std::sregex_iterator();
+	for (auto it = stopBegin; it != stopEnd; ++it) {
+		const std::string stopTag = it->str(0);
+		std::string colorText;
+		if ((parseStyleValue(stopTag, "stop-color", &colorText) || parseAttrString(stopTag, "stop-color", &colorText))
+			&& parseHexColor(colorText, &lastColor)) {
+			hasLastColor = true;
+		}
+	}
+	if (hasLastColor) {
+		*outColor = lastColor;
+		return true;
+	}
+
+	std::string href;
+	if (parseAttrString(gradientTagAndBody, "xlink:href", &href) || parseAttrString(gradientTagAndBody, "href", &href)) {
+		if (!href.empty() && href[0] == '#') {
+			return gradientLastStopColor(svgText, href.substr(1), outColor, depth + 1);
+		}
+	}
+	return false;
+}
+
+GradientResolvedColors resolveGradientColors(
+	const std::string& svgText,
+	const std::string& gradientId,
+	std::map<std::string, GradientResolvedColors>* cache
+) {
+	if (cache) {
+		auto it = cache->find(gradientId);
+		if (it != cache->end()) {
+			return it->second;
+		}
+	}
+	GradientResolvedColors colors;
+	colors.hasStartColor = gradientFirstStopColor(svgText, gradientId, &colors.startColor);
+	colors.hasEndColor = gradientLastStopColor(svgText, gradientId, &colors.endColor);
+	if (cache) {
+		(*cache)[gradientId] = colors;
+	}
+	return colors;
+}
+
+void resolveRectFillColors(
+	const std::string& svgText,
+	const std::string& rectTag,
+	std::map<std::string, GradientResolvedColors>* gradientCache,
+	panel_svg::SvgRectMatch* match
+) {
+	if (!match) {
+		return;
 	}
 	std::string fill;
 	if (!parseStyleValue(rectTag, "fill", &fill)) {
 		parseAttrString(rectTag, "fill", &fill);
 	}
 	if (fill.empty()) {
-		return false;
+		return;
 	}
-	if (parseHexColor(fill, outColor)) {
-		return true;
+	if (parseHexColor(fill, &match->fillColor)) {
+		match->hasFillColor = true;
+		return;
 	}
 	std::string gradientId;
 	if (parseUrlId(fill, &gradientId)) {
-		return gradientFirstStopColor(svgText, gradientId, outColor);
+		const GradientResolvedColors colors = resolveGradientColors(svgText, gradientId, gradientCache);
+		match->hasFillColor = colors.hasStartColor;
+		match->fillColor = colors.startColor;
+		match->hasFillGradientEndColor = colors.hasEndColor;
+		match->fillGradientEndColor = colors.endColor;
 	}
-	return false;
 }
 
 bool parseRectTagMm(const std::string& rectTag, math::Rect* outRect) {
@@ -351,6 +438,7 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		return false;
 	}
 
+	std::map<std::string, GradientResolvedColors> gradientCache;
 	std::vector<SvgAffine> transformStack;
 	transformStack.push_back(SvgAffine());
 	const std::regex tagRegex("</g\\s*>|<g\\b[^>]*>|<rect\\b[^>]*>", std::regex::icase);
@@ -388,7 +476,7 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		SvgRectMatch match;
 		match.id = !id.empty() ? id : label;
 		match.rect = rect;
-		match.hasFillColor = rectFillColor(svgText, rectTag, &match.fillColor);
+		resolveRectFillColors(svgText, rectTag, &gradientCache, &match);
 		outRects->push_back(match);
 	}
 	return !outRects->empty();
