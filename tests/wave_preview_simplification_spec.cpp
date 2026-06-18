@@ -108,6 +108,39 @@ TestResult testLargePointCountFallback() {
 	return {"Large point count fallback (1000 points)", pass, detail};
 }
 
+TestResult testCompactNearlyCollinearRemovesShallowMiddlePoint() {
+	std::vector<TestPoint> points = {
+		{0.f, 0.f},
+		{1.f, 0.002f},
+		{2.f, 0.f},
+		{3.f, 1.f}
+	};
+
+	const size_t compacted = wave_preview::compactNearlyCollinear(points.data(), points.size(), 0.01f);
+	bool pass = compacted == 3 &&
+	            points[0].x == 0.f && points[0].y == 0.f &&
+	            points[1].x == 2.f && points[1].y == 0.f &&
+	            points[2].x == 3.f && points[2].y == 1.f;
+
+	std::string detail = "Reduced 4 points to " + std::to_string(compacted);
+	return {"Near-collinear consolidation removes shallow middle point", pass, detail};
+}
+
+TestResult testCompactNearlyCollinearPreservesSharpPeak() {
+	std::vector<TestPoint> points = {
+		{0.f, 0.f},
+		{1.f, 1.f},
+		{2.f, 0.f}
+	};
+
+	const size_t compacted = wave_preview::compactNearlyCollinear(points.data(), points.size(), 0.01f);
+	bool pass = compacted == 3 &&
+	            points[1].x == 1.f && points[1].y == 1.f;
+
+	std::string detail = "Kept " + std::to_string(compacted) + " points";
+	return {"Near-collinear consolidation preserves sharp peak", pass, detail};
+}
+
 } // namespace
 
 int main() {
@@ -116,6 +149,8 @@ int main() {
 	tests.push_back(testTriangleWaveSimplifiesToThreePoints());
 	tests.push_back(testSineWaveSimplification());
 	tests.push_back(testLargePointCountFallback());
+	tests.push_back(testCompactNearlyCollinearRemovesShallowMiddlePoint());
+	tests.push_back(testCompactNearlyCollinearPreservesSharpPeak());
 
 	int failed = 0;
 	std::cout << "Wave Preview Simplification Spec\n";

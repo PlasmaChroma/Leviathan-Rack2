@@ -28,8 +28,21 @@ struct WavePreviewBufferedTracerStyle {
 	float minCaptureIntervalSec = 1.f / 24.f;
 	float maxAlpha = 118.f;
 	float rasterScale = 2.f;
+	float consolidationTolerance = 0.01f;
 	int drawStride = 2;
 	int lineRadiusPx = 1;
+};
+
+struct WavePreviewTracerCaptureStats {
+	bool captured = false;
+	size_t simplifiedPointCount = 0;
+	size_t compactedPointCount = 0;
+
+	WavePreviewTracerCaptureStats() = default;
+	WavePreviewTracerCaptureStats(bool captured, size_t simplifiedPointCount, size_t compactedPointCount)
+		: captured(captured),
+		  simplifiedPointCount(simplifiedPointCount),
+		  compactedPointCount(compactedPointCount) {}
 };
 
 template <size_t PointCount, size_t FrameCount>
@@ -48,9 +61,14 @@ struct WavePreviewTracer {
 	int nextFrame = 0;
 	double lastCaptureSec = -1.0;
 
-	void capture(const std::array<Vec, PointCount>& points, double nowSec, float minCaptureIntervalSec, int drawStride, float tolerance = 0.02f) {
+	WavePreviewTracerCaptureStats capture(const std::array<Vec, PointCount>& points,
+	                                      double nowSec,
+	                                      float minCaptureIntervalSec,
+	                                      int drawStride,
+	                                      float tolerance = 0.02f,
+	                                      float consolidationTolerance = 0.01f) {
 		if (lastCaptureSec > 0.0 && (nowSec - lastCaptureSec) < minCaptureIntervalSec) {
-			return;
+			return {};
 		}
 		Frame& frame = frames[nextFrame];
 		frame.pointCount = 0;
@@ -60,10 +78,13 @@ struct WavePreviewTracer {
 				frame.points[frame.pointCount++] = pt;
 			}
 		});
+		const size_t simplifiedPointCount = frame.pointCount;
+		frame.pointCount = wave_preview::compactNearlyCollinear(frame.points.data(), frame.pointCount, consolidationTolerance);
 		frame.birthSec = nowSec;
 		frame.active = frame.pointCount > 0;
 		nextFrame = (nextFrame + 1) % int(FrameCount);
 		lastCaptureSec = nowSec;
+		return {true, simplifiedPointCount, frame.pointCount};
 	}
 
 	void expire(double nowSec, float fadeSec) {
@@ -263,14 +284,14 @@ struct WavePreviewBufferedTracer {
 		}
 	}
 
-	void capture(const std::array<Vec, PointCount>& points,
-	             double nowSec,
-	             const Vec& size,
-	             const WavePreviewBufferedTracerStyle& style) {
+	WavePreviewTracerCaptureStats capture(const std::array<Vec, PointCount>& points,
+	                                      double nowSec,
+	                                      const Vec& size,
+	                                      const WavePreviewBufferedTracerStyle& style) {
 		const float rasterScale = clamp(style.rasterScale, 1.f, 4.f);
 		ensureSize(int(std::ceil(std::max(size.x, 1.f) * rasterScale)), int(std::ceil(std::max(size.y, 1.f) * rasterScale)));
 		if (lastCaptureSec > 0.0 && (nowSec - lastCaptureSec) < style.minCaptureIntervalSec) {
-			return;
+			return {};
 		}
 		const int stride = std::max(style.drawStride, 1);
 		const int radius = std::max(int(std::round(float(style.lineRadiusPx) * rasterScale)), 0);
@@ -278,23 +299,24 @@ struct WavePreviewBufferedTracer {
 		const uint32_t r = uint32_t(clamp(int(style.color.r * float(alpha)), 0, 255));
 		const uint32_t g = uint32_t(clamp(int(style.color.g * float(alpha)), 0, 255));
 		const uint32_t b = uint32_t(clamp(int(style.color.b * float(alpha)), 0, 255));
-		Vec prev;
-		bool hasPrev = false;
+		std::array<Vec, PointCount> capturePoints {};
+		size_t capturePointCount = 0;
 		wave_preview::simplifyPath(points.data(), PointCount, stride, 0.02f, [&](const Vec& pt, bool isMove) {
-			Vec scaled = pt.mult(rasterScale);
-			if (isMove) {
-				prev = scaled;
-				hasPrev = true;
-			} else {
-				if (hasPrev) {
-					drawLine(prev, scaled, radius, r, g, b, alpha);
-				}
-				prev = scaled;
+			(void)isMove;
+			if (capturePointCount < PointCount) {
+				capturePoints[capturePointCount++] = pt.mult(rasterScale);
 			}
 		});
+		const size_t simplifiedPointCount = capturePointCount;
+		capturePointCount = wave_preview::compactNearlyCollinear(capturePoints.data(), capturePointCount,
+		                                                         style.consolidationTolerance * rasterScale);
+		for (size_t i = 1; i < capturePointCount; ++i) {
+			drawLine(capturePoints[i - 1], capturePoints[i], radius, r, g, b, alpha);
+		}
 		lastCaptureSec = nowSec;
 		pixelsDirty = true;
 		hasVisiblePixels = true;
+		return {true, simplifiedPointCount, capturePointCount};
 	}
 
 	void draw(NVGcontext* vg, double nowSec, const Vec& size, const WavePreviewBufferedTracerStyle& style) {

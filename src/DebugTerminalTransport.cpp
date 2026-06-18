@@ -539,10 +539,14 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
-                               uint64_t eclipseShadowDraws) {
+                               uint64_t eclipseShadowDraws,
+                               float ch1CurvePointsReducedAvg,
+                               float ch4CurvePointsReducedAvg,
+                               float ch1TracerExtraPointsReducedAvg,
+                               float ch4TracerExtraPointsReducedAvg) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"}]");
-  char dataBuf[448];
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"eclipse_shadow_us\",\"label\":\"E.S (us)\"},{\"key\":\"eclipse_shadow_draws\",\"label\":\"E.S #\"},{\"key\":\"ch1_curve_reduced_avg\",\"label\":\"C1 Red\"},{\"key\":\"ch4_curve_reduced_avg\",\"label\":\"C4 Red\"},{\"key\":\"ch1_tracer_extra_reduced_avg\",\"label\":\"C1 Tr+\"},{\"key\":\"ch4_tracer_extra_reduced_avg\",\"label\":\"C4 Tr+\"}]");
+  char dataBuf[640];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -561,11 +565,15 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "aperture_us", apertureUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu}",
+                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"eclipse_shadow_us\":%.3f,\"eclipse_shadow_draws\":%llu,\"ch1_curve_reduced_avg\":%.3f,\"ch4_curve_reduced_avg\":%.3f,\"ch1_tracer_extra_reduced_avg\":%.3f,\"ch4_tracer_extra_reduced_avg\":%.3f}",
                 std::max(0.f, gearUs),
                 std::max(0.f, eclipseUs),
                 std::max(0.f, eclipseShadowUs),
-                (unsigned long long) eclipseShadowDraws);
+                (unsigned long long) eclipseShadowDraws,
+                std::max(0.f, ch1CurvePointsReducedAvg),
+                std::max(0.f, ch4CurvePointsReducedAvg),
+                std::max(0.f, ch1TracerExtraPointsReducedAvg),
+                std::max(0.f, ch4TracerExtraPointsReducedAvg));
   double ts = system::getTime();
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
 }

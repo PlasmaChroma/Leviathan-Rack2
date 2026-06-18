@@ -197,6 +197,10 @@ struct IntegralFlux : Module {
 	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<float> perfUiRenderMs {0.f};
+	std::array<std::atomic<uint64_t>, 2> debugCurvePointsReducedTotal {};
+	std::array<std::atomic<uint64_t>, 2> debugCurveReductionSamples {};
+	std::array<std::atomic<uint64_t>, 2> debugTracerExtraPointsReducedTotal {};
+	std::array<std::atomic<uint64_t>, 2> debugTracerReductionSamples {};
 	uint32_t debugInstanceId = 0u;
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
@@ -238,6 +242,31 @@ struct IntegralFlux : Module {
 	static constexpr float BOTH_V0_V = 4.15514297f;
 	static constexpr float BOTH_NEUTRAL_V = -0.05f;
 	static constexpr float BOTH_TIME_SCALE_MAX = 64.f;
+
+	static size_t previewDebugChannelIndex(int channel) {
+		return channel == 4 ? 1u : 0u;
+	}
+
+	void recordCurvePointReduction(int channel, size_t inputPointCount, size_t outputPointCount) {
+		if (!isDragonKingDebugEnabled()) {
+			return;
+		}
+		const size_t index = previewDebugChannelIndex(channel);
+		debugCurvePointsReducedTotal[index].fetch_add(inputPointCount - std::min(inputPointCount, outputPointCount),
+		                                              std::memory_order_relaxed);
+		debugCurveReductionSamples[index].fetch_add(1u, std::memory_order_relaxed);
+	}
+
+	void recordTracerExtraPointReduction(int channel, const WavePreviewTracerCaptureStats& stats) {
+		if (!isDragonKingDebugEnabled() || !stats.captured) {
+			return;
+		}
+		const size_t index = previewDebugChannelIndex(channel);
+		debugTracerExtraPointsReducedTotal[index].fetch_add(
+			stats.simplifiedPointCount - std::min(stats.simplifiedPointCount, stats.compactedPointCount),
+			std::memory_order_relaxed);
+		debugTracerReductionSamples[index].fetch_add(1u, std::memory_order_relaxed);
+	}
 	// Hardware-like FG ceilings.
 	static constexpr float OUTER_MAX_CYCLE_HZ = 1000.f;
 	static constexpr float OUTER_MAX_TRIGGER_HZ = 2000.f;
@@ -1449,6 +1478,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			}
 		}
 		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
+		if (modulePtr) {
+			modulePtr->recordCurvePointReduction(channel, POINT_COUNT, POINT_COUNT);
+		}
 		drawGlDot();
 	}
 
@@ -1610,7 +1642,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					const WavePreviewTracerCaptureStats stats =
 						curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
+					modulePtr->recordTracerExtraPointReduction(channel, stats);
 				}
 				else {
 					WavePreviewBufferedTracerStyle style;
@@ -1618,8 +1652,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					style.fadeSec = TRAIL_FADE_SEC;
 					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
 					style.maxAlpha = 118.f;
-						style.drawStride = TRAIL_CAPTURE_STRIDE;
-					frameTracer.capture(points, nowSec, box.size, style);
+					style.drawStride = TRAIL_CAPTURE_STRIDE;
+					const WavePreviewTracerCaptureStats stats = frameTracer.capture(points, nowSec, box.size, style);
+					modulePtr->recordTracerExtraPointReduction(channel, stats);
 				}
 			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
@@ -1667,13 +1702,18 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			}
 			auto vg = args.vg;
 			nvgBeginPath(vg);
-			wave_preview::simplifyPath(points.data(), POINT_COUNT, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
+			size_t reducedPointCount = 0;
+			wave_preview::simplifyPath(points.data(), POINT_COUNT, 1, 0.02f, [vg, &reducedPointCount](const Vec& pt, bool isMove) {
+				++reducedPointCount;
 				if (isMove) {
 					nvgMoveTo(vg, pt.x, pt.y);
 				} else {
 					nvgLineTo(vg, pt.x, pt.y);
 				}
 			});
+			if (modulePtr) {
+				modulePtr->recordCurvePointReduction(channel, POINT_COUNT, reducedPointCount);
+			}
 			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
 			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
 			nvgLineCap(args.vg, NVG_BUTT);
@@ -1848,6 +1888,12 @@ struct IntegralFluxWidget : ModuleWidget {
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
 	uint64_t eclipseShadowDrawsSinceSubmit = 0u;
+
+	static float consumeReductionAverage(std::atomic<uint64_t>& total, std::atomic<uint64_t>& samples) {
+		const uint64_t totalValue = total.exchange(0u, std::memory_order_acq_rel);
+		const uint64_t sampleCount = samples.exchange(0u, std::memory_order_acq_rel);
+		return sampleCount > 0u ? float(double(totalValue) / double(sampleCount)) : 0.f;
+	}
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
@@ -2109,6 +2155,14 @@ struct IntegralFluxWidget : ModuleWidget {
 				flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 				const uint64_t eclipseShadowDrawsToSubmit = eclipseShadowDrawsSinceSubmit;
 				eclipseShadowDrawsSinceSubmit = 0u;
+				const float ch1CurvePointsReducedAvg = consumeReductionAverage(
+					flux->debugCurvePointsReducedTotal[0], flux->debugCurveReductionSamples[0]);
+				const float ch4CurvePointsReducedAvg = consumeReductionAverage(
+					flux->debugCurvePointsReducedTotal[1], flux->debugCurveReductionSamples[1]);
+				const float ch1TracerExtraPointsReducedAvg = consumeReductionAverage(
+					flux->debugTracerExtraPointsReducedTotal[0], flux->debugTracerReductionSamples[0]);
+				const float ch4TracerExtraPointsReducedAvg = consumeReductionAverage(
+					flux->debugTracerExtraPointsReducedTotal[1], flux->debugTracerReductionSamples[1]);
 				debug_terminal::submitIntegralFluxMetrics(
 					flux->debugInstanceId,
 					debug_terminal::consumeAudioProcessTiming(flux->perfAudioProcessMinNs, flux->perfAudioProcessMaxNs),
@@ -2118,7 +2172,11 @@ struct IntegralFluxWidget : ModuleWidget {
 					gearDrawUsEma,
 					eclipseDrawUsEma,
 					eclipseShadowDrawUsEma,
-					eclipseShadowDrawsToSubmit);
+					eclipseShadowDrawsToSubmit,
+					ch1CurvePointsReducedAvg,
+					ch4CurvePointsReducedAvg,
+					ch1TracerExtraPointsReducedAvg,
+					ch4TracerExtraPointsReducedAvg);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];

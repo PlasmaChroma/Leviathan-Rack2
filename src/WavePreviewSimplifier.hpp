@@ -64,4 +64,45 @@ inline void simplifyPath(const PointType* points, size_t count, size_t stride, f
 	emit(points[indices[numIndices - 1]], false);
 }
 
+template <typename PointType>
+inline size_t compactNearlyCollinear(PointType* points, size_t count, float tolerance) {
+	if (count <= 2 || tolerance <= 0.f) {
+		return count;
+	}
+
+	const float toleranceSq = tolerance * tolerance;
+	size_t write = 1;
+
+	for (size_t i = 1; i < count - 1; ++i) {
+		const PointType& prev = points[write - 1];
+		const PointType& curr = points[i];
+		const PointType& next = points[i + 1];
+
+		const float dx = next.x - prev.x;
+		const float dy = next.y - prev.y;
+		const float lenSq = dx * dx + dy * dy;
+		if (lenSq <= 1e-12f) {
+			points[write++] = curr;
+			continue;
+		}
+
+		const float inX = curr.x - prev.x;
+		const float inY = curr.y - prev.y;
+		const float outX = next.x - curr.x;
+		const float outY = next.y - curr.y;
+		if (inX * outX + inY * outY < 0.f) {
+			points[write++] = curr;
+			continue;
+		}
+
+		const float cross = inX * dy - inY * dx;
+		if (cross * cross > toleranceSq * lenSq) {
+			points[write++] = curr;
+		}
+	}
+
+	points[write++] = points[count - 1];
+	return write;
+}
+
 } // namespace wave_preview

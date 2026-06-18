@@ -130,7 +130,11 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                float gearUs,
                                float eclipseUs,
                                float eclipseShadowUs,
-                               uint64_t eclipseShadowDraws);
+                               uint64_t eclipseShadowDraws,
+                               float ch1CurvePointsReducedAvg,
+                               float ch4CurvePointsReducedAvg,
+                               float ch1TracerExtraPointsReducedAvg,
+                               float ch4TracerExtraPointsReducedAvg);
 
 void submitProcMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
