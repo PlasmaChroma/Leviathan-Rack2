@@ -60,19 +60,19 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 		}
 
 		const float radius = clamp(std::min(w, h) * 0.055f, 2.f, 8.f);
-		const float bevel = clamp(std::min(w, h) * 0.014f, 0.55f, 2.0f);
-		const NVGcolor lightColor = mixColor(baseColor, nvgRGB(255, 255, 255), 0.24f, 0.54f);
+		const float bevel = clamp(std::min(w, h) * 0.010f, 0.38f, 1.35f);
+		const NVGcolor lightColor = mixColor(baseColor, nvgRGB(255, 255, 255), 0.18f, 0.46f);
 		const NVGcolor shadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.56f, 0.80f);
 		const NVGcolor innerShadowColor = mixColor(baseColor, nvgRGB(0, 0, 0), 0.40f, 0.44f);
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x, y, w, h, radius);
-		nvgStrokeWidth(args.vg, bevel * 1.05f);
+		nvgStrokeWidth(args.vg, bevel * 0.82f);
 		NVGpaint outerPaint = nvgLinearGradient(
 			args.vg,
 			x,
 			y,
-			x + w,
+			x,
 			y + h,
 			lightColor,
 			shadowColor);
@@ -81,39 +81,15 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + bevel * 0.42f, y + bevel * 0.42f, std::max(0.f, w - bevel * 0.84f), std::max(0.f, h - bevel * 0.84f), std::max(0.f, radius - bevel * 0.42f));
-		nvgStrokeWidth(args.vg, std::max(0.32f, bevel * 0.24f));
+		nvgStrokeWidth(args.vg, std::max(0.20f, bevel * 0.18f));
 		nvgStrokeColor(args.vg, innerShadowColor);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + radius, y);
-		nvgLineTo(args.vg, x + w - radius, y);
-		nvgMoveTo(args.vg, x, y + radius);
-		nvgLineTo(args.vg, x, y + h - radius);
-		nvgStrokeColor(args.vg, lightColor);
-		nvgStrokeWidth(args.vg, std::max(0.26f, bevel * 0.22f));
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w, y + radius);
-		nvgLineTo(args.vg, x + w, y + h - radius);
-		NVGpaint rightPaint = nvgLinearGradient(
-			args.vg,
-			x + w,
-			y + radius,
-			x + w,
-			y + h - radius,
-			mixColor(baseColor, nvgRGB(0, 0, 0), 0.34f, 0.50f),
-			shadowColor);
-		nvgStrokePaint(args.vg, rightPaint);
-		nvgStrokeWidth(args.vg, std::max(0.36f, bevel * 0.32f));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x + radius, y + h);
 		nvgLineTo(args.vg, x + w - radius, y + h);
 		nvgStrokeColor(args.vg, shadowColor);
-		nvgStrokeWidth(args.vg, std::max(0.36f, bevel * 0.32f));
+		nvgStrokeWidth(args.vg, std::max(0.22f, bevel * 0.22f));
 		nvgStroke(args.vg);
 
 		nvgSave(args.vg);
@@ -127,7 +103,7 @@ struct SvgRect3DEffectWidget : TransparentWidget {
 			y - bevel,
 			x,
 			y + bevel,
-			mixColor(baseColor, nvgRGB(255, 255, 255), 0.62f, 0.52f),
+			mixColor(baseColor, nvgRGB(255, 255, 255), 0.24f, 0.28f),
 			nvgRGBA(255, 255, 255, 0));
 		nvgFillPaint(args.vg, sheenPaint);
 		nvgFill(args.vg);
