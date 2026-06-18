@@ -206,9 +206,13 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 };
 
 struct PreviewFrameEnhancementWidget : TransparentWidget {
+	float outsideMarginPx = 0.f;
+
 	void draw(const DrawArgs& args) override {
-		const float w = box.size.x;
-		const float h = box.size.y;
+		const float x = outsideMarginPx;
+		const float y = outsideMarginPx;
+		const float w = box.size.x - 2.f * outsideMarginPx;
+		const float h = box.size.y - 2.f * outsideMarginPx;
 		if (w <= 2.f || h <= 2.f) {
 			return;
 		}
@@ -216,31 +220,25 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 		nvgSave(args.vg);
 
 		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, w, h);
-		NVGpaint wellPaint = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, h, nvgRGB(1, 2, 5), nvgRGB(5, 8, 12));
-		nvgFillPaint(args.vg, wellPaint);
-		nvgFill(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.7f, 0.7f, w - 1.4f, h - 1.4f);
+		nvgRect(args.vg, x - 0.55f, y - 0.55f, w + 1.1f, h + 1.1f);
 		nvgStrokeWidth(args.vg, 1.0f);
 		nvgStrokeColor(args.vg, nvgRGBA(28, 202, 216, 115));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 1.4f, h - 1.2f);
-		nvgLineTo(args.vg, w - 1.2f, h - 1.2f);
-		nvgLineTo(args.vg, w - 1.2f, 1.4f);
-		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 42));
+		nvgMoveTo(args.vg, x - 0.15f, y + h + 0.45f);
+		nvgLineTo(args.vg, x + w + 0.45f, y + h + 0.45f);
+		nvgLineTo(args.vg, x + w + 0.45f, y - 0.15f);
+		nvgStrokeWidth(args.vg, 1.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 96));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 1.4f, h - 1.4f);
-		nvgLineTo(args.vg, 1.4f, 1.4f);
-		nvgLineTo(args.vg, w - 1.4f, 1.4f);
-		nvgStrokeWidth(args.vg, 1.7f);
-		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 155));
+		nvgMoveTo(args.vg, x - 0.6f, y + h + 0.25f);
+		nvgLineTo(args.vg, x - 0.6f, y - 0.6f);
+		nvgLineTo(args.vg, x + w + 0.25f, y - 0.6f);
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 42));
 		nvgStroke(args.vg);
 
 		nvgRestore(args.vg);
@@ -271,12 +269,14 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
 	if (rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
 		return new Widget();
 	}
+	const float marginMm = 0.45f;
 	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
 	fb->dirtyOnSubpixelChange = false;
-	fb->box.pos = mm2px(rectMm.pos);
-	fb->box.size = mm2px(rectMm.size);
+	fb->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));
+	fb->box.size = mm2px(rectMm.size.plus(Vec(2.f * marginMm, 2.f * marginMm)));
 
 	PreviewFrameEnhancementWidget* frame = new PreviewFrameEnhancementWidget();
+	frame->outsideMarginPx = mm2px(Vec(marginMm, 0.f)).x;
 	frame->box.size = fb->box.size;
 	fb->addChild(frame);
 	return fb;
