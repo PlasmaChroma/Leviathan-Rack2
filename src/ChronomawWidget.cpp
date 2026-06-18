@@ -1636,16 +1636,16 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(selectedOutputPos), module, Chronomaw::SELECTED_OUTPUT_PARAM));
 	addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(timelineZoomPos), module, Chronomaw::TIMELINE_ZOOM_PARAM));
 
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(resetInPos), module, Chronomaw::RESET_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv1InPos), module, Chronomaw::CV_1_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv2InPos), module, Chronomaw::CV_2_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv3InPos), module, Chronomaw::CV_3_INPUT));
-	addInput(createInputCentered<DarkPJ301MPort>(mm2px(cv4InPos), module, Chronomaw::CV_4_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(clkInPos), module, Chronomaw::CLK_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(runInPos), module, Chronomaw::RUN_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(resetInPos), module, Chronomaw::RESET_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(cv1InPos), module, Chronomaw::CV_1_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(cv2InPos), module, Chronomaw::CV_2_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(cv3InPos), module, Chronomaw::CV_3_INPUT));
+	addInput(createInputCentered<Magitek2InputJack>(mm2px(cv4InPos), module, Chronomaw::CV_4_INPUT));
 
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(outPos[size_t(i)]), module, Chronomaw::OUT_1_OUTPUT + i));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outPos[size_t(i)]), module, Chronomaw::OUT_1_OUTPUT + i));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(outLightPos[size_t(i)]), module, Chronomaw::OUT_1_LIGHT + i));
 	}
 	addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(runLightPos), module, Chronomaw::RUN_LIGHT));

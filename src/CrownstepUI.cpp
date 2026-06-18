@@ -3965,15 +3965,15 @@ struct CrownstepWidget final : ModuleWidget {
 				addChild(aiThinkMsWidget);
 			}
 
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
-		addInput(createInputCentered<DarkPJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
 		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
