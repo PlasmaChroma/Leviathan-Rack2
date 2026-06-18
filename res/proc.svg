@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="proc.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -278,15 +278,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="26.40896"
-   inkscape:cy="262.20325"
-   inkscape:window-width="2560"
-   inkscape:window-height="1377"
-   inkscape:window-x="-8"
-   inkscape:window-y="-8"
+   inkscape:zoom="1.6868414"
+   inkscape:cx="19.563191"
+   inkscape:cy="261.13895"
+   inkscape:window-width="1862"
+   inkscape:window-height="1016"
+   inkscape:window-x="58"
+   inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g18"
+   inkscape:current-layer="panel_art"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -384,7 +384,7 @@
    stroke-opacity="0.06"
    stroke-width="45.4351"
    id="frame_left_ENHANCE"
-   style="opacity:0.33;fill:url(#linearGradient18);fill-opacity:1" />
+   style="opacity:0.5;fill:url(#linearGradient18);fill-opacity:1" />
         
         <rect
    x="1226.6439"
