@@ -517,9 +517,11 @@ float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
 }
 
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex) {
-	(void) state;
 	if (sampleIndex < 0) return 0.f;
-	return (sampleIndex == 0) ? kPreviewProbeImpulseAmplitude : 0.f;
+	const float sampleRate = std::max(state.sampleRate, 1.f);
+	const float phase = 144.f * float(sampleIndex) / sampleRate + 0.125f;
+	const float phase01 = phase - std::floor(phase);
+	return (phase01 < 0.5f) ? 4.f : -4.f;
 }
 
 SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm, bool highResonanceSelfOscEnabled) {
@@ -527,7 +529,7 @@ SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, floa
 	return processCharacterStage(core, stageIndex, input, sampleRate, cutoff, damping, drive, resoNorm, highResonanceSelfOscEnabled, nullptr);
 }
 
-void simulatePreviewProbeImpulseResponse(const BifurxPreviewState& state, float* inputBuffer, float* outputBuffer, int sampleCount) {
+void simulatePreviewProbeResponse(const BifurxPreviewState& state, float* inputBuffer, float* outputBuffer, int sampleCount) {
 	if (!inputBuffer || !outputBuffer || sampleCount <= 0) return;
 	BifurxProbeEngineState engine;
 	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, wideMorph = cascadeWideMorph(state.spanNorm), drive = levelDriveGain(kPreviewProbeLevelKnob);
@@ -1375,20 +1377,22 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	if (state.hasPreview) return;
 	BifurxPreviewState preview;
 	preview.sampleRate = 48000.f;
-	preview.mode = 8;          // Band + High
-	preview.freqA = 180.f;
-	preview.freqB = 3120.f;
-	preview.qA = 2.1f;
+	preview.mode = 0;          // Low + Low
+	constexpr float previewCenterHz = 1440.f;
+	constexpr float previewSpanNorm = 0.33f;
+	preview.spanOct = 8.f * bifurx::shapedSpan(previewSpanNorm);
+	preview.freqA = previewCenterHz * fastExp2(-0.5f * preview.spanOct);
+	preview.freqB = previewCenterHz * fastExp2(0.5f * preview.spanOct);
+	preview.qA = 1.6f;
 	preview.qB = 1.6f;
-	preview.balance = 0.22f;
+	preview.balance = 0.f;
 	preview.balanceTarget = preview.balance;
 	preview.resoNorm = 0.72f;
-	preview.spanParamNorm = 0.78f;
+	preview.spanParamNorm = previewSpanNorm;
 	preview.spanCvNorm = 0.f;
 	preview.spanAtten = 0.f;
-	preview.spanNorm = 0.78f;
-	preview.spanOct = std::log2(preview.freqB / preview.freqA);
-	preview.freqParamNorm = bifurxParamFromFrequencyHz(preview.freqA);
+	preview.spanNorm = previewSpanNorm;
+	preview.freqParamNorm = bifurxParamFromFrequencyHz(previewCenterHz);
 	preview.voctCv = 0.f;
 
 	state.previewState = preview;
@@ -1402,16 +1406,29 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	}
 	state.hasCurveTarget = false;
 
-	// Browser preview is static art: synthesize deterministic response shading.
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float x01 = float(i) / float(kCurvePointCount - 1);
-		const float curveNorm = levi_math::clamp01((state.curveTargetDb[i] - kResponseMinDb) / (kResponseMaxDb - kResponseMinDb));
-		const float bed = -35.f + 15.f * curveNorm;
-		const float ridge = 1.8f * std::sin(2.f * kPi * (2.6f * x01 + 0.11f));
-		state.overlayTargetOutputDbfs[i] = bed + ridge;
-		state.overlayTargetModuleDb[i] = state.curveTargetDb[i];
+	// The module browser has no live engine input. Generate a deterministic
+	// 144 Hz square wave, run it through the real filter, and feed both signals through the
+	// same FFT preparation used by an instantiated module.
+	simulatePreviewProbeResponse(preview, fftInputTime, fftOutputTime, kFftSize);
+	for (int i = 0; i < kFftSize; ++i) {
+		fftInputTime[i] *= window[i];
+		fftOutputTime[i] *= window[i];
 	}
-	state.displayTopTargetDbfs = -6.f;
+	fft.rfft(fftInputTime, fftRawInputFreq);
+	fft.rfft(fftOutputTime, fftOutputFreq);
+	prepareOverlayTargetsFromSpectra(
+		preview.sampleRate,
+		state.curveBinPos,
+		fftOutputFreq,
+		fftOutputFreq,
+		fftRawInputFreq,
+		true,
+		false,
+		true,
+		state.overlayTargetModuleDb,
+		state.overlayTargetOutputDbfs,
+		&state.displayTopTargetDbfs
+	);
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
 		state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
