@@ -886,7 +886,7 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float gearSizePx = 9.f;
 	constexpr float gearOuterRadiusPx = gearSizePx * (26.3906f / 56.f);
 	constexpr float gearPitchRadiusPx = gearSizePx * (22.8f / 56.f);
-	constexpr float topGearCenterYPx = 16.f;
+	constexpr float topGearCenterYPx = 22.f;
 	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
