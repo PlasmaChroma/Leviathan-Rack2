@@ -878,11 +878,18 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float railClipHeightPx = 74.7691385f;
 	constexpr float railArtworkWidthInViewBox = 9.8f;
 	constexpr float railViewBoxWidth = 24.f;
+	constexpr float railViewBoxHeight = 240.f;
+	constexpr float railToothPitchInViewBox = 2.f;
 	constexpr float railDrawHeightPx = 190.f;
 	constexpr float railVisibleWidthPx = 6.2f;
 	constexpr float railDrawWidthPx = railVisibleWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
 	constexpr float gearSizePx = 10.5f;
-	constexpr float gearPitchRadiusPx = gearSizePx * (22.8f / 56.f);
+	constexpr float gearToothCount = 20.f;
+	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
+	constexpr float gearRotationSpeedTrim = 1.11f;
+	constexpr float gearPitchRadiusPx =
+		railToothPitchPx * gearToothCount / (2.f * float(M_PI) * gearRotationSpeedTrim);
+	constexpr float bottomGearPhaseOffsetRad = (float(M_PI) / gearToothCount) * -1.5;
 	constexpr float leftGearCenterXPx = 5.8661845f;
 	constexpr float rightGearCenterXPx = 18.7720951f;
 	constexpr float topGearCenterYPx = 22.f;
@@ -933,7 +940,7 @@ LeviathanSlider::LeviathanSlider() {
 		addRackGear(
 			Vec(rightGearCenterXPx, bottomGearCenterYPx),
 			-1.f,
-			float(M_PI)
+			float(M_PI) + bottomGearPhaseOffsetRad
 		);
 	}
 	setHandlePosCentered(
