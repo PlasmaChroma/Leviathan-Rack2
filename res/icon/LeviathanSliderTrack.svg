@@ -112,8 +112,8 @@
      y="4.4131117"
      width="3.062731"
      height="71.282814"
-     rx="1.3915148"
-     ry="1.620064"
+     rx="0"
+     ry="0"
      fill="url(#railFill)"
      stroke="#05050d"
      stroke-width="0.467787"
@@ -125,7 +125,7 @@
      fill="none"
      stroke="#080615"
      stroke-width="0.437609"
-     stroke-linecap="round"
+     stroke-linecap="butt"
      opacity="0.82"
      id="path10" />
   <path

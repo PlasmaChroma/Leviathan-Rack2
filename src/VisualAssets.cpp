@@ -768,6 +768,44 @@ float clockworkParamValue(GearKnobInvertSized* knob) {
 static constexpr bool kClockworkLiquidShimmerEnabled = true;
 static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 
+struct MovingSliderTeethRail : widget::Widget {
+	app::SvgSlider* slider = nullptr;
+	std::shared_ptr<window::Svg> railSvg;
+	float drawWidthPx = 0.f;
+	float drawHeightPx = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		if (!slider || !slider->handle || !railSvg || !railSvg->handle ||
+				box.size.x <= 0.f || box.size.y <= 0.f ||
+				drawWidthPx <= 0.f || drawHeightPx <= 0.f) {
+			return;
+		}
+
+		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const Vec svgSize = railSvg->getSize();
+		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+			return;
+		}
+
+		// NanoVG translation is in screen pixels here. Center the artwork when
+		// the handle is centered, then apply the handle's exact vertical pixel
+		// displacement so the teeth and handle travel together at a 1:1 rate.
+		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
+		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
+		const float svgScaleY = drawHeightPx / svgSize.y;
+		const float railY = 0.5f * (box.size.y - drawHeightPx) + handleOffsetY;
+		const float railX = 0.5f * (box.size.x - drawWidthPx);
+
+		nvgSave(args.vg);
+		nvgIntersectScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgTranslate(args.vg, railX, railY);
+		nvgScale(args.vg, drawWidthPx / svgSize.x, svgScaleY);
+		railSvg->draw(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
 } // namespace
 
 TorxScrew::TorxScrew() {
@@ -799,6 +837,15 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float anchorWidthPx = 11.33858f;
 	constexpr float anchorHeightPx = 98.26772f;
 	constexpr float handleTravelInsetPx = 17.5f;
+	constexpr float trackWidthPx = 8.f;
+	constexpr float trackHeightPx = 80.f;
+	constexpr float grooveXInTrackPx = 2.4691308f;
+	constexpr float grooveYInTrackPx = 4.4131117f;
+	constexpr float grooveWidthPx = 3.062731f;
+	constexpr float grooveHeightPx = 71.282814f;
+	constexpr float railArtworkWidthInViewBox = 9.8f;
+	constexpr float railViewBoxWidth = 24.f;
+	constexpr float railDrawHeightPx = 112.f;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
 	box.size = Vec(anchorWidthPx, anchorHeightPx);
@@ -810,6 +857,19 @@ LeviathanSlider::LeviathanSlider() {
 			0.5f * (anchorWidthPx - background->box.size.x),
 			0.5f * (anchorHeightPx - background->box.size.y)
 		);
+	}
+	if (fb && handle) {
+		auto* teethRail = new MovingSliderTeethRail;
+		teethRail->slider = this;
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_track.svg");
+		teethRail->box.pos = Vec(
+			0.5f * (anchorWidthPx - trackWidthPx) + grooveXInTrackPx,
+			0.5f * (anchorHeightPx - trackHeightPx) + grooveYInTrackPx
+		);
+		teethRail->box.size = Vec(grooveWidthPx, grooveHeightPx);
+		teethRail->drawWidthPx = grooveWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
+		teethRail->drawHeightPx = railDrawHeightPx;
+		fb->addChildBelow(teethRail, handle);
 	}
 	setHandlePosCentered(
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
