@@ -511,8 +511,6 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz);
 
 constexpr float kPreviewProbeLevelKnob = 0.5f;
-constexpr float kPreviewProbeImpulseAmplitude = 0.01f;
-constexpr int kPreviewProbeBurstLength = 64;
 
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex);
 
@@ -533,7 +531,7 @@ SvfOutputs processProbeStage(
 	bool highResonanceSelfOscEnabled
 );
 
-void simulatePreviewProbeImpulseResponse(
+void simulatePreviewProbeResponse(
 	const BifurxPreviewState& state,
 	float* inputBuffer,
 	float* outputBuffer,
