@@ -793,15 +793,51 @@ struct MovingSliderTeethRail : widget::Widget {
 		// displacement so the teeth and handle travel together at a 1:1 rate.
 		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
 		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
-		const float svgScale = drawHeightPx / svgSize.y;
+		const float svgScaleX = drawWidthPx / svgSize.x;
+		const float svgScaleY = drawHeightPx / svgSize.y;
 		const float railY = 0.5f * (box.size.y - drawHeightPx) + handleOffsetY;
 		const float railX = 0.5f * (box.size.x - drawWidthPx);
 
 		nvgSave(args.vg);
 		nvgIntersectScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgTranslate(args.vg, railX, railY);
-		nvgScale(args.vg, svgScale, svgScale);
+		nvgScale(args.vg, svgScaleX, svgScaleY);
 		railSvg->draw(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+struct SliderRackGear : widget::Widget {
+	app::SvgSlider* slider = nullptr;
+	std::shared_ptr<window::Svg> gearSvg;
+	float rotationDirection = 1.f;
+	float pitchRadiusPx = 1.f;
+	float restAngleRad = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		if (!slider || !slider->handle || !gearSvg || !gearSvg->handle ||
+				box.size.x <= 0.f || box.size.y <= 0.f || pitchRadiusPx <= 0.f) {
+			return;
+		}
+
+		const Vec svgSize = gearSvg->getSize();
+		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+			return;
+		}
+
+		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
+		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
+		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
+		const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
+		nvgRotate(args.vg, angleRad);
+		nvgScale(args.vg, scale, scale);
+		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+		gearSvg->draw(args.vg);
 		nvgRestore(args.vg);
 	}
 };
@@ -838,14 +874,20 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float anchorHeightPx = 98.26772f;
 	constexpr float handleTravelInsetPx = 17.5f;
 	constexpr float trackHeightPx = 80.f;
-	constexpr float grooveYInTrackPx = 4.4131117f;
-	constexpr float grooveHeightPx = 71.282814f;
+	constexpr float railClipYInTrackPx = 2.6426902f;
+	constexpr float railClipHeightPx = 74.7691385f;
 	constexpr float railArtworkWidthInViewBox = 9.8f;
 	constexpr float railViewBoxWidth = 24.f;
-	constexpr float railViewBoxHeight = 240.f;
 	constexpr float railDrawHeightPx = 224.f;
-	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
-	constexpr float railVisibleWidthPx = railDrawHeightPx * railArtworkWidthInViewBox / railViewBoxHeight;
+	constexpr float railVisibleWidthPx = 6.9232178f;
+	constexpr float railDrawWidthPx = railVisibleWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
+	constexpr float trackLeftBorderPx = 8.8575309f;
+	constexpr float trackRightBorderPx = 15.7807487f;
+	constexpr float gearSizePx = 9.f;
+	constexpr float gearOuterRadiusPx = gearSizePx * (26.3906f / 56.f);
+	constexpr float gearPitchRadiusPx = gearSizePx * (22.8f / 56.f);
+	constexpr float topGearCenterYPx = 16.f;
+	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
 	box.size = Vec(anchorWidthPx, anchorHeightPx);
@@ -861,15 +903,39 @@ LeviathanSlider::LeviathanSlider() {
 	if (fb && handle) {
 		auto* teethRail = new MovingSliderTeethRail;
 		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_track_240mm.svg");
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_gold.svg");
 		teethRail->box.pos = Vec(
 			0.5f * (anchorWidthPx - railVisibleWidthPx),
-			0.5f * (anchorHeightPx - trackHeightPx) + grooveYInTrackPx
+			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
 		);
-		teethRail->box.size = Vec(railVisibleWidthPx, grooveHeightPx);
+		teethRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
 		teethRail->drawWidthPx = railDrawWidthPx;
 		teethRail->drawHeightPx = railDrawHeightPx;
 		fb->addChildBelow(teethRail, handle);
+
+		const std::shared_ptr<window::Svg> gearSvg =
+			visual_assets::loadPluginSvgCached("res/icon/gear_gold.svg");
+		auto addRackGear = [&](Vec center, float rotationDirection, float restAngleRad) {
+			auto* gear = new SliderRackGear;
+			gear->slider = this;
+			gear->gearSvg = gearSvg;
+			gear->rotationDirection = rotationDirection;
+			gear->pitchRadiusPx = gearPitchRadiusPx;
+			gear->restAngleRad = restAngleRad;
+			gear->box.pos = center.minus(Vec(0.5f * gearSizePx, 0.5f * gearSizePx));
+			gear->box.size = Vec(gearSizePx, gearSizePx);
+			fb->addChildBelow(gear, handle);
+		};
+		addRackGear(
+			Vec(trackLeftBorderPx - gearOuterRadiusPx, topGearCenterYPx),
+			1.f,
+			0.f
+		);
+		addRackGear(
+			Vec(trackRightBorderPx + gearOuterRadiusPx, bottomGearCenterYPx),
+			-1.f,
+			float(M_PI)
+		);
 	}
 	setHandlePosCentered(
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),

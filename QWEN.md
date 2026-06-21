@@ -1,6 +1,8 @@
 # Leviathan Rack Plugin Suite - Context Primer
 
-See also: file Agents.md
+See also (other files): 
+Agents.md
+vcv-coding.md
 
 ## Overview
 
