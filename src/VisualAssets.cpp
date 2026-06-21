@@ -878,14 +878,13 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float railClipHeightPx = 74.7691385f;
 	constexpr float railArtworkWidthInViewBox = 9.8f;
 	constexpr float railViewBoxWidth = 24.f;
-	constexpr float railDrawHeightPx = 224.f;
-	constexpr float railVisibleWidthPx = 6.9232178f;
+	constexpr float railDrawHeightPx = 190.f;
+	constexpr float railVisibleWidthPx = 6.2f;
 	constexpr float railDrawWidthPx = railVisibleWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
-	constexpr float trackLeftBorderPx = 8.8575309f;
-	constexpr float trackRightBorderPx = 15.7807487f;
-	constexpr float gearSizePx = 9.f;
-	constexpr float gearOuterRadiusPx = gearSizePx * (26.3906f / 56.f);
+	constexpr float gearSizePx = 10.5f;
 	constexpr float gearPitchRadiusPx = gearSizePx * (22.8f / 56.f);
+	constexpr float leftGearCenterXPx = 5.8661845f;
+	constexpr float rightGearCenterXPx = 18.7720951f;
 	constexpr float topGearCenterYPx = 22.f;
 	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
 
@@ -903,7 +902,7 @@ LeviathanSlider::LeviathanSlider() {
 	if (fb && handle) {
 		auto* teethRail = new MovingSliderTeethRail;
 		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_gold.svg");
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth.svg");
 		teethRail->box.pos = Vec(
 			0.5f * (anchorWidthPx - railVisibleWidthPx),
 			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
@@ -927,12 +926,12 @@ LeviathanSlider::LeviathanSlider() {
 			fb->addChildBelow(gear, handle);
 		};
 		addRackGear(
-			Vec(trackLeftBorderPx - gearOuterRadiusPx, topGearCenterYPx),
+			Vec(leftGearCenterXPx, topGearCenterYPx),
 			1.f,
 			0.f
 		);
 		addRackGear(
-			Vec(trackRightBorderPx + gearOuterRadiusPx, bottomGearCenterYPx),
+			Vec(rightGearCenterXPx, bottomGearCenterYPx),
 			-1.f,
 			float(M_PI)
 		);
