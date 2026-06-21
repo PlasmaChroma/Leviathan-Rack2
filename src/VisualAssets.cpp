@@ -842,6 +842,19 @@ struct SliderRackGear : widget::Widget {
 	}
 };
 
+bool isInsideLeviathanSliderControlArea(Vec pos, Vec widgetSize) {
+	constexpr float controlWidthPx = 8.f;
+	constexpr float controlHeightPx = 80.f;
+	const math::Rect controlArea(
+		Vec(
+			0.5f * (widgetSize.x - controlWidthPx),
+			0.5f * (widgetSize.y - controlHeightPx)
+		),
+		Vec(controlWidthPx, controlHeightPx)
+	);
+	return controlArea.contains(pos);
+}
+
 } // namespace
 
 TorxScrew::TorxScrew() {
@@ -947,6 +960,30 @@ LeviathanSlider::LeviathanSlider() {
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
 		math::Vec(anchorWidthPx * 0.5f, handleTravelInsetPx)
 	);
+}
+
+void LeviathanSlider::onHover(const event::Hover& e) {
+	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onHover(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onHover(e);
+}
+
+void LeviathanSlider::onHoverScroll(const event::HoverScroll& e) {
+	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onHoverScroll(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onHoverScroll(e);
+}
+
+void LeviathanSlider::onButton(const event::Button& e) {
+	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onButton(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onButton(e);
 }
 
 MagitekInputJack::MagitekInputJack() {

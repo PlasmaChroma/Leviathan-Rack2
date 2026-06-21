@@ -66,6 +66,9 @@ using LeviathanCyanPurpleLight = TLeviathanCyanPurpleLight<>;
 
 struct LeviathanSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
 	LeviathanSlider();
+	void onHover(const event::Hover& e) override;
+	void onHoverScroll(const event::HoverScroll& e) override;
+	void onButton(const event::Button& e) override;
 };
 
 struct GoldButton : app::SvgSwitch {
