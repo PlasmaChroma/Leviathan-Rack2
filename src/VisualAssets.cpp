@@ -793,14 +793,14 @@ struct MovingSliderTeethRail : widget::Widget {
 		// displacement so the teeth and handle travel together at a 1:1 rate.
 		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
 		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
-		const float svgScaleY = drawHeightPx / svgSize.y;
+		const float svgScale = drawHeightPx / svgSize.y;
 		const float railY = 0.5f * (box.size.y - drawHeightPx) + handleOffsetY;
 		const float railX = 0.5f * (box.size.x - drawWidthPx);
 
 		nvgSave(args.vg);
 		nvgIntersectScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgTranslate(args.vg, railX, railY);
-		nvgScale(args.vg, drawWidthPx / svgSize.x, svgScaleY);
+		nvgScale(args.vg, svgScale, svgScale);
 		railSvg->draw(args.vg);
 		nvgRestore(args.vg);
 	}
@@ -834,18 +834,18 @@ void TorxScrew::draw(const DrawArgs& args) {
 }
 
 LeviathanSlider::LeviathanSlider() {
-	constexpr float anchorWidthPx = 11.33858f;
+	constexpr float anchorWidthPx = 24.56693f;
 	constexpr float anchorHeightPx = 98.26772f;
 	constexpr float handleTravelInsetPx = 17.5f;
-	constexpr float trackWidthPx = 8.f;
 	constexpr float trackHeightPx = 80.f;
-	constexpr float grooveXInTrackPx = 2.4691308f;
 	constexpr float grooveYInTrackPx = 4.4131117f;
-	constexpr float grooveWidthPx = 3.062731f;
 	constexpr float grooveHeightPx = 71.282814f;
 	constexpr float railArtworkWidthInViewBox = 9.8f;
 	constexpr float railViewBoxWidth = 24.f;
-	constexpr float railDrawHeightPx = 112.f;
+	constexpr float railViewBoxHeight = 240.f;
+	constexpr float railDrawHeightPx = 224.f;
+	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
+	constexpr float railVisibleWidthPx = railDrawHeightPx * railArtworkWidthInViewBox / railViewBoxHeight;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
 	box.size = Vec(anchorWidthPx, anchorHeightPx);
@@ -861,13 +861,13 @@ LeviathanSlider::LeviathanSlider() {
 	if (fb && handle) {
 		auto* teethRail = new MovingSliderTeethRail;
 		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_track.svg");
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_track_240mm.svg");
 		teethRail->box.pos = Vec(
-			0.5f * (anchorWidthPx - trackWidthPx) + grooveXInTrackPx,
+			0.5f * (anchorWidthPx - railVisibleWidthPx),
 			0.5f * (anchorHeightPx - trackHeightPx) + grooveYInTrackPx
 		);
-		teethRail->box.size = Vec(grooveWidthPx, grooveHeightPx);
-		teethRail->drawWidthPx = grooveWidthPx * railViewBoxWidth / railArtworkWidthInViewBox;
+		teethRail->box.size = Vec(railVisibleWidthPx, grooveHeightPx);
+		teethRail->drawWidthPx = railDrawWidthPx;
 		teethRail->drawHeightPx = railDrawHeightPx;
 		fb->addChildBelow(teethRail, handle);
 	}
