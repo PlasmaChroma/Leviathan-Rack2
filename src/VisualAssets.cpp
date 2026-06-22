@@ -922,7 +922,7 @@ LeviathanSlider::LeviathanSlider() {
 	if (fb && handle) {
 		auto* teethRail = new MovingSliderTeethRail;
 		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_rounded.svg");
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_rounded_dark.svg");
 		teethRail->box.pos = Vec(
 			0.5f * (anchorWidthPx - railVisibleWidthPx),
 			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
