@@ -937,6 +937,7 @@ LeviathanSlider::LeviathanSlider() {
 	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
+	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderHandle.svg"));
 	box.size = Vec(anchorWidthPx, anchorHeightPx);
 	if (fb) {
 		// SvgSlider keeps the complete mechanical assembly in this framebuffer.
