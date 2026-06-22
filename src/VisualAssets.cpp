@@ -810,6 +810,7 @@ struct MovingSliderTeethRail : widget::Widget {
 struct SliderRackGear : widget::Widget {
 	app::SvgSlider* slider = nullptr;
 	std::shared_ptr<window::Svg> gearSvg;
+	std::shared_ptr<window::Svg> shadowSvg;
 	float rotationDirection = 1.f;
 	float pitchRadiusPx = 1.f;
 	float restAngleRad = 0.f;
@@ -820,8 +821,8 @@ struct SliderRackGear : widget::Widget {
 			return;
 		}
 
-		const Vec svgSize = gearSvg->getSize();
-		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+		const Vec gearSvgSize = gearSvg->getSize();
+		if (gearSvgSize.x <= 0.f || gearSvgSize.y <= 0.f) {
 			return;
 		}
 
@@ -830,15 +831,42 @@ struct SliderRackGear : widget::Widget {
 		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
 		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
 		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
-		const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
+		auto drawSvg = [&] (
+			const std::shared_ptr<window::Svg>& svg,
+			Vec offset,
+			float alpha,
+			bool darkenAsShadow
+		) {
+			if (!svg || !svg->handle) {
+				return;
+			}
+			const Vec svgSize = svg->getSize();
+			if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+				return;
+			}
+			const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
 
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
-		nvgRotate(args.vg, angleRad);
-		nvgScale(args.vg, scale, scale);
-		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		gearSvg->draw(args.vg);
-		nvgRestore(args.vg);
+			nvgSave(args.vg);
+			nvgGlobalAlpha(args.vg, alpha);
+			if (darkenAsShadow) {
+				// Tint the exact metal SVG geometry black. Unlike destination-darkening
+				// blending, this produces a visible source-over shadow in the cache.
+				nvgGlobalTint(args.vg, nvgRGB(0x00, 0x00, 0x00));
+			}
+			nvgTranslate(
+				args.vg,
+				0.5f * box.size.x + offset.x,
+				0.5f * box.size.y + offset.y
+			);
+			nvgRotate(args.vg, angleRad);
+			nvgScale(args.vg, scale, scale);
+			nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+			svg->draw(args.vg);
+			nvgRestore(args.vg);
+		};
+
+		drawSvg(shadowSvg, Vec(0.4f, 0.45f), 0.6f, true);
+		drawSvg(gearSvg, Vec(), 1.f, false);
 	}
 };
 
@@ -911,7 +939,16 @@ LeviathanSlider::LeviathanSlider() {
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LeviathanSliderTrack.svg"));
 	box.size = Vec(anchorWidthPx, anchorHeightPx);
 	if (fb) {
+		// SvgSlider keeps the complete mechanical assembly in this framebuffer.
+		// Its onChange() invalidates the cache when the handle moves, so world
+		// subpixel changes do not need to redraw the SVG layers.
+		fb->dirtyOnSubpixelChange = false;
 		fb->box.size = box.size;
+	}
+	using SliderLight = VCVSliderLight<LeviathanCyanPurpleLight>;
+	auto* sliderLight = static_cast<SliderLight*>(light);
+	if (sliderLight && sliderLight->fb) {
+		sliderLight->fb->dirtyOnSubpixelChange = false;
 	}
 	if (background) {
 		background->box.pos = Vec(
@@ -938,6 +975,8 @@ LeviathanSlider::LeviathanSlider() {
 			auto* gear = new SliderRackGear;
 			gear->slider = this;
 			gear->gearSvg = gearSvg;
+			// Share the exact metal SVG as the shadow stencil for both gears.
+			gear->shadowSvg = gearSvg;
 			gear->rotationDirection = rotationDirection;
 			gear->pitchRadiusPx = gearPitchRadiusPx;
 			gear->restAngleRad = restAngleRad;
