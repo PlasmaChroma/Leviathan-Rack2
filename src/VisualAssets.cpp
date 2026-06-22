@@ -871,7 +871,7 @@ struct SliderRackGear : widget::Widget {
 };
 
 bool isInsideLeviathanSliderControlArea(Vec pos, Vec widgetSize) {
-	constexpr float controlWidthPx = 8.f;
+	constexpr float controlWidthPx = 12.f;
 	constexpr float controlHeightPx = 80.f;
 	const math::Rect controlArea(
 		Vec(

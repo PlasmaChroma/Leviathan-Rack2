@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg
    width="11.6"
-   height="11.74218"
-   viewBox="0 0 11.6 11.74218"
+   height="14.74218"
+   viewBox="0 0 11.6 14.74218"
    version="1.1"
    xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -11,7 +11,7 @@
        x1="1"
        y1="1"
        x2="10.6"
-       y2="10.7"
+       y2="13.7"
        gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#aeb7c2" />
       <stop offset="0.32" stop-color="#687684" />
@@ -21,9 +21,9 @@
     <linearGradient
        id="brassRetainer"
        x1="0"
-       y1="4.9"
+       y1="6.4"
        x2="0"
-       y2="6.8"
+       y2="8.3"
        gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ffe28a" />
       <stop offset="0.42" stop-color="#c99327" />
@@ -33,14 +33,14 @@
 
   <!-- Fixed down-right carriage shadow; kept filter-free for Rack/NanoSVG. -->
   <path
-     d="M 2,1.35 H 9.6 L 10.8,2.95 V 8.79 L 9.6,10.39 H 2 L 0.8,8.79 V 2.95 Z"
+     d="M 2,0.65 H 9.6 L 10.8,2.5 V 12.24 L 9.6,14.09 H 2 L 0.8,12.24 V 2.5 Z"
      transform="translate(0.4,0.45)"
      fill="#000000"
      opacity="0.62" />
 
   <!-- Chamfered titanium rack carriage. -->
   <path
-     d="M 2,0.8 H 9.6 L 10.8,2.4 V 9.34 L 9.6,10.94 H 2 L 0.8,9.34 V 2.4 Z"
+     d="M 2,0.1 H 9.6 L 10.8,1.95 V 12.79 L 9.6,14.64 H 2 L 0.8,12.79 V 1.95 Z"
      fill="url(#carriageMetal)"
      stroke="#080b10"
      stroke-width="0.7"
@@ -48,10 +48,10 @@
 
   <!-- Side notches visually engage the toothed rack. -->
   <path
-     d="M 0.8,3.18 L 0.12,3.72 L 0.8,4.27 Z
-        M 0.8,7.47 L 0.12,8.02 L 0.8,8.56 Z
-        M 10.8,3.18 L 11.48,3.72 L 10.8,4.27 Z
-        M 10.8,7.47 L 11.48,8.02 L 10.8,8.56 Z"
+     d="M 0.8,4.68 L 0.12,5.22 L 0.8,5.77 Z
+        M 0.8,8.97 L 0.12,9.52 L 0.8,10.06 Z
+        M 10.8,4.68 L 11.48,5.22 L 10.8,5.77 Z
+        M 10.8,8.97 L 11.48,9.52 L 10.8,10.06 Z"
      fill="#4e5c69"
      stroke="#080b10"
      stroke-width="0.38"
@@ -60,7 +60,7 @@
   <!-- Frame around the exact 4.32027 x 6.00001 px Rack LED bounds. -->
   <rect
      x="3.24"
-     y="2.47"
+     y="3.97"
      width="5.12"
      height="6.80"
      rx="0.65"
@@ -70,7 +70,7 @@
   <rect
      id="led-border"
      x="3.639865"
-     y="2.871085"
+     y="4.371085"
      width="4.32027"
      height="6.00001"
      rx="0.12"
@@ -79,13 +79,13 @@
      stroke-width="0.38" />
 
   <!-- Brass retainers tie the carriage to the gear axle treatment. -->
-  <circle cx="1.98" cy="5.87" r="0.82" fill="#3b2408" />
-  <circle cx="1.98" cy="5.87" r="0.55" fill="url(#brassRetainer)" />
-  <circle cx="9.62" cy="5.87" r="0.82" fill="#3b2408" />
-  <circle cx="9.62" cy="5.87" r="0.55" fill="url(#brassRetainer)" />
+  <circle cx="1.98" cy="7.37" r="0.82" fill="#3b2408" />
+  <circle cx="1.98" cy="7.37" r="0.55" fill="url(#brassRetainer)" />
+  <circle cx="9.62" cy="7.37" r="0.82" fill="#3b2408" />
+  <circle cx="9.62" cy="7.37" r="0.55" fill="url(#brassRetainer)" />
 
   <path
-     d="M 2.15,1.52 H 9.45"
+     d="M 2.15,0.82 H 9.45"
      fill="none"
      stroke="#d5dde4"
      stroke-width="0.35"
