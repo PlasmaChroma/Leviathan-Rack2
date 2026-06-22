@@ -1,8 +1,96 @@
-# Leviathan Rack Plugin Suite - Context Primer
+# Leviathan Rack Plugin Suite - Agent Context Primer
 
-See also (other files): 
-Agents.md
-vcv-coding.md
+See also (other files):
+- `Agents.md`
+- `vcv-coding.md`
+
+---
+
+## Agent Operating Protocol
+
+This repository is a real VCV Rack 2 plugin suite. Do not rely on general memory when exact local facts are available. The source tree, compiler errors, tests, existing code patterns, and Rack SDK headers are the source of truth.
+
+### Mandatory Behavior
+
+Before making non-trivial edits:
+
+1. Inspect the relevant files first.
+2. Identify the exact symbols, classes, params, ports, lights, widgets, assets, or JSON keys involved.
+3. State the smallest viable change.
+4. Prefer existing repository patterns over new architecture.
+5. Do not invent Rack APIs, helper functions, build flags, filenames, module IDs, asset paths, or enum names.
+6. If unsure whether something exists, search for it before using it.
+
+While editing:
+
+1. Make surgical patches.
+2. Do not mix DSP, UI/layout, asset, serialization, and build-system changes unless explicitly requested.
+3. Preserve released-module compatibility.
+4. Preserve enum ordering for existing params, inputs, outputs, lights, and JSON persistence keys.
+5. Avoid broad rewrites unless explicitly requested.
+
+After editing:
+
+1. Run the relevant test/build command when available.
+2. Quote exact compiler/test errors.
+3. Fix from evidence, not memory.
+4. If blocked, report the specific blocker and the files inspected.
+
+### Change Categories
+
+Classify each task before editing:
+
+- DSP-only
+- UI/layout-only
+- asset-only
+- serialization-only
+- build-system-only
+- test-only
+- documentation-only
+- integration/refactor
+
+Do not combine categories unless the user explicitly asks for an integrated change.
+
+### Released Module Safety
+
+Integral Flux, Proc, and Temporal Deck are released modules. For these:
+
+- Do not reorder existing `ParamIds`, `InputIds`, `OutputIds`, or `LightIds`.
+- Do not rename model slugs, module IDs, asset paths, or JSON keys.
+- Do not change existing patch behavior casually.
+- Append new enum values instead of inserting into existing enum order.
+- Treat serialization and user patch compatibility as sacred.
+
+### Evidence Over Assumption
+
+Never invent:
+
+- Rack API calls
+- llama.cpp flags
+- helper functions
+- source filenames
+- SVG anchor labels
+- asset paths
+- module IDs
+- enum names
+- JSON keys
+- build targets
+
+Use grep, local files, tests, build logs, and existing nearby code as ground truth.
+
+### Mandatory First Response Format for Non-Trivial Coding Tasks
+
+For non-trivial coding tasks, start with:
+
+1. Files I need to inspect:
+2. Existing patterns I will follow:
+3. Risk category:
+4. Planned smallest patch:
+5. Build/test command I will run:
+
+Do not edit until the relevant files have been inspected.
+
+---
 
 ## Overview
 
@@ -144,199 +232,194 @@ The Leviathan plugin suite is a collection of VCV Rack 2 modules focused on expe
 
 ## VCV Rack Execution Model
 
-### Threading Architecture
+### Core Threading Rule
 
-VCV Rack 2 uses a **dual-thread architecture** that is critical to understand when developing performance-critical audio modules:
+VCV Rack modules separate real-time DSP from UI rendering. Treat `Module::process()` as real-time audio/engine code and treat `ModuleWidget::step()` / `draw()` as UI-thread code.
 
-| Thread | Purpose | Characteristics |
-|--------|---------|-----------------|
-| **Audio Thread** | `Module::process()` | Real-time, high priority, deterministic timing, no allocations, no I/O |
-| **UI Thread** | `ModuleWidget::step()`, `ModuleWidget::draw()` | Non-real-time, handles user interaction, can allocate, can call OS APIs |
+| Area | Typical Methods | Rule |
+|------|-----------------|------|
+| Audio / engine | `Module::process()` | Real-time hot path. Must be deterministic, allocation-free, and non-blocking. |
+| UI / widget | `ModuleWidget::step()`, `ModuleWidget::draw()` | Non-real-time, but still frequent. Avoid needless per-frame work. |
+| Lifecycle / patch state | constructors, destructors, `onSampleRateChange()`, `dataToJson()`, `dataFromJson()` | Not normal sample-rate DSP, but still preserve thread safety and compatibility. |
 
-**Key Implications:**
-- **Audio thread MUST NOT block** - any stalls cause audio dropouts/glitches
-- **UI thread can be slow** - it's acceptable for UI updates to take longer
-- **Thread separation is absolute** - `process()` and `step()/draw()` never run simultaneously on the same module
-- **UI thread is single-threaded** - all widget operations happen on one thread
+**Important:** Assume audio/engine code and UI code can access the same module object concurrently. UI code must not directly read non-atomic state that `process()` writes. Use atomics, versioned snapshots, double buffering, or other explicit synchronization.
 
-### Execution Cycle
+### Audio / Engine Code: `Module::process()`
 
+`process()` is the real-time hot path. It should be written as if any unpredictable stall can cause audible dropouts.
+
+**Allowed in `process()`:**
+- Simple arithmetic and predictable branching
+- Stack-local POD values
+- Precomputed lookup tables
+- Reading params/inputs and writing outputs/lights
+- Lock-free atomics for small UI-visible state
+- Fixed-size buffers allocated outside the hot path
+- Rate-limited meter/light/debug state publication
+
+**Avoid in `process()`:**
+- Heap allocation: `new`, `malloc`, `std::vector::push_back`, etc.
+- File I/O, network I/O, or OS calls that can block
+- Logging, string formatting, JSON, filesystem checks
+- Mutexes, locks, condition variables
+- `std::unordered_map` lookups or data structures with unpredictable behavior
+- Expensive debug timing unless protected by debug flags and rate limits
+- Any operation that can block or unpredictably stall
+
+**Rack callback caution:** Treat `Module::process(const ProcessArgs& args)` as a per-sample callback unless the local Rack SDK or existing repository code proves otherwise. Do not invent an `args.sampleCount` buffer loop.
+
+### UI Code: `ModuleWidget::step()` and `draw()`
+
+UI code is not real-time audio code. It may perform more complex work than `process()`, but it still runs frequently and should avoid unnecessary per-frame allocations or blocking work.
+
+**Allowed in UI code:**
+- Widget state updates
+- Rendering with NanoVG/OpenGL
+- Reading module state through atomics or explicit thread-safe snapshots
+- Preparing visualization data
+- Rate-limited debug metric submission
+- Lazy validation/recreation of graphics resources
+
+**Avoid in UI hot paths:**
+- Repeated SVG parsing
+- Repeated image loading
+- Heavy allocation every frame
+- Blocking file/network operations
+- Direct reads of non-atomic module state that can be written by `process()`
+
+### Cross-Thread Communication
+
+**Safe patterns:**
+1. **`std::atomic<T>`** for simple scalar state
+2. **Versioned snapshots** for several related values
+3. **Double buffering** for complex data
+4. **Preallocated ring buffers** for one-way event/data transfer
+5. **UI-owned cached copies** rebuilt from atomic/shared snapshots
+
+**Cautions:**
+- `std::shared_ptr` has thread-safe reference counting, but the pointed-to object is not automatically thread-safe.
+- `memory_order_relaxed` is fine for many independent meters/previews, but do not use it blindly for multi-field invariants.
+- If several related values must be read consistently, publish them with a version/counter or snapshot protocol.
+- Avoid raw pointers/shared references to mutable non-atomic data across audio/UI boundaries.
+
+### Preferred Preview Publication Pattern
+
+Audio/engine side:
+
+```cpp
+struct PreviewSharedState {
+    std::atomic<float> riseTime {0.01f};
+    std::atomic<float> fallTime {0.01f};
+    std::atomic<float> curveSigned {0.f};
+    std::atomic<uint32_t> version {1};
+};
+
+void publishPreviewState(PreviewSharedState& shared, float rise, float fall, float curve) {
+    shared.riseTime.store(rise, std::memory_order_relaxed);
+    shared.fallTime.store(fall, std::memory_order_relaxed);
+    shared.curveSigned.store(curve, std::memory_order_relaxed);
+    shared.version.fetch_add(1u, std::memory_order_release);
+}
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Audio Thread (process)                       │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ 1. Audio input sampling (if needed)                          │   │
-│  │ 2. Module::process() called for ALL modules                  │   │
-│  │ 3. Audio output rendering                                    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ Repeat at audio buffer boundary (~1ms at 48kHz)              │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              │ (separate thread)
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        UI Thread (step + draw)                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ 1. ModuleWidget::step() - UI state updates                   │   │
-│  │    - Read module state via atomics/caching                   │   │
-│  │    - Update widget state                                     │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ 2. ModuleWidget::draw() - Rendering                          │   │
-│  │    - Render UI with NanoVG/OpenGL                            │   │
-│  │    - Submit debug metrics                                    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ 3. Wait for next frame (~16.7ms at 60fps)                    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+
+UI side:
+
+```cpp
+void step() override {
+    const uint32_t version = shared.version.load(std::memory_order_acquire);
+    if (version != lastVersion) {
+        const float rise = shared.riseTime.load(std::memory_order_relaxed);
+        const float fall = shared.fallTime.load(std::memory_order_relaxed);
+        const float curve = shared.curveSigned.load(std::memory_order_relaxed);
+
+        rebuildPreviewFrom(rise, fall, curve);
+        lastVersion = version;
+    }
+}
 ```
 
-### Communication Between Threads
-
-**Safe Patterns:**
-1. **`std::atomic<T>`** - Lock-free communication for simple types
-2. **`std::shared_ptr<T>`** - Shared ownership with thread-safe reference counting
-3. **Double buffering** - Separate read/write buffers for complex data
-4. **Batched updates with version numbers** - UI only updates when version changes
-
-**Unsafe Patterns:**
-- Raw pointers/shared references to non-atomic data
-- `std::unordered_map`/`std::vector` without synchronization
-- Non-atomic reads/writes to shared data
-
-### Timing Considerations
-
-| Operation | Typical Frequency | Audio Thread Safe? |
-|-----------|-------------------|-------------------|
-| `process()` | Audio sample rate (44.1kHz-192kHz) | ✅ Required |
-| `step()` | UI refresh rate (~60Hz) | ❌ Not audio thread |
-| `draw()` | UI refresh rate (~60Hz) | ❌ Not audio thread |
-| `onSampleRateChange()` | On sample rate change | ✅ Safe (not real-time) |
-| `dataToJson()` / `dataFromJson()` | On save/load | ✅ Safe (not real-time) |
-
-### Performance Guidelines
-
-**Audio Thread (`process()`):**
-- ✅ Use LUTs instead of `powf()`, `expf()`, `sinf()`
-- ✅ Cache computed values (warp scale, timing, etc.)
-- ✅ Use `std::max()`/`std::min()` instead of `clamp()` when possible
-- ✅ Minimize branches (predictable execution)
-- ❌ No allocations (`new`, `malloc`, `std::vector::push_back`)
-- ❌ No file I/O
-- ❌ No string formatting
-- ❌ No `std::unordered_map` lookups
-
-**UI Thread (`step()`, `draw()`):**
-- ✅ Can allocate memory
-- ✅ Can use complex algorithms
-- ✅ Can call OS APIs
-- ❌ Still should avoid allocations in hot paths (per-frame)
-- ✅ Use EMA (exponential moving average) for smooth timing metrics
+For simple meters where exact consistency is not important, relaxed atomics are fine. For related multi-field state, prefer a versioned publication protocol.
 
 ### Module-Widget State Relationship
 
-**Design Pattern:** Module and Widget are separate objects with a clear separation of concerns:
+**Design pattern:** Module and Widget are separate objects with a clear separation of concerns.
 
 ```cpp
 struct IntegralFlux : Module {
-    // State that UI needs to read
-    std::atomic<float> perfAudioProcessNs {0};
-    std::atomic<float> perfUiRenderMs {0.f};
-    
-    // Thread-safe communication with UI
+    // Audio/engine-owned state.
+    std::atomic<float> perfAudioProcessNs {0.f};
+
     struct PreviewSharedState {
         std::atomic<float> riseTime {0.01f};
         std::atomic<float> fallTime {0.01f};
         std::atomic<uint32_t> version {1};
     };
+
     PreviewSharedState previewCh1;
 };
 
 struct IntegralFluxWidget : ModuleWidget {
-    // Widget-specific state (UI thread only)
+    // Widget-owned state. UI thread only.
     float uiStepMsEma = 0.f;
     float uiDrawMsEma = 0.f;
-    
+
     void step() override {
-        // Read module state via atomics (thread-safe)
-        float uiMs = module->perfUiRenderMs.load(std::memory_order_relaxed);
-        // ... update UI
+        ModuleWidget::step();
+        // Read module state through atomics/snapshots only.
     }
-    
-    void draw() override {
-        // Draw UI (can use complex operations)
+
+    void draw(const DrawArgs& args) override {
+        ModuleWidget::draw(args);
+        // Draw UI. Can use complex operations, but avoid per-frame churn.
     }
 };
 ```
 
-**Key Principles:**
-1. **Module state** - owned by `Module`, accessed by audio thread (and UI via atomics)
-2. **Widget state** - owned by `ModuleWidget`, accessed only by UI thread
-3. **Cross-thread communication** - use `std::atomic` with appropriate memory ordering
-4. **No direct access** - UI should never directly read non-atomic module members
+**Key principles:**
+1. Module state is owned by `Module`; audio/engine code may update it.
+2. Widget state is owned by `ModuleWidget`; UI code may update it.
+3. Cross-thread communication must use atomics/snapshots/buffers.
+4. UI should never directly read non-atomic module members that `process()` writes.
 
-### Module Lifecycle
+### Lifecycle Notes
 
-| Event | Thread | Method Called | Notes |
-|-------|--------|---------------|-------|
-| Plugin load | UI | `Plugin::init()` | Register all Module Models |
-| Module instance created | UI | `Module` constructor | Initialize parameters, set up state |
-| Sample rate change | UI | `Module::onSampleRateChange()` | Recompute sample-rate dependent values |
-| Audio processing | Audio | `Module::process()` | Real-time audio DSP |
-| UI update | UI | `ModuleWidget::step()` | Sync UI state from module |
-| UI render | UI | `ModuleWidget::draw()` | Render widgets, submit metrics |
-| Module destroyed | UI | `Module` destructor | Cleanup resources |
+| Event | Typical Method | Notes |
+|-------|----------------|-------|
+| Plugin load | `Plugin::init()` | Register all module models. |
+| Module instance created | Module constructor | Can allocate/init state. Preserve released-module compatibility. |
+| Sample rate change | `onSampleRateChange()` | Recompute sample-rate dependent values. |
+| Audio processing | `process()` | Real-time hot path. No blocking/allocation. |
+| UI update | `ModuleWidget::step()` | Sync UI state from module through safe communication. |
+| UI render | `ModuleWidget::draw()` | Render widgets, submit rate-limited metrics. |
+| Save/load | `dataToJson()` / `dataFromJson()` | Preserve JSON keys for released modules. |
+| Module destroyed | destructors | Free resources carefully. Avoid cross-context graphics deletion bugs. |
 
-**Critical Notes:**
-- **Constructor** runs on UI thread - can allocate, can use complex initialization
-- **Destructor** runs on UI thread - can free resources, no real-time constraints
-- **`process()`** is the ONLY method running on audio thread
-- All other methods (`step()`, `draw()`, constructor, destructor) run on UI thread
+### Rate-Limited Updates
 
-### Audio Buffer Processing Pattern
+Use rate limiting for lights, meters, debug metrics, and preview publication instead of doing expensive work every sample.
 
-**Typical `process()` implementation:**
 ```cpp
-void process(const ProcessArgs& args) override {
-    // 1. Read inputs (voltage levels)
-    float in1 = inputs[INPUT_1].getVoltage();
-    float in2 = inputs[INPUT_2].getVoltage();
-    
-    // 2. Process at sample rate (loop over audio buffer)
-    for (int i = 0; i < args.sampleCount; ++i) {
-        // Process one sample
-        float out = processSample(in1, in2, args.sampleTime);
-        
-        // 3. Write outputs
-        outputs[OUTPUT_1].setVoltage(out, i);
-    }
-    
-    // 4. Update lights (rate-limited to 120Hz)
-    lightUpdateTimer += args.sampleTime;
-    if (lightUpdateTimer >= 1.0f / 120.0f) {
-        lights[LED].setBrightness(brightness);
-        lightUpdateTimer = 0.f;
-    }
+lightUpdateTimer += args.sampleTime;
+if (lightUpdateTimer >= 1.0f / 120.0f) {
+    lights[LED].setBrightness(brightness);
+    lightUpdateTimer = 0.f;
 }
 ```
 
-**Key Points:**
-- **`args.sampleCount`** - Number of samples in current buffer (typically 8-128)
-- **`args.sampleTime`** - Time per sample (1.0 / sampleRate)
-- **Loop over buffer** - Process each sample individually
-- **Lights/controls** - Updated at reduced rate (not per-sample)
+For counter-based throttling:
 
-**Common Pattern - Rate-Limited Updates:**
 ```cpp
-// Only update complex UI state at reduced rate
-if (updateCounter++ >= UPDATE_DIVISOR) {
+if (++updateCounter >= UPDATE_DIVISOR) {
     updateCounter = 0;
-    // Expensive UI update here
+    // Publish lightweight UI/debug state here.
 }
 ```
+
+### Debug Timing
+
+Debug timing in hot paths must be guarded, rate-limited, and removable. Prefer existing project debug infrastructure and feature flags over ad hoc logging.
+
+Do not add unconditional `std::chrono`, string formatting, logging, or debug terminal submission to `process()` unless explicitly requested and protected by debug checks.
 
 ---
 
@@ -584,34 +667,48 @@ Compatibility constraints are looser but still should follow patterns establishe
 
 ## Performance Measurement & Debugging
 
-**Audio Thread Performance Tracking:**
+### General Rule
+
+Performance instrumentation should not compromise real-time safety. Prefer existing project debug infrastructure, rate limits, and runtime feature flags. When adding new metrics, keep the audio-thread path as small and predictable as possible.
+
+### Audio Thread Metrics
+
+Audio-thread metrics are allowed only when guarded and lightweight. Prefer counters, accumulated nanoseconds, and rate-limited publication. Avoid unconditional logging, allocation, string formatting, or debug terminal submission from `process()`.
+
 ```cpp
-// In process():
-const uint64_t perfStart = std::chrono::steady_clock::now();
+if (isDragonKingDebugEnabled()) {
+    const auto perfStart = std::chrono::steady_clock::now();
 
-// ... audio processing ...
+    // ... audio processing ...
 
-const uint64_t elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-    std::chrono::steady_clock::now() - perfStart).count();
-perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
-perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+    const auto elapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - perfStart).count();
+    perfAudioProcessNs.fetch_add(static_cast<float>(elapsedNs), std::memory_order_relaxed);
+    perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+}
 ```
 
-**UI Thread Performance Tracking:**
+If timing itself becomes measurable overhead, use coarser sampling instead of timing every process call.
+
+### UI Thread Metrics
+
+UI timing can be more detailed, but still avoid per-frame allocation and blocking work.
+
 ```cpp
-// In step():
-const uint64_t stepStart = std::chrono::steady_clock::now();
+const auto stepStart = std::chrono::steady_clock::now();
 ModuleWidget::step();
 const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::steady_clock::now() - stepStart).count()) * 1e-6f;
 uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
 ```
 
-**Debug Terminal Submission:**
-- Metrics submitted to external Python server via UDP
-- Timing ranges (min/max) submitted for process/step/draw
-- Only submitted when `isDragonKingDebugEnabled()` returns true
-- Controlled by `res/dragonking.txt` configuration
+### Debug Terminal Submission
+
+- Metrics are submitted to the external Python server via UDP.
+- Timing ranges may be submitted for process/step/draw.
+- Submit only when `isDragonKingDebugEnabled()` returns true.
+- Prefer UI-thread/rate-limited submission over audio-thread submission.
+- Controlled by `res/dragonking.txt` configuration.
 
 ---
 
@@ -678,7 +775,7 @@ uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18
 | Task | Pattern |
 |------|---------|
 | Add new module | Add Model declaration in plugin.hpp, add to init() in plugin.cpp, create module source |
-| Add knob to panel | Use `visual_assets::createSvgRect3DEffectWidget()`, add param with Magitek knob |
+| Add knob to panel | Use existing VisualAssets knob classes and SVG anchors; add params with repository-local patterns |
 | Position jack from SVG | `panel_svg::loadPointFromSvgMm(svgPath, "label")` |
 | Debug timing in hot path | Use `PreviewBuildLogTimer`, `ModuleTeardownTimer` |
 | Submit metrics to debug terminal | Call `submit*_Metrics()` from UI widgets |
@@ -690,4 +787,4 @@ uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18
 
 ---
 
-*This primer was generated for Leviathan Rack Plugin Suite v2.8.1*
+*This primer was revised for Leviathan Rack Plugin Suite v2.8.1 agent use.*
