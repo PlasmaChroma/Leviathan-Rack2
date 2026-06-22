@@ -53,9 +53,9 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 # Release Compatibility Note
 
-- `Integral Flux`, `Proc`, and `Temporal Deck` are released modules.
+- `Integral Flux`, `Proc`, `Temporal Deck`, `TD.Scope`, and `Undertow` are released modules.
 - Changes to those modules must be made with backward compatibility in mind, especially:
   - patch/state serialization
   - parameter/input/output/light IDs and ordering
   - user-visible behavior that existing patches may rely on
-- `Crownstep` and `TD.Scope` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.
+- `Crownstep`, `Bifurx`, `Wyrm`, `Sil`, `Chronomaw`, and `Bulkhead` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.
