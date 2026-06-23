@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="24.56693"
+   height="98.26772"
+   viewBox="0 0 24.56693 98.26772"
+   version="1.1"
+   id="svg13"
+   sodipodi:docname="LuminSliderTrack.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview13"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="11.957131"
+     inkscape:cx="6.1469596"
+     inkscape:cy="58.417024"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg13" />
+  <defs
+     id="defs6">
+    <linearGradient
+       id="slotFill"
+       x1="2.2"
+       y1="1.8"
+       x2="9.1000004"
+       y2="96.400002"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.75459268,0,0,0.82114179,-0.20486569,-0.3101016)">
+      <stop
+         offset="0"
+         stop-color="#070a11"
+         id="stop1" />
+      <stop
+         offset="0.48"
+         stop-color="#010206"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#000001"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="railFill"
+       x1="4"
+       y1="5.6999998"
+       x2="7.4000001"
+       y2="92.599998"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.69925365,0,0,0.79634964,0.03572818,0.87226845)">
+      <stop
+         offset="0"
+         stop-color="#070612"
+         id="stop4" />
+      <stop
+         offset="0.45"
+         stop-color="#010104"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#090612"
+         id="stop6" />
+    </linearGradient>
+  </defs>
+  <g
+     id="slider-ticks"
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-opacity="1">
+    <g
+       id="slider-ticks-outline"
+       stroke="#000000"
+       stroke-width="2.133333"
+       stroke-opacity="0.9">
+      <path
+         id="slider-ticks-top-right-outline"
+         d="M 15.216798,12.826168 H 20.283465           M 15.216798,20.894544 H 19.616798           M 15.216798,28.962911 H 18.950132           M 15.216798,37.031296 H 18.283465           M 15.216798,45.099671 H 17.616798" />
+      <path
+         id="slider-ticks-bottom-left-outline"
+         d="M 6.950132,53.168049 H 9.350132           M 6.283465,61.236415 H 9.350132           M 5.616798,69.304800 H 9.350132           M 4.950132,77.373166 H 9.350132           M 4.283465,85.441552 H 9.350132" />
+    </g>
+    <path
+       id="slider-ticks-top-right"
+       stroke="#1ccad8"
+       stroke-width="1.333333"
+       d="M 15.216798,12.826168 H 20.283465           M 15.216798,20.894544 H 19.616798           M 15.216798,28.962911 H 18.950132           M 15.216798,37.031296 H 18.283465           M 15.216798,45.099671 H 17.616798" />
+    <path
+       id="slider-ticks-bottom-left"
+       stroke="#b58aff"
+       stroke-width="1.333333"
+       d="M 6.950132,53.168049 H 9.350132           M 6.283465,61.236415 H 9.350132           M 5.616798,69.304800 H 9.350132           M 4.950132,77.373166 H 9.350132           M 4.283465,85.441552 H 9.350132" />
+  </g>
+  <g
+     id="slider-track-art"
+     transform="translate(8.283465,9.13386)">
+    <rect
+       x="0.035728216"
+       y="0.87226868"
+       width="7.9285436"
+       height="78.255463"
+       fill="none"
+       id="rect6"
+       style="stroke-width:0.746224" />
+    <rect
+       x="0.57406592"
+       y="0.87226868"
+       width="6.9232178"
+       height="78.255463"
+       rx="0.50266302"
+       ry="0.60643119"
+       fill="#020309"
+       stroke="none"
+       id="rect7"
+       style="display:inline;stroke-width:0.69731" />
+    <rect
+       x="1.1986767"
+       y="1.5374669"
+       width="5.7499962"
+       height="76.998459"
+       rx="0"
+       ry="0.67405921"
+       fill="url(#slotFill)"
+       stroke="#111625"
+       stroke-width="0.330611"
+       stroke-opacity="0.46"
+       id="rect9"
+       style="fill:url(#slotFill);stroke:#212b48;stroke-opacity:0.46" />
+    <rect
+       x="2.4691308"
+       y="5.1327391"
+       width="3.062731"
+       height="69.728371"
+       rx="0"
+       ry="0"
+       fill="url(#railFill)"
+       stroke="#05050d"
+       stroke-width="0.462658"
+       stroke-opacity="0.9"
+       id="rect10"
+       style="fill:url(#railFill)" />
+    <path
+       d="M 2.9166532,6.2476291 V 73.778078"
+       fill="none"
+       stroke="#080615"
+       stroke-width="0.432811"
+       stroke-linecap="butt"
+       opacity="0.82"
+       id="path10" />
+    <path
+       d="M 5.1053171,6.5263514 V 73.41972"
+       fill="none"
+       stroke="#24163f"
+       stroke-width="0.328338"
+       stroke-linecap="round"
+       opacity="0.34"
+       id="path11" />
+    <path
+       d="M 1.7558922,4.4160253 V 75.729133"
+       fill="none"
+       stroke="#252f43"
+       stroke-width="0.253718"
+       stroke-linecap="round"
+       opacity="0.28"
+       id="path12" />
+    <path
+       d="M 6.3010409,4.7018028 V 75.298197"
+       fill="none"
+       stroke="#000000"
+       stroke-width="0.328338"
+       stroke-linecap="round"
+       opacity="0.72"
+       id="path13"
+       style="display:inline;opacity:0.718" />
+  </g>
+</svg>

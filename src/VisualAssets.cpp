@@ -870,7 +870,7 @@ struct SliderRackGear : widget::Widget {
 	}
 };
 
-bool isInsideLeviathanSliderControlArea(Vec pos, Vec widgetSize) {
+bool isInsideSliderControlArea(Vec pos, Vec widgetSize) {
 	constexpr float controlWidthPx = 12.f;
 	constexpr float controlHeightPx = 80.f;
 	const math::Rect controlArea(
@@ -1003,7 +1003,7 @@ LeviathanSlider::LeviathanSlider() {
 }
 
 void LeviathanSlider::onHover(const event::Hover& e) {
-	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
 		widget::Widget::onHover(e);
 		return;
 	}
@@ -1011,7 +1011,7 @@ void LeviathanSlider::onHover(const event::Hover& e) {
 }
 
 void LeviathanSlider::onHoverScroll(const event::HoverScroll& e) {
-	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
 		widget::Widget::onHoverScroll(e);
 		return;
 	}
@@ -1019,7 +1019,121 @@ void LeviathanSlider::onHoverScroll(const event::HoverScroll& e) {
 }
 
 void LeviathanSlider::onButton(const event::Button& e) {
-	if (!isInsideLeviathanSliderControlArea(e.pos, box.size)) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onButton(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onButton(e);
+}
+
+LuminSlider::LuminSlider() {
+	constexpr float anchorWidthPx = 24.56693f;
+	constexpr float anchorHeightPx = 98.26772f;
+	constexpr float handleTravelInsetPx = 17.5f;
+	constexpr float trackHeightPx = 80.f;
+	constexpr float railClipYInTrackPx = 2.6426902f;
+	constexpr float railClipHeightPx = 74.7691385f;
+	constexpr float railViewBoxWidth = 24.f;
+	constexpr float railViewBoxHeight = 240.f;
+	constexpr float railToothPitchInViewBox = 2.f;
+	constexpr float railDrawHeightPx = 190.f;
+	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
+	constexpr float railVisibleWidthPx = railDrawWidthPx;
+	constexpr float gearSizePx = 10.5f;
+	constexpr float gearToothCount = 20.f;
+	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
+	constexpr float gearRotationSpeedTrim = 1.11f;
+	constexpr float gearPitchRadiusPx =
+		(railToothPitchPx * gearToothCount / (2.f * float(M_PI) * gearRotationSpeedTrim));
+	constexpr float bottomGearPhaseOffsetRad = (float(M_PI) / gearToothCount) * -1.5;
+	constexpr float leftGearCenterXPx = 5.8661845f;
+	constexpr float rightGearCenterXPx = 18.7720951f;
+	constexpr float topGearCenterYPx = 22.f;
+	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
+
+	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderTrack.svg"));
+	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderHandle.svg"));
+	box.size = Vec(anchorWidthPx, anchorHeightPx);
+	if (fb) {
+		// SvgSlider keeps the complete mechanical assembly in this framebuffer.
+		// Its onChange() invalidates the cache when the handle moves, so world
+		// subpixel changes do not need to redraw the SVG layers.
+		fb->dirtyOnSubpixelChange = false;
+		fb->box.size = box.size;
+	}
+	using SliderLight = VCVSliderLight<LeviathanCyanPurpleLight>;
+	auto* sliderLight = static_cast<SliderLight*>(light);
+	if (sliderLight && sliderLight->fb) {
+		sliderLight->fb->dirtyOnSubpixelChange = false;
+	}
+	if (background) {
+		background->box.pos = Vec(
+			0.5f * (anchorWidthPx - background->box.size.x),
+			0.5f * (anchorHeightPx - background->box.size.y)
+		);
+	}
+	if (fb && handle) {
+		auto* teethRail = new MovingSliderTeethRail;
+		teethRail->slider = this;
+		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_field_contact_track.svg");
+		teethRail->box.pos = Vec(
+			0.5f * (anchorWidthPx - railVisibleWidthPx),
+			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
+		);
+		teethRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
+		teethRail->drawWidthPx = railDrawWidthPx;
+		teethRail->drawHeightPx = railDrawHeightPx;
+		fb->addChildBelow(teethRail, handle);
+
+		const std::shared_ptr<window::Svg> gearSvg =
+			visual_assets::loadPluginSvgCached("res/icon/phase_rotor_cyan_violet.svg");
+		auto addRackGear = [&](Vec center, float rotationDirection, float restAngleRad) {
+			auto* gear = new SliderRackGear;
+			gear->slider = this;
+			gear->gearSvg = gearSvg;
+			gear->shadowSvg = gearSvg;
+			gear->rotationDirection = rotationDirection;
+			gear->pitchRadiusPx = gearPitchRadiusPx;
+			gear->restAngleRad = restAngleRad;
+			gear->box.pos = center.minus(Vec(0.5f * gearSizePx, 0.5f * gearSizePx));
+			gear->box.size = Vec(gearSizePx, gearSizePx);
+			fb->addChildBelow(gear, handle);
+		};
+		addRackGear(
+			Vec(leftGearCenterXPx, topGearCenterYPx),
+			1.f,
+			0.f
+		);
+		addRackGear(
+			Vec(rightGearCenterXPx, bottomGearCenterYPx),
+			-1.f,
+			float(M_PI) + bottomGearPhaseOffsetRad
+		);
+	}
+	setHandlePosCentered(
+		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
+		math::Vec(anchorWidthPx * 0.5f, handleTravelInsetPx)
+	);
+}
+
+void LuminSlider::onHover(const event::Hover& e) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onHover(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onHover(e);
+}
+
+void LuminSlider::onHoverScroll(const event::HoverScroll& e) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
+		widget::Widget::onHoverScroll(e);
+		return;
+	}
+	VCVLightSlider<LeviathanCyanPurpleLight>::onHoverScroll(e);
+}
+
+void LuminSlider::onButton(const event::Button& e) {
+	if (!isInsideSliderControlArea(e.pos, box.size)) {
 		widget::Widget::onButton(e);
 		return;
 	}

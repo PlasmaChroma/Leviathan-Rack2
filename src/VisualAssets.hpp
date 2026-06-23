@@ -71,6 +71,13 @@ struct LeviathanSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
 	void onButton(const event::Button& e) override;
 };
 
+struct LuminSlider : VCVLightSlider<LeviathanCyanPurpleLight> {
+	LuminSlider();
+	void onHover(const event::Hover& e) override;
+	void onHoverScroll(const event::HoverScroll& e) override;
+	void onButton(const event::Button& e) override;
+};
+
 struct GoldButton : app::SvgSwitch {
 	TransformWidget* faceTransform = nullptr;
 	TransparentWidget* pressOverlay = nullptr;

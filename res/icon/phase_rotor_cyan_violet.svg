@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px" viewBox="0 0 56 56" version="1.1">
+  <title>Leviathan Phase Rotor — Cyan Violet Field Iris</title>
+  <desc>NanoSVG-friendly replacement for the mechanical gear. Designed to rotate like a gear while reading as a sci-fi iris/phase rotor.</desc>
+  <defs>
+    <radialGradient id="coreMetal" cx="24" cy="20" r="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#91a9ba"/>
+      <stop offset="0.35" stop-color="#28364a"/>
+      <stop offset="0.72" stop-color="#101722"/>
+      <stop offset="1" stop-color="#03050a"/>
+    </radialGradient>
+    <linearGradient id="bladeA" x1="11" y1="8" x2="42" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#55647d"/>
+      <stop offset="0.48" stop-color="#192536"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </linearGradient>
+    <linearGradient id="bladeB" x1="43" y1="8" x2="13" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#66708d"/>
+      <stop offset="0.52" stop-color="#211a3a"/>
+      <stop offset="1" stop-color="#06040c"/>
+    </linearGradient>
+    <radialGradient id="axleGlow" cx="28" cy="28" r="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dfffff"/>
+      <stop offset="0.35" stop-color="#40f7ff"/>
+      <stop offset="0.72" stop-color="#116c82"/>
+      <stop offset="1" stop-color="#031119"/>
+    </radialGradient>
+  </defs>
+  <circle cx="28" cy="28" r="27.2" fill="#020308" opacity="0.96"/>
+  <circle cx="28" cy="28" r="25.0" fill="url(#coreMetal)" stroke="#05070b" stroke-width="1.2"/>
+  <path d="M 30.447,2.115 A 26.000,26.000 0 0 1 38.823,4.360 L 37.408,7.451 A 22.600,22.600 0 0 0 30.127,5.500 Z" fill="#39f7ff" opacity="0.92"/><path d="M 43.061,6.807 A 26.000,26.000 0 0 1 49.193,12.939 L 46.422,14.908 A 22.600,22.600 0 0 0 41.092,9.578 Z" fill="#9a6cff" opacity="0.72"/><path d="M 51.640,17.177 A 26.000,26.000 0 0 1 53.885,25.553 L 50.500,25.873 A 22.600,22.600 0 0 0 48.549,18.592 Z" fill="#39f7ff" opacity="0.92"/><path d="M 53.885,30.447 A 26.000,26.000 0 0 1 51.640,38.823 L 48.549,37.408 A 22.600,22.600 0 0 0 50.500,30.127 Z" fill="#9a6cff" opacity="0.72"/><path d="M 49.193,43.061 A 26.000,26.000 0 0 1 43.061,49.193 L 41.092,46.422 A 22.600,22.600 0 0 0 46.422,41.092 Z" fill="#39f7ff" opacity="0.92"/><path d="M 38.823,51.640 A 26.000,26.000 0 0 1 30.447,53.885 L 30.127,50.500 A 22.600,22.600 0 0 0 37.408,48.549 Z" fill="#9a6cff" opacity="0.72"/><path d="M 25.553,53.885 A 26.000,26.000 0 0 1 17.177,51.640 L 18.592,48.549 A 22.600,22.600 0 0 0 25.873,50.500 Z" fill="#39f7ff" opacity="0.92"/><path d="M 12.939,49.193 A 26.000,26.000 0 0 1 6.807,43.061 L 9.578,41.092 A 22.600,22.600 0 0 0 14.908,46.422 Z" fill="#9a6cff" opacity="0.72"/><path d="M 4.360,38.823 A 26.000,26.000 0 0 1 2.115,30.447 L 5.500,30.127 A 22.600,22.600 0 0 0 7.451,37.408 Z" fill="#39f7ff" opacity="0.92"/><path d="M 2.115,25.553 A 26.000,26.000 0 0 1 4.360,17.177 L 7.451,18.592 A 22.600,22.600 0 0 0 5.500,25.873 Z" fill="#9a6cff" opacity="0.72"/><path d="M 6.807,12.939 A 26.000,26.000 0 0 1 12.939,6.807 L 14.908,9.578 A 22.600,22.600 0 0 0 9.578,14.908 Z" fill="#39f7ff" opacity="0.92"/><path d="M 17.177,4.360 A 26.000,26.000 0 0 1 25.553,2.115 L 25.873,5.500 A 22.600,22.600 0 0 0 18.592,7.451 Z" fill="#9a6cff" opacity="0.72"/>
+  <circle cx="28" cy="28" r="20.7" fill="#03050a" opacity="0.74"/>
+  <path d="M 26.570,20.944 L 26.402,8.064 L 30.415,6.133 L 30.404,19.639 Z" fill="url(#bladeA)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 31.978,21.999 L 40.967,12.773 L 45.170,14.245 L 35.612,23.788 Z" fill="url(#bladeB)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 35.056,26.570 L 47.936,26.402 L 49.867,30.415 L 36.361,30.404 Z" fill="url(#bladeA)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 34.001,31.978 L 43.227,40.967 L 41.755,45.170 L 32.212,35.612 Z" fill="url(#bladeB)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 29.430,35.056 L 29.598,47.936 L 25.585,49.867 L 25.596,36.361 Z" fill="url(#bladeA)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 24.022,34.001 L 15.033,43.227 L 10.830,41.755 L 20.388,32.212 Z" fill="url(#bladeB)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 20.944,29.430 L 8.064,29.598 L 6.133,25.585 L 19.639,25.596 Z" fill="url(#bladeA)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/><path d="M 21.999,24.022 L 12.773,15.033 L 14.245,10.830 L 23.788,20.388 Z" fill="url(#bladeB)" stroke="#05070c" stroke-width="0.55" stroke-linejoin="round" opacity="0.96"/>
+  <circle cx="28" cy="28" r="11.2" fill="#050812" stroke="#233044" stroke-width="1.1"/>
+  <path d="M 28.000,9.900 L 28.000,7.600" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 34.927,11.278 L 35.807,9.153" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 40.799,15.201 L 42.425,13.575" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 44.722,21.073 L 46.847,20.193" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 46.100,28.000 L 48.400,28.000" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 44.722,34.927 L 46.847,35.807" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 40.799,40.799 L 42.425,42.425" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 34.927,44.722 L 35.807,46.847" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 28.000,46.100 L 28.000,48.400" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 21.073,44.722 L 20.193,46.847" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 15.201,40.799 L 13.575,42.425" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 11.278,34.927 L 9.153,35.807" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 9.900,28.000 L 7.600,28.000" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 11.278,21.073 L 9.153,20.193" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 15.201,15.201 L 13.575,13.575" stroke="#55fbff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/><path d="M 21.073,11.278 L 20.193,9.153" stroke="#b084ff" stroke-width="1.25" stroke-linecap="round" opacity="0.72"/>
+  <circle cx="28" cy="28" r="5.45" fill="url(#axleGlow)" stroke="#021017" stroke-width="0.9"/>
+  <path d="M 28 21.4 L 30.0 28 L 28 34.6 L 26.0 28 Z" fill="#e9ffff" opacity="0.82"/>
+  <circle cx="28" cy="28" r="2.1" fill="#051018" opacity="0.95"/>
+</svg>
