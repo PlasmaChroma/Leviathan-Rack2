@@ -1540,7 +1540,7 @@ struct ProcWidget : ModuleWidget {
 		setPanel(createPanel(panelPath));
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<PurpleOrbScrew>(Vec(0.f, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));
 		//addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 

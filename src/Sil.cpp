@@ -2522,8 +2522,8 @@ struct SilWidget : ModuleWidget {
 		const std::string panelPath = asset::plugin(pluginInstance, "res/sil.svg");
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/sil.svg")));
 		previewBuildTimer.markPanelDone();
-		addChild(createWidget<PurpleOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<PurpleOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 

@@ -1063,7 +1063,7 @@ void TorxScrew::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
-HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection) {
+HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection, NVGcolor glowColor) {
 	constexpr float orbSizePx = 13.5f;
 	box.size = Vec(RACK_GRID_WIDTH, RACK_GRID_WIDTH);
 	this->spinDirection = spinDirection;
@@ -1077,6 +1077,13 @@ HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, floa
 	staticLayer->box.size = box.size;
 	staticFb->addChild(staticLayer);
 	addChild(staticFb);
+
+	glowWidget = new GlowShimmerWidget;
+	glowWidget->glowR = uint8_t(glowColor.r * 255.f);
+	glowWidget->glowG = uint8_t(glowColor.g * 255.f);
+	glowWidget->glowB = uint8_t(glowColor.b * 255.f);
+	glowWidget->box.size = box.size;
+	addChild(glowWidget);
 
 	rotatingFb = new widget::FramebufferWidget;
 	rotatingFb->dirtyOnSubpixelChange = false;
@@ -1092,15 +1099,93 @@ HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, floa
 }
 
 PurpleOrbScrew::PurpleOrbScrew()
-	: HoverOrbScrew("res/icon/purple_orb.png", "res/icon/purple_underlay.png", -1.f) {
+	: HoverOrbScrew(
+		"res/icon/purple_orb.png",
+		"res/icon/purple_underlay.png",
+		-1.f,
+		nvgRGBA(0xa8, 0x62, 0xff, 0xff)) {
 }
 
 CyanOrbScrew::CyanOrbScrew()
-	: HoverOrbScrew("res/icon/cyan_orb.png", "res/icon/cyan_underlay.png", 1.f) {
+	: HoverOrbScrew(
+		"res/icon/cyan_orb.png",
+		"res/icon/cyan_underlay.png",
+		1.f,
+		nvgRGBA(0x00, 0xc6, 0xe4, 0xff)) {
+}
+
+void GlowShimmerWidget::draw(const DrawArgs& args) {
+	if (opacity <= 1e-3f) {
+		return;
+	}
+
+	const float radius = std::min(box.size.x, box.size.y) * 0.5f;
+	const Vec center = box.size.mult(0.5f);
+
+	const uint8_t r = glowR;
+	const uint8_t g = glowG;
+	const uint8_t b = glowB;
+
+	nvgSave(args.vg);
+	nvgTranslate(args.vg, center.x, center.y);
+
+	const float alphaScale = pulse * opacity;
+
+	// Outer bloom: deep glow filling most of the orb
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, 0.f, 0.f, radius * 0.85f);
+	nvgFillPaint(args.vg, nvgRadialGradient(
+		args.vg,
+		0.f, 0.f,
+		radius * 0.08f,
+		radius * 0.85f,
+		nvgRGBA(r, g, b, uint8_t(0x70 * alphaScale)),
+		nvgRGBA(r, g, b, 0x00)));
+	nvgFill(args.vg);
+
+	// Mid glow: brighter color in the center half
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, 0.f, 0.f, radius * 0.50f);
+	nvgFillPaint(args.vg, nvgRadialGradient(
+		args.vg,
+		0.f, 0.f,
+		radius * 0.02f,
+		radius * 0.50f,
+		nvgRGBA(r, g, b, uint8_t(0x90 * alphaScale)),
+		nvgRGBA(r, g, b, 0x00)));
+	nvgFill(args.vg);
+
+	// Hot core: very bright tinted-white center
+	const uint8_t coreR = (r + 40u > 255u) ? 255u : (r + 40u);
+	const uint8_t coreG = (g + 40u > 255u) ? 255u : (g + 40u);
+	const uint8_t coreB = (b + 40u > 255u) ? 255u : (b + 40u);
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, 0.f, 0.f, radius * 0.18f);
+	nvgFillPaint(args.vg, nvgRadialGradient(
+		args.vg,
+		0.f, 0.f,
+		0.f,
+		radius * 0.18f,
+		nvgRGBA(coreR, coreG, coreB, uint8_t(0xaa * alphaScale)),
+		nvgRGBA(r, g, b, uint8_t(0x40 * alphaScale))));
+	nvgFill(args.vg);
+
+	// Rotating highlight arc sweeping through the center
+	const uint8_t arcAlpha = uint8_t(0x28 * alphaScale);
+	nvgBeginPath(args.vg);
+	nvgArc(args.vg, 0.f, 0.f, radius * 0.35f, shimmerPhaseRad - 0.8f, shimmerPhaseRad + 0.8f, NVG_CCW);
+	nvgStrokeColor(args.vg, nvgRGBA(coreR, coreG, coreB, arcAlpha));
+	nvgStrokeWidth(args.vg, radius * 0.04f);
+	nvgStroke(args.vg);
+
+	nvgRestore(args.vg);
 }
 
 void HoverOrbScrew::onEnter(const event::Enter& e) {
 	hovered = true;
+	if (glowWidget) {
+		glowWidget->opacity = 1.f;
+	}
 	OpaqueWidget::onEnter(e);
 }
 
@@ -1115,6 +1200,9 @@ void HoverOrbScrew::step() {
 	lastSpinUpdateSec = nowSec;
 	const float oldRotationRad = rotationRad;
 	constexpr float hoverSpinRateRadPerSec = 0.333f;
+	constexpr float returnRatePerSec = 19.7f;
+	constexpr float glowFadeRatePerSec = 8.f;
+	constexpr float shimmerRateRadPerSec = 1.35f;
 
 	if (hovered) {
 		rotationRad += float(dt * hoverSpinRateRadPerSec * spinDirection);
@@ -1122,10 +1210,26 @@ void HoverOrbScrew::step() {
 			rotationRad = std::fmod(rotationRad, float(M_PI) * 2.f);
 		}
 	}
-	else {
-		rotationRad *= 0.72f;
+	else if (rotationRad != 0.f) {
+		rotationRad *= std::exp(float(-dt * returnRatePerSec));
 		if (std::fabs(rotationRad) < 1e-4f) {
 			rotationRad = 0.f;
+		}
+	}
+
+	if (glowWidget) {
+		if (!hovered && glowWidget->opacity > 0.f) {
+			glowWidget->opacity *= std::exp(float(-dt * glowFadeRatePerSec));
+			if (glowWidget->opacity < 1e-3f) {
+				glowWidget->opacity = 0.f;
+			}
+		}
+		if (glowWidget->opacity > 0.f) {
+			glowWidget->shimmerPhaseRad += float(dt * shimmerRateRadPerSec * spinDirection);
+			if (std::fabs(glowWidget->shimmerPhaseRad) > float(M_PI) * 2.f) {
+				glowWidget->shimmerPhaseRad = std::fmod(glowWidget->shimmerPhaseRad, float(M_PI) * 2.f);
+			}
+			glowWidget->pulse = 0.55f + 0.45f * std::sin(float(nowSec) * float(M_PI));
 		}
 	}
 

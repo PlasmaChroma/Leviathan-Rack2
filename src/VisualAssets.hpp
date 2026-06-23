@@ -55,14 +55,27 @@ struct TorxScrew : TransparentWidget {
 	void draw(const DrawArgs& args) override;
 };
 
+struct GlowShimmerWidget : TransparentWidget {
+	uint8_t glowR = 0xa8;
+	uint8_t glowG = 0x62;
+	uint8_t glowB = 0xff;
+	float shimmerPhaseRad = 0.f;
+	float opacity = 0.f;
+	float pulse = 1.f;
+
+	void draw(const DrawArgs& args) override;
+};
+
 struct HoverOrbScrew : OpaqueWidget {
 	widget::FramebufferWidget* rotatingFb = nullptr;
+	GlowShimmerWidget* glowWidget = nullptr;
 	float rotationRad = 0.f;
 	float spinDirection = 1.f;
 	double lastSpinUpdateSec = 0.0;
 	bool hovered = false;
 
-	HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection = 1.f);
+	HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection, NVGcolor glowColor);
+
 	void onEnter(const event::Enter& e) override;
 	void onLeave(const event::Leave& e) override;
 	void step() override;
