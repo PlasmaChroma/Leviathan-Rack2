@@ -55,6 +55,27 @@ struct TorxScrew : TransparentWidget {
 	void draw(const DrawArgs& args) override;
 };
 
+struct HoverOrbScrew : TransparentWidget {
+	widget::FramebufferWidget* rotatingFb = nullptr;
+	float rotationRad = 0.f;
+	float spinDirection = 1.f;
+	double lastSpinUpdateSec = 0.0;
+	bool hovered = false;
+
+	HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection = 1.f);
+	void onEnter(const event::Enter& e) override;
+	void onLeave(const event::Leave& e) override;
+	void step() override;
+};
+
+struct PurpleOrbScrew : HoverOrbScrew {
+	PurpleOrbScrew();
+};
+
+struct CyanOrbScrew : HoverOrbScrew {
+	CyanOrbScrew();
+};
+
 template <typename TBase = GrayModuleLightWidget>
 struct TLeviathanCyanPurpleLight : TBase {
 	TLeviathanCyanPurpleLight() {

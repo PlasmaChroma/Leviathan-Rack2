@@ -353,6 +353,103 @@ uint64_t eclipseShadowDrawCount() {
 
 namespace {
 
+struct OrbScrewRasterLayer : TransparentWidget {
+	std::string path;
+	const float* rotationRad = nullptr;
+	float imageSizePx = 0.f;
+
+	explicit OrbScrewRasterLayer(std::string path)
+		: path(std::move(path)) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (path.empty() || imageSizePx <= 0.f || box.size.x <= 0.f || box.size.y <= 0.f) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(pluginInstance, path);
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+
+		int imageW = 0;
+		int imageH = 0;
+		nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
+		if (imageW <= 0 || imageH <= 0) {
+			return;
+		}
+
+		const float aspect = float(imageW) / float(imageH);
+		float drawW = imageSizePx;
+		float drawH = drawW / aspect;
+		if (drawH > imageSizePx) {
+			drawH = imageSizePx;
+			drawW = drawH * aspect;
+		}
+		const Vec center = box.size.mult(0.5f);
+		const float rotation = rotationRad ? *rotationRad : 0.f;
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		if (std::fabs(rotation) > 1e-6f) {
+			nvgRotate(args.vg, rotation);
+		}
+		NVGpaint paint = nvgImagePattern(
+			args.vg,
+			-0.5f * drawW,
+			-0.5f * drawH,
+			drawW,
+			drawH,
+			0.f,
+			imageHandle,
+			1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, -0.5f * drawW, -0.5f * drawH, drawW, drawH);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+struct OrbScrewStaticLayer : TransparentWidget {
+	std::string underlayPath;
+	float imageSizePx = 0.f;
+
+	void draw(const DrawArgs& args) override {
+		if (imageSizePx <= 0.f || box.size.x <= 0.f || box.size.y <= 0.f) {
+			return;
+		}
+		const Vec center = box.size.mult(0.5f);
+		const float radius = 0.5f * imageSizePx;
+		const Vec shadowCenter = center.plus(Vec(0.55f, 0.75f));
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, shadowCenter.x, shadowCenter.y);
+		nvgScale(args.vg, 1.f, 0.80f);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, 0.f, 0.f, radius * 1.10f);
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg,
+			0.f,
+			0.f,
+			radius * 0.40f,
+			radius * 1.10f,
+			nvgRGBA(0, 0, 0, 155),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+
+		OrbScrewRasterLayer underlay(underlayPath);
+		underlay.box.size = box.size;
+		underlay.imageSizePx = imageSizePx;
+		underlay.draw(args);
+	}
+};
+
 void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
 	if (!port) {
 		return;
@@ -826,18 +923,26 @@ struct MovingSliderTeethRail : widget::Widget {
 				centerTrackRightPx > centerTrackLeftPx &&
 				centerTrackRightPx < box.size.x) {
 			const float halfHeight = 0.5f * box.size.y;
-			// Upper half: remove protrusions left of the fixed slider slot.
+			// Draw the central housing once at full height. Splitting it into
+			// two scissored passes creates a visible horizontal raster seam.
 			drawRail(
 				centerTrackLeftPx,
 				0.f,
-				box.size.x - centerTrackLeftPx,
+				centerTrackRightPx - centerTrackLeftPx,
+				box.size.y
+			);
+			// Keep only the upper-right protrusions.
+			drawRail(
+				centerTrackRightPx,
+				0.f,
+				box.size.x - centerTrackRightPx,
 				halfHeight
 			);
-			// Lower half: remove protrusions right of the fixed slider slot.
+			// Keep only the lower-left protrusions.
 			drawRail(
 				0.f,
 				halfHeight,
-				centerTrackRightPx,
+				centerTrackLeftPx,
 				box.size.y - halfHeight
 			);
 		}
@@ -910,106 +1015,6 @@ struct SliderRackGear : widget::Widget {
 	}
 };
 
-struct SliderRasterOrb : widget::Widget {
-	app::SvgSlider* slider = nullptr;
-	std::string imagePath;
-	std::string underlayPath;
-	float rotationDirection = 1.f;
-	float pitchRadiusPx = 1.f;
-	float restAngleRad = 0.f;
-	float imageSizePx = 0.f;
-
-	void drawShadow(const DrawArgs& args) {
-		const Vec center = box.size.mult(0.5f).plus(Vec(0.45f, 0.65f));
-		const float radius = 0.5f * imageSizePx;
-
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, center.x, center.y);
-		nvgScale(args.vg, 1.f, 0.82f);
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, radius * 1.08f);
-		nvgFillPaint(args.vg, nvgRadialGradient(
-			args.vg,
-			0.f,
-			0.f,
-			radius * 0.38f,
-			radius * 1.08f,
-			nvgRGBA(0, 0, 0, 150),
-			nvgRGBA(0, 0, 0, 0)));
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
-	}
-
-	void drawRasterLayer(const DrawArgs& args, const std::string& path, float rotationRad) {
-		if (path.empty()) {
-			return;
-		}
-		const std::string fullPath = asset::plugin(pluginInstance, path);
-		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-		if (!image || image->handle < 0) {
-			return;
-		}
-		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
-		if (imageHandle < 0) {
-			imageHandle = image->handle;
-		}
-
-		int imageW = 0;
-		int imageH = 0;
-		nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
-		if (imageW <= 0 || imageH <= 0) {
-			return;
-		}
-
-		const float imageAspect = float(imageW) / float(imageH);
-		float drawW = imageSizePx;
-		float drawH = drawW / imageAspect;
-		if (drawH > imageSizePx) {
-			drawH = imageSizePx;
-			drawW = drawH * imageAspect;
-		}
-		const Vec center = box.size.mult(0.5f);
-
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, center.x, center.y);
-		if (std::fabs(rotationRad) > 1e-6f) {
-			nvgRotate(args.vg, rotationRad);
-		}
-		NVGpaint paint = nvgImagePattern(
-			args.vg,
-			-0.5f * drawW,
-			-0.5f * drawH,
-			drawW,
-			drawH,
-			0.f,
-			imageHandle,
-			1.f);
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, -0.5f * drawW, -0.5f * drawH, drawW, drawH);
-		nvgFillPaint(args.vg, paint);
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!slider || !slider->handle || imagePath.empty() ||
-				box.size.x <= 0.f || box.size.y <= 0.f ||
-				imageSizePx <= 0.f || pitchRadiusPx <= 0.f) {
-			return;
-		}
-
-		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
-		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
-		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
-
-		drawShadow(args);
-		drawRasterLayer(args, underlayPath, 0.f);
-		drawRasterLayer(args, imagePath, angleRad);
-	}
-};
-
 bool isInsideSliderControlArea(Vec pos, Vec widgetSize) {
 	constexpr float controlWidthPx = 12.f;
 	constexpr float controlHeightPx = 80.f;
@@ -1048,6 +1053,78 @@ void TorxScrew::draw(const DrawArgs& args) {
 	nvgTranslate(args.vg, -svgCenter.x, -svgCenter.y);
 	Widget::draw(args);
 	nvgRestore(args.vg);
+}
+
+HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, float spinDirection) {
+	constexpr float orbSizePx = 13.5f;
+	box.size = Vec(RACK_GRID_WIDTH, RACK_GRID_WIDTH);
+	this->spinDirection = spinDirection;
+
+	auto* staticFb = new widget::FramebufferWidget;
+	staticFb->dirtyOnSubpixelChange = false;
+	staticFb->box.size = box.size;
+	auto* staticLayer = new OrbScrewStaticLayer;
+	staticLayer->underlayPath = underlayPath ? underlayPath : "";
+	staticLayer->imageSizePx = orbSizePx;
+	staticLayer->box.size = box.size;
+	staticFb->addChild(staticLayer);
+	addChild(staticFb);
+
+	rotatingFb = new widget::FramebufferWidget;
+	rotatingFb->dirtyOnSubpixelChange = false;
+	rotatingFb->box.size = box.size;
+	auto* orbLayer = new OrbScrewRasterLayer(orbPath ? orbPath : "");
+	orbLayer->rotationRad = &rotationRad;
+	orbLayer->imageSizePx = orbSizePx;
+	orbLayer->box.size = box.size;
+	rotatingFb->addChild(orbLayer);
+	addChild(rotatingFb);
+
+	lastSpinUpdateSec = system::getTime();
+}
+
+PurpleOrbScrew::PurpleOrbScrew()
+	: HoverOrbScrew("res/icon/purple_orb.png", "res/icon/purple_underlay.png", -1.f) {
+}
+
+CyanOrbScrew::CyanOrbScrew()
+	: HoverOrbScrew("res/icon/cyan_orb.png", "res/icon/cyan_underlay.png", 1.f) {
+}
+
+void HoverOrbScrew::onEnter(const event::Enter& e) {
+	hovered = true;
+	TransparentWidget::onEnter(e);
+}
+
+void HoverOrbScrew::onLeave(const event::Leave& e) {
+	hovered = false;
+	TransparentWidget::onLeave(e);
+}
+
+void HoverOrbScrew::step() {
+	const double nowSec = system::getTime();
+	const double dt = std::max(0.0, nowSec - lastSpinUpdateSec);
+	lastSpinUpdateSec = nowSec;
+	const float oldRotationRad = rotationRad;
+	constexpr float hoverSpinRateRadPerSec = 0.333f;
+
+	if (hovered) {
+		rotationRad += float(dt * hoverSpinRateRadPerSec * spinDirection);
+		if (std::fabs(rotationRad) > float(M_PI) * 2.f) {
+			rotationRad = std::fmod(rotationRad, float(M_PI) * 2.f);
+		}
+	}
+	else {
+		rotationRad *= 0.72f;
+		if (std::fabs(rotationRad) < 1e-4f) {
+			rotationRad = 0.f;
+		}
+	}
+
+	if (rotatingFb && std::fabs(rotationRad - oldRotationRad) > 1e-6f) {
+		rotatingFb->setDirty();
+	}
+	TransparentWidget::step();
 }
 
 LeviathanSlider::LeviathanSlider() {
@@ -1175,23 +1252,11 @@ LuminSlider::LuminSlider() {
 	constexpr float railClipHeightPx = 74.7691385f;
 	constexpr float railViewBoxWidth = 24.f;
 	constexpr float railViewBoxHeight = 240.f;
-	constexpr float railToothPitchInViewBox = 2.f;
 	constexpr float railDrawHeightPx = 190.f;
 	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
 	constexpr float railVisibleWidthPx = railDrawWidthPx;
 	constexpr float fixedHousingLeftPx = 8.3191932f;
 	constexpr float fixedHousingRightPx = 16.2477368f;
-	constexpr float gearSizePx = 10.5f;
-	constexpr float gearToothCount = 20.f;
-	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
-	constexpr float gearRotationSpeedTrim = 1.11f;
-	constexpr float gearPitchRadiusPx =
-		(railToothPitchPx * gearToothCount / (2.f * float(M_PI) * gearRotationSpeedTrim));
-	constexpr float bottomGearPhaseOffsetRad = (float(M_PI) / gearToothCount) * -1.5;
-	constexpr float leftGearCenterXPx = 5.8661845f;
-	constexpr float rightGearCenterXPx = 18.7720951f;
-	constexpr float topGearCenterYPx = 22.f;
-	constexpr float bottomGearCenterYPx = anchorHeightPx - topGearCenterYPx;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderTrack.svg"));
 	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderHandle.svg"));
@@ -1214,6 +1279,17 @@ LuminSlider::LuminSlider() {
 			0.5f * (anchorHeightPx - background->box.size.y)
 		);
 	}
+	if (fb && background) {
+		// The fixed housing does not need to be re-rasterized when the slider
+		// value changes. Keep it in a nested framebuffer so the mechanical
+		// framebuffer only composites its cached texture.
+		fb->removeChild(background);
+		auto* fixedBackgroundFb = new widget::FramebufferWidget;
+		fixedBackgroundFb->dirtyOnSubpixelChange = false;
+		fixedBackgroundFb->box.size = box.size;
+		fixedBackgroundFb->addChild(background);
+		fb->addChildBottom(fixedBackgroundFb);
+	}
 	if (fb && handle) {
 		auto* teethRail = new MovingSliderTeethRail;
 		teethRail->slider = this;
@@ -1231,42 +1307,6 @@ LuminSlider::LuminSlider() {
 		teethRail->centerTrackRightPx =
 			fixedHousingRightPx - teethRail->box.pos.x;
 		fb->addChildBelow(teethRail, handle);
-
-		auto addPhaseOrb = [&](
-			const char* imagePath,
-			const char* underlayPath,
-			Vec center,
-			float rotationDirection,
-			float restAngleRad
-		) {
-			constexpr float shadowBleedPx = 4.f;
-			auto* orb = new SliderRasterOrb;
-			orb->slider = this;
-			orb->imagePath = imagePath ? imagePath : "";
-			orb->underlayPath = underlayPath ? underlayPath : "";
-			orb->rotationDirection = rotationDirection;
-			orb->pitchRadiusPx = gearPitchRadiusPx;
-			orb->restAngleRad = restAngleRad;
-			orb->imageSizePx = gearSizePx;
-			const float widgetSizePx = gearSizePx + shadowBleedPx;
-			orb->box.pos = center.minus(Vec(0.5f * widgetSizePx, 0.5f * widgetSizePx));
-			orb->box.size = Vec(widgetSizePx, widgetSizePx);
-			fb->addChildBelow(orb, handle);
-		};
-		addPhaseOrb(
-			"res/icon/cyan_orb.png",
-			"res/icon/cyan_underlay.png",
-			Vec(leftGearCenterXPx, topGearCenterYPx),
-			1.f,
-			0.f
-		);
-		addPhaseOrb(
-			"res/icon/purple_orb.png",
-			"res/icon/purple_underlay.png",
-			Vec(rightGearCenterXPx, bottomGearCenterYPx),
-			-1.f,
-			float(M_PI) + bottomGearPhaseOffsetRad
-		);
 	}
 	setHandlePosCentered(
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
