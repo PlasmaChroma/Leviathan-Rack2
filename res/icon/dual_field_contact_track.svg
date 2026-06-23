@@ -1,111 +1,136 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24mm"
-  height="240mm"
-  viewBox="0 0 24 240"
-  version="1.1">
-  <title>Leviathan Dual Field Contact Slider Track</title>
-  <desc>NanoSVG-friendly cyan and violet field-contact rail.</desc>
-
-  <defs>
-    <linearGradient id="trench" x1="0" y1="0" x2="0" y2="240" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#091018"/>
-      <stop offset="0.48" stop-color="#010307"/>
-      <stop offset="1" stop-color="#0b1220"/>
+   width="24mm"
+   height="240mm"
+   viewBox="0 0 24 240"
+   version="1.1"
+   id="svg15"
+   sodipodi:docname="dual_field_contact_track.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview15"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="1.8319099"
+     inkscape:cx="18.832804"
+     inkscape:cy="241.0053"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg15" />
+  <title
+     id="title1">Leviathan Dual Field Contact Slider Track</title>
+  <desc
+     id="desc1">NanoSVG-friendly cyan and violet field-contact rail.</desc>
+  <defs
+     id="defs9">
+    <linearGradient
+       id="trench"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="240"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#091018"
+         id="stop1" />
+      <stop
+         offset="0.48"
+         stop-color="#010307"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#0b1220"
+         id="stop3" />
     </linearGradient>
-    <linearGradient id="spine" x1="10.45" y1="0" x2="13.55" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#17233a"/>
-      <stop offset="0.50" stop-color="#030611"/>
-      <stop offset="1" stop-color="#28425d"/>
+    <linearGradient
+       id="spine"
+       x1="10.45"
+       y1="0"
+       x2="13.55"
+       y2="0"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#17233a"
+         id="stop4" />
+      <stop
+         offset="0.50"
+         stop-color="#030611"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#28425d"
+         id="stop6" />
     </linearGradient>
-    <linearGradient id="cyanViolet" x1="0" y1="0" x2="0" y2="240" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3ff6ff"/>
-      <stop offset="0.52" stop-color="#7f6cff"/>
-      <stop offset="1" stop-color="#38f0ff"/>
+    <linearGradient
+       id="cyanViolet"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="240"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#3ff6ff"
+         id="stop7" />
+      <stop
+         offset="0.52"
+         stop-color="#7f6cff"
+         id="stop8" />
+      <stop
+         offset="1"
+         stop-color="#38f0ff"
+         id="stop9" />
     </linearGradient>
   </defs>
-
-  <rect x="6.55" y="4.50" width="10.90" height="231.00" rx="1.20" fill="#000000" opacity="0.58"/>
-  <rect x="7.20" y="5.10" width="9.60" height="229.80" rx="0.95" fill="url(#trench)" stroke="#050a12" stroke-width="0.70"/>
-  <rect x="10.60" y="5.85" width="2.80" height="228.30" rx="0.45" fill="url(#spine)" stroke="#0b1220" stroke-width="0.35"/>
-  <rect x="9.35" y="7.50" width="0.62" height="225.00" rx="0.31" fill="#3df4ff" opacity="0.30"/>
-  <rect x="14.03" y="7.50" width="0.62" height="225.00" rx="0.31" fill="#9a6cff" opacity="0.28"/>
-  <rect x="11.52" y="9.50" width="0.96" height="221.00" rx="0.48" fill="url(#cyanViolet)" opacity="0.28"/>
-
+  <rect
+     x="10.6"
+     y="5.8499999"
+     width="2.8"
+     height="228.3"
+     rx="0.44999999"
+     fill="url(#spine)"
+     stroke="#0b1220"
+     stroke-width="0.35"
+     id="rect11"
+     style="display:inline" />
+  <rect
+     x="11.52"
+     y="9.50"
+     width="0.96"
+     height="221.00"
+     rx="0.48"
+     fill="url(#cyanViolet)"
+     opacity="0.28"
+     id="rect14" />
   <path
-    d="
-      M 3.60,8.50 H 5.40
-      M 4.00,16.19 H 5.40
-      M 4.00,23.88 H 5.40
-      M 3.60,31.57 H 5.40
-      M 4.00,39.26 H 5.40
-      M 4.00,46.95 H 5.40
-      M 3.60,54.64 H 5.40
-      M 4.00,62.33 H 5.40
-      M 4.00,70.02 H 5.40
-      M 3.60,77.71 H 5.40
-      M 4.00,85.40 H 5.40
-      M 4.00,93.09 H 5.40
-      M 3.60,100.78 H 5.40
-      M 4.00,108.47 H 5.40
-      M 4.00,116.16 H 5.40
-      M 3.60,123.85 H 5.40
-      M 4.00,131.54 H 5.40
-      M 4.00,139.23 H 5.40
-      M 3.60,146.92 H 5.40
-      M 4.00,154.61 H 5.40
-      M 4.00,162.30 H 5.40
-      M 3.60,169.99 H 5.40
-      M 4.00,177.68 H 5.40
-      M 4.00,185.37 H 5.40
-      M 3.60,193.06 H 5.40
-      M 4.00,200.75 H 5.40
-      M 4.00,208.44 H 5.40
-      M 3.60,216.13 H 5.40
-      M 4.00,223.82 H 5.40
-      M 4.00,231.51 H 5.40"
-    fill="none"
-    stroke="#9b6cff"
-    stroke-width="1.20"
-    stroke-linecap="round"
-    opacity="0.48"/>
-
+     d="M 4.6,8.5 H 6.4 M 5,16.19 H 6.4 M 5,23.88 H 6.4 M 4.6,31.57 H 6.4 M 5,39.26 H 6.4 M 5,46.95 H 6.4 M 4.6,54.64 H 6.4 M 5,62.33 H 6.4 M 5,70.02 H 6.4 M 4.6,77.71 H 6.4 M 5,85.4 H 6.4 M 5,93.09 h 1.4 m -1.8,7.69 H 6.4 M 5,108.47 H 6.4 M 5,116.16 h 1.4 m -1.8,7.69 H 6.4 M 5,131.54 H 6.4 M 5,139.23 h 1.4 m -1.8,7.69 H 6.4 M 5,154.61 H 6.4 M 5,162.3 h 1.4 m -1.8,7.69 H 6.4 M 5,177.68 H 6.4 M 5,185.37 h 1.4 m -1.8,7.69 H 6.4 M 5,200.75 H 6.4 M 5,208.44 h 1.4 m -1.8,7.69 H 6.4 M 5,223.82 H 6.4 M 5,231.51 h 1.4"
+     fill="none"
+     stroke="#9b6cff"
+     stroke-width="1.2"
+     stroke-linecap="round"
+     opacity="0.48"
+     id="path14" />
   <path
-    d="
-      M 18.60,8.50 H 20.40
-      M 18.60,16.19 H 20.00
-      M 18.60,23.88 H 20.00
-      M 18.60,31.57 H 20.40
-      M 18.60,39.26 H 20.00
-      M 18.60,46.95 H 20.00
-      M 18.60,54.64 H 20.40
-      M 18.60,62.33 H 20.00
-      M 18.60,70.02 H 20.00
-      M 18.60,77.71 H 20.40
-      M 18.60,85.40 H 20.00
-      M 18.60,93.09 H 20.00
-      M 18.60,100.78 H 20.40
-      M 18.60,108.47 H 20.00
-      M 18.60,116.16 H 20.00
-      M 18.60,123.85 H 20.40
-      M 18.60,131.54 H 20.00
-      M 18.60,139.23 H 20.00
-      M 18.60,146.92 H 20.40
-      M 18.60,154.61 H 20.00
-      M 18.60,162.30 H 20.00
-      M 18.60,169.99 H 20.40
-      M 18.60,177.68 H 20.00
-      M 18.60,185.37 H 20.00
-      M 18.60,193.06 H 20.40
-      M 18.60,200.75 H 20.00
-      M 18.60,208.44 H 20.00
-      M 18.60,216.13 H 20.40
-      M 18.60,223.82 H 20.00
-      M 18.60,231.51 H 20.00"
-    fill="none"
-    stroke="#42f2ff"
-    stroke-width="1.20"
-    stroke-linecap="round"
-    opacity="0.52"/>
+     d="m 17.6,8.5 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 M 17.6,85.4 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19 m -1.4,7.69 h 1.8 m -1.8,7.69 H 19 m -1.4,7.69 H 19"
+     fill="none"
+     stroke="#42f2ff"
+     stroke-width="1.2"
+     stroke-linecap="round"
+     opacity="0.52"
+     id="path15" />
 </svg>
