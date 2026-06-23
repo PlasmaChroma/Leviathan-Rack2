@@ -248,6 +248,14 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 
 } // namespace
 
+int loadPluginRasterMipmapHandle(
+	NVGcontext* vg,
+	std::shared_ptr<window::Image> lifecycleImage,
+	const std::string& fullPath
+) {
+	return loadRasterMipmapHandle(vg, std::move(lifecycleImage), fullPath);
+}
+
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
 	return createSvgRect3DEffectWidget(rectMm, nvgRGB(87, 64, 191));
 }
@@ -773,6 +781,9 @@ struct MovingSliderTeethRail : widget::Widget {
 	std::shared_ptr<window::Svg> railSvg;
 	float drawWidthPx = 0.f;
 	float drawHeightPx = 0.f;
+	bool clipOpposingQuadrants = false;
+	float centerTrackLeftPx = 0.f;
+	float centerTrackRightPx = 0.f;
 
 	void draw(const DrawArgs& args) override {
 		if (!slider || !slider->handle || !railSvg || !railSvg->handle ||
@@ -798,12 +809,41 @@ struct MovingSliderTeethRail : widget::Widget {
 		const float railY = 0.5f * (box.size.y - drawHeightPx) + handleOffsetY;
 		const float railX = 0.5f * (box.size.x - drawWidthPx);
 
-		nvgSave(args.vg);
-		nvgIntersectScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgTranslate(args.vg, railX, railY);
-		nvgScale(args.vg, svgScaleX, svgScaleY);
-		railSvg->draw(args.vg);
-		nvgRestore(args.vg);
+		auto drawRail = [&](float clipX, float clipY, float clipWidth, float clipHeight) {
+			if (clipWidth <= 0.f || clipHeight <= 0.f) {
+				return;
+			}
+			nvgSave(args.vg);
+			nvgIntersectScissor(args.vg, clipX, clipY, clipWidth, clipHeight);
+			nvgTranslate(args.vg, railX, railY);
+			nvgScale(args.vg, svgScaleX, svgScaleY);
+			railSvg->draw(args.vg);
+			nvgRestore(args.vg);
+		};
+
+		if (clipOpposingQuadrants &&
+				centerTrackLeftPx > 0.f &&
+				centerTrackRightPx > centerTrackLeftPx &&
+				centerTrackRightPx < box.size.x) {
+			const float halfHeight = 0.5f * box.size.y;
+			// Upper half: remove protrusions left of the fixed slider slot.
+			drawRail(
+				centerTrackLeftPx,
+				0.f,
+				box.size.x - centerTrackLeftPx,
+				halfHeight
+			);
+			// Lower half: remove protrusions right of the fixed slider slot.
+			drawRail(
+				0.f,
+				halfHeight,
+				centerTrackRightPx,
+				box.size.y - halfHeight
+			);
+		}
+		else {
+			drawRail(0.f, 0.f, box.size.x, box.size.y);
+		}
 	}
 };
 
@@ -867,6 +907,96 @@ struct SliderRackGear : widget::Widget {
 
 		drawSvg(shadowSvg, Vec(0.4f, 0.45f), 0.6f, true);
 		drawSvg(gearSvg, Vec(), 1.f, false);
+	}
+};
+
+struct SliderRasterOrb : widget::Widget {
+	app::SvgSlider* slider = nullptr;
+	std::string imagePath;
+	float rotationDirection = 1.f;
+	float pitchRadiusPx = 1.f;
+	float restAngleRad = 0.f;
+	float imageSizePx = 0.f;
+
+	void drawShadow(const DrawArgs& args) {
+		const Vec center = box.size.mult(0.5f).plus(Vec(0.45f, 0.65f));
+		const float radius = 0.5f * imageSizePx;
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgScale(args.vg, 1.f, 0.82f);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, 0.f, 0.f, radius * 1.08f);
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg,
+			0.f,
+			0.f,
+			radius * 0.38f,
+			radius * 1.08f,
+			nvgRGBA(0, 0, 0, 150),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!slider || !slider->handle || imagePath.empty() ||
+				box.size.x <= 0.f || box.size.y <= 0.f ||
+				imageSizePx <= 0.f || pitchRadiusPx <= 0.f) {
+			return;
+		}
+
+		const std::string fullPath = asset::plugin(pluginInstance, imagePath);
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+
+		int imageW = 0;
+		int imageH = 0;
+		nvgImageSize(args.vg, imageHandle, &imageW, &imageH);
+		if (imageW <= 0 || imageH <= 0) {
+			return;
+		}
+
+		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
+		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
+		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
+
+		const float imageAspect = float(imageW) / float(imageH);
+		float drawW = imageSizePx;
+		float drawH = drawW / imageAspect;
+		if (drawH > imageSizePx) {
+			drawH = imageSizePx;
+			drawW = drawH * imageAspect;
+		}
+		const Vec center = box.size.mult(0.5f);
+
+		drawShadow(args);
+
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgRotate(args.vg, angleRad);
+		NVGpaint paint = nvgImagePattern(
+			args.vg,
+			-0.5f * drawW,
+			-0.5f * drawH,
+			drawW,
+			drawH,
+			0.f,
+			imageHandle,
+			1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, -0.5f * drawW, -0.5f * drawH, drawW, drawH);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
 	}
 };
 
@@ -1039,6 +1169,8 @@ LuminSlider::LuminSlider() {
 	constexpr float railDrawHeightPx = 190.f;
 	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
 	constexpr float railVisibleWidthPx = railDrawWidthPx;
+	constexpr float fixedSlotLeftPx = 8.8575309f;
+	constexpr float fixedSlotRightPx = 15.7807473f;
 	constexpr float gearSizePx = 10.5f;
 	constexpr float gearToothCount = 20.f;
 	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
@@ -1083,28 +1215,35 @@ LuminSlider::LuminSlider() {
 		teethRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
 		teethRail->drawWidthPx = railDrawWidthPx;
 		teethRail->drawHeightPx = railDrawHeightPx;
+		teethRail->clipOpposingQuadrants = true;
+		teethRail->centerTrackLeftPx =
+			fixedSlotLeftPx - teethRail->box.pos.x;
+		teethRail->centerTrackRightPx =
+			fixedSlotRightPx - teethRail->box.pos.x;
 		fb->addChildBelow(teethRail, handle);
 
-		const std::shared_ptr<window::Svg> gearSvg =
-			visual_assets::loadPluginSvgCached("res/icon/phase_rotor_cyan_violet.svg");
-		auto addRackGear = [&](Vec center, float rotationDirection, float restAngleRad) {
-			auto* gear = new SliderRackGear;
-			gear->slider = this;
-			gear->gearSvg = gearSvg;
-			gear->shadowSvg = gearSvg;
-			gear->rotationDirection = rotationDirection;
-			gear->pitchRadiusPx = gearPitchRadiusPx;
-			gear->restAngleRad = restAngleRad;
-			gear->box.pos = center.minus(Vec(0.5f * gearSizePx, 0.5f * gearSizePx));
-			gear->box.size = Vec(gearSizePx, gearSizePx);
-			fb->addChildBelow(gear, handle);
+		auto addPhaseOrb = [&](const char* imagePath, Vec center, float rotationDirection, float restAngleRad) {
+			constexpr float shadowBleedPx = 4.f;
+			auto* orb = new SliderRasterOrb;
+			orb->slider = this;
+			orb->imagePath = imagePath ? imagePath : "";
+			orb->rotationDirection = rotationDirection;
+			orb->pitchRadiusPx = gearPitchRadiusPx;
+			orb->restAngleRad = restAngleRad;
+			orb->imageSizePx = gearSizePx;
+			const float widgetSizePx = gearSizePx + shadowBleedPx;
+			orb->box.pos = center.minus(Vec(0.5f * widgetSizePx, 0.5f * widgetSizePx));
+			orb->box.size = Vec(widgetSizePx, widgetSizePx);
+			fb->addChildBelow(orb, handle);
 		};
-		addRackGear(
+		addPhaseOrb(
+			"res/icon/cyan_orb.png",
 			Vec(leftGearCenterXPx, topGearCenterYPx),
 			1.f,
 			0.f
 		);
-		addRackGear(
+		addPhaseOrb(
+			"res/icon/purple_orb.png",
 			Vec(rightGearCenterXPx, bottomGearCenterYPx),
 			-1.f,
 			float(M_PI) + bottomGearPhaseOffsetRad
