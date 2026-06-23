@@ -1169,8 +1169,8 @@ LuminSlider::LuminSlider() {
 	constexpr float railDrawHeightPx = 190.f;
 	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
 	constexpr float railVisibleWidthPx = railDrawWidthPx;
-	constexpr float fixedSlotLeftPx = 8.8575309f;
-	constexpr float fixedSlotRightPx = 15.7807473f;
+	constexpr float fixedHousingLeftPx = 8.3191932f;
+	constexpr float fixedHousingRightPx = 16.2477368f;
 	constexpr float gearSizePx = 10.5f;
 	constexpr float gearToothCount = 20.f;
 	constexpr float railToothPitchPx = railToothPitchInViewBox * railDrawHeightPx / railViewBoxHeight;
@@ -1217,9 +1217,9 @@ LuminSlider::LuminSlider() {
 		teethRail->drawHeightPx = railDrawHeightPx;
 		teethRail->clipOpposingQuadrants = true;
 		teethRail->centerTrackLeftPx =
-			fixedSlotLeftPx - teethRail->box.pos.x;
+			fixedHousingLeftPx - teethRail->box.pos.x;
 		teethRail->centerTrackRightPx =
-			fixedSlotRightPx - teethRail->box.pos.x;
+			fixedHousingRightPx - teethRail->box.pos.x;
 		fb->addChildBelow(teethRail, handle);
 
 		auto addPhaseOrb = [&](const char* imagePath, Vec center, float rotationDirection, float restAngleRad) {
