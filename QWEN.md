@@ -53,7 +53,7 @@ Do not combine categories unless the user explicitly asks for an integrated chan
 
 ### Released Module Safety
 
-Integral Flux, Proc, and Temporal Deck are released modules. For these:
+Integral Flux, Proc, Temporal Deck, TD.Scope, and Undertow are released modules. For these:
 
 - Do not reorder existing `ParamIds`, `InputIds`, `OutputIds`, or `LightIds`.
 - Do not rename model slugs, module IDs, asset paths, or JSON keys.
@@ -100,16 +100,16 @@ The Leviathan plugin suite is a collection of VCV Rack 2 modules focused on expe
 - **Integral Flux** - Dual slope generator with variable curve slew, attenuverters, signal mixing, and full audio-rate fidelity
 - **Proc** - Generator, slew limiter, and envelope follower
 - **Temporal Deck** - Virtual turntable with modern hybrid control
+- **TD.Scope** - Expander: Waveform display for Temporal Deck
+- **Undertow** - Compact sub-harmonic oscillator
 
 **Current Unreleased Modules:**
-- **TD.Scope** - Expander: Waveform display for Temporal Deck
 - **Crownstep** - Checkers-driven sequencer (game rules: checkers, chess, Othello)
 - **Bifurx** - Dual-peak multimode filter with live response and spectrum preview
 - **Wyrm** - Custom drawable wavetable oscillator with FM, sync, and fold
 - **Sil** - Automatic mastering module
 - **Chronomaw** - Rack-native eight-output clock and modulation engine
 - **Bulkhead** - Spatial room reverb
-- **Undertow** - Compact sub-harmonic oscillator
 
 ---
 
@@ -211,7 +211,7 @@ The Leviathan plugin suite is a collection of VCV Rack 2 modules focused on expe
 | `BulkheadGeometry.cpp` / `BulkheadGeometry.hpp` | Room geometry and wall reflection calculations |
 | `BulkheadWidget.cpp` | UI widget with interactive wall layout |
 
-### Undertow (Unreleased)
+### Undertow (Released)
 | File | Purpose |
 |------|---------|
 | `Undertow.hpp` / `Undertow.cpp` | Sub-harmonic oscillator |
@@ -221,7 +221,7 @@ The Leviathan plugin suite is a collection of VCV Rack 2 modules focused on expe
 |------|---------|
 | `Sil.cpp` | Automatic mastering |
 
-### TDScope (Unreleased - Expander)
+### TDScope (Released - Expander)
 | File | Purpose |
 |------|---------|
 | `TDScope.hpp` | Temporal Deck expander waveform display |
@@ -652,7 +652,7 @@ Logs panel and anchor loading times to INFO when debug enabled.
 
 ## Release Compatibility Considerations
 
-**Released Modules (Integral Flux, Proc, Temporal Deck):**
+**Released Modules (Integral Flux, Proc, Temporal Deck, TD.Scope, Undertow):
 Changes must preserve backward compatibility:
 - Parameter/input/output/light IDs must not be reordered
 - Patch state serialization format must remain stable
