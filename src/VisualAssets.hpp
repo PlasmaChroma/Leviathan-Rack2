@@ -55,7 +55,7 @@ struct TorxScrew : TransparentWidget {
 	void draw(const DrawArgs& args) override;
 };
 
-struct HoverOrbScrew : TransparentWidget {
+struct HoverOrbScrew : OpaqueWidget {
 	widget::FramebufferWidget* rotatingFb = nullptr;
 	float rotationRad = 0.f;
 	float spinDirection = 1.f;

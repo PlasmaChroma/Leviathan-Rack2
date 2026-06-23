@@ -1540,9 +1540,9 @@ struct ProcWidget : ModuleWidget {
 		setPanel(createPanel(panelPath));
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<TorxScrew>(Vec(0.f, 0)));
-		//addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<TorxScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<PurpleOrbScrew>(Vec(0.f, 0)));
+		//addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		visual_assets::addSvgRect3DEffectWidgets(this, panelPath);
 

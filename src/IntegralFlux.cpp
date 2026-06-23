@@ -1860,10 +1860,10 @@ struct IntegralFluxWidget : ModuleWidget {
         // use EclipseKnob for the attenuverter knobs
         // use TL1105 for the cycle buttons
 
-		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<PurpleOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<PurpleOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		Vec cycle1ButtonPos(31.875f, 20.938f);
 		Vec cycle4ButtonPos(69.552f, 20.938f);

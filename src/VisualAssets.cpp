@@ -881,6 +881,10 @@ struct MovingSliderTeethRail : widget::Widget {
 	bool clipOpposingQuadrants = false;
 	float centerTrackLeftPx = 0.f;
 	float centerTrackRightPx = 0.f;
+	float upperProtrusionTopPx = 0.f;
+	float upperProtrusionBottomPx = 0.f;
+	float lowerProtrusionTopPx = 0.f;
+	float lowerProtrusionBottomPx = 0.f;
 
 	void draw(const DrawArgs& args) override {
 		if (!slider || !slider->handle || !railSvg || !railSvg->handle ||
@@ -921,8 +925,12 @@ struct MovingSliderTeethRail : widget::Widget {
 		if (clipOpposingQuadrants &&
 				centerTrackLeftPx > 0.f &&
 				centerTrackRightPx > centerTrackLeftPx &&
-				centerTrackRightPx < box.size.x) {
-			const float halfHeight = 0.5f * box.size.y;
+				centerTrackRightPx < box.size.x &&
+				upperProtrusionTopPx >= 0.f &&
+				upperProtrusionBottomPx > upperProtrusionTopPx &&
+				lowerProtrusionTopPx > upperProtrusionBottomPx &&
+				lowerProtrusionBottomPx > lowerProtrusionTopPx &&
+				lowerProtrusionBottomPx <= box.size.y) {
 			// Draw the central housing once at full height. Splitting it into
 			// two scissored passes creates a visible horizontal raster seam.
 			drawRail(
@@ -934,16 +942,16 @@ struct MovingSliderTeethRail : widget::Widget {
 			// Keep only the upper-right protrusions.
 			drawRail(
 				centerTrackRightPx,
-				0.f,
+				upperProtrusionTopPx,
 				box.size.x - centerTrackRightPx,
-				halfHeight
+				upperProtrusionBottomPx - upperProtrusionTopPx
 			);
 			// Keep only the lower-left protrusions.
 			drawRail(
 				0.f,
-				halfHeight,
+				lowerProtrusionTopPx,
 				centerTrackLeftPx,
-				box.size.y - halfHeight
+				lowerProtrusionBottomPx - lowerProtrusionTopPx
 			);
 		}
 		else {
@@ -1093,12 +1101,12 @@ CyanOrbScrew::CyanOrbScrew()
 
 void HoverOrbScrew::onEnter(const event::Enter& e) {
 	hovered = true;
-	TransparentWidget::onEnter(e);
+	OpaqueWidget::onEnter(e);
 }
 
 void HoverOrbScrew::onLeave(const event::Leave& e) {
 	hovered = false;
-	TransparentWidget::onLeave(e);
+	OpaqueWidget::onLeave(e);
 }
 
 void HoverOrbScrew::step() {
@@ -1124,7 +1132,7 @@ void HoverOrbScrew::step() {
 	if (rotatingFb && std::fabs(rotationRad - oldRotationRad) > 1e-6f) {
 		rotatingFb->setDirty();
 	}
-	TransparentWidget::step();
+	OpaqueWidget::step();
 }
 
 LeviathanSlider::LeviathanSlider() {
@@ -1257,6 +1265,10 @@ LuminSlider::LuminSlider() {
 	constexpr float railVisibleWidthPx = railDrawWidthPx;
 	constexpr float fixedHousingLeftPx = 8.3191932f;
 	constexpr float fixedHousingRightPx = 16.2477368f;
+	constexpr float upperStaticTickOuterYPx = 12.826168f;
+	constexpr float upperStaticTickInnerYPx = 45.099671f;
+	constexpr float lowerStaticTickInnerYPx = 53.168049f;
+	constexpr float lowerStaticTickOuterYPx = 85.441552f;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderTrack.svg"));
 	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderHandle.svg"));
@@ -1306,6 +1318,14 @@ LuminSlider::LuminSlider() {
 			fixedHousingLeftPx - teethRail->box.pos.x;
 		teethRail->centerTrackRightPx =
 			fixedHousingRightPx - teethRail->box.pos.x;
+		teethRail->upperProtrusionTopPx =
+			upperStaticTickOuterYPx - teethRail->box.pos.y;
+		teethRail->upperProtrusionBottomPx =
+			upperStaticTickInnerYPx - teethRail->box.pos.y;
+		teethRail->lowerProtrusionTopPx =
+			lowerStaticTickInnerYPx - teethRail->box.pos.y;
+		teethRail->lowerProtrusionBottomPx =
+			lowerStaticTickOuterYPx - teethRail->box.pos.y;
 		fb->addChildBelow(teethRail, handle);
 	}
 	setHandlePosCentered(

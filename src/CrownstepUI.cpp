@@ -3875,10 +3875,10 @@ struct CrownstepWidget final : ModuleWidget {
 		}
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-			addChild(createWidget<TorxScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-			addChild(createWidget<TorxScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<PurpleOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<PurpleOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+			addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+			addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 			math::Rect boardRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
