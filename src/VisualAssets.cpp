@@ -913,6 +913,7 @@ struct SliderRackGear : widget::Widget {
 struct SliderRasterOrb : widget::Widget {
 	app::SvgSlider* slider = nullptr;
 	std::string imagePath;
+	std::string underlayPath;
 	float rotationDirection = 1.f;
 	float pitchRadiusPx = 1.f;
 	float restAngleRad = 0.f;
@@ -939,14 +940,11 @@ struct SliderRasterOrb : widget::Widget {
 		nvgRestore(args.vg);
 	}
 
-	void draw(const DrawArgs& args) override {
-		if (!slider || !slider->handle || imagePath.empty() ||
-				box.size.x <= 0.f || box.size.y <= 0.f ||
-				imageSizePx <= 0.f || pitchRadiusPx <= 0.f) {
+	void drawRasterLayer(const DrawArgs& args, const std::string& path, float rotationRad) {
+		if (path.empty()) {
 			return;
 		}
-
-		const std::string fullPath = asset::plugin(pluginInstance, imagePath);
+		const std::string fullPath = asset::plugin(pluginInstance, path);
 		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
 		if (!image || image->handle < 0) {
 			return;
@@ -963,12 +961,6 @@ struct SliderRasterOrb : widget::Widget {
 			return;
 		}
 
-		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
-		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
-		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
-		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
-
 		const float imageAspect = float(imageW) / float(imageH);
 		float drawW = imageSizePx;
 		float drawH = drawW / imageAspect;
@@ -978,11 +970,11 @@ struct SliderRasterOrb : widget::Widget {
 		}
 		const Vec center = box.size.mult(0.5f);
 
-		drawShadow(args);
-
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, center.x, center.y);
-		nvgRotate(args.vg, angleRad);
+		if (std::fabs(rotationRad) > 1e-6f) {
+			nvgRotate(args.vg, rotationRad);
+		}
 		NVGpaint paint = nvgImagePattern(
 			args.vg,
 			-0.5f * drawW,
@@ -997,6 +989,24 @@ struct SliderRasterOrb : widget::Widget {
 		nvgFillPaint(args.vg, paint);
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!slider || !slider->handle || imagePath.empty() ||
+				box.size.x <= 0.f || box.size.y <= 0.f ||
+				imageSizePx <= 0.f || pitchRadiusPx <= 0.f) {
+			return;
+		}
+
+		const float topHandleY = std::min(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float bottomHandleY = std::max(slider->minHandlePos.y, slider->maxHandlePos.y);
+		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
+		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
+		const float angleRad = restAngleRad + rotationDirection * handleOffsetY / pitchRadiusPx;
+
+		drawShadow(args);
+		drawRasterLayer(args, underlayPath, 0.f);
+		drawRasterLayer(args, imagePath, angleRad);
 	}
 };
 
@@ -1222,11 +1232,18 @@ LuminSlider::LuminSlider() {
 			fixedHousingRightPx - teethRail->box.pos.x;
 		fb->addChildBelow(teethRail, handle);
 
-		auto addPhaseOrb = [&](const char* imagePath, Vec center, float rotationDirection, float restAngleRad) {
+		auto addPhaseOrb = [&](
+			const char* imagePath,
+			const char* underlayPath,
+			Vec center,
+			float rotationDirection,
+			float restAngleRad
+		) {
 			constexpr float shadowBleedPx = 4.f;
 			auto* orb = new SliderRasterOrb;
 			orb->slider = this;
 			orb->imagePath = imagePath ? imagePath : "";
+			orb->underlayPath = underlayPath ? underlayPath : "";
 			orb->rotationDirection = rotationDirection;
 			orb->pitchRadiusPx = gearPitchRadiusPx;
 			orb->restAngleRad = restAngleRad;
@@ -1238,12 +1255,14 @@ LuminSlider::LuminSlider() {
 		};
 		addPhaseOrb(
 			"res/icon/cyan_orb.png",
+			"res/icon/cyan_underlay.png",
 			Vec(leftGearCenterXPx, topGearCenterYPx),
 			1.f,
 			0.f
 		);
 		addPhaseOrb(
 			"res/icon/purple_orb.png",
+			"res/icon/purple_underlay.png",
 			Vec(rightGearCenterXPx, bottomGearCenterYPx),
 			-1.f,
 			float(M_PI) + bottomGearPhaseOffsetRad
