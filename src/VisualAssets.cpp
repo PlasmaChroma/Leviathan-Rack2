@@ -696,13 +696,13 @@ struct Magitek2RingPulseOverlay : TransparentWidget {
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, center.x, center.y, radius);
-		nvgStrokeWidth(args.vg, 2.15f);
+		nvgStrokeWidth(args.vg, 1.45f);
 		nvgStrokeColor(args.vg, nvgRGBA(color.r * 255.f, color.g * 255.f, color.b * 255.f, glowAlpha));
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, center.x, center.y, radius);
-		nvgStrokeWidth(args.vg, 0.78f);
+		nvgStrokeWidth(args.vg, 0.52f);
 		nvgStrokeColor(args.vg, nvgRGBA(color.r * 255.f, color.g * 255.f, color.b * 255.f, coreAlpha));
 		nvgStroke(args.vg);
 	}
