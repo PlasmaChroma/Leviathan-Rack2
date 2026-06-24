@@ -716,8 +716,8 @@ struct Magitek2RingPulseOverlay : TransparentWidget {
 
 		const Vec center = box.size.div(2.f);
 		const NVGcolor color = inward ? nvgRGB(0xa8, 0x62, 0xff) : nvgRGB(0x00, 0xc6, 0xe4);
-		const float startRadius = inward ? 6.85f : 2.65f;
-		const float endRadius = inward ? 2.65f : 6.9f;
+		const float startRadius = inward ? 6.25f : 0.95f;
+		const float endRadius = inward ? 0.95f : 6.3f;
 		constexpr float cycleSpacingSec = 0.52f;
 		constexpr float cycleLifeSec = 1.42f;
 
