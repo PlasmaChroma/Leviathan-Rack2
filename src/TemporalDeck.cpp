@@ -438,8 +438,8 @@ static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, doub
     double wrappedPos = engine.buffer.wrapPosition(pos);
     idx = engine.buffer.wrapIndex(int(std::lround(wrappedPos)));
   }
-  float left = engine.buffer.left[size_t(idx)];
-  float right = engine.buffer.rightSample(idx);
+  float left = sampleMode ? engine.sampleLeftAt(idx) : engine.buffer.left[size_t(idx)];
+  float right = sampleMode ? engine.sampleRightAt(idx) : engine.buffer.rightSample(idx);
   return reduceScopeChannelValue(left, right, channelMode);
 }
 
@@ -2428,7 +2428,15 @@ bool TemporalDeck::saveLoadedSampleToPath(const std::string &path, std::string *
   }
   int frames = impl->engine.sampleFrames;
   int channels = impl->engine.buffer.monoStorage ? 1 : 2;
-  if (!writeStereoOrMonoWav16(path, impl->engine.buffer.left, impl->engine.buffer.right, frames, channels,
+  std::vector<float> left(size_t(frames), 0.f);
+  std::vector<float> right(channels == 2 ? size_t(frames) : 0u);
+  for (int i = 0; i < frames; ++i) {
+    left[size_t(i)] = impl->engine.sampleLeftAt(i);
+    if (channels == 2) {
+      right[size_t(i)] = impl->engine.sampleRightAt(i);
+    }
+  }
+  if (!writeStereoOrMonoWav16(path, left, right, frames, channels,
                               impl->engine.sampleRate, temporaldeck::bufferVoltageToSampleFile(1.f), errorOut)) {
     return false;
   }

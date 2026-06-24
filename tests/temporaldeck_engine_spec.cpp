@@ -460,18 +460,60 @@ TestResult testConvertLiveWindowToSampleCapturesRedLimitToNow() {
     engine.buffer.write(float(i), float(100 + i));
   }
 
+  const float *leftStorageBefore = engine.buffer.left.data();
+  const float *rightStorageBefore = engine.buffer.right.data();
   bool converted = engine.convertLiveWindowToSample(0.00045f);
   bool sizeOk = engine.sampleFrames == 5;
-  bool endpointsOk = sizeOk && std::fabs(engine.buffer.left[0] - 5.f) <= 1e-6f &&
-                     std::fabs(engine.buffer.left[engine.sampleFrames - 1] - 9.f) <= 1e-6f;
-  bool rightOk = sizeOk && !engine.buffer.monoStorage && std::fabs(engine.buffer.right[0] - 105.f) <= 1e-6f &&
-                 std::fabs(engine.buffer.right[engine.sampleFrames - 1] - 109.f) <= 1e-6f;
+  bool endpointsOk = sizeOk && std::fabs(engine.sampleLeftAt(0) - 5.f) <= 1e-6f &&
+                     std::fabs(engine.sampleLeftAt(engine.sampleFrames - 1) - 9.f) <= 1e-6f;
+  bool rightOk = sizeOk && !engine.buffer.monoStorage && std::fabs(engine.sampleRightAt(0) - 105.f) <= 1e-6f &&
+                 std::fabs(engine.sampleRightAt(engine.sampleFrames - 1) - 109.f) <= 1e-6f;
+  bool storageUnchanged = engine.buffer.left.data() == leftStorageBefore && engine.buffer.right.data() == rightStorageBefore;
   bool pass = converted && sizeOk && endpointsOk && rightOk && engine.sampleModeEnabled && engine.sampleLoaded &&
-              engine.sampleTransportPlaying;
+              engine.sampleTransportPlaying && storageUnchanged;
   return {"Convert live -> sample captures red-limit window", pass,
           "converted=" + std::to_string(int(converted)) + " frames=" + std::to_string(engine.sampleFrames) +
-            " firstL=" + std::to_string(engine.buffer.left[0]) +
-            " lastL=" + std::to_string(engine.buffer.left[std::max(0, engine.sampleFrames - 1)])};
+            " firstL=" + std::to_string(engine.sampleLeftAt(0)) +
+            " lastL=" + std::to_string(engine.sampleLeftAt(std::max(0, engine.sampleFrames - 1))) +
+            " storageUnchanged=" + std::to_string(int(storageUnchanged))};
+}
+
+TestResult testConvertWrappedLiveWindowUsesLogicalSampleOrder() {
+  Engine engine;
+  engine.reset(1000.f);
+  engine.buffer.size = 8;
+  engine.buffer.left.assign(8u, 0.f);
+  engine.buffer.right.assign(8u, 0.f);
+  engine.buffer.writeHead = 0;
+  engine.buffer.filled = 0;
+
+  for (int i = 0; i < 12; ++i) {
+    engine.buffer.write(float(i), float(100 + i));
+  }
+
+  const float *leftStorageBefore = engine.buffer.left.data();
+  const float *rightStorageBefore = engine.buffer.right.data();
+  bool converted = engine.convertLiveWindowToSample(1.f);
+  bool ordered = converted && engine.sampleFrames == 8 && engine.sampleStartIndex == 4;
+  for (int i = 0; ordered && i < 8; ++i) {
+    ordered = std::fabs(engine.sampleLeftAt(i) - float(i + 4)) <= 1e-6f &&
+              std::fabs(engine.sampleRightAt(i) - float(i + 104)) <= 1e-6f;
+  }
+  auto interpolated = engine.readSampleBounded(2.5, Engine::SCRATCH_INTERP_CUBIC, 7.0);
+  bool playbackOrdered = std::fabs(interpolated.first - 6.5f) <= 1e-5f &&
+                         std::fabs(interpolated.second - 106.5f) <= 1e-5f;
+  engine.sampleLoopEnabled = true;
+  auto loopWrapped = engine.readSampleBounded(8.0, Engine::SCRATCH_INTERP_CUBIC, 7.0);
+  bool loopOrdered = std::fabs(loopWrapped.first - 4.f) <= 1e-6f &&
+                     std::fabs(loopWrapped.second - 104.f) <= 1e-6f;
+  bool storageUnchanged = engine.buffer.left.data() == leftStorageBefore && engine.buffer.right.data() == rightStorageBefore;
+  bool pass = ordered && playbackOrdered && loopOrdered && storageUnchanged;
+  return {"Wrapped live -> sample conversion preserves logical order without replacing storage", pass,
+          "start=" + std::to_string(engine.sampleStartIndex) + " first=" + std::to_string(engine.sampleLeftAt(0)) +
+            " last=" + std::to_string(engine.sampleLeftAt(7)) +
+            " interpolated=" + std::to_string(interpolated.first) +
+            " loopWrapped=" + std::to_string(loopWrapped.first) +
+            " storageUnchanged=" + std::to_string(int(storageUnchanged))};
 }
 
 TestResult testSincLutMatchesDirectWindowedSincReference() {
@@ -551,6 +593,7 @@ int main() {
   tests.push_back(testDeepLiveManualTouchPolicyOnlyBeyondWindow());
   tests.push_back(testManualTouchNowSnapPolicy());
   tests.push_back(testConvertLiveWindowToSampleCapturesRedLimitToNow());
+  tests.push_back(testConvertWrappedLiveWindowUsesLogicalSampleOrder());
   tests.push_back(testSincLutMatchesDirectWindowedSincReference());
   tests.push_back(testSampleBoundedSincLutMatchesDirectReference());
 

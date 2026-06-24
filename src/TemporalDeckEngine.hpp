@@ -555,6 +555,10 @@ struct TemporalDeckEngine {
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
   int sampleFrames = 0;
+  // Physical buffer index corresponding to logical sample frame 0. Loaded
+  // files use zero; live captures retain their circular-buffer storage and
+  // set this to the oldest captured frame so conversion stays allocation-free.
+  int sampleStartIndex = 0;
   float sampleAbsolutePeakVolts = 0.f;
   double samplePlayhead = 0.0;
   double readHead = 0.0;
@@ -664,13 +668,29 @@ struct TemporalDeckEngine {
       return;
     }
     for (int i = 0; i < sampleFrames; ++i) {
-      float l = buffer.left[i];
-      float r = buffer.rightSample(i);
+      float l = sampleLeftAt(i);
+      float r = sampleRightAt(i);
       sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(l));
       sampleAbsolutePeakVolts = std::max(sampleAbsolutePeakVolts, std::fabs(r));
       preview.pushMonoSample(0.5f * (l + r));
     }
     preview.finalizePartialBin();
+  }
+
+  int samplePhysicalIndex(int logicalIndex) const {
+    if (buffer.size <= 0) {
+      return 0;
+    }
+    int bounded = clampSampleIndex(logicalIndex, std::max(0, sampleFrames - 1));
+    return buffer.wrapIndex(sampleStartIndex + bounded);
+  }
+
+  float sampleLeftAt(int logicalIndex) const {
+    return buffer.left[size_t(samplePhysicalIndex(logicalIndex))];
+  }
+
+  float sampleRightAt(int logicalIndex) const {
+    return buffer.rightSample(samplePhysicalIndex(logicalIndex));
   }
 
   void bumpBufferGeneration() {
@@ -810,6 +830,7 @@ struct TemporalDeckEngine {
     sampleTransportPlaying = false;
     sampleTruncated = false;
     sampleFrames = 0;
+    sampleStartIndex = 0;
     sampleAbsolutePeakVolts = 0.f;
     samplePlayhead = 0.f;
     readHead = 0.f;
@@ -1607,21 +1628,22 @@ struct TemporalDeckEngine {
       }
       return wrapped;
     };
-    auto leftAt = [&](int idx) { return leftData[wrappedIndex(idx)]; };
-    auto rightAt = [&](int idx) { return rightData[wrappedIndex(idx)]; };
+    auto physicalIndex = [&](int idx) { return buffer.wrapIndex(sampleStartIndex + wrappedIndex(idx)); };
+    auto leftAt = [&](int idx) { return leftData[physicalIndex(idx)]; };
+    auto rightAt = [&](int idx) { return rightData[physicalIndex(idx)]; };
 
     // Exact/near-exact sample-center reads are common in transport playback.
     // Skip interpolation math when the phase is effectively integral.
     if (std::fabs(t) <= 1e-6f || std::fabs(1.f - t) <= 1e-6f) {
-      int idx = clampSampleIndex(int(std::round(pos)), maxIndex);
-      return {leftData[idx], rightData[idx]};
+      int idx = int(std::round(pos));
+      return {leftAt(idx), rightAt(idx)};
     }
 
     if (interpolationMode == SCRATCH_INTERP_SINC) {
       float accL = 0.f;
       float accR = 0.f;
       const TemporalDeckBuffer::SincKernel &kernel = TemporalDeckBuffer::sincKernelForFraction(t);
-      bool interior = !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
+      bool interior = sampleStartIndex == 0 && !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
                       (i1 + TemporalDeckBuffer::kSincRadius <= readMaxIndex);
       if (interior) {
         for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
@@ -1634,10 +1656,9 @@ struct TemporalDeckEngine {
       } else {
         for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
           int k = tap - TemporalDeckBuffer::kSincRadius + 1;
-          int idx = clampSampleIndex(i1 + k, maxIndex);
           float w = kernel.weights[size_t(tap)];
-          accL += leftData[idx] * w;
-          accR += rightData[idx] * w;
+          accL += leftAt(i1 + k) * w;
+          accR += rightAt(i1 + k) * w;
         }
       }
       accL *= kernel.invWeightSum;
@@ -1647,7 +1668,7 @@ struct TemporalDeckEngine {
 
     if (interpolationMode == SCRATCH_INTERP_LAGRANGE6) {
       auto w = TemporalDeckBuffer::lagrange6Weights(t);
-      bool interior = (i1 >= 2) && (i1 + 3 <= maxIndex);
+      bool interior = sampleStartIndex == 0 && !loopActive && (i1 >= 2) && (i1 + 3 <= readMaxIndex);
       if (interior) {
         int i0 = i1 - 2;
         int iA = i1 - 1;
@@ -1660,19 +1681,14 @@ struct TemporalDeckEngine {
                      rightData[iC] * w.w4 + rightData[iD] * w.w5;
         return {outL, outR};
       }
-      int i0 = clampSampleIndex(i1 - 2, maxIndex);
-      int iA = clampSampleIndex(i1 - 1, maxIndex);
-      int iB = clampSampleIndex(i1 + 1, maxIndex);
-      int iC = clampSampleIndex(i1 + 2, maxIndex);
-      int iD = clampSampleIndex(i1 + 3, maxIndex);
-      float outL = leftData[i0] * w.w0 + leftData[iA] * w.w1 + leftData[i1] * w.w2 + leftData[iB] * w.w3 +
-                   leftData[iC] * w.w4 + leftData[iD] * w.w5;
-      float outR = rightData[i0] * w.w0 + rightData[iA] * w.w1 + rightData[i1] * w.w2 + rightData[iB] * w.w3 +
-                   rightData[iC] * w.w4 + rightData[iD] * w.w5;
+      float outL = leftAt(i1 - 2) * w.w0 + leftAt(i1 - 1) * w.w1 + leftAt(i1) * w.w2 + leftAt(i1 + 1) * w.w3 +
+                   leftAt(i1 + 2) * w.w4 + leftAt(i1 + 3) * w.w5;
+      float outR = rightAt(i1 - 2) * w.w0 + rightAt(i1 - 1) * w.w1 + rightAt(i1) * w.w2 + rightAt(i1 + 1) * w.w3 +
+                   rightAt(i1 + 2) * w.w4 + rightAt(i1 + 3) * w.w5;
       return {outL, outR};
     }
 
-    bool interior = (i1 >= 1) && (i1 + 2 <= maxIndex);
+    bool interior = sampleStartIndex == 0 && !loopActive && (i1 >= 1) && (i1 + 2 <= readMaxIndex);
     if (interior) {
       int i0 = i1 - 1;
       int i2 = i1 + 1;
@@ -1680,11 +1696,8 @@ struct TemporalDeckEngine {
       return {TemporalDeckBuffer::cubicSample(leftData[i0], leftData[i1], leftData[i2], leftData[i3], t),
               TemporalDeckBuffer::cubicSample(rightData[i0], rightData[i1], rightData[i2], rightData[i3], t)};
     }
-    int i0 = clampSampleIndex(i1 - 1, maxIndex);
-    int i2 = clampSampleIndex(i1 + 1, maxIndex);
-    int i3 = clampSampleIndex(i1 + 2, maxIndex);
-    return {TemporalDeckBuffer::cubicSample(leftAt(i0), leftAt(i1), leftAt(i2), leftAt(i3), t),
-            TemporalDeckBuffer::cubicSample(rightAt(i0), rightAt(i1), rightAt(i2), rightAt(i3), t)};
+    return {TemporalDeckBuffer::cubicSample(leftAt(i1 - 1), leftAt(i1), leftAt(i1 + 1), leftAt(i1 + 2), t),
+            TemporalDeckBuffer::cubicSample(rightAt(i1 - 1), rightAt(i1), rightAt(i1 + 1), rightAt(i1 + 2), t)};
   }
 
   float getLiveAbsolutePeakVolts() const {
@@ -1712,6 +1725,7 @@ struct TemporalDeckEngine {
     sampleTransportPlaying = sampleLoaded;
     sampleTruncated = truncated;
     sampleFrames = std::max(0, std::min(frames, buffer.size));
+    sampleStartIndex = 0;
     samplePlayhead = 0.0;
     readHead = 0.0;
     timelineHead = 0.0;
@@ -1747,6 +1761,7 @@ struct TemporalDeckEngine {
     sampleModeEnabled = sampleLoaded || sampleModeEnabled;
     sampleTransportPlaying = sampleLoaded;
     sampleTruncated = truncated;
+    sampleStartIndex = 0;
     samplePlayhead = 0.0;
     readHead = 0.0;
     timelineHead = 0.0;
@@ -1787,25 +1802,21 @@ struct TemporalDeckEngine {
       return false;
     }
 
-    std::vector<float> left(capturedFrames, 0.f);
-    std::vector<float> right;
-    if (!buffer.monoStorage) {
-      right.assign(capturedFrames, 0.f);
-    }
-
     int newestIndex = buffer.wrapIndex(buffer.writeHead - 1);
     int oldestIndex = buffer.wrapIndex(newestIndex - (capturedFrames - 1));
-    for (int i = 0; i < capturedFrames; ++i) {
-      int src = buffer.wrapIndex(oldestIndex + i);
-      left[i] = buffer.left[src];
-      if (!buffer.monoStorage) {
-        right[i] = buffer.rightSample(src);
-      }
-    }
-
-    installPreparedSample(std::move(left), std::move(right), capturedFrames, false, buffer.monoStorage);
-    sampleModeEnabled = sampleLoaded;
-    return sampleLoaded;
+    sampleLoaded = true;
+    sampleModeEnabled = true;
+    sampleTransportPlaying = true;
+    sampleTruncated = false;
+    sampleFrames = capturedFrames;
+    sampleStartIndex = oldestIndex;
+    samplePlayhead = 0.0;
+    readHead = 0.0;
+    timelineHead = 0.0;
+    rebuildPreviewFromCurrentSample();
+    resetLiveScopeEnvelope();
+    bumpBufferGeneration();
+    return true;
   }
 
   void clearScratchMotionState() {
