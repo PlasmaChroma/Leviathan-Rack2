@@ -1826,11 +1826,9 @@ struct IntegralFluxWidget : ModuleWidget {
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
 	float eclipseDrawUsEma = 0.f;
-	float eclipseShadowDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
-	uint64_t eclipseShadowDrawsSinceSubmit = 0u;
 
 	static float consumeReductionAverage(std::atomic<uint64_t>& total, std::atomic<uint64_t>& samples) {
 		const uint64_t totalValue = total.exchange(0u, std::memory_order_acq_rel);
@@ -2080,12 +2078,6 @@ struct IntegralFluxWidget : ModuleWidget {
 		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
 		eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
 		apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
-		const uint64_t eclipseShadowDraws = visual_assets::eclipseShadowDrawCount();
-		if (eclipseShadowDraws > 0u) {
-			const float eclipseShadowDrawUs = float(visual_assets::eclipseShadowDrawNs()) * 1e-3f;
-			eclipseShadowDrawUsEma = (eclipseShadowDrawUsEma > 0.f) ? (eclipseShadowDrawUsEma + (eclipseShadowDrawUs - eclipseShadowDrawUsEma) * 0.18f) : eclipseShadowDrawUs;
-			eclipseShadowDrawsSinceSubmit += eclipseShadowDraws;
-		}
 		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
 
@@ -2096,16 +2088,10 @@ struct IntegralFluxWidget : ModuleWidget {
 				lastSubmitSec = nowSec;
 				flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
 				flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const uint64_t eclipseShadowDrawsToSubmit = eclipseShadowDrawsSinceSubmit;
-				eclipseShadowDrawsSinceSubmit = 0u;
 				const float ch1CurvePointsReducedAvg = consumeReductionAverage(
 					flux->debugCurvePointsReducedTotal[0], flux->debugCurveReductionSamples[0]);
-				const float ch4CurvePointsReducedAvg = consumeReductionAverage(
-					flux->debugCurvePointsReducedTotal[1], flux->debugCurveReductionSamples[1]);
 				const float ch1TracerExtraPointsReducedAvg = consumeReductionAverage(
 					flux->debugTracerExtraPointsReducedTotal[0], flux->debugTracerReductionSamples[0]);
-				const float ch4TracerExtraPointsReducedAvg = consumeReductionAverage(
-					flux->debugTracerExtraPointsReducedTotal[1], flux->debugTracerReductionSamples[1]);
 				debug_terminal::submitIntegralFluxMetrics(
 					flux->debugInstanceId,
 					debug_terminal::consumeAudioProcessTiming(flux->perfAudioProcessMinNs, flux->perfAudioProcessMaxNs),
@@ -2114,12 +2100,8 @@ struct IntegralFluxWidget : ModuleWidget {
 					apertureDrawUsRange.consume(),
 					gearDrawUsEma,
 					eclipseDrawUsEma,
-					eclipseShadowDrawUsEma,
-					eclipseShadowDrawsToSubmit,
 					ch1CurvePointsReducedAvg,
-					ch4CurvePointsReducedAvg,
-					ch1TracerExtraPointsReducedAvg,
-					ch4TracerExtraPointsReducedAvg);
+					ch1TracerExtraPointsReducedAvg);
 			}
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];
