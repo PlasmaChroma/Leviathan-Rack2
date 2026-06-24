@@ -675,6 +675,9 @@ static bool magitek2JackAnimationIsRingPulse(Magitek2JackAnimationStyle animatio
 		animationStyle == Magitek2JackAnimationStyle::CyanRingsOutward;
 }
 
+constexpr float kMagitek2RingCycleSpacingSec = 0.68f;
+constexpr float kMagitek2RingCycleLifeSec = 1.86f;
+
 struct Magitek2RingPulseOverlay : TransparentWidget {
 	const Magitek2RasterJack* jack = nullptr;
 
@@ -718,13 +721,14 @@ struct Magitek2RingPulseOverlay : TransparentWidget {
 		const NVGcolor color = inward ? nvgRGB(0xa8, 0x62, 0xff) : nvgRGB(0x00, 0xc6, 0xe4);
 		const float startRadius = inward ? 6.25f : 0.95f;
 		const float endRadius = inward ? 0.95f : 6.3f;
-		constexpr float cycleSpacingSec = 0.68f;
-		constexpr float cycleLifeSec = 1.86f;
 
 		for (int i = 0; i < 4; ++i) {
-			float localSec = jack->ringAnimationSec - float(i) * cycleSpacingSec;
-			localSec -= std::floor(localSec / cycleLifeSec) * cycleLifeSec;
-			const float t = clamp(localSec / cycleLifeSec, 0.f, 1.f);
+			float localSec = jack->ringAnimationSec - float(i) * kMagitek2RingCycleSpacingSec;
+			if (localSec < 0.f) {
+				continue;
+			}
+			localSec -= std::floor(localSec / kMagitek2RingCycleLifeSec) * kMagitek2RingCycleLifeSec;
+			const float t = clamp(localSec / kMagitek2RingCycleLifeSec, 0.f, 1.f);
 			const float smoothT = t * t * (3.f - 2.f * t);
 			const float radius = crossfade(startRadius, endRadius, smoothT);
 			const float fadeIn = clamp(t * 7.f, 0.f, 1.f);
@@ -1599,6 +1603,9 @@ Magitek2OutputJack::Magitek2OutputJack(Magitek2JackAnimationStyle animationStyle
 
 void Magitek2RasterJack::onEnter(const event::Enter& e) {
 	hovered = true;
+	if (magitek2JackAnimationIsRingPulse(animationStyle)) {
+		ringAnimationSec = 0.f;
+	}
 	PortWidget::onEnter(e);
 }
 
@@ -1631,7 +1638,8 @@ void Magitek2RasterJack::step() {
 	}
 
 	if (magitek2JackAnimationIsRingPulse(animationStyle)) {
-		ringAnimationSec += float(dt);
+		const float startupSpeed = ringAnimationSec < kMagitek2RingCycleSpacingSec ? 2.f : 1.f;
+		ringAnimationSec += float(dt) * startupSpeed;
 		if (ringAnimationSec > 8.f) {
 			ringAnimationSec = std::fmod(ringAnimationSec, 1.84f);
 		}
