@@ -43,7 +43,7 @@ struct Magitek2RasterJack : app::PortWidget {
 	widget::FramebufferWidget* shadowFb = nullptr;
 	TransparentWidget* animationOverlay = nullptr;
 	float hoverSpinRad = 0.f;
-	float ringAnimationSec = 0.f;
+	double ringAnimationSec = 0.0;
 	float ringOpacity = 0.f;
 	Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::ClockwiseRotation;
 	double lastSpinUpdateSec = 0.0;
