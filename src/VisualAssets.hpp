@@ -26,25 +26,36 @@ struct MagitekOutputJack : app::SvgPort {
 	MagitekOutputJack();
 };
 
+enum class Magitek2JackAnimationStyle {
+	None,
+	CounterClockwiseRotation,
+	ClockwiseRotation,
+	PurpleRingsInward,
+	CyanRingsOutward,
+};
+
 struct Magitek2RasterJack : app::PortWidget {
-	explicit Magitek2RasterJack(const char* imagePath, float spinDirection = 1.f);
+	explicit Magitek2RasterJack(const char* imagePath, Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::ClockwiseRotation);
 	void step() override;
 	void onEnter(const event::Enter& e) override;
 	void onLeave(const event::Leave& e) override;
 
 	widget::FramebufferWidget* shadowFb = nullptr;
+	TransparentWidget* animationOverlay = nullptr;
 	float hoverSpinRad = 0.f;
-	float spinDirection = 1.f;
+	float ringAnimationSec = 0.f;
+	float ringOpacity = 0.f;
+	Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::ClockwiseRotation;
 	double lastSpinUpdateSec = 0.0;
 	bool hovered = false;
 };
 
 struct Magitek2InputJack : Magitek2RasterJack {
-	Magitek2InputJack();
+	explicit Magitek2InputJack(Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::PurpleRingsInward);
 };
 
 struct Magitek2OutputJack : Magitek2RasterJack {
-	Magitek2OutputJack();
+	explicit Magitek2OutputJack(Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::CyanRingsOutward);
 };
 
 struct TorxScrew : TransparentWidget {

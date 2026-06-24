@@ -665,6 +665,76 @@ struct MagitekRasterImage : TransparentWidget {
 	}
 };
 
+static bool magitek2JackAnimationIsRotation(Magitek2JackAnimationStyle animationStyle) {
+	return animationStyle == Magitek2JackAnimationStyle::CounterClockwiseRotation ||
+		animationStyle == Magitek2JackAnimationStyle::ClockwiseRotation;
+}
+
+static bool magitek2JackAnimationIsRingPulse(Magitek2JackAnimationStyle animationStyle) {
+	return animationStyle == Magitek2JackAnimationStyle::PurpleRingsInward ||
+		animationStyle == Magitek2JackAnimationStyle::CyanRingsOutward;
+}
+
+struct Magitek2RingPulseOverlay : TransparentWidget {
+	const Magitek2RasterJack* jack = nullptr;
+
+	explicit Magitek2RingPulseOverlay(const Magitek2RasterJack* jack)
+		: jack(jack) {
+	}
+
+	void drawRing(const DrawArgs& args, const Vec& center, float radius, float alpha, NVGcolor color) {
+		alpha = clamp(alpha, 0.f, 1.f);
+		if (alpha <= 0.002f || radius <= 0.f) {
+			return;
+		}
+
+		const unsigned char glowAlpha = (unsigned char) std::round(82.f * alpha);
+		const unsigned char coreAlpha = (unsigned char) std::round(190.f * alpha);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, radius);
+		nvgStrokeWidth(args.vg, 2.15f);
+		nvgStrokeColor(args.vg, nvgRGBA(color.r * 255.f, color.g * 255.f, color.b * 255.f, glowAlpha));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, radius);
+		nvgStrokeWidth(args.vg, 0.78f);
+		nvgStrokeColor(args.vg, nvgRGBA(color.r * 255.f, color.g * 255.f, color.b * 255.f, coreAlpha));
+		nvgStroke(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!jack || jack->ringOpacity <= 0.002f) {
+			return;
+		}
+
+		const bool inward = jack->animationStyle == Magitek2JackAnimationStyle::PurpleRingsInward;
+		if (!inward && jack->animationStyle != Magitek2JackAnimationStyle::CyanRingsOutward) {
+			return;
+		}
+
+		const Vec center = box.size.div(2.f);
+		const NVGcolor color = inward ? nvgRGB(0xa8, 0x62, 0xff) : nvgRGB(0x00, 0xc6, 0xe4);
+		const float startRadius = inward ? 6.85f : 2.65f;
+		const float endRadius = inward ? 2.65f : 6.9f;
+		constexpr float cycleSpacingSec = 0.52f;
+		constexpr float cycleLifeSec = 1.42f;
+
+		for (int i = 0; i < 4; ++i) {
+			float localSec = jack->ringAnimationSec - float(i) * cycleSpacingSec;
+			localSec -= std::floor(localSec / cycleLifeSec) * cycleLifeSec;
+			const float t = clamp(localSec / cycleLifeSec, 0.f, 1.f);
+			const float smoothT = t * t * (3.f - 2.f * t);
+			const float radius = crossfade(startRadius, endRadius, smoothT);
+			const float fadeIn = clamp(t * 7.f, 0.f, 1.f);
+			const float fadeOut = clamp((1.f - t) * 2.6f, 0.f, 1.f);
+			const float alpha = jack->ringOpacity * fadeIn * fadeOut;
+			drawRing(args, center, radius, alpha, color);
+		}
+	}
+};
+
 struct GoldButtonShadow : TransparentWidget {
 	float pressAmount = 0.f;
 
@@ -1476,9 +1546,21 @@ MagitekOutputJack::MagitekOutputJack() {
 	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
 }
 
-Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, float spinDirection) {
+static float magitek2JackAnimationDirection(Magitek2JackAnimationStyle animationStyle) {
+	switch (animationStyle) {
+		case Magitek2JackAnimationStyle::CounterClockwiseRotation:
+			return -1.f;
+		case Magitek2JackAnimationStyle::ClockwiseRotation:
+			return 1.f;
+		case Magitek2JackAnimationStyle::None:
+		default:
+			return 0.f;
+	}
+}
+
+Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, Magitek2JackAnimationStyle animationStyle) {
 	box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
-	this->spinDirection = spinDirection;
+	this->animationStyle = animationStyle;
 
 	shadowFb = new widget::FramebufferWidget();
 	shadowFb->dirtyOnSubpixelChange = false;
@@ -1492,18 +1574,27 @@ Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, float spinDirectio
 
 	MagitekRasterImage* image = new MagitekRasterImage(imagePath ? imagePath : "");
 	image->box.size = box.size;
-	image->rotationRad = &hoverSpinRad;
+	if (magitek2JackAnimationIsRotation(animationStyle)) {
+		image->rotationRad = &hoverSpinRad;
+	}
 	addChild(image);
+
+	if (magitek2JackAnimationIsRingPulse(animationStyle)) {
+		Magitek2RingPulseOverlay* rings = new Magitek2RingPulseOverlay(this);
+		rings->box.size = box.size;
+		animationOverlay = rings;
+		addChild(rings);
+	}
 
 	lastSpinUpdateSec = system::getTime();
 }
 
-Magitek2InputJack::Magitek2InputJack()
-	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png", -1.f) {
+Magitek2InputJack::Magitek2InputJack(Magitek2JackAnimationStyle animationStyle)
+	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png", animationStyle) {
 }
 
-Magitek2OutputJack::Magitek2OutputJack()
-	: Magitek2RasterJack("res/icon/magitek2_output_rackfinal_256.png") {
+Magitek2OutputJack::Magitek2OutputJack(Magitek2JackAnimationStyle animationStyle)
+	: Magitek2RasterJack("res/icon/magitek2_output_rackfinal_256.png", animationStyle) {
 }
 
 void Magitek2RasterJack::onEnter(const event::Enter& e) {
@@ -1521,10 +1612,12 @@ void Magitek2RasterJack::step() {
 	const double dt = std::max(0.0, nowSec - lastSpinUpdateSec);
 	lastSpinUpdateSec = nowSec;
 	constexpr float hoverSpinRateRadPerSec = 0.333f;
+	const float spinDirection = magitek2JackAnimationDirection(animationStyle);
 
 	engine::Port* port = getPort();
 	const bool connected = port && port->isConnected();
-	if (hovered && !connected) {
+	const bool hoverAnimating = hovered && !connected;
+	if (hoverAnimating && spinDirection != 0.f) {
 		hoverSpinRad += float(dt * hoverSpinRateRadPerSec * spinDirection);
 		if (std::fabs(hoverSpinRad) > float(M_PI) * 2.f) {
 			hoverSpinRad = std::fmod(hoverSpinRad, float(M_PI) * 2.f);
@@ -1534,6 +1627,21 @@ void Magitek2RasterJack::step() {
 		hoverSpinRad *= 0.88f;
 		if (std::fabs(hoverSpinRad) < 1e-4f) {
 			hoverSpinRad = 0.f;
+		}
+	}
+
+	if (magitek2JackAnimationIsRingPulse(animationStyle)) {
+		ringAnimationSec += float(dt);
+		if (ringAnimationSec > 8.f) {
+			ringAnimationSec = std::fmod(ringAnimationSec, 1.84f);
+		}
+
+		const float targetOpacity = hoverAnimating ? 1.f : 0.f;
+		const float response = targetOpacity > ringOpacity ? 12.f : 8.f;
+		const float amount = clamp(float(dt) * response, 0.f, 1.f);
+		ringOpacity += (targetOpacity - ringOpacity) * amount;
+		if (ringOpacity < 0.002f) {
+			ringOpacity = 0.f;
 		}
 	}
 
