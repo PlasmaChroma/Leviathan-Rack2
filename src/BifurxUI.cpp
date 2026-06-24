@@ -322,8 +322,9 @@ float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float
 
 void BifurxSpectrumWidget::step() {
 	using PerfClock = std::chrono::steady_clock;
-	const PerfClock::time_point perfStepStart = PerfClock::now();
 	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
+	const bool measurePerf = isDragonKingDebugEnabled() || perfLoggingActive;
+	const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	Widget::step();
 	syncCurveDebugCaptureState();
 	syncPerfDebugCaptureState();
@@ -444,10 +445,14 @@ void BifurxSpectrumWidget::step() {
 
 	if (dirty && framebuffer) framebuffer->setDirty();
 
-	const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-		PerfClock::now() - perfStepStart).count()) * 1e-6f;
-	lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
-	stepUsRange.add(stepMs * 1000.f);
+	if (measurePerf) {
+		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - perfStepStart).count()) * 1e-6f;
+		lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
+		if (isDragonKingDebugEnabled()) {
+			stepUsRange.add(stepMs * 1000.f);
+		}
+	}
 	
 	if (isDragonKingDebugEnabled() && module->renderMode == Bifurx::RENDER_NANOVG) {
 		double nowSec = system::getTime();
@@ -494,7 +499,8 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	if (!(w > 0.f && h > 0.f)) return;
 	using PerfClock = std::chrono::steady_clock;
 	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
-	const PerfClock::time_point perfDrawStart = PerfClock::now();
+	const bool measurePerf = isDragonKingDebugEnabled() || perfLoggingActive;
+	const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfSectionStart = perfDrawStart;
 	auto recordDrawSection = [&](uint64_t& count, uint64_t& totalNs) {
 		if (!perfLoggingActive) return;
@@ -629,14 +635,16 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	}
 	nvgResetScissor(args.vg); nvgRestore(args.vg);
 	recordDrawSection(uiDrawMarkersCount, uiDrawMarkersNs);
-	lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
-	{
+	if (measurePerf) {
+		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
 		lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
-		drawUsRange.add(drawMs * 1000.f);
-	}
-	if (perfLoggingActive) {
-		uiDrawCount++; uiDrawNs += lastDrawNs; uiDrawMaxNs = std::max(uiDrawMaxNs, lastDrawNs);
+		if (isDragonKingDebugEnabled()) {
+			drawUsRange.add(drawMs * 1000.f);
+		}
+		if (perfLoggingActive) {
+			uiDrawCount++; uiDrawNs += lastDrawNs; uiDrawMaxNs = std::max(uiDrawMaxNs, lastDrawNs);
+		}
 	}
 }
 
@@ -845,7 +853,8 @@ struct BifurxWidget final : ModuleWidget {
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfDrawStart = PerfClock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::draw(args);
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		if (bifurx && ageSigilSvg && ageSigilUnlocked) {
@@ -891,7 +900,7 @@ struct BifurxWidget final : ModuleWidget {
 			nvgText(args.vg, x, y, debugIdLabel, nullptr);
 			nvgRestore(args.vg);
 		}
-		if (bifurx) {
+		if (bifurx && measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfDrawStart).count()) * 1e-6f;
 			const float prevMs = bifurx->perfUiRenderMs.load(std::memory_order_relaxed);

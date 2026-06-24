@@ -869,7 +869,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfStepStart = PerfClock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		OpenGlWidget::step();
 		if (!module) return;
 		if (module->renderMode != Bifurx::RENDER_OPENGL) return;
@@ -904,10 +905,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			lastUseGlShaderRenderer = useGlShaderRendererNow;
 			setDirty();
 		}
-		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - perfStepStart).count()) * 1e-6f;
-		lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
-		stepUsRange.add(stepMs * 1000.f);
+		if (measurePerf) {
+			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStepStart).count()) * 1e-6f;
+			lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
+			stepUsRange.add(stepMs * 1000.f);
+		}
 
 		if (isDragonKingDebugEnabled() && module && module->renderMode == Bifurx::RENDER_OPENGL) {
 			double nowSec = system::getTime();
@@ -945,7 +948,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawFramebuffer() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfDrawStart = PerfClock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
 		if (!vbo) glGenBuffers(1, &vbo);
@@ -1154,8 +1158,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size());
 
-		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
-		{
+		if (measurePerf) {
+			lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 			const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
 			lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
 			drawUsRange.add(drawMs * 1000.f);

@@ -385,13 +385,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   }
 
   void drawFramebuffer() override {
-    auto drawStart = std::chrono::steady_clock::now();
+    const bool measurePerf = module && isDragonKingDebugEnabled();
+    auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     fallbackRendererActive = false;
-    if (module) {
+    if (measurePerf) {
       module->uiDebugScopeDrawCalls.fetch_add(1u, std::memory_order_relaxed);
     }
     auto publishUiDebugMetrics = [&](float densityPct, int densityRows) {
-      if (!module) {
+      if (!measurePerf) {
         return;
       }
       auto drawEnd = std::chrono::steady_clock::now();

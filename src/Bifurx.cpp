@@ -1169,20 +1169,26 @@ void BifurxSpectrumBase::syncBase() {
 		state.lastPreviewSeq = previewSeq;
 		if (!useWorkerCurve) {
 			updateAxisCache();
-			const auto curvePrepStart = std::chrono::steady_clock::now();
+			const bool measurePrep = isDragonKingDebugEnabled();
+			const auto curvePrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 			updateCurveCache();
-			lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::steady_clock::now() - curvePrepStart).count());
+			if (measurePrep) {
+				lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+					std::chrono::steady_clock::now() - curvePrepStart).count());
+			}
 		}
 	}
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
 	if (analysisSeq != state.lastAnalysisSeq) {
 		if (!useWorkerCurve) {
-			const auto overlayPrepStart = std::chrono::steady_clock::now();
+			const bool measurePrep = isDragonKingDebugEnabled();
+			const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 			updateOverlayCache();
-			lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::steady_clock::now() - overlayPrepStart).count());
+			if (measurePrep) {
+				lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+					std::chrono::steady_clock::now() - overlayPrepStart).count());
+			}
 			state.hasOverlay = true;
 		}
 		state.lastAnalysisSeq = analysisSeq;

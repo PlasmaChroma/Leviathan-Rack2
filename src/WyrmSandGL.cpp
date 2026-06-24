@@ -810,7 +810,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 
 	void drawFramebuffer() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfStart = PerfClock::now();
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
 		validateGlResourcesForCurrentContext();
@@ -984,9 +985,11 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glPopMatrix();
 		glMatrixMode(GL_MODELVIEW);
 
-		const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - perfStart).count()) * 0.001f;
-		module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
+		if (measurePerf) {
+			const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count()) * 0.001f;
+			module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
+		}
 	}
 };
 

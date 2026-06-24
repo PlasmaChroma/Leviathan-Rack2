@@ -1479,16 +1479,20 @@ struct ProcWidget : ModuleWidget {
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 
 	void step() override {
-		const auto stepStart = std::chrono::steady_clock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		ModuleWidget::step();
-		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
-		uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
-		uiStepUsRange.add(stepUs);
+		if (measurePerf) {
+			const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
+			uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+			uiStepUsRange.add(stepUs);
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
-		const auto drawStart = std::chrono::steady_clock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		ModuleWidget::draw(args);
 		Proc* proc = static_cast<Proc*>(module);
 		if (!proc) {
@@ -1511,12 +1515,14 @@ struct ProcWidget : ModuleWidget {
 			nvgRestore(args.vg);
 		}
 
-		const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
-		uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
-		uiDrawUsRange.add(drawUs);
+		if (measurePerf) {
+			const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
+			uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+			uiDrawUsRange.add(drawUs);
+		}
 
-		if (isDragonKingDebugEnabled()) {
+		if (measurePerf) {
 			const double nowSec = system::getTime();
 			double& lastSubmitSec = gProcDebugTerminalLastSubmitSec[proc->debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kProcDebugTerminalSubmitIntervalSec) {

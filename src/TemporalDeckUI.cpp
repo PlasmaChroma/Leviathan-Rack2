@@ -3476,9 +3476,10 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void draw(const DrawArgs &args) override {
-    auto drawStart = std::chrono::steady_clock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     auto publishUiDrawMetric = [&](TemporalDeck *deckModule) {
-      if (!deckModule) {
+      if (!deckModule || !measurePerf) {
         return;
       }
       auto drawEnd = std::chrono::steady_clock::now();
@@ -3548,7 +3549,8 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void step() override {
-    auto stepStart = std::chrono::steady_clock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
     if (deckModule) {
       syncScopeDragTraceCaptureState();
@@ -3568,10 +3570,12 @@ struct TemporalDeckWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
-    float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
-                     std::chrono::steady_clock::now() - stepStart).count();
-    uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
-    uiStepUsRange.add(stepUs);
+    if (measurePerf) {
+      float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
+                       std::chrono::steady_clock::now() - stepStart).count();
+      uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+      uiStepUsRange.add(stepUs);
+    }
   }
 
   ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }

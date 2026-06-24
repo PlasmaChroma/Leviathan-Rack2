@@ -121,7 +121,8 @@ struct TDScopeWidget : ModuleWidget {
 
   void step() override {
     using PerfClock = std::chrono::steady_clock;
-    const PerfClock::time_point stepStart = PerfClock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
     bool linkedToDeck = shouldRenderDockBridge();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
@@ -136,7 +137,7 @@ struct TDScopeWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
-    if (scopeModule) {
+    if (scopeModule && measurePerf) {
       const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    PerfClock::now() - stepStart).count()) *
                            0.001f;
@@ -149,7 +150,8 @@ struct TDScopeWidget : ModuleWidget {
 
   void draw(const DrawArgs &args) override {
     using PerfClock = std::chrono::steady_clock;
-    const PerfClock::time_point moduleDrawStart = PerfClock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const PerfClock::time_point moduleDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
     bool linkedToDeck = shouldRenderDockBridge();
     if (linkedToDeck) {
       DrawArgs adjusted = args;
@@ -189,7 +191,7 @@ struct TDScopeWidget : ModuleWidget {
       nvgRestore(args.vg);
     }
 
-    if (scopeModule) {
+    if (scopeModule && measurePerf) {
       const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    PerfClock::now() - moduleDrawStart).count()) *
                            0.001f;

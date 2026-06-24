@@ -1785,6 +1785,10 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	explicit IntegralFluxHalo2Knob(Config config) : LeviathanHaloKnob2(config) {}
 
 	void draw(const DrawArgs& args) override {
+		if (!isDragonKingDebugEnabled()) {
+			LeviathanHaloKnob2::draw(args);
+			return;
+		}
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point drawStart = PerfClock::now();
 		LeviathanHaloKnob2::draw(args);
@@ -1802,6 +1806,10 @@ struct IntegralFluxCurveHalo2Knob : IntegralFluxHalo2Knob {
 
 struct IntegralFluxEclipse2Knob : Eclipse2Knob {
 	void draw(const DrawArgs& args) override {
+		if (!isDragonKingDebugEnabled()) {
+			Eclipse2Knob::draw(args);
+			return;
+		}
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point drawStart = PerfClock::now();
 		Eclipse2Knob::draw(args);
@@ -1813,6 +1821,10 @@ struct IntegralFluxEclipse2Knob : Eclipse2Knob {
 template <typename TBase>
 struct IntegralFluxTimedApertureLight : TBase {
 	void draw(const typename TBase::DrawArgs& args) override {
+		if (!isDragonKingDebugEnabled()) {
+			TBase::draw(args);
+			return;
+		}
 		using PerfClock = std::chrono::steady_clock;
 		const PerfClock::time_point drawStart = PerfClock::now();
 		TBase::draw(args);
@@ -1838,12 +1850,15 @@ struct IntegralFluxWidget : ModuleWidget {
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point stepStart = PerfClock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::step();
-		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - stepStart).count()) * 1e-6f;
-		uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
-		uiStepUsRange.add(stepMs * 1000.f);
+		if (measurePerf) {
+			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - stepStart).count()) * 1e-6f;
+			uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
+			uiStepUsRange.add(stepMs * 1000.f);
+		}
 	}
 
 	IntegralFluxWidget(IntegralFlux* module) {
@@ -2059,29 +2074,34 @@ struct IntegralFluxWidget : ModuleWidget {
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
-		gIntegralFluxGearDrawNsThisFrame = 0u;
-		gIntegralFluxEclipseDrawNsThisFrame = 0u;
-		gIntegralFluxApertureDrawNsThisFrame = 0u;
-		visual_assets::resetEclipseShadowDrawMetrics();
-		const PerfClock::time_point perfStart = PerfClock::now();
+		const bool measurePerf = isDragonKingDebugEnabled();
+		if (measurePerf) {
+			gIntegralFluxGearDrawNsThisFrame = 0u;
+			gIntegralFluxEclipseDrawNsThisFrame = 0u;
+			gIntegralFluxApertureDrawNsThisFrame = 0u;
+			visual_assets::resetEclipseShadowDrawMetrics();
+		}
+		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::draw(args);
 		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
 		if (!flux) {
 			return;
 		}
-		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - perfStart).count()) * 1e-6f;
-		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
-		uiDrawUsRange.add(drawMs * 1000.f);
-		const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
-		gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
-		const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
-		eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
-		apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
-		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
-		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
+		if (measurePerf) {
+			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count()) * 1e-6f;
+			uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
+			uiDrawUsRange.add(drawMs * 1000.f);
+			const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
+			gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
+			const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
+			eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
+			apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
+			const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
+			flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
+		}
 
-		if (isDragonKingDebugEnabled()) {
+		if (measurePerf) {
 			double nowSec = system::getTime();
 			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[flux->debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {

@@ -2063,7 +2063,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
         float scopeNewestPosSamples = 0.f;
         uint32_t scopeBinCount = 0u;
         ScopeWindowParams scopeParams;
-        auto scopePreviewMeasureStart = std::chrono::steady_clock::now();
+        auto scopePreviewMeasureStart =
+          perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
         bool haveScopeParams = computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
@@ -2090,13 +2091,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
           impl->expanderScopeCacheMono.valid = false;
           impl->expanderScopeCacheRight.valid = false;
         }
-        auto scopePreviewMeasureEnd = std::chrono::steady_clock::now();
-        float scopePreviewMeasureUs =
-          float(std::chrono::duration_cast<std::chrono::microseconds>(scopePreviewMeasureEnd - scopePreviewMeasureStart).count());
-        float previousMeasureUs = impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
-        float smoothedMeasureUs =
-          (previousMeasureUs > 0.f) ? (previousMeasureUs + (scopePreviewMeasureUs - previousMeasureUs) * 0.25f) : scopePreviewMeasureUs;
-        impl->uiScopePreviewCostUs.store(smoothedMeasureUs, std::memory_order_relaxed);
+        if (perfTimingEnabled) {
+          auto scopePreviewMeasureEnd = std::chrono::steady_clock::now();
+          float scopePreviewMeasureUs =
+            float(std::chrono::duration_cast<std::chrono::microseconds>(scopePreviewMeasureEnd - scopePreviewMeasureStart).count());
+          float previousMeasureUs = impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
+          float smoothedMeasureUs =
+            (previousMeasureUs > 0.f) ? (previousMeasureUs + (scopePreviewMeasureUs - previousMeasureUs) * 0.25f) : scopePreviewMeasureUs;
+          impl->uiScopePreviewCostUs.store(smoothedMeasureUs, std::memory_order_relaxed);
+        }
         impl->uiScopePreviewStride.store(haveScopeParams ? std::max(0, scopeParams.scopeStride) : 0, std::memory_order_relaxed);
         impl->uiScopePreviewMetricValid.store(haveScopeParams, std::memory_order_relaxed);
         uint32_t flags = 0;

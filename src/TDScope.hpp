@@ -412,7 +412,8 @@ struct TDScope final : Module {
   }
 
   void process(const ProcessArgs &args) override {
-    const auto processStart = std::chrono::steady_clock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto processStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     bool validMessage = false;
     bool previewValidNow = false;
     const temporaldeck_expander::HostToDisplay *latestMsg = nullptr;
@@ -572,8 +573,10 @@ struct TDScope final : Module {
     bool ready = linkActive && previewVisible;
     lights[LINK_LIGHT].setBrightness(linkActive && !ready ? 1.f : 0.f);
     lights[PREVIEW_LIGHT].setBrightness(ready ? 1.f : 0.f);
-    const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now() - processStart).count());
-    debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+    if (measurePerf) {
+      const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - processStart).count());
+      debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+    }
   }
 };

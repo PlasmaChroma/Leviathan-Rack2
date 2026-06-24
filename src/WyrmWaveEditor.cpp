@@ -579,7 +579,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point stepStart = PerfClock::now();
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		TransparentWidget::step();
 		const double nowSec = system::getTime();
 		advanceVisualSlitherPhase(nowSec);
@@ -656,7 +657,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			framebuffer->setDirty();
 		}
 
-		if (isDragonKingDebugEnabled()) {
+		if (measurePerf) {
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
 				if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
@@ -682,10 +683,12 @@ struct WyrmWaveEditor : TransparentWidget {
 					);
 				}
 			}
-		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - stepStart).count()) * 0.001f;
-		lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
-		stepUsRange.add(stepUs);
+		if (measurePerf) {
+			const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - stepStart).count()) * 0.001f;
+			lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
+			stepUsRange.add(stepUs);
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
