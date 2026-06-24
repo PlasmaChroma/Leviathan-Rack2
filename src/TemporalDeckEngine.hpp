@@ -1,6 +1,5 @@
 #pragma once
 
-#include "MathHelpers.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 
@@ -61,6 +60,14 @@ inline double wrapd(double x, double length) {
     x += length;
   }
   return x;
+}
+
+inline float fastTanh(float x) {
+  const float x2 = x * x;
+  if (x2 < 9.f) {
+    return x * (27.f + x2) / (27.f + 9.f * x2);
+  }
+  return (x > 0.f) ? 1.f : -1.f;
 }
 
 template <typename T, typename U, typename V>
@@ -1328,7 +1335,7 @@ struct TemporalDeckEngine {
     cachedTiltRightGain = 1.f + cachedStereoTilt * 0.5f;
     cachedAirMixGain = 1.f + cachedCartridgeParams.presenceGain;
     cachedBodyMixGain = cachedCartridgeParams.bodyGain - cachedCartridgeParams.presenceGain;
-    cachedDriveNorm = std::max(levi_math::fastTanh(cachedCartridgeParams.drive), 1e-6f);
+    cachedDriveNorm = std::max(fastTanh(cachedCartridgeParams.drive), 1e-6f);
     cachedMakeupGain = makeupGainForCartridge(cartridgeCharacter);
     cachedPlaybackColorMix = playbackColorMixForCartridge(cartridgeCharacter);
     cachedScratchCompensation = std::max(cachedCartridgeParams.scratchCompensation, 0.f);
@@ -1399,7 +1406,7 @@ struct TemporalDeckEngine {
       float voiced = air * cachedAirMixGain + body * cachedBodyMixGain;
       if (cachedDriveEnabled) {
         float dry = voiced;
-        float sat = levi_math::fastTanh(voiced * p.drive) / cachedDriveNorm;
+        float sat = fastTanh(voiced * p.drive) / cachedDriveNorm;
         voiced = crossfade(dry, sat, cachedSaturationMix);
       }
       return voiced;
@@ -1746,18 +1753,11 @@ struct TemporalDeckEngine {
 
     buffer.sampleRate = sampleRate;
     buffer.monoStorage = monoStorage;
-    buffer.left = std::move(left);
-    if (monoStorage) {
-      std::vector<float>().swap(buffer.right);
-    } else {
-      buffer.right = std::move(right);
-      if (buffer.right.size() < buffer.left.size()) {
-        buffer.right.resize(buffer.left.size(), 0.f);
-      }
-    }
-    if (buffer.left.empty()) {
-      buffer.left.assign(1, 0.f);
-    }
+    // Prepared storage is complete before publication. Swapping is constant
+    // time and returns the displaced engine buffers to the caller for
+    // destruction on the sample worker, never in the audio callback.
+    buffer.left.swap(left);
+    buffer.right.swap(right);
     buffer.size = std::max(1, int(buffer.left.size()));
     buffer.durationSeconds = std::max(1.f, float(buffer.size) / std::max(sampleRate, 1.f));
 

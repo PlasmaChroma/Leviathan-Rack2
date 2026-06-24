@@ -132,4 +132,25 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
   return outPrepared->valid;
 }
 
+bool buildPreparedEmptyBuffer(float targetSampleRate, int bufferMode, PreparedSampleData *outPrepared) {
+  if (!outPrepared || targetSampleRate <= 1.f) {
+    return false;
+  }
+  PreparedSampleData prepared;
+  prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
+                              TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+  prepared.sampleRate = targetSampleRate;
+  prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
+  const int size = std::max(1, int(std::round(
+    targetSampleRate * temporaldeck_modes::realBufferSecondsForMode(prepared.bufferMode))));
+  prepared.left.assign(size_t(size), 0.f);
+  if (!prepared.monoStorage) {
+    prepared.right.assign(size_t(size), 0.f);
+  }
+  prepared.frames = 0;
+  prepared.valid = true;
+  *outPrepared = std::move(prepared);
+  return true;
+}
+
 } // namespace temporaldeck

@@ -252,6 +252,7 @@ Crownstep::Crownstep() {
 	startAiWorker();
 	randomizeBoardValueLayout();
 	setGameMode(GAME_MODE_CHECKERS, true);
+	publishPlaybackSnapshot();
 }
 
 Crownstep::~Crownstep() {
@@ -922,6 +923,7 @@ void Crownstep::appendDebugRandomMoves(int count) {
 			sequenceTrimRight += 1;
 		}
 	}
+	publishPlaybackSnapshot();
 }
 
 void Crownstep::startNewGame() {
@@ -932,6 +934,7 @@ void Crownstep::startNewGame() {
 		history.clear();
 		moveHistory.clear();
 	}
+	publishPlaybackSnapshot();
 	highlightedDestinations.clear();
 	opponentHighlightedDestinations.clear();
 	selectedSquare = -1;
@@ -1187,6 +1190,7 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 			sequenceTrimRight += 1;
 		}
 	}
+	publishPlaybackSnapshot();
 	if (currentSequenceCap() == 1) {
 		eocActivityPulseRequests.fetch_add(1, std::memory_order_relaxed);
 	}

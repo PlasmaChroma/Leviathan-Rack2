@@ -25,6 +25,8 @@ double lifecycleElapsedMs(std::chrono::steady_clock::time_point start, std::chro
 
 TemporalDeckSampleLifecycle::~TemporalDeckSampleLifecycle() {
   stopWorker();
+  delete pendingPreparedSample_.exchange(nullptr, std::memory_order_acq_rel);
+  delete retiredPreparedSample_.exchange(nullptr, std::memory_order_acq_rel);
 }
 
 void TemporalDeckSampleLifecycle::startWorker() {
@@ -60,25 +62,59 @@ uint64_t TemporalDeckSampleLifecycle::requestAsyncSampleBuild(const AsyncSampleB
   return requestSerial;
 }
 
+uint64_t TemporalDeckSampleLifecycle::requestAsyncRuntimeBuild(
+  int type, float targetSampleRate, int requestedBufferMode) {
+  runtimeBuildType_.store(type, std::memory_order_relaxed);
+  runtimeBuildSampleRate_.store(targetSampleRate, std::memory_order_relaxed);
+  runtimeBuildBufferMode_.store(requestedBufferMode, std::memory_order_relaxed);
+  const uint64_t serial = sampleBuildRequestSerial_.fetch_add(1, std::memory_order_acq_rel) + 1u;
+  sampleBuildInProgress_.store(true, std::memory_order_release);
+  runtimeBuildPending_.store(true, std::memory_order_release);
+  sampleBuildCv_.notify_one();
+  return serial;
+}
+
+void TemporalDeckSampleLifecycle::requestClearDecodedAndPreparedStateFromAudio() {
+  clearStateRequested_.store(true, std::memory_order_release);
+  sampleBuildCv_.notify_one();
+}
+
 bool TemporalDeckSampleLifecycle::sampleBuildInProgress() const {
-  return sampleBuildInProgress_.load(std::memory_order_relaxed);
+  return sampleBuildInProgress_.load(std::memory_order_relaxed) ||
+         pendingPreparedSample_.load(std::memory_order_acquire) != nullptr;
 }
 
 bool TemporalDeckSampleLifecycle::decodedSampleAvailable() const {
   return decodedSampleAvailable_.load(std::memory_order_relaxed);
 }
 
-bool TemporalDeckSampleLifecycle::consumePendingPreparedSample(PreparedSampleData *outPrepared) {
-  if (!outPrepared || !pendingPreparedSampleInstall_.exchange(false, std::memory_order_relaxed)) {
-    return false;
+PreparedSampleData *TemporalDeckSampleLifecycle::consumePendingPreparedSample() {
+  // Do not consume another install until the worker has reclaimed the prior
+  // engine buffers. This bounds ownership to one retired allocation set and
+  // keeps the audio path free of delete/free operations.
+  if (retiredPreparedSample_.load(std::memory_order_acquire) != nullptr) {
+    return nullptr;
   }
-  std::lock_guard<std::mutex> lock(preparedSampleMutex_);
-  if (!preparedSample_.valid) {
-    return false;
+  PreparedSampleData *prepared = pendingPreparedSample_.exchange(nullptr, std::memory_order_acq_rel);
+  if (prepared) {
+    pendingPreparedBytes_.store(0u, std::memory_order_release);
   }
-  *outPrepared = std::move(preparedSample_);
-  preparedSample_ = PreparedSampleData();
-  return true;
+  return prepared;
+}
+
+void TemporalDeckSampleLifecycle::retirePreparedSampleFromAudio(PreparedSampleData *prepared) {
+  if (!prepared) {
+    return;
+  }
+  PreparedSampleData *expected = nullptr;
+  if (!retiredPreparedSample_.compare_exchange_strong(
+        expected, prepared, std::memory_order_release, std::memory_order_relaxed)) {
+    // consumePendingPreparedSample() prevents this state. Keep ownership in
+    // the pending slot as a fail-safe rather than deleting on the audio thread.
+    pendingPreparedSample_.store(prepared, std::memory_order_release);
+    return;
+  }
+  sampleBuildCv_.notify_one();
 }
 
 bool TemporalDeckSampleLifecycle::consumeAllocationFallbackPending() {
@@ -93,11 +129,8 @@ void TemporalDeckSampleLifecycle::clearDecodedAndPreparedState() {
     decodedSample_ = DecodedSampleFile();
   }
   decodedSampleAvailable_.store(false, std::memory_order_relaxed);
-  pendingPreparedSampleInstall_.store(false, std::memory_order_relaxed);
-  {
-    std::lock_guard<std::mutex> lock(preparedSampleMutex_);
-    preparedSample_ = PreparedSampleData();
-  }
+  delete pendingPreparedSample_.exchange(nullptr, std::memory_order_acq_rel);
+  pendingPreparedBytes_.store(0u, std::memory_order_release);
 }
 
 void TemporalDeckSampleLifecycle::setPendingSampleStateApply() {
@@ -137,24 +170,42 @@ void TemporalDeckSampleLifecycle::sampleMemorySnapshot(size_t *decodedBytesOut, 
     *decodedBytesOut = (decodedSample_.left.capacity() + decodedSample_.right.capacity()) * sizeof(float);
   }
   if (preparedBytesOut) {
-    std::lock_guard<std::mutex> lock(preparedSampleMutex_);
-    *preparedBytesOut = (preparedSample_.left.capacity() + preparedSample_.right.capacity()) * sizeof(float);
+    *preparedBytesOut = pendingPreparedBytes_.load(std::memory_order_acquire);
   }
 }
 
 void TemporalDeckSampleLifecycle::workerLoop() {
   while (true) {
+    if (PreparedSampleData *retired = retiredPreparedSample_.exchange(nullptr, std::memory_order_acq_rel)) {
+      delete retired;
+    }
+    if (clearStateRequested_.exchange(false, std::memory_order_acq_rel)) {
+      clearDecodedAndPreparedState();
+    }
     AsyncSampleBuildRequest request;
     uint64_t requestSerial = 0;
     {
       std::unique_lock<std::mutex> lock(sampleBuildMutex_);
-      sampleBuildCv_.wait(lock, [this]() { return sampleBuildStop_ || sampleBuildHasRequest_; });
+      sampleBuildCv_.wait(lock, [this]() {
+        return sampleBuildStop_ || sampleBuildHasRequest_ || runtimeBuildPending_.load(std::memory_order_acquire) ||
+               clearStateRequested_.load(std::memory_order_acquire) ||
+               retiredPreparedSample_.load(std::memory_order_acquire) != nullptr;
+      });
       if (sampleBuildStop_) {
         break;
       }
-      request = sampleBuildRequest_;
-      sampleBuildHasRequest_ = false;
-      requestSerial = sampleBuildRequestSerial_.load(std::memory_order_relaxed);
+      if (sampleBuildHasRequest_) {
+        request = sampleBuildRequest_;
+        sampleBuildHasRequest_ = false;
+        requestSerial = sampleBuildRequestSerial_.load(std::memory_order_relaxed);
+      } else if (runtimeBuildPending_.exchange(false, std::memory_order_acq_rel)) {
+        request.type = runtimeBuildType_.load(std::memory_order_relaxed);
+        request.targetSampleRate = runtimeBuildSampleRate_.load(std::memory_order_relaxed);
+        request.requestedBufferMode = runtimeBuildBufferMode_.load(std::memory_order_relaxed);
+        requestSerial = sampleBuildRequestSerial_.load(std::memory_order_relaxed);
+      } else {
+        continue;
+      }
     }
 
     DecodedSampleFile decoded;
@@ -162,7 +213,9 @@ void TemporalDeckSampleLifecycle::workerLoop() {
     const auto buildStart = std::chrono::steady_clock::now();
     double decodeMs = 0.0;
 
-    if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
+    if (request.type == AsyncSampleBuildRequest::BUILD_EMPTY_BUFFER) {
+      validDecoded = true;
+    } else if (request.type == AsyncSampleBuildRequest::LOAD_PATH) {
       std::string decodeError;
       bool decodeOk = false;
       try {
@@ -210,7 +263,10 @@ void TemporalDeckSampleLifecycle::workerLoop() {
     PreparedSampleData prepared;
     try {
       const auto prepStart = std::chrono::steady_clock::now();
-      if (buildPreparedSample(decoded, request.targetSampleRate, targetMode, &prepared)) {
+      const bool built = request.type == AsyncSampleBuildRequest::BUILD_EMPTY_BUFFER
+        ? buildPreparedEmptyBuffer(request.targetSampleRate, targetMode, &prepared)
+        : buildPreparedSample(decoded, request.targetSampleRate, targetMode, &prepared);
+      if (built) {
         prepared.buildSerial = requestSerial;
         prepared.buildRequestType = request.type;
         prepared.sourceFrames = decoded.frames;
@@ -219,9 +275,12 @@ void TemporalDeckSampleLifecycle::workerLoop() {
         prepared.workerPrepMs = lifecycleElapsedMs(prepStart, std::chrono::steady_clock::now());
         prepared.workerTotalMs = lifecycleElapsedMs(buildStart, std::chrono::steady_clock::now());
         if (requestSerial == sampleBuildRequestSerial_.load(std::memory_order_relaxed)) {
-          std::lock_guard<std::mutex> lock(preparedSampleMutex_);
-          preparedSample_ = std::move(prepared);
-          pendingPreparedSampleInstall_.store(true, std::memory_order_relaxed);
+          PreparedSampleData *published = new PreparedSampleData(std::move(prepared));
+          pendingPreparedBytes_.store(
+            (published->left.capacity() + published->right.capacity()) * sizeof(float),
+            std::memory_order_release);
+          PreparedSampleData *superseded = pendingPreparedSample_.exchange(published, std::memory_order_acq_rel);
+          delete superseded;
         }
       }
     } catch (const std::bad_alloc &) {

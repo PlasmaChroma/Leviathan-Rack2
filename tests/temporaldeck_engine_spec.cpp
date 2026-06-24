@@ -164,6 +164,26 @@ TestResult testSampleModeDisablesWrites() {
             ", filled " + std::to_string(beforeFilled) + " -> " + std::to_string(engine.buffer.filled)};
 }
 
+TestResult testPreparedInstallSwapsStorageWithoutReallocation() {
+  Engine engine;
+  engine.reset(100.f);
+  float *oldLeft = engine.buffer.left.data();
+  float *oldRight = engine.buffer.right.data();
+
+  std::vector<float> preparedLeft(16, 1.f);
+  std::vector<float> preparedRight(16, -1.f);
+  float *newLeft = preparedLeft.data();
+  float *newRight = preparedRight.data();
+  engine.installPreparedSample(std::move(preparedLeft), std::move(preparedRight), 16, false, false);
+
+  const bool installedPointers = engine.buffer.left.data() == newLeft && engine.buffer.right.data() == newRight;
+  const bool displacedPointers = preparedLeft.data() == oldLeft && preparedRight.data() == oldRight;
+  const bool pass = installedPointers && displacedPointers && engine.sampleFrames == 16;
+  return {"Prepared install swaps storage and returns displaced buffers", pass,
+          "installed=" + std::to_string(int(installedPointers)) +
+            " displaced=" + std::to_string(int(displacedPointers))};
+}
+
 TestResult testSampleTransportStopsAtEndWithoutLoop() {
   const float sr = 48000.f;
   const int frames = 16;
@@ -386,11 +406,11 @@ TestResult testLiveTouchDirectionalCompensationBalance() {
 
 TestResult testLiveTouchWriteHeadCompensationPolicyOnlyNearNow() {
   const float sr = 48000.f;
-  bool near = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr, sr);
-  bool deep = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, true, true, sr + 1.0, sr);
-  bool sampleMode = Engine::shouldApplyLiveManualWriteHeadCompensation(true, false, true, true, sr * 0.5, sr);
-  bool freeze = Engine::shouldApplyLiveManualWriteHeadCompensation(false, true, true, true, sr * 0.5, sr);
-  bool idle = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, false, sr * 0.5, sr);
+  bool near = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, true, true, sr, sr);
+  bool deep = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, true, true, sr + 1.0, sr);
+  bool sampleMode = Engine::shouldApplyLiveManualWriteHeadCompensation(true, false, false, true, true, sr * 0.5, sr);
+  bool freeze = Engine::shouldApplyLiveManualWriteHeadCompensation(false, true, false, true, true, sr * 0.5, sr);
+  bool idle = Engine::shouldApplyLiveManualWriteHeadCompensation(false, false, false, false, false, sr * 0.5, sr);
 
   bool pass = near && !deep && !sampleMode && !freeze && !idle;
   return {"Live touch write-head compensation policy is near-NOW only", pass,
@@ -417,11 +437,11 @@ TestResult testDeepLiveManualTouchPolicyOnlyBeyondWindow() {
 TestResult testManualTouchNowSnapPolicy() {
   const float sr = 48000.f;
   const float nowThreshold = sr * 0.033f;
-  bool nearForward = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, 1.f, 200.0, nowThreshold);
-  bool deep = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, 1.f, sr * 2.0, nowThreshold);
-  bool reverse = Engine::shouldAllowManualTouchNowSnap(false, false, true, true, -1.f, 200.0, nowThreshold);
-  bool freezeLike = Engine::shouldAllowManualTouchNowSnap(false, true, true, true, 1.f, 200.0, nowThreshold);
-  bool sampleMode = Engine::shouldAllowManualTouchNowSnap(true, false, true, true, 1.f, 200.0, nowThreshold);
+  bool nearForward = Engine::shouldAllowManualTouchNowSnap(false, false, false, true, true, 1.f, 200.0, nowThreshold);
+  bool deep = Engine::shouldAllowManualTouchNowSnap(false, false, false, true, true, 1.f, sr * 2.0, nowThreshold);
+  bool reverse = Engine::shouldAllowManualTouchNowSnap(false, false, false, true, true, -1.f, 200.0, nowThreshold);
+  bool freezeLike = Engine::shouldAllowManualTouchNowSnap(false, true, false, true, true, 1.f, 200.0, nowThreshold);
+  bool sampleMode = Engine::shouldAllowManualTouchNowSnap(true, false, false, true, true, 1.f, 200.0, nowThreshold);
   bool pass = nearForward && !deep && !reverse && !freezeLike && !sampleMode;
   return {"Manual touch near-NOW snap policy", pass,
           "nearForward=" + std::to_string(int(nearForward)) + " deep=" + std::to_string(int(deep)) +
@@ -521,6 +541,7 @@ int main() {
   std::vector<TestResult> tests;
   tests.push_back(testLiveModeWritesAdvance());
   tests.push_back(testSampleModeDisablesWrites());
+  tests.push_back(testPreparedInstallSwapsStorageWithoutReallocation());
   tests.push_back(testSampleTransportStopsAtEndWithoutLoop());
   tests.push_back(testSampleLoopWraps());
   tests.push_back(testLiveFreezeForwardTouchSnapAppliesToReadHead());

@@ -43,4 +43,6 @@ int chooseSampleBufferMode(const DecodedSampleFile &sample);
 bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSampleRate, int bufferMode,
                          PreparedSampleData *outPrepared);
 
+bool buildPreparedEmptyBuffer(float targetSampleRate, int bufferMode, PreparedSampleData *outPrepared);
+
 } // namespace temporaldeck

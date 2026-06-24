@@ -321,6 +321,7 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 			lastMoveSide = moveHistory.empty() ? 0 : opposingSide(turnSide);
 		}
 	}
+	publishPlaybackSnapshot();
 		captureFlashSeconds = 0.f;
 		resetMoveAnimation();
 		cachedRootSemitoneValid = false;

@@ -246,6 +246,21 @@ struct Crownstep : Module {
 	bool aiWorkerHasRequest = false;
 	bool aiWorkerHasResult = false;
 	mutable std::recursive_mutex sequenceMutex;
+	struct PlaybackSnapshot {
+		std::vector<Step> history;
+		std::vector<Move> moveHistory;
+		bool rangeTrimEnabled = false;
+		int trimLeft = 0;
+		int trimRight = 0;
+	};
+	// UI/serialization publish complete immutable snapshots. The engine marks
+	// the slot it is reading so publishers can always choose a different slot.
+	// Three slots allow a new publish while the engine still reads the previous
+	// generation without locks, allocation, or reference-count destruction.
+	std::array<PlaybackSnapshot, 3> playbackSnapshots;
+	std::atomic<int> playbackSnapshotPublished {0};
+	mutable std::atomic<int> playbackSnapshotReader {-1};
+	std::atomic<bool> heldPitchRefreshRequested {true};
 
 
 	Crownstep();
@@ -314,8 +329,12 @@ struct Crownstep : Module {
 	int activeEndIndexExclusive();
 	void setActiveRangeTrimWindow(int startInclusive, int endExclusive);
 	void clearActiveRangeTrimWindow();
+	void publishPlaybackSnapshot();
+	const PlaybackSnapshot& acquirePlaybackSnapshot(int* slotOut) const;
+	void releasePlaybackSnapshot(int slot) const;
 	float pitchForSequenceIndex(int sequenceIndex);
 	void refreshHeldPitchForCurrentStep();
+	void applyHeldPitchRefreshFromSnapshot();
 	void randomizeBoardValueLayout();
 	void emitStepAtClockEdge();
 

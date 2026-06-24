@@ -1225,8 +1225,8 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
 }
 
 void TemporalDeck::onSampleRateChange() {
-  // Reconfiguration is applied on the audio thread from process() to avoid
-  // cross-thread buffer reallocations.
+  // process() publishes a POD runtime-build request. The sample worker creates
+  // complete storage; audio only swaps it into the engine when ready.
 }
 
 json_t *TemporalDeck::dataToJson() {
@@ -1366,15 +1366,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
   const auto processStart = perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
   if (impl->sampleLifecycle.consumeAllocationFallbackPending()) {
-    impl->sampleLifecycle.clearDecodedAndPreparedState();
+    impl->sampleLifecycle.requestClearDecodedAndPreparedStateFromAudio();
     impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
     impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
     impl->sampleLifecycle.setPendingSampleStateApply();
   }
 
-  PreparedSampleData prepared;
   bool installedPreparedSampleThisFrame = false;
-  if (impl->sampleLifecycle.consumePendingPreparedSample(&prepared)) {
+  if (PreparedSampleData *preparedPtr = impl->sampleLifecycle.consumePendingPreparedSample()) {
+    PreparedSampleData &prepared = *preparedPtr;
     std::string samplePath;
     size_t lifecycleDecodedBytes = 0u;
     size_t lifecyclePreparedBytes = 0u;
@@ -1399,7 +1399,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     const auto installEnd = std::chrono::steady_clock::now();
     installedPreparedSampleThisFrame = true;
     impl->pendingSampleStateApplyDeferralLogged = false;
-    impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+    impl->sampleModeEnabled.store(impl->engine.sampleLoaded, std::memory_order_relaxed);
     if (impl->pendingLegacySampleFreezeOnPreparedInstall) {
       impl->transportControl.freezeLatched = true;
       impl->transportControl.freezeLatchedByButton = false;
@@ -1431,6 +1431,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
                                          elapsedMs(resetStart, resetEnd),
                                          elapsedMs(installStart, installEnd),
                                          elapsedMs(processInstallStart, std::chrono::steady_clock::now()));
+    impl->sampleLifecycle.retirePreparedSampleFromAudio(preparedPtr);
   }
 
   int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
@@ -1482,36 +1483,19 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
   bool shouldRebuildLoadedSample = decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
   if (shouldApplyWithoutDecoded) {
-    const auto applyStart = std::chrono::steady_clock::now();
-    applySampleRateChange(args.sampleRate);
-    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
-                                         "process_apply_sample_rate_change",
-                                         "",
-                                         0u,
-                                         0,
-                                         args.sampleRate,
-                                         requestedBufferMode,
-                                         0,
-                                         0,
-                                         0,
-                                         (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
-                                         0u,
-                                         0u,
-                                         decodedAvailable,
-                                         sampleBuildInProgress,
-                                         0.0,
-                                         0.0,
-                                         0.0,
-                                         elapsedMs(applyStart, std::chrono::steady_clock::now()),
-                                         0.0,
-                                         elapsedMs(applyStart, std::chrono::steady_clock::now()),
-                                         "no decoded sample available");
+    temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
+    request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::BUILD_EMPTY_BUFFER;
+    request.targetSampleRate = args.sampleRate;
+    request.requestedBufferMode = requestedBufferMode;
+    impl->sampleLifecycle.requestAsyncRuntimeBuild(
+      request.type, request.targetSampleRate, request.requestedBufferMode);
   } else if (shouldRebuildLoadedSample && !sampleBuildInProgress) {
     temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
     request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::REBUILD_FROM_DECODED;
     request.targetSampleRate = args.sampleRate;
     request.requestedBufferMode = requestedBufferMode;
-    uint64_t requestSerial = impl->sampleLifecycle.requestAsyncSampleBuild(request);
+    uint64_t requestSerial = impl->sampleLifecycle.requestAsyncRuntimeBuild(
+      request.type, request.targetSampleRate, request.requestedBufferMode);
     appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
                                          "request_rebuild_from_decoded",
                                          impl->sampleLifecycle.samplePath(),

@@ -18,6 +18,7 @@ struct TemporalDeckSampleLifecycle {
       NONE = 0,
       LOAD_PATH = 1,
       REBUILD_FROM_DECODED = 2,
+      BUILD_EMPTY_BUFFER = 3,
     };
     int type = NONE;
     std::string path;
@@ -32,10 +33,13 @@ struct TemporalDeckSampleLifecycle {
   void stopWorker();
 
   uint64_t requestAsyncSampleBuild(const AsyncSampleBuildRequest &request);
+  uint64_t requestAsyncRuntimeBuild(int type, float targetSampleRate, int requestedBufferMode);
+  void requestClearDecodedAndPreparedStateFromAudio();
   bool sampleBuildInProgress() const;
   bool decodedSampleAvailable() const;
 
-  bool consumePendingPreparedSample(temporaldeck::PreparedSampleData *outPrepared);
+  temporaldeck::PreparedSampleData *consumePendingPreparedSample();
+  void retirePreparedSampleFromAudio(temporaldeck::PreparedSampleData *prepared);
   bool consumeAllocationFallbackPending();
 
   void clearDecodedAndPreparedState();
@@ -57,9 +61,9 @@ private:
   temporaldeck::DecodedSampleFile decodedSample_;
   std::atomic<bool> decodedSampleAvailable_{false};
 
-  mutable std::mutex preparedSampleMutex_;
-  temporaldeck::PreparedSampleData preparedSample_;
-  std::atomic<bool> pendingPreparedSampleInstall_{false};
+  std::atomic<temporaldeck::PreparedSampleData *> pendingPreparedSample_{nullptr};
+  std::atomic<temporaldeck::PreparedSampleData *> retiredPreparedSample_{nullptr};
+  std::atomic<size_t> pendingPreparedBytes_{0u};
 
   std::thread sampleBuildThread_;
   mutable std::mutex sampleBuildMutex_;
@@ -70,6 +74,11 @@ private:
   std::atomic<bool> sampleBuildInProgress_{false};
   std::atomic<uint64_t> sampleBuildRequestSerial_{0};
   std::atomic<bool> allocationFallbackPending_{false};
+  std::atomic<bool> runtimeBuildPending_{false};
+  std::atomic<int> runtimeBuildType_{AsyncSampleBuildRequest::NONE};
+  std::atomic<float> runtimeBuildSampleRate_{44100.f};
+  std::atomic<int> runtimeBuildBufferMode_{temporaldeck::TemporalDeckEngine::BUFFER_DURATION_10S};
+  std::atomic<bool> clearStateRequested_{false};
 
   std::atomic<bool> pendingSampleStateApply_{false};
 };

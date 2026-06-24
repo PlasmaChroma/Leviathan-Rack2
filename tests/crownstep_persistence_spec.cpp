@@ -1,8 +1,11 @@
 #include "../src/CrownstepShared.hpp"
 
 #include <cmath>
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 ModuleTeardownTimer::ModuleTeardownTimer(const char* moduleName)
@@ -292,6 +295,43 @@ TestResult testRootCvUsesOneVoltPerOctaveSemitoneQuantization() {
             std::to_string(negativeSemitoneRoot)};
 }
 
+TestResult testPlaybackSnapshotDoesNotWaitForSequenceMutex() {
+  Crownstep module;
+  Step step;
+  step.pitch = 1.25f;
+  step.accent = 0.75f;
+  step.mod = 0.2f;
+  {
+    std::lock_guard<std::recursive_mutex> lock(module.sequenceMutex);
+    module.history.assign(1, step);
+    module.moveHistory.clear();
+  }
+  module.publishPlaybackSnapshot();
+
+  std::atomic<bool> mutexHeld {false};
+  std::thread holder([&]() {
+    std::lock_guard<std::recursive_mutex> lock(module.sequenceMutex);
+    mutexHeld.store(true, std::memory_order_release);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  });
+  while (!mutexHeld.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+
+  const auto start = std::chrono::steady_clock::now();
+  module.emitStepAtClockEdge();
+  const double elapsedMs = std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now() - start).count() * 1e-3;
+  holder.join();
+
+  const bool outputOk = nearlyEqual(module.heldPitch, step.pitch) &&
+                        nearlyEqual(module.heldAccent, step.accent) &&
+                        nearlyEqual(module.modOutputVolts, step.mod * 10.f);
+  const bool pass = elapsedMs < 50.0 && outputOk;
+  return {"Playback snapshot never waits for UI sequence mutex", pass,
+          "elapsedMs=" + std::to_string(elapsedMs) + " outputOk=" + std::to_string(int(outputOk))};
+}
+
 } // namespace
 
 int main() {
@@ -299,6 +339,7 @@ int main() {
   tests.push_back(testCrownstepStateJsonRoundTrip());
   tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
   tests.push_back(testDiagonalLayoutModesAreDistinct());
+  tests.push_back(testPlaybackSnapshotDoesNotWaitForSequenceMutex());
 
   int failed = 0;
   std::cout << "Crownstep Persistence Spec\n";

@@ -101,6 +101,18 @@ TestResult testFileBufferScalingIsInvertible() {
           "buffer=" + std::to_string(bufferSample) + " roundTrip=" + std::to_string(roundTrip)};
 }
 
+TestResult testBuildPreparedEmptyLiveBuffer() {
+  PreparedSampleData prepared;
+  bool ok = temporaldeck::buildPreparedEmptyBuffer(
+    10.f, TemporalDeckEngine::BUFFER_DURATION_10S, &prepared);
+  const int expected = int(std::round(
+    10.f * temporaldeck_modes::realBufferSecondsForMode(TemporalDeckEngine::BUFFER_DURATION_10S)));
+  bool pass = ok && prepared.valid && prepared.frames == 0 && !prepared.monoStorage &&
+              int(prepared.left.size()) == expected && int(prepared.right.size()) == expected;
+  return {"Empty live buffer is fully prepared off the audio path", pass,
+          "left=" + std::to_string(prepared.left.size()) + " expected=" + std::to_string(expected)};
+}
+
 } // namespace
 
 int main() {
@@ -110,6 +122,7 @@ int main() {
   tests.push_back(testBuildPreparedSampleTruncatesToBufferLimit());
   tests.push_back(testInvalidInputClearsPreparedOutput());
   tests.push_back(testFileBufferScalingIsInvertible());
+  tests.push_back(testBuildPreparedEmptyLiveBuffer());
 
   int failed = 0;
   std::cout << "TemporalDeck Sample Prep Spec\n";
