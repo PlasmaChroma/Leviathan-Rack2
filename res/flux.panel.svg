@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="flux.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)" inkscape:label="Wave Art">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="flux.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)" inkscape:label="Wave Art">
   <defs id="defs1">
     <linearGradient id="linearGradient33" inkscape:collect="always">
       <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop32" />
@@ -169,6 +169,7 @@
     </g>
   </g>
   <g id="components" style="display:none" transform="matrix(1.0000025,0,0,1.0000025,-9.8065814e-4,-0.00279678)">
+    <rect id="DRAGON_RENDER_AREA" x="4213.81" y="1092.8" width="1742.13" height="3558.49" style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke:none" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="LIN_LOG_1" cx="1397.5443" cy="5052.6074" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="FALL_1" cx="4200.748" cy="5307.9067" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="CYCLE_1" cx="2837.5388" cy="2093.8098" rx="294.84427" ry="295.80988" />

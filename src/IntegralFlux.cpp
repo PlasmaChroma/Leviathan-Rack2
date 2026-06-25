@@ -22,6 +22,29 @@ std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxApertureDrawNsThisFrame = 0u;
+
+struct IntegralFluxFittedSvgWidget final : TransparentWidget {
+	std::shared_ptr<window::Svg> svg;
+
+	void setSvg(std::shared_ptr<window::Svg> svg) {
+		this->svg = svg;
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!svg || !svg->handle || box.size.x <= 0.f || box.size.y <= 0.f) {
+			return;
+		}
+		const Vec svgSize = svg->getSize();
+		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+			return;
+		}
+
+		nvgSave(args.vg);
+		nvgScale(args.vg, box.size.x / svgSize.x, box.size.y / svgSize.y);
+		svg->draw(args.vg);
+		nvgRestore(args.vg);
+	}
+};
 }
 
 struct IntegralFlux : Module {
@@ -2202,6 +2225,18 @@ struct IntegralFluxWidget : ModuleWidget {
 			labelsFb->dirtyOnSubpixelChange = true;
 			labelsFb->addChild(labels);
 			addChild(labelsFb);
+		}
+		{
+			math::Rect dragonRectMm;
+			if (!panel_svg::loadRectFromSvgMm(panelPath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
+				dragonRectMm.pos = Vec(42.1381f, 10.928f);
+				dragonRectMm.size = Vec(17.4213f, 35.5849f);
+			}
+			IntegralFluxFittedSvgWidget* dragon = new IntegralFluxFittedSvgWidget();
+			dragon->setSvg(visual_assets::loadPluginSvgCached("res/icon/Leviathan_Optimized.svg"));
+			dragon->box.pos = mm2px(dragonRectMm.pos);
+			dragon->box.size = mm2px(dragonRectMm.size);
+			addChild(dragon);
 		}
 		previewBuildTimer.markPanelDone();
 
