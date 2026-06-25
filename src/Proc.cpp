@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -1542,15 +1543,14 @@ struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Proc", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/proc.svg");
-		setPanel(createPanel(panelPath));
+		const std::string panelBasePath = asset::plugin(pluginInstance, "res/proc.panel.svg");
+		setPanel(createPanel(panelBasePath));
+		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));
 		//addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-
-		visual_assets::addSvgRect3DEffectWidgets(this, panelPath);
 
 		Vec cyclePos(33.075f, 20.138f);
 		Vec risePos(32.907f, 36.293f);
@@ -1575,7 +1575,7 @@ struct ProcWidget : ModuleWidget {
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPosMm) {
 			Vec pointMm;
-			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+			if (panel_svg::loadPointFromSvgMm(panelBasePath, elementId, &pointMm)) {
 				*outPosMm = pointMm;
 			}
 		};
@@ -1617,7 +1617,7 @@ struct ProcWidget : ModuleWidget {
 		{
 			WavePreviewWidget* previewWidget = new WavePreviewWidget();
 			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
 				// Keep the legacy SVG id until proc.svg is cleaned up as well.
 				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
@@ -1633,7 +1633,7 @@ struct ProcWidget : ModuleWidget {
 			}
 			addChild(previewWidget);
 		}
-		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));
 		previewBuildTimer.markAnchorsDone();
 
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));

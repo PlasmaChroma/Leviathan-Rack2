@@ -1858,283 +1858,6 @@ struct IntegralFluxTimedApertureLight : TBase {
 	}
 };
 
-struct IntegralFluxSplitLayerTestArt : TransparentWidget {
-	struct GlassRectArt {
-		math::Rect rectPx;
-		float radiusPx = 0.f;
-		NVGcolor baseColor = nvgRGB(87, 64, 191);
-	};
-
-	std::vector<GlassRectArt> glassRects;
-	std::vector<math::Rect> screenRectsPx;
-
-	void setGlassRects(std::vector<GlassRectArt> rects) {
-		glassRects = std::move(rects);
-	}
-
-	void setScreenRects(std::vector<math::Rect> rectsPx) {
-		screenRectsPx = std::move(rectsPx);
-	}
-
-	static bool rectsIntersect(const math::Rect& a, const math::Rect& b) {
-		return a.pos.x < b.pos.x + b.size.x
-			&& a.pos.x + a.size.x > b.pos.x
-			&& a.pos.y < b.pos.y + b.size.y
-			&& a.pos.y + a.size.y > b.pos.y;
-	}
-
-	static math::Rect rectIntersection(const math::Rect& a, const math::Rect& b) {
-		const float x0 = std::max(a.pos.x, b.pos.x);
-		const float y0 = std::max(a.pos.y, b.pos.y);
-		const float x1 = std::min(a.pos.x + a.size.x, b.pos.x + b.size.x);
-		const float y1 = std::min(a.pos.y + a.size.y, b.pos.y + b.size.y);
-		return math::Rect(Vec(x0, y0), Vec(std::max(0.f, x1 - x0), std::max(0.f, y1 - y0)));
-	}
-
-	static void subtractRect(std::vector<math::Rect>& pieces, const math::Rect& cut) {
-		std::vector<math::Rect> next;
-		next.reserve(pieces.size() + 3u);
-		for (const math::Rect& piece : pieces) {
-			if (!rectsIntersect(piece, cut)) {
-				next.push_back(piece);
-				continue;
-			}
-			const math::Rect inter = rectIntersection(piece, cut);
-			const float px0 = piece.pos.x;
-			const float py0 = piece.pos.y;
-			const float px1 = piece.pos.x + piece.size.x;
-			const float py1 = piece.pos.y + piece.size.y;
-			const float ix0 = inter.pos.x;
-			const float iy0 = inter.pos.y;
-			const float ix1 = inter.pos.x + inter.size.x;
-			const float iy1 = inter.pos.y + inter.size.y;
-			auto addPiece = [&next](float x0, float y0, float x1, float y1) {
-				if (x1 - x0 > 0.5f && y1 - y0 > 0.5f) {
-					next.push_back(math::Rect(Vec(x0, y0), Vec(x1 - x0, y1 - y0)));
-				}
-			};
-			addPiece(px0, py0, px1, iy0);
-			addPiece(px0, iy1, px1, py1);
-			addPiece(px0, iy0, ix0, iy1);
-			addPiece(ix1, iy0, px1, iy1);
-		}
-		pieces = std::move(next);
-	}
-
-	void drawGlassRectPiece(const DrawArgs& args, const GlassRectArt& glass, const math::Rect& piece) {
-		const float x = glass.rectPx.pos.x;
-		const float y = glass.rectPx.pos.y;
-		const float w = glass.rectPx.size.x;
-		const float h = glass.rectPx.size.y;
-		if (!(w > 2.f && h > 2.f && piece.size.x > 0.5f && piece.size.y > 0.5f)) {
-			return;
-		}
-
-		const float sourceRadius = glass.radiusPx > 0.f ? glass.radiusPx : std::min(std::min(w, h) * 0.085f, 8.0f);
-		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
-		const NVGcolor base = glass.baseColor;
-		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
-		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
-
-		NVGpaint outerGlow = nvgBoxGradient(
-			args.vg,
-			x - 1.5f,
-			y - 1.5f,
-			w + 3.0f,
-			h + 3.0f,
-			r + 2.0f,
-			7.0f,
-			nvgRGBAf(base.r, base.g, base.b, 0.075f),
-			nvgRGBA(0, 0, 0, 0));
-		nvgSave(args.vg);
-		nvgScissor(args.vg, piece.pos.x, piece.pos.y, piece.size.x, piece.size.y);
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x - 1.5f, y - 1.5f, w + 3.0f, h + 3.0f, r + 2.0f);
-		nvgFillPaint(args.vg, outerGlow);
-		nvgFill(args.vg);
-
-		NVGpaint glassFill = nvgLinearGradient(
-			args.vg,
-			x,
-			y,
-			x,
-			y + h,
-			nvgRGBA(255, 255, 255, 14),
-			nvgRGBAf(base.r, base.g, base.b, 0.04f));
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
-		nvgFillPaint(args.vg, glassFill);
-		nvgFill(args.vg);
-
-		nvgSave(args.vg);
-		nvgScissor(args.vg, x + 1.f, y + 1.f, w - 2.f, h - 2.f);
-		NVGpaint sheen = nvgLinearGradient(
-			args.vg,
-			x + w * 0.12f,
-			y + h * 0.05f,
-			x + w * 0.55f,
-			y + h * 0.62f,
-			nvgRGBA(255, 255, 255, 10),
-			nvgRGBA(255, 255, 255, 0));
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.06f, y);
-		nvgLineTo(args.vg, x + w * 0.23f, y);
-		nvgLineTo(args.vg, x + w * 0.64f, y + h);
-		nvgLineTo(args.vg, x + w * 0.46f, y + h);
-		nvgClosePath(args.vg);
-		nvgFillPaint(args.vg, sheen);
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, r);
-		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 17));
-		nvgStroke(args.vg);
-
-		NVGpaint edge = nvgLinearGradient(
-			args.vg,
-			x,
-			y,
-			x + w,
-			y + h,
-			nvgRGBAf(violet.r, violet.g, violet.b, 0.16f),
-			nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.12f));
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, x + 1.35f, y + 1.35f, w - 2.7f, h - 2.7f, std::max(1.f, r - 1.f));
-		nvgStrokeWidth(args.vg, 0.55f);
-		nvgStrokePaint(args.vg, edge);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + r + 2.f, y + 2.2f);
-		nvgLineTo(args.vg, x + w - r - 2.f, y + 2.2f);
-		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
-		nvgStroke(args.vg);
-		nvgRestore(args.vg);
-	}
-
-	void drawGlassRect(const DrawArgs& args, const GlassRectArt& glass) {
-		std::vector<math::Rect> pieces;
-		pieces.push_back(glass.rectPx);
-		for (const math::Rect& screen : screenRectsPx) {
-			subtractRect(pieces, screen);
-			if (pieces.empty()) {
-				break;
-			}
-		}
-		for (const math::Rect& piece : pieces) {
-			drawGlassRectPiece(args, glass, piece);
-		}
-	}
-
-	void drawScreenGrid(const DrawArgs& args, const math::Rect& screen) {
-		const float x = screen.pos.x;
-		const float y = screen.pos.y;
-		const float w = screen.size.x;
-		const float h = screen.size.y;
-		if (!(w > 4.f && h > 4.f)) {
-			return;
-		}
-
-		nvgSave(args.vg);
-		nvgScissor(args.vg, x, y, w, h);
-
-		const int majorCols = std::max(3, int(std::round(w / 16.0f)));
-		const int majorRows = std::max(3, int(std::round(h / 16.0f)));
-		const int minorSubdivisions = 4;
-		const float majorX = w / float(majorCols);
-		const float majorY = h / float(majorRows);
-		const NVGcolor minorColor = nvgRGBA(0x1c, 0xcc, 0xd9, 30);
-		const NVGcolor majorColor = nvgRGBA(0x72, 0x8d, 0xff, 46);
-
-		nvgBeginPath(args.vg);
-		for (int col = 0; col < majorCols; ++col) {
-			const float cellX = x + float(col) * majorX;
-			for (int sub = 1; sub < minorSubdivisions; ++sub) {
-				const float gx = cellX + majorX * (float(sub) / float(minorSubdivisions));
-				nvgMoveTo(args.vg, gx, y);
-				nvgLineTo(args.vg, gx, y + h);
-			}
-		}
-		for (int row = 0; row < majorRows; ++row) {
-			const float cellY = y + float(row) * majorY;
-			for (int sub = 1; sub < minorSubdivisions; ++sub) {
-				const float gy = cellY + majorY * (float(sub) / float(minorSubdivisions));
-				nvgMoveTo(args.vg, x, gy);
-				nvgLineTo(args.vg, x + w, gy);
-			}
-		}
-		nvgStrokeWidth(args.vg, 0.38f);
-		nvgStrokeColor(args.vg, minorColor);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		for (int col = 1; col < majorCols; ++col) {
-			const float gx = x + float(col) * majorX;
-			nvgMoveTo(args.vg, gx, y);
-			nvgLineTo(args.vg, gx, y + h);
-		}
-		for (int row = 1; row < majorRows; ++row) {
-			const float gy = y + float(row) * majorY;
-			nvgMoveTo(args.vg, x, gy);
-			nvgLineTo(args.vg, x + w, gy);
-		}
-		nvgStrokeWidth(args.vg, 0.55f);
-		nvgStrokeColor(args.vg, majorColor);
-		nvgStroke(args.vg);
-
-		NVGpaint vignette = nvgBoxGradient(
-			args.vg,
-			x + 1.f,
-			y + 1.f,
-			w - 2.f,
-			h - 2.f,
-			1.5f,
-			9.0f,
-			nvgRGBA(0, 0, 0, 0),
-			nvgRGBA(0, 0, 0, 132));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, x, y, w, h);
-		nvgFillPaint(args.vg, vignette);
-		nvgFill(args.vg);
-
-		NVGpaint edgeGlow = nvgBoxGradient(
-			args.vg,
-			x + 0.5f,
-			y + 0.5f,
-			w - 1.f,
-			h - 1.f,
-			1.5f,
-			4.0f,
-			nvgRGBA(0x1c, 0xcc, 0xd9, 78),
-			nvgRGBA(0x1c, 0xcc, 0xd9, 0));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, x, y, w, h);
-		nvgStrokeWidth(args.vg, 1.1f);
-		nvgStrokePaint(args.vg, edgeGlow);
-		nvgStroke(args.vg);
-
-		nvgRestore(args.vg);
-	}
-
-	void draw(const DrawArgs& args) override {
-		const float w = box.size.x;
-		const float h = box.size.y;
-		if (!(w > 0.f && h > 0.f)) {
-			return;
-		}
-
-		for (const GlassRectArt& glass : glassRects) {
-			drawGlassRect(args, glass);
-		}
-		for (const math::Rect& screen : screenRectsPx) {
-			drawScreenGrid(args, screen);
-		}
-	}
-};
-
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
@@ -2166,54 +1889,9 @@ struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
 		const std::string panelBasePath = asset::plugin(pluginInstance, "res/flux.panel.svg");
 		setPanel(createPanel(panelBasePath));
-		{
-			widget::FramebufferWidget* overlayFb = new widget::FramebufferWidget();
-			overlayFb->dirtyOnSubpixelChange = false;
-			overlayFb->box.size = box.size;
-
-			IntegralFluxSplitLayerTestArt* testArt = new IntegralFluxSplitLayerTestArt();
-			testArt->box.size = box.size;
-			{
-				static bool cachedGlassRectsLoaded = false;
-				static std::vector<IntegralFluxSplitLayerTestArt::GlassRectArt> cachedGlassRects;
-				static std::vector<math::Rect> cachedScreenRectsPx;
-				if (!cachedGlassRectsLoaded) {
-					std::vector<panel_svg::SvgRectMatch> glassMatches;
-					if (panel_svg::findRectsInGroupsWithIdSubstringMm(panelBasePath, "glass", &glassMatches)) {
-						cachedGlassRects.reserve(glassMatches.size());
-						for (const panel_svg::SvgRectMatch& match : glassMatches) {
-							IntegralFluxSplitLayerTestArt::GlassRectArt art;
-							art.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
-							if (match.hasCornerRadius) {
-								const Vec radiusPx = mm2px(match.cornerRadius);
-								art.radiusPx = std::min(radiusPx.x, radiusPx.y);
-							}
-							if (match.hasFillColor) {
-								art.baseColor = match.fillColor;
-							}
-							cachedGlassRects.push_back(art);
-						}
-					}
-					std::vector<panel_svg::SvgRectMatch> screenMatches;
-					if (panel_svg::findRectsInGroupsWithIdSubstringMm(panelBasePath, "screen", &screenMatches)) {
-						cachedScreenRectsPx.reserve(screenMatches.size());
-						for (const panel_svg::SvgRectMatch& match : screenMatches) {
-							math::Rect screenRectMm = insetRectMm(match.rect, 0.2f);
-							cachedScreenRectsPx.push_back(math::Rect(mm2px(screenRectMm.pos), mm2px(screenRectMm.size)));
-						}
-					}
-					cachedGlassRectsLoaded = true;
-				}
-				testArt->setGlassRects(cachedGlassRects);
-				testArt->setScreenRects(cachedScreenRectsPx);
-			}
-			overlayFb->addChild(testArt);
-
-			addChild(overlayFb);
-		}
+		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
 		{
 			widget::SvgWidget* labels = new widget::SvgWidget();
 			labels->setSvg(visual_assets::loadPluginSvgCached("res/flux.labels.svg"));
@@ -2228,7 +1906,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		{
 			math::Rect dragonRectMm;
-			if (!panel_svg::loadRectFromSvgMm(panelPath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
+			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
 				dragonRectMm.pos = Vec(42.1381f, 10.928f);
 				dragonRectMm.size = Vec(17.4213f, 35.5849f);
 			}
@@ -2298,7 +1976,7 @@ struct IntegralFluxWidget : ModuleWidget {
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
 			Vec pointMm;
-			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+			if (panel_svg::loadPointFromSvgMm(panelBasePath, elementId, &pointMm)) {
 				*outPos = pointMm;
 			}
 		};
@@ -2348,7 +2026,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			applyPointOverride("Light_Unity_4", &unity4LightPos);
 			applyPointOverride("OR_LED", &orLightPos);
 			applyPointOverride("INV_LED", &invLightPos);
-		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));
 		previewBuildTimer.markAnchorsDone();
 
 		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
@@ -2363,7 +2041,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
 				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch1Preview->box.pos = mm2px(previewRectMm.pos);
@@ -2381,7 +2059,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
 			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewRectMm)) {
 				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				ch4Preview->box.pos = mm2px(previewRectMm.pos);

@@ -10,6 +10,7 @@ Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
+Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createLeviathanFooterLogoWidget(math::Rect boundsMm);
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");
 void resetEclipseShadowDrawMetrics();

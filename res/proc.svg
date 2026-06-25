@@ -20,22 +20,6 @@
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
    id="defs1"><linearGradient
-   id="linearGradient3"
-   inkscape:collect="always"><stop
-     style="stop-color:#1cccd9;stop-opacity:1;"
-     offset="0"
-     id="stop19" /><stop
-     style="stop-color:#1cccd9;stop-opacity:0.5;"
-     offset="1"
-     id="stop24" /></linearGradient><linearGradient
-   id="linearGradient2"
-   inkscape:collect="always"><stop
-     style="stop-color:#5740bf;stop-opacity:1;"
-     offset="0"
-     id="stop17" /><stop
-     style="stop-color:#5740bf;stop-opacity:0.5;"
-     offset="1"
-     id="stop18" /></linearGradient><linearGradient
    id="linearGradient22"
    inkscape:collect="always"><stop
      style="stop-color:#7a5cff;stop-opacity:1;"
@@ -251,23 +235,7 @@
    x1="5546.3999"
    y1="1486.0581"
    x2="6703.7256"
-   y2="1488.6417" /><linearGradient
-   inkscape:collect="always"
-   xlink:href="#linearGradient2"
-   id="linearGradient18"
-   x1="1082.2377"
-   y1="2067.5444"
-   x2="4959.5674"
-   y2="7872.3066"
-   gradientUnits="userSpaceOnUse" /><linearGradient
-   inkscape:collect="always"
-   xlink:href="#linearGradient3"
-   id="linearGradient24"
-   x1="1234.876"
-   y1="10191.739"
-   x2="4814.7979"
-   y2="13061.613"
-   gradientUnits="userSpaceOnUse" /></defs>
+   y2="1488.6417" /></defs>
   <sodipodi:namedview
    id="namedview488"
    pagecolor="#ffffff"
@@ -280,13 +248,13 @@
    inkscape:document-units="mm"
    inkscape:zoom="1.6868414"
    inkscape:cx="19.563191"
-   inkscape:cy="261.13895"
+   inkscape:cy="213.12021"
    inkscape:window-width="1862"
    inkscape:window-height="1016"
-   inkscape:window-x="1978"
+   inkscape:window-x="58"
    inkscape:window-y="27"
    inkscape:window-maximized="1"
-   inkscape:current-layer="labels"
+   inkscape:current-layer="glass"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -368,8 +336,8 @@
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g
-   id="grp_frame"
-   inkscape:label="Frame"
+   id="glass"
+   inkscape:label="glass"
    style="display:inline">
         <rect
    x="1089.2188"
@@ -383,8 +351,8 @@
    stroke="#ffffff"
    stroke-opacity="0.06"
    stroke-width="45.4351"
-   id="frame_left_ENHANCE"
-   style="opacity:0.5;fill:url(#linearGradient18);fill-opacity:1" />
+   id="inputs"
+   style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
         
         <rect
    x="1226.6439"
@@ -398,8 +366,8 @@
    stroke="#ffffff"
    stroke-opacity="0.06"
    stroke-width="28.0455"
-   id="outputs_ENHANCE"
-   style="opacity:0.33;fill:url(#linearGradient24);fill-opacity:0.5" />
+   id="outputs"
+   style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
         
       </g>
       
@@ -534,7 +502,6 @@
    sodipodi:nodetypes="cc" /></g>
   <g
    id="panel_labels_reworked"
-   inkscape:groupmode="layer"
    inkscape:label="Labels Reworked"
    style="display:none"><text
    id="reworked_module_title_text"
@@ -903,10 +870,11 @@
      cy="9694.5723"
      rx="387.49817"
      ry="405.17139" /></g>
-<rect
-   style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-   id="CH1_PREVIEW"
-   width="3628.1987"
-   height="1648.6146"
-   x="217.90068"
-   y="6991.6509" /></svg>
+<g
+   id="screen"><rect
+     style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     id="CH1_PREVIEW"
+     width="3628.1987"
+     height="1648.6146"
+     x="217.90068"
+     y="6991.6509" /></g></svg>

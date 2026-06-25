@@ -1,0 +1,153 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="40.639999mm" height="128.5mm" viewBox="0 0 4064 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="proc.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)" inkscape:label="Wave Art">
+  <defs id="defs1">
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+    <linearGradient id="linearGradient20" inkscape:collect="always">
+      <stop style="stop-color:#795cff;stop-opacity:1" offset="0" id="stop20" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
+    </linearGradient>
+    <linearGradient id="linearGradient16" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop15" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop16" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient14" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop13" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop14" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient12" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop11" style="stop-color:#6140bf;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop12" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="1108.8855" y1="886.8808" x2="1108.8855" y2="12348.43" gradientTransform="matrix(0.35573807,0,0,1.1244228,591.70921,0)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0b0d10" id="stop1" />
+      <stop offset="50%" stop-color="#10141a" id="stop2" />
+      <stop offset="100%" stop-color="#07080a" id="stop3" />
+    </linearGradient>
+    <linearGradient id="panelSheen" x1="1258.4897" y1="999.76398" x2="1258.4897" y2="12199.481" gradientTransform="scale(0.88692179,1.1274951)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.1" id="stop4" />
+      <stop offset="15%" stop-color="#ffffff" stop-opacity="0.02" id="stop5" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.0" id="stop6" />
+      <stop offset="85%" stop-color="#ffffff" stop-opacity="0.02" id="stop7" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.1" id="stop8" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1ccad8" stop-opacity="0.65" id="stop9" />
+      <stop offset="100%" stop-color="#7a5cff" stop-opacity="0.65" id="stop10" />
+    </linearGradient>
+    <linearGradient id="oceanWaveGrad" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#55dbff" id="stop_wave_1" />
+      <stop offset="55%" stop-color="#1496df" id="stop_wave_2" />
+      <stop offset="100%" stop-color="#182682" id="stop_wave_3" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient1" gradientUnits="userSpaceOnUse" x1="5496.8262" y1="12956.067" x2="7087.4873" y2="12956.067" gradientTransform="matrix(1.3902179,0,0,1.3902178,-6439.6914,-5277.5495)" />
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient67" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.99690805,0,0,0.99690805,-4074.8156,-888.26714)" x1="5546.3999" y1="1486.0581" x2="6703.7256" y2="1488.6417" />
+  </defs>
+  <g id="panel_art" style="display:inline">
+    <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <rect x="986.18201" y="997.229" width="4077.3096" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:17.8492" sodipodi:insensitive="true" />
+      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-1170.8786,975.86517)">
+        <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2150.0189,12130.149)" style="display:inline">
+          <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
+          <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
+          <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path155" />
+        </g>
+        <g id="branding_wave_right" transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)" style="display:none">
+          <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path158" />
+          <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path160" />
+          <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path164" />
+        </g>
+      </g>
+      <rect x="1084.9954" y="1096.0424" width="3915.2769" height="12690.001" rx="82.441162" ry="210.37091" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="37.6267" id="gray_outline" style="display:none;stroke:#3c3f42;stroke-opacity:1" />
+    </g>
+    <g id="panel_graphics" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <g id="glass" inkscape:label="glass" style="display:inline">
+        <rect x="1089.2188" y="2060.8857" width="3871.2363" height="5802.3491" rx="181.74057" ry="181.74057" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.4351" id="inputs" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
+        <rect x="1226.6439" y="10178.908" width="3596.386" height="2873.2893" rx="162.81253" ry="182.65692" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="28.0455" id="outputs" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+      </g>
+      <g id="lines_gen1_side">
+        <path style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2161.9375,6802.2764 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />
+        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1" d="m 2982.8495,4254.2432 1264.2608,327.6294" id="surge_connector" sodipodi:nodetypes="cc" />
+        <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 4237.3591,6376.5454 -865.0558,976.6498" id="sink_connector" sodipodi:nodetypes="cc" />
+      </g>
+    </g>
+    <g id="ring_guides" style="display:none" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <g id="GenA_Guide_Rings" style="display:inline" transform="translate(1.0410941e-5)">
+        <circle cx="1729.1086" cy="2680.4136" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_in1_o" style="display:inline" />
+        <circle cx="3069.8853" cy="2680.4136" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_trig1_o" style="display:inline" />
+        <circle cx="4280.2456" cy="2959.5808" r="360" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_loopbtn1_o" style="display:inline" />
+        <circle cx="4207.9512" cy="4650" r="520" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_surgeA_o" />
+        <circle cx="4303.5522" cy="6333.5591" r="520" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_sinkA_o" />
+        <ellipse cx="2149.4373" cy="6814.4219" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="71.5728" id="ring_curveA_o-4" rx="544.07501" ry="519.57361" style="display:inline" />
+      </g>
+      <g id="GenB_Guide_Rings" style="display:inline" transform="translate(1.0410941e-5)" />
+      <g id="output_ring_guides" style="display:inline" transform="translate(1.0410941e-5)">
+        <circle cx="2000" cy="10730" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_eor_o" style="display:inline" transform="translate(1.0410941e-5)" />
+        <circle cx="3720.4089" cy="10730" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_out1_o" style="display:inline" />
+        <circle cx="2000" cy="12110.747" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_s1_o" />
+        <circle cx="3716.0947" cy="12130.806" r="454.70001" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="70" id="ring_or_o" />
+      </g>
+      <g id="middle_ring_guides" style="display:inline" transform="translate(1.0410941e-5)" />
+    </g>
+    <path d="m 224.91839,952.22269 3600.46661,0.01" stroke="url(#accentGrad)" stroke-width="49.8454" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+  </g>
+  <g id="panel_labels_reworked" inkscape:label="Labels Reworked" style="display:none">
+    <text id="reworked_module_title_text" x="2021.4169" y="447.27814" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient67);stroke-width:28.1347" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan1" x="2021.4169" y="447.27814" style="fill:url(#linearGradient67)">Proc</tspan>
+    </text>
+    <text id="reworked_LEVIATHAN_LOGO" x="2304.9004" y="12482.233" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke:none;stroke-width:37.1;stroke-dasharray:none" xml:space="preserve" inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
+    <text id="reworked_lbl_in1" x="722.86957" y="2324.4685" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan5" x="722.86957" y="2324.4685">INPUT</tspan>
+    </text>
+    <text id="reworked_lbl_trig1" x="1987.7968" y="2322.9529" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">TRIG</text>
+    <text id="reworked_lbl_surgeA" x="3242.3435" y="4482.8999" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">SURGE</text>
+    <text id="reworked_lbl_sinkA" x="3257.512" y="6255.1035" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">SINK</text>
+    <text id="lbl_halt" x="725.45502" y="4671.0205" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan6" x="725.45502" y="4671.0205">HALT</tspan>
+    </text>
+    <text id="reworked_lbl_bothA" x="1993.2269" y="5071.6011" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">BOTH</text>
+    <text id="reworked_text36" x="3296.0046" y="2629.6912" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">LOOP</text>
+    <text id="reworked_text29-1" x="1199.9861" y="6692.2412" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">CURVE</text>
+    <text id="reworked_text27" x="377.88834" y="5064.1782" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">LIN</text>
+    <text id="reworked_lbl_eor" x="954.01709" y="10341.131" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">EoR</text>
+    <text id="reworked_lbl_eoc" x="2660.136" y="10344" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">EoC</text>
+    <text id="reworked_lbl_s1" x="963.19336" y="11741.934" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan112" x="963.19336" y="11741.934">OUT+</tspan>
+    </text>
+    <text id="reworked_lbl_s1-2" x="2660.6975" y="11741.9" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan113" x="2660.6975" y="11741.9">OUT-</tspan>
+    </text>
+    <text id="reworked_module_description" x="2027.8726" y="815.19421" style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff" xml:space="preserve">
+      <tspan sodipodi:role="line" id="tspan2" x="2027.8726" y="815.19421">generator • slew limiter</tspan>
+    </text>
+  </g>
+  <g id="components" style="display:none;opacity:0.5">
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="LIN_LOG_1" cx="1177.5327" cy="5792.6074" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="AMP" cx="724.64429" cy="2871.01" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="FALL_1" cx="3240.7444" cy="5357.9102" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="CYCLE_1" cx="3307.5281" cy="2013.8008" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="RISE_1" cx="3240.7441" cy="3589.3101" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="EOR_LIGHT" cx="1593.6866" cy="9694.5723" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="MAIN_LIGHT" cx="1594.6865" cy="11068.226" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="EOR_OUTPUT" cx="943.69867" cy="9694.5723" rx="398.39865" ry="405.17139" />
+    <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="MAIN_OUTPUT" cx="944.70752" cy="11068.226" rx="398.39865" ry="405.17139" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="TRIGGER_INPUT" cx="1994.2986" cy="1665.4272" rx="398.39865" ry="405.17139" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="FALL_CV_INPUT" cx="2360.3987" cy="6326.3164" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="BOTH_CV_INPUT" cx="1994.2986" cy="4449.7715" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="RISE_CV_INPUT" cx="1994.2986" cy="3241.5713" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="HALT_INPUT" cx="720.69867" cy="4036.6716" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="SIGNAL_INPUT" cx="724.70056" cy="1665.4274" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="CYCLE_LIGHT" cx="3307.5261" cy="1405.5314" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="NEG_OUTPUT" cx="2655.1987" cy="11068.226" rx="398.39865" ry="405.17139" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="NEG_LIGHT" cx="3357.8699" cy="11068.226" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="EOC_LIGHT" cx="3364.5483" cy="9694.5723" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:43.9097" id="EOC_OUTPUT" cx="2659.5144" cy="9694.5723" rx="387.49817" ry="405.17139" />
+  </g>
+  <g id="screen">
+    <rect style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="CH1_PREVIEW" width="3628.1987" height="1648.6146" x="217.90068" y="6991.6509" />
+  </g>
+</svg>
