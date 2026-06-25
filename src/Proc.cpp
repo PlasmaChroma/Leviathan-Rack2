@@ -1118,34 +1118,6 @@ struct Proc : Module {
 
 namespace {
 
-struct IMBigPushButton : CKD6 {
-	int* mode = NULL;
-	TransformWidget *tw;
-	IMBigPushButton() {
-		setSizeRatio(0.9f);
-	}
-	void setSizeRatio(float ratio) {
-		// Scale only the SVG child so hit area follows the visible button.
-		sw->box.size = sw->box.size.mult(ratio);
-		fb->removeChild(sw);
-		tw = new TransformWidget();
-		tw->addChild(sw);
-		tw->scale(Vec(ratio, ratio));
-		tw->box.size = sw->box.size;
-		fb->addChild(tw);
-		box.size = sw->box.size;
-		shadow->box.size = sw->box.size;
-	}
-};
-
-// Create a bigger basic button
-struct BigTL1105 : TL1105 {
-    BigTL1105() {
-        // Dialed back to ~85% of previous size for a tighter click area.
-        box.size = mm2px(Vec(9.5, 9.5));
-    }
-};
-
 struct WavePreviewWidget : Widget {
 	// Small preview box: lower geometry density reduces UI cost while staying smooth.
 	static constexpr int POINT_COUNT = 128;
@@ -1546,6 +1518,18 @@ struct ProcWidget : ModuleWidget {
 		const std::string panelBasePath = asset::plugin(pluginInstance, "res/proc.panel.svg");
 		setPanel(createPanel(panelBasePath));
 		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
+		{
+			widget::SvgWidget* labels = new widget::SvgWidget();
+			labels->setSvg(visual_assets::loadPluginSvgCached("res/proc.labels.svg"));
+			labels->box.size = box.size;
+
+			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
+			labelsFb->box.size = box.size;
+			labelsFb->oversample = 2.0f;
+			labelsFb->dirtyOnSubpixelChange = true;
+			labelsFb->addChild(labels);
+			addChild(labelsFb);
+		}
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));
@@ -1601,7 +1585,7 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("MAIN_LIGHT", &outLightPos);
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<GoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
 		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(risePos), module, Proc::RISE_PARAM));
 		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(fallPos), module, Proc::FALL_PARAM));
 		addParam(createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));

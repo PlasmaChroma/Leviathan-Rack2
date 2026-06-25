@@ -71,6 +71,9 @@ struct GlowShimmerWidget : TransparentWidget {
 	uint8_t glowR = 0xa8;
 	uint8_t glowG = 0x62;
 	uint8_t glowB = 0xff;
+	uint8_t coreR = 0xd0;
+	uint8_t coreG = 0xa0;
+	uint8_t coreB = 0xff;
 	float shimmerPhaseRad = 0.f;
 	float opacity = 0.f;
 	float pulse = 1.f;

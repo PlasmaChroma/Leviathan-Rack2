@@ -1443,6 +1443,9 @@ HoverOrbScrew::HoverOrbScrew(const char* orbPath, const char* underlayPath, floa
 	glowWidget->glowR = uint8_t(glowColor.r * 255.f);
 	glowWidget->glowG = uint8_t(glowColor.g * 255.f);
 	glowWidget->glowB = uint8_t(glowColor.b * 255.f);
+	glowWidget->coreR = std::min(255, int(glowWidget->glowR) + 40);
+	glowWidget->coreG = std::min(255, int(glowWidget->glowG) + 40);
+	glowWidget->coreB = std::min(255, int(glowWidget->glowB) + 40);
 	glowWidget->box.size = box.size;
 	addChild(glowWidget);
 
@@ -1472,7 +1475,12 @@ CyanOrbScrew::CyanOrbScrew()
 		"res/icon/cyan_orb.png",
 		"res/icon/cyan_underlay.png",
 		1.f,
-		nvgRGBA(0x00, 0xc6, 0xe4, 0xff)) {
+		nvgRGBA(0xb8, 0x72, 0xff, 0xff)) {
+	if (glowWidget) {
+		glowWidget->coreR = 0xb8;
+		glowWidget->coreG = 0x72;
+		glowWidget->coreB = 0xff;
+	}
 }
 
 void GlowShimmerWidget::draw(const DrawArgs& args) {
@@ -1517,9 +1525,9 @@ void GlowShimmerWidget::draw(const DrawArgs& args) {
 	nvgFill(args.vg);
 
 	// Hot core: very bright tinted-white center
-	const uint8_t coreR = (r + 40u > 255u) ? 255u : (r + 40u);
-	const uint8_t coreG = (g + 40u > 255u) ? 255u : (g + 40u);
-	const uint8_t coreB = (b + 40u > 255u) ? 255u : (b + 40u);
+	const uint8_t hotR = coreR;
+	const uint8_t hotG = coreG;
+	const uint8_t hotB = coreB;
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, 0.f, 0.f, radius * 0.18f);
 	nvgFillPaint(args.vg, nvgRadialGradient(
@@ -1527,7 +1535,7 @@ void GlowShimmerWidget::draw(const DrawArgs& args) {
 		0.f, 0.f,
 		0.f,
 		radius * 0.18f,
-		nvgRGBA(coreR, coreG, coreB, uint8_t(0xaa * alphaScale)),
+		nvgRGBA(hotR, hotG, hotB, uint8_t(0xaa * alphaScale)),
 		nvgRGBA(r, g, b, uint8_t(0x40 * alphaScale))));
 	nvgFill(args.vg);
 
