@@ -2020,7 +2020,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 
 		const int majorCols = std::max(3, int(std::round(w / 16.0f)));
 		const int majorRows = std::max(3, int(std::round(h / 16.0f)));
-		const int minorSubdivisions = 4;
+		const int minorSubdivisions = 3;
 		const float majorX = w / float(majorCols);
 		const float majorY = h / float(majorRows);
 		const NVGcolor minorColor = nvgRGBA(0x1c, 0xcc, 0xd9, 30);
