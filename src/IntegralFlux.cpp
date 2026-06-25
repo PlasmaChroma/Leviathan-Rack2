@@ -63,6 +63,8 @@ struct IntegralFlux : Module {
 		LIN_LOG_1_PARAM,
 		LIN_LOG_4_PARAM,
 		ATTENUATE_4_PARAM,
+		SHAPE_MODE_1_PARAM,
+		SHAPE_MODE_4_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -116,6 +118,11 @@ struct IntegralFlux : Module {
 		OUTER_FALL
 	};
 
+	enum FunctionShapeMode {
+		FUNCTION_SHAPE_MATHS = 0,
+		FUNCTION_SHAPE_SHARK_FIN = 1
+	};
+
 	struct OuterChannelState {
 		// Edge detectors for trigger input and momentary cycle button.
 		dsp::SchmittTrigger trigEdge;
@@ -138,7 +145,9 @@ struct IntegralFlux : Module {
 		// Cached warp compensation for the current shape setting.
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
-		float cachedWarpScale = 1.f;
+		int cachedShapeMode = FUNCTION_SHAPE_MATHS;
+		float cachedRiseWarpScale = 1.f;
+		float cachedFallWarpScale = 1.f;
 		// Stage-time cache avoids recomputing expensive mapping every sample when unchanged.
 		bool stageTimeValid = false;
 		float cachedRiseKnob = 0.f;
@@ -167,6 +176,7 @@ struct IntegralFlux : Module {
 		int riseParam;
 		int fallParam;
 		int shapeParam;
+		int shapeModeParam;
 		int riseCvInput;
 		int fallCvInput;
 		int bothCvInput;
@@ -194,6 +204,7 @@ struct IntegralFlux : Module {
 		std::atomic<float> riseTime {0.01f};
 		std::atomic<float> fallTime {0.01f};
 		std::atomic<float> curveSigned {0.f};
+		std::atomic<int> shapeMode {FUNCTION_SHAPE_MATHS};
 		std::atomic<float> dotXNorm {0.f};
 		std::atomic<float> dotYNorm {0.f};
 		std::atomic<uint8_t> dotVisible {0};
@@ -209,6 +220,7 @@ struct IntegralFlux : Module {
 		float lastRiseSent = 0.01f;
 		float lastFallSent = 0.01f;
 		float lastCurveSent = 0.f;
+		int lastShapeMode = FUNCTION_SHAPE_MATHS;
 		bool sentOnce = false;
 	};
 	PreviewSharedState previewCh1;
@@ -356,6 +368,10 @@ struct IntegralFlux : Module {
 		return 0.f;
 	}
 
+	static FunctionShapeMode functionShapeModeFromParam(float value) {
+		return value >= 0.5f ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
+	}
+
 	static float slopeWarp(float x, float s) {
 		// Differential warp used by both function-generator and slew modes.
 		// We shape local slope, then normalize total travel time with slopeWarpScale().
@@ -388,6 +404,28 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
+	static float stageLocalX(float outputNorm, bool rising) {
+		return rising ? outputNorm : (1.f - outputNorm);
+	}
+
+	static float shapeSignedForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
+			return rising ? -shapeSigned : shapeSigned;
+		}
+		return shapeSigned;
+	}
+
+	static float slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
+		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
+			return slopeWarp(stageLocalX(outputNorm, rising), shapeSignedForMode(shapeSigned, rising, mode));
+		}
+		return slopeWarp(outputNorm, shapeSigned);
+	}
+
+	static float slopeWarpScaleForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+		return slopeWarpScale(shapeSignedForMode(shapeSigned, rising, mode));
+	}
+
 	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
 		outputNorm = clamp(outputNorm, 0.f, 1.f);
 		if (std::fabs(shapeSigned) < 1e-6f) {
@@ -406,6 +444,26 @@ struct IntegralFlux : Module {
 		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
 	}
 
+	static float segmentPhaseFromOutputNormForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
+		outputNorm = clamp(outputNorm, 0.f, 1.f);
+		if (mode == FUNCTION_SHAPE_MATHS) {
+			return segmentPhaseFromOutputNorm(outputNorm, shapeSigned, rising);
+		}
+		const float localEnd = stageLocalX(outputNorm, rising);
+		if (std::fabs(shapeSigned) < 1e-6f) {
+			return localEnd;
+		}
+		const float stageShape = shapeSignedForMode(shapeSigned, rising, mode);
+		float partialSum = 0.f;
+		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
+			float t = (float(i) + 0.5f) / float(WARP_SCALE_SAMPLES);
+			partialSum += 1.f / slopeWarp(localEnd * t, stageShape);
+		}
+		const float partialIntegral = localEnd * partialSum / float(WARP_SCALE_SAMPLES);
+		const float totalIntegral = std::max(slopeWarpScale(stageShape), 1e-6f);
+		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
+	}
+
 	static float computeSegPhase(float out, float startOut, float invSpan) {
 		if (std::fabs(invSpan) < 1e-9f) {
 			return 1.f;
@@ -420,7 +478,9 @@ struct IntegralFlux : Module {
 		float riseTime,
 		float fallTime,
 		float shapeSigned,
-		float warpScale,
+		FunctionShapeMode shapeMode,
+		float riseWarpScale,
+		float fallWarpScale,
 		float dt
 	) {
 		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
@@ -458,10 +518,13 @@ struct IntegralFlux : Module {
 
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
+		const bool rising = delta > 0.f;
 		float range = OUTER_V_MAX - OUTER_V_MIN;
-		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
+		float segmentPhase = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
+		float scale = rising ? riseWarpScale : fallWarpScale;
+		float warp = slopeWarp(segmentPhase, shapeSignedForMode(shapeSigned, rising, shapeMode));
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
-		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
+		float step = dp * warp * scale * range;
 
 		float prevOut = out;
 		out += (delta > 0.f) ? step : -step;
@@ -582,11 +645,13 @@ struct IntegralFlux : Module {
 		}
 	}
 
-	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
+	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned,
+		FunctionShapeMode shapeMode, bool interactiveRecent) {
 		// Batched atomic publish: UI only rebuilds when version increments.
 		shared.riseTime.store(riseTime, std::memory_order_relaxed);
 		shared.fallTime.store(fallTime, std::memory_order_relaxed);
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
+		shared.shapeMode.store(int(shapeMode), std::memory_order_relaxed);
 		shared.interactiveRecent.store(interactiveRecent ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 		shared.version.fetch_add(1, std::memory_order_relaxed);
 	}
@@ -614,17 +679,20 @@ struct IntegralFlux : Module {
 		float riseTime,
 		float fallTime,
 		float curveSigned,
+		FunctionShapeMode shapeMode,
 		float dt
 	) {
 		// Preview refresh runs slower than audio and only pushes updates when meaningful.
 		bool knobChanged = std::fabs(riseKnob - state.lastRiseKnob) > PARAM_CACHE_EPS
 			|| std::fabs(fallKnob - state.lastFallKnob) > PARAM_CACHE_EPS
 			|| std::fabs(curveKnob - state.lastCurveKnob) > PARAM_CACHE_EPS;
+		bool modeChanged = int(shapeMode) != state.lastShapeMode;
 		state.lastRiseKnob = riseKnob;
 		state.lastFallKnob = fallKnob;
 		state.lastCurveKnob = curveKnob;
+		state.lastShapeMode = int(shapeMode);
 
-		if (knobChanged) {
+		if (knobChanged || modeChanged) {
 			state.interactiveHold = PREVIEW_INTERACTIVE_HOLD;
 			// Push an immediate preview refresh on manual interaction.
 			state.timer = PREVIEW_INTERACTIVE_INTERVAL;
@@ -635,13 +703,13 @@ struct IntegralFlux : Module {
 		state.timer += dt;
 
 		float interval = (state.interactiveHold > 0.f) ? PREVIEW_INTERACTIVE_INTERVAL : PREVIEW_CV_INTERVAL;
-		bool changed = knobChanged || !state.sentOnce || previewChangedMeaningfully(
+		bool changed = knobChanged || modeChanged || !state.sentOnce || previewChangedMeaningfully(
 			riseTime, state.lastRiseSent,
 			fallTime, state.lastFallSent,
 			curveSigned, state.lastCurveSent
 		);
 		if (changed && state.timer >= interval) {
-			publishPreviewState(shared, riseTime, fallTime, curveSigned, state.interactiveHold > 0.f);
+			publishPreviewState(shared, riseTime, fallTime, curveSigned, shapeMode, state.interactiveHold > 0.f);
 			state.lastRiseSent = riseTime;
 			state.lastFallSent = fallTime;
 			state.lastCurveSent = curveSigned;
@@ -653,11 +721,12 @@ struct IntegralFlux : Module {
 	}
 
 	void getPreviewState(int channel, float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm,
-		float& dotYNorm, bool& dotVisible, bool& interactiveRecent, uint32_t& version) const {
+		float& dotYNorm, bool& dotVisible, FunctionShapeMode& shapeMode, bool& interactiveRecent, uint32_t& version) const {
 		const PreviewSharedState& shared = (channel == 4) ? previewCh4 : previewCh1;
 		riseTime = shared.riseTime.load(std::memory_order_relaxed);
 		fallTime = shared.fallTime.load(std::memory_order_relaxed);
 		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+		shapeMode = functionShapeModeFromParam(float(shared.shapeMode.load(std::memory_order_relaxed)));
 		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
 		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
 		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
@@ -765,10 +834,12 @@ struct IntegralFlux : Module {
 		float riseKnob = params[cfg.riseParam].getValue();
 		float fallKnob = params[cfg.fallParam].getValue();
 		float shape = params[cfg.shapeParam].getValue();
+		FunctionShapeMode shapeMode = functionShapeModeFromParam(params[cfg.shapeModeParam].getValue());
 		float riseCv = inputs[cfg.riseCvInput].getVoltage();
 		float fallCv = inputs[cfg.fallCvInput].getVoltage();
 		float bothCv = inputs[cfg.bothCvInput].getVoltage();
 		bool shapeKnobChanged = std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS;
+		bool shapeModeChanged = int(shapeMode) != ch.cachedShapeMode;
 		if (!ch.stageTimeValid || timingTick) {
 			// Recompute times only when a relevant source changed.
 			bool stageTimeDirty = !ch.stageTimeValid
@@ -855,22 +926,28 @@ struct IntegralFlux : Module {
 			riseTime,
 			fallTime,
 			shapeSigned,
+			shapeMode,
 			dt
 		);
-		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
+		if (!ch.warpScaleValid
+			|| std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f
+			|| shapeModeChanged) {
 			// Curve normalization changes only when shape changes.
 			ch.cachedShapeSigned = shapeSigned;
-			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
+			ch.cachedShapeMode = int(shapeMode);
+			ch.cachedRiseWarpScale = slopeWarpScaleForMode(shapeSigned, true, shapeMode);
+			ch.cachedFallWarpScale = slopeWarpScaleForMode(shapeSigned, false, shapeMode);
 			ch.warpScaleValid = true;
 		}
-		if (shapeKnobChanged && ch.phase != OUTER_IDLE) {
+		if ((shapeKnobChanged || shapeModeChanged) && ch.phase != OUTER_IDLE) {
 			// Re-anchor phase to current output whenever curve changes so the tracer
 			// location is invalidated/recomputed against the updated curve shape.
 			float range = std::max(OUTER_V_MAX - OUTER_V_MIN, 1e-6f);
 			float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			ch.phasePos = segmentPhaseFromOutputNorm(x, shapeSigned, ch.phase == OUTER_RISE);
+			ch.phasePos = segmentPhaseFromOutputNormForMode(x, shapeSigned, ch.phase == OUTER_RISE, shapeMode);
 		}
-		float scale = ch.cachedWarpScale;
+		float riseScale = ch.cachedRiseWarpScale;
+		float fallScale = ch.cachedFallWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
@@ -917,7 +994,7 @@ struct IntegralFlux : Module {
 				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / riseTime, 0.f, 0.5f);
-				x += dp * slopeWarp(x, s) * scale;
+				x += dp * slopeWarpForMode(x, s, true, shapeMode) * riseScale;
 				if (injectAlpha > 0.f) {
 					// Hardware-like perturbation: gently pull active FG state toward input.
 					x += injectAlpha * (xIn - x);
@@ -945,7 +1022,7 @@ struct IntegralFlux : Module {
 				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / fallTime, 0.f, 0.5f);
-				x -= dp * slopeWarp(x, s) * scale;
+				x -= dp * slopeWarpForMode(x, s, false, shapeMode) * fallScale;
 				if (injectAlpha > 0.f) {
 					x += injectAlpha * (xIn - x);
 				}
@@ -977,7 +1054,9 @@ struct IntegralFlux : Module {
 				riseTime,
 				fallTime,
 				shapeSigned,
-				scale,
+				shapeMode,
+				riseScale,
+				fallScale,
 				dt
 			);
 			ch.out = slewStep.out;
@@ -1018,6 +1097,8 @@ struct IntegralFlux : Module {
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
 		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "CH4 shape");
 		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter", "%", 0.f, 200.f, -100.f);
+		configSwitch(SHAPE_MODE_1_PARAM, 0.f, 1.f, 0.f, "CH1 function shape mode", {"Maths", "Shark Fin"});
+		configSwitch(SHAPE_MODE_4_PARAM, 0.f, 1.f, 0.f, "CH4 function shape mode", {"Maths", "Shark Fin"});
 		configInput(INPUT_1_INPUT, "CH1 signal");
 		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
 		configInput(INPUT_2_INPUT, "CH2 signal");
@@ -1133,6 +1214,7 @@ struct IntegralFlux : Module {
 			RISE_1_PARAM,
 			FALL_1_PARAM,
 			LIN_LOG_1_PARAM,
+			SHAPE_MODE_1_PARAM,
 			CH1_RISE_CV_INPUT,
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
@@ -1148,6 +1230,7 @@ struct IntegralFlux : Module {
 			RISE_4_PARAM,
 			FALL_4_PARAM,
 			LIN_LOG_4_PARAM,
+			SHAPE_MODE_4_PARAM,
 			CH4_RISE_CV_INPUT,
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
@@ -1329,6 +1412,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
 		std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
 		float cachedLutCurveSigned = 0.f;
+		int cachedLutShapeMode = IntegralFlux::FUNCTION_SHAPE_MATHS;
 		bool cachedLutsValid = false;
 		uint32_t lastVersion = 0;
 	bool pointsValid = false;
@@ -1527,17 +1611,18 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
 	}
 
-	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
+	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising,
+		IntegralFlux::FunctionShapeMode shapeMode) {
 		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
-		float scale = IntegralFlux::slopeWarpScale(curveSigned);
+		float scale = IntegralFlux::slopeWarpScaleForMode(curveSigned, rising, shapeMode);
 		float dp = 1.f / float(PREVIEW_LUT_SIZE - 1);
 		float x = rising ? 0.f : 1.f;
 		lut[0] = x;
 		for (int i = 1; i < PREVIEW_LUT_SIZE; ++i) {
-			float k1 = IntegralFlux::slopeWarp(x, curveSigned) * scale;
+			float k1 = IntegralFlux::slopeWarpForMode(x, curveSigned, rising, shapeMode) * scale;
 			float xMid = rising ? (x + 0.5f * dp * k1) : (x - 0.5f * dp * k1);
 			xMid = clamp(xMid, 0.f, 1.f);
-			float k2 = IntegralFlux::slopeWarp(xMid, curveSigned) * scale;
+			float k2 = IntegralFlux::slopeWarpForMode(xMid, curveSigned, rising, shapeMode) * scale;
 			x += rising ? (dp * k2) : (-dp * k2);
 			x = clamp(x, 0.f, 1.f);
 			lut[i] = x;
@@ -1555,17 +1640,21 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return lut[i0] + (lut[i1] - lut[i0]) * f;
 	}
 
-		void ensureSegmentLuts(float curveSigned) {
-			if (cachedLutsValid && std::fabs(curveSigned - cachedLutCurveSigned) <= 1e-6f) {
+		void ensureSegmentLuts(float curveSigned, IntegralFlux::FunctionShapeMode shapeMode) {
+			if (cachedLutsValid
+				&& std::fabs(curveSigned - cachedLutCurveSigned) <= 1e-6f
+				&& cachedLutShapeMode == int(shapeMode)) {
 				return;
 			}
-			buildSegmentLut(cachedRiseLut, curveSigned, true);
-			buildSegmentLut(cachedFallLut, curveSigned, false);
+			buildSegmentLut(cachedRiseLut, curveSigned, true, shapeMode);
+			buildSegmentLut(cachedFallLut, curveSigned, false, shapeMode);
 			cachedLutCurveSigned = curveSigned;
+			cachedLutShapeMode = int(shapeMode);
 			cachedLutsValid = true;
 		}
 
-		void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
+		void rebuildPoints(float riseTime, float fallTime, float curveSigned,
+			IntegralFlux::FunctionShapeMode shapeMode, bool interactiveRecent) {
 		float w = std::max(box.size.x, 1.f);
 		float h = std::max(box.size.y, 1.f);
 		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
@@ -1583,7 +1672,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		float fallWidth = std::max(right - peakX, 1e-4f);
 		// Reserved hook if we later render interactive-state emphasis.
 		(void) interactiveRecent;
-			ensureSegmentLuts(curveSigned);
+			ensureSegmentLuts(curveSigned, shapeMode);
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
@@ -1621,7 +1710,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		}
 		if (!modulePtr) {
 			if (!pointsValid) {
-				rebuildPoints(0.01f, 0.01f, 0.f, false);
+				rebuildPoints(0.01f, 0.01f, 0.f, IntegralFlux::FUNCTION_SHAPE_MATHS, false);
 			}
 			return;
 		}
@@ -1631,10 +1720,11 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		float previewDotXNorm = 0.f;
 		float previewDotYNorm = 0.f;
 		bool previewDotVisible = false;
+		IntegralFlux::FunctionShapeMode shapeMode = IntegralFlux::FUNCTION_SHAPE_MATHS;
 		bool interactiveRecent = false;
 		uint32_t version = 0;
 		modulePtr->getPreviewState(channel, riseTime, fallTime, curveSigned, previewDotXNorm, previewDotYNorm,
-			previewDotVisible, interactiveRecent, version);
+			previewDotVisible, shapeMode, interactiveRecent, version);
 		dotXNorm = previewDotXNorm;
 		dotYNorm = previewDotYNorm;
 		// Displayed frequency reflects the currently effective cycle period.
@@ -1682,7 +1772,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
 				}
 			}
-			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
+			rebuildPoints(riseTime, fallTime, curveSigned, shapeMode, interactiveRecent);
 			lastVersion = version;
 		}
 		if (openGlRenderer) {
@@ -1936,6 +2026,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		Vec fall4KnobPos(59.185f, 53.079f);
 		Vec linLog1KnobPos(13.975f, 50.526f);
 		Vec linLog4KnobPos(91.716f, 50.526f);
+		Vec shapeMode1SwitchPos(13.975f, 36.8f);
+		Vec shapeMode4SwitchPos(91.716f, 36.8f);
 		Vec attenuate1KnobPos(25.494f, 86.446f);
 		Vec attenuate2KnobPos(42.542f, 86.446f);
 		Vec attenuate3KnobPos(59.585f, 86.446f);
@@ -1989,6 +2081,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		applyPointOverride("FALL_4", &fall4KnobPos);
 		applyPointOverride("LIN_LOG_1", &linLog1KnobPos);
 		applyPointOverride("LIN_LOG_4", &linLog4KnobPos);
+		applyPointOverride("SHAPE_MODE_1", &shapeMode1SwitchPos);
+		applyPointOverride("SHAPE_MODE_4", &shapeMode4SwitchPos);
 		applyPointOverride("ATTENUATE_1", &attenuate1KnobPos);
 		applyPointOverride("ATTENUATE_2", &attenuate2KnobPos);
 		applyPointOverride("ATTENUATE_3", &attenuate3KnobPos);
@@ -2038,6 +2132,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
 		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
+		addParam(createParamCentered<CKSS>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
+		addParam(createParamCentered<CKSS>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			math::Rect previewRectMm;
