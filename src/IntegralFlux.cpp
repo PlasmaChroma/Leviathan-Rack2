@@ -1289,7 +1289,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
-	static constexpr int TRAIL_FRAME_COUNT = 11;
+	static constexpr int TRAIL_FRAME_COUNT = 6;
 	static constexpr float TRAIL_FADE_SEC = 0.333f;
 	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
@@ -2020,7 +2020,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 
 		const int majorCols = std::max(3, int(std::round(w / 16.0f)));
 		const int majorRows = std::max(3, int(std::round(h / 16.0f)));
-		const int minorSubdivisions = 3;
+		const int minorSubdivisions = 4;
 		const float majorX = w / float(majorCols);
 		const float majorY = h / float(majorRows);
 		const NVGcolor minorColor = nvgRGBA(0x1c, 0xcc, 0xd9, 30);

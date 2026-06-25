@@ -39,7 +39,7 @@ struct UndertowShapePreviewWidget final : Widget {
   static constexpr float DEFAULT_FREQUENCY_HZ = 261.63f;
   static constexpr float DEFAULT_SHAPE_AMOUNT = 0.f;
   static constexpr float DEFAULT_EDGE_HARDNESS = 0.5f;
-  static constexpr int TRAIL_FRAME_COUNT = 11;
+  static constexpr int TRAIL_FRAME_COUNT = 6;
   static constexpr float TRAIL_FADE_SEC = 0.333f;
   static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
   static constexpr float TRAIL_LINE_WIDTH = 1.05f;

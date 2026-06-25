@@ -1156,7 +1156,7 @@ struct WavePreviewWidget : Widget {
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
-	static constexpr int TRAIL_FRAME_COUNT = 11;
+	static constexpr int TRAIL_FRAME_COUNT = 6;
 	static constexpr float TRAIL_FADE_SEC = 0.333f;
 		static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 		static constexpr float TRAIL_LINE_WIDTH = 1.15f;
