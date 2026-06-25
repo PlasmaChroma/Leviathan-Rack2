@@ -1833,6 +1833,58 @@ struct IntegralFluxTimedApertureLight : TBase {
 	}
 };
 
+struct IntegralFluxSplitLayerTestArt : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		if (!(w > 0.f && h > 0.f)) {
+			return;
+		}
+
+		const Vec center(w * 0.5f, h * 0.5f);
+		const float markerR = std::min(w, h) * 0.075f;
+
+		NVGpaint halo = nvgRadialGradient(
+			args.vg,
+			center.x,
+			center.y,
+			markerR * 0.15f,
+			markerR * 1.8f,
+			nvgRGBA(0x00, 0xc6, 0xe4, 34),
+			nvgRGBA(0xa8, 0x62, 0xff, 0));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, markerR * 1.8f);
+		nvgFillPaint(args.vg, halo);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x, center.y - markerR);
+		nvgLineTo(args.vg, center.x + markerR * 0.72f, center.y);
+		nvgLineTo(args.vg, center.x, center.y + markerR);
+		nvgLineTo(args.vg, center.x - markerR * 0.72f, center.y);
+		nvgClosePath(args.vg);
+		nvgFillColor(args.vg, nvgRGBA(10, 14, 28, 58));
+		nvgFill(args.vg);
+		nvgStrokeWidth(args.vg, 1.05f);
+		nvgStrokeColor(args.vg, nvgRGBA(0x00, 0xc6, 0xe4, 150));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x - markerR * 0.92f, center.y);
+		nvgLineTo(args.vg, center.x + markerR * 0.92f, center.y);
+		nvgStrokeWidth(args.vg, 1.15f);
+		nvgStrokeColor(args.vg, nvgRGBA(0xa8, 0x62, 0xff, 126));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x, center.y - markerR * 0.92f);
+		nvgLineTo(args.vg, center.x, center.y + markerR * 0.92f);
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStrokeColor(args.vg, nvgRGBA(0x00, 0xc6, 0xe4, 112));
+		nvgStroke(args.vg);
+	}
+};
+
 struct IntegralFluxWidget : ModuleWidget {
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
@@ -1865,7 +1917,24 @@ struct IntegralFluxWidget : ModuleWidget {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
 		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
-		setPanel(createPanel(panelPath));
+		const std::string panelBasePath = asset::plugin(pluginInstance, "res/flux.panel.svg");
+		setPanel(createPanel(panelBasePath));
+		{
+			widget::FramebufferWidget* overlayFb = new widget::FramebufferWidget();
+			overlayFb->dirtyOnSubpixelChange = false;
+			overlayFb->box.size = box.size;
+
+			IntegralFluxSplitLayerTestArt* testArt = new IntegralFluxSplitLayerTestArt();
+			testArt->box.size = box.size;
+			overlayFb->addChild(testArt);
+
+			widget::SvgWidget* labels = new widget::SvgWidget();
+			labels->box.size = box.size;
+			labels->setSvg(visual_assets::loadPluginSvgCached("res/flux.labels.svg"));
+			overlayFb->addChild(labels);
+
+			addChild(overlayFb);
+		}
 		previewBuildTimer.markPanelDone();
 
         // use LeviathanHaloKnob2 for surge/sink and curve shape knobs

@@ -27,10 +27,12 @@ import xml.etree.ElementTree as ET
 SVG_NS = "http://www.w3.org/2000/svg"
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+XLINK_NS = "http://www.w3.org/1999/xlink"
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)
 ET.register_namespace("sodipodi", SODIPODI_NS)
+ET.register_namespace("xlink", XLINK_NS)
 
 
 def qname(ns: str, tag: str) -> str:
