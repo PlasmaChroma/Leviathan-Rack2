@@ -1921,7 +1921,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			h + 3.0f,
 			r + 2.0f,
 			7.0f,
-			nvgRGBAf(base.r, base.g, base.b, 0.11f),
+			nvgRGBAf(base.r, base.g, base.b, 0.075f),
 			nvgRGBA(0, 0, 0, 0));
 		nvgSave(args.vg);
 		nvgScissor(args.vg, piece.pos.x, piece.pos.y, piece.size.x, piece.size.y);
@@ -1936,8 +1936,8 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			y,
 			x,
 			y + h,
-			nvgRGBA(255, 255, 255, 20),
-			nvgRGBAf(base.r, base.g, base.b, 0.06f));
+			nvgRGBA(255, 255, 255, 14),
+			nvgRGBAf(base.r, base.g, base.b, 0.04f));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
 		nvgFillPaint(args.vg, glassFill);
@@ -1951,7 +1951,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			y + h * 0.05f,
 			x + w * 0.55f,
 			y + h * 0.62f,
-			nvgRGBA(255, 255, 255, 16),
+			nvgRGBA(255, 255, 255, 10),
 			nvgRGBA(255, 255, 255, 0));
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x + w * 0.06f, y);
@@ -1966,7 +1966,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, r);
 		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 17));
 		nvgStroke(args.vg);
 
 		NVGpaint edge = nvgLinearGradient(
@@ -1975,8 +1975,8 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			y,
 			x + w,
 			y + h,
-			nvgRGBAf(violet.r, violet.g, violet.b, 0.22f),
-			nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.16f));
+			nvgRGBAf(violet.r, violet.g, violet.b, 0.16f),
+			nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.12f));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 1.35f, y + 1.35f, w - 2.7f, h - 2.7f, std::max(1.f, r - 1.f));
 		nvgStrokeWidth(args.vg, 0.55f);
@@ -1987,7 +1987,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 		nvgMoveTo(args.vg, x + r + 2.f, y + 2.2f);
 		nvgLineTo(args.vg, x + w - r - 2.f, y + 2.2f);
 		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 34));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
 		nvgStroke(args.vg);
 		nvgRestore(args.vg);
 	}

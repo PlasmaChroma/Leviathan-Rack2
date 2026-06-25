@@ -34,6 +34,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool lastMouseInside = false;
 	int lastHoverColumn = -2;
 	int lastHoverRock = -2;
+	float lastHoverGuideY = -1.f;
 	uint32_t lastWaveVersion = 0;
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
@@ -626,7 +627,11 @@ struct WyrmWaveEditor : TransparentWidget {
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
 		const int hoverRockNow = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		if (mouseInside != lastMouseInside || hoverColumnNow != lastHoverColumn || hoverRockNow != lastHoverRock) {
+		const float hoverGuideYNow = mouseInside ? clamp(mouseLocal.y, 0.f, box.size.y) : -1.f;
+		if (mouseInside != lastMouseInside
+			|| hoverColumnNow != lastHoverColumn
+			|| hoverRockNow != lastHoverRock
+			|| std::fabs(hoverGuideYNow - lastHoverGuideY) > 0.25f) {
 			dirty = true;
 		}
 
@@ -652,6 +657,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastMouseInside = mouseInside;
 		lastHoverColumn = hoverColumnNow;
 		lastHoverRock = hoverRockNow;
+		lastHoverGuideY = hoverGuideYNow;
 
 		if (dirty) {
 			framebuffer->setDirty();
