@@ -482,6 +482,77 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 	return !outRects->empty();
 }
 
+bool findRectsInGroupsWithIdSubstringMm(const std::string& svgPath, const std::string& groupIdSubstring, std::vector<SvgRectMatch>* outRects) {
+	if (!outRects || groupIdSubstring.empty()) {
+		return false;
+	}
+	outRects->clear();
+
+	std::string svgText;
+	if (!loadSvgText(svgPath, &svgText)) {
+		return false;
+	}
+
+	std::map<std::string, GradientResolvedColors> gradientCache;
+	std::vector<SvgAffine> transformStack;
+	transformStack.push_back(SvgAffine());
+	std::vector<bool> groupMatchStack;
+	groupMatchStack.push_back(false);
+
+	const std::regex tagRegex("</g\\s*>|<g\\b[^>]*>|<rect\\b[^>]*>", std::regex::icase);
+	auto tagBegin = std::sregex_iterator(svgText.begin(), svgText.end(), tagRegex);
+	auto tagEnd = std::sregex_iterator();
+	for (auto it = tagBegin; it != tagEnd; ++it) {
+		const std::string tag = it->str(0);
+		if (tag.size() >= 3u && tag[1] == '/') {
+			if (transformStack.size() > 1u) {
+				transformStack.pop_back();
+			}
+			if (groupMatchStack.size() > 1u) {
+				groupMatchStack.pop_back();
+			}
+			continue;
+		}
+		if (tag.size() >= 2u && (tag[1] == 'g' || tag[1] == 'G')) {
+			const SvgAffine combined = multiplyAffine(transformStack.back(), transformForTag(tag));
+			std::string id;
+			std::string label;
+			parseAttrString(tag, "id", &id);
+			parseAttrString(tag, "inkscape:label", &label);
+			const bool thisGroupMatches = id.find(groupIdSubstring) != std::string::npos
+				|| label.find(groupIdSubstring) != std::string::npos;
+			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+				transformStack.push_back(combined);
+				groupMatchStack.push_back(groupMatchStack.back() || thisGroupMatches);
+			}
+			continue;
+		}
+
+		const std::string rectTag = tag;
+		std::string id;
+		std::string label;
+		parseAttrString(rectTag, "id", &id);
+		parseAttrString(rectTag, "inkscape:label", &label);
+		const bool rectMatchesDirectly = id.find(groupIdSubstring) != std::string::npos
+			|| label.find(groupIdSubstring) != std::string::npos;
+		if (!groupMatchStack.back() && !rectMatchesDirectly) {
+			continue;
+		}
+		math::Rect rect;
+		if (!parseRectTagMm(rectTag, &rect)) {
+			continue;
+		}
+		const SvgAffine rectTransform = multiplyAffine(transformStack.back(), transformForTag(rectTag));
+		rect = transformRectMm(rect, rectTransform);
+		SvgRectMatch match;
+		match.id = !id.empty() ? id : label;
+		match.rect = rect;
+		resolveRectFillColors(svgText, rectTag, &gradientCache, &match);
+		outRects->push_back(match);
+	}
+	return !outRects->empty();
+}
+
 bool loadCircleFromSvg(
 	const std::string& svgPath,
 	const std::string& circleId,

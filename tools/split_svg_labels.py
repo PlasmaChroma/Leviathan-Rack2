@@ -66,22 +66,12 @@ def copy_svg_shell(source_root: ET.Element) -> ET.Element:
     """
     new_root = ET.Element(source_root.tag)
 
-    preserve_attrs = [
-        "width",
-        "height",
-        "viewBox",
-        "version",
-        "id",
-    ]
-
-    for attr in preserve_attrs:
-        if attr in source_root.attrib:
-            new_root.attrib[attr] = source_root.attrib[attr]
-
-    # Preserve any namespaced/root metadata that may affect rendering.
+    # Preserve root render metadata such as width, height, viewBox,
+    # preserveAspectRatio, fill-rule, stroke defaults, and editor metadata.
+    # The split label SVG should behave like the original full SVG root unless
+    # we deliberately override an attribute below.
     for attr, value in source_root.attrib.items():
-        if attr.startswith("{") and attr not in new_root.attrib:
-            new_root.attrib[attr] = value
+        new_root.attrib[attr] = value
 
     return new_root
 
