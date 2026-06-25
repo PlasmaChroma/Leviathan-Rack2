@@ -1838,6 +1838,7 @@ struct IntegralFluxTimedApertureLight : TBase {
 struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 	struct GlassRectArt {
 		math::Rect rectPx;
+		float radiusPx = 0.f;
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
 	};
 
@@ -1906,7 +1907,8 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			return;
 		}
 
-		const float r = std::min(std::min(w, h) * 0.085f, 8.0f);
+		const float sourceRadius = glass.radiusPx > 0.f ? glass.radiusPx : std::min(std::min(w, h) * 0.085f, 8.0f);
+		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
 		const NVGcolor base = glass.baseColor;
 		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
 		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
@@ -2021,8 +2023,8 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 		const int minorSubdivisions = 4;
 		const float majorX = w / float(majorCols);
 		const float majorY = h / float(majorRows);
-		const NVGcolor minorColor = nvgRGBA(0x1c, 0xcc, 0xd9, 18);
-		const NVGcolor majorColor = nvgRGBA(0x72, 0x8d, 0xff, 26);
+		const NVGcolor minorColor = nvgRGBA(0x1c, 0xcc, 0xd9, 30);
+		const NVGcolor majorColor = nvgRGBA(0x72, 0x8d, 0xff, 46);
 
 		nvgBeginPath(args.vg);
 		for (int col = 0; col < majorCols; ++col) {
@@ -2083,7 +2085,7 @@ struct IntegralFluxSplitLayerTestArt : TransparentWidget {
 			h - 1.f,
 			1.5f,
 			4.0f,
-			nvgRGBA(0x1c, 0xcc, 0xd9, 62),
+			nvgRGBA(0x1c, 0xcc, 0xd9, 78),
 			nvgRGBA(0x1c, 0xcc, 0xd9, 0));
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, x, y, w, h);
@@ -2162,6 +2164,10 @@ struct IntegralFluxWidget : ModuleWidget {
 						for (const panel_svg::SvgRectMatch& match : glassMatches) {
 							IntegralFluxSplitLayerTestArt::GlassRectArt art;
 							art.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
+							if (match.hasCornerRadius) {
+								const Vec radiusPx = mm2px(match.cornerRadius);
+								art.radiusPx = std::min(radiusPx.x, radiusPx.y);
+							}
 							if (match.hasFillColor) {
 								art.baseColor = match.fillColor;
 							}

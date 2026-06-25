@@ -2,6 +2,7 @@
 #include "PanelAnchorAtlas.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -294,6 +295,28 @@ bool parseRectTagMm(const std::string& rectTag, math::Rect* outRect) {
 	return true;
 }
 
+bool parseRectCornerRadiusMm(const std::string& rectTag, Vec* outRadius) {
+	if (!outRadius) {
+		return false;
+	}
+	float rxMm = 0.f;
+	float ryMm = 0.f;
+	const bool hasRx = parseAttrScaled(rectTag, "rx", 0.01f, &rxMm);
+	const bool hasRy = parseAttrScaled(rectTag, "ry", 0.01f, &ryMm);
+	if (!hasRx && !hasRy) {
+		return false;
+	}
+	if (!hasRx) {
+		rxMm = ryMm;
+	}
+	if (!hasRy) {
+		ryMm = rxMm;
+	}
+	outRadius->x = std::max(0.f, rxMm);
+	outRadius->y = std::max(0.f, ryMm);
+	return outRadius->x > 0.f || outRadius->y > 0.f;
+}
+
 struct SvgAffine {
 	float a = 1.f;
 	float b = 0.f;
@@ -391,6 +414,12 @@ math::Rect transformRectMm(const math::Rect& rectMm, const SvgAffine& transform)
 	return math::Rect(Vec(minX, minY), Vec(maxX - minX, maxY - minY));
 }
 
+Vec transformCornerRadiusMm(Vec radiusMm, const SvgAffine& transform) {
+	const float xScale = std::sqrt(transform.a * transform.a + transform.b * transform.b);
+	const float yScale = std::sqrt(transform.c * transform.c + transform.d * transform.d);
+	return Vec(radiusMm.x * xScale, radiusMm.y * yScale);
+}
+
 } // namespace
 
 namespace panel_svg {
@@ -476,6 +505,11 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		SvgRectMatch match;
 		match.id = !id.empty() ? id : label;
 		match.rect = rect;
+		Vec cornerRadius;
+		if (parseRectCornerRadiusMm(rectTag, &cornerRadius)) {
+			match.hasCornerRadius = true;
+			match.cornerRadius = transformCornerRadiusMm(cornerRadius, rectTransform);
+		}
 		resolveRectFillColors(svgText, rectTag, &gradientCache, &match);
 		outRects->push_back(match);
 	}
@@ -547,6 +581,11 @@ bool findRectsInGroupsWithIdSubstringMm(const std::string& svgPath, const std::s
 		SvgRectMatch match;
 		match.id = !id.empty() ? id : label;
 		match.rect = rect;
+		Vec cornerRadius;
+		if (parseRectCornerRadiusMm(rectTag, &cornerRadius)) {
+			match.hasCornerRadius = true;
+			match.cornerRadius = transformCornerRadiusMm(cornerRadius, rectTransform);
+		}
 		resolveRectFillColors(svgText, rectTag, &gradientCache, &match);
 		outRects->push_back(match);
 	}

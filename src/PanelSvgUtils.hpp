@@ -9,6 +9,8 @@ namespace panel_svg {
 struct SvgRectMatch {
 	std::string id;
 	math::Rect rect;
+	bool hasCornerRadius = false;
+	Vec cornerRadius;
 	bool hasFillColor = false;
 	NVGcolor fillColor {};
 	bool hasFillGradientEndColor = false;
