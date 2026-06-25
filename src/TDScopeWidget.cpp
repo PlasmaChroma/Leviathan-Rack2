@@ -1,4 +1,5 @@
 #include "TDScope.hpp"
+#include "VisualAssets.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -68,11 +69,63 @@ const char *debugRenderModeLabel(const TDScope *scopeModule) {
       return "STD";
   }
 }
+
+struct FittedSvgWidget final : TransparentWidget {
+  std::shared_ptr<window::Svg> svg;
+
+  void setSvg(std::shared_ptr<window::Svg> svg) {
+    this->svg = svg;
+  }
+
+  void draw(const DrawArgs &args) override {
+    if (!svg || !svg->handle || box.size.x <= 0.f || box.size.y <= 0.f) {
+      return;
+    }
+    const Vec svgSize = svg->getSize();
+    if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+      return;
+    }
+
+    nvgSave(args.vg);
+    nvgScale(args.vg, box.size.x / svgSize.x, box.size.y / svgSize.y);
+    svg->draw(args.vg);
+    nvgRestore(args.vg);
+  }
+};
+
+struct UnpairedStatusWidget final : TransparentWidget {
+  void draw(const DrawArgs &args) override {
+    if (!APP || !APP->window || !APP->window->uiFont) {
+      return;
+    }
+
+    const float centerX = box.size.x * 0.5f;
+    const float bottomY = box.size.y - 7.f;
+    const float lineGap = 9.f;
+
+    nvgSave(args.vg);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+
+    nvgFontSize(args.vg, 12.f);
+    nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
+    nvgText(args.vg, centerX, bottomY - 2.f * lineGap, "Attach to", nullptr);
+
+    nvgFontSize(args.vg, 14.f);
+    nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
+    nvgText(args.vg, centerX, bottomY - lineGap + 2.f, "Temporal Deck", nullptr);
+    nvgRestore(args.vg);
+  }
+};
 }
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
+  Widget *standardDisplay = nullptr;
+  Widget *input = nullptr;
+  Widget *unpairedDragon = nullptr;
+  Widget *unpairedStatus = nullptr;
   math::Rect scopeRectPx;
   debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
   debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
@@ -86,6 +139,11 @@ struct TDScopeWidget : ModuleWidget {
     }
     return tdscope::isTemporalDeckModule(scopeModule->leftExpander.module) ||
            scopeModule->uiLinkActive.load(std::memory_order_relaxed);
+  }
+
+  bool isPairedToTemporalDeck() const {
+    TDScope *scopeModule = static_cast<TDScope *>(module);
+    return scopeModule && tdscope::isTemporalDeckModule(scopeModule->leftExpander.module);
   }
 
   TDScopeWidget(TDScope *module) {
@@ -108,12 +166,38 @@ struct TDScopeWidget : ModuleWidget {
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
+    const bool initialPairedToDeck = isPairedToTemporalDeck();
+
     glDisplay = tdscope::createGlDisplay(module, scopeRectMm);
-    glDisplay->setVisible(module && module->useOpenGlGeometryRenderMode());
+    glDisplay->setVisible(initialPairedToDeck && module && module->useOpenGlGeometryRenderMode());
     addChild(glDisplay);
 
-    addChild(tdscope::createDisplay(module, scopeRectMm));
-    addChild(tdscope::createInput(module, scopeRectMm));
+    standardDisplay = tdscope::createDisplay(module, scopeRectMm);
+    standardDisplay->setVisible(initialPairedToDeck);
+    addChild(standardDisplay);
+    input = tdscope::createInput(module, scopeRectMm);
+    input->setVisible(initialPairedToDeck);
+    addChild(input);
+
+    math::Rect dragonRectMm;
+    if (!panel_svg::loadRectFromSvgMm(panelPath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
+      dragonRectMm.pos = Vec(1.72215f, 25.0f);
+      dragonRectMm.size = Vec(37.3422f, 76.2759f);
+    }
+    auto *dragon = new FittedSvgWidget;
+    dragon->setSvg(visual_assets::loadPluginSvgCached("res/icon/Leviathan_Optimized.svg"));
+    dragon->box.pos = mm2px(dragonRectMm.pos);
+    dragon->box.size = mm2px(dragonRectMm.size);
+    dragon->setVisible(!initialPairedToDeck);
+    unpairedDragon = dragon;
+    addChild(unpairedDragon);
+
+    auto *status = new UnpairedStatusWidget;
+    status->box.pos = mm2px(scopeRectMm.pos);
+    status->box.size = mm2px(scopeRectMm.size);
+    status->setVisible(!initialPairedToDeck);
+    unpairedStatus = status;
+    addChild(unpairedStatus);
 
     addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
     addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
@@ -124,9 +208,22 @@ struct TDScopeWidget : ModuleWidget {
     const bool measurePerf = isDragonKingDebugEnabled();
     const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
     bool linkedToDeck = shouldRenderDockBridge();
+    bool pairedToDeck = isPairedToTemporalDeck();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
-      glDisplay->setVisible(scopeModule && scopeModule->useOpenGlGeometryRenderMode());
+      glDisplay->setVisible(pairedToDeck && scopeModule && scopeModule->useOpenGlGeometryRenderMode());
+    }
+    if (standardDisplay) {
+      standardDisplay->setVisible(pairedToDeck);
+    }
+    if (input) {
+      input->setVisible(pairedToDeck);
+    }
+    if (unpairedDragon) {
+      unpairedDragon->setVisible(!pairedToDeck);
+    }
+    if (unpairedStatus) {
+      unpairedStatus->setVisible(!pairedToDeck);
     }
     const float borderGrowPx = linkedToDeck ? 3.f : 0.f;
     if (panelBorder && (panelBorder->box.pos.x != -borderGrowPx || panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
