@@ -15,7 +15,14 @@ SOURCES += $(wildcard src/*.cpp)
 
 # Add files to the ZIP package when running `make dist`
 # The compiled plugin and "plugin.json" are automatically added.
-DISTRIBUTABLES += res
+RES_FILES := $(shell find res -type f ! -path 'res/icon/*')
+RES_EXCLUDES := \
+	res/flux.svg \
+	res/proc.svg \
+	$(shell find res/panels-source -type f 2>/dev/null)
+
+DISTRIBUTABLES += res/icon
+DISTRIBUTABLES += $(filter-out $(RES_EXCLUDES),$(RES_FILES))
 DISTRIBUTABLES += $(wildcard LICENSE*)
 DISTRIBUTABLES += $(wildcard presets)
 
