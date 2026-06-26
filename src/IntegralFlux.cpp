@@ -314,6 +314,7 @@ struct IntegralFlux : Module {
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
+	static constexpr float SHARK_FIN_LINEAR_SHAPE = 0.5f;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 	float cachedInjectSampleTime = -1.f;
 	float cachedInjectAlphaBase = 0.f;
@@ -357,19 +358,28 @@ struct IntegralFlux : Module {
 		}
 	}
 
-	static float shapeSignedFromKnob(float shape01) {
+	static float shapeSignedFromKnob(float shape01, float linearShape) {
 		shape01 = clamp(shape01, 0.f, 1.f);
-		if (shape01 < LINEAR_SHAPE) {
-			return (shape01 - LINEAR_SHAPE) / LINEAR_SHAPE;
+		linearShape = clamp(linearShape, 1e-4f, 1.f - 1e-4f);
+		if (shape01 < linearShape) {
+			return (shape01 - linearShape) / linearShape;
 		}
-		if (shape01 > LINEAR_SHAPE) {
-			return (shape01 - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+		if (shape01 > linearShape) {
+			return (shape01 - linearShape) / (1.f - linearShape);
 		}
 		return 0.f;
 	}
 
+	static float shapeSignedFromKnobForMode(float shape01, FunctionShapeMode mode) {
+		return shapeSignedFromKnob(shape01, mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE);
+	}
+
 	static FunctionShapeMode functionShapeModeFromParam(float value) {
-		return value >= 0.5f ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
+		return value >= 0.5f ? FUNCTION_SHAPE_MATHS : FUNCTION_SHAPE_SHARK_FIN;
+	}
+
+	static FunctionShapeMode functionShapeModeFromStoredInt(int value) {
+		return value == FUNCTION_SHAPE_SHARK_FIN ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
 	}
 
 	static float slopeWarp(float x, float s) {
@@ -404,10 +414,6 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
-	static float stageLocalX(float outputNorm, bool rising) {
-		return rising ? outputNorm : (1.f - outputNorm);
-	}
-
 	static float shapeSignedForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
 		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
 			return rising ? -shapeSigned : shapeSigned;
@@ -416,10 +422,7 @@ struct IntegralFlux : Module {
 	}
 
 	static float slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
-		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
-			return slopeWarp(stageLocalX(outputNorm, rising), shapeSignedForMode(shapeSigned, rising, mode));
-		}
-		return slopeWarp(outputNorm, shapeSigned);
+		return slopeWarp(outputNorm, shapeSignedForMode(shapeSigned, rising, mode));
 	}
 
 	static float slopeWarpScaleForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
@@ -449,19 +452,7 @@ struct IntegralFlux : Module {
 		if (mode == FUNCTION_SHAPE_MATHS) {
 			return segmentPhaseFromOutputNorm(outputNorm, shapeSigned, rising);
 		}
-		const float localEnd = stageLocalX(outputNorm, rising);
-		if (std::fabs(shapeSigned) < 1e-6f) {
-			return localEnd;
-		}
-		const float stageShape = shapeSignedForMode(shapeSigned, rising, mode);
-		float partialSum = 0.f;
-		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
-			float t = (float(i) + 0.5f) / float(WARP_SCALE_SAMPLES);
-			partialSum += 1.f / slopeWarp(localEnd * t, stageShape);
-		}
-		const float partialIntegral = localEnd * partialSum / float(WARP_SCALE_SAMPLES);
-		const float totalIntegral = std::max(slopeWarpScale(stageShape), 1e-6f);
-		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
+		return segmentPhaseFromOutputNorm(outputNorm, shapeSignedForMode(shapeSigned, rising, mode), rising);
 	}
 
 	static float computeSegPhase(float out, float startOut, float invSpan) {
@@ -520,9 +511,9 @@ struct IntegralFlux : Module {
 		stageTime = std::max(stageTime, 1e-6f);
 		const bool rising = delta > 0.f;
 		float range = OUTER_V_MAX - OUTER_V_MIN;
-		float segmentPhase = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
+		float outputNorm = clamp((out - OUTER_V_MIN) / std::max(range, 1e-6f), 0.f, 1.f);
 		float scale = rising ? riseWarpScale : fallWarpScale;
-		float warp = slopeWarp(segmentPhase, shapeSignedForMode(shapeSigned, rising, shapeMode));
+		float warp = slopeWarpForMode(outputNorm, shapeSigned, rising, shapeMode);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
 		float step = dp * warp * scale * range;
 
@@ -726,7 +717,7 @@ struct IntegralFlux : Module {
 		riseTime = shared.riseTime.load(std::memory_order_relaxed);
 		fallTime = shared.fallTime.load(std::memory_order_relaxed);
 		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
-		shapeMode = functionShapeModeFromParam(float(shared.shapeMode.load(std::memory_order_relaxed)));
+		shapeMode = functionShapeModeFromStoredInt(shared.shapeMode.load(std::memory_order_relaxed));
 		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
 		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
 		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
@@ -734,16 +725,17 @@ struct IntegralFlux : Module {
 		version = shared.version.load(std::memory_order_relaxed);
 	}
 
-	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
+	float computeShapeTimeScale(float shape, FunctionShapeMode mode, float logScaleLog2, float expScaleLog2) const {
 		// Shape knob (log/lin/exp) contributes a multiplicative time factor.
 		// We interpolate in log2 domain so scaling stays perceptually smooth.
 		shape = clamp(shape, 0.f, 1.f);
-		if (shape < LINEAR_SHAPE) {
-			float t = shape / LINEAR_SHAPE;
+		const float linearShape = mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE;
+		if (shape < linearShape) {
+			float t = shape / linearShape;
 			return rack::dsp::exp2_taylor5((1.f - t) * logScaleLog2);
 		}
-		if (shape > LINEAR_SHAPE) {
-			float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+		if (shape > linearShape) {
+			float t = (shape - linearShape) / (1.f - linearShape);
 			return rack::dsp::exp2_taylor5(t * expScaleLog2);
 		}
 		return 1.f;
@@ -846,12 +838,13 @@ struct IntegralFlux : Module {
 				|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
 				|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
 				|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
+				|| shapeModeChanged
 				|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
 				float bothScale = bothTimeScaleFromCv(bothCv);
-				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
+				float shapeTimeScale = computeShapeTimeScale(shape, shapeMode, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
 					riseCv,
@@ -916,7 +909,7 @@ struct IntegralFlux : Module {
 			// One-shot/triggered FG segments use trigger-domain ceiling when not cycling.
 			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
 		}
-		float shapeSigned = shapeSignedFromKnob(shape);
+		float shapeSigned = shapeSignedFromKnobForMode(shape, shapeMode);
 		bool previewStatePublished = updatePreviewChannel(
 			previewShared,
 			previewUpdateState,
@@ -1097,8 +1090,8 @@ struct IntegralFlux : Module {
 		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
 		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "CH4 shape");
 		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter", "%", 0.f, 200.f, -100.f);
-		configSwitch(SHAPE_MODE_1_PARAM, 0.f, 1.f, 0.f, "CH1 function shape mode", {"Maths", "Shark Fin"});
-		configSwitch(SHAPE_MODE_4_PARAM, 0.f, 1.f, 0.f, "CH4 function shape mode", {"Maths", "Shark Fin"});
+		configSwitch(SHAPE_MODE_1_PARAM, 0.f, 1.f, 1.f, "CH1 function shape mode", {"Shark Fin", "Mirror"});
+		configSwitch(SHAPE_MODE_4_PARAM, 0.f, 1.f, 1.f, "CH4 function shape mode", {"Shark Fin", "Mirror"});
 		configInput(INPUT_1_INPUT, "CH1 signal");
 		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
 		configInput(INPUT_2_INPUT, "CH2 signal");
@@ -1917,6 +1910,89 @@ struct IntegralFluxCurveHalo2Knob : IntegralFluxHalo2Knob {
 	}
 };
 
+struct IntegralFluxLinearPointOverlay : TransparentWidget {
+	IntegralFlux* module = nullptr;
+	int shapeModeParamId = -1;
+	Vec centerPx;
+	float linearValue = IntegralFlux::LINEAR_SHAPE;
+	double lastStepTime = 0.0;
+	bool initialized = false;
+
+	static constexpr float BASE_ANGLE_DEG = 120.f;
+	static constexpr float SWEEP_ANGLE_DEG = 300.f;
+	static constexpr float ANIMATION_RATE = 3.2f;
+	static constexpr float LINE_RADIUS_MM = 8.6f;
+	static constexpr float LABEL_RADIUS_MM = 10.65f;
+	static constexpr float LABEL_TANGENT_OFFSET_MM = 1.65f;
+	static constexpr float LINE_WIDTH_MM = 0.5f;
+	static constexpr float FONT_SIZE_MM = 2.82f;
+
+	IntegralFluxLinearPointOverlay(IntegralFlux* module, int shapeModeParamId, Vec centerPx)
+		: module(module)
+		, shapeModeParamId(shapeModeParamId)
+		, centerPx(centerPx) {
+		box.pos = Vec(0.f, 0.f);
+	}
+
+	float targetLinearValue() const {
+		if (!module || shapeModeParamId < 0) {
+			return IntegralFlux::LINEAR_SHAPE;
+		}
+		const IntegralFlux::FunctionShapeMode mode =
+			IntegralFlux::functionShapeModeFromParam(module->params[shapeModeParamId].getValue());
+		return mode == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN
+			? IntegralFlux::SHARK_FIN_LINEAR_SHAPE
+			: IntegralFlux::LINEAR_SHAPE;
+	}
+
+	void step() override {
+		TransparentWidget::step();
+		const float target = targetLinearValue();
+		const double now = system::getTime();
+		if (!initialized) {
+			linearValue = target;
+			lastStepTime = now;
+			initialized = true;
+			return;
+		}
+		const float dt = clamp(float(now - lastStepTime), 0.f, 0.05f);
+		lastStepTime = now;
+		const float alpha = 1.f - std::exp(-ANIMATION_RATE * dt);
+		linearValue += (target - linearValue) * alpha;
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float angle = (BASE_ANGLE_DEG + SWEEP_ANGLE_DEG * linearValue) * (float(M_PI) / 180.f);
+		const Vec dir(std::cos(angle), std::sin(angle));
+		const Vec tangent(-dir.y, dir.x);
+		const float lineRadius = mm2px(Vec(LINE_RADIUS_MM, 0.f)).x;
+		const float labelRadius = mm2px(Vec(LABEL_RADIUS_MM, 0.f)).x;
+		const float tangentOffset = mm2px(Vec(LABEL_TANGENT_OFFSET_MM, 0.f)).x
+			* clamp(std::fabs(linearValue - IntegralFlux::SHARK_FIN_LINEAR_SHAPE)
+				/ std::max(IntegralFlux::SHARK_FIN_LINEAR_SHAPE - IntegralFlux::LINEAR_SHAPE, 1e-4f), 0.f, 1.f);
+		const float lineWidth = mm2px(Vec(LINE_WIDTH_MM, 0.f)).x;
+		const float fontSize = mm2px(Vec(0.f, FONT_SIZE_MM)).y;
+		const Vec lineEnd = centerPx.plus(dir.mult(lineRadius));
+		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset));
+
+		nvgSave(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, centerPx.x, centerPx.y);
+		nvgLineTo(args.vg, lineEnd.x, lineEnd.y);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgStrokeWidth(args.vg, lineWidth);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+
+		nvgFontSize(args.vg, fontSize);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, labelPos.x, labelPos.y, "LIN", nullptr);
+		nvgRestore(args.vg);
+	}
+};
+
 // Deprecated old EclipseKnob wrapper, replaced by Eclipse2Knob
 
 struct IntegralFluxEclipse2Knob : Eclipse2Knob {
@@ -2122,6 +2198,18 @@ struct IntegralFluxWidget : ModuleWidget {
 			applyPointOverride("INV_LED", &invLightPos);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));
 		previewBuildTimer.markAnchorsDone();
+
+		{
+			IntegralFluxLinearPointOverlay* ch1LinearPoint = new IntegralFluxLinearPointOverlay(
+				module, IntegralFlux::SHAPE_MODE_1_PARAM, mm2px(linLog1KnobPos));
+			ch1LinearPoint->box.size = box.size;
+			addChild(ch1LinearPoint);
+
+			IntegralFluxLinearPointOverlay* ch4LinearPoint = new IntegralFluxLinearPointOverlay(
+				module, IntegralFlux::SHAPE_MODE_4_PARAM, mm2px(linLog4KnobPos));
+			ch4LinearPoint->box.size = box.size;
+			addChild(ch4LinearPoint);
+		}
 
 		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
