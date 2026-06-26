@@ -60,6 +60,29 @@ struct IntegralFluxPreviewEdgeInteraction {
 	bool fallDragging = false;
 };
 
+struct IntegralFluxKnobTooltipState {
+	int activeParamId = -1;
+	int activeChannel = 0;
+	const char* activeLabel = nullptr;
+	bool dragging = false;
+
+	void activate(int paramId, int channel, const char* label, bool isDragging) {
+		activeParamId = paramId;
+		activeChannel = channel;
+		activeLabel = label;
+		dragging = isDragging;
+	}
+
+	void clearIfActive(int paramId) {
+		if (activeParamId == paramId) {
+			activeParamId = -1;
+			activeChannel = 0;
+			activeLabel = nullptr;
+			dragging = false;
+		}
+	}
+};
+
 struct WavePreviewWidget : widget::OpenGlWidget {
 	// Preview boxes are small; this density materially lowers per-frame NanoVG work
 	// while remaining visually smooth at current panel scale.
@@ -654,6 +677,52 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 	return rect;
 }
 
+struct IntegralFluxCentralTooltipOverlay : TransparentWidget {
+	IntegralFlux* module = nullptr;
+	IntegralFluxKnobTooltipState* state = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !state || state->activeParamId < 0 || state->activeParamId >= IntegralFlux::PARAMS_LEN) {
+			return;
+		}
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+
+		const float valuePct = clamp(module->params[state->activeParamId].getValue(), 0.f, 1.f) * 100.f;
+		char text[64];
+		std::snprintf(text, sizeof(text), "CH%d %s  %.1f%%",
+			state->activeChannel,
+			state->activeLabel ? state->activeLabel : "",
+			valuePct);
+
+		const float bubbleW = box.size.x;
+		const float bubbleH = box.size.y;
+		const float x = 0.f;
+		const float y = 0.f;
+		const float radius = mm2px(1.7f);
+
+		nvgSave(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x, y, bubbleW, bubbleH, radius);
+		nvgFillColor(args.vg, nvgRGBA(7, 9, 18, state->dragging ? 222 : 190));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + 0.5f, y + 0.5f, bubbleW - 1.f, bubbleH - 1.f, radius);
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(0x86, 0x5c, 0xff, state->dragging ? 176 : 130));
+		nvgStroke(args.vg);
+
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.2f);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGBA(242, 238, 255, 238));
+		nvgText(args.vg, x + bubbleW * 0.5f, y + bubbleH * 0.52f, text, nullptr);
+		nvgRestore(args.vg);
+	}
+};
+
 struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	enum PreviewEdge {
 		PREVIEW_EDGE_NONE,
@@ -663,6 +732,12 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 
 	IntegralFluxPreviewEdgeInteraction* previewInteraction = nullptr;
 	PreviewEdge previewEdge = PREVIEW_EDGE_NONE;
+	IntegralFluxKnobTooltipState* tooltipState = nullptr;
+	const char* tooltipLabel = nullptr;
+	int tooltipChannel = 0;
+	int tooltipParamId = -1;
+	bool tooltipHovered = false;
+	bool tooltipDragging = false;
 	bool suppressRackTooltip = false;
 
 	IntegralFluxHalo2Knob() = default;
@@ -673,8 +748,27 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 		previewEdge = edge;
 	}
 
+	void setCentralTooltip(IntegralFluxKnobTooltipState* state, int channel, const char* label, int paramId) {
+		tooltipState = state;
+		tooltipChannel = channel;
+		tooltipLabel = label;
+		tooltipParamId = paramId;
+	}
+
 	void setSuppressRackTooltip(bool suppress) {
 		suppressRackTooltip = suppress;
+	}
+
+	void updateCentralTooltip(bool active, bool isDragging) {
+		if (!tooltipState || tooltipParamId < 0) {
+			return;
+		}
+		if (active) {
+			tooltipState->activate(tooltipParamId, tooltipChannel, tooltipLabel, isDragging);
+		}
+		else {
+			tooltipState->clearIfActive(tooltipParamId);
+		}
 	}
 
 	void setHovered(bool hovered) {
@@ -703,6 +797,8 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 
 	void onEnter(const event::Enter& e) override {
 		setHovered(true);
+		tooltipHovered = true;
+		updateCentralTooltip(true, tooltipDragging);
 		if (suppressRackTooltip) {
 			hovered = true;
 			updateCenterSvg();
@@ -714,6 +810,10 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 
 	void onLeave(const event::Leave& e) override {
 		setHovered(false);
+		tooltipHovered = false;
+		if (!tooltipDragging) {
+			updateCentralTooltip(false, false);
+		}
 		if (suppressRackTooltip) {
 			hovered = false;
 			updateCenterSvg();
@@ -726,11 +826,20 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 
 	void onDragStart(const event::DragStart& e) override {
 		setDragging(true);
+		tooltipDragging = true;
+		updateCentralTooltip(true, true);
 		LeviathanHaloKnob2::onDragStart(e);
 	}
 
 	void onDragEnd(const event::DragEnd& e) override {
 		setDragging(false);
+		tooltipDragging = false;
+		if (tooltipHovered) {
+			updateCentralTooltip(true, false);
+		}
+		else {
+			updateCentralTooltip(false, false);
+		}
 		LeviathanHaloKnob2::onDragEnd(e);
 	}
 
@@ -984,6 +1093,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
 	IntegralFluxPreviewEdgeInteraction ch1EdgeInteraction;
 	IntegralFluxPreviewEdgeInteraction ch4EdgeInteraction;
+	IntegralFluxKnobTooltipState centralTooltipState;
 
 	static float consumeReductionAverage(std::atomic<uint64_t>& total, std::atomic<uint64_t>& samples) {
 		const uint64_t totalValue = total.exchange(0u, std::memory_order_acq_rel);
@@ -1197,18 +1307,25 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
 		auto addEdgeKnob = [&](Vec posMm, int paramId, IntegralFluxPreviewEdgeInteraction* interaction,
-			IntegralFluxHalo2Knob::PreviewEdge edge, bool suppressRackTooltip = false) {
+			IntegralFluxHalo2Knob::PreviewEdge edge, int channel, const char* tooltipLabel) {
 			IntegralFluxHalo2Knob* knob = createParamCentered<IntegralFluxHalo2Knob>(mm2px(posMm), module, paramId);
 			knob->setPreviewInteraction(interaction, edge);
-			knob->setSuppressRackTooltip(suppressRackTooltip);
+			knob->setCentralTooltip(&centralTooltipState, channel, tooltipLabel, paramId);
+			knob->setSuppressRackTooltip(true);
 			addParam(knob);
 		};
-		addEdgeKnob(rise1KnobPos, IntegralFlux::RISE_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE);
-		addEdgeKnob(rise4KnobPos, IntegralFlux::RISE_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE);
-		addEdgeKnob(fall1KnobPos, IntegralFlux::FALL_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL);
-		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, true);
-		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
+		auto addCurveKnob = [&](Vec posMm, int paramId, int channel) {
+			IntegralFluxCurveHalo2Knob* knob = createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(posMm), module, paramId);
+			knob->setCentralTooltip(&centralTooltipState, channel, "Curve", paramId);
+			knob->setSuppressRackTooltip(true);
+			addParam(knob);
+		};
+		addEdgeKnob(rise1KnobPos, IntegralFlux::RISE_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE, 1, "Surge");
+		addEdgeKnob(rise4KnobPos, IntegralFlux::RISE_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE, 4, "Surge");
+		addEdgeKnob(fall1KnobPos, IntegralFlux::FALL_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 1, "Sink");
+		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 4, "Sink");
+		addCurveKnob(linLog1KnobPos, IntegralFlux::LIN_LOG_1_PARAM, 1);
+		addCurveKnob(linLog4KnobPos, IntegralFlux::LIN_LOG_4_PARAM, 4);
 		addParam(createParamCentered<CKSS>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
@@ -1295,6 +1412,14 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<MagentaApertureLight>>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
+
+		IntegralFluxCentralTooltipOverlay* centralTooltip = new IntegralFluxCentralTooltipOverlay();
+		centralTooltip->box.size = mm2px(Vec(32.f, 7.6f));
+		centralTooltip->box.pos = Vec(box.size.x * 0.5f - centralTooltip->box.size.x * 0.5f,
+			mm2px(20.84f) - centralTooltip->box.size.y * 0.5f);
+		centralTooltip->module = module;
+		centralTooltip->state = &centralTooltipState;
+		addChild(centralTooltip);
 	}
 
 	void draw(const DrawArgs& args) override {
