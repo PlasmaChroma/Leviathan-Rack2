@@ -1922,8 +1922,10 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 	static constexpr float SWEEP_ANGLE_DEG = 300.f;
 	static constexpr float ANIMATION_RATE = 3.2f;
 	static constexpr float LINE_RADIUS_MM = 8.6f;
-	static constexpr float LABEL_RADIUS_MM = 10.65f;
-	static constexpr float LABEL_TANGENT_OFFSET_MM = 1.65f;
+	static constexpr float LABEL_RADIUS_MM = 10.9f;
+	static constexpr float LABEL_TANGENT_OFFSET_MM = 0.85f;
+	static constexpr float LABEL_Y_OFFSET_MM = 0.32f;
+	static constexpr float LABEL_TOP_Y_OFFSET_MM = 0.18f;
 	static constexpr float LINE_WIDTH_MM = 0.5f;
 	static constexpr float FONT_SIZE_MM = 2.82f;
 
@@ -1970,10 +1972,13 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 		const float tangentOffset = mm2px(Vec(LABEL_TANGENT_OFFSET_MM, 0.f)).x
 			* clamp(std::fabs(linearValue - IntegralFlux::SHARK_FIN_LINEAR_SHAPE)
 				/ std::max(IntegralFlux::SHARK_FIN_LINEAR_SHAPE - IntegralFlux::LINEAR_SHAPE, 1e-4f), 0.f, 1.f);
+		const float topBlend = clamp((linearValue - IntegralFlux::LINEAR_SHAPE)
+			/ std::max(IntegralFlux::SHARK_FIN_LINEAR_SHAPE - IntegralFlux::LINEAR_SHAPE, 1e-4f), 0.f, 1.f);
+		const float labelYOffset = mm2px(Vec(0.f, LABEL_Y_OFFSET_MM + LABEL_TOP_Y_OFFSET_MM * topBlend)).y;
 		const float lineWidth = mm2px(Vec(LINE_WIDTH_MM, 0.f)).x;
 		const float fontSize = mm2px(Vec(0.f, FONT_SIZE_MM)).y;
 		const Vec lineEnd = centerPx.plus(dir.mult(lineRadius));
-		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset));
+		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset)).plus(Vec(0.f, labelYOffset));
 
 		nvgSave(args.vg);
 		nvgBeginPath(args.vg);
