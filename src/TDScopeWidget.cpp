@@ -186,10 +186,14 @@ struct TDScopeWidget : ModuleWidget {
     }
     auto *dragon = new FittedSvgWidget;
     dragon->setSvg(visual_assets::loadPluginSvgCached("res/icon/Leviathan_Optimized.svg"));
-    dragon->box.pos = mm2px(dragonRectMm.pos);
-    dragon->box.size = mm2px(dragonRectMm.size);
-    dragon->setVisible(!initialPairedToDeck);
-    unpairedDragon = dragon;
+    auto *dragonFb = new widget::FramebufferWidget;
+    dragonFb->box.pos = mm2px(dragonRectMm.pos);
+    dragonFb->box.size = mm2px(dragonRectMm.size);
+    dragonFb->dirtyOnSubpixelChange = false;
+    dragon->box.size = dragonFb->box.size;
+    dragonFb->addChild(dragon);
+    dragonFb->setVisible(!initialPairedToDeck);
+    unpairedDragon = dragonFb;
     addChild(unpairedDragon);
 
     auto *status = new UnpairedStatusWidget;

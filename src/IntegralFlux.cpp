@@ -2188,9 +2188,13 @@ struct IntegralFluxWidget : ModuleWidget {
 			}
 			IntegralFluxFittedSvgWidget* dragon = new IntegralFluxFittedSvgWidget();
 			dragon->setSvg(visual_assets::loadPluginSvgCached("res/icon/Leviathan_Optimized.svg"));
-			dragon->box.pos = mm2px(dragonRectMm.pos);
-			dragon->box.size = mm2px(dragonRectMm.size);
-			addChild(dragon);
+			widget::FramebufferWidget* dragonFb = new widget::FramebufferWidget();
+			dragonFb->box.pos = mm2px(dragonRectMm.pos);
+			dragonFb->box.size = mm2px(dragonRectMm.size);
+			dragonFb->dirtyOnSubpixelChange = false;
+			dragon->box.size = dragonFb->box.size;
+			dragonFb->addChild(dragon);
+			addChild(dragonFb);
 		}
 		previewBuildTimer.markPanelDone();
 
