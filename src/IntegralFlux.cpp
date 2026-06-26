@@ -1378,6 +1378,13 @@ struct BigTL1105 : TL1105 {
     }
 };
 
+struct IntegralFluxPreviewEdgeInteraction {
+	bool riseHovered = false;
+	bool fallHovered = false;
+	bool riseDragging = false;
+	bool fallDragging = false;
+};
+
 struct WavePreviewWidget : widget::OpenGlWidget {
 	// Preview boxes are small; this density materially lowers per-frame NanoVG work
 	// while remaining visually smooth at current panel scale.
@@ -1395,22 +1402,24 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
 	static constexpr float TRAIL_LINE_WIDTH = 1.15f;
 	static constexpr float GL_WAVE_LINE_WIDTH = 2.0f;
-		static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
-		static constexpr float GL_HIGH_ZOOM_WIDTH_TAPER = 0.08f;
-		static constexpr int TRAIL_DRAW_STRIDE = 2;
-		static constexpr int TRAIL_CAPTURE_STRIDE = 1;
+	static constexpr float GL_TRAIL_LINE_WIDTH = 1.6f;
+	static constexpr float GL_HIGH_ZOOM_WIDTH_TAPER = 0.08f;
+	static constexpr int TRAIL_DRAW_STRIDE = 2;
+	static constexpr int TRAIL_CAPTURE_STRIDE = 1;
 	int channel = 1;
 	IntegralFlux* modulePtr = nullptr;
+	IntegralFluxPreviewEdgeInteraction* edgeInteraction = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
-		WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
-		std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
-		std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
-		float cachedLutCurveSigned = 0.f;
-		int cachedLutShapeMode = IntegralFlux::FUNCTION_SHAPE_MATHS;
-		bool cachedLutsValid = false;
-		uint32_t lastVersion = 0;
+	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+	std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
+	std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
+	float cachedLutCurveSigned = 0.f;
+	int cachedLutShapeMode = IntegralFlux::FUNCTION_SHAPE_MATHS;
+	bool cachedLutsValid = false;
+	uint32_t lastVersion = 0;
 	bool pointsValid = false;
+	int peakPointIndex = POINT_COUNT / 2;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
@@ -1478,6 +1487,100 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 
 	static void drawGlRibbon(const std::array<Vec, POINT_COUNT>& linePoints, int stride, float lineWidth, NVGcolor color) {
 		drawGlRibbonPoints(linePoints.data(), POINT_COUNT, stride, lineWidth, color);
+	}
+
+	int highlightedEdge() const {
+		if (!edgeInteraction) {
+			return 0;
+		}
+		if (edgeInteraction->riseDragging) {
+			return 1;
+		}
+		if (edgeInteraction->fallDragging) {
+			return 2;
+		}
+		if (edgeInteraction->riseHovered) {
+			return 1;
+		}
+		if (edgeInteraction->fallHovered) {
+			return 2;
+		}
+		return 0;
+	}
+
+	static NVGcolor waveformColor() {
+		return nvgRGBA(230, 230, 220, 255);
+	}
+
+	static NVGcolor activeEdgeColor() {
+		return nvgRGBA(0x86, 0x5c, 0xff, 0xff);
+	}
+
+	void drawGlWaveSegment(int start, int end, float lineScale, NVGcolor color) {
+		if (!pointsValid) {
+			return;
+		}
+		start = clamp(start, 0, POINT_COUNT - 1);
+		end = clamp(end, 0, POINT_COUNT - 1);
+		const int count = end - start + 1;
+		if (count < 2) {
+			return;
+		}
+		drawGlRibbonPoints(points.data() + start, count, 1, GL_WAVE_LINE_WIDTH * lineScale, color);
+	}
+
+	void drawGlWaveform(float lineScale) {
+		const int edge = highlightedEdge();
+		if (edge == 0) {
+			drawGlWaveSegment(0, POINT_COUNT - 1, lineScale, waveformColor());
+			return;
+		}
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		drawGlWaveSegment(0, peakIndex, lineScale, edge == 1 ? activeEdgeColor() : waveformColor());
+		drawGlWaveSegment(peakIndex, POINT_COUNT - 1, lineScale, edge == 2 ? activeEdgeColor() : waveformColor());
+	}
+
+	void drawNvgWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color, size_t* reducedPointCount) {
+		if (!pointsValid) {
+			return;
+		}
+		start = clamp(start, 0, POINT_COUNT - 1);
+		end = clamp(end, 0, POINT_COUNT - 1);
+		const int count = end - start + 1;
+		if (count < 2) {
+			return;
+		}
+		NVGcontext* vg = args.vg;
+		nvgBeginPath(vg);
+		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f, [vg, reducedPointCount](const Vec& pt, bool isMove) {
+			if (reducedPointCount) {
+				++(*reducedPointCount);
+			}
+			if (isMove) {
+				nvgMoveTo(vg, pt.x, pt.y);
+			}
+			else {
+				nvgLineTo(vg, pt.x, pt.y);
+			}
+		});
+		nvgStrokeColor(vg, color);
+		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
+		nvgLineCap(vg, NVG_BUTT);
+		nvgLineJoin(vg, NVG_ROUND);
+		nvgStroke(vg);
+	}
+
+	size_t drawNvgWaveform(const DrawArgs& args) {
+		size_t reducedPointCount = 0;
+		const int edge = highlightedEdge();
+		if (edge == 0) {
+			drawNvgWaveSegment(args, 0, POINT_COUNT - 1, waveformColor(), &reducedPointCount);
+			return reducedPointCount;
+		}
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		drawNvgWaveSegment(args, 0, peakIndex, edge == 1 ? activeEdgeColor() : waveformColor(), &reducedPointCount);
+		drawNvgWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? activeEdgeColor() : waveformColor(), &reducedPointCount);
+		return reducedPointCount;
 	}
 
 	static const std::array<Vec, 25>& glDotUnitCircle() {
@@ -1581,7 +1684,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				drawGlRibbonPoints(frame.points.data(), int(frame.pointCount), 1, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
 			}
 		}
-		drawGlRibbon(points, 1, GL_WAVE_LINE_WIDTH * lineScale, nvgRGBA(230, 230, 220, 255));
+		drawGlWaveform(lineScale);
 		if (modulePtr) {
 			modulePtr->recordCurvePointReduction(channel, POINT_COUNT, POINT_COUNT);
 		}
@@ -1688,13 +1791,14 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			points[i] = Vec(x, py);
 		}
 
-			// Preserve full crest height without flattening the apex into a
-			// two-point plateau when the true peak falls between sample columns.
-			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
-			points[peakIndex] = Vec(peakX, top);
-			points.front() = Vec(left, bottom);
-			points.back() = Vec(right, bottom);
+		// Preserve full crest height without flattening the apex into a
+		// two-point plateau when the true peak falls between sample columns.
+		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+		int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
+		peakPointIndex = peakIndex;
+		points[peakIndex] = Vec(peakX, top);
+		points.front() = Vec(left, bottom);
+		points.back() = Vec(right, bottom);
 		pointsValid = true;
 	}
 
@@ -1810,25 +1914,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					frameTracer.draw(args.vg, nowSec, box.size, style);
 				}
 			}
-			auto vg = args.vg;
-			nvgBeginPath(vg);
-			size_t reducedPointCount = 0;
-			wave_preview::simplifyPath(points.data(), POINT_COUNT, 1, 0.02f, [vg, &reducedPointCount](const Vec& pt, bool isMove) {
-				++reducedPointCount;
-				if (isMove) {
-					nvgMoveTo(vg, pt.x, pt.y);
-				} else {
-					nvgLineTo(vg, pt.x, pt.y);
-				}
-			});
+			size_t reducedPointCount = drawNvgWaveform(args);
 			if (modulePtr) {
 				modulePtr->recordCurvePointReduction(channel, POINT_COUNT, reducedPointCount);
 			}
-			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
-			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
-			nvgLineCap(args.vg, NVG_BUTT);
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgStroke(args.vg);
 		}
 		if (pointsValid && dotVisible) {
 			float w = std::max(box.size.x, 1.f);
@@ -1891,8 +1980,84 @@ static math::Rect insetRectMm(math::Rect rect, float insetMm) {
 }
 
 struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
+	enum PreviewEdge {
+		PREVIEW_EDGE_NONE,
+		PREVIEW_EDGE_RISE,
+		PREVIEW_EDGE_FALL
+	};
+
+	IntegralFluxPreviewEdgeInteraction* previewInteraction = nullptr;
+	PreviewEdge previewEdge = PREVIEW_EDGE_NONE;
+	bool suppressRackTooltip = false;
+
 	IntegralFluxHalo2Knob() = default;
 	explicit IntegralFluxHalo2Knob(Config config) : LeviathanHaloKnob2(config) {}
+
+	void setPreviewInteraction(IntegralFluxPreviewEdgeInteraction* interaction, PreviewEdge edge) {
+		previewInteraction = interaction;
+		previewEdge = edge;
+	}
+
+	void setSuppressRackTooltip(bool suppress) {
+		suppressRackTooltip = suppress;
+	}
+
+	void setHovered(bool hovered) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseHovered = hovered;
+		}
+		else if (previewEdge == PREVIEW_EDGE_FALL) {
+			previewInteraction->fallHovered = hovered;
+		}
+	}
+
+	void setDragging(bool dragging) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseDragging = dragging;
+		}
+		else if (previewEdge == PREVIEW_EDGE_FALL) {
+			previewInteraction->fallDragging = dragging;
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		setHovered(true);
+		if (suppressRackTooltip) {
+			hovered = true;
+			updateCenterSvg();
+			destroyTooltip();
+			return;
+		}
+		LeviathanHaloKnob2::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		setHovered(false);
+		if (suppressRackTooltip) {
+			hovered = false;
+			updateCenterSvg();
+			destroyTooltip();
+			app::SvgKnob::onLeave(e);
+			return;
+		}
+		LeviathanHaloKnob2::onLeave(e);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		setDragging(true);
+		LeviathanHaloKnob2::onDragStart(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		setDragging(false);
+		LeviathanHaloKnob2::onDragEnd(e);
+	}
 
 	void draw(const DrawArgs& args) override {
 		if (!isDragonKingDebugEnabled()) {
@@ -2142,6 +2307,8 @@ struct IntegralFluxWidget : ModuleWidget {
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
+	IntegralFluxPreviewEdgeInteraction ch1EdgeInteraction;
+	IntegralFluxPreviewEdgeInteraction ch4EdgeInteraction;
 
 	static float consumeReductionAverage(std::atomic<uint64_t>& total, std::atomic<uint64_t>& samples) {
 		const uint64_t totalValue = total.exchange(0u, std::memory_order_acq_rel);
@@ -2354,16 +2521,24 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
 		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
-        addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<IntegralFluxHalo2Knob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
+		auto addEdgeKnob = [&](Vec posMm, int paramId, IntegralFluxPreviewEdgeInteraction* interaction,
+			IntegralFluxHalo2Knob::PreviewEdge edge, bool suppressRackTooltip = false) {
+			IntegralFluxHalo2Knob* knob = createParamCentered<IntegralFluxHalo2Knob>(mm2px(posMm), module, paramId);
+			knob->setPreviewInteraction(interaction, edge);
+			knob->setSuppressRackTooltip(suppressRackTooltip);
+			addParam(knob);
+		};
+		addEdgeKnob(rise1KnobPos, IntegralFlux::RISE_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE);
+		addEdgeKnob(rise4KnobPos, IntegralFlux::RISE_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE);
+		addEdgeKnob(fall1KnobPos, IntegralFlux::FALL_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL);
+		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, true);
 		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
 		addParam(createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
+			ch1Preview->edgeInteraction = &ch1EdgeInteraction;
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
 				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
@@ -2382,6 +2557,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
+			ch4Preview->edgeInteraction = &ch4EdgeInteraction;
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewRectMm)) {
 				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
