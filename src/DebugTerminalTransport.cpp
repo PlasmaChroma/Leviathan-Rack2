@@ -538,10 +538,12 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs apertureUs,
                                float gearUs,
                                float eclipseUs,
+                               float linearPointUs,
+                               float shapeGlyphUs,
                                float ch1CurvePointsReducedAvg,
                                float ch1TracerExtraPointsReducedAvg) {
   submitUiMetricSchema("IntegralFlux",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"ch1_curve_reduced_avg\",\"label\":\"C1 Red\"},{\"key\":\"ch1_tracer_extra_reduced_avg\",\"label\":\"C1 Tr+\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"linear_point_us\",\"label\":\"LinPt (us)\"},{\"key\":\"shape_glyph_us\",\"label\":\"Glyph (us)\"},{\"key\":\"ch1_curve_reduced_avg\",\"label\":\"C1 Red\"},{\"key\":\"ch1_tracer_extra_reduced_avg\",\"label\":\"C1 Tr+\"}]");
   char dataBuf[640];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -561,9 +563,11 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "aperture_us", apertureUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"ch1_curve_reduced_avg\":%.3f,\"ch1_tracer_extra_reduced_avg\":%.3f}",
+                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"linear_point_us\":%.3f,\"shape_glyph_us\":%.3f,\"ch1_curve_reduced_avg\":%.3f,\"ch1_tracer_extra_reduced_avg\":%.3f}",
                 std::max(0.f, gearUs),
                 std::max(0.f, eclipseUs),
+                std::max(0.f, linearPointUs),
+                std::max(0.f, shapeGlyphUs),
                 std::max(0.f, ch1CurvePointsReducedAvg),
                 std::max(0.f, ch1TracerExtraPointsReducedAvg));
   double ts = system::getTime();
