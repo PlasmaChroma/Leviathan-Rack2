@@ -1915,6 +1915,7 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 	int shapeModeParamId = -1;
 	Vec centerPx;
 	float linearValue = IntegralFlux::LINEAR_SHAPE;
+	float lastTarget = IntegralFlux::LINEAR_SHAPE;
 	double lastStepTime = 0.0;
 	bool initialized = false;
 
@@ -1926,8 +1927,12 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 	static constexpr float LABEL_TANGENT_OFFSET_MM = 0.85f;
 	static constexpr float LABEL_Y_OFFSET_MM = 0.32f;
 	static constexpr float LABEL_TOP_Y_OFFSET_MM = 0.18f;
+	static constexpr float LABEL_MIRROR_X_OFFSET_MM = 0.38f;
+	static constexpr float LABEL_MIRROR_Y_OFFSET_MM = -0.28f;
 	static constexpr float LINE_WIDTH_MM = 0.5f;
-	static constexpr float FONT_SIZE_MM = 2.82f;
+	static constexpr float TRIANGLE_GLYPH_WIDTH_MM = 4.1f;
+	static constexpr float TRIANGLE_GLYPH_HEIGHT_MM = 2.35f;
+	static constexpr float TRIANGLE_GLYPH_LINE_WIDTH_MM = 0.42f;
 
 	IntegralFluxLinearPointOverlay(IntegralFlux* module, int shapeModeParamId, Vec centerPx)
 		: module(module)
@@ -1951,16 +1956,31 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 		TransparentWidget::step();
 		const float target = targetLinearValue();
 		const double now = system::getTime();
+		bool dirty = false;
 		if (!initialized) {
 			linearValue = target;
+			lastTarget = target;
 			lastStepTime = now;
 			initialized = true;
-			return;
+			dirty = true;
 		}
-		const float dt = clamp(float(now - lastStepTime), 0.f, 0.05f);
-		lastStepTime = now;
-		const float alpha = 1.f - std::exp(-ANIMATION_RATE * dt);
-		linearValue += (target - linearValue) * alpha;
+		else if (std::fabs(target - linearValue) <= 1e-4f) {
+			const float previous = linearValue;
+			linearValue = target;
+			dirty = std::fabs(target - lastTarget) > 1e-6f || std::fabs(linearValue - previous) > 1e-5f;
+			lastTarget = target;
+			lastStepTime = now;
+		}
+		else {
+			const float previous = linearValue;
+			const float dt = clamp(float(now - lastStepTime), 0.f, 0.05f);
+			lastStepTime = now;
+			const float alpha = 1.f - std::exp(-ANIMATION_RATE * dt);
+			linearValue += (target - linearValue) * alpha;
+			lastTarget = target;
+			dirty = std::fabs(linearValue - previous) > 1e-5f;
+		}
+		(void) dirty;
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1975,10 +1995,18 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 		const float topBlend = clamp((linearValue - IntegralFlux::LINEAR_SHAPE)
 			/ std::max(IntegralFlux::SHARK_FIN_LINEAR_SHAPE - IntegralFlux::LINEAR_SHAPE, 1e-4f), 0.f, 1.f);
 		const float labelYOffset = mm2px(Vec(0.f, LABEL_Y_OFFSET_MM + LABEL_TOP_Y_OFFSET_MM * topBlend)).y;
+		const Vec mirrorOffset = mm2px(Vec(
+			LABEL_MIRROR_X_OFFSET_MM * (1.f - topBlend),
+			LABEL_MIRROR_Y_OFFSET_MM * (1.f - topBlend)));
 		const float lineWidth = mm2px(Vec(LINE_WIDTH_MM, 0.f)).x;
-		const float fontSize = mm2px(Vec(0.f, FONT_SIZE_MM)).y;
+		const float triangleWidth = mm2px(Vec(TRIANGLE_GLYPH_WIDTH_MM, 0.f)).x;
+		const float triangleHeight = mm2px(Vec(0.f, TRIANGLE_GLYPH_HEIGHT_MM)).y;
+		const float triangleLineWidth = mm2px(Vec(TRIANGLE_GLYPH_LINE_WIDTH_MM, 0.f)).x;
 		const Vec lineEnd = centerPx.plus(dir.mult(lineRadius));
-		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset)).plus(Vec(0.f, labelYOffset));
+		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset)).plus(Vec(0.f, labelYOffset)).plus(mirrorOffset);
+		const Vec triangleLeft(labelPos.x - 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
+		const Vec trianglePeak(labelPos.x, labelPos.y - 0.5f * triangleHeight);
+		const Vec triangleRight(labelPos.x + 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
 
 		nvgSave(args.vg);
 		nvgBeginPath(args.vg);
@@ -1989,11 +2017,172 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
 
-		nvgFontSize(args.vg, fontSize);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, labelPos.x, labelPos.y, "LIN", nullptr);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStrokeWidth(args.vg, triangleLineWidth);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, triangleLeft.x, triangleLeft.y);
+		nvgLineTo(args.vg, trianglePeak.x, trianglePeak.y);
+		nvgLineTo(args.vg, triangleRight.x, triangleRight.y);
+		NVGpaint triangleGradient = nvgLinearGradient(
+			args.vg,
+			triangleLeft.x,
+			triangleLeft.y,
+			triangleRight.x,
+			triangleRight.y,
+			nvgRGBA(255, 184, 0, 255),
+			nvgRGBA(220, 94, 30, 255));
+		nvgStrokePaint(args.vg, triangleGradient);
+		nvgStroke(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+struct IntegralFluxShapeModeGlyphOverlay : TransparentWidget {
+	IntegralFlux* module = nullptr;
+	int shapeModeParamId = -1;
+	int lastMode = -1;
+	bool ch4 = false;
+	Vec panelOriginPx;
+
+	static constexpr float SVG_TO_MM = 0.01f;
+	static constexpr int GLYPH_SAMPLES = 49;
+	static constexpr int GLYPH_LUT_SIZE = 96;
+	static constexpr float CH1_SCALE_X = 0.95221678f;
+	static constexpr float CH1_SCALE_Y = 1.0007281f;
+	static constexpr float CH1_TRANSLATE_X = 46.602978f;
+	static constexpr float CH1_TRANSLATE_Y = -62.247725f;
+	static constexpr float CH4_SCALE_X = 0.95221716f;
+	static constexpr float CH4_SCALE_Y = 1.0007277f;
+	static constexpr float CH4_TRANSLATE_X = 436.42502f;
+	static constexpr float CH4_TRANSLATE_Y = -62.246332f;
+	static constexpr float CH1_LEFT_X = 357.40172f;
+	static constexpr float CH1_RIGHT_X = 1057.044f;
+	static constexpr float CH4_LEFT_X = 8516.2317f;
+	static constexpr float CH4_RIGHT_X = 9215.8741f;
+	static constexpr float MATHS_Y = 2701.5983f;
+	static constexpr float SHARK_Y = 3761.5987f;
+	static constexpr float GLYPH_WIDTH_SVG = 539.7242f;
+	static constexpr float GLYPH_HEIGHT_SVG = 289.1967f;
+	static constexpr float STROKE_WIDTH_SVG = 40.8035f;
+	std::array<Vec, GLYPH_SAMPLES> leftPoints {};
+	std::array<Vec, GLYPH_SAMPLES> rightPoints {};
+	bool pointsValid = false;
+
+	IntegralFluxShapeModeGlyphOverlay(IntegralFlux* module, int shapeModeParamId, bool ch4)
+		: module(module)
+		, shapeModeParamId(shapeModeParamId)
+		, ch4(ch4) {
+	}
+
+	IntegralFlux::FunctionShapeMode currentMode(int shapeModeParamId) const {
+		if (!module || shapeModeParamId < 0) {
+			return IntegralFlux::FUNCTION_SHAPE_MATHS;
+		}
+		return IntegralFlux::functionShapeModeFromParam(module->params[shapeModeParamId].getValue());
+	}
+
+	Vec svgPointToPx(float x, float y, bool ch4) const {
+		const float sx = ch4 ? CH4_SCALE_X : CH1_SCALE_X;
+		const float sy = ch4 ? CH4_SCALE_Y : CH1_SCALE_Y;
+		const float tx = ch4 ? CH4_TRANSLATE_X : CH1_TRANSLATE_X;
+		const float ty = ch4 ? CH4_TRANSLATE_Y : CH1_TRANSLATE_Y;
+		return mm2px(Vec((x * sx + tx) * SVG_TO_MM, (y * sy + ty) * SVG_TO_MM)).minus(panelOriginPx);
+	}
+
+	static void buildSegmentLut(std::array<float, GLYPH_LUT_SIZE>& lut, float curveSigned, bool rising,
+		IntegralFlux::FunctionShapeMode shapeMode) {
+		const float scale = IntegralFlux::slopeWarpScaleForMode(curveSigned, rising, shapeMode);
+		const float dp = 1.f / float(GLYPH_LUT_SIZE - 1);
+		float x = rising ? 0.f : 1.f;
+		lut[0] = x;
+		for (int i = 1; i < GLYPH_LUT_SIZE; ++i) {
+			const float k1 = IntegralFlux::slopeWarpForMode(x, curveSigned, rising, shapeMode) * scale;
+			const float xMid = clamp(x + (rising ? 0.5f * dp * k1 : -0.5f * dp * k1), 0.f, 1.f);
+			const float k2 = IntegralFlux::slopeWarpForMode(xMid, curveSigned, rising, shapeMode) * scale;
+			x += rising ? (dp * k2) : (-dp * k2);
+			x = clamp(x, 0.f, 1.f);
+			lut[i] = x;
+		}
+		lut.front() = rising ? 0.f : 1.f;
+		lut.back() = rising ? 1.f : 0.f;
+	}
+
+	static float sampleSegmentLut(const std::array<float, GLYPH_LUT_SIZE>& lut, float t) {
+		t = clamp(t, 0.f, 1.f);
+		const float idx = t * float(GLYPH_LUT_SIZE - 1);
+		const int i0 = int(idx);
+		const int i1 = std::min(i0 + 1, GLYPH_LUT_SIZE - 1);
+		const float f = idx - float(i0);
+		return lut[i0] + (lut[i1] - lut[i0]) * f;
+	}
+
+	static float sampleCycle(float t,
+		const std::array<float, GLYPH_LUT_SIZE>& riseLut,
+		const std::array<float, GLYPH_LUT_SIZE>& fallLut) {
+		t = clamp(t, 0.f, 1.f);
+		if (t <= 0.5f) {
+			return sampleSegmentLut(riseLut, t * 2.f);
+		}
+		return sampleSegmentLut(fallLut, (t - 0.5f) * 2.f);
+	}
+
+	void rebuildGlyphPath(bool rightGlyph, IntegralFlux::FunctionShapeMode shapeMode, std::array<Vec, GLYPH_SAMPLES>& points) {
+		const float curveKnob = rightGlyph ? 1.f : 0.f;
+		const float curveSigned = IntegralFlux::shapeSignedFromKnobForMode(curveKnob, shapeMode);
+		std::array<float, GLYPH_LUT_SIZE> riseLut {};
+		std::array<float, GLYPH_LUT_SIZE> fallLut {};
+		buildSegmentLut(riseLut, curveSigned, true, shapeMode);
+		buildSegmentLut(fallLut, curveSigned, false, shapeMode);
+
+		const float startX = ch4
+			? (rightGlyph ? CH4_RIGHT_X : CH4_LEFT_X)
+			: (rightGlyph ? CH1_RIGHT_X : CH1_LEFT_X);
+		const float bottomY = shapeMode == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN ? SHARK_Y : MATHS_Y;
+		for (int i = 0; i < GLYPH_SAMPLES; ++i) {
+			const float t = float(i) / float(GLYPH_SAMPLES - 1);
+			const float x = startX + t * GLYPH_WIDTH_SVG;
+			const float y = bottomY - sampleCycle(t, riseLut, fallLut) * GLYPH_HEIGHT_SVG;
+			points[i] = svgPointToPx(x, y, ch4);
+		}
+	}
+
+	void rebuildGlyphPaths(IntegralFlux::FunctionShapeMode mode) {
+		rebuildGlyphPath(false, mode, leftPoints);
+		rebuildGlyphPath(true, mode, rightPoints);
+		pointsValid = true;
+	}
+
+	void drawGlyphPath(const DrawArgs& args, const std::array<Vec, GLYPH_SAMPLES>& points, NVGcolor color) const {
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, points[0].x, points[0].y);
+		for (int i = 1; i < GLYPH_SAMPLES; ++i) {
+			nvgLineTo(args.vg, points[i].x, points[i].y);
+		}
+		nvgStrokeColor(args.vg, color);
+		nvgStrokeWidth(args.vg, mm2px(STROKE_WIDTH_SVG * SVG_TO_MM));
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	}
+
+	void step() override {
+		TransparentWidget::step();
+		const int mode = int(currentMode(shapeModeParamId));
+		if (mode != lastMode) {
+			lastMode = mode;
+			rebuildGlyphPaths(IntegralFlux::functionShapeModeFromStoredInt(lastMode));
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		const IntegralFlux::FunctionShapeMode mode = IntegralFlux::functionShapeModeFromStoredInt(lastMode);
+		if (!pointsValid) {
+			rebuildGlyphPaths(mode);
+		}
+		nvgSave(args.vg);
+		drawGlyphPath(args, leftPoints, nvgRGBA(220, 94, 30, 255));
+		drawGlyphPath(args, rightPoints, nvgRGBA(255, 184, 0, 255));
 		nvgRestore(args.vg);
 	}
 };
@@ -2205,15 +2394,22 @@ struct IntegralFluxWidget : ModuleWidget {
 		previewBuildTimer.markAnchorsDone();
 
 		{
-			IntegralFluxLinearPointOverlay* ch1LinearPoint = new IntegralFluxLinearPointOverlay(
-				module, IntegralFlux::SHAPE_MODE_1_PARAM, mm2px(linLog1KnobPos));
-			ch1LinearPoint->box.size = box.size;
-			addChild(ch1LinearPoint);
+			auto addCurveModeOverlay = [&](Vec centerMm, int shapeModeParamId, bool ch4) {
+				IntegralFluxLinearPointOverlay* linearPoint = new IntegralFluxLinearPointOverlay(
+					module, shapeModeParamId, mm2px(centerMm));
+				linearPoint->box.pos = Vec(0.f, 0.f);
+				linearPoint->box.size = box.size;
+				addChild(linearPoint);
 
-			IntegralFluxLinearPointOverlay* ch4LinearPoint = new IntegralFluxLinearPointOverlay(
-				module, IntegralFlux::SHAPE_MODE_4_PARAM, mm2px(linLog4KnobPos));
-			ch4LinearPoint->box.size = box.size;
-			addChild(ch4LinearPoint);
+				IntegralFluxShapeModeGlyphOverlay* shapeGlyphs = new IntegralFluxShapeModeGlyphOverlay(
+					module, shapeModeParamId, ch4);
+				shapeGlyphs->box.pos = Vec(0.f, 0.f);
+				shapeGlyphs->box.size = box.size;
+				shapeGlyphs->panelOriginPx = Vec(0.f, 0.f);
+				addChild(shapeGlyphs);
+			};
+			addCurveModeOverlay(linLog1KnobPos, IntegralFlux::SHAPE_MODE_1_PARAM, false);
+			addCurveModeOverlay(linLog4KnobPos, IntegralFlux::SHAPE_MODE_4_PARAM, true);
 		}
 
 		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
