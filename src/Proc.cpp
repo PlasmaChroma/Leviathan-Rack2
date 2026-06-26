@@ -1118,6 +1118,13 @@ struct Proc : Module {
 
 namespace {
 
+struct ProcPreviewEdgeInteraction {
+	bool riseHovered = false;
+	bool fallHovered = false;
+	bool riseDragging = false;
+	bool fallDragging = false;
+};
+
 struct WavePreviewWidget : Widget {
 	// Small preview box: lower geometry density reduces UI cost while staying smooth.
 	static constexpr int POINT_COUNT = 128;
@@ -1138,8 +1145,10 @@ struct WavePreviewWidget : Widget {
 	std::array<Vec, POINT_COUNT> points {};
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
+	int peakPointIndex = POINT_COUNT / 2;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
@@ -1173,6 +1182,71 @@ struct WavePreviewWidget : Widget {
 		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
 		float f = idx - float(i0);
 		return lut[i0] + (lut[i1] - lut[i0]) * f;
+	}
+
+	int highlightedEdge() const {
+		if (!edgeInteraction) {
+			return 0;
+		}
+		if (edgeInteraction->riseDragging) {
+			return 1;
+		}
+		if (edgeInteraction->fallDragging) {
+			return 2;
+		}
+		if (edgeInteraction->riseHovered) {
+			return 1;
+		}
+		if (edgeInteraction->fallHovered) {
+			return 2;
+		}
+		return 0;
+	}
+
+	static NVGcolor waveformColor() {
+		return nvgRGBA(230, 230, 220, 255);
+	}
+
+	static NVGcolor activeEdgeColor() {
+		return nvgRGBA(0x86, 0x5c, 0xff, 0xff);
+	}
+
+	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
+		if (!pointsValid) {
+			return;
+		}
+		start = clamp(start, 0, POINT_COUNT - 1);
+		end = clamp(end, 0, POINT_COUNT - 1);
+		const int count = end - start + 1;
+		if (count < 2) {
+			return;
+		}
+		NVGcontext* vg = args.vg;
+		nvgBeginPath(vg);
+		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
+			if (isMove) {
+				nvgMoveTo(vg, pt.x, pt.y);
+			}
+			else {
+				nvgLineTo(vg, pt.x, pt.y);
+			}
+		});
+		nvgStrokeColor(vg, color);
+		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
+		nvgLineCap(vg, NVG_BUTT);
+		nvgLineJoin(vg, NVG_ROUND);
+		nvgStroke(vg);
+	}
+
+	void drawWaveform(const DrawArgs& args) {
+		const int edge = highlightedEdge();
+		if (edge == 0) {
+			drawWaveSegment(args, 0, POINT_COUNT - 1, waveformColor());
+			return;
+		}
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		drawWaveSegment(args, 0, peakIndex, edge == 1 ? activeEdgeColor() : waveformColor());
+		drawWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? activeEdgeColor() : waveformColor());
 	}
 
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
@@ -1221,6 +1295,7 @@ struct WavePreviewWidget : Widget {
 			// two-point plateau when the true peak falls between sample columns.
 			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
 			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
+			peakPointIndex = peakIndex;
 			points[peakIndex] = Vec(peakX, top);
 			points.front() = Vec(left, bottom);
 			points.back() = Vec(right, bottom);
@@ -1325,20 +1400,7 @@ struct WavePreviewWidget : Widget {
 					frameTracer.draw(args.vg, nowSec, box.size, style);
 				}
 			}
-			auto vg = args.vg;
-			nvgBeginPath(vg);
-			wave_preview::simplifyPath(points.data(), POINT_COUNT, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
-				if (isMove) {
-					nvgMoveTo(vg, pt.x, pt.y);
-				} else {
-					nvgLineTo(vg, pt.x, pt.y);
-				}
-			});
-			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
-			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
-			nvgLineCap(args.vg, NVG_BUTT);
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgStroke(args.vg);
+			drawWaveform(args);
 		}
 		if (pointsValid && dotVisible) {
 			float w = std::max(box.size.x, 1.f);
@@ -1445,11 +1507,71 @@ struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
 	}
 };
 
+struct ProcEdgeHalo2Knob : LeviathanHaloKnob2 {
+	enum PreviewEdge {
+		PREVIEW_EDGE_RISE,
+		PREVIEW_EDGE_FALL
+	};
+
+	ProcPreviewEdgeInteraction* previewInteraction = nullptr;
+	PreviewEdge previewEdge = PREVIEW_EDGE_RISE;
+
+	void setPreviewInteraction(ProcPreviewEdgeInteraction* interaction, PreviewEdge edge) {
+		previewInteraction = interaction;
+		previewEdge = edge;
+	}
+
+	void setHovered(bool hovered) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseHovered = hovered;
+		}
+		else {
+			previewInteraction->fallHovered = hovered;
+		}
+	}
+
+	void setDragging(bool dragging) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseDragging = dragging;
+		}
+		else {
+			previewInteraction->fallDragging = dragging;
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		setHovered(true);
+		LeviathanHaloKnob2::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		setHovered(false);
+		LeviathanHaloKnob2::onLeave(e);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		setDragging(true);
+		LeviathanHaloKnob2::onDragStart(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		setDragging(false);
+		LeviathanHaloKnob2::onDragEnd(e);
+	}
+};
+
 struct ProcWidget : ModuleWidget {
 	float uiStepUsEma = 0.f;
 	float uiDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+	ProcPreviewEdgeInteraction previewEdgeInteraction;
 
 	void step() override {
 		const bool measurePerf = isDragonKingDebugEnabled();
@@ -1586,8 +1708,16 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
 		addParam(createParamCentered<GoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(risePos), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(fallPos), module, Proc::FALL_PARAM));
+		{
+			ProcEdgeHalo2Knob* riseKnob = createParamCentered<ProcEdgeHalo2Knob>(mm2px(risePos), module, Proc::RISE_PARAM);
+			riseKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_RISE);
+			addParam(riseKnob);
+		}
+		{
+			ProcEdgeHalo2Knob* fallKnob = createParamCentered<ProcEdgeHalo2Knob>(mm2px(fallPos), module, Proc::FALL_PARAM);
+			fallKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_FALL);
+			addParam(fallKnob);
+		}
 		addParam(createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
 		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
@@ -1600,6 +1730,7 @@ struct ProcWidget : ModuleWidget {
 		}
 		{
 			WavePreviewWidget* previewWidget = new WavePreviewWidget();
+			previewWidget->edgeInteraction = &previewEdgeInteraction;
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
 				// Keep the legacy SVG id until proc.svg is cleaned up as well.
