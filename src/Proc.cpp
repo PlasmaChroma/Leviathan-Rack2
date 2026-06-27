@@ -18,6 +18,22 @@ namespace {
 std::atomic<uint32_t> gProcDebugInstanceCounter {1u};
 constexpr double kProcDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gProcDebugTerminalLastSubmitSec;
+
+struct ProcPercentQuantity final : ParamQuantity {
+	float getDisplayValue() override {
+		return getValue() * 100.f;
+	}
+
+	void setDisplayValue(float displayValue) override {
+		setValue(displayValue / 100.f);
+	}
+
+	std::string getDisplayValueString() override {
+		char buf[32];
+		std::snprintf(buf, sizeof(buf), "%.1f", getDisplayValue());
+		return buf;
+	}
+};
 }
 
 struct Proc : Module {
@@ -919,9 +935,9 @@ struct Proc : Module {
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(CYCLE_PARAM, 0.f, 1.f, 0.f, "Cycle");
-		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
-		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
-		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+		configParam<ProcPercentQuantity>(RISE_PARAM, 0.f, 1.f, 0.f, "Surge", "%");
+		configParam<ProcPercentQuantity>(FALL_PARAM, 0.f, 1.f, 0.f, "Sink", "%");
+		configParam<ProcPercentQuantity>(SHAPE_PARAM, 0.f, 1.f, 0.f, "Curve", "%");
 		configParam(AMP_PARAM, 0.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
 		configInput(SIGNAL_INPUT, "Signal");
 		configInput(TRIGGER_INPUT, "Trigger");
