@@ -1086,8 +1086,8 @@ struct IntegralFluxImpl : IntegralFlux {
 		debugInstanceId = gIntegralFluxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter", "%", 0.f, 200.f, -100.f);
-		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
-		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "CH4 cycle");
+		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 loop");
+		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "CH4 loop");
 		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise", "%", 0.f, 100.f, 0.f);
 		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "CH4 rise", "%", 0.f, 100.f, 0.f);
 		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "CH2 attenuverter", "%", 0.f, 200.f, -100.f);
@@ -1111,8 +1111,8 @@ struct IntegralFluxImpl : IntegralFlux {
 		configInput(CH4_BOTH_CV_INPUT, "CH4 both");
 		configInput(CH1_FALL_CV_INPUT, "CH1 fall");
 		configInput(CH4_FALL_CV_INPUT, "CH4 fall");
-		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle");
-		configInput(CH4_CYCLE_CV_INPUT, "CH4 cycle");
+		configInput(CH1_CYCLE_CV_INPUT, "CH1 loop");
+		configInput(CH4_CYCLE_CV_INPUT, "CH4 loop");
 		configOutput(OUT_1_OUTPUT, "CH1 variable");
 		configOutput(OUT_2_OUTPUT, "CH2 variable");
 		configOutput(OUT_3_OUTPUT, "CH3 variable");
