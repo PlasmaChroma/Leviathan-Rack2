@@ -145,6 +145,8 @@ struct PlasmaSwitch : app::Switch {
 	float displayValue = 0.f;
 	double animationSec = 0.0;
 	double lastStepSec = 0.0;
+	std::string backingFullPath;
+	std::shared_ptr<window::Image> backingImage;
 
 	PlasmaSwitch();
 	void step() override;

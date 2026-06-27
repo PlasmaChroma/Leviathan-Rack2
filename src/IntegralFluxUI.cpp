@@ -21,6 +21,7 @@ thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxApertureDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
 
 struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	std::shared_ptr<window::Svg> svg;
@@ -861,6 +862,20 @@ struct IntegralFluxCurveHalo2Knob : IntegralFluxHalo2Knob {
 	}
 };
 
+struct IntegralFluxPlasmaSwitch : PlasmaSwitch {
+	void draw(const DrawArgs& args) override {
+		if (!isDragonKingDebugEnabled()) {
+			PlasmaSwitch::draw(args);
+			return;
+		}
+		using PerfClock = std::chrono::steady_clock;
+		const PerfClock::time_point drawStart = PerfClock::now();
+		PlasmaSwitch::draw(args);
+		gIntegralFluxPlasmaSwitchDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - drawStart).count());
+	}
+};
+
 struct IntegralFluxLinearPointOverlay : TransparentWidget {
 	IntegralFlux* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
@@ -1185,6 +1200,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	float eclipseDrawUsEma = 0.f;
 	float linearPointDrawUsEma = 0.f;
 	float shapeGlyphDrawUsEma = 0.f;
+	float plasmaSwitchDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
@@ -1428,8 +1444,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 4, "Sink");
 		addCurveKnob(linLog1KnobPos, IntegralFlux::LIN_LOG_1_PARAM, 1);
 		addCurveKnob(linLog4KnobPos, IntegralFlux::LIN_LOG_4_PARAM, 4);
-		addParam(createParamCentered<PlasmaSwitch>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
-		addParam(createParamCentered<PlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
+		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
+		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			ch1Preview->edgeInteraction = &ch1EdgeInteraction;
@@ -1533,6 +1549,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxApertureDrawNsThisFrame = 0u;
 			gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 			gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
+			gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
 			visual_assets::resetEclipseShadowDrawMetrics();
 		}
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -1554,6 +1571,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			linearPointDrawUsEma = (linearPointDrawUsEma > 0.f) ? (linearPointDrawUsEma + (linearPointDrawUs - linearPointDrawUsEma) * 0.18f) : linearPointDrawUs;
 			const float shapeGlyphDrawUs = float(gIntegralFluxShapeGlyphDrawNsThisFrame) * 1e-3f;
 			shapeGlyphDrawUsEma = (shapeGlyphDrawUsEma > 0.f) ? (shapeGlyphDrawUsEma + (shapeGlyphDrawUs - shapeGlyphDrawUsEma) * 0.18f) : shapeGlyphDrawUs;
+			const float plasmaSwitchDrawUs = float(gIntegralFluxPlasmaSwitchDrawNsThisFrame) * 1e-3f;
+			plasmaSwitchDrawUsEma = (plasmaSwitchDrawUsEma > 0.f) ? (plasmaSwitchDrawUsEma + (plasmaSwitchDrawUs - plasmaSwitchDrawUsEma) * 0.18f) : plasmaSwitchDrawUs;
 			apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
 			const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
 			flux->setPerfUiRenderMs(uiMs);
@@ -1584,6 +1603,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];
 				std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", debugInstanceId);
+				char plasmaSwitchLabel[32];
+				std::snprintf(plasmaSwitchLabel, sizeof(plasmaSwitchLabel), "PSW:%.1fus", plasmaSwitchDrawUsEma);
 				const float x = box.size.x - mm2px(0.9f);
 				const float y = mm2px(2.5f);
 				nvgSave(args.vg);
@@ -1594,6 +1615,11 @@ struct IntegralFluxWidget : ModuleWidget {
 				nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
 				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
 				nvgText(args.vg, x, y, debugIdLabel, nullptr);
+				nvgFontSize(args.vg, 6.2f);
+				nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+				nvgText(args.vg, x + 0.45f, y + mm2px(2.0f) + 0.45f, plasmaSwitchLabel, nullptr);
+				nvgFillColor(args.vg, nvgRGBA(190, 235, 255, 225));
+				nvgText(args.vg, x, y + mm2px(2.0f), plasmaSwitchLabel, nullptr);
 				nvgRestore(args.vg);
 			}
 		}

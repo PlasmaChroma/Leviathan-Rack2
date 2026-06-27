@@ -2218,6 +2218,7 @@ void GoldButton::step() {
 PlasmaSwitch::PlasmaSwitch() {
 	momentary = false;
 	box.size = Vec(kPlasmaSwitchWidthPx, kPlasmaSwitchHeightPx);
+	backingFullPath = asset::plugin(pluginInstance, "res/icon/PlasmaSwitchSmall.png");
 }
 
 void PlasmaSwitch::step() {
@@ -2229,7 +2230,7 @@ void PlasmaSwitch::step() {
 
 	engine::ParamQuantity* pq = getParamQuantity();
 	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
-	const float response = target > displayValue ? 13.5f : 11.0f;
+	const float response = target > displayValue ? 7.5f : 6.2f;
 	displayValue += (target - displayValue) * clamp(float(dt) * response, 0.f, 1.f);
 	if (std::fabs(target - displayValue) < 0.001f) {
 		displayValue = target;
@@ -2241,12 +2242,41 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 		return;
 	}
 
-	const std::string fullPath = asset::plugin(pluginInstance, "res/icon/PlasmaSwitchSmall.png");
-	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-	if (image && image->handle >= 0) {
-		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
+	auto drawBodySilhouette = [&](float inset, float dx, float dy) {
+		const float x0 = inset + dx;
+		const float y0 = inset + dy;
+		const float x1 = box.size.x - inset + dx;
+		const float y1 = box.size.y - inset + dy;
+		const float chamferX = box.size.x * 0.18f;
+		const float chamferY = box.size.y * 0.105f;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x0 + chamferX, y0);
+		nvgLineTo(args.vg, x1 - chamferX, y0);
+		nvgLineTo(args.vg, x1, y0 + chamferY);
+		nvgLineTo(args.vg, x1, y1 - chamferY);
+		nvgLineTo(args.vg, x1 - chamferX, y1);
+		nvgLineTo(args.vg, x0 + chamferX, y1);
+		nvgLineTo(args.vg, x0, y1 - chamferY);
+		nvgLineTo(args.vg, x0, y0 + chamferY);
+		nvgClosePath(args.vg);
+	};
+
+	nvgSave(args.vg);
+	drawBodySilhouette(box.size.x * 0.055f, box.size.x * 0.085f, box.size.y * 0.075f);
+	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 58));
+	nvgFill(args.vg);
+	drawBodySilhouette(box.size.x * 0.13f, box.size.x * 0.075f, box.size.y * 0.060f);
+	nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 42));
+	nvgFill(args.vg);
+	nvgRestore(args.vg);
+
+	if (!backingImage || backingImage->handle < 0) {
+		backingImage = APP->window->loadImage(backingFullPath);
+	}
+	if (backingImage && backingImage->handle >= 0) {
+		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, backingImage, backingFullPath);
 		if (imageHandle < 0) {
-			imageHandle = image->handle;
+			imageHandle = backingImage->handle;
 		}
 		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
 		nvgBeginPath(args.vg);
@@ -2255,17 +2285,53 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 		nvgFill(args.vg);
 	}
 
+	const float tubeX = box.size.x * 0.255f;
+	const float tubeY = box.size.y * 0.155f;
+	const float tubeW = box.size.x * 0.49f;
+	const float tubeH = box.size.y * 0.690f;
+	const float tubeR = box.size.x * 0.105f;
+	const float lensX = box.size.x * 0.245f;
+	const float lensY = box.size.y * 0.160f;
+	const float lensW = box.size.x * 0.51f;
+	const float lensH = box.size.y * 0.680f;
+	const float lensR = box.size.x * 0.075f;
+	auto drawChamferRect = [&](float x, float y, float w, float h, float chamfer) {
+		const float c = clamp(chamfer, 0.f, std::min(w, h) * 0.48f);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x + c, y);
+		nvgLineTo(args.vg, x + w - c, y);
+		nvgLineTo(args.vg, x + w, y + c);
+		nvgLineTo(args.vg, x + w, y + h - c);
+		nvgLineTo(args.vg, x + w - c, y + h);
+		nvgLineTo(args.vg, x + c, y + h);
+		nvgLineTo(args.vg, x, y + h - c);
+		nvgLineTo(args.vg, x, y + c);
+		nvgClosePath(args.vg);
+	};
+	nvgSave(args.vg);
+	drawChamferRect(tubeX, tubeY, tubeW, tubeH, tubeR);
+	NVGpaint tubeBase = nvgLinearGradient(args.vg, tubeX, tubeY, tubeX + tubeW, tubeY,
+		nvgRGBA(0, 0, 0, 210), nvgRGBA(1, 2, 6, 242));
+	nvgFillPaint(args.vg, tubeBase);
+	nvgFill(args.vg);
+
+	drawChamferRect(tubeX + 0.35f, tubeY + 0.35f, tubeW - 0.7f, tubeH - 0.7f, std::max(0.f, tubeR - 0.35f));
+	nvgStrokeWidth(args.vg, std::max(0.36f, box.size.x * 0.024f));
+	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 165));
+	nvgStroke(args.vg);
+	nvgRestore(args.vg);
+
 	const float cx = box.size.x * 0.5f;
 	const float topY = box.size.y * 0.335f;
 	const float bottomY = box.size.y * 0.665f;
 	const float cy = crossfade(bottomY, topY, clamp(displayValue, 0.f, 1.f));
-	const float pulse = 0.5f + 0.5f * std::sin(float(animationSec * 3.0));
-	const float flicker = 0.5f + 0.5f * std::sin(float(animationSec * 5.2 + 1.4));
-	const float hueBlend = 0.5f + 0.5f * std::sin(float(animationSec * 0.82 + 0.6));
+	const float pulse = 0.5f + 0.5f * std::sin(float(animationSec * 1.45));
+	const float flicker = 0.5f + 0.5f * std::sin(float(animationSec * 2.4 + 1.4));
+	const float hueBlend = 0.5f + 0.5f * std::sin(float(animationSec * 0.36 + 0.6));
 	const float coreR = box.size.x * crossfade(0.130f, 0.148f, pulse);
-	const float glowR = box.size.x * crossfade(0.28f, 0.35f, flicker);
-	const NVGcolor cyan = nvgRGBA(0x2a, 0xf4, 0xff, 190);
-	const NVGcolor purple = nvgRGBA(0xd3, 0xa0, 0xff, 176);
+	const float glowR = box.size.x * crossfade(0.32f, 0.42f, flicker);
+	const NVGcolor cyan = nvgRGBA(0x00, 0xc8, 0xff, 205);
+	const NVGcolor purple = nvgRGBA(0x8e, 0x34, 0xff, 198);
 	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
 		t = clamp(t, 0.f, 1.f);
 		NVGcolor out;
@@ -2279,74 +2345,59 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	const NVGcolor accentColor = blendColor(purple, cyan, 1.f - hueBlend * 0.55f);
 
 	nvgSave(args.vg);
-	nvgScissor(args.vg, box.size.x * 0.19f, box.size.y * 0.13f, box.size.x * 0.62f, box.size.y * 0.74f);
+	const float glowScissorInsetX = box.size.x * 0.024f;
+	const float glowScissorInsetY = box.size.x * 0.014f;
+	const float glowClipX = lensX + glowScissorInsetX;
+	const float glowClipY = lensY + glowScissorInsetY;
+	const float glowClipW = std::max(0.f, lensW - 2.f * glowScissorInsetX);
+	const float glowClipH = std::max(0.f, lensH - 2.f * glowScissorInsetY);
+	const float glowClipChamfer = lensR + box.size.x * 0.045f;
+	nvgScissor(args.vg,
+		glowClipX,
+		glowClipY,
+		glowClipW,
+		glowClipH);
 
 	NVGpaint outerGlow = nvgRadialGradient(args.vg, cx, cy, coreR * 0.55f, glowR,
-		nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.34f), nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, cx, cy, glowR);
+		nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.52f), nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
+	drawChamferRect(glowClipX, glowClipY, glowClipW, glowClipH, glowClipChamfer);
 	nvgFillPaint(args.vg, outerGlow);
 	nvgFill(args.vg);
 
 	NVGpaint violetGlow = nvgRadialGradient(args.vg, cx + coreR * 0.42f, cy + coreR * 0.18f, coreR * 0.18f, glowR * 0.72f,
-		nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.43f), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, cx + coreR * 0.2f, cy, glowR * 0.76f);
+		nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.58f), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
+	drawChamferRect(glowClipX, glowClipY, glowClipW, glowClipH, glowClipChamfer);
 	nvgFillPaint(args.vg, violetGlow);
 	nvgFill(args.vg);
 
 	NVGpaint core = nvgRadialGradient(args.vg, cx - coreR * 0.2f, cy - coreR * 0.22f, coreR * 0.08f, coreR * 1.18f,
-		nvgRGBA(255, 255, 255, 242), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.92f));
+		nvgRGBA(228, 250, 255, 238), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 1.0f));
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, cx, cy, coreR);
 	nvgFillPaint(args.vg, core);
 	nvgFill(args.vg);
 
-	for (int i = 0; i < 5; ++i) {
+	for (int i = 0; i < 3; ++i) {
 		const float phase = float(animationSec * (1.9 + 0.37 * i) + double(i) * 1.73);
 		const float ox = std::sin(phase) * coreR * (0.42f + 0.08f * i);
 		const float oy = std::cos(phase * 1.21f) * coreR * 0.46f;
 		const float sparkR = coreR * (0.16f + 0.035f * float(i & 1));
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, cx + ox, cy + oy, sparkR);
-		nvgFillColor(args.vg, i & 1 ? nvgRGBA(0xff, 0xb8, 0x00, 105) : nvgRGBA(255, 255, 255, 124));
+		nvgFillColor(args.vg, i & 1 ? nvgRGBA(0xff, 0xb8, 0x00, 128) : nvgRGBA(255, 255, 255, 146));
 		nvgFill(args.vg);
 	}
 
 	nvgRestore(args.vg);
 
-	const float lensX = box.size.x * 0.245f;
-	const float lensY = box.size.y * 0.185f;
-	const float lensW = box.size.x * 0.51f;
-	const float lensH = box.size.y * 0.63f;
-	const float lensR = box.size.x * 0.075f;
 	nvgSave(args.vg);
-	nvgBeginPath(args.vg);
-	nvgRoundedRect(args.vg, lensX, lensY, lensW, lensH, lensR);
-	NVGpaint lensShade = nvgLinearGradient(args.vg, lensX, lensY, lensX + lensW * 0.55f, lensY + lensH,
-		nvgRGBA(0, 0, 0, 18), nvgRGBA(0, 0, 0, 72));
-	nvgFillPaint(args.vg, lensShade);
+	drawChamferRect(lensX, lensY, lensW, lensH, lensR);
+	nvgFillColor(args.vg, nvgRGBA(106, 54, 164, 18));
 	nvgFill(args.vg);
 
-	nvgBeginPath(args.vg);
-	nvgRoundedRect(args.vg, lensX + 0.35f, lensY + 0.35f, lensW - 0.7f, lensH - 0.7f, std::max(0.f, lensR - 0.35f));
+	drawChamferRect(lensX + 0.35f, lensY + 0.35f, lensW - 0.7f, lensH - 0.7f, std::max(0.f, lensR - 0.35f));
 	nvgStrokeWidth(args.vg, std::max(0.38f, box.size.x * 0.030f));
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
-	nvgStroke(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, lensX + lensR * 0.9f, lensY + 0.95f);
-	nvgLineTo(args.vg, lensX + lensW - lensR * 0.9f, lensY + 0.95f);
-	nvgStrokeWidth(args.vg, std::max(0.28f, box.size.x * 0.018f));
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 30));
-	nvgStroke(args.vg);
-
-	NVGpaint edgeShadow = nvgBoxGradient(args.vg, lensX, lensY, lensW, lensH, lensR, box.size.x * 0.16f,
-		nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 82));
-	nvgBeginPath(args.vg);
-	nvgRoundedRect(args.vg, lensX, lensY, lensW, lensH, lensR);
-	nvgStrokeWidth(args.vg, std::max(0.7f, box.size.x * 0.055f));
-	nvgStrokePaint(args.vg, edgeShadow);
+	nvgStrokeColor(args.vg, nvgRGBA(218, 178, 255, 24));
 	nvgStroke(args.vg);
 	nvgRestore(args.vg);
 }
