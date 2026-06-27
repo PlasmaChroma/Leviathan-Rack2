@@ -253,6 +253,14 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
 	};
 
+	struct MetalRectArt {
+		math::Rect rectPx;
+		float radiusPx = 0.f;
+		NVGcolor baseColor = nvgRGB(58, 64, 72);
+		NVGcolor accentColor = nvgRGB(156, 166, 176);
+	};
+
+	std::vector<MetalRectArt> metalRects;
 	std::vector<GlassRectArt> glassRects;
 	std::vector<math::Rect> screenRectsPx;
 
@@ -299,6 +307,143 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			addPiece(ix1, iy0, px1, iy1);
 		}
 		pieces = std::move(next);
+	}
+
+	static uint32_t hashCoords(int x, int y, int salt) {
+		uint32_t h = uint32_t(x) * 0x8da6b343u;
+		h ^= uint32_t(y) * 0xd8163841u;
+		h ^= uint32_t(salt) * 0xcb1ab31fu;
+		h ^= h >> 13;
+		h *= 0x85ebca6bu;
+		h ^= h >> 16;
+		return h;
+	}
+
+	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t, float alphaScale = 1.f) {
+		t = clamp(t, 0.f, 1.f);
+		NVGcolor out;
+		out.r = a.r + (b.r - a.r) * t;
+		out.g = a.g + (b.g - a.g) * t;
+		out.b = a.b + (b.b - a.b) * t;
+		out.a = clamp((a.a + (b.a - a.a) * t) * alphaScale, 0.f, 1.f);
+		return out;
+	}
+
+	void drawMetalRectPiece(const DrawArgs& args, const MetalRectArt& metal, const math::Rect& piece) {
+		const float x = metal.rectPx.pos.x;
+		const float y = metal.rectPx.pos.y;
+		const float w = metal.rectPx.size.x;
+		const float h = metal.rectPx.size.y;
+		if (!(w > 3.f && h > 3.f && piece.size.x > 0.5f && piece.size.y > 0.5f)) {
+			return;
+		}
+
+		const float sourceRadius = metal.radiusPx > 0.f ? metal.radiusPx : std::min(std::min(w, h) * 0.04f, 6.0f);
+		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
+		const NVGcolor base = metal.baseColor;
+		const NVGcolor accent = metal.accentColor;
+		const NVGcolor dark = mixColor(base, nvgRGB(0, 0, 0), 0.58f, 1.f);
+		const NVGcolor light = mixColor(accent, nvgRGB(255, 255, 255), 0.22f, 1.f);
+		const NVGcolor diagonalShadow = mixColor(dark, nvgRGB(0, 0, 0), 0.35f, 0.30f);
+		const NVGcolor diagonalHighlight = mixColor(light, nvgRGB(255, 255, 255), 0.25f, 0.18f);
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, piece.pos.x, piece.pos.y, piece.size.x, piece.size.y);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x, y, w, h, r);
+		nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w * 0.42f, y + h,
+			mixColor(light, base, 0.38f, 0.34f),
+			mixColor(dark, base, 0.42f, 0.42f)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + 0.55f, y + 0.55f, w - 1.1f, h - 1.1f, std::max(0.f, r - 0.55f));
+		nvgFillPaint(args.vg, nvgLinearGradient(args.vg, x, y, x, y + h,
+			nvgRGBA(255, 255, 255, 18),
+			nvgRGBA(0, 0, 0, 32)));
+		nvgFill(args.vg);
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, x + 0.9f, y + 0.9f, w - 1.8f, h - 1.8f);
+
+		const float lineStep = 2.35f;
+		nvgBeginPath(args.vg);
+		for (float ly = y + 1.2f; ly < y + h - 1.f; ly += lineStep) {
+			const int row = int((ly - y) / lineStep);
+			const uint32_t hash = hashCoords(row, int(w), int(h));
+			const float jitter = float(hash & 0xffu) * (0.55f / 255.f);
+			nvgMoveTo(args.vg, x + 1.1f, ly + jitter);
+			nvgLineTo(args.vg, x + w - 1.1f, ly + jitter + 0.18f);
+		}
+		nvgStrokeWidth(args.vg, 0.46f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 20));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		for (float ly = y + 2.4f; ly < y + h + w * 0.12f; ly += 6.8f) {
+			nvgMoveTo(args.vg, x + 1.2f, ly);
+			nvgLineTo(args.vg, x + w - 1.2f, ly - w * 0.12f);
+		}
+		nvgStrokeWidth(args.vg, 0.32f);
+		nvgStrokeColor(args.vg, diagonalShadow);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		for (float ly = y + 3.2f; ly < y + h + w * 0.12f; ly += 6.8f) {
+			nvgMoveTo(args.vg, x + 1.2f, ly + 0.75f);
+			nvgLineTo(args.vg, x + w - 1.2f, ly - w * 0.12f + 0.75f);
+		}
+		nvgStrokeWidth(args.vg, 0.24f);
+		nvgStrokeColor(args.vg, diagonalHighlight);
+		nvgStroke(args.vg);
+
+		const float cell = 10.0f;
+		for (float cy = y + 4.f; cy < y + h - 2.f; cy += cell) {
+			for (float cx = x + 4.f; cx < x + w - 2.f; cx += cell) {
+				const uint32_t hash = hashCoords(int(cx), int(cy), 17);
+				if ((hash & 7u) != 0u) {
+					continue;
+				}
+				const float px = cx + float((hash >> 8) & 0xffu) * (cell / 255.f);
+				const float py = cy + float((hash >> 16) & 0xffu) * (cell / 255.f);
+				const float alpha = 10.f + float((hash >> 24) & 0x1fu);
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, px, py, 0.72f, 0.36f);
+				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, int(alpha)));
+				nvgFill(args.vg);
+			}
+		}
+
+		nvgRestore(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + 0.45f, y + 0.45f, w - 0.9f, h - 0.9f, std::max(0.f, r - 0.45f));
+		nvgStrokeWidth(args.vg, 0.9f);
+		nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w, y + h,
+			nvgRGBA(255, 255, 255, 52),
+			nvgRGBA(0, 0, 0, 62)));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, x + 1.55f, y + 1.55f, w - 3.1f, h - 3.1f, std::max(0.f, r - 1.55f));
+		nvgStrokeWidth(args.vg, 0.48f);
+		nvgStrokeColor(args.vg, nvgRGBAf(accent.r, accent.g, accent.b, 0.22f));
+		nvgStroke(args.vg);
+		nvgRestore(args.vg);
+	}
+
+	void drawMetalRect(const DrawArgs& args, const MetalRectArt& metal) {
+		std::vector<math::Rect> pieces;
+		pieces.push_back(metal.rectPx);
+		for (const math::Rect& screen : screenRectsPx) {
+			subtractRect(pieces, screen);
+			if (pieces.empty()) {
+				break;
+			}
+		}
+		for (const math::Rect& piece : pieces) {
+			drawMetalRectPiece(args, metal, piece);
+		}
 	}
 
 	void drawGlassRectPiece(const DrawArgs& args, const GlassRectArt& glass, const math::Rect& piece) {
@@ -455,6 +600,9 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		for (const MetalRectArt& metal : metalRects) {
+			drawMetalRect(args, metal);
+		}
 		for (const GlassRectArt& glass : glassRects) {
 			drawGlassRect(args, glass);
 		}
@@ -465,6 +613,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 };
 
 struct PanelSurfaceEffectDefinition {
+	std::vector<PanelSurfaceEffectWidget::MetalRectArt> metalRects;
 	std::vector<PanelSurfaceEffectWidget::GlassRectArt> glassRects;
 	std::vector<math::Rect> screenRectsPx;
 };
@@ -479,6 +628,29 @@ math::Rect insetRectMm(math::Rect rect, float insetMm) {
 
 PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string& svgPath) {
 	PanelSurfaceEffectDefinition def;
+	std::vector<panel_svg::SvgRectMatch> metalMatches;
+	if (panel_svg::findRectsInGroupsWithIdSubstringMm(svgPath, "metal", &metalMatches)) {
+		def.metalRects.reserve(metalMatches.size());
+		for (const panel_svg::SvgRectMatch& match : metalMatches) {
+			PanelSurfaceEffectWidget::MetalRectArt art;
+			art.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
+			if (match.hasCornerRadius) {
+				const Vec radiusPx = mm2px(match.cornerRadius);
+				art.radiusPx = std::min(radiusPx.x, radiusPx.y);
+			}
+			if (match.hasFillColor) {
+				art.baseColor = match.fillColor;
+			}
+			if (match.hasFillGradientEndColor) {
+				art.accentColor = match.fillGradientEndColor;
+			}
+			else if (match.hasFillColor) {
+				art.accentColor = PanelSurfaceEffectWidget::mixColor(match.fillColor, nvgRGB(255, 255, 255), 0.34f, 1.f);
+			}
+			def.metalRects.push_back(art);
+		}
+	}
+
 	std::vector<panel_svg::SvgRectMatch> glassMatches;
 	if (panel_svg::findRectsInGroupsWithIdSubstringMm(svgPath, "glass", &glassMatches)) {
 		def.glassRects.reserve(glassMatches.size());
@@ -576,6 +748,7 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->box.size = panelSizePx;
+	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;
 	effect->screenRectsPx = it->second.screenRectsPx;
 	fb->addChild(effect);

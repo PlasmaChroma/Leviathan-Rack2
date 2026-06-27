@@ -1036,6 +1036,103 @@ struct IntegralFluxShapeModeGlyphOverlay : TransparentWidget {
 	}
 };
 
+struct IntegralFluxInactiveShapeModeGlyphs : TransparentWidget {
+	static constexpr int SAMPLE_COUNT = 49;
+	IntegralFlux* module = nullptr;
+	int shapeModeParamId = -1;
+
+	IntegralFluxInactiveShapeModeGlyphs(IntegralFlux* module, int shapeModeParamId)
+		: module(module)
+		, shapeModeParamId(shapeModeParamId) {
+	}
+
+	IntegralFlux::FunctionShapeMode currentMode() const {
+		if (!module || shapeModeParamId < 0) {
+			return IntegralFlux::FUNCTION_SHAPE_MATHS;
+		}
+		return IntegralFlux::functionShapeModeFromParam(module->params[shapeModeParamId].getValue());
+	}
+
+	void drawSampledCurve(const DrawArgs& args, float x0, float xStep, const float* ySamples) {
+		const float sx = box.size.x / 2000.f;
+		const float sy = box.size.y / 1800.f;
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < SAMPLE_COUNT; ++i) {
+			const float x = (x0 + xStep * float(i)) * sx;
+			const float y = ySamples[i] * sy;
+			if (i == 0) {
+				nvgMoveTo(args.vg, x, y);
+			}
+			else {
+				nvgLineTo(args.vg, x, y);
+			}
+		}
+		nvgStroke(args.vg);
+	}
+
+	void drawGlyphs(const DrawArgs& args, bool drawMirror, bool drawShark) {
+		static constexpr float mirrorLeft[SAMPLE_COUNT] = {
+			441.3f, 360.0f, 328.9f, 307.9f, 291.6f, 278.0f, 266.3f, 255.8f, 246.4f, 237.7f,
+			229.7f, 222.3f, 215.3f, 208.6f, 202.4f, 196.4f, 190.7f, 185.3f, 180.0f, 175.0f,
+			170.1f, 165.4f, 160.9f, 156.5f, 151.9f, 156.2f, 160.6f, 165.1f, 169.8f, 174.7f,
+			179.7f, 184.9f, 190.4f, 196.1f, 202.0f, 208.2f, 214.8f, 221.8f, 229.2f, 237.2f,
+			245.8f, 255.2f, 265.6f, 277.2f, 290.7f, 306.8f, 327.4f, 357.5f, 441.3f
+		};
+		static constexpr float mirrorRight[SAMPLE_COUNT] = {
+			441.3f, 438.6f, 435.9f, 433.1f, 430.3f, 427.4f, 424.4f, 421.3f, 418.0f, 414.5f,
+			410.7f, 406.7f, 402.2f, 397.3f, 391.8f, 385.5f, 378.3f, 369.8f, 359.6f, 346.9f,
+			330.8f, 309.3f, 279.1f, 232.9f, 151.9f, 232.1f, 278.6f, 309.0f, 330.5f, 346.7f,
+			359.4f, 369.7f, 378.2f, 385.4f, 391.7f, 397.2f, 402.2f, 406.6f, 410.7f, 414.4f,
+			417.9f, 421.2f, 424.4f, 427.4f, 430.3f, 433.1f, 435.9f, 438.6f, 441.3f
+		};
+		static constexpr float sharkLeft[SAMPLE_COUNT] = {
+			1502.1f, 1499.4f, 1496.7f, 1493.9f, 1491.1f, 1488.2f, 1485.2f, 1482.1f, 1478.8f, 1475.3f,
+			1471.5f, 1467.4f, 1463.0f, 1458.1f, 1452.6f, 1446.3f, 1439.1f, 1430.6f, 1420.3f, 1407.7f,
+			1391.6f, 1370.1f, 1339.9f, 1293.7f, 1212.7f, 1217.0f, 1221.4f, 1225.9f, 1230.6f, 1235.4f,
+			1240.5f, 1245.7f, 1251.1f, 1256.8f, 1262.8f, 1269.0f, 1275.6f, 1282.6f, 1290.0f, 1298.0f,
+			1306.6f, 1316.0f, 1326.3f, 1338.0f, 1351.5f, 1367.6f, 1388.1f, 1418.3f, 1502.1f
+		};
+		static constexpr float sharkRight[SAMPLE_COUNT] = {
+			1502.1f, 1420.8f, 1389.6f, 1368.7f, 1352.4f, 1338.8f, 1327.0f, 1316.6f, 1307.1f, 1298.5f,
+			1290.5f, 1283.0f, 1276.0f, 1269.4f, 1263.2f, 1257.2f, 1251.5f, 1246.0f, 1240.8f, 1235.8f,
+			1230.9f, 1226.2f, 1221.6f, 1217.2f, 1212.7f, 1292.9f, 1339.3f, 1369.7f, 1391.3f, 1407.5f,
+			1420.2f, 1430.4f, 1439.0f, 1446.2f, 1452.5f, 1458.0f, 1462.9f, 1467.4f, 1471.4f, 1475.2f,
+			1478.7f, 1482.0f, 1485.2f, 1488.2f, 1491.1f, 1493.9f, 1496.6f, 1499.4f, 1502.1f
+		};
+		static constexpr float leftX = 386.9f;
+		static constexpr float rightX = 1053.1f;
+		static constexpr float xStep = 10.707f;
+		if (drawMirror) {
+			drawSampledCurve(args, leftX, xStep, mirrorLeft);
+			drawSampledCurve(args, rightX, xStep, mirrorRight);
+		}
+		if (drawShark) {
+			drawSampledCurve(args, leftX, xStep, sharkLeft);
+			drawSampledCurve(args, rightX, xStep, sharkRight);
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point drawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+
+		nvgSave(args.vg);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStrokeWidth(args.vg, std::max(1.0f, box.size.x * 0.0204f));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 245));
+		const bool activeShark = currentMode() == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN;
+		drawGlyphs(args, activeShark, !activeShark);
+		nvgRestore(args.vg);
+
+		if (measurePerf) {
+			gIntegralFluxShapeGlyphDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - drawStart).count());
+		}
+	}
+};
+
 struct IntegralFluxTimedShapeModeGlyphSvg : widget::SvgWidget {
 	void draw(const DrawArgs& args) override {
 		if (!isDragonKingDebugEnabled()) {
@@ -1285,6 +1382,11 @@ struct IntegralFluxWidget : ModuleWidget {
 				shapeGlyphFb->box.pos = mm2px(ch4 ? Vec(81.585f, 22.f) : Vec(0.f, 22.f));
 				shapeGlyphFb->box.size = mm2px(Vec(20.f, 18.f));
 				shapeGlyphFb->dirtyOnSubpixelChange = false;
+
+				IntegralFluxInactiveShapeModeGlyphs* inactiveShapeGlyphs = new IntegralFluxInactiveShapeModeGlyphs(
+					module, shapeModeParamId);
+				inactiveShapeGlyphs->box.size = shapeGlyphFb->box.size;
+				shapeGlyphFb->addChild(inactiveShapeGlyphs);
 
 				IntegralFluxTimedShapeModeGlyphSvg* shapeGlyphSvg = new IntegralFluxTimedShapeModeGlyphSvg();
 				shapeGlyphSvg->box.size = shapeGlyphFb->box.size;

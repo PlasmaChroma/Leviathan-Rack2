@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.385554"
-   inkscape:cx="182.55718"
-   inkscape:cy="146.08766"
+   inkscape:zoom="3.3736828"
+   inkscape:cx="226.60696"
+   inkscape:cy="147.76137"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -350,17 +350,17 @@
    inkscape:label="Frame"
    style="display:inline">
         <rect
-   x="1274.6125"
-   y="1935.9918"
-   width="4657.8223"
-   height="5832.6113"
-   rx="181.73123"
-   ry="185.70935"
+   x="1214.5623"
+   y="1936.1384"
+   width="4717.731"
+   height="5832.3184"
+   rx="184.06866"
+   ry="185.70001"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="45.9273"
+   stroke-width="46.2204"
    id="frame_left"
    style="opacity:0.33;fill:#5740bf;fill-opacity:1" /><rect
    x="4149.1533"
@@ -390,17 +390,17 @@
    id="frame_input_3"
    style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
         <rect
-   x="6231.3662"
-   y="1936.1254"
-   width="4650.7036"
-   height="5832.3091"
-   rx="185.56786"
-   ry="183.90857"
+   x="6231.5308"
+   y="1936.2898"
+   width="4717.438"
+   height="5831.98"
+   rx="188.23064"
+   ry="183.89819"
    fill="#000000"
    opacity="0.1"
    stroke="#ffffff"
    stroke-opacity="0.06"
-   stroke-width="46.1842"
+   stroke-width="46.5131"
    id="frame_right"
    style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
         <rect
@@ -696,7 +696,7 @@
         
       </g><g
    id="shape_mode_glyphs"
-   style="display:inline;fill:none;stroke:#ffffff;stroke-width:36;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"><g
+   style="display:none;fill:none;stroke:#ffffff;stroke-width:36;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"><g
      id="shape_mode_glyphs_ch1"
      transform="matrix(0.95221678,0,0,1.0007281,46.602978,-62.247725)"><path
        id="shape_mode_1_maths_0"
