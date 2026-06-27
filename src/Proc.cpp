@@ -1137,8 +1137,10 @@ namespace {
 struct ProcPreviewEdgeInteraction {
 	bool riseHovered = false;
 	bool fallHovered = false;
+	bool curveHovered = false;
 	bool riseDragging = false;
 	bool fallDragging = false;
+	bool curveDragging = false;
 };
 
 struct WavePreviewWidget : Widget {
@@ -1161,6 +1163,7 @@ struct WavePreviewWidget : Widget {
 	std::array<Vec, POINT_COUNT> points {};
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+	Proc* modulePtr = nullptr;
 	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
@@ -1170,7 +1173,8 @@ struct WavePreviewWidget : Widget {
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
 
-	WavePreviewWidget() = default;
+	explicit WavePreviewWidget(Proc* module) : modulePtr(module) {
+	}
 
 	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
 		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
@@ -1204,11 +1208,17 @@ struct WavePreviewWidget : Widget {
 		if (!edgeInteraction) {
 			return 0;
 		}
+		if (edgeInteraction->curveDragging) {
+			return 3;
+		}
 		if (edgeInteraction->riseDragging) {
 			return 1;
 		}
 		if (edgeInteraction->fallDragging) {
 			return 2;
+		}
+		if (edgeInteraction->curveHovered) {
+			return 3;
 		}
 		if (edgeInteraction->riseHovered) {
 			return 1;
@@ -1223,8 +1233,35 @@ struct WavePreviewWidget : Widget {
 		return nvgRGBA(230, 230, 220, 255);
 	}
 
-	static NVGcolor activeEdgeColor() {
-		return nvgRGBA(0x86, 0x5c, 0xff, 0xff);
+	NVGcolor activeEdgeColor(int edge) const {
+		const NVGcolor purple = nvgRGB(0x86, 0x5c, 0xff);
+		const NVGcolor cyan = nvgRGB(0x00, 0xc6, 0xe4);
+		if (!modulePtr) {
+			return purple;
+		}
+
+		const int paramId = edge == 1 ? Proc::RISE_PARAM : Proc::FALL_PARAM;
+		const float amount = clamp(modulePtr->params[paramId].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			purple.r + (cyan.r - purple.r) * amount,
+			purple.g + (cyan.g - purple.g) * amount,
+			purple.b + (cyan.b - purple.b) * amount,
+			1.f);
+	}
+
+	NVGcolor activeCurveColor() const {
+		const NVGcolor orange = nvgRGB(0xdc, 0x5e, 0x1e);
+		const NVGcolor yellow = nvgRGB(0xff, 0xb8, 0x00);
+		if (!modulePtr) {
+			return orange;
+		}
+
+		const float amount = clamp(modulePtr->params[Proc::SHAPE_PARAM].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			orange.r + (yellow.r - orange.r) * amount,
+			orange.g + (yellow.g - orange.g) * amount,
+			orange.b + (yellow.b - orange.b) * amount,
+			1.f);
 	}
 
 	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
@@ -1260,9 +1297,14 @@ struct WavePreviewWidget : Widget {
 			drawWaveSegment(args, 0, POINT_COUNT - 1, waveformColor());
 			return;
 		}
+		if (edge == 3) {
+			drawWaveSegment(args, 0, POINT_COUNT - 1, activeCurveColor());
+			return;
+		}
 		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
-		drawWaveSegment(args, 0, peakIndex, edge == 1 ? activeEdgeColor() : waveformColor());
-		drawWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? activeEdgeColor() : waveformColor());
+		const NVGcolor highlightColor = activeEdgeColor(edge);
+		drawWaveSegment(args, 0, peakIndex, edge == 1 ? highlightColor : waveformColor());
+		drawWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? highlightColor : waveformColor());
 	}
 
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
@@ -1320,8 +1362,6 @@ struct WavePreviewWidget : Widget {
 
 	void step() override {
 		Widget::step();
-		ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
-		Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1519,7 +1559,41 @@ struct AmpVoltageReadoutWidget : Widget {
 };
 
 struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
+	ProcPreviewEdgeInteraction* previewInteraction = nullptr;
+
 	ProcCurveHalo2Knob() : LeviathanHaloKnob2(LeviathanHaloKnob2::brightOrangeConfig()) {
+	}
+
+	void setPreviewInteraction(ProcPreviewEdgeInteraction* interaction) {
+		previewInteraction = interaction;
+	}
+
+	void onEnter(const event::Enter& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveHovered = true;
+		}
+		LeviathanHaloKnob2::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveHovered = false;
+		}
+		LeviathanHaloKnob2::onLeave(e);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveDragging = true;
+		}
+		LeviathanHaloKnob2::onDragStart(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveDragging = false;
+		}
+		LeviathanHaloKnob2::onDragEnd(e);
 	}
 };
 
@@ -1734,7 +1808,11 @@ struct ProcWidget : ModuleWidget {
 			fallKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_FALL);
 			addParam(fallKnob);
 		}
-		addParam(createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
+		{
+			ProcCurveHalo2Knob* curveKnob = createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM);
+			curveKnob->setPreviewInteraction(&previewEdgeInteraction);
+			addParam(curveKnob);
+		}
 		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
@@ -1745,7 +1823,7 @@ struct ProcWidget : ModuleWidget {
 			addChild(ampReadout);
 		}
 		{
-			WavePreviewWidget* previewWidget = new WavePreviewWidget();
+			WavePreviewWidget* previewWidget = new WavePreviewWidget(module);
 			previewWidget->edgeInteraction = &previewEdgeInteraction;
 			math::Rect previewRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {

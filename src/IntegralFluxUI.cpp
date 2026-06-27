@@ -57,8 +57,10 @@ struct BigTL1105 : TL1105 {
 struct IntegralFluxPreviewEdgeInteraction {
 	bool riseHovered = false;
 	bool fallHovered = false;
+	bool curveHovered = false;
 	bool riseDragging = false;
 	bool fallDragging = false;
+	bool curveDragging = false;
 };
 
 struct IntegralFluxKnobTooltipState {
@@ -192,11 +194,17 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		if (!edgeInteraction) {
 			return 0;
 		}
+		if (edgeInteraction->curveDragging) {
+			return 3;
+		}
 		if (edgeInteraction->riseDragging) {
 			return 1;
 		}
 		if (edgeInteraction->fallDragging) {
 			return 2;
+		}
+		if (edgeInteraction->curveHovered) {
+			return 3;
 		}
 		if (edgeInteraction->riseHovered) {
 			return 1;
@@ -211,8 +219,46 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return nvgRGBA(230, 230, 220, 255);
 	}
 
-	static NVGcolor activeEdgeColor() {
-		return nvgRGBA(0x86, 0x5c, 0xff, 0xff);
+	NVGcolor activeEdgeColor(int edge) const {
+		const NVGcolor purple = nvgRGB(0x86, 0x5c, 0xff);
+		const NVGcolor cyan = nvgRGB(0x00, 0xc6, 0xe4);
+		if (!modulePtr) {
+			return purple;
+		}
+
+		int paramId = -1;
+		if (edge == 1) {
+			paramId = channel == 4 ? IntegralFlux::RISE_4_PARAM : IntegralFlux::RISE_1_PARAM;
+		}
+		else if (edge == 2) {
+			paramId = channel == 4 ? IntegralFlux::FALL_4_PARAM : IntegralFlux::FALL_1_PARAM;
+		}
+		if (paramId < 0) {
+			return purple;
+		}
+
+		const float amount = clamp(modulePtr->params[paramId].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			purple.r + (cyan.r - purple.r) * amount,
+			purple.g + (cyan.g - purple.g) * amount,
+			purple.b + (cyan.b - purple.b) * amount,
+			1.f);
+	}
+
+	NVGcolor activeCurveColor() const {
+		const NVGcolor orange = nvgRGB(0xdc, 0x5e, 0x1e);
+		const NVGcolor yellow = nvgRGB(0xff, 0xb8, 0x00);
+		if (!modulePtr) {
+			return orange;
+		}
+
+		const int paramId = channel == 4 ? IntegralFlux::LIN_LOG_4_PARAM : IntegralFlux::LIN_LOG_1_PARAM;
+		const float amount = clamp(modulePtr->params[paramId].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			orange.r + (yellow.r - orange.r) * amount,
+			orange.g + (yellow.g - orange.g) * amount,
+			orange.b + (yellow.b - orange.b) * amount,
+			1.f);
 	}
 
 	void drawGlWaveSegment(int start, int end, float lineScale, NVGcolor color) {
@@ -234,9 +280,14 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			drawGlWaveSegment(0, POINT_COUNT - 1, lineScale, waveformColor());
 			return;
 		}
+		if (edge == 3) {
+			drawGlWaveSegment(0, POINT_COUNT - 1, lineScale, activeCurveColor());
+			return;
+		}
 		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
-		drawGlWaveSegment(0, peakIndex, lineScale, edge == 1 ? activeEdgeColor() : waveformColor());
-		drawGlWaveSegment(peakIndex, POINT_COUNT - 1, lineScale, edge == 2 ? activeEdgeColor() : waveformColor());
+		const NVGcolor highlightColor = activeEdgeColor(edge);
+		drawGlWaveSegment(0, peakIndex, lineScale, edge == 1 ? highlightColor : waveformColor());
+		drawGlWaveSegment(peakIndex, POINT_COUNT - 1, lineScale, edge == 2 ? highlightColor : waveformColor());
 	}
 
 	void drawNvgWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color, size_t* reducedPointCount) {
@@ -276,9 +327,14 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			drawNvgWaveSegment(args, 0, POINT_COUNT - 1, waveformColor(), &reducedPointCount);
 			return reducedPointCount;
 		}
+		if (edge == 3) {
+			drawNvgWaveSegment(args, 0, POINT_COUNT - 1, activeCurveColor(), &reducedPointCount);
+			return reducedPointCount;
+		}
 		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
-		drawNvgWaveSegment(args, 0, peakIndex, edge == 1 ? activeEdgeColor() : waveformColor(), &reducedPointCount);
-		drawNvgWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? activeEdgeColor() : waveformColor(), &reducedPointCount);
+		const NVGcolor highlightColor = activeEdgeColor(edge);
+		drawNvgWaveSegment(args, 0, peakIndex, edge == 1 ? highlightColor : waveformColor(), &reducedPointCount);
+		drawNvgWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? highlightColor : waveformColor(), &reducedPointCount);
 		return reducedPointCount;
 	}
 
@@ -728,7 +784,8 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	enum PreviewEdge {
 		PREVIEW_EDGE_NONE,
 		PREVIEW_EDGE_RISE,
-		PREVIEW_EDGE_FALL
+		PREVIEW_EDGE_FALL,
+		PREVIEW_CURVE
 	};
 
 	IntegralFluxPreviewEdgeInteraction* previewInteraction = nullptr;
@@ -782,6 +839,9 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 		else if (previewEdge == PREVIEW_EDGE_FALL) {
 			previewInteraction->fallHovered = hovered;
 		}
+		else if (previewEdge == PREVIEW_CURVE) {
+			previewInteraction->curveHovered = hovered;
+		}
 	}
 
 	void setDragging(bool dragging) {
@@ -793,6 +853,9 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 		}
 		else if (previewEdge == PREVIEW_EDGE_FALL) {
 			previewInteraction->fallDragging = dragging;
+		}
+		else if (previewEdge == PREVIEW_CURVE) {
+			previewInteraction->curveDragging = dragging;
 		}
 	}
 
@@ -1432,8 +1495,9 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setSuppressRackTooltip(true);
 			addParam(knob);
 		};
-		auto addCurveKnob = [&](Vec posMm, int paramId, int channel) {
+		auto addCurveKnob = [&](Vec posMm, int paramId, IntegralFluxPreviewEdgeInteraction* interaction, int channel) {
 			IntegralFluxCurveHalo2Knob* knob = createParamCentered<IntegralFluxCurveHalo2Knob>(mm2px(posMm), module, paramId);
+			knob->setPreviewInteraction(interaction, IntegralFluxHalo2Knob::PREVIEW_CURVE);
 			knob->setCentralTooltip(&centralTooltipState, channel, "Curve", paramId);
 			knob->setSuppressRackTooltip(true);
 			addParam(knob);
@@ -1442,8 +1506,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addEdgeKnob(rise4KnobPos, IntegralFlux::RISE_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE, 4, "Surge");
 		addEdgeKnob(fall1KnobPos, IntegralFlux::FALL_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 1, "Sink");
 		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 4, "Sink");
-		addCurveKnob(linLog1KnobPos, IntegralFlux::LIN_LOG_1_PARAM, 1);
-		addCurveKnob(linLog4KnobPos, IntegralFlux::LIN_LOG_4_PARAM, 4);
+		addCurveKnob(linLog1KnobPos, IntegralFlux::LIN_LOG_1_PARAM, &ch1EdgeInteraction, 1);
+		addCurveKnob(linLog4KnobPos, IntegralFlux::LIN_LOG_4_PARAM, &ch4EdgeInteraction, 4);
 		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
 		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
