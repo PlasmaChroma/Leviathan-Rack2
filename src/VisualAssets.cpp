@@ -980,6 +980,7 @@ constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kPlasmaSwitchHeightPx = 22.0f;
 constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
+constexpr float kPlasmaSwitchShadowBleedPx = 5.f;
 constexpr double kPlasmaSwitchAnimationCacheFps = 120.0;
 constexpr bool kUseSharedPlasmaSwitchOrbRenderer = false;
 
@@ -991,6 +992,74 @@ uint64_t getSharedPlasmaSwitchAnimationFrame() {
 
 double getSharedPlasmaSwitchAnimationSec() {
 	return double(getSharedPlasmaSwitchAnimationFrame()) / kPlasmaSwitchAnimationCacheFps;
+}
+
+struct PlasmaSwitchStaticLayerWidget : TransparentWidget {
+	Vec componentSize;
+
+	void drawBodySilhouette(const DrawArgs& args, float inset, float dx, float dy) {
+		const float x0 = inset + dx;
+		const float y0 = inset + dy;
+		const float x1 = componentSize.x - inset + dx;
+		const float y1 = componentSize.y - inset + dy;
+		const float chamferX = componentSize.x * 0.18f;
+		const float chamferY = componentSize.y * 0.105f;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x0 + chamferX, y0);
+		nvgLineTo(args.vg, x1 - chamferX, y0);
+		nvgLineTo(args.vg, x1, y0 + chamferY);
+		nvgLineTo(args.vg, x1, y1 - chamferY);
+		nvgLineTo(args.vg, x1 - chamferX, y1);
+		nvgLineTo(args.vg, x0 + chamferX, y1);
+		nvgLineTo(args.vg, x0, y1 - chamferY);
+		nvgLineTo(args.vg, x0, y0 + chamferY);
+		nvgClosePath(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, kPlasmaSwitchShadowBleedPx * 0.5f, kPlasmaSwitchShadowBleedPx * 0.5f);
+		drawBodySilhouette(args, componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 94));
+		nvgFill(args.vg);
+		drawBodySilhouette(args, componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 70));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+int getSharedPlasmaSwitchShadowImageHandle(NVGcontext* vg, Vec size) {
+	struct Cache {
+		NVGcontext* vg = nullptr;
+		widget::FramebufferWidget* fb = nullptr;
+		PlasmaSwitchStaticLayerWidget* layer = nullptr;
+		Vec size;
+	};
+	static Cache cache;
+
+	if (!vg || size.x <= 1.f || size.y <= 1.f) {
+		return -1;
+	}
+	if (cache.vg != vg || !cache.fb || !cache.layer) {
+		cache.vg = vg;
+		cache.fb = new widget::FramebufferWidget();
+		cache.fb->dirtyOnSubpixelChange = false;
+		cache.fb->viewportMargin = Vec(INFINITY, INFINITY);
+		cache.layer = new PlasmaSwitchStaticLayerWidget();
+		cache.fb->addChild(cache.layer);
+		cache.size = Vec();
+	}
+	if (cache.size.x != size.x || cache.size.y != size.y) {
+		cache.size = size;
+		const Vec cachedSize = size.plus(Vec(kPlasmaSwitchShadowBleedPx, kPlasmaSwitchShadowBleedPx));
+		cache.fb->box.size = cachedSize;
+		cache.layer->box.size = cachedSize;
+		cache.layer->componentSize = size;
+		cache.fb->setDirty();
+		cache.fb->render();
+	}
+	return cache.fb->getImageHandle();
 }
 
 void drawPlasmaSwitchOrbLayer(const Widget::DrawArgs& args,
@@ -2400,6 +2469,28 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	if (!backingImage || backingImage->handle < 0) {
 		backingImage = APP->window->loadImage(backingFullPath);
 	}
+	const int shadowImageHandle = getSharedPlasmaSwitchShadowImageHandle(args.vg, box.size);
+	if (shadowImageHandle >= 0) {
+		const Vec shadowSize = box.size.plus(Vec(kPlasmaSwitchShadowBleedPx, kPlasmaSwitchShadowBleedPx));
+		NVGpaint shadowPaint = nvgImagePattern(
+			args.vg,
+			-kPlasmaSwitchShadowBleedPx * 0.5f,
+			-kPlasmaSwitchShadowBleedPx * 0.5f,
+			shadowSize.x,
+			shadowSize.y,
+			0.f,
+			shadowImageHandle,
+			1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(
+			args.vg,
+			-kPlasmaSwitchShadowBleedPx * 0.5f,
+			-kPlasmaSwitchShadowBleedPx * 0.5f,
+			shadowSize.x,
+			shadowSize.y);
+		nvgFillPaint(args.vg, shadowPaint);
+		nvgFill(args.vg);
+	}
 	if (backingImageVg != args.vg || !backingImage || backingLifecycleHandle != backingImage->handle) {
 		backingImageVg = args.vg;
 		backingImageHandle = -1;
@@ -2412,7 +2503,8 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 				backingImageHandle = backingImage->handle;
 			}
 		}
-		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, backingImageHandle, 1.f);
+		NVGpaint paint = nvgImagePattern(
+			args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, backingImageHandle, 1.f);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgFillPaint(args.vg, paint);
