@@ -1029,39 +1029,6 @@ struct PlasmaSwitchStaticLayerWidget : TransparentWidget {
 	}
 };
 
-int getSharedPlasmaSwitchShadowImageHandle(NVGcontext* vg, Vec size) {
-	struct Cache {
-		NVGcontext* vg = nullptr;
-		widget::FramebufferWidget* fb = nullptr;
-		PlasmaSwitchStaticLayerWidget* layer = nullptr;
-		Vec size;
-	};
-	static Cache cache;
-
-	if (!vg || size.x <= 1.f || size.y <= 1.f) {
-		return -1;
-	}
-	if (cache.vg != vg || !cache.fb || !cache.layer) {
-		cache.vg = vg;
-		cache.fb = new widget::FramebufferWidget();
-		cache.fb->dirtyOnSubpixelChange = false;
-		cache.fb->viewportMargin = Vec(INFINITY, INFINITY);
-		cache.layer = new PlasmaSwitchStaticLayerWidget();
-		cache.fb->addChild(cache.layer);
-		cache.size = Vec();
-	}
-	if (cache.size.x != size.x || cache.size.y != size.y) {
-		cache.size = size;
-		const Vec cachedSize = size.plus(Vec(kPlasmaSwitchShadowBleedPx, kPlasmaSwitchShadowBleedPx));
-		cache.fb->box.size = cachedSize;
-		cache.layer->box.size = cachedSize;
-		cache.layer->componentSize = size;
-		cache.fb->setDirty();
-		cache.fb->render();
-	}
-	return cache.fb->getImageHandle();
-}
-
 void drawPlasmaSwitchOrbLayer(const Widget::DrawArgs& args,
 	Vec layerSize,
 	float cx,
@@ -2422,6 +2389,17 @@ PlasmaSwitch::PlasmaSwitch() {
 	momentary = false;
 	box.size = Vec(kPlasmaSwitchWidthPx, kPlasmaSwitchHeightPx);
 	backingFullPath = asset::plugin(pluginInstance, "res/icon/PlasmaSwitchSmall.png");
+
+	const Vec bleed(kPlasmaSwitchShadowBleedPx, kPlasmaSwitchShadowBleedPx);
+	shadowFb = new widget::FramebufferWidget();
+	shadowFb->dirtyOnSubpixelChange = false;
+	shadowFb->box.pos = bleed.mult(-0.5f);
+	shadowFb->box.size = box.size.plus(bleed);
+	PlasmaSwitchStaticLayerWidget* shadowLayer = new PlasmaSwitchStaticLayerWidget();
+	shadowLayer->box.size = shadowFb->box.size;
+	shadowLayer->componentSize = box.size;
+	shadowFb->addChild(shadowLayer);
+	addChild(shadowFb);
 }
 
 void PlasmaSwitch::step() {
@@ -2466,42 +2444,14 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 		displayValueInitialized = true;
 	}
 
-	if (!backingImage || backingImage->handle < 0) {
-		backingImage = APP->window->loadImage(backingFullPath);
+	if (shadowFb) {
+		drawChild(shadowFb, args);
 	}
-	const int shadowImageHandle = getSharedPlasmaSwitchShadowImageHandle(args.vg, box.size);
-	if (shadowImageHandle >= 0) {
-		const Vec shadowSize = box.size.plus(Vec(kPlasmaSwitchShadowBleedPx, kPlasmaSwitchShadowBleedPx));
-		NVGpaint shadowPaint = nvgImagePattern(
-			args.vg,
-			-kPlasmaSwitchShadowBleedPx * 0.5f,
-			-kPlasmaSwitchShadowBleedPx * 0.5f,
-			shadowSize.x,
-			shadowSize.y,
-			0.f,
-			shadowImageHandle,
-			1.f);
-		nvgBeginPath(args.vg);
-		nvgRect(
-			args.vg,
-			-kPlasmaSwitchShadowBleedPx * 0.5f,
-			-kPlasmaSwitchShadowBleedPx * 0.5f,
-			shadowSize.x,
-			shadowSize.y);
-		nvgFillPaint(args.vg, shadowPaint);
-		nvgFill(args.vg);
-	}
-	if (backingImageVg != args.vg || !backingImage || backingLifecycleHandle != backingImage->handle) {
-		backingImageVg = args.vg;
-		backingImageHandle = -1;
-		backingLifecycleHandle = backingImage ? backingImage->handle : -1;
-	}
+	std::shared_ptr<window::Image> backingImage = APP->window->loadImage(backingFullPath);
 	if (backingImage && backingImage->handle >= 0) {
+		int backingImageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, backingImage, backingFullPath);
 		if (backingImageHandle < 0) {
-			backingImageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, backingImage, backingFullPath);
-			if (backingImageHandle < 0) {
-				backingImageHandle = backingImage->handle;
-			}
+			backingImageHandle = backingImage->handle;
 		}
 		NVGpaint paint = nvgImagePattern(
 			args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, backingImageHandle, 1.f);

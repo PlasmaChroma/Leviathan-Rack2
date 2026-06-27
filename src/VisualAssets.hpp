@@ -151,10 +151,7 @@ struct PlasmaSwitch : app::Switch {
 	float sparkOffsetY[3] = {};
 	double lastStepSec = 0.0;
 	std::string backingFullPath;
-	std::shared_ptr<window::Image> backingImage;
-	NVGcontext* backingImageVg = nullptr;
-	int backingImageHandle = -1;
-	int backingLifecycleHandle = -1;
+	widget::FramebufferWidget* shadowFb = nullptr;
 
 	PlasmaSwitch();
 	void step() override;
