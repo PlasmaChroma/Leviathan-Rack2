@@ -143,6 +143,7 @@ struct GoldButton : app::SvgSwitch {
 
 struct PlasmaSwitch : app::Switch {
 	float displayValue = 0.f;
+	bool displayValueInitialized = false;
 	float pulseAmount = 0.5f;
 	float flickerAmount = 0.5f;
 	float hueAmount = 0.5f;

@@ -2229,11 +2229,17 @@ void PlasmaSwitch::step() {
 	animationSec += dt;
 
 	engine::ParamQuantity* pq = getParamQuantity();
-	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
-	const float response = target > displayValue ? 7.5f : 6.2f;
-	displayValue += (target - displayValue) * clamp(float(dt) * response, 0.f, 1.f);
-	if (std::fabs(target - displayValue) < 0.001f) {
+	const float target = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+	if (!displayValueInitialized) {
 		displayValue = target;
+		displayValueInitialized = true;
+	}
+	else {
+		const float response = target > displayValue ? 7.5f : 6.2f;
+		displayValue += (target - displayValue) * clamp(float(dt) * response, 0.f, 1.f);
+		if (std::fabs(target - displayValue) < 0.001f) {
+			displayValue = target;
+		}
 	}
 
 	pulseAmount = 0.5f + 0.5f * std::sin(float(animationSec * 1.45));
@@ -2249,6 +2255,12 @@ void PlasmaSwitch::step() {
 void PlasmaSwitch::draw(const DrawArgs& args) {
 	if (box.size.x <= 1.f || box.size.y <= 1.f) {
 		return;
+	}
+
+	if (!displayValueInitialized) {
+		engine::ParamQuantity* pq = getParamQuantity();
+		displayValue = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+		displayValueInitialized = true;
 	}
 
 	if (!backingImage || backingImage->handle < 0) {
