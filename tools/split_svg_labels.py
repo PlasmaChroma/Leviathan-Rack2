@@ -6,6 +6,10 @@ Split an SVG into:
   - a panel/art SVG with labels removed
   - a labels-only SVG containing only the chosen label group
 
+By default, the panel/art SVG also strips SVG text elements so the runtime
+panel does not depend on locally installed fonts. The labels-only SVG keeps
+text unchanged.
+
 Expected source convention:
   <g id="labels"> ... </g>
 
@@ -104,6 +108,34 @@ def remove_editor_junk(root: ET.Element) -> None:
                 parent.remove(child)
 
 
+def strip_font_text_elements(root: ET.Element) -> int:
+    """
+    Remove SVG elements whose rendering depends on text/font layout.
+
+    This intentionally runs only on panel outputs. The labels output should
+    keep text intact so labels can be rendered in a dedicated cached layer or
+    converted separately by the asset pipeline.
+    """
+    text_element_names = {
+        "text",
+        "tspan",
+        "textPath",
+        "flowRoot",
+        "flowRegion",
+        "flowPara",
+        "flowSpan",
+        "flowDiv",
+    }
+
+    removed = 0
+    for parent in root.iter():
+        for child in list(parent):
+            if local_name(child.tag) in text_element_names:
+                parent.remove(child)
+                removed += 1
+    return removed
+
+
 def split_svg(
     source_path: Path,
     label_id: str,
@@ -111,6 +143,7 @@ def split_svg(
     labels_suffix: str,
     overwrite: bool,
     cleanup: bool,
+    strip_panel_text: bool,
 ) -> tuple[Path, Path]:
     tree = ET.parse(source_path)
     root = tree.getroot()
@@ -153,6 +186,9 @@ def split_svg(
         raise RuntimeError(f"{source_path}: internal error removing labels")
 
     panel_parent.remove(panel_label_group)
+
+    if strip_panel_text:
+        strip_font_text_elements(panel_root)
 
     if cleanup:
         remove_editor_junk(panel_root)
@@ -214,6 +250,11 @@ def main() -> int:
         action="store_true",
         help="Do not remove editor metadata/namedview nodes",
     )
+    parser.add_argument(
+        "--keep-panel-text",
+        action="store_true",
+        help="Do not strip font-backed SVG text elements from the panel output",
+    )
 
     args = parser.parse_args()
 
@@ -239,6 +280,7 @@ def main() -> int:
                 labels_suffix=args.labels_suffix,
                 overwrite=args.overwrite,
                 cleanup=not args.no_cleanup,
+                strip_panel_text=not args.keep_panel_text,
             )
             print(f"{svg_path}")
             print(f"  -> {panel_path}")
