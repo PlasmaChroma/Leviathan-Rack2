@@ -980,6 +980,140 @@ constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kPlasmaSwitchHeightPx = 22.0f;
 constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
+constexpr double kPlasmaSwitchAnimationCacheFps = 120.0;
+constexpr bool kUseSharedPlasmaSwitchOrbRenderer = false;
+
+uint64_t getSharedPlasmaSwitchAnimationFrame() {
+	static const double startSec = system::getTime();
+	const double elapsedSec = std::max(0.0, system::getTime() - startSec);
+	return uint64_t(elapsedSec * kPlasmaSwitchAnimationCacheFps);
+}
+
+double getSharedPlasmaSwitchAnimationSec() {
+	return double(getSharedPlasmaSwitchAnimationFrame()) / kPlasmaSwitchAnimationCacheFps;
+}
+
+void drawPlasmaSwitchOrbLayer(const Widget::DrawArgs& args,
+	Vec layerSize,
+	float cx,
+	float cy,
+	float coreR,
+	float glowR,
+	NVGcolor glowColor,
+	NVGcolor accentColor,
+	const float sparkOffsetX[3],
+	const float sparkOffsetY[3]) {
+	NVGpaint outerGlow = nvgRadialGradient(args.vg, cx, cy, coreR * 0.55f, glowR,
+		nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.52f), nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, layerSize.x, layerSize.y);
+	nvgFillPaint(args.vg, outerGlow);
+	nvgFill(args.vg);
+
+	NVGpaint violetGlow = nvgRadialGradient(args.vg, cx + coreR * 0.42f, cy + coreR * 0.18f, coreR * 0.18f, glowR * 0.72f,
+		nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.58f), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, layerSize.x, layerSize.y);
+	nvgFillPaint(args.vg, violetGlow);
+	nvgFill(args.vg);
+
+	NVGpaint core = nvgRadialGradient(args.vg, cx - coreR * 0.2f, cy - coreR * 0.22f, coreR * 0.08f, coreR * 1.18f,
+		nvgRGBA(228, 250, 255, 238), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 1.0f));
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, coreR);
+	nvgFillPaint(args.vg, core);
+	nvgFill(args.vg);
+
+	for (int i = 0; i < 3; ++i) {
+		const float sparkR = coreR * (0.16f + 0.035f * float(i & 1));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx + sparkOffsetX[i] * coreR, cy + sparkOffsetY[i] * coreR, sparkR);
+		nvgFillColor(args.vg, i & 1 ? nvgRGBA(0xff, 0xb8, 0x00, 128) : nvgRGBA(255, 255, 255, 146));
+		nvgFill(args.vg);
+	}
+}
+
+struct PlasmaSwitchOrbLayerWidget : TransparentWidget {
+	float pulseAmount = 0.5f;
+	float flickerAmount = 0.5f;
+	float hueAmount = 0.5f;
+	float sparkOffsetX[3] = {};
+	float sparkOffsetY[3] = {};
+
+	void draw(const DrawArgs& args) override {
+		const float cx = box.size.x * 0.5f;
+		const float cy = box.size.y * 0.5f;
+		const float coreR = box.size.x * crossfade(0.142f, 0.162f, pulseAmount);
+		const float glowR = box.size.x * crossfade(0.35f, 0.46f, flickerAmount);
+		const NVGcolor cyan = nvgRGBA(0x00, 0xc8, 0xff, 205);
+		const NVGcolor purple = nvgRGBA(0x8e, 0x34, 0xff, 198);
+		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
+			t = clamp(t, 0.f, 1.f);
+			NVGcolor out;
+			out.r = a.r + (b.r - a.r) * t;
+			out.g = a.g + (b.g - a.g) * t;
+			out.b = a.b + (b.b - a.b) * t;
+			out.a = a.a + (b.a - a.a) * t;
+			return out;
+		};
+		const NVGcolor glowColor = blendColor(cyan, purple, hueAmount);
+		const NVGcolor accentColor = blendColor(purple, cyan, 1.f - hueAmount * 0.55f);
+		Widget::DrawArgs layerArgs = args;
+		layerArgs.clipBox = math::Rect(Vec(0.f, 0.f), box.size);
+		drawPlasmaSwitchOrbLayer(layerArgs, box.size, cx, cy, coreR, glowR, glowColor, accentColor, sparkOffsetX, sparkOffsetY);
+	}
+};
+
+int getSharedPlasmaSwitchOrbImageHandle(NVGcontext* vg,
+	Vec size,
+	uint64_t animationFrame,
+	float pulseAmount,
+	float flickerAmount,
+	float hueAmount,
+	const float sparkOffsetX[3],
+	const float sparkOffsetY[3]) {
+	struct Cache {
+		NVGcontext* vg = nullptr;
+		widget::FramebufferWidget* fb = nullptr;
+		PlasmaSwitchOrbLayerWidget* layer = nullptr;
+		Vec size;
+		uint64_t animationFrame = UINT64_MAX;
+	};
+	static Cache cache;
+
+	if (!vg || size.x <= 1.f || size.y <= 1.f) {
+		return -1;
+	}
+	if (cache.vg != vg || !cache.fb || !cache.layer) {
+		cache.vg = vg;
+		cache.fb = new widget::FramebufferWidget();
+		cache.fb->dirtyOnSubpixelChange = false;
+		cache.fb->viewportMargin = Vec(INFINITY, INFINITY);
+		cache.layer = new PlasmaSwitchOrbLayerWidget();
+		cache.fb->addChild(cache.layer);
+		cache.size = Vec();
+		cache.animationFrame = UINT64_MAX;
+	}
+	if (cache.size.x != size.x || cache.size.y != size.y) {
+		cache.size = size;
+		cache.fb->box.size = size;
+		cache.layer->box.size = size;
+		cache.animationFrame = UINT64_MAX;
+	}
+	if (cache.animationFrame != animationFrame) {
+		cache.layer->pulseAmount = pulseAmount;
+		cache.layer->flickerAmount = flickerAmount;
+		cache.layer->hueAmount = hueAmount;
+		for (int i = 0; i < 3; ++i) {
+			cache.layer->sparkOffsetX[i] = sparkOffsetX[i];
+			cache.layer->sparkOffsetY[i] = sparkOffsetY[i];
+		}
+		cache.fb->setDirty();
+		cache.fb->render();
+		cache.animationFrame = animationFrame;
+	}
+	return cache.fb->getImageHandle();
+}
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -2226,7 +2360,6 @@ void PlasmaSwitch::step() {
 	const double nowSec = system::getTime();
 	const double dt = lastStepSec > 0.0 ? std::max(0.0, nowSec - lastStepSec) : 0.0;
 	lastStepSec = nowSec;
-	animationSec += dt;
 
 	engine::ParamQuantity* pq = getParamQuantity();
 	const float target = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
@@ -2242,6 +2375,7 @@ void PlasmaSwitch::step() {
 		}
 	}
 
+	const double animationSec = getSharedPlasmaSwitchAnimationSec();
 	pulseAmount = 0.5f + 0.5f * std::sin(float(animationSec * 1.45));
 	flickerAmount = 0.5f + 0.5f * std::sin(float(animationSec * 2.4 + 1.4));
 	hueAmount = 0.5f + 0.5f * std::sin(float(animationSec * 0.36 + 0.6));
@@ -2355,31 +2489,25 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 		glowClipW,
 		glowClipH);
 
-	NVGpaint outerGlow = nvgRadialGradient(args.vg, cx, cy, coreR * 0.55f, glowR,
-		nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.52f), nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
-	drawChamferRect(glowClipX, glowClipY, glowClipW, glowClipH, glowClipChamfer);
-	nvgFillPaint(args.vg, outerGlow);
-	nvgFill(args.vg);
-
-	NVGpaint violetGlow = nvgRadialGradient(args.vg, cx + coreR * 0.42f, cy + coreR * 0.18f, coreR * 0.18f, glowR * 0.72f,
-		nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.58f), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
-	drawChamferRect(glowClipX, glowClipY, glowClipW, glowClipH, glowClipChamfer);
-	nvgFillPaint(args.vg, violetGlow);
-	nvgFill(args.vg);
-
-	NVGpaint core = nvgRadialGradient(args.vg, cx - coreR * 0.2f, cy - coreR * 0.22f, coreR * 0.08f, coreR * 1.18f,
-		nvgRGBA(228, 250, 255, 238), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 1.0f));
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, cx, cy, coreR);
-	nvgFillPaint(args.vg, core);
-	nvgFill(args.vg);
-
-	for (int i = 0; i < 3; ++i) {
-		const float sparkR = coreR * (0.16f + 0.035f * float(i & 1));
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, cx + sparkOffsetX[i] * coreR, cy + sparkOffsetY[i] * coreR, sparkR);
-		nvgFillColor(args.vg, i & 1 ? nvgRGBA(0xff, 0xb8, 0x00, 128) : nvgRGBA(255, 255, 255, 146));
+	const int sharedOrbImageHandle = kUseSharedPlasmaSwitchOrbRenderer
+		? getSharedPlasmaSwitchOrbImageHandle(args.vg,
+			box.size,
+			getSharedPlasmaSwitchAnimationFrame(),
+			pulseAmount,
+			flickerAmount,
+			hueAmount,
+			sparkOffsetX,
+			sparkOffsetY)
+		: -1;
+	if (sharedOrbImageHandle >= 0) {
+		const float cachedOrbCenterY = box.size.y * 0.5f;
+		NVGpaint orbPaint = nvgImagePattern(args.vg, 0.f, cy - cachedOrbCenterY, box.size.x, box.size.y, 0.f, sharedOrbImageHandle, 1.f);
+		drawChamferRect(glowClipX, glowClipY, glowClipW, glowClipH, glowClipChamfer);
+		nvgFillPaint(args.vg, orbPaint);
 		nvgFill(args.vg);
+	}
+	else {
+		drawPlasmaSwitchOrbLayer(args, box.size, cx, cy, coreR, glowR, glowColor, accentColor, sparkOffsetX, sparkOffsetY);
 	}
 
 	nvgRestore(args.vg);
