@@ -1428,8 +1428,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		addEdgeKnob(fall4KnobPos, IntegralFlux::FALL_4_PARAM, &ch4EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_FALL, 4, "Sink");
 		addCurveKnob(linLog1KnobPos, IntegralFlux::LIN_LOG_1_PARAM, 1);
 		addCurveKnob(linLog4KnobPos, IntegralFlux::LIN_LOG_4_PARAM, 4);
-		addParam(createParamCentered<CKSS>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
-		addParam(createParamCentered<CKSS>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
+		addParam(createParamCentered<PlasmaSwitch>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
+		addParam(createParamCentered<PlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			ch1Preview->edgeInteraction = &ch1EdgeInteraction;

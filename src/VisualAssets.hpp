@@ -141,6 +141,16 @@ struct GoldButton : app::SvgSwitch {
 	void step() override;
 };
 
+struct PlasmaSwitch : app::Switch {
+	float displayValue = 0.f;
+	double animationSec = 0.0;
+	double lastStepSec = 0.0;
+
+	PlasmaSwitch();
+	void step() override;
+	void draw(const DrawArgs& args) override;
+};
+
 struct GearKnobInvertSized : app::SvgKnob {
 	struct ActiveRingWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;

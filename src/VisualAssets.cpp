@@ -978,6 +978,8 @@ TransformWidget* setSvgSwitchSizePx(app::SvgSwitch* button, float px) {
 
 constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
+constexpr float kPlasmaSwitchHeightPx = 22.0f;
+constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -2211,6 +2213,142 @@ void GoldButton::step() {
 			pressOverlayFb->setDirty();
 		}
 	}
+}
+
+PlasmaSwitch::PlasmaSwitch() {
+	momentary = false;
+	box.size = Vec(kPlasmaSwitchWidthPx, kPlasmaSwitchHeightPx);
+}
+
+void PlasmaSwitch::step() {
+	app::Switch::step();
+	const double nowSec = system::getTime();
+	const double dt = lastStepSec > 0.0 ? std::max(0.0, nowSec - lastStepSec) : 0.0;
+	lastStepSec = nowSec;
+	animationSec += dt;
+
+	engine::ParamQuantity* pq = getParamQuantity();
+	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
+	const float response = target > displayValue ? 13.5f : 11.0f;
+	displayValue += (target - displayValue) * clamp(float(dt) * response, 0.f, 1.f);
+	if (std::fabs(target - displayValue) < 0.001f) {
+		displayValue = target;
+	}
+}
+
+void PlasmaSwitch::draw(const DrawArgs& args) {
+	if (box.size.x <= 1.f || box.size.y <= 1.f) {
+		return;
+	}
+
+	const std::string fullPath = asset::plugin(pluginInstance, "res/icon/PlasmaSwitchSmall.png");
+	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+	if (image && image->handle >= 0) {
+		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, fullPath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+
+	const float cx = box.size.x * 0.5f;
+	const float topY = box.size.y * 0.335f;
+	const float bottomY = box.size.y * 0.665f;
+	const float cy = crossfade(bottomY, topY, clamp(displayValue, 0.f, 1.f));
+	const float pulse = 0.5f + 0.5f * std::sin(float(animationSec * 3.0));
+	const float flicker = 0.5f + 0.5f * std::sin(float(animationSec * 5.2 + 1.4));
+	const float hueBlend = 0.5f + 0.5f * std::sin(float(animationSec * 0.82 + 0.6));
+	const float coreR = box.size.x * crossfade(0.130f, 0.148f, pulse);
+	const float glowR = box.size.x * crossfade(0.28f, 0.35f, flicker);
+	const NVGcolor cyan = nvgRGBA(0x2a, 0xf4, 0xff, 190);
+	const NVGcolor purple = nvgRGBA(0xd3, 0xa0, 0xff, 176);
+	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
+		t = clamp(t, 0.f, 1.f);
+		NVGcolor out;
+		out.r = a.r + (b.r - a.r) * t;
+		out.g = a.g + (b.g - a.g) * t;
+		out.b = a.b + (b.b - a.b) * t;
+		out.a = a.a + (b.a - a.a) * t;
+		return out;
+	};
+	const NVGcolor glowColor = blendColor(cyan, purple, hueBlend);
+	const NVGcolor accentColor = blendColor(purple, cyan, 1.f - hueBlend * 0.55f);
+
+	nvgSave(args.vg);
+	nvgScissor(args.vg, box.size.x * 0.19f, box.size.y * 0.13f, box.size.x * 0.62f, box.size.y * 0.74f);
+
+	NVGpaint outerGlow = nvgRadialGradient(args.vg, cx, cy, coreR * 0.55f, glowR,
+		nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.34f), nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, glowR);
+	nvgFillPaint(args.vg, outerGlow);
+	nvgFill(args.vg);
+
+	NVGpaint violetGlow = nvgRadialGradient(args.vg, cx + coreR * 0.42f, cy + coreR * 0.18f, coreR * 0.18f, glowR * 0.72f,
+		nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.43f), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx + coreR * 0.2f, cy, glowR * 0.76f);
+	nvgFillPaint(args.vg, violetGlow);
+	nvgFill(args.vg);
+
+	NVGpaint core = nvgRadialGradient(args.vg, cx - coreR * 0.2f, cy - coreR * 0.22f, coreR * 0.08f, coreR * 1.18f,
+		nvgRGBA(255, 255, 255, 242), nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.92f));
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, coreR);
+	nvgFillPaint(args.vg, core);
+	nvgFill(args.vg);
+
+	for (int i = 0; i < 5; ++i) {
+		const float phase = float(animationSec * (1.9 + 0.37 * i) + double(i) * 1.73);
+		const float ox = std::sin(phase) * coreR * (0.42f + 0.08f * i);
+		const float oy = std::cos(phase * 1.21f) * coreR * 0.46f;
+		const float sparkR = coreR * (0.16f + 0.035f * float(i & 1));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx + ox, cy + oy, sparkR);
+		nvgFillColor(args.vg, i & 1 ? nvgRGBA(0xff, 0xb8, 0x00, 105) : nvgRGBA(255, 255, 255, 124));
+		nvgFill(args.vg);
+	}
+
+	nvgRestore(args.vg);
+
+	const float lensX = box.size.x * 0.245f;
+	const float lensY = box.size.y * 0.185f;
+	const float lensW = box.size.x * 0.51f;
+	const float lensH = box.size.y * 0.63f;
+	const float lensR = box.size.x * 0.075f;
+	nvgSave(args.vg);
+	nvgBeginPath(args.vg);
+	nvgRoundedRect(args.vg, lensX, lensY, lensW, lensH, lensR);
+	NVGpaint lensShade = nvgLinearGradient(args.vg, lensX, lensY, lensX + lensW * 0.55f, lensY + lensH,
+		nvgRGBA(0, 0, 0, 18), nvgRGBA(0, 0, 0, 72));
+	nvgFillPaint(args.vg, lensShade);
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgRoundedRect(args.vg, lensX + 0.35f, lensY + 0.35f, lensW - 0.7f, lensH - 0.7f, std::max(0.f, lensR - 0.35f));
+	nvgStrokeWidth(args.vg, std::max(0.38f, box.size.x * 0.030f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+	nvgStroke(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgMoveTo(args.vg, lensX + lensR * 0.9f, lensY + 0.95f);
+	nvgLineTo(args.vg, lensX + lensW - lensR * 0.9f, lensY + 0.95f);
+	nvgStrokeWidth(args.vg, std::max(0.28f, box.size.x * 0.018f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 30));
+	nvgStroke(args.vg);
+
+	NVGpaint edgeShadow = nvgBoxGradient(args.vg, lensX, lensY, lensW, lensH, lensR, box.size.x * 0.16f,
+		nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 82));
+	nvgBeginPath(args.vg);
+	nvgRoundedRect(args.vg, lensX, lensY, lensW, lensH, lensR);
+	nvgStrokeWidth(args.vg, std::max(0.7f, box.size.x * 0.055f));
+	nvgStrokePaint(args.vg, edgeShadow);
+	nvgStroke(args.vg);
+	nvgRestore(args.vg);
 }
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
