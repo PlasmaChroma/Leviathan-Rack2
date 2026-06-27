@@ -143,10 +143,18 @@ struct GoldButton : app::SvgSwitch {
 
 struct PlasmaSwitch : app::Switch {
 	float displayValue = 0.f;
+	float pulseAmount = 0.5f;
+	float flickerAmount = 0.5f;
+	float hueAmount = 0.5f;
+	float sparkOffsetX[3] = {};
+	float sparkOffsetY[3] = {};
 	double animationSec = 0.0;
 	double lastStepSec = 0.0;
 	std::string backingFullPath;
 	std::shared_ptr<window::Image> backingImage;
+	NVGcontext* backingImageVg = nullptr;
+	int backingImageHandle = -1;
+	int backingLifecycleHandle = -1;
 
 	PlasmaSwitch();
 	void step() override;
