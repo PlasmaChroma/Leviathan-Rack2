@@ -980,7 +980,7 @@ constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kPlasmaSwitchHeightPx = 22.0f;
 constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
-constexpr float kPlasmaSwitchShadowBleedPx = 12.f;
+constexpr float kPlasmaSwitchShadowBleedPx = 6.f;
 constexpr double kPlasmaSwitchAnimationCacheFps = 120.0;
 constexpr bool kUseSharedPlasmaSwitchOrbRenderer = false;
 
@@ -997,17 +997,18 @@ double getSharedPlasmaSwitchAnimationSec() {
 struct PlasmaSwitchStaticLayerWidget : TransparentWidget {
 	Vec componentSize;
 
-	void drawBodySilhouette(const DrawArgs& args, float inset, float dx, float dy) {
+	void drawBodySilhouette(
+		const DrawArgs& args, float inset, float dx, float dy, float topExpansion = 0.f, float topSlope = 0.f) {
 		const float x0 = inset + dx;
-		const float y0 = inset + dy;
+		const float y0 = inset + dy + topExpansion;
 		const float x1 = componentSize.x - inset + dx;
 		const float y1 = componentSize.y - inset + dy;
 		const float chamferX = componentSize.x * 0.18f;
 		const float chamferY = componentSize.y * 0.105f;
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x0 + chamferX, y0);
-		nvgLineTo(args.vg, x1 - chamferX, y0);
-		nvgLineTo(args.vg, x1, y0 + chamferY);
+		nvgLineTo(args.vg, x1 - chamferX, y0 + topSlope);
+		nvgLineTo(args.vg, x1, y0 + chamferY + topSlope);
 		nvgLineTo(args.vg, x1, y1 - chamferY);
 		nvgLineTo(args.vg, x1 - chamferX, y1);
 		nvgLineTo(args.vg, x0 + chamferX, y1);
@@ -1018,31 +1019,22 @@ struct PlasmaSwitchStaticLayerWidget : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		auto fillShadowPass = [&](float inset, float dx, float dy, int alpha) {
-			const float x = inset + dx;
-			const float y = inset + dy;
-			const float w = componentSize.x - 2.f * inset;
-			const float h = componentSize.y - 2.f * inset;
-			const float radius = componentSize.x * 0.105f;
-			const float feather = std::max(1.f, componentSize.x * 0.28f);
-			drawBodySilhouette(args, inset - feather, dx, dy);
-			NVGpaint paint = nvgBoxGradient(
-				args.vg,
-				x,
-				y,
-				w,
-				h,
-				radius,
-				feather,
-				nvgRGBA(0, 0, 0, alpha),
-				nvgRGBA(0, 0, 0, 0));
-			nvgFillPaint(args.vg, paint);
-			nvgFill(args.vg);
+			const float feather = std::max(1.f, componentSize.x * 0.12f);
+			constexpr int FEATHER_STEPS = 10;
+			const int stepAlpha = std::max(1, int(std::round(float(alpha) / 8.4f)));
+			for (int i = 0; i < FEATHER_STEPS; ++i) {
+				const float t = float(i) / float(FEATHER_STEPS - 1);
+				const float expansion = feather * (1.f - t);
+				drawBodySilhouette(args, inset - expansion, dx, dy, expansion * 0.95f);
+				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, stepAlpha));
+				nvgFill(args.vg);
+			}
 		};
 
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, kPlasmaSwitchShadowBleedPx * 0.5f, kPlasmaSwitchShadowBleedPx * 0.5f);
-		fillShadowPass(componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f, 82);
-		fillShadowPass(componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f, 58);
+		fillShadowPass(componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f, 52);
+		fillShadowPass(componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f, 34);
 		nvgRestore(args.vg);
 	}
 };

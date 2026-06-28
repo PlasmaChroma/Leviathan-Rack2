@@ -1441,6 +1441,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));
 		previewBuildTimer.markAnchorsDone();
 
+		std::vector<widget::FramebufferWidget*> pendingShapeGlyphFramebuffers;
 		{
 			auto addCurveModeOverlay = [&](Vec centerMm, int shapeModeParamId, bool ch4) {
 				const Vec centerPx = mm2px(centerMm);
@@ -1470,7 +1471,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				IntegralFluxTimedShapeModeGlyphSvg* shapeGlyphSvg = new IntegralFluxTimedShapeModeGlyphSvg();
 				shapeGlyphSvg->box.size = shapeGlyphFb->box.size;
 				shapeGlyphFb->addChild(shapeGlyphSvg);
-				addChild(shapeGlyphFb);
+				pendingShapeGlyphFramebuffers.push_back(shapeGlyphFb);
 
 				IntegralFluxShapeModeGlyphOverlay* shapeGlyphs = new IntegralFluxShapeModeGlyphOverlay(
 					module, shapeModeParamId);
@@ -1594,6 +1595,10 @@ struct IntegralFluxWidget : ModuleWidget {
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<MagentaApertureLight>>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
 		addChild(createLightCentered<IntegralFluxTimedApertureLight<SmallAperture<GreenApertureLight>>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
+
+		for (widget::FramebufferWidget* shapeGlyphFb : pendingShapeGlyphFramebuffers) {
+			addChild(shapeGlyphFb);
+		}
 
 		IntegralFluxCentralTooltipOverlay* centralTooltip = new IntegralFluxCentralTooltipOverlay();
 		centralTooltip->box.size = mm2px(Vec(32.f, 7.6f));
