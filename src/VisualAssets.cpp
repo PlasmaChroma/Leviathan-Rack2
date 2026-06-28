@@ -983,6 +983,7 @@ constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
 constexpr float kPlasmaSwitchShadowBleedPx = 8.f;
 constexpr double kPlasmaSwitchAnimationCacheFps = 120.0;
 constexpr bool kUseSharedPlasmaSwitchOrbRenderer = false;
+constexpr bool kDrawPlasmaSwitchGlass = false;
 
 uint64_t getSharedPlasmaSwitchAnimationFrame() {
 	static const double startSec = system::getTime();
@@ -2565,9 +2566,67 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 
 	nvgRestore(args.vg);
 
+	if (kDrawPlasmaSwitchGlass) {
 	nvgSave(args.vg);
 	drawChamferRect(lensX, lensY, lensW, lensH, lensR);
-	nvgFillColor(args.vg, nvgRGBA(106, 54, 164, 18));
+	nvgFillColor(args.vg, nvgRGBA(92, 42, 154, 52));
+	nvgFill(args.vg);
+
+	const float glassInnerX = lensX + 0.35f;
+	const float glassInnerY = lensY + 0.35f;
+	const float glassInnerW = lensW - 0.7f;
+	const float glassInnerH = lensH - 0.7f;
+	const float glassInnerR = std::max(0.f, lensR - 0.35f);
+
+	drawChamferRect(glassInnerX, glassInnerY, glassInnerW, glassInnerH, glassInnerR);
+	NVGpaint leftCurveShade = nvgLinearGradient(
+		args.vg,
+		glassInnerX,
+		glassInnerY,
+		cx,
+		glassInnerY,
+		nvgRGBA(34, 16, 72, 54),
+		nvgRGBA(92, 56, 150, 0));
+	nvgFillPaint(args.vg, leftCurveShade);
+	nvgFill(args.vg);
+
+	drawChamferRect(glassInnerX, glassInnerY, glassInnerW, glassInnerH, glassInnerR);
+	NVGpaint rightCurveShade = nvgLinearGradient(
+		args.vg,
+		cx,
+		glassInnerY,
+		glassInnerX + glassInnerW,
+		glassInnerY,
+		nvgRGBA(92, 56, 150, 0),
+		nvgRGBA(28, 14, 62, 58));
+	nvgFillPaint(args.vg, rightCurveShade);
+	nvgFill(args.vg);
+
+	const float highlightHalfW = glassInnerW * 0.20f;
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, cx - highlightHalfW, glassInnerY, highlightHalfW, glassInnerH);
+	NVGpaint highlightLeft = nvgLinearGradient(
+		args.vg,
+		cx - highlightHalfW,
+		glassInnerY,
+		cx,
+		glassInnerY,
+		nvgRGBA(232, 220, 255, 0),
+		nvgRGBA(244, 236, 255, 42));
+	nvgFillPaint(args.vg, highlightLeft);
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, cx, glassInnerY, highlightHalfW, glassInnerH);
+	NVGpaint highlightRight = nvgLinearGradient(
+		args.vg,
+		cx,
+		glassInnerY,
+		cx + highlightHalfW,
+		glassInnerY,
+		nvgRGBA(244, 236, 255, 42),
+		nvgRGBA(232, 220, 255, 0));
+	nvgFillPaint(args.vg, highlightRight);
 	nvgFill(args.vg);
 
 	drawChamferRect(lensX + 0.35f, lensY + 0.35f, lensW - 0.7f, lensH - 0.7f, std::max(0.f, lensR - 0.35f));
@@ -2575,6 +2634,7 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	nvgStrokeColor(args.vg, nvgRGBA(218, 178, 255, 24));
 	nvgStroke(args.vg);
 	nvgRestore(args.vg);
+	}
 }
 
 void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
