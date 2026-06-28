@@ -980,7 +980,7 @@ constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kPlasmaSwitchHeightPx = 22.0f;
 constexpr float kPlasmaSwitchWidthPx = kPlasmaSwitchHeightPx * (168.f / 262.f);
-constexpr float kPlasmaSwitchShadowBleedPx = 6.f;
+constexpr float kPlasmaSwitchShadowBleedPx = 8.f;
 constexpr double kPlasmaSwitchAnimationCacheFps = 120.0;
 constexpr bool kUseSharedPlasmaSwitchOrbRenderer = false;
 
@@ -1026,15 +1026,16 @@ struct PlasmaSwitchStaticLayerWidget : TransparentWidget {
 				const float t = float(i) / float(FEATHER_STEPS - 1);
 				const float expansion = feather * (1.f - t);
 				drawBodySilhouette(args, inset - expansion, dx, dy, expansion * 0.95f);
-				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, stepAlpha));
+				const int layerAlpha = std::max(1, int(std::round(float(stepAlpha) * crossfade(0.3f, 1.7f, t))));
+				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, layerAlpha));
 				nvgFill(args.vg);
 			}
 		};
 
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, kPlasmaSwitchShadowBleedPx * 0.5f, kPlasmaSwitchShadowBleedPx * 0.5f);
-		fillShadowPass(componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f, 52);
-		fillShadowPass(componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f, 34);
+		fillShadowPass(componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f, 44);
+		fillShadowPass(componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f, 28);
 		nvgRestore(args.vg);
 	}
 };
