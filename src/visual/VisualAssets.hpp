@@ -2,10 +2,15 @@
 
 #include "../plugin.hpp"
 #include "ApertureLight.hpp"
+#include "PlasmaSwitch.hpp"
 
 namespace visual_assets {
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
+int loadPluginRasterMipmapHandle(
+	NVGcontext* vg,
+	std::shared_ptr<window::Image> lifecycleImage,
+	const std::string& fullPath);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);
@@ -139,23 +144,6 @@ struct GoldButton : app::SvgSwitch {
 
 	GoldButton();
 	void step() override;
-};
-
-struct PlasmaSwitch : app::Switch {
-	float displayValue = 0.f;
-	bool displayValueInitialized = false;
-	float pulseAmount = 0.5f;
-	float flickerAmount = 0.5f;
-	float hueAmount = 0.5f;
-	float sparkOffsetX[3] = {};
-	float sparkOffsetY[3] = {};
-	double lastStepSec = 0.0;
-	std::string backingFullPath;
-	widget::FramebufferWidget* shadowFb = nullptr;
-
-	PlasmaSwitch();
-	void step() override;
-	void draw(const DrawArgs& args) override;
 };
 
 struct GearKnobInvertSized : app::SvgKnob {
