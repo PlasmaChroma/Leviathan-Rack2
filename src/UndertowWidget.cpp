@@ -2,7 +2,7 @@
 #include "UndertowShape.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <chrono>

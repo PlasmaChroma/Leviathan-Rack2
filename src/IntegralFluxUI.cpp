@@ -2,7 +2,7 @@
 #include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>

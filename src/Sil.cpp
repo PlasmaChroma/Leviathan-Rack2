@@ -1,6 +1,6 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
 #include <vector>

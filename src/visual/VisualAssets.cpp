@@ -1,7 +1,7 @@
 #include "VisualAssets.hpp"
-#include "MathHelpers.hpp"
-#include "NvgGraphicsLifecycle.hpp"
-#include "PanelSvgUtils.hpp"
+#include "../MathHelpers.hpp"
+#include "../NvgGraphicsLifecycle.hpp"
+#include "../PanelSvgUtils.hpp"
 
 #include <chrono>
 #include <cstdint>

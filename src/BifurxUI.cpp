@@ -1,7 +1,7 @@
 #include "Bifurx.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "BifurxWorker.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 #include <unordered_map>
 
 namespace bifurx {

@@ -1,6 +1,6 @@
 #include "Bulkhead.hpp"
 #include "PanelSvgUtils.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 
 namespace {
 

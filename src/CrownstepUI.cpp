@@ -2,7 +2,7 @@
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>

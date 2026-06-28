@@ -1,7 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <cstdio>
 

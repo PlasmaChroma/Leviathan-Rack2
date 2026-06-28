@@ -1,5 +1,5 @@
 #include "TDScope.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <chrono>
 #include <cstdio>

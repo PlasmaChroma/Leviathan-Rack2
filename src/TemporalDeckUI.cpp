@@ -3,7 +3,7 @@
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
-#include "VisualAssets.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <array>
