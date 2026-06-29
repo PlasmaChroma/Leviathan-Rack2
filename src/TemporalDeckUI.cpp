@@ -191,8 +191,8 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const float gap = std::max(0.010f, total * 0.0048f);
     const float centerStep = total / float(TemporalDeck::kArcLightCount - 1);
     const float segmentSweep = std::max(0.001f, centerStep - gap);
-    const float capStartAngle = startAngle - 0.5f * segmentSweep;
-    const float capEndAngle = endAngle + 0.5f * segmentSweep;
+    const float borderStartAngle = startAngle - 0.5f * centerStep;
+    const float borderEndAngle = endAngle + 0.5f * centerStep;
     const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
     const float bloomLow = bloomRaw + 2.2f * bloomRaw * (1.f - bloomRaw);
     const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
@@ -204,17 +204,6 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const NVGcolor litHot = nvgRGBA(122, 252, 255, 188);
     const NVGcolor limitCore = nvgRGBA(220, 32, 24, 238);
     const NVGcolor limitHot = nvgRGBA(255, 114, 74, 230);
-
-    nvgSave(args.vg);
-
-    const float backWidth = segmentWidth + 1.8f;
-    drawArcBand(args, capStartAngle, capEndAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
-    strokeArc(args, capStartAngle, capEndAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
-              nvgRGBA(126, 194, 225, 62));
-    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
-              nvgRGBA(185, 218, 240, 44));
-    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
-              nvgRGBA(0, 1, 8, 196));
 
     std::array<float, TemporalDeck::kArcLightCount> redByIndex{};
     const bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
@@ -230,13 +219,61 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const float valueSegmentUnits = clamp(valueNorm * float(TemporalDeck::kArcLightCount), 0.f,
                                           float(TemporalDeck::kArcLightCount));
 
+    auto valueForLightIndex = [&](int i) {
+      const int valueOrder = sampleDisplay ? (TemporalDeck::kArcLightCount - 1 - i) : i;
+      return clamp(valueSegmentUnits - float(valueOrder), 0.f, 1.f);
+    };
+
+    nvgSave(args.vg);
+
+    if (bloom > 0.001f) {
+      auto bloomColor = [&](NVGcolor color) {
+        color.a *= bloom;
+        return color;
+      };
+      const NVGcolor inactiveOuterGlow = bloomColor(nvgRGBA(126, 70, 230, 30));
+      const NVGcolor activeOuterGlow = bloomColor(nvgRGBA(0, 210, 255, 34));
+      const NVGcolor inactiveMidGlow = bloomColor(nvgRGBA(154, 84, 245, 50));
+      const NVGcolor activeMidGlow = bloomColor(nvgRGBA(0, 225, 255, 58));
+      const NVGcolor inactiveInnerGlow = bloomColor(nvgRGBA(192, 123, 255, 72));
+      const NVGcolor activeInnerGlow = bloomColor(nvgRGBA(30, 245, 255, 88));
+      const NVGcolor limitOuterGlow = bloomColor(nvgRGBA(220, 32, 24, 44));
+      const NVGcolor limitMidGlow = bloomColor(nvgRGBA(255, 82, 42, 68));
+      const NVGcolor limitInnerGlow = bloomColor(nvgRGBA(255, 126, 74, 84));
+      for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+        const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
+        const float segmentCenter = startAngle + centerStep * float(visualIndex);
+        const float a0 = segmentCenter - 0.5f * segmentSweep;
+        const float a1 = segmentCenter + 0.5f * segmentSweep;
+        const float yellow = valueForLightIndex(i);
+        const float red = redByIndex[i];
+        NVGcolor outerGlow = blendColor(inactiveOuterGlow, activeOuterGlow, yellow);
+        NVGcolor midGlow = blendColor(inactiveMidGlow, activeMidGlow, yellow);
+        NVGcolor innerGlow = blendColor(inactiveInnerGlow, activeInnerGlow, yellow);
+        outerGlow = blendColor(outerGlow, limitOuterGlow, red);
+        midGlow = blendColor(midGlow, limitMidGlow, red);
+        innerGlow = blendColor(innerGlow, limitInnerGlow, red);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 6.8f, outerGlow);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 4.2f, midGlow);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 2.0f, innerGlow);
+      }
+    }
+
+    const float backWidth = segmentWidth + 1.8f;
+    drawArcBand(args, borderStartAngle, borderEndAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
+              nvgRGBA(126, 194, 225, 62));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
+              nvgRGBA(185, 218, 240, 44));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
+              nvgRGBA(0, 1, 8, 196));
+
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
       const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
       const float segmentCenter = startAngle + centerStep * float(visualIndex);
       const float a0 = segmentCenter - 0.5f * segmentSweep;
       const float a1 = segmentCenter + 0.5f * segmentSweep;
-      const int valueOrder = sampleDisplay ? (TemporalDeck::kArcLightCount - 1 - i) : i;
-      const float yellow = clamp(valueSegmentUnits - float(valueOrder), 0.f, 1.f);
+      const float yellow = valueForLightIndex(i);
       const float red = redByIndex[i];
       NVGcolor core = blendColor(unlitCore, litCore, yellow);
       NVGcolor hot = blendColor(unlitHot, litHot, yellow);
@@ -246,9 +283,9 @@ struct TemporalDeckArcWidget : TransparentWidget {
       drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
     }
 
-    drawEndCapPiece(args, capStartAngle, segmentRadius, segmentWidth);
-    drawEndCapPiece(args, capEndAngle, segmentRadius, segmentWidth);
-    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
+    drawEndCapPiece(args, borderStartAngle, segmentRadius, segmentWidth);
+    drawEndCapPiece(args, borderEndAngle, segmentRadius, segmentWidth);
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
               nvgRGBA(155, 170, 190, 42));
 
     nvgRestore(args.vg);
