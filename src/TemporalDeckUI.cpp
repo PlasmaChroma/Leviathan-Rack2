@@ -73,6 +73,136 @@ struct TemporalDeckTonearmWidget : Widget {
   void draw(const DrawArgs &args) override;
 };
 
+struct TemporalDeckArcWidget : TransparentWidget {
+  TemporalDeck *module = nullptr;
+  Vec centerPx = mm2px(Vec(50.8f, 72.f));
+  float radiusPx = mm2px(Vec(33.0f, 0.f)).x;
+
+  static NVGcolor blendColor(NVGcolor a, NVGcolor b, float t) {
+    t = clamp(t, 0.f, 1.f);
+    NVGcolor out;
+    out.r = crossfade(a.r, b.r, t);
+    out.g = crossfade(a.g, b.g, t);
+    out.b = crossfade(a.b, b.b, t);
+    out.a = crossfade(a.a, b.a, t);
+    return out;
+  }
+
+  void drawArcBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor color) const {
+    if (a1 <= a0 || width <= 0.f) {
+      return;
+    }
+    const float halfWidth = 0.5f * width;
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius + halfWidth, a0, a1, NVG_CW);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius - halfWidth, a1, a0, NVG_CCW);
+    nvgClosePath(args.vg);
+    nvgFillColor(args.vg, color);
+    nvgFill(args.vg);
+  }
+
+  void strokeArc(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor color) const {
+    if (a1 <= a0 || width <= 0.f) {
+      return;
+    }
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius, a0, a1, NVG_CW);
+    nvgStrokeColor(args.vg, color);
+    nvgStrokeWidth(args.vg, width);
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgStroke(args.vg);
+  }
+
+  void drawSegmentBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
+                       NVGcolor highlight, float glow) const {
+    if (a1 <= a0) {
+      return;
+    }
+    drawArcBand(args, a0, a1, radius, width + 1.0f, nvgRGBA(0, 0, 4, 226));
+
+    const float halfWidth = 0.5f * width;
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius + halfWidth, a0, a1, NVG_CW);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius - halfWidth, a1, a0, NVG_CCW);
+    nvgClosePath(args.vg);
+    NVGpaint paint = nvgLinearGradient(args.vg,
+                                       centerPx.x + std::cos(a0) * radius,
+                                       centerPx.y + std::sin(a0) * radius,
+                                       centerPx.x + std::cos(a1) * radius,
+                                       centerPx.y + std::sin(a1) * radius,
+                                       fill,
+                                       highlight);
+    nvgFillPaint(args.vg, paint);
+    nvgFill(args.vg);
+
+    strokeArc(args, a0, a1, radius + halfWidth * 0.82f, std::max(0.22f, width * 0.075f), nvgRGBA(0, 1, 7, 166));
+    strokeArc(args, a0, a1, radius - halfWidth * 0.50f, std::max(0.30f, width * 0.11f), highlight);
+    if (glow > 0.001f) {
+      NVGcolor glowColor = highlight;
+      glowColor.a *= glow;
+      strokeArc(args, a0, a1, radius, width + 3.2f, glowColor);
+    }
+  }
+
+  void draw(const DrawArgs &args) override {
+    if (!module || radiusPx <= 1.f) {
+      return;
+    }
+
+    const float startAngle = -float(M_PI);
+    const float endAngle = 0.f;
+    const float total = endAngle - startAngle;
+    const float segmentWidth = std::max(4.2f, radiusPx * 0.095f);
+    const float segmentRadius = radiusPx;
+    const float gap = std::max(0.010f, total * 0.0048f);
+    const float step = total / float(TemporalDeck::kArcLightCount);
+    const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+    const float bloomLow = bloomRaw + 2.2f * bloomRaw * (1.f - bloomRaw);
+    const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+    const float bloom = bloomLow * (1.0f + 1.1f * bloomRamp * bloomRamp);
+
+    const NVGcolor unlitCore = nvgRGBA(120, 42, 13, 178);
+    const NVGcolor unlitHot = nvgRGBA(186, 70, 22, 118);
+    const NVGcolor litCore = nvgRGBA(255, 184, 0, 242);
+    const NVGcolor litHot = nvgRGBA(255, 234, 82, 232);
+    const NVGcolor redCore = nvgRGBA(220, 32, 24, 238);
+    const NVGcolor redHot = nvgRGBA(255, 114, 74, 230);
+
+    nvgSave(args.vg);
+
+    const float backWidth = segmentWidth + 1.8f;
+    drawArcBand(args, startAngle, endAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
+    strokeArc(args, startAngle, endAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
+              nvgRGBA(255, 210, 38, 56));
+    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
+              nvgRGBA(255, 238, 98, 46));
+    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
+              nvgRGBA(0, 1, 8, 196));
+
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
+      const float a0 = startAngle + step * float(visualIndex) + 0.5f * gap;
+      const float a1 = startAngle + step * float(visualIndex + 1) - 0.5f * gap;
+      const float yellow = clamp(module->lights[TemporalDeck::ARC_LIGHT_START + i].getBrightness(), 0.f, 1.f);
+      const float red = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
+      NVGcolor core = blendColor(unlitCore, litCore, yellow);
+      NVGcolor hot = blendColor(unlitHot, litHot, yellow);
+      core = blendColor(core, redCore, red);
+      hot = blendColor(hot, redHot, red);
+      const float segmentGlow = bloom * clamp(std::max(yellow, red) * 0.36f, 0.f, 0.58f);
+      drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
+    }
+
+    const float terminatorSweep = std::max(0.018f, step * 0.36f);
+    drawArcBand(args, startAngle, startAngle + terminatorSweep, segmentRadius, segmentWidth + 1.3f, nvgRGBA(0, 1, 8, 230));
+    drawArcBand(args, endAngle - terminatorSweep, endAngle, segmentRadius, segmentWidth + 1.3f, nvgRGBA(0, 1, 8, 230));
+    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
+              nvgRGBA(155, 170, 190, 42));
+
+    nvgRestore(args.vg);
+  }
+};
+
 static void drawTemporalDeckStepTriangle(const Widget::DrawArgs &args, const Vec &size, bool pointRight) {
   const float cx = 0.5f * size.x;
   const float cy = 0.5f * size.y;
@@ -3409,13 +3539,13 @@ struct TemporalDeckWidget : ModuleWidget {
     applyPointOverride("CARTRIDGE_CYCLE", &cartridgeCycleMm);
 
     float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
-    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
-      float angle = -float(M_PI) * t;
-      Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
-      addChild(createLightCentered<MediumLight<RedLight>>(ledPos, module, TemporalDeck::ARC_MAX_LIGHT_START + i));
-      addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
-    }
+    auto *arcWidget = new TemporalDeckArcWidget;
+    arcWidget->module = module;
+    arcWidget->centerPx = platterCenter;
+    arcWidget->radiusPx = arcRadius;
+    arcWidget->box.pos = Vec(0.f, 0.f);
+    arcWidget->box.size = box.size;
+    addChild(arcWidget);
 
     auto display = new TemporalDeckDisplayWidget();
     display->module = module;
