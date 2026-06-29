@@ -174,18 +174,27 @@
          sodipodi:nodetypes="csc"
          style="display:none" />
     </g>
-    <rect
+    <path
+       d="M 4.7463355,79.6
+          H 20.992665
+          Q 23.5,79.6 23.5,82.2
+          V 90.482001
+          Q 23.5,93.082001 26.007335,93.082001
+          H 61.970663
+          Q 64.477998,93.082001 64.477998,95.681999
+          V 118.579
+          Q 64.477998,121.17887 61.970663,121.17887
+          H 4.7463355
+          Q 2.2390001,121.17887 2.2390001,118.579
+          V 82.2
+          Q 2.2390001,79.6 4.7463355,79.6
+          Z"
        fill="#241935"
-       height="28.096869"
-       rx="2.5073354"
-       ry="2.5999999"
        stroke="#7e50c7"
        stroke-width="0.441909"
-       width="62.238998"
-       x="2.2390001"
-       y="93.082001"
        id="rect1631"
-       style="opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none" />
+       style="opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none"
+       sodipodi:nodetypes="ccccccccccccccccccccc" />
     <path
        d="m 20.865056,98.898431 0.01805,14.120149"
        stroke="url(#accentGrad)"
