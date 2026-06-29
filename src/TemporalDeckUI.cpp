@@ -193,9 +193,6 @@ struct TemporalDeckArcWidget : TransparentWidget {
       drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
     }
 
-    const float terminatorSweep = std::max(0.018f, step * 0.36f);
-    drawArcBand(args, startAngle, startAngle + terminatorSweep, segmentRadius, segmentWidth + 1.3f, nvgRGBA(0, 1, 8, 230));
-    drawArcBand(args, endAngle - terminatorSweep, endAngle, segmentRadius, segmentWidth + 1.3f, nvgRGBA(0, 1, 8, 230));
     strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
               nvgRGBA(155, 170, 190, 42));
 
