@@ -29,6 +29,7 @@ extern Model* modelCrownstep;
 extern Model* modelBifurx;
 extern Model* modelWyrm;
 extern Model* modelSil;
+extern Model* modelPachinkoTiming;
 extern Model* modelChronomaw;
 extern Model* modelBulkhead;
 extern Model* modelUndertow;

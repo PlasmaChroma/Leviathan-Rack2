@@ -819,6 +819,11 @@ struct TemporalDeckEngine {
   }
 
   void reset(float sr, bool resetBuffer = true) {
+    // Preserve playback position across sample rate change
+    double preserveSamplePlayheadSec = (sampleRate > 0) ? (samplePlayhead / sampleRate) : 0.0;
+    double preserveReadHeadSec = (sampleRate > 0) ? (readHead / sampleRate) : 0.0;
+    double preserveTimelineHeadSec = (sampleRate > 0) ? (timelineHead / sampleRate) : 0.0;
+
     sampleRate = sr;
     if (resetBuffer) {
       buffer.reset(sr, realBufferSecondsForMode(bufferDurationMode), isMonoBufferMode(bufferDurationMode));
@@ -832,9 +837,10 @@ struct TemporalDeckEngine {
     sampleFrames = 0;
     sampleStartIndex = 0;
     sampleAbsolutePeakVolts = 0.f;
-    samplePlayhead = 0.f;
-    readHead = 0.f;
-    timelineHead = 0.f;
+    // Restore positions in sample frames at new sample rate
+    samplePlayhead = (preserveSamplePlayheadSec > 0 && sr > 0) ? (preserveSamplePlayheadSec * sr) : 0.f;
+    readHead = (preserveReadHeadSec > 0 && sr > 0) ? (preserveReadHeadSec * sr) : 0.f;
+    timelineHead = (preserveTimelineHeadSec > 0 && sr > 0) ? (preserveTimelineHeadSec * sr) : 0.f;
     platterPhase = 0.f;
     platterVelocity = 0.f;
     scratchActive = false;
@@ -1776,9 +1782,12 @@ struct TemporalDeckEngine {
     buffer.size = std::max(1, int(buffer.left.size()));
     buffer.durationSeconds = std::max(1.f, float(buffer.size) / std::max(sampleRate, 1.f));
 
-    sampleFrames = std::max(0, std::min(frames, buffer.size));
-    buffer.filled = sampleFrames;
-    buffer.writeHead = buffer.wrapIndex(sampleFrames);
+    // Use the actual swapped buffer size, not the passed frames parameter.
+    // The passed frames may have been truncated or limited by buffer mode,
+    // but buffer.size reflects the actual storage capacity.
+    sampleFrames = buffer.size;
+    buffer.filled = std::min(sampleFrames, std::max(0, frames));
+    buffer.writeHead = buffer.wrapIndex(buffer.filled);
     resetLiveScopeEnvelope();
     if (preparedPreviewValid && preparedPreview) {
       preview = *preparedPreview;

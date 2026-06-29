@@ -227,9 +227,8 @@ void shutdownBifurxRenderService() {
 }
 
 void setBifurxVisualWorkerDefaultMode(int mode) {
-	(void) mode;
 	loadBifurxVisualWorkerDefaultModeIfNeeded();
-	gBifurxVisualWorkerDefaultMode.store(VISUAL_WORKER_ON, std::memory_order_relaxed);
+	gBifurxVisualWorkerDefaultMode.store(clamp(mode, VISUAL_WORKER_OFF, VISUAL_WORKER_INHERIT), std::memory_order_relaxed);
 }
 
 int getBifurxVisualWorkerDefaultMode() {

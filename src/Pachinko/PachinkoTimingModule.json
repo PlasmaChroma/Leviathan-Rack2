@@ -1,0 +1,8 @@
+{
+    "slug": "pachinko",
+    "name": "PachinkoTiming",
+    "description": "Pachinko-style timing gate module with physics simulation",
+    "author": "Leviathan",
+    "version": "1.0.0",
+    "license": "MIT"
+}

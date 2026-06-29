@@ -580,6 +580,8 @@ struct VinylInventoryState {
   std::string basePath = "res/Vinyl";
   int verifiedEntryCount = 0;
   std::vector<VinylInventoryEntry> entries;
+  // For tracking warnings - set by getVinylInventoryState() when warning issued
+  int lastWarningSerial = -1;
 };
 
 static void markVinylEntriesUnverified(VinylInventoryState *state, const std::string &reason) {
@@ -1288,19 +1290,22 @@ static const VinylInventoryState &getVinylInventoryState() {
   if (cachedSerial != serial) {
     state = mergeVinylInventoryStates(getBuiltInVinylInventoryState(), getExpandedVinylInventoryState());
     cachedSerial = serial;
+    // Reset warning state when inventory state changes
+    state.lastWarningSerial = -1;
   }
-  static bool warned = false;
-  if (warned) {
-    return state;
+  // Track warning state per error type
+  static thread_local int lastWarningSerial = -1;
+  if (lastWarningSerial == serial) {
+    return state;  // Already warned this cache cycle
   }
   if (!state.valid) {
-    warned = true;
+    lastWarningSerial = serial;
     WARN("TemporalDeck: invalid Vinyl inventory.json: %s", state.error.c_str());
   } else if (!state.signaturePresent) {
-    warned = true;
+    lastWarningSerial = serial;
     WARN("TemporalDeck: unsigned vinyl inventory: %s", state.signatureError.c_str());
   } else if (!state.signatureVerified) {
-    warned = true;
+    lastWarningSerial = serial;
     WARN("TemporalDeck: vinyl inventory signature check failed: %s", state.signatureError.c_str());
   }
   return state;

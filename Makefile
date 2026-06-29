@@ -12,6 +12,7 @@ LDFLAGS +=
 
 # Add .cpp files to the build
 SOURCES += $(wildcard src/*.cpp)
+SOURCES += $(wildcard src/Pachinko/*.cpp)
 
 # Add files to the ZIP package when running `make dist`
 # The compiled plugin and "plugin.json" are automatically added.
@@ -44,7 +45,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec \
-	build/tests/wave_preview_simplification_spec
+	build/tests/wave_preview_simplification_spec \
+	build/tests/pachinko_physics_spec
 
 
 TEST_BINS_RACK := \
@@ -188,6 +190,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
+	$(call run_test_bin,build/tests/pachinko_physics_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -291,6 +294,9 @@ build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter
 
 build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/wave_preview_simplification_spec.cpp -o $@
+
+build/tests/pachinko_physics_spec: tests/pachinko_physics_spec.cpp | build/tests
+	$(CXX) -std=c++11 -Wall -Wextra tests/pachinko_physics_spec.cpp -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

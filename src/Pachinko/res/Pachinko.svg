@@ -1,0 +1,64 @@
+<!-- Simple placeholder SVG for Pachinko module panel -->
+<svg width="350" height="500" viewBox="0 0 350 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="350" height="500" fill="#2a2a3a" stroke="#1a1a2a" stroke-width="2"/>
+  
+  <!-- Title -->
+  <text x="175" y="25" font-family="Arial" font-size="16" fill="#ffffff" text-anchor="middle">PACHINKO</text>
+  <text x="175" y="40" font-family="Arial" font-size="10" fill="#aaaaaa" text-anchor="middle">Timing Module</text>
+  
+  <!-- Ball Rate Knob -->
+  <circle cx="30" cy="50" r="15" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="2"/>
+  <text x="30" y="80" font-family="Arial" font-size="10" fill="#aaaaaa" text-anchor="middle">Ball Rate</text>
+  
+  <!-- Damping Knob -->
+  <circle cx="30" cy="110" r="15" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="2"/>
+  <text x="30" y="140" font-family="Arial" font-size="10" fill="#aaaaaa" text-anchor="middle">Damping</text>
+  
+  <!-- Clock Input -->
+  <rect x="10" y="170" width="40" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+  <text x="30" y="205" font-family="Arial" font-size="10" fill="#aaaaaa" text-anchor="middle">CLOCK</text>
+  
+  <!-- Reset Input -->
+  <rect x="10" y="210" width="40" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+  <text x="30" y="245" font-family="Arial" font-size="10" fill="#aaaaaa" text-anchor="middle">RESET</text>
+  
+  <!-- Output Gates (8 gates) -->
+  <g id="gates">
+    <rect x="270" y="50" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="60" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="85" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 1</text>
+    
+    <rect x="270" y="90" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="100" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="125" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 2</text>
+    
+    <rect x="270" y="130" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="140" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="165" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 3</text>
+    
+    <rect x="270" y="170" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="180" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="205" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 4</text>
+    
+    <rect x="270" y="210" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="220" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="245" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 5</text>
+    
+    <rect x="270" y="250" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="260" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="285" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 6</text>
+    
+    <rect x="270" y="290" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="300" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="325" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 7</text>
+    
+    <rect x="270" y="330" width="30" height="20" fill="#1a1a2a" stroke="#3a3a4a" stroke-width="1"/>
+    <circle cx="310" cy="340" r="5" fill="#2a2a3a" stroke="#3a3a4a" stroke-width="1"/>
+    <text x="295" y="365" font-family="Arial" font-size="8" fill="#aaaaaa" text-anchor="middle">OUT 8</text>
+  </g>
+  
+  <!-- Decorative peg area background -->
+  <rect x="60" y="60" width="230" height="300" fill="#2a2a3a" stroke="#1a1a2a" stroke-width="1" rx="5"/>
+  <text x="175" y="75" font-family="Arial" font-size="10" fill="#555555" text-anchor="middle">Physics Field</text>
+</svg>
