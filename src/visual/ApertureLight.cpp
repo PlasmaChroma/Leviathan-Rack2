@@ -34,6 +34,7 @@ void setApertureBaseColor(LeviathanApertureLight* light, NVGcolor color) {
 		return;
 	}
 	light->baseColor = color;
+	light->activeColor = color;
 	light->baseColors.clear();
 	light->addBaseColor(color);
 	light->invalidateStaticBackgroundCache();
@@ -205,8 +206,25 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
 
-	engine::Light* light = getLight(0);
-	const float t = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+	float t = 0.f;
+	float colorWeight = 0.f;
+	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
+	for (size_t i = 0; i < baseColors.size(); ++i) {
+		engine::Light* light = getLight(int(i));
+		const float brightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		t = std::max(t, brightness);
+		colorWeight += brightness;
+		mixedColor.r += baseColors[i].r * brightness;
+		mixedColor.g += baseColors[i].g * brightness;
+		mixedColor.b += baseColors[i].b * brightness;
+	}
+	if (colorWeight > 1e-6f) {
+		activeColor = nvgRGBAf(mixedColor.r / colorWeight, mixedColor.g / colorWeight,
+		                      mixedColor.b / colorWeight, 1.f);
+	}
+	else {
+		activeColor = baseColor;
+	}
 	const float glow = std::pow(t, 0.55f);
 	const float core = std::pow(t, 0.85f);
 	const float hot = std::pow(t, 3.0f);
@@ -218,8 +236,12 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 			if (!bloomFb->box.size.equals(box.size.plus(Vec(2.f * bloomCacheBleedPx, 2.f * bloomCacheBleedPx)))) {
 				syncBloomCache();
 			}
-			if (std::fabs(effectiveBloom - bloomCacheGlow) > 0.0005f) {
+			const float colorDelta = std::fabs(activeColor.r - bloomCacheColor.r) +
+			                         std::fabs(activeColor.g - bloomCacheColor.g) +
+			                         std::fabs(activeColor.b - bloomCacheColor.b);
+			if (std::fabs(effectiveBloom - bloomCacheGlow) > 0.0005f || colorDelta > 0.001f) {
 				bloomCacheGlow = effectiveBloom;
+				bloomCacheColor = activeColor;
 				bloomFb->setDirty();
 			}
 			nvgSave(vg);
@@ -335,9 +357,9 @@ void LeviathanApertureLight::drawUnlitLens(NVGcontext* vg, float cx, float cy) {
 }
 
 void LeviathanApertureLight::drawBloom(NVGcontext* vg, float cx, float cy, float glow) {
-	const NVGcolor inner = withNvgAlpha(baseColor, bloomAlpha * 0.95f * glow);
-	const NVGcolor mid = withNvgAlpha(baseColor, bloomAlpha * 0.34f * glow);
-	const NVGcolor outer = withNvgAlpha(baseColor, 0.f);
+	const NVGcolor inner = withNvgAlpha(activeColor, bloomAlpha * 0.95f * glow);
+	const NVGcolor mid = withNvgAlpha(activeColor, bloomAlpha * 0.34f * glow);
+	const NVGcolor outer = withNvgAlpha(activeColor, 0.f);
 
 	NVGpaint outerBloom = nvgRadialGradient(
 		vg,
@@ -368,8 +390,8 @@ void LeviathanApertureLight::drawBloom(NVGcontext* vg, float cx, float cy, float
 
 void LeviathanApertureLight::drawCore(NVGcontext* vg, float cx, float cy, float core, float hot) {
 	const NVGcolor hotWhite = nvgRGBAf(1.f, 1.f, 1.f, 1.f);
-	const NVGcolor center = withNvgAlpha(mixNvgColor(baseColor, hotWhite, 0.58f), 0.35f * core + 0.35f * hot);
-	const NVGcolor edge = withNvgAlpha(baseColor, 0.82f * core);
+	const NVGcolor center = withNvgAlpha(mixNvgColor(activeColor, hotWhite, 0.58f), 0.35f * core + 0.35f * hot);
+	const NVGcolor edge = withNvgAlpha(activeColor, 0.82f * core);
 
 	NVGpaint corePaint = nvgRadialGradient(
 		vg,
@@ -386,7 +408,7 @@ void LeviathanApertureLight::drawCore(NVGcontext* vg, float cx, float cy, float 
 
 	nvgBeginPath(vg);
 	nvgCircle(vg, cx, cy, coreRadius);
-	nvgFillColor(vg, withNvgAlpha(mixNvgColor(baseColor, hotWhite, 0.34f), 0.18f * core + 0.20f * hot));
+	nvgFillColor(vg, withNvgAlpha(mixNvgColor(activeColor, hotWhite, 0.34f), 0.18f * core + 0.20f * hot));
 	nvgFill(vg);
 }
 
@@ -457,6 +479,16 @@ BlueApertureLight::BlueApertureLight() {
 
 GreenApertureLight::GreenApertureLight() {
 	setApertureBaseColor(this, nvgRGB(134, 255, 107));
+}
+
+AmberGreenApertureLight::AmberGreenApertureLight() {
+	baseColor = nvgRGB(255, 195, 62);
+	activeColor = baseColor;
+	baseColors.clear();
+	addBaseColor(baseColor);
+	addBaseColor(nvgRGB(134, 255, 107));
+	invalidateStaticBackgroundCache();
+	invalidateBloomCache();
 }
 
 RedApertureLight::RedApertureLight() {

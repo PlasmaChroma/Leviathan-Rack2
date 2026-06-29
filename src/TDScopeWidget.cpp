@@ -205,8 +205,8 @@ struct TDScopeWidget : ModuleWidget {
     unpairedStatus = status;
     addChild(unpairedStatus);
 
-    addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
-    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
   }
 
   void step() override {

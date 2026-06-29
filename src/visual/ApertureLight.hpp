@@ -17,6 +17,7 @@ enum class ApertureLightSize {
 
 struct LeviathanApertureLight : app::ModuleLightWidget {
 	NVGcolor baseColor = nvgRGB(42, 246, 255);
+	NVGcolor activeColor = nvgRGB(42, 246, 255);
 	float socketRadius = 4.8f;
 	float lensRadius = 3.3f;
 	float coreRadius = 2.1f;
@@ -41,6 +42,7 @@ private:
 	BloomWidget* bloomWidget = nullptr;
 	float bloomCacheBleedPx = 0.f;
 	float bloomCacheGlow = -1.f;
+	NVGcolor bloomCacheColor = nvgRGBA(0, 0, 0, 0);
 
 	void syncStaticBackgroundCache();
 	void syncBloomCache();
@@ -116,6 +118,10 @@ struct BlueApertureLight : LeviathanApertureLight {
 
 struct GreenApertureLight : LeviathanApertureLight {
 	GreenApertureLight();
+};
+
+struct AmberGreenApertureLight : LeviathanApertureLight {
+	AmberGreenApertureLight();
 };
 
 struct RedApertureLight : LeviathanApertureLight {

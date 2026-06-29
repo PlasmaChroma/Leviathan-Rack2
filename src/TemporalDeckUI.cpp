@@ -3644,17 +3644,18 @@ struct TemporalDeckWidget : ModuleWidget {
     addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRMm), module, TemporalDeck::OUTPUT_R_OUTPUT));
     addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(sPosOutMm), module, TemporalDeck::S_POS_O_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(freezeLightMm), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(reverseLightMm), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
-                                                       TemporalDeck::SLIP_SLOW_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm), module, TemporalDeck::SLIP_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
-                                                       TemporalDeck::SLIP_FAST_LIGHT));
-    addChild(
-      createLightCentered<SmallLight<YellowLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
-    addChild(
-      createLightCentered<SmallLight<GreenLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_READY_LIGHT));
+    addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(freezeLightMm), module,
+                                                                 TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(reverseLightMm), module,
+                                                                 TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
+                                                                TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm), module,
+                                                                TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
+                                                                TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
