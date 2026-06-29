@@ -1,5 +1,6 @@
 #include "TemporalDeck.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "TemporalDeckEngine.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
@@ -188,7 +189,10 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const float segmentWidth = std::max(4.2f, radiusPx * 0.095f);
     const float segmentRadius = radiusPx;
     const float gap = std::max(0.010f, total * 0.0048f);
-    const float step = total / float(TemporalDeck::kArcLightCount);
+    const float centerStep = total / float(TemporalDeck::kArcLightCount - 1);
+    const float segmentSweep = std::max(0.001f, centerStep - gap);
+    const float capStartAngle = startAngle - 0.5f * segmentSweep;
+    const float capEndAngle = endAngle + 0.5f * segmentSweep;
     const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
     const float bloomLow = bloomRaw + 2.2f * bloomRaw * (1.f - bloomRaw);
     const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
@@ -204,31 +208,33 @@ struct TemporalDeckArcWidget : TransparentWidget {
     nvgSave(args.vg);
 
     const float backWidth = segmentWidth + 1.8f;
-    drawArcBand(args, startAngle, endAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
-    strokeArc(args, startAngle, endAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
+    drawArcBand(args, capStartAngle, capEndAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
+    strokeArc(args, capStartAngle, capEndAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
               nvgRGBA(126, 194, 225, 62));
-    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
+    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
               nvgRGBA(185, 218, 240, 44));
-    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
+    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
               nvgRGBA(0, 1, 8, 196));
 
-    std::array<float, TemporalDeck::kArcLightCount> yellowByIndex{};
     std::array<float, TemporalDeck::kArcLightCount> redByIndex{};
-    float yellowTotal = 0.f;
     const bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
-    const float maxSegmentValue = sampleDisplay ? 0.92f : 1.f;
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      yellowByIndex[i] = clamp(module->lights[TemporalDeck::ARC_LIGHT_START + i].getBrightness(), 0.f, 1.f);
       redByIndex[i] = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
-      yellowTotal += yellowByIndex[i];
     }
-    const float valueSegmentUnits = clamp(yellowTotal / std::max(1e-6f, maxSegmentValue), 0.f,
+    const float bufferNorm = clamp(module->params[TemporalDeck::BUFFER_PARAM].getValue(), 0.f, 1.f);
+    const float maxLagSamples =
+      std::max(1.f, module->getUiSampleRate() * temporaldeck_modes::usableBufferSecondsForMode(module->getBufferDurationMode()));
+    const float liveNorm = clamp(float(module->getUiLagSamples()) / maxLagSamples, 0.f, bufferNorm);
+    const float sampleNorm = clamp(float(module->getUiSampleProgress()) * bufferNorm, 0.f, bufferNorm);
+    const float valueNorm = sampleDisplay ? sampleNorm : liveNorm;
+    const float valueSegmentUnits = clamp(valueNorm * float(TemporalDeck::kArcLightCount), 0.f,
                                           float(TemporalDeck::kArcLightCount));
 
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
       const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
-      const float a0 = startAngle + step * float(visualIndex) + 0.5f * gap;
-      const float a1 = startAngle + step * float(visualIndex + 1) - 0.5f * gap;
+      const float segmentCenter = startAngle + centerStep * float(visualIndex);
+      const float a0 = segmentCenter - 0.5f * segmentSweep;
+      const float a1 = segmentCenter + 0.5f * segmentSweep;
       const int valueOrder = sampleDisplay ? (TemporalDeck::kArcLightCount - 1 - i) : i;
       const float yellow = clamp(valueSegmentUnits - float(valueOrder), 0.f, 1.f);
       const float red = redByIndex[i];
@@ -240,9 +246,9 @@ struct TemporalDeckArcWidget : TransparentWidget {
       drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
     }
 
-    drawEndCapPiece(args, startAngle, segmentRadius, segmentWidth);
-    drawEndCapPiece(args, endAngle, segmentRadius, segmentWidth);
-    strokeArc(args, startAngle, endAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
+    drawEndCapPiece(args, capStartAngle, segmentRadius, segmentWidth);
+    drawEndCapPiece(args, capEndAngle, segmentRadius, segmentWidth);
+    strokeArc(args, capStartAngle, capEndAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
               nvgRGBA(155, 170, 190, 42));
 
     nvgRestore(args.vg);
