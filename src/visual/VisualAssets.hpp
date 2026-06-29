@@ -14,7 +14,13 @@ int loadPluginRasterMipmapHandle(
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);
+enum class PreviewFrameTint {
+	Cyan,
+	Purple
+};
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
+Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint);
+Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createLeviathanFooterLogoWidget(math::Rect boundsMm);
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");

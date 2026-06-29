@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="wyrm.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -247,15 +247,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.8284271"
-   inkscape:cx="133.11285"
-   inkscape:cy="336.0525"
-   inkscape:window-width="1862"
-   inkscape:window-height="1016"
-   inkscape:window-x="1978"
-   inkscape:window-y="27"
+   inkscape:zoom="4"
+   inkscape:cx="128.125"
+   inkscape:cy="93.625001"
+   inkscape:window-width="2560"
+   inkscape:window-height="1377"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="g22"
+   inkscape:current-layer="panel_art"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -336,7 +336,7 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" /></g><rect
+   style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" /></g><rect
    x="57.409203"
    y="7794.9995"
    width="6965.585"
@@ -854,8 +854,8 @@
      y="0">XM</tspan></text>
       </g><rect
    id="WYRM_WAVE_EDITOR"
-   x="78.241165"
-   y="1054.4412"
-   width="6951.2178"
-   height="6228.8179"
-   style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.00000009;stroke-opacity:1;stroke-dasharray:none" /></svg>
+   x="78.404099"
+   y="952.07806"
+   width="6950.8921"
+   height="6331.0181"
+   style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" /></svg>

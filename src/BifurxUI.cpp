@@ -777,10 +777,23 @@ struct BifurxWidget final : ModuleWidget {
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/bifurx.svg");
+		const std::string panelPath = asset::plugin(pluginInstance, "res/bifurx.panel.svg");
 		try { setPanel(createPanel(panelPath)); }
 		catch (const std::exception& e) { setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg"))); box.size = mm2px(Vec(kDefaultPanelWidthMm, kDefaultPanelHeightMm)); }
 		previewBuildTimer.markPanelDone();
+		addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+		{
+			widget::SvgWidget* labels = new widget::SvgWidget();
+			labels->setSvg(visual_assets::loadPluginSvgCached("res/bifurx.labels.svg"));
+			labels->box.size = box.size;
+
+			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
+			labelsFb->box.size = box.size;
+			labelsFb->oversample = 2.0f;
+			labelsFb->dirtyOnSubpixelChange = true;
+			labelsFb->addChild(labels);
+			addChild(labelsFb);
+		}
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
@@ -793,6 +806,7 @@ struct BifurxWidget final : ModuleWidget {
 		
 		spectrumOpenGL = createGlSpectrumDisplay(module, sRect);
 		addChild(spectrumOpenGL);
+		addChild(visual_assets::createPreviewFrameEnhancementWidget(sRect));
 
 		bool showGL = (module && module->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);

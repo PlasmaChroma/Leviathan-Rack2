@@ -326,6 +326,7 @@ struct WyrmWidget : ModuleWidget {
 		editor->box.size = editorFb->box.size;
 		editorFb->addChild(editor);
 		addChild(editorFb);
+		addChild(visual_assets::createPreviewFrameEnhancementWidget(editorRectMm, visual_assets::PreviewFrameTint::Purple));
 		auto* freqReadout = new WyrmFrequencyReadoutWidget();
 		freqReadout->module = module;
 		freqReadout->box.pos = mm2px(freqReadoutRectMm.pos);

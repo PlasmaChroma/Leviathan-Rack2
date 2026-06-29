@@ -208,6 +208,8 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 
 struct PreviewFrameEnhancementWidget : TransparentWidget {
 	float outsideMarginPx = 0.f;
+	NVGcolor highlightColor = nvgRGBA(28, 202, 216, 115);
+	NVGcolor edgeHighlightColor = nvgRGBA(92, 245, 255, 42);
 
 	void draw(const DrawArgs& args) override {
 		const float x = outsideMarginPx;
@@ -223,7 +225,7 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, x - 0.55f, y - 0.55f, w + 1.1f, h + 1.1f);
 		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStrokeColor(args.vg, nvgRGBA(28, 202, 216, 115));
+		nvgStrokeColor(args.vg, highlightColor);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
@@ -239,7 +241,7 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 		nvgLineTo(args.vg, x - 0.6f, y - 0.6f);
 		nvgLineTo(args.vg, x + w + 0.25f, y - 0.6f);
 		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(92, 245, 255, 42));
+		nvgStrokeColor(args.vg, edgeHighlightColor);
 		nvgStroke(args.vg);
 
 		nvgRestore(args.vg);
@@ -713,6 +715,10 @@ Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGco
 }
 
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
+	return createPreviewFrameEnhancementWidget(rectMm, PreviewFrameTint::Cyan);
+}
+
+static Widget* createPreviewFrameEnhancementWidgetWithColors(math::Rect rectMm, NVGcolor highlightColor, NVGcolor edgeHighlightColor) {
 	if (rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
 		return new Widget();
 	}
@@ -724,9 +730,25 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
 
 	PreviewFrameEnhancementWidget* frame = new PreviewFrameEnhancementWidget();
 	frame->outsideMarginPx = mm2px(Vec(marginMm, 0.f)).x;
+	frame->highlightColor = highlightColor;
+	frame->edgeHighlightColor = edgeHighlightColor;
 	frame->box.size = fb->box.size;
 	fb->addChild(frame);
 	return fb;
+}
+
+Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint) {
+	switch (tint) {
+		case PreviewFrameTint::Purple:
+			return createPreviewFrameEnhancementWidgetWithColors(rectMm, nvgRGBA(134, 92, 255, 122), nvgRGBA(174, 132, 255, 46));
+		case PreviewFrameTint::Cyan:
+		default:
+			return createPreviewFrameEnhancementWidgetWithColors(rectMm, nvgRGBA(28, 202, 216, 115), nvgRGBA(92, 245, 255, 42));
+	}
+}
+
+Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor) {
+	return createPreviewFrameEnhancementWidgetWithColors(rectMm, highlightColor, nvgRGBAf(highlightColor.r, highlightColor.g, highlightColor.b, 42.f / 255.f));
 }
 
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {
