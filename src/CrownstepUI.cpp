@@ -3975,8 +3975,8 @@ struct CrownstepWidget final : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
-		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
+		addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
 	}
 
 	void step() override {

@@ -120,7 +120,6 @@ struct UnpairedStatusWidget final : TransparentWidget {
 }
 
 struct TDScopeWidget : ModuleWidget {
-  PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
   Widget *standardDisplay = nullptr;
   Widget *input = nullptr;
@@ -129,17 +128,6 @@ struct TDScopeWidget : ModuleWidget {
   math::Rect scopeRectPx;
   debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
   debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
-  static constexpr float kTopBarYmm = 9.522227f;
-  static constexpr float kTopBarLeftStartMm = 2.2491839f;
-
-  bool shouldRenderDockBridge() const {
-    TDScope *scopeModule = static_cast<TDScope *>(module);
-    if (!scopeModule) {
-      return false;
-    }
-    return tdscope::isTemporalDeckModule(scopeModule->leftExpander.module) ||
-           scopeModule->uiLinkActive.load(std::memory_order_relaxed);
-  }
 
   bool isPairedToTemporalDeck() const {
     TDScope *scopeModule = static_cast<TDScope *>(module);
@@ -152,9 +140,6 @@ struct TDScopeWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
-    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-      panelBorder = tdscope::findPanelBorder(svgPanel->fb);
-    }
 
     math::Rect scopeRectMm;
     if (!panel_svg::loadRectFromSvgMm(panelPath, "scope", &scopeRectMm)) {
@@ -175,6 +160,7 @@ struct TDScopeWidget : ModuleWidget {
     standardDisplay = tdscope::createDisplay(module, scopeRectMm);
     standardDisplay->setVisible(initialPairedToDeck);
     addChild(standardDisplay);
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(scopeRectMm));
     input = tdscope::createInput(module, scopeRectMm);
     input->setVisible(initialPairedToDeck);
     addChild(input);
@@ -211,7 +197,6 @@ struct TDScopeWidget : ModuleWidget {
     using PerfClock = std::chrono::steady_clock;
     const bool measurePerf = isDragonKingDebugEnabled();
     const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-    bool linkedToDeck = shouldRenderDockBridge();
     bool pairedToDeck = isPairedToTemporalDeck();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
@@ -229,14 +214,6 @@ struct TDScopeWidget : ModuleWidget {
     if (unpairedStatus) {
       unpairedStatus->setVisible(!pairedToDeck);
     }
-    const float borderGrowPx = linkedToDeck ? 3.f : 0.f;
-    if (panelBorder && (panelBorder->box.pos.x != -borderGrowPx || panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
-      panelBorder->box.pos.x = -borderGrowPx;
-      panelBorder->box.size.x = box.size.x + borderGrowPx;
-      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-        svgPanel->fb->dirty = true;
-      }
-    }
     ModuleWidget::step();
     if (scopeModule && measurePerf) {
       const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -253,28 +230,7 @@ struct TDScopeWidget : ModuleWidget {
     using PerfClock = std::chrono::steady_clock;
     const bool measurePerf = isDragonKingDebugEnabled();
     const PerfClock::time_point moduleDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-    bool linkedToDeck = shouldRenderDockBridge();
-    if (linkedToDeck) {
-      DrawArgs adjusted = args;
-      adjusted.clipBox.pos.x -= mm2px(0.3f);
-      adjusted.clipBox.size.x += mm2px(0.3f);
-      ModuleWidget::draw(adjusted);
-
-      float y = mm2px(kTopBarYmm);
-      float x0 = 0.f;
-      float x1 = mm2px(kTopBarLeftStartMm);
-      if (x1 > x0 + 0.1f) {
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255));
-        nvgStrokeWidth(args.vg, mm2px(0.50f));
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-      }
-    } else {
-      ModuleWidget::draw(args);
-    }
+    ModuleWidget::draw(args);
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {

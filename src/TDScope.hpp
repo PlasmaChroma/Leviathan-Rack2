@@ -22,7 +22,6 @@ extern std::atomic<uint32_t> gTDScopeDebugInstanceCounter;
 constexpr float kScopeDisplayVerticalSupersampleMax = 2.f;
 
 float computeScopeDisplayVerticalSupersample(float rackZoom);
-PanelBorder *findPanelBorder(Widget *widget);
 bool isTemporalDeckModule(const engine::Module *neighbor);
 Widget *createDisplay(TDScope *module, math::Rect scopeRectMm);
 Widget *createInput(TDScope *module, math::Rect scopeRectMm);

@@ -22,18 +22,6 @@ float computeScopeDisplayVerticalSupersample(float rackZoom) {
   return 0.55f;
 }
 
-PanelBorder *findPanelBorder(Widget *widget) {
-  if (!widget) {
-    return nullptr;
-  }
-  for (Widget *child : widget->children) {
-    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
-      return border;
-    }
-  }
-  return nullptr;
-}
-
 bool isTemporalDeckModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
     return false;

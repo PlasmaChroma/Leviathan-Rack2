@@ -3249,18 +3249,6 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
   }
 }
 
-static PanelBorder *findPanelBorder(Widget *widget) {
-  if (!widget) {
-    return nullptr;
-  }
-  for (Widget *child : widget->children) {
-    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
-      return border;
-    }
-  }
-  return nullptr;
-}
-
 static bool isTDScopeModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
     return false;
@@ -3276,15 +3264,12 @@ struct TemporalDeckWidget : ModuleWidget {
     uint64_t rowsWritten = 0;
   };
 
-  PanelBorder *panelBorder = nullptr;
   TemporalDeckScopeSpawnButton *scopeSpawnButton = nullptr;
   ScopeDragTraceRecorder scopeDragTraceRecorder;
   float uiStepUsEma = 0.f;
   float uiDrawUsEma = 0.f;
   debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
   debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
-  static constexpr float kTopBarYmm = 9.522227f;
-  static constexpr float kTopBarRightEndMm = 97.413935f;
 
   void spawnTDScopeRight();
   void startScopeDragTraceCapture();
@@ -3298,9 +3283,6 @@ struct TemporalDeckWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
-    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-      panelBorder = findPanelBorder(svgPanel->fb);
-    }
 
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -3491,28 +3473,7 @@ struct TemporalDeckWidget : ModuleWidget {
     };
 
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
-    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
-    if (linkedToScope) {
-      DrawArgs adjusted = args;
-      adjusted.clipBox.size.x += mm2px(0.3f);
-      ModuleWidget::draw(adjusted);
-
-      // Bridge the top purple divider to the right panel edge when docked.
-      float y = mm2px(kTopBarYmm);
-      float x0 = mm2px(kTopBarRightEndMm);
-      float x1 = box.size.x;
-      if (x1 > x0 + 0.1f) {
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
-        nvgStrokeWidth(args.vg, mm2px(0.50f));
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-      }
-    } else {
-      ModuleWidget::draw(args);
-    }
+    ModuleWidget::draw(args);
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
@@ -3561,13 +3522,6 @@ struct TemporalDeckWidget : ModuleWidget {
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (scopeSpawnButton) {
       scopeSpawnButton->setVisible(!linkedToScope);
-    }
-    const float borderGrowPx = linkedToScope ? 3.f : 0.f;
-    if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
-      panelBorder->box.size.x = box.size.x + borderGrowPx;
-      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-        svgPanel->fb->dirty = true;
-      }
     }
     ModuleWidget::step();
     if (measurePerf) {

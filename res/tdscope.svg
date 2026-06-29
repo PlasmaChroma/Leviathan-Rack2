@@ -11,7 +11,7 @@
    xml:space="preserve"
    id="svg488"
    sodipodi:docname="tdscope.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    inkscape:label="Wave Art"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -248,13 +248,13 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="81.513295"
-   inkscape:cy="85.514856"
-   inkscape:window-width="1862"
-   inkscape:window-height="1016"
-   inkscape:window-x="1978"
-   inkscape:window-y="27"
+   inkscape:zoom="2"
+   inkscape:cx="108.25"
+   inkscape:cy="243.25"
+   inkscape:window-width="2560"
+   inkscape:window-height="1377"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
    inkscape:window-maximized="1"
    inkscape:current-layer="svg488"
    showgrid="false"
@@ -463,7 +463,7 @@
    opacity="0.55"
    fill="none"
    id="top_horizontal_line"
-   style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1"
+   style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /></g>
   <g
    id="panel_labels_reworked"
@@ -593,12 +593,12 @@
         
       </g>
 <rect
-   style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+   style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.465;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
    id="scope"
-   width="3855.6331"
-   height="10942.057"
-   x="111.38239"
-   y="1094.0403" /><g
+   width="3855.4692"
+   height="11096.946"
+   x="111.46432"
+   y="939.06879" /><g
    id="components"
    style="display:inline"><rect
      id="DRAGON_RENDER_AREA"
