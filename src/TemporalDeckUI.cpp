@@ -114,12 +114,11 @@ struct TemporalDeckArcWidget : TransparentWidget {
     nvgStroke(args.vg);
   }
 
-  void drawSegmentBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
-                       NVGcolor highlight, float glow) const {
+  void drawSegmentSurface(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
+                          NVGcolor highlight, float glow) const {
     if (a1 <= a0) {
       return;
     }
-    drawArcBand(args, a0, a1, radius, width + 1.0f, nvgRGBA(0, 0, 4, 226));
 
     const float halfWidth = 0.5f * width;
     nvgBeginPath(args.vg);
@@ -145,13 +144,23 @@ struct TemporalDeckArcWidget : TransparentWidget {
     }
   }
 
+  void drawSegmentBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
+                       NVGcolor highlight, float glow) const {
+    if (a1 <= a0) {
+      return;
+    }
+    drawArcBand(args, a0, a1, radius, width + 1.0f, nvgRGBA(0, 0, 4, 226));
+    drawSegmentSurface(args, a0, a1, radius, width, fill, highlight, glow);
+  }
+
   void drawEndCapPiece(const DrawArgs &args, float angle, float radius, float width) const {
     const Vec dir(std::cos(angle), std::sin(angle));
     const float halfWidth = 0.5f * width;
-    const Vec outer = centerPx.plus(dir.mult(radius + halfWidth * 0.96f));
-    const Vec inner = centerPx.plus(dir.mult(radius - halfWidth * 0.96f));
-    const Vec midOuter = centerPx.plus(dir.mult(radius + halfWidth * 0.64f));
-    const Vec midInner = centerPx.plus(dir.mult(radius - halfWidth * 0.64f));
+    const float capHalfSpan = halfWidth + 0.9f;
+    const Vec outer = centerPx.plus(dir.mult(radius + capHalfSpan));
+    const Vec inner = centerPx.plus(dir.mult(radius - capHalfSpan));
+    const Vec midOuter = centerPx.plus(dir.mult(radius + capHalfSpan * 0.82f));
+    const Vec midInner = centerPx.plus(dir.mult(radius - capHalfSpan * 0.82f));
 
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, outer.x, outer.y);
@@ -191,6 +200,7 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const float gap = std::max(0.010f, total * 0.0048f);
     const float centerStep = total / float(TemporalDeck::kArcLightCount - 1);
     const float segmentSweep = std::max(0.001f, centerStep - gap);
+    const float limitStripSweep = segmentSweep * 0.34f;
     const float borderStartAngle = startAngle - 0.5f * centerStep;
     const float borderEndAngle = endAngle + 0.5f * centerStep;
     const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
@@ -207,17 +217,30 @@ struct TemporalDeckArcWidget : TransparentWidget {
 
     std::array<float, TemporalDeck::kArcLightCount> redByIndex{};
     const bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+    float limitBrightness = 0.f;
     for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
       redByIndex[i] = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
+      limitBrightness = std::max(limitBrightness, redByIndex[i]);
     }
     const float bufferNorm = clamp(module->params[TemporalDeck::BUFFER_PARAM].getValue(), 0.f, 1.f);
     const float maxLagSamples =
       std::max(1.f, module->getUiSampleRate() * temporaldeck_modes::usableBufferSecondsForMode(module->getBufferDurationMode()));
+    const float accessibleLag = std::max(0.f, float(module->getUiAccessibleLagSamples()));
     const float liveNorm = clamp(float(module->getUiLagSamples()) / maxLagSamples, 0.f, bufferNorm);
     const float sampleNorm = clamp(float(module->getUiSampleProgress()) * bufferNorm, 0.f, bufferNorm);
     const float valueNorm = sampleDisplay ? sampleNorm : liveNorm;
     const float valueSegmentUnits = clamp(valueNorm * float(TemporalDeck::kArcLightCount), 0.f,
                                           float(TemporalDeck::kArcLightCount));
+    const float sampleNewest =
+      std::max(1.f, float(module->getUiSampleDurationSeconds() * module->getUiSampleRate()) - 1.f);
+    const float limitRatio = sampleDisplay ? clamp(accessibleLag / sampleNewest, 0.f, 1.f)
+                                          : clamp(accessibleLag / maxLagSamples, 0.f, 1.f);
+    const float limitLightIndex = (sampleDisplay ? (1.f - limitRatio) : limitRatio) *
+                                  float(TemporalDeck::kArcLightCount - 1);
+    const float limitTravelStart = borderStartAngle + 0.5f * limitStripSweep;
+    const float limitTravelEnd = borderEndAngle - 0.5f * limitStripSweep;
+    const float limitPosition = limitLightIndex / float(TemporalDeck::kArcLightCount - 1);
+    const float limitAngle = crossfade(limitTravelEnd, limitTravelStart, limitPosition);
 
     auto valueForLightIndex = [&](int i) {
       const int valueOrder = sampleDisplay ? (TemporalDeck::kArcLightCount - 1 - i) : i;
@@ -246,16 +269,19 @@ struct TemporalDeckArcWidget : TransparentWidget {
         const float a0 = segmentCenter - 0.5f * segmentSweep;
         const float a1 = segmentCenter + 0.5f * segmentSweep;
         const float yellow = valueForLightIndex(i);
-        const float red = redByIndex[i];
         NVGcolor outerGlow = blendColor(inactiveOuterGlow, activeOuterGlow, yellow);
         NVGcolor midGlow = blendColor(inactiveMidGlow, activeMidGlow, yellow);
         NVGcolor innerGlow = blendColor(inactiveInnerGlow, activeInnerGlow, yellow);
-        outerGlow = blendColor(outerGlow, limitOuterGlow, red);
-        midGlow = blendColor(midGlow, limitMidGlow, red);
-        innerGlow = blendColor(innerGlow, limitInnerGlow, red);
         strokeArc(args, a0, a1, segmentRadius, segmentWidth + 6.8f, outerGlow);
         strokeArc(args, a0, a1, segmentRadius, segmentWidth + 4.2f, midGlow);
         strokeArc(args, a0, a1, segmentRadius, segmentWidth + 2.0f, innerGlow);
+      }
+      if (limitBrightness > 0.001f) {
+        const float glowA0 = limitAngle - 0.5f * limitStripSweep;
+        const float glowA1 = limitAngle + 0.5f * limitStripSweep;
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 6.8f, limitOuterGlow);
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 4.2f, limitMidGlow);
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 2.0f, limitInnerGlow);
       }
     }
 
@@ -274,13 +300,20 @@ struct TemporalDeckArcWidget : TransparentWidget {
       const float a0 = segmentCenter - 0.5f * segmentSweep;
       const float a1 = segmentCenter + 0.5f * segmentSweep;
       const float yellow = valueForLightIndex(i);
-      const float red = redByIndex[i];
       NVGcolor core = blendColor(unlitCore, litCore, yellow);
       NVGcolor hot = blendColor(unlitHot, litHot, yellow);
-      core = blendColor(core, limitCore, red);
-      hot = blendColor(hot, limitHot, red);
-      const float segmentGlow = bloom * clamp(std::max(yellow, red) * 0.36f, 0.f, 0.58f);
+      const float segmentGlow = bloom * clamp(yellow * 0.36f, 0.f, 0.58f);
       drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
+    }
+    if (limitBrightness > 0.001f) {
+      const int limitIndex = clamp(int(std::round(limitLightIndex)), 0, TemporalDeck::kArcLightCount - 1);
+      const float yellow = valueForLightIndex(limitIndex);
+      const NVGcolor core = blendColor(blendColor(unlitCore, litCore, yellow), limitCore, limitBrightness);
+      const NVGcolor hot = blendColor(blendColor(unlitHot, litHot, yellow), limitHot, limitBrightness);
+      const float stripA0 = limitAngle - 0.5f * limitStripSweep;
+      const float stripA1 = limitAngle + 0.5f * limitStripSweep;
+      const float limitGlow = bloom * clamp(limitBrightness * 0.36f, 0.f, 0.58f);
+      drawSegmentSurface(args, stripA0, stripA1, segmentRadius, segmentWidth, core, hot, limitGlow);
     }
 
     drawEndCapPiece(args, borderStartAngle, segmentRadius, segmentWidth);
