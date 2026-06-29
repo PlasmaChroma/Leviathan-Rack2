@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" height="128.5mm" version="1.1" viewBox="0 0 101.6 128.5" width="101.6mm" id="svg1713" sodipodi:docname="deck.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)" inkscape:label="art">
+  <defs id="defs1527">
+    <linearGradient id="linearGradient72" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop72" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop73" />
+    </linearGradient>
+    <linearGradient id="linearGradient3" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop3" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop4" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient3" id="linearGradient4" x1="34.296806" y1="9.2125835" x2="72.601418" y2="9.3648348" gradientUnits="userSpaceOnUse" gradientTransform="translate(-2.8903267,-2.2443574)" />
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#0b0d10" id="stop1" />
+      <stop offset="50%" stop-color="#10141a" id="stop2" />
+      <stop offset="100%" stop-color="#07080a" id="stop3-6" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient72" id="linearGradient74" gradientUnits="userSpaceOnUse" gradientTransform="translate(-1.6233675,-0.50761205)" x1="41.355317" y1="125.28868" x2="63.491417" y2="125.28868" />
+  </defs>
+  <g id="panel_art" style="display:inline" inkscape:label="panel_art">
+    <rect x="0" y="3.5527137e-15" width="101.93" height="128.49995" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:0.000996894" sodipodi:insensitive="true" />
+    <rect fill="#0e1016" height="128.5" rx="0" ry="0" stroke="#23283a" stroke-width="0.8" width="101.6" x="0" y="0" id="rect1529" style="display:none;fill:#101319;fill-opacity:1" />
+    <path d="m 8.5369379,17.056614 9.5361381,8.366285" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector-8" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-linecap:butt;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <rect fill="none" height="125.3" rx="1.6" ry="1.6" stroke="#1a1f2a" stroke-width="0.4" width="98.400002" x="1.6" y="1.6" id="gray_border_inner" style="display:none" />
+    <g id="panel_buffer_display" inkscape:label="Buffer Display" style="display:inline">
+      <path d="m 9.9639766,54.363096 a 40.831924,41.008194 0 0 1 81.6637964,0" fill="none" opacity="0.75" stroke="#7e50c7" stroke-linecap="round" stroke-width="6.15074" id="path1571" style="display:none;opacity:0.33;fill:none;fill-opacity:1;stroke:#1cccd9;stroke-width:5.61147;stroke-dasharray:none;stroke-opacity:0.5" />
+      <path d="m 17.8,62.099986 c 0,-18.225409 14.774604,-32.999993 33,-32.999993 18.225396,0 33,14.774577 33,32.999986" fill="none" opacity="1" stroke="#f4d24b" stroke-linecap="round" stroke-width="3.7" id="path1573" sodipodi:nodetypes="csc" style="display:none" />
+    </g>
+    <g id="glass" inkscape:label="glass" style="display:inline">
+      <rect fill="#13233a" height="27.878769" rx="2.2240479" ry="2.3716216" stroke="#47a0ff" stroke-width="0.592526" width="22.812" x="77.14624" y="93.317749" id="outputs" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
+      <path d="M 4.7463355,79.6           H 20.992665           Q 23.5,79.6 23.5,82.2           V 90.482001           Q 23.5,93.082001 26.007335,93.082001           H 61.970663           Q 64.477998,93.082001 64.477998,95.681999           V 118.579           Q 64.477998,121.17887 61.970663,121.17887           H 4.7463355           Q 2.2390001,121.17887 2.2390001,118.579           V 82.2           Q 2.2390001,79.6 4.7463355,79.6           Z" fill="#241935" stroke="#7e50c7" stroke-width="0.441909" id="inputs" style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none" sodipodi:nodetypes="ccccccccccccccccccccc" />
+    </g>
+    <path d="m 20.865056,98.898431 0.01805,14.120149" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="M 4.186227,9.522227 H 97.413935" stroke="url(#accentGrad)" stroke-width="0.498454" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
+    <path d="m 57.599239,100.22351 0.01805,14.12015" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="freeze_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 44.377488,112.91436 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="gate_and_pos_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 45.182363,101.281 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rev_and_rev" style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1" sodipodi:nodetypes="cc" />
+    <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.1209828)">
+      <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
+        <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
+        <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
+        <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path155" />
+      </g>
+      <g id="branding_wave_right" transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)" style="display:inline">
+        <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path158" />
+        <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path160" />
+        <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path164" />
+      </g>
+    </g>
+    <path d="M 8.527272,107.9163 7.5970965,106.335 h 1.8603523 z" id="Normal_L_R" style="font-size:3.175px;font-family:'Cascadia Mono';-inkscape-font-specification:'Cascadia Mono, @wght=700';font-variation-settings:'wght' 700;opacity:1;fill:#ffffff;fill-opacity:0.8;fill-rule:evenodd;stroke:none;stroke-width:1.144;stroke-linejoin:round;stroke-opacity:1" aria-label="▼" />
+  </g>
+  <g id="components" style="display:none">
+    <circle cx="8.4081755" cy="17.086493" id="BUFFER" r="4" style="display:inline;fill:#ff0000;fill-opacity:1" />
+    <circle cx="20.889322" cy="99.225998" id="RATE" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="7.4590001" cy="84.669998" id="SENSITIVITY" r="4" style="display:inline;fill:#ff0000;fill-opacity:1" />
+    <circle cx="70.982445" cy="98.871986" id="MIX" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="70.982002" cy="112.99601" id="FEEDBACK" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="57.499905" cy="101.10004" id="FREEZE" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="45.599949" cy="101.10004" id="REVERSE" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="17.700226" cy="86.799683" id="SLIP" r="4" style="fill:#ff0000;fill-opacity:1" />
+    <circle cx="57.499905" cy="95.300003" id="FREEZE_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
+    <circle cx="45.599949" cy="95.300003" id="REVERSE_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
+    <circle cx="17.700226" cy="82.399651" id="SLIP_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
+    <circle cx="45.665001" cy="112.89996" id="POSITION_CV" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="20.905001" cy="112.89996" id="RATE_CV" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="8.4780197" cy="112.89996" id="INPUT_R" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="8.4370003" cy="99.012131" id="INPUT_L" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="33.403" cy="112.89996" id="SCRATCH_GATE" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="57.499981" cy="112.89996" id="FREEZE_GATE" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="33.403" cy="101.25" id="REV_CV" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
+    <circle cx="94.241013" cy="99.012001" id="OUTPUT_L" r="4.1500001" style="fill:#0000ff;fill-opacity:1" />
+    <circle cx="94.199997" cy="113.146" id="OUTPUT_R" r="4.1500001" style="fill:#0000ff;fill-opacity:1;stroke:none" />
+    <circle cx="83.03685" cy="99.135414" id="S_GATE_O" r="4.1500001" style="display:inline;fill:#0000ff;fill-opacity:1" />
+    <circle cx="82.995834" cy="113.26942" id="S_POS_O" r="4.1500001" style="display:inline;fill:#0000ff;fill-opacity:1;stroke:none" />
+    <circle cx="92.279999" cy="66.561996" id="CARTRIDGE_CYCLE" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
+    <circle cx="98.5" cy="34.900002" id="TD_SCOPE_SPAWN" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
+  </g>
+  <g id="custom_anchors" style="display:inline;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1">
+    <circle cx="50.799999" cy="53.971752" fill="none" id="PLATTER_AREA" r="37.031235" stroke="#ffffff" stroke-width="0.251045" style="display:none;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1" />
+  </g>
+  <g id="Labels" style="display:none" inkscape:highlight-color="#00cd22" inkscape:label="Labels">
+    </g>
+</svg>

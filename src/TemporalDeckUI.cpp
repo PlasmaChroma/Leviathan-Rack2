@@ -442,7 +442,7 @@ static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
   Vec centerMm;
   float radiusMm = 0.f;
   if (!panel_svg::loadCircleFromSvg(
-          asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
+          asset::plugin(pluginInstance, "res/deck.panel.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
     return false;
   }
   centerPx = mm2px(centerMm);
@@ -3545,8 +3545,21 @@ struct TemporalDeckWidget : ModuleWidget {
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("TemporalDeck", module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
+    const std::string panelPath = asset::plugin(pluginInstance, "res/deck.panel.svg");
     setPanel(createPanel(panelPath));
+    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+    {
+      widget::SvgWidget *labels = new widget::SvgWidget();
+      labels->setSvg(visual_assets::loadPluginSvgCached("res/deck.labels.svg"));
+      labels->box.size = box.size;
+
+      widget::FramebufferWidget *labelsFb = new widget::FramebufferWidget();
+      labelsFb->box.size = box.size;
+      labelsFb->oversample = 2.0f;
+      labelsFb->dirtyOnSubpixelChange = true;
+      labelsFb->addChild(labels);
+      addChild(labelsFb);
+    }
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);

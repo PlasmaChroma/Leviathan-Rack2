@@ -255,6 +255,12 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
 	};
 
+	struct GlassPathArt {
+		std::vector<panel_svg::SvgPathCommand> commandsPx;
+		math::Rect boundsPx;
+		NVGcolor baseColor = nvgRGB(87, 64, 191);
+	};
+
 	struct MetalRectArt {
 		math::Rect rectPx;
 		float radiusPx = 0.f;
@@ -264,6 +270,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 	std::vector<MetalRectArt> metalRects;
 	std::vector<GlassRectArt> glassRects;
+	std::vector<GlassPathArt> glassPaths;
 	std::vector<math::Rect> screenRectsPx;
 
 	static bool rectsIntersect(const math::Rect& a, const math::Rect& b) {
@@ -462,19 +469,27 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const NVGcolor base = glass.baseColor;
 		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
 		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
+		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
+		const float glowAlpha = 0.105f + smallBoost * 0.08f;
+		const float baseWashAlpha = 0.055f + smallBoost * 0.07f;
+		const int topWhiteAlpha = int(std::round(20.f + smallBoost * 16.f));
+		const int sheenAlpha = int(std::round(10.f + smallBoost * 16.f));
+		const int strokeWhiteAlpha = int(std::round(24.f + smallBoost * 24.f));
+		const int topLineAlpha = int(std::round(34.f + smallBoost * 34.f));
+		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 
 		nvgSave(args.vg);
 		nvgScissor(args.vg, piece.pos.x, piece.pos.y, piece.size.x, piece.size.y);
 
 		NVGpaint outerGlow = nvgBoxGradient(args.vg, x - 1.5f, y - 1.5f, w + 3.0f, h + 3.0f, r + 2.0f, 7.0f,
-			nvgRGBAf(base.r, base.g, base.b, 0.075f), nvgRGBA(0, 0, 0, 0));
+			nvgRGBAf(base.r, base.g, base.b, glowAlpha), nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x - 1.5f, y - 1.5f, w + 3.0f, h + 3.0f, r + 2.0f);
 		nvgFillPaint(args.vg, outerGlow);
 		nvgFill(args.vg);
 
 		NVGpaint glassFill = nvgLinearGradient(args.vg, x, y, x, y + h,
-			nvgRGBA(255, 255, 255, 14), nvgRGBAf(base.r, base.g, base.b, 0.04f));
+			nvgRGBA(255, 255, 255, topWhiteAlpha), nvgRGBAf(base.r, base.g, base.b, baseWashAlpha));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
 		nvgFillPaint(args.vg, glassFill);
@@ -483,7 +498,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, x + 1.f, y + 1.f, w - 2.f, h - 2.f);
 		NVGpaint sheen = nvgLinearGradient(args.vg, x + w * 0.12f, y + h * 0.05f, x + w * 0.55f, y + h * 0.62f,
-			nvgRGBA(255, 255, 255, 10), nvgRGBA(255, 255, 255, 0));
+			nvgRGBA(255, 255, 255, sheenAlpha), nvgRGBA(255, 255, 255, 0));
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, x + w * 0.06f, y);
 		nvgLineTo(args.vg, x + w * 0.23f, y);
@@ -497,11 +512,12 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, r);
 		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 17));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, strokeWhiteAlpha));
 		nvgStroke(args.vg);
 
 		NVGpaint edge = nvgLinearGradient(args.vg, x, y, x + w, y + h,
-			nvgRGBAf(violet.r, violet.g, violet.b, 0.16f), nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.12f));
+			nvgRGBAf(violet.r, violet.g, violet.b, 0.22f * edgeAlphaBoost),
+			nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.17f * edgeAlphaBoost));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 1.35f, y + 1.35f, w - 2.7f, h - 2.7f, std::max(1.f, r - 1.f));
 		nvgStrokeWidth(args.vg, 0.55f);
@@ -512,8 +528,19 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgMoveTo(args.vg, x + r + 2.f, y + 2.2f);
 		nvgLineTo(args.vg, x + w - r - 2.f, y + 2.2f);
 		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, topLineAlpha));
 		nvgStroke(args.vg);
+
+		if (smallBoost > 0.f) {
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x + 0.4f, y + 0.4f, w - 0.8f, h - 0.8f, std::max(1.f, r - 0.4f));
+			nvgStrokeWidth(args.vg, 1.1f);
+			nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w, y + h,
+				nvgRGBA(255, 255, 255, int(std::round(18.f * smallBoost))),
+				nvgRGBA(0, 0, 0, int(std::round(32.f * smallBoost)))));
+			nvgStroke(args.vg);
+		}
+
 		nvgRestore(args.vg);
 	}
 
@@ -529,6 +556,176 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		for (const math::Rect& piece : pieces) {
 			drawGlassRectPiece(args, glass, piece);
 		}
+	}
+
+	static void appendGlassPath(NVGcontext* vg, const GlassPathArt& glass, Vec offset = Vec()) {
+		for (const panel_svg::SvgPathCommand& command : glass.commandsPx) {
+			switch (command.type) {
+				case panel_svg::SvgPathCommand::MoveTo:
+					nvgMoveTo(vg, command.p1.x + offset.x, command.p1.y + offset.y);
+					break;
+				case panel_svg::SvgPathCommand::LineTo:
+					nvgLineTo(vg, command.p1.x + offset.x, command.p1.y + offset.y);
+					break;
+				case panel_svg::SvgPathCommand::QuadTo:
+					nvgQuadTo(
+						vg,
+						command.p1.x + offset.x,
+						command.p1.y + offset.y,
+						command.p2.x + offset.x,
+						command.p2.y + offset.y
+					);
+					break;
+				case panel_svg::SvgPathCommand::BezierTo:
+					nvgBezierTo(
+						vg,
+						command.p1.x + offset.x,
+						command.p1.y + offset.y,
+						command.p2.x + offset.x,
+						command.p2.y + offset.y,
+						command.p3.x + offset.x,
+						command.p3.y + offset.y
+					);
+					break;
+				case panel_svg::SvgPathCommand::Close:
+					nvgClosePath(vg);
+					break;
+			}
+		}
+	}
+
+	static void appendGlassPathTopContour(NVGcontext* vg, const GlassPathArt& glass) {
+		const float cutoffY = glass.boundsPx.pos.y + glass.boundsPx.size.y * 0.43f;
+		Vec current;
+		Vec subpathStart;
+		bool hasCurrent = false;
+		bool contourOpen = false;
+		auto startContourAt = [&](Vec point) {
+			if (!contourOpen) {
+				nvgMoveTo(vg, point.x, point.y);
+				contourOpen = true;
+			}
+		};
+		auto endContour = [&]() {
+			contourOpen = false;
+		};
+		for (const panel_svg::SvgPathCommand& command : glass.commandsPx) {
+			switch (command.type) {
+				case panel_svg::SvgPathCommand::MoveTo:
+					current = command.p1;
+					subpathStart = command.p1;
+					hasCurrent = true;
+					endContour();
+					break;
+				case panel_svg::SvgPathCommand::LineTo: {
+					const Vec target = command.p1;
+					const bool horizontalEnough = std::fabs(target.x - current.x) > std::fabs(target.y - current.y) * 1.4f;
+					if (hasCurrent && horizontalEnough && current.y <= cutoffY && target.y <= cutoffY) {
+						startContourAt(current);
+						nvgLineTo(vg, target.x, target.y);
+					}
+					else {
+						endContour();
+					}
+					current = target;
+					hasCurrent = true;
+					break;
+				}
+				case panel_svg::SvgPathCommand::QuadTo: {
+					const Vec control = command.p1;
+					const Vec target = command.p2;
+					if (hasCurrent && current.y <= cutoffY && control.y <= cutoffY && target.y <= cutoffY) {
+						startContourAt(current);
+						nvgQuadTo(vg, control.x, control.y, target.x, target.y);
+					}
+					else {
+						endContour();
+					}
+					current = target;
+					hasCurrent = true;
+					break;
+				}
+				case panel_svg::SvgPathCommand::BezierTo: {
+					const Vec c1 = command.p1;
+					const Vec c2 = command.p2;
+					const Vec target = command.p3;
+					if (hasCurrent && current.y <= cutoffY && c1.y <= cutoffY && c2.y <= cutoffY && target.y <= cutoffY) {
+						startContourAt(current);
+						nvgBezierTo(vg, c1.x, c1.y, c2.x, c2.y, target.x, target.y);
+					}
+					else {
+						endContour();
+					}
+					current = target;
+					hasCurrent = true;
+					break;
+				}
+				case panel_svg::SvgPathCommand::Close:
+					current = subpathStart;
+					hasCurrent = true;
+					endContour();
+					break;
+			}
+		}
+	}
+
+	void drawGlassPath(const DrawArgs& args, const GlassPathArt& glass) {
+		const float x = glass.boundsPx.pos.x;
+		const float y = glass.boundsPx.pos.y;
+		const float w = glass.boundsPx.size.x;
+		const float h = glass.boundsPx.size.y;
+		if (!(w > 2.f && h > 2.f && !glass.commandsPx.empty())) {
+			return;
+		}
+
+		const NVGcolor base = glass.baseColor;
+		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
+		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
+
+		nvgSave(args.vg);
+
+		NVGpaint outerGlow = nvgBoxGradient(args.vg, x - 1.5f, y - 1.5f, w + 3.0f, h + 3.0f, 5.0f, 7.0f,
+			nvgRGBAf(base.r, base.g, base.b, 0.105f), nvgRGBA(0, 0, 0, 0));
+		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
+		nvgFillPaint(args.vg, outerGlow);
+		nvgFill(args.vg);
+
+		NVGpaint glassFill = nvgLinearGradient(args.vg, x, y, x, y + h,
+			nvgRGBA(255, 255, 255, 20), nvgRGBAf(base.r, base.g, base.b, 0.055f));
+		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
+		nvgFillPaint(args.vg, glassFill);
+		nvgFill(args.vg);
+
+		NVGpaint sheen = nvgLinearGradient(args.vg, x + w * 0.12f, y + h * 0.05f, x + w * 0.55f, y + h * 0.62f,
+			nvgRGBA(255, 255, 255, 10), nvgRGBA(255, 255, 255, 0));
+		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
+		nvgFillPaint(args.vg, sheen);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+		nvgStroke(args.vg);
+
+		NVGpaint edge = nvgLinearGradient(args.vg, x, y, x + w, y + h,
+			nvgRGBAf(violet.r, violet.g, violet.b, 0.22f), nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.17f));
+		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
+		nvgStrokeWidth(args.vg, 0.55f);
+		nvgStrokePaint(args.vg, edge);
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		appendGlassPathTopContour(args.vg, glass);
+		nvgStrokeWidth(args.vg, 0.8f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 34));
+		nvgStroke(args.vg);
+
+		nvgRestore(args.vg);
 	}
 
 	void drawScreenGrid(const DrawArgs& args, const math::Rect& screen) {
@@ -608,6 +805,9 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		for (const GlassRectArt& glass : glassRects) {
 			drawGlassRect(args, glass);
 		}
+		for (const GlassPathArt& glass : glassPaths) {
+			drawGlassPath(args, glass);
+		}
 		for (const math::Rect& screen : screenRectsPx) {
 			drawScreenGrid(args, screen);
 		}
@@ -617,6 +817,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 struct PanelSurfaceEffectDefinition {
 	std::vector<PanelSurfaceEffectWidget::MetalRectArt> metalRects;
 	std::vector<PanelSurfaceEffectWidget::GlassRectArt> glassRects;
+	std::vector<PanelSurfaceEffectWidget::GlassPathArt> glassPaths;
 	std::vector<math::Rect> screenRectsPx;
 };
 
@@ -667,6 +868,26 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 				art.baseColor = match.fillColor;
 			}
 			def.glassRects.push_back(art);
+		}
+	}
+
+	std::vector<panel_svg::SvgPathMatch> glassPathMatches;
+	if (panel_svg::findPathsInGroupsWithIdSubstringMm(svgPath, "glass", &glassPathMatches)) {
+		def.glassPaths.reserve(glassPathMatches.size());
+		for (const panel_svg::SvgPathMatch& match : glassPathMatches) {
+			PanelSurfaceEffectWidget::GlassPathArt art;
+			art.boundsPx = math::Rect(mm2px(match.bounds.pos), mm2px(match.bounds.size));
+			art.commandsPx.reserve(match.commands.size());
+			for (panel_svg::SvgPathCommand command : match.commands) {
+				command.p1 = mm2px(command.p1);
+				command.p2 = mm2px(command.p2);
+				command.p3 = mm2px(command.p3);
+				art.commandsPx.push_back(command);
+			}
+			if (match.hasFillColor) {
+				art.baseColor = match.fillColor;
+			}
+			def.glassPaths.push_back(art);
 		}
 	}
 
@@ -772,6 +993,7 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;
+	effect->glassPaths = it->second.glassPaths;
 	effect->screenRectsPx = it->second.screenRectsPx;
 	fb->addChild(effect);
 	return fb;
