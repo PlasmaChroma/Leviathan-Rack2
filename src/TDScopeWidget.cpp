@@ -7,6 +7,18 @@
 namespace {
 constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 
+PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
+  }
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
+
 struct TDScopeBrightnessQuantity final : Quantity {
   TDScope *module = nullptr;
 
@@ -120,6 +132,7 @@ struct UnpairedStatusWidget final : TransparentWidget {
 }
 
 struct TDScopeWidget : ModuleWidget {
+  PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
   Widget *standardDisplay = nullptr;
   Widget *input = nullptr;
@@ -140,6 +153,9 @@ struct TDScopeWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
+    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      panelBorder = findPanelBorder(svgPanel->fb);
+    }
 
     math::Rect scopeRectMm;
     if (!panel_svg::loadRectFromSvgMm(panelPath, "scope", &scopeRectMm)) {
@@ -214,6 +230,16 @@ struct TDScopeWidget : ModuleWidget {
     if (unpairedStatus) {
       unpairedStatus->setVisible(!pairedToDeck);
     }
+    const float borderGrowPx = pairedToDeck ? 3.f : 0.f;
+    if (panelBorder &&
+        (panelBorder->box.pos.x != -borderGrowPx ||
+         panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
+      panelBorder->box.pos.x = -borderGrowPx;
+      panelBorder->box.size.x = box.size.x + borderGrowPx;
+      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+        svgPanel->fb->dirty = true;
+      }
+    }
     ModuleWidget::step();
     if (scopeModule && measurePerf) {
       const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -230,7 +256,14 @@ struct TDScopeWidget : ModuleWidget {
     using PerfClock = std::chrono::steady_clock;
     const bool measurePerf = isDragonKingDebugEnabled();
     const PerfClock::time_point moduleDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-    ModuleWidget::draw(args);
+    if (isPairedToTemporalDeck()) {
+      DrawArgs adjusted = args;
+      adjusted.clipBox.pos.x -= mm2px(0.3f);
+      adjusted.clipBox.size.x += mm2px(0.3f);
+      ModuleWidget::draw(adjusted);
+    } else {
+      ModuleWidget::draw(args);
+    }
 
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (scopeModule && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {

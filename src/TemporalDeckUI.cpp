@@ -3501,6 +3501,18 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
   }
 }
 
+static PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
+  }
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
+
 static bool isTDScopeModule(const engine::Module *neighbor) {
   if (!neighbor || !neighbor->model) {
     return false;
@@ -3516,6 +3528,7 @@ struct TemporalDeckWidget : ModuleWidget {
     uint64_t rowsWritten = 0;
   };
 
+  PanelBorder *panelBorder = nullptr;
   TemporalDeckScopeSpawnButton *scopeSpawnButton = nullptr;
   ScopeDragTraceRecorder scopeDragTraceRecorder;
   float uiStepUsEma = 0.f;
@@ -3535,6 +3548,9 @@ struct TemporalDeckWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
+    if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      panelBorder = findPanelBorder(svgPanel->fb);
+    }
 
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -3725,7 +3741,14 @@ struct TemporalDeckWidget : ModuleWidget {
     };
 
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
-    ModuleWidget::draw(args);
+    const bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    if (linkedToScope) {
+      DrawArgs adjusted = args;
+      adjusted.clipBox.size.x += mm2px(0.3f);
+      ModuleWidget::draw(adjusted);
+    } else {
+      ModuleWidget::draw(args);
+    }
     if (deckModule) {
       bool metricValid = deckModule->isUiScopePreviewMetricValid();
       if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
@@ -3774,6 +3797,13 @@ struct TemporalDeckWidget : ModuleWidget {
     bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (scopeSpawnButton) {
       scopeSpawnButton->setVisible(!linkedToScope);
+    }
+    const float borderGrowPx = linkedToScope ? 3.f : 0.f;
+    if (panelBorder && panelBorder->box.size.x != (box.size.x + borderGrowPx)) {
+      panelBorder->box.size.x = box.size.x + borderGrowPx;
+      if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+        svgPanel->fb->dirty = true;
+      }
     }
     ModuleWidget::step();
     if (measurePerf) {
