@@ -4,6 +4,16 @@
 #include <random>
 
 PachinkoTimingModule::PachinkoTimingModule() {
+    config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+    configParam(BALL_RATE_PARAM, 0.1f, 20.0f, 1.0f, "Ball rate", " balls/s");
+    configParam(DAMPING_PARAM, 0.0f, 1.0f, 0.98f, "Damping");
+    configSwitch(BALL_TO_BALL_PARAM, 0.0f, 1.0f, 1.0f, "Ball collisions", {"Off", "On"});
+    configInput(CLOCK_INPUT, "Clock");
+    configInput(RESET_INPUT, "Reset");
+    configInput(LATTICE_CV_INPUT, "Lattice");
+    for (int i = 0; i < NUM_OUTPUTS; ++i) {
+        configOutput(GATE_1_OUTPUT + i, string::f("Bucket %d gate", i + 1));
+    }
     // Initialize balls
     balls.resize(maxBalls);
     for (auto& ball : balls) {
@@ -124,13 +134,15 @@ void PachinkoTimingModule::generateHoneycombPegs() {
 void PachinkoTimingModule::process(const ProcessArgs& args) {
     float dt = args.sampleTime;
     double currentTime = static_cast<double>(args.frame) / args.sampleRate;
+    ballRate = params[BALL_RATE_PARAM].getValue();
+    ballToBallCollisions = params[BALL_TO_BALL_PARAM].getValue() > 0.5f;
     
     // Process clock input
-    float clockValue = inputs[CLOCK_INPUT].value;
-    bool clockTriggered = clockPulse.process(clockValue);
+    float clockValue = inputs[CLOCK_INPUT].getVoltage();
+    bool clockTriggered = clockTrigger.process(clockValue);
     
     // Process reset input
-    bool resetTriggered = resetPulse.process(inputs[RESET_INPUT].value);
+    bool resetTriggered = resetTrigger.process(inputs[RESET_INPUT].getVoltage());
     if (resetTriggered) {
         onReset(ResetEvent{});
     }

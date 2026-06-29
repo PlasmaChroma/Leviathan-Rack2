@@ -121,9 +121,6 @@ void init(Plugin* p) {
     pluginInstance = p;
     refreshDragonKingDebugEnabled();
     
-    // Initialize Pachinko plugin
-    initPachinkoPlugin();
-    
     // Add modules here
     // p->addModel(modelMyModule);
     p->addModel(modelIntegralFlux);

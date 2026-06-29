@@ -85,9 +85,6 @@ void PachinkoWidget::PachinkoVisualWidget::draw(const DrawArgs& args) {
     NVGcontext* vg = args.vg;
     if (!vg) return;
     
-    // Clear with dark background (nvgBeginFrame already clears)
-    nvgBeginFrame(vg, box.size.x, box.size.y, 1.0f);
-    
     // Draw pegs
     if (module->pegs.size() > 0) {
         nvgBeginPath(vg);
@@ -108,7 +105,7 @@ void PachinkoWidget::PachinkoVisualWidget::draw(const DrawArgs& args) {
         nvgFill(vg);
         
         // Highlight active bucket
-        if (module->outputs[PachinkoTimingModule::GATE_1_OUTPUT + i].value > 1.0f) {
+        if (module->outputs[PachinkoTimingModule::GATE_1_OUTPUT + i].getVoltage() > 1.0f) {
             nvgBeginPath(vg);
             nvgRect(vg, x + 175.0f, 240.0f, bucketWidth - 2, 20);
             nvgFillColor(vg, nvgRGB(255, 100, 0));
@@ -125,6 +122,4 @@ void PachinkoWidget::PachinkoVisualWidget::draw(const DrawArgs& args) {
     }
     nvgFillColor(vg, nvgRGB(255, 200, 50));
     nvgFill(vg);
-    
-    nvgEndFrame(vg);
 }

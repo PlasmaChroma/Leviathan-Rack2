@@ -126,6 +126,15 @@
         "Reverb"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Pachinko",
+      "name": "Pachinko",
+      "description": "Physics-driven eight-output gate generator.",
+      "tags": [
+        "Clock generator",
+        "Random"
+      ]
     }
   ]
 }

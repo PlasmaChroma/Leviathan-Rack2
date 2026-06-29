@@ -76,8 +76,8 @@ struct PachinkoTimingModule : Module {
     // Timing
     float ballRate = 1.0f; // balls per second
     float lastBallTime = 0.0f;
-    dsp::PulseGenerator clockPulse;
-    dsp::PulseGenerator resetPulse;
+    dsp::SchmittTrigger clockTrigger;
+    dsp::SchmittTrigger resetTrigger;
 
     PachinkoTimingModule();
     void process(const ProcessArgs& args) override;
