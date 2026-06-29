@@ -681,48 +681,66 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const NVGcolor base = glass.baseColor;
 		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
 		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
+		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
+		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 
 		nvgSave(args.vg);
 
 		NVGpaint outerGlow = nvgBoxGradient(args.vg, x - 1.5f, y - 1.5f, w + 3.0f, h + 3.0f, 5.0f, 7.0f,
-			nvgRGBAf(base.r, base.g, base.b, 0.105f), nvgRGBA(0, 0, 0, 0));
+			nvgRGBAf(base.r, base.g, base.b, 0.13f + smallBoost * 0.06f), nvgRGBA(0, 0, 0, 0));
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
 		nvgFillPaint(args.vg, outerGlow);
 		nvgFill(args.vg);
 
 		NVGpaint glassFill = nvgLinearGradient(args.vg, x, y, x, y + h,
-			nvgRGBA(255, 255, 255, 20), nvgRGBAf(base.r, base.g, base.b, 0.055f));
+			nvgRGBA(255, 255, 255, int(std::round(22.f + smallBoost * 10.f))),
+			nvgRGBAf(base.r, base.g, base.b, 0.065f + smallBoost * 0.045f));
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
 		nvgFillPaint(args.vg, glassFill);
 		nvgFill(args.vg);
 
 		NVGpaint sheen = nvgLinearGradient(args.vg, x + w * 0.12f, y + h * 0.05f, x + w * 0.55f, y + h * 0.62f,
-			nvgRGBA(255, 255, 255, 10), nvgRGBA(255, 255, 255, 0));
+			nvgRGBA(255, 255, 255, int(std::round(14.f + smallBoost * 8.f))), nvgRGBA(255, 255, 255, 0));
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
 		nvgFillPaint(args.vg, sheen);
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(-0.65f, -0.65f));
+		nvgStrokeWidth(args.vg, 2.0f);
+		nvgStrokeColor(args.vg, nvgRGBAf(base.r, base.g, base.b, 0.12f + smallBoost * 0.05f));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
-		nvgStrokeWidth(args.vg, 0.85f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 24));
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(30.f + smallBoost * 18.f))));
 		nvgStroke(args.vg);
 
 		NVGpaint edge = nvgLinearGradient(args.vg, x, y, x + w, y + h,
-			nvgRGBAf(violet.r, violet.g, violet.b, 0.22f), nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.17f));
+			nvgRGBAf(violet.r, violet.g, violet.b, 0.26f * edgeAlphaBoost),
+			nvgRGBAf(cyan.r, cyan.g, cyan.b, 0.20f * edgeAlphaBoost));
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
-		nvgStrokeWidth(args.vg, 0.55f);
+		nvgStrokeWidth(args.vg, 0.72f);
 		nvgStrokePaint(args.vg, edge);
 		nvgStroke(args.vg);
 
 		nvgBeginPath(args.vg);
+		appendGlassPath(args.vg, glass, Vec(0.85f, 0.85f));
+		nvgStrokeWidth(args.vg, 0.55f);
+		nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w, y + h,
+			nvgRGBA(255, 255, 255, int(std::round(18.f + smallBoost * 12.f))),
+			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
 		appendGlassPathTopContour(args.vg, glass);
-		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 34));
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(44.f + smallBoost * 18.f))));
 		nvgStroke(args.vg);
 
 		nvgRestore(args.vg);
