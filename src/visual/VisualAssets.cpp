@@ -1000,6 +1000,7 @@ TransformWidget* setSvgSwitchSizePx(app::SvgSwitch* button, float px) {
 
 constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
+constexpr float kSmallGoldButtonSizePx = 18.f;
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -2146,12 +2147,16 @@ void Magitek2RasterJack::step() {
 	PortWidget::step();
 }
 
-GoldButton::GoldButton() {
+GoldButton::GoldButton() : GoldButton(kGoldButtonSizePx) {
+}
+
+GoldButton::GoldButton(float buttonSizePx) {
+	sizePx = std::max(8.f, buttonSizePx);
 	momentary = true;
 	std::shared_ptr<window::Svg> svg = visual_assets::loadPluginSvgCached("res/icon/gold_button.svg");
 	addFrame(svg);
 	addFrame(svg);
-	faceTransform = setSvgSwitchSizePx(this, kGoldButtonSizePx);
+	faceTransform = setSvgSwitchSizePx(this, sizePx);
 	if (shadow) {
 		shadow->opacity = 0.f;
 	}
@@ -2209,7 +2214,7 @@ void GoldButton::step() {
 	const bool pressChanged = std::fabs(pressAmount - oldPressAmount) > 0.0001f;
 	if (faceTransform) {
 		faceTransform->identity();
-		const float scale = kGoldButtonSizePx / 64.f;
+		const float scale = sizePx / 64.f;
 		faceTransform->translate(Vec(0.f, 1.05f * pressAmount));
 		faceTransform->scale(Vec(scale, scale));
 	}
@@ -2233,6 +2238,9 @@ void GoldButton::step() {
 			pressOverlayFb->setDirty();
 		}
 	}
+}
+
+SmallGoldButton::SmallGoldButton() : GoldButton(kSmallGoldButtonSizePx) {
 }
 
  void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {

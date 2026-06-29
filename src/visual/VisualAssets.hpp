@@ -147,9 +147,15 @@ struct GoldButton : app::SvgSwitch {
 	TransparentWidget* fixedBezel = nullptr;
 	widget::FramebufferWidget* fixedBezelFb = nullptr;
 	float pressAmount = 0.f;
+	float sizePx = 24.f;
 
 	GoldButton();
+	explicit GoldButton(float sizePx);
 	void step() override;
+};
+
+struct SmallGoldButton : GoldButton {
+	SmallGoldButton();
 };
 
 struct GearKnobInvertSized : app::SvgKnob {

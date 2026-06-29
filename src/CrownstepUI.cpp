@@ -3956,7 +3956,7 @@ struct CrownstepWidget final : ModuleWidget {
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
-			addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+			addParam(createParamCentered<SmallGoldButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
 			if (isDragonKingDebugEnabled()) {
 				addParam(createParamCentered<LEDButton>(mm2px(debugAddMovesPos), module, Crownstep::DEBUG_ADD_MOVES_PARAM));
 				CrownstepAiThinkMsWidget* aiThinkMsWidget = new CrownstepAiThinkMsWidget(module);

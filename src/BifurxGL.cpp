@@ -1308,21 +1308,23 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 		nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
 
-		const char* renderBadge = "GL FIXED";
-		if (shaderRendererActiveLastFrame) {
-			renderBadge = "GL SHDR";
+		if (isDragonKingDebugEnabled()) {
+			const char* renderBadge = "GL FIXED";
+			if (shaderRendererActiveLastFrame) {
+				renderBadge = "GL SHDR";
+			}
+			else if (shaderRendererFallbackLastFrame) {
+				renderBadge = "GL FALLBACK";
+			}
+			const float badgeFontSize = std::max(6.6f, h * 0.045f);
+			nvgFontSize(args.vg, badgeFontSize);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+			nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
+			nvgText(args.vg, w - 2.2f + 0.5f, 1.6f + 0.5f, renderBadge, nullptr);
+			nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
+			nvgText(args.vg, w - 2.2f, 1.6f, renderBadge, nullptr);
 		}
-		else if (shaderRendererFallbackLastFrame) {
-			renderBadge = "GL FALLBACK";
-		}
-		const float badgeFontSize = std::max(6.6f, h * 0.045f);
-		nvgFontSize(args.vg, badgeFontSize);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-		nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220));
-		nvgText(args.vg, w - 2.2f + 0.5f, 1.6f + 0.5f, renderBadge, nullptr);
-		nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230));
-		nvgText(args.vg, w - 2.2f, 1.6f, renderBadge, nullptr);
 	}
 };
 
