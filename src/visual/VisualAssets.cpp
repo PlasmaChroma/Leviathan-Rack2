@@ -1285,6 +1285,7 @@ TransformWidget* setSvgSwitchSizePx(app::SvgSwitch* button, float px) {
 constexpr float kMagitekPortSizePx = 24.5f;
 constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kSmallGoldButtonSizePx = 18.f;
+constexpr float kSmallGoldButtonShadowBleedPx = 12.f;
 
 struct MagitekInputShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
@@ -2594,6 +2595,55 @@ void GoldButton::step() {
 	}
 }
 
+struct SmallGoldButtonShadowLayer : TransparentWidget {
+	SmallGoldButton* owner = nullptr;
+
+	explicit SmallGoldButtonShadowLayer(SmallGoldButton* owner) : owner(owner) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!owner) {
+			return;
+		}
+		const float s = kSmallGoldButtonSizePx;
+		const float p = clamp(owner->pressAmount, 0.f, 1.f);
+		const Vec center = Vec(kSmallGoldButtonShadowBleedPx * 0.5f)
+			.plus(Vec(s * 0.5f));
+
+		// Broad socket shadow. The oversized framebuffer allows this gradient
+		// to extend beyond the button's visual and interaction bounds.
+		const Vec socketShadowCenter =
+			center.plus(Vec(s * 0.08f, s * 0.14f));
+		const float socketShadowRadius = s * 0.62f;
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, socketShadowCenter.x, socketShadowCenter.y, socketShadowRadius);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			socketShadowCenter.x,
+			socketShadowCenter.y,
+			s * 0.10f,
+			socketShadowRadius,
+			nvgRGBA(0, 0, 0, 126),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+
+		// The face shadow tightens and darkens as the cap moves into the socket.
+		const Vec faceShadowCenter = center.plus(Vec(
+			s * 0.06f,
+			s * crossfade(0.10f, 0.07f, p)));
+		const float faceShadowRadius = s * crossfade(0.46f, 0.40f, p);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, faceShadowCenter.x, faceShadowCenter.y, faceShadowRadius);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			faceShadowCenter.x,
+			faceShadowCenter.y,
+			s * 0.05f,
+			faceShadowRadius,
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(70.f, 132.f, p)))),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+	}
+};
+
 struct SmallGoldButtonStaticLayer : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const float s = std::min(box.size.x, box.size.y);
@@ -2602,17 +2652,6 @@ struct SmallGoldButtonStaticLayer : TransparentWidget {
 		}
 		const Vec center = box.size.mult(0.5f);
 		const float socketR = s * 0.49f;
-
-		nvgBeginPath(args.vg);
-		nvgEllipse(args.vg, center.x + s * 0.055f, center.y + s * 0.15f, s * 0.36f, s * 0.20f);
-		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-			center.x + s * 0.06f,
-			center.y + s * 0.12f,
-			s * 0.06f,
-			s * 0.39f,
-			nvgRGBA(0, 0, 0, 88),
-			nvgRGBA(0, 0, 0, 0)));
-		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, center.x, center.y, socketR);
@@ -2648,17 +2687,6 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 		const Vec center = box.size.mult(0.5f);
 		const Vec faceCenter = center.plus(Vec(0.f, crossfade(0.f, 0.72f, p)));
 		const float faceR = s * crossfade(0.375f, 0.352f, p);
-
-		nvgBeginPath(args.vg);
-		nvgEllipse(args.vg, center.x + s * 0.055f, center.y + s * crossfade(0.12f, 0.085f, p), s * 0.28f, s * 0.12f);
-		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-			center.x + s * 0.05f,
-			center.y + s * 0.10f,
-			s * 0.04f,
-			s * 0.31f,
-			nvgRGBA(0, 0, 0, int(std::round(crossfade(36.f, 104.f, p)))),
-			nvgRGBA(0, 0, 0, 0)));
-		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, faceCenter.x, faceCenter.y, faceR);
@@ -2700,6 +2728,15 @@ SmallGoldButton::SmallGoldButton() {
 	momentary = true;
 	box.size = Vec(kSmallGoldButtonSizePx, kSmallGoldButtonSizePx);
 
+	shadowFb = new widget::FramebufferWidget();
+	shadowFb->dirtyOnSubpixelChange = false;
+	shadowFb->box.pos = Vec(-kSmallGoldButtonShadowBleedPx * 0.5f);
+	shadowFb->box.size = box.size.plus(Vec(kSmallGoldButtonShadowBleedPx));
+	SmallGoldButtonShadowLayer* shadowLayer = new SmallGoldButtonShadowLayer(this);
+	shadowLayer->box.size = shadowFb->box.size;
+	shadowFb->addChild(shadowLayer);
+	addChild(shadowFb);
+
 	staticFb = new widget::FramebufferWidget();
 	staticFb->dirtyOnSubpixelChange = false;
 	staticFb->box.size = box.size;
@@ -2728,6 +2765,9 @@ void SmallGoldButton::step() {
 	}
 	if (faceFb && std::fabs(pressAmount - lastRenderedPressAmount) > 0.0001f) {
 		faceFb->setDirty();
+		if (shadowFb) {
+			shadowFb->setDirty();
+		}
 		lastRenderedPressAmount = pressAmount;
 	}
 }

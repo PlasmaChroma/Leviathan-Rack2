@@ -158,6 +158,7 @@ struct GoldButton : app::SvgSwitch {
 };
 
 struct SmallGoldButton : app::Switch {
+	widget::FramebufferWidget* shadowFb = nullptr;
 	widget::FramebufferWidget* staticFb = nullptr;
 	widget::FramebufferWidget* faceFb = nullptr;
 	float pressAmount = 0.f;
