@@ -23,6 +23,24 @@ thread_local uint64_t gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
 
+struct IntegralFluxScopedDrawTimer {
+	using Clock = std::chrono::steady_clock;
+	uint64_t* elapsedNs = nullptr;
+	Clock::time_point start;
+
+	IntegralFluxScopedDrawTimer(uint64_t& elapsedNs, bool enabled)
+		: elapsedNs(enabled ? &elapsedNs : nullptr)
+		, start(enabled ? Clock::now() : Clock::time_point()) {
+	}
+
+	~IntegralFluxScopedDrawTimer() {
+		if (elapsedNs) {
+			*elapsedNs += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				Clock::now() - start).count());
+		}
+	}
+};
+
 struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	std::shared_ptr<window::Svg> svg;
 
@@ -137,6 +155,27 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 
 	static NVGcolor tracerColorWithAlpha(float alpha) {
 		return nvgRGBA(255, 190, 80, clamp(int(alpha), 0, 255));
+	}
+
+	static WavePreviewTracerStyle curveTracerStyle() {
+		WavePreviewTracerStyle style;
+		style.color = nvgRGBA(255, 190, 80, 255);
+		style.lineWidth = TRAIL_LINE_WIDTH;
+		style.fadeSec = TRAIL_FADE_SEC;
+		style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+		style.maxAlpha = 118.f;
+		style.drawStride = TRAIL_DRAW_STRIDE;
+		return style;
+	}
+
+	static WavePreviewBufferedTracerStyle bufferedTracerStyle(int drawStride) {
+		WavePreviewBufferedTracerStyle style;
+		style.color = nvgRGBA(255, 190, 80, 255);
+		style.fadeSec = TRAIL_FADE_SEC;
+		style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+		style.maxAlpha = 118.f;
+		style.drawStride = drawStride;
+		return style;
 	}
 
 	static void glColorFromNvg(NVGcolor c) {
@@ -350,21 +389,17 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return unit;
 	}
 
-	void drawGlDot() {
-		if (!pointsValid || !dotVisible) {
-			return;
-		}
-		float w = std::max(box.size.x, 1.f);
-		float h = std::max(box.size.y, 1.f);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-		float left = drawPad;
-		float top = drawPad;
-		float right = std::max(left + 1.f, w - drawPad);
-		float bottom = std::max(top + 1.f, h - drawPad);
-		float drawW = right - left;
-		float drawH = bottom - top;
-		float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-		float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
+	Vec dotPosition() const {
+		const float w = std::max(box.size.x, 1.f);
+		const float h = std::max(box.size.y, 1.f);
+		const float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
+		const float left = drawPad;
+		const float top = drawPad;
+		const float right = std::max(left + 1.f, w - drawPad);
+		const float bottom = std::max(top + 1.f, h - drawPad);
+		const float targetX = left + clamp(dotXNorm, 0.f, 1.f) * (right - left);
+		const float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * (bottom - top);
+
 		int i0 = 0;
 		for (int i = 1; i < POINT_COUNT; ++i) {
 			if (points[i].x >= targetX) {
@@ -373,27 +408,35 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			}
 			i0 = i - 1;
 		}
-		int i1 = std::min(i0 + 1, POINT_COUNT - 1);
-		float x = targetX;
+		const int i1 = std::min(i0 + 1, POINT_COUNT - 1);
 		float y = points[i0].y;
 		if (i1 != i0 && points[i1].x > points[i0].x) {
-			float t = clamp((targetX - points[i0].x) / (points[i1].x - points[i0].x), 0.f, 1.f);
-			y = points[i0].y + (points[i1].y - points[i0].y) * t;
+			const float t = clamp(
+				(targetX - points[i0].x) / (points[i1].x - points[i0].x), 0.f, 1.f);
+			y += (points[i1].y - y) * t;
 		}
-		y = y * 0.9f + targetY * 0.1f;
+		constexpr float curveBlend = 0.9f;
+		return Vec(targetX, y * curveBlend + targetY * (1.f - curveBlend));
+	}
+
+	void drawGlDot() {
+		if (!pointsValid || !dotVisible) {
+			return;
+		}
+		const Vec dot = dotPosition();
 		glColor4f(0.f, 0.f, 0.f, 0.86f);
 		glBegin(GL_TRIANGLE_FAN);
-		glVertex2f(x, y);
+		glVertex2f(dot.x, dot.y);
 		const std::array<Vec, 25>& unitCircle = glDotUnitCircle();
 		for (const Vec& p : unitCircle) {
-			glVertex2f(x + p.x * (DOT_RADIUS + 0.55f), y + p.y * (DOT_RADIUS + 0.55f));
+			glVertex2f(dot.x + p.x * (DOT_RADIUS + 0.55f), dot.y + p.y * (DOT_RADIUS + 0.55f));
 		}
 		glEnd();
 		glColor4f(1.f, 0.91f, 0.28f, 1.f);
 		glBegin(GL_TRIANGLE_FAN);
-		glVertex2f(x, y);
+		glVertex2f(dot.x, dot.y);
 		for (const Vec& p : unitCircle) {
-			glVertex2f(x + p.x * DOT_RADIUS, y + p.y * DOT_RADIUS);
+			glVertex2f(dot.x + p.x * DOT_RADIUS, dot.y + p.y * DOT_RADIUS);
 		}
 		glEnd();
 	}
@@ -616,12 +659,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
 				}
 				else {
-					WavePreviewBufferedTracerStyle style;
-					style.color = nvgRGBA(255, 190, 80, 255);
-					style.fadeSec = TRAIL_FADE_SEC;
-					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
-					style.maxAlpha = 118.f;
-					style.drawStride = TRAIL_CAPTURE_STRIDE;
+					const WavePreviewBufferedTracerStyle style =
+						bufferedTracerStyle(TRAIL_CAPTURE_STRIDE);
 					const WavePreviewTracerCaptureStats stats = frameTracer.capture(points, nowSec, box.size, style);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
 				}
@@ -650,23 +689,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			if (tracerEnabled) {
 				const int tracerMode = modulePtr->previewTracerCacheModeControl().load(std::memory_order_relaxed);
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					WavePreviewTracerStyle style;
-					style.color = nvgRGBA(255, 190, 80, 255);
-					style.lineWidth = TRAIL_LINE_WIDTH;
-					style.fadeSec = TRAIL_FADE_SEC;
-					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
-					style.maxAlpha = 118.f;
-					style.drawStride = TRAIL_DRAW_STRIDE;
-					curveTracer.draw(args.vg, nowSec, style);
+					curveTracer.draw(args.vg, nowSec, curveTracerStyle());
 				}
 				else {
-					WavePreviewBufferedTracerStyle style;
-					style.color = nvgRGBA(255, 190, 80, 255);
-					style.fadeSec = TRAIL_FADE_SEC;
-					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
-					style.maxAlpha = 118.f;
-					style.drawStride = TRAIL_DRAW_STRIDE;
-					frameTracer.draw(args.vg, nowSec, box.size, style);
+					frameTracer.draw(args.vg, nowSec, box.size, bufferedTracerStyle(TRAIL_DRAW_STRIDE));
 				}
 			}
 			size_t reducedPointCount = drawNvgWaveform(args);
@@ -675,44 +701,13 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			}
 		}
 		if (pointsValid && dotVisible) {
-			float w = std::max(box.size.x, 1.f);
-			float h = std::max(box.size.y, 1.f);
-			float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-			float left = drawPad;
-			float top = drawPad;
-			float right = std::max(left + 1.f, w - drawPad);
-			float bottom = std::max(top + 1.f, h - drawPad);
-			float drawW = right - left;
-			float drawH = bottom - top;
-			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
-			// Keep the marker on the drawn curve, but use continuous interpolation
-			// across neighboring points to avoid visible stepping at slow rates.
-			int i0 = 0;
-			for (int i = 1; i < POINT_COUNT; ++i) {
-				if (points[i].x >= targetX) {
-					i0 = i - 1;
-					break;
-				}
-				i0 = i - 1;
-			}
-			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
-			float x0 = points[i0].x;
-			float x1 = points[i1].x;
-			float x = targetX;
-			float y = points[i0].y;
-			if (i1 != i0 && x1 > x0) {
-				float t = clamp((targetX - x0) / (x1 - x0), 0.f, 1.f);
-				y = points[i0].y + (points[i1].y - points[i0].y) * t;
-			}
-			float blendToCurve = 0.9f;
-			y = y * blendToCurve + targetY * (1.f - blendToCurve);
+			const Vec dot = dotPosition();
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, DOT_RADIUS);
+			nvgCircle(args.vg, dot.x, dot.y, DOT_RADIUS);
 			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
 			nvgFill(args.vg);
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, DOT_RADIUS + 0.55f);
+			nvgCircle(args.vg, dot.x, dot.y, DOT_RADIUS + 0.55f);
 			nvgStrokeWidth(args.vg, 0.9f);
 			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 220));
 			nvgStroke(args.vg);
@@ -908,15 +903,9 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	}
 
 	void draw(const DrawArgs& args) override {
-		if (!isDragonKingDebugEnabled()) {
-			LeviathanHaloKnob2::draw(args);
-			return;
-		}
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxGearDrawNsThisFrame, isDragonKingDebugEnabled());
 		LeviathanHaloKnob2::draw(args);
-		gIntegralFluxGearDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
 	}
 };
 
@@ -927,15 +916,9 @@ struct IntegralFluxCurveHalo2Knob : IntegralFluxHalo2Knob {
 
 struct IntegralFluxPlasmaSwitch : PlasmaSwitch {
 	void draw(const DrawArgs& args) override {
-		if (!isDragonKingDebugEnabled()) {
-			PlasmaSwitch::draw(args);
-			return;
-		}
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxPlasmaSwitchDrawNsThisFrame, isDragonKingDebugEnabled());
 		PlasmaSwitch::draw(args);
-		gIntegralFluxPlasmaSwitchDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
 	}
 };
 
@@ -1016,9 +999,8 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		using PerfClock = std::chrono::steady_clock;
-		const bool measurePerf = isDragonKingDebugEnabled();
-		const PerfClock::time_point drawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxLinearPointDrawNsThisFrame, isDragonKingDebugEnabled());
 		const float angle = (BASE_ANGLE_DEG + SWEEP_ANGLE_DEG * linearValue) * (float(M_PI) / 180.f);
 		const Vec dir(std::cos(angle), std::sin(angle));
 		const Vec tangent(-dir.y, dir.x);
@@ -1070,10 +1052,6 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 		nvgStrokePaint(args.vg, triangleGradient);
 		nvgStroke(args.vg);
 		nvgRestore(args.vg);
-		if (measurePerf) {
-			gIntegralFluxLinearPointDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - drawStart).count());
-		}
 	}
 };
 
@@ -1191,9 +1169,8 @@ struct IntegralFluxInactiveShapeModeGlyphs : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		using PerfClock = std::chrono::steady_clock;
-		const bool measurePerf = isDragonKingDebugEnabled();
-		const PerfClock::time_point drawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxShapeGlyphDrawNsThisFrame, isDragonKingDebugEnabled());
 
 		nvgSave(args.vg);
 		nvgLineCap(args.vg, NVG_ROUND);
@@ -1203,25 +1180,14 @@ struct IntegralFluxInactiveShapeModeGlyphs : TransparentWidget {
 		const bool activeShark = currentMode() == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN;
 		drawGlyphs(args, activeShark, !activeShark);
 		nvgRestore(args.vg);
-
-		if (measurePerf) {
-			gIntegralFluxShapeGlyphDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - drawStart).count());
-		}
 	}
 };
 
 struct IntegralFluxTimedShapeModeGlyphSvg : widget::SvgWidget {
 	void draw(const DrawArgs& args) override {
-		if (!isDragonKingDebugEnabled()) {
-			widget::SvgWidget::draw(args);
-			return;
-		}
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxShapeGlyphDrawNsThisFrame, isDragonKingDebugEnabled());
 		widget::SvgWidget::draw(args);
-		gIntegralFluxShapeGlyphDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
 	}
 };
 
@@ -1229,30 +1195,18 @@ struct IntegralFluxTimedShapeModeGlyphSvg : widget::SvgWidget {
 
 struct IntegralFluxEclipse2Knob : Eclipse2Knob {
 	void draw(const DrawArgs& args) override {
-		if (!isDragonKingDebugEnabled()) {
-			Eclipse2Knob::draw(args);
-			return;
-		}
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxEclipseDrawNsThisFrame, isDragonKingDebugEnabled());
 		Eclipse2Knob::draw(args);
-		gIntegralFluxEclipseDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
 	}
 };
 
 template <typename TBase>
 struct IntegralFluxTimedApertureLight : TBase {
 	void draw(const typename TBase::DrawArgs& args) override {
-		if (!isDragonKingDebugEnabled()) {
-			TBase::draw(args);
-			return;
-		}
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point drawStart = PerfClock::now();
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxApertureDrawNsThisFrame, isDragonKingDebugEnabled());
 		TBase::draw(args);
-		gIntegralFluxApertureDrawNsThisFrame += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - drawStart).count());
 	}
 };
 

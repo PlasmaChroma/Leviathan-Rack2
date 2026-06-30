@@ -85,7 +85,7 @@ struct GlowShimmerWidget : TransparentWidget {
 	uint8_t coreR = 0xd0;
 	uint8_t coreG = 0xa0;
 	uint8_t coreB = 0xff;
-	float shimmerPhaseRad = 0.f;
+	double shimmerPhaseRad = 0.0;
 	float opacity = 0.f;
 	float pulse = 1.f;
 	bool plasmaOrbStyle = false;
@@ -99,6 +99,7 @@ struct HoverOrbScrew : OpaqueWidget {
 	float rotationRad = 0.f;
 	float spinDirection = 1.f;
 	bool renderRotatingLayer = true;
+	bool steadyGlow = false;
 	double lastSpinUpdateSec = 0.0;
 	bool hovered = false;
 

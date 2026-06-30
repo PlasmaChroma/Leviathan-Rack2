@@ -1962,7 +1962,8 @@ CyanOrbScrew::CyanOrbScrew()
 		glowWidget->coreB = 0xff;
 		glowWidget->plasmaOrbStyle = true;
 	}
-	renderRotatingLayer = false;
+	steadyGlow = true;
+	renderRotatingLayer = true;
 }
 
 void GlowShimmerWidget::draw(const DrawArgs& args) {
@@ -2139,11 +2140,12 @@ void HoverOrbScrew::step() {
 			}
 		}
 		if (glowWidget->opacity > 0.f) {
-			glowWidget->shimmerPhaseRad += float(dt * shimmerRateRadPerSec * spinDirection);
-			if (std::fabs(glowWidget->shimmerPhaseRad) > float(M_PI) * 2.f) {
-				glowWidget->shimmerPhaseRad = std::fmod(glowWidget->shimmerPhaseRad, float(M_PI) * 2.f);
-			}
-			glowWidget->pulse = 0.55f + 0.45f * std::sin(float(nowSec) * float(M_PI));
+			// Keep a continuous phase like PlasmaSwitch. Wrapping at 2pi is
+			// discontinuous for the non-integer spark phase multipliers.
+			glowWidget->shimmerPhaseRad += dt * double(shimmerRateRadPerSec * spinDirection);
+			glowWidget->pulse = steadyGlow
+				? 1.f
+				: 0.55f + 0.45f * std::sin(float(nowSec) * float(M_PI));
 		}
 	}
 
