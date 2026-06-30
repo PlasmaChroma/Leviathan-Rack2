@@ -20,6 +20,39 @@ namespace {
 thread_local uint64_t gEclipseShadowDrawNs = 0u;
 thread_local uint64_t gEclipseShadowDrawCount = 0u;
 
+struct PanelGlassTintState {
+	bool enabled = false;
+	uint64_t generation = 0u;
+};
+
+PanelGlassTintState gPanelGlassTint;
+
+void updatePanelGlassTint() {
+	// Direct two-state preview for tuning the alternate tint. The toggle
+	// increments generation, so no periodic framebuffer invalidation is needed.
+}
+
+float panelGlassTintAmount() {
+	return gPanelGlassTint.enabled ? 0.28f : 0.f;
+}
+
+NVGcolor panelGlassCycleColor() {
+	return nvgRGBf(1.f, 0.22f, 1.f);
+}
+
+NVGcolor applyPanelGlassTint(NVGcolor color) {
+	const float amount = panelGlassTintAmount();
+	if (amount <= 0.f) {
+		return color;
+	}
+	const NVGcolor tint = panelGlassCycleColor();
+	return nvgRGBAf(
+		color.r + (tint.r - color.r) * amount,
+		color.g + (tint.g - color.g) * amount,
+		color.b + (tint.b - color.b) * amount,
+		color.a);
+}
+
 } // namespace
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
@@ -249,6 +282,9 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 };
 
 struct PanelSurfaceEffectWidget : TransparentWidget {
+	widget::FramebufferWidget* framebuffer = nullptr;
+	uint64_t tintGeneration = 0u;
+
 	struct GlassRectArt {
 		math::Rect rectPx;
 		float radiusPx = 0.f;
@@ -468,9 +504,9 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 		const float sourceRadius = glass.radiusPx > 0.f ? glass.radiusPx : std::min(std::min(w, h) * 0.085f, 8.0f);
 		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
-		const NVGcolor base = glass.baseColor;
-		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
-		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
+		const NVGcolor base = applyPanelGlassTint(glass.baseColor);
+		const NVGcolor cyan = applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
+		const NVGcolor violet = applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float glowAlpha = 0.105f + smallBoost * 0.08f;
 		const float baseWashAlpha = 0.055f + smallBoost * 0.07f;
@@ -541,6 +577,15 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 				nvgRGBA(255, 255, 255, int(std::round(18.f * smallBoost))),
 				nvgRGBA(0, 0, 0, int(std::round(32.f * smallBoost)))));
 			nvgStroke(args.vg);
+		}
+
+		if (gPanelGlassTint.enabled) {
+			// Retain the strong magenta wash from the useful portion of the
+			// earlier diagnostic treatment, without its white debug border.
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
+			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, 32));
+			nvgFill(args.vg);
 		}
 
 		nvgRestore(args.vg);
@@ -704,9 +749,9 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			return;
 		}
 
-		const NVGcolor base = glass.baseColor;
-		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
-		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
+		const NVGcolor base = applyPanelGlassTint(glass.baseColor);
+		const NVGcolor cyan = applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
+		const NVGcolor violet = applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 		const int glassTopAlpha = int(std::round(12.f + smallBoost * 6.f));
@@ -784,6 +829,13 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgStrokeWidth(args.vg, 0.42f);
 		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(58.f + smallBoost * 14.f))));
 		nvgStroke(args.vg);
+
+		if (gPanelGlassTint.enabled) {
+			nvgBeginPath(args.vg);
+			appendGlassPath(args.vg, glass);
+			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, 32));
+			nvgFill(args.vg);
+		}
 
 		nvgRestore(args.vg);
 	}
@@ -871,6 +923,17 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		for (const math::Rect& screen : screenRectsPx) {
 			drawScreenGrid(args, screen);
 		}
+	}
+
+	void step() override {
+		updatePanelGlassTint();
+		if (tintGeneration != gPanelGlassTint.generation) {
+			tintGeneration = gPanelGlassTint.generation;
+			if (framebuffer) {
+				framebuffer->setDirty();
+			}
+		}
+		TransparentWidget::step();
 	}
 };
 
@@ -974,6 +1037,15 @@ int loadPluginRasterMipmapHandle(
 	return loadRasterMipmapHandle(vg, std::move(lifecycleImage), fullPath);
 }
 
+bool isPanelGlassColorCycleEnabled() {
+	return gPanelGlassTint.enabled;
+}
+
+void togglePanelGlassColorCycle() {
+	gPanelGlassTint.enabled = !gPanelGlassTint.enabled;
+	++gPanelGlassTint.generation;
+}
+
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
 	return createSvgRect3DEffectWidget(rectMm, nvgRGB(87, 64, 191));
 }
@@ -1052,6 +1124,8 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	fb->box.size = panelSizePx;
 
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
+	effect->framebuffer = fb;
+	effect->tintGeneration = gPanelGlassTint.generation;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;

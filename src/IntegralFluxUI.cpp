@@ -103,6 +103,64 @@ struct IntegralFluxLogoWidget final : TransparentWidget {
 	}
 };
 
+struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
+	void onButton(const event::Button& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			visual_assets::togglePanelGlassColorCycle();
+			e.consume(this);
+			return;
+		}
+		OpaqueWidget::onButton(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!visual_assets::isPanelGlassColorCycleEnabled()) {
+			return;
+		}
+		const Vec center = box.size.mult(0.5f);
+		const float radius = box.size.y * 0.48f;
+
+		nvgSave(args.vg);
+		nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgScale(args.vg, 1.65f, 0.82f);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, 0.f, 0.f, radius * 1.35f);
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg,
+			0.f,
+			0.f,
+			radius * 0.10f,
+			radius * 1.35f,
+			nvgRGBA(190, 225, 255, 178),
+			nvgRGBA(0x7a, 0x5c, 0xff, 0)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, 0.f, 0.f, radius * 0.34f);
+		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, 128));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, center.x, center.y - radius * 0.72f);
+		nvgLineTo(args.vg, center.x + radius * 1.45f, center.y);
+		nvgLineTo(args.vg, center.x, center.y + radius * 0.72f);
+		nvgLineTo(args.vg, center.x - radius * 1.45f, center.y);
+		nvgClosePath(args.vg);
+		nvgStrokeWidth(args.vg, 1.0f);
+		nvgStrokePaint(args.vg, nvgLinearGradient(
+			args.vg,
+			center.x - radius,
+			center.y - radius,
+			center.x + radius,
+			center.y + radius,
+			nvgRGBA(0x7a, 0x5c, 0xff, 190),
+			nvgRGBA(0x1c, 0xcc, 0xd9, 210)));
+		nvgStroke(args.vg);
+	}
+};
+
 // Create a bigger basic button
 struct BigTL1105 : TL1105 {
     BigTL1105() {
@@ -1327,6 +1385,12 @@ struct IntegralFluxWidget : ModuleWidget {
 			logo->box.size = logoFb->box.size;
 			logoFb->addChild(logo);
 			addChild(logoFb);
+
+			IntegralFluxLogoCrystalButton* crystalButton =
+				new IntegralFluxLogoCrystalButton();
+			crystalButton->box.pos = mm2px(Vec(48.3f, 125.61f));
+			crystalButton->box.size = mm2px(Vec(5.0f, 2.5f));
+			addChild(crystalButton);
 		}
 
         // use LeviathanHaloKnob2 for surge/sink and curve shape knobs
