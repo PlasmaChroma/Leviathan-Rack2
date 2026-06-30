@@ -20,6 +20,9 @@ RES_FILES := $(shell find res -type f ! -path 'res/icon/*')
 RES_EXCLUDES := \
 	res/flux.svg \
 	res/proc.svg \
+	res/deck.svg \
+	res/undertow.svg \
+	res/bifurx.svg \
 	$(shell find res/panels-source -type f 2>/dev/null)
 
 DISTRIBUTABLES += res/icon

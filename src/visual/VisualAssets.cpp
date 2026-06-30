@@ -12,6 +12,8 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <jansson.h>
+#include <cstdio>
 
 namespace visual_assets {
 
@@ -39,11 +41,6 @@ void updatePanelGlassTint() {
 	double now = system::getTime();
 	if (gPanelGlassTint.lastUpdateSec <= 0.0) {
 		gPanelGlassTint.lastUpdateSec = now;
-		gPanelGlassTint.currentAmount = 0.f;
-		gPanelGlassTint.currentTintColor = nvgRGBf(1.f, 0.22f, 1.f);
-		gPanelGlassTint.currentWashColor = nvgRGBA(255, 0, 255, 0);
-		gPanelGlassTint.currentCrystalGlowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-		gPanelGlassTint.currentCrystalStrokeColor = nvgRGB(0x2a, 0xab, 0xef);
 		return;
 	}
 
@@ -1167,6 +1164,134 @@ NVGcolor panelGlassCrystalStrokeColor() {
 
 float panelGlassCyclePhase() {
 	return float(std::fmod(gPanelGlassTint.lastColorUpdateAccumSec, 180.0) / 180.0);
+}
+
+void saveSettings() {
+	json_t* rootJ = json_object();
+	json_object_set_new(rootJ, "enabled", json_boolean(gPanelGlassTint.enabled));
+	json_object_set_new(rootJ, "accumulatedTimeSec", json_real(gPanelGlassTint.accumulatedTimeSec));
+	json_object_set_new(rootJ, "lastColorUpdateAccumSec", json_real(gPanelGlassTint.lastColorUpdateAccumSec));
+	json_object_set_new(rootJ, "currentAmount", json_real(gPanelGlassTint.currentAmount));
+
+	json_t* tintJ = json_array();
+	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.r));
+	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.g));
+	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.b));
+	json_object_set_new(rootJ, "currentTintColor", tintJ);
+
+	json_t* washJ = json_array();
+	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.r));
+	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.g));
+	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.b));
+	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.a));
+	json_object_set_new(rootJ, "currentWashColor", washJ);
+
+	json_t* glowJ = json_array();
+	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.r));
+	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.g));
+	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.b));
+	json_object_set_new(rootJ, "currentCrystalGlowColor", glowJ);
+
+	json_t* strokeJ = json_array();
+	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.r));
+	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.g));
+	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.b));
+	json_object_set_new(rootJ, "currentCrystalStrokeColor", strokeJ);
+
+	const std::string dir = system::join(asset::user(), "Leviathan");
+	system::createDirectories(dir);
+	const std::string path = system::join(dir, "settings.json");
+	FILE* file = std::fopen(path.c_str(), "w");
+	if (file) {
+		json_dumpf(rootJ, file, JSON_INDENT(2));
+		std::fclose(file);
+	}
+	json_decref(rootJ);
+}
+
+void loadSettings() {
+	const std::string dir = system::join(asset::user(), "Leviathan");
+	const std::string path = system::join(dir, "settings.json");
+	FILE* file = std::fopen(path.c_str(), "r");
+	if (!file) {
+		return;
+	}
+	json_error_t error;
+	json_t* rootJ = json_loadf(file, 0, &error);
+	std::fclose(file);
+	if (!rootJ) {
+		return;
+	}
+
+	json_t* enabledJ = json_object_get(rootJ, "enabled");
+	if (enabledJ) {
+		gPanelGlassTint.enabled = json_boolean_value(enabledJ);
+	}
+
+	json_t* accumJ = json_object_get(rootJ, "accumulatedTimeSec");
+	if (accumJ) {
+		gPanelGlassTint.accumulatedTimeSec = json_number_value(accumJ);
+	}
+
+	json_t* lastColorJ = json_object_get(rootJ, "lastColorUpdateAccumSec");
+	if (lastColorJ) {
+		gPanelGlassTint.lastColorUpdateAccumSec = json_number_value(lastColorJ);
+	}
+
+	json_t* amountJ = json_object_get(rootJ, "currentAmount");
+	if (amountJ) {
+		gPanelGlassTint.currentAmount = json_number_value(amountJ);
+	}
+
+	json_t* tintJ = json_object_get(rootJ, "currentTintColor");
+	if (tintJ && json_is_array(tintJ) && json_array_size(tintJ) >= 3) {
+		gPanelGlassTint.currentTintColor.r = json_number_value(json_array_get(tintJ, 0));
+		gPanelGlassTint.currentTintColor.g = json_number_value(json_array_get(tintJ, 1));
+		gPanelGlassTint.currentTintColor.b = json_number_value(json_array_get(tintJ, 2));
+		gPanelGlassTint.currentTintColor.a = 1.f;
+	}
+
+	json_t* washJ = json_object_get(rootJ, "currentWashColor");
+	if (washJ && json_is_array(washJ) && json_array_size(washJ) >= 4) {
+		gPanelGlassTint.currentWashColor.r = json_number_value(json_array_get(washJ, 0));
+		gPanelGlassTint.currentWashColor.g = json_number_value(json_array_get(washJ, 1));
+		gPanelGlassTint.currentWashColor.b = json_number_value(json_array_get(washJ, 2));
+		gPanelGlassTint.currentWashColor.a = json_number_value(json_array_get(washJ, 3));
+	}
+
+	json_t* glowJ = json_object_get(rootJ, "currentCrystalGlowColor");
+	if (glowJ && json_is_array(glowJ) && json_array_size(glowJ) >= 3) {
+		gPanelGlassTint.currentCrystalGlowColor.r = json_number_value(json_array_get(glowJ, 0));
+		gPanelGlassTint.currentCrystalGlowColor.g = json_number_value(json_array_get(glowJ, 1));
+		gPanelGlassTint.currentCrystalGlowColor.b = json_number_value(json_array_get(glowJ, 2));
+		gPanelGlassTint.currentCrystalGlowColor.a = 1.f;
+	}
+
+	json_t* strokeJ = json_object_get(rootJ, "currentCrystalStrokeColor");
+	if (strokeJ && json_is_array(strokeJ) && json_array_size(strokeJ) >= 3) {
+		gPanelGlassTint.currentCrystalStrokeColor.r = json_number_value(json_array_get(strokeJ, 0));
+		gPanelGlassTint.currentCrystalStrokeColor.g = json_number_value(json_array_get(strokeJ, 1));
+		gPanelGlassTint.currentCrystalStrokeColor.b = json_number_value(json_array_get(strokeJ, 2));
+		gPanelGlassTint.currentCrystalStrokeColor.a = 1.f;
+	}
+
+	// Trigger a single frame invalidation to force-draw the restored color state
+	++gPanelGlassTint.generation;
+
+	json_decref(rootJ);
+}
+
+void resetPanelGlassColorCycle() {
+	gPanelGlassTint.enabled = false;
+	gPanelGlassTint.accumulatedTimeSec = 0.0;
+	gPanelGlassTint.lastColorUpdateAccumSec = 0.0;
+	gPanelGlassTint.currentAmount = 0.f;
+	gPanelGlassTint.currentTintColor = nvgRGBf(1.f, 0.22f, 1.f);
+	gPanelGlassTint.currentWashColor = nvgRGBA(255, 0, 255, 0);
+	gPanelGlassTint.currentCrystalGlowColor = nvgRGB(0x1c, 0xcc, 0xd9);
+	gPanelGlassTint.currentCrystalStrokeColor = nvgRGB(0x2a, 0xab, 0xef);
+	++gPanelGlassTint.generation;
+	saveSettings();
 }
 
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {

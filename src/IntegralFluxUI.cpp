@@ -1906,6 +1906,10 @@ struct IntegralFluxWidget : ModuleWidget {
 					addDivItem(32, "Control rate (/32)");
 				}
 			));
+			menu->addChild(createMenuLabel("Plugin"));
+			menu->addChild(createMenuItem("Reset Crystal", "", [=]() {
+				visual_assets::resetPanelGlassColorCycle();
+			}));
 		}
 	}
 };

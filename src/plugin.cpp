@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "BifurxWorker.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -119,6 +120,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
+	visual_assets::loadSettings();
 
 	// Add modules here
 	// p->addModel(modelMyModule);
@@ -139,5 +141,6 @@ void init(Plugin* p) {
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	visual_assets::saveSettings();
 	bifurx::shutdownBifurxRenderService();
 }
