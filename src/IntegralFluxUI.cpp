@@ -118,45 +118,49 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 			return;
 		}
 		const Vec center = box.size.mult(0.5f);
-		const float radius = box.size.y * 0.48f;
+		const float w = mm2px(2.4f);
+		const float h = mm2px(1.6f);
 
 		nvgSave(args.vg);
 		nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
 		nvgTranslate(args.vg, center.x, center.y);
-		nvgScale(args.vg, 1.65f, 0.82f);
+		nvgScale(args.vg, w * 0.5f, h * 0.5f);
+
+		// Draw the glow ellipse, scaled to match the aspect ratio of the crystal
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, radius * 1.35f);
+		nvgCircle(args.vg, 0.f, 0.f, 1.2f);
 		nvgFillPaint(args.vg, nvgRadialGradient(
 			args.vg,
 			0.f,
 			0.f,
-			radius * 0.10f,
-			radius * 1.35f,
-			nvgRGBA(190, 225, 255, 178),
+			0.1f,
+			1.2f,
+			nvgRGBA(190, 225, 255, 90),  // Subtler glow (90 vs 178)
 			nvgRGBA(0x7a, 0x5c, 0xff, 0)));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, radius * 0.34f);
-		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, 128));
+		nvgCircle(args.vg, 0.f, 0.f, 0.35f);
+		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, 75));  // Subtler center highlight (75 vs 128)
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
 
+		// Draw the diamond shape matching the actual crystal dimensions
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, center.x, center.y - radius * 0.72f);
-		nvgLineTo(args.vg, center.x + radius * 1.45f, center.y);
-		nvgLineTo(args.vg, center.x, center.y + radius * 0.72f);
-		nvgLineTo(args.vg, center.x - radius * 1.45f, center.y);
+		nvgMoveTo(args.vg, center.x, center.y - h * 0.5f);
+		nvgLineTo(args.vg, center.x + w * 0.5f, center.y);
+		nvgLineTo(args.vg, center.x, center.y + h * 0.5f);
+		nvgLineTo(args.vg, center.x - w * 0.5f, center.y);
 		nvgClosePath(args.vg);
 		nvgStrokeWidth(args.vg, 1.0f);
 		nvgStrokePaint(args.vg, nvgLinearGradient(
 			args.vg,
-			center.x - radius,
-			center.y - radius,
-			center.x + radius,
-			center.y + radius,
-			nvgRGBA(0x7a, 0x5c, 0xff, 190),
-			nvgRGBA(0x1c, 0xcc, 0xd9, 210)));
+			center.x - w * 0.5f,
+			center.y - h * 0.5f,
+			center.x + w * 0.5f,
+			center.y + h * 0.5f,
+			nvgRGBA(0x7a, 0x5c, 0xff, 110), // Subtler gradient colors
+			nvgRGBA(0x1c, 0xcc, 0xd9, 130)));
 		nvgStroke(args.vg);
 	}
 };
@@ -1388,7 +1392,7 @@ struct IntegralFluxWidget : ModuleWidget {
 
 			IntegralFluxLogoCrystalButton* crystalButton =
 				new IntegralFluxLogoCrystalButton();
-			crystalButton->box.pos = mm2px(Vec(48.3f, 125.61f));
+			crystalButton->box.pos = mm2px(Vec(48.96f, 125.30f));
 			crystalButton->box.size = mm2px(Vec(5.0f, 2.5f));
 			addChild(crystalButton);
 		}
