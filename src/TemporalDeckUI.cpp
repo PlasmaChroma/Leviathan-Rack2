@@ -3640,9 +3640,9 @@ struct TemporalDeckWidget : ModuleWidget {
       sensitivityKnob->setProgressRingBipolar(true);
       addParam(sensitivityKnob);
     }
-    addParam(createParamCentered<LEDButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<SmallGoldButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<SmallGoldButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
+    addParam(createParamCentered<SmallGoldButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
 
     addInput(createInputCentered<Magitek2InputJack>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));

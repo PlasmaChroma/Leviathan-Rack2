@@ -98,6 +98,7 @@ struct HoverOrbScrew : OpaqueWidget {
 	GlowShimmerWidget* glowWidget = nullptr;
 	float rotationRad = 0.f;
 	float spinDirection = 1.f;
+	bool renderRotatingLayer = true;
 	double lastSpinUpdateSec = 0.0;
 	bool hovered = false;
 
@@ -155,8 +156,12 @@ struct GoldButton : app::SvgSwitch {
 	void step() override;
 };
 
-struct SmallGoldButton : GoldButton {
+struct SmallGoldButton : app::Switch {
+	float pressAmount = 0.f;
+
 	SmallGoldButton();
+	void step() override;
+	void draw(const DrawArgs& args) override;
 };
 
 struct GearKnobInvertSized : app::SvgKnob {
