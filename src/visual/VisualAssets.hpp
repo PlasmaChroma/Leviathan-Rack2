@@ -24,6 +24,7 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highligh
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 bool isPanelGlassColorCycleEnabled();
 void togglePanelGlassColorCycle();
+float panelGlassTintAmount();
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");
 void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();

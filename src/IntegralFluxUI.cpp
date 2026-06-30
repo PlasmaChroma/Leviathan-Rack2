@@ -121,6 +121,8 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 		const float w = mm2px(2.4f);
 		const float h = mm2px(1.6f);
 
+		const float intensity = 0.3f + 0.7f * clamp(visual_assets::panelGlassTintAmount() / 0.28f, 0.f, 1.f);
+
 		nvgSave(args.vg);
 		nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
 		nvgTranslate(args.vg, center.x, center.y);
@@ -135,13 +137,13 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 			0.f,
 			0.1f,
 			1.2f,
-			nvgRGBA(190, 225, 255, 90),  // Subtler glow (90 vs 178)
+			nvgRGBA(190, 225, 255, int(90 * intensity)),
 			nvgRGBA(0x7a, 0x5c, 0xff, 0)));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, 0.f, 0.f, 0.35f);
-		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, 75));  // Subtler center highlight (75 vs 128)
+		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, int(75 * intensity)));
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
 
@@ -159,9 +161,24 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 			center.y - h * 0.5f,
 			center.x + w * 0.5f,
 			center.y + h * 0.5f,
-			nvgRGBA(0x7a, 0x5c, 0xff, 110), // Subtler gradient colors
-			nvgRGBA(0x1c, 0xcc, 0xd9, 130)));
+			nvgRGBA(0x7a, 0x5c, 0xff, int(110 * intensity)),
+			nvgRGBA(0x1c, 0xcc, 0xd9, int(130 * intensity))));
 		nvgStroke(args.vg);
+
+		// Debug print showing phase percentage next to the logo crystal
+		if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+			const float pct = (visual_assets::panelGlassTintAmount() / 0.28f) * 100.f;
+			char buf[32];
+			std::snprintf(buf, sizeof(buf), "%.1f%%", pct);
+
+			nvgSave(args.vg);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 7.5f);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+			nvgFillColor(args.vg, nvgRGBA(0x1c, 0xcc, 0xd9, 180));
+			nvgText(args.vg, box.size.x + mm2px(1.5f), box.size.y * 0.5f, buf, nullptr);
+			nvgRestore(args.vg);
+		}
 	}
 };
 

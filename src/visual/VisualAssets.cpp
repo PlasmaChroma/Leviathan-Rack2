@@ -23,17 +23,47 @@ thread_local uint64_t gEclipseShadowDrawCount = 0u;
 struct PanelGlassTintState {
 	bool enabled = false;
 	uint64_t generation = 0u;
+	double accumulatedTimeSec = 0.0;
+	double lastUpdateSec = 0.0;
+	double lastColorUpdateAccumSec = 0.0;
+	float currentAmount = 0.f;
 };
 
 PanelGlassTintState gPanelGlassTint;
 
 void updatePanelGlassTint() {
-	// Direct two-state preview for tuning the alternate tint. The toggle
-	// increments generation, so no periodic framebuffer invalidation is needed.
-}
+	double now = system::getTime();
+	if (gPanelGlassTint.lastUpdateSec <= 0.0) {
+		gPanelGlassTint.lastUpdateSec = now;
+		return;
+	}
 
-float panelGlassTintAmount() {
-	return gPanelGlassTint.enabled ? 0.28f : 0.f;
+	double dt = now - gPanelGlassTint.lastUpdateSec;
+	gPanelGlassTint.lastUpdateSec = now;
+
+	if (!gPanelGlassTint.enabled) {
+		return;
+	}
+
+	gPanelGlassTint.accumulatedTimeSec += dt;
+
+	// Only update once per second
+	if (gPanelGlassTint.accumulatedTimeSec - gPanelGlassTint.lastColorUpdateAccumSec >= 1.0) {
+		gPanelGlassTint.lastColorUpdateAccumSec = std::floor(gPanelGlassTint.accumulatedTimeSec);
+
+		double cycleTime = std::fmod(gPanelGlassTint.accumulatedTimeSec, 120.0);
+		float amount = 0.f;
+		if (cycleTime < 60.0) {
+			amount = 0.28f * float(cycleTime / 60.0);
+		} else {
+			amount = 0.28f * float((120.0 - cycleTime) / 60.0);
+		}
+
+		if (std::fabs(amount - gPanelGlassTint.currentAmount) > 1e-4f) {
+			gPanelGlassTint.currentAmount = amount;
+			++gPanelGlassTint.generation;
+		}
+	}
 }
 
 NVGcolor panelGlassCycleColor() {
@@ -41,7 +71,7 @@ NVGcolor panelGlassCycleColor() {
 }
 
 NVGcolor applyPanelGlassTint(NVGcolor color) {
-	const float amount = panelGlassTintAmount();
+	const float amount = gPanelGlassTint.currentAmount;
 	if (amount <= 0.f) {
 		return color;
 	}
@@ -579,12 +609,12 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgStroke(args.vg);
 		}
 
-		if (gPanelGlassTint.enabled) {
+		if (gPanelGlassTint.currentAmount > 0.f) {
 			// Retain the strong magenta wash from the useful portion of the
 			// earlier diagnostic treatment, without its white debug border.
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
-			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, 32));
+			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, int(std::round(32.f * (gPanelGlassTint.currentAmount / 0.28f)))));
 			nvgFill(args.vg);
 		}
 
@@ -830,10 +860,10 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(58.f + smallBoost * 14.f))));
 		nvgStroke(args.vg);
 
-		if (gPanelGlassTint.enabled) {
+		if (gPanelGlassTint.currentAmount > 0.f) {
 			nvgBeginPath(args.vg);
 			appendGlassPath(args.vg, glass);
-			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, 32));
+			nvgFillColor(args.vg, nvgRGBA(255, 0, 255, int(std::round(32.f * (gPanelGlassTint.currentAmount / 0.28f)))));
 			nvgFill(args.vg);
 		}
 
@@ -1044,6 +1074,10 @@ bool isPanelGlassColorCycleEnabled() {
 void togglePanelGlassColorCycle() {
 	gPanelGlassTint.enabled = !gPanelGlassTint.enabled;
 	++gPanelGlassTint.generation;
+}
+
+float panelGlassTintAmount() {
+	return gPanelGlassTint.currentAmount;
 }
 
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
