@@ -25,6 +25,9 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 bool isPanelGlassColorCycleEnabled();
 void togglePanelGlassColorCycle();
 float panelGlassTintAmount();
+NVGcolor panelGlassCrystalGlowColor();
+NVGcolor panelGlassCrystalStrokeColor();
+float panelGlassCyclePhase();
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");
 void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();

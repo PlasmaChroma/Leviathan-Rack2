@@ -156,28 +156,50 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 		const float h = mm2px(1.6f);
 
 		const float intensity = 0.3f + 0.7f * clamp(visual_assets::panelGlassTintAmount() / 0.28f, 0.f, 1.f);
+		NVGcolor glowColor = visual_assets::panelGlassCrystalGlowColor();
+		NVGcolor strokeColor = visual_assets::panelGlassCrystalStrokeColor();
 
 		nvgSave(args.vg);
 		nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
 		nvgTranslate(args.vg, center.x, center.y);
 		nvgScale(args.vg, w * 0.5f, h * 0.5f);
 
-		// Draw the glow ellipse, scaled to match the aspect ratio of the crystal
+		// Draw the bloom (outer softer layer)
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, 0.f, 0.f, 2.2f);
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg,
+			0.f,
+			0.f,
+			0.1f,
+			2.2f,
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, (45.f / 255.f) * intensity),
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0)));
+		nvgFill(args.vg);
+
+		// Draw the main bright glow (middle layer)
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, 0.f, 0.f, 1.2f);
+		NVGcolor coreColor = nvgRGBAf(
+			glowColor.r + (1.f - glowColor.r) * 0.7f,
+			glowColor.g + (1.f - glowColor.g) * 0.7f,
+			glowColor.b + (1.f - glowColor.b) * 0.7f,
+			(130.f / 255.f) * intensity
+		);
 		nvgFillPaint(args.vg, nvgRadialGradient(
 			args.vg,
 			0.f,
 			0.f,
 			0.1f,
 			1.2f,
-			nvgRGBA(190, 225, 255, int(90 * intensity)),
-			nvgRGBA(0x7a, 0x5c, 0xff, 0)));
+			coreColor,
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0)));
 		nvgFill(args.vg);
 
+		// Draw the center hotspot highlight
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, 0.35f);
-		nvgFillColor(args.vg, nvgRGBA(226, 246, 255, int(75 * intensity)));
+		nvgCircle(args.vg, 0.f, 0.f, 0.4f);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, int(110 * intensity)));  // Pure white hotspot
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
 
@@ -195,13 +217,13 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 			center.y - h * 0.5f,
 			center.x + w * 0.5f,
 			center.y + h * 0.5f,
-			nvgRGBA(0x7a, 0x5c, 0xff, int(110 * intensity)),
-			nvgRGBA(0x1c, 0xcc, 0xd9, int(130 * intensity))));
+			nvgRGBAf(strokeColor.r, strokeColor.g, strokeColor.b, (110.f / 255.f) * intensity),
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, (130.f / 255.f) * intensity)));
 		nvgStroke(args.vg);
 
 		// Debug print showing phase percentage next to the logo crystal
 		if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-			const float pct = (visual_assets::panelGlassTintAmount() / 0.28f) * 100.f;
+			const float pct = visual_assets::panelGlassCyclePhase() * 100.f;
 			char buf[32];
 			std::snprintf(buf, sizeof(buf), "%.1f%%", pct);
 
