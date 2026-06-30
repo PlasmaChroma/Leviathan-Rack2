@@ -3642,7 +3642,6 @@ struct TemporalDeckWidget : ModuleWidget {
     }
     addParam(createParamCentered<SmallGoldButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
     addParam(createParamCentered<SmallGoldButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<SmallGoldButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
 
     addInput(createInputCentered<Magitek2InputJack>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
@@ -3723,7 +3722,8 @@ struct TemporalDeckWidget : ModuleWidget {
     tonearm->box.size = box.size;
     addChild(tonearm);
 
-    // Add after platter/tonearm so this control is visible on top.
+    // Add after platter/tonearm so controls inside the platter hit area remain interactive.
+    addParam(createParamCentered<SmallGoldButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(cartridgeCycleMm), module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
 
     Vec scopeSpawnPosMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm + 3.5f, 0.f));
