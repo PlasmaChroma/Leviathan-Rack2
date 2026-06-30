@@ -2592,9 +2592,128 @@ void GoldButton::step() {
 	}
 }
 
+struct SmallGoldButtonStaticLayer : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const float s = std::min(box.size.x, box.size.y);
+		if (s <= 1.f) {
+			return;
+		}
+		const Vec center = box.size.mult(0.5f);
+		const float socketR = s * 0.49f;
+
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, center.x + s * 0.055f, center.y + s * 0.15f, s * 0.36f, s * 0.20f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			center.x + s * 0.06f,
+			center.y + s * 0.12f,
+			s * 0.06f,
+			s * 0.39f,
+			nvgRGBA(0, 0, 0, 88),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, socketR);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			center.x - s * 0.12f,
+			center.y - s * 0.16f,
+			s * 0.20f,
+			socketR,
+			nvgRGBA(32, 25, 18, 255),
+			nvgRGBA(5, 5, 7, 255)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, socketR - 0.75f);
+		nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.055f));
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 178));
+		nvgStroke(args.vg);
+	}
+};
+
+struct SmallGoldButtonFaceLayer : TransparentWidget {
+	SmallGoldButton* owner = nullptr;
+
+	explicit SmallGoldButtonFaceLayer(SmallGoldButton* owner) : owner(owner) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float s = std::min(box.size.x, box.size.y);
+		if (!owner || s <= 1.f) {
+			return;
+		}
+		const float p = clamp(owner->pressAmount, 0.f, 1.f);
+		const Vec center = box.size.mult(0.5f);
+		const Vec faceCenter = center.plus(Vec(0.f, crossfade(0.f, 0.72f, p)));
+		const float faceR = s * crossfade(0.375f, 0.352f, p);
+
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, center.x + s * 0.055f, center.y + s * crossfade(0.12f, 0.085f, p), s * 0.28f, s * 0.12f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			center.x + s * 0.05f,
+			center.y + s * 0.10f,
+			s * 0.04f,
+			s * 0.31f,
+			nvgRGBA(0, 0, 0, int(std::round(crossfade(36.f, 104.f, p)))),
+			nvgRGBA(0, 0, 0, 0)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, faceCenter.x, faceCenter.y, faceR);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			faceCenter.x - faceR * 0.38f,
+			faceCenter.y - faceR * 0.48f,
+			faceR * 0.10f,
+			faceR * 1.18f,
+			nvgRGBA(255, 239, 146, int(std::round(crossfade(255.f, 218.f, p)))),
+			nvgRGBA(156, 86, 20, 255)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, faceCenter.x, faceCenter.y, faceR);
+		nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.05f));
+		nvgStrokePaint(args.vg, nvgLinearGradient(args.vg,
+			faceCenter.x,
+			faceCenter.y - faceR,
+			faceCenter.x,
+			faceCenter.y + faceR,
+			nvgRGBA(255, 248, 186, int(std::round(crossfade(170.f, 92.f, p)))),
+			nvgRGBA(80, 36, 8, 205)));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, faceCenter.x - faceR * 0.28f, faceCenter.y - faceR * 0.34f, faceR * 0.23f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			faceCenter.x - faceR * 0.30f,
+			faceCenter.y - faceR * 0.36f,
+			0.f,
+			faceR * 0.38f,
+			nvgRGBA(255, 255, 230, int(std::round(crossfade(128.f, 54.f, p)))),
+			nvgRGBA(255, 226, 120, 0)));
+		nvgFill(args.vg);
+	}
+};
+
 SmallGoldButton::SmallGoldButton() {
 	momentary = true;
 	box.size = Vec(kSmallGoldButtonSizePx, kSmallGoldButtonSizePx);
+
+	staticFb = new widget::FramebufferWidget();
+	staticFb->dirtyOnSubpixelChange = false;
+	staticFb->box.size = box.size;
+	SmallGoldButtonStaticLayer* staticLayer = new SmallGoldButtonStaticLayer();
+	staticLayer->box.size = box.size;
+	staticFb->addChild(staticLayer);
+	addChild(staticFb);
+
+	faceFb = new widget::FramebufferWidget();
+	faceFb->dirtyOnSubpixelChange = false;
+	faceFb->box.size = box.size;
+	SmallGoldButtonFaceLayer* faceLayer = new SmallGoldButtonFaceLayer(this);
+	faceLayer->box.size = box.size;
+	faceFb->addChild(faceLayer);
+	addChild(faceFb);
+	lastRenderedPressAmount = -1.f;
 }
 
 void SmallGoldButton::step() {
@@ -2605,81 +2724,14 @@ void SmallGoldButton::step() {
 	if (std::fabs(target - pressAmount) < 0.001f) {
 		pressAmount = target;
 	}
+	if (faceFb && std::fabs(pressAmount - lastRenderedPressAmount) > 0.0001f) {
+		faceFb->setDirty();
+		lastRenderedPressAmount = pressAmount;
+	}
 }
 
 void SmallGoldButton::draw(const DrawArgs& args) {
-	const float s = std::min(box.size.x, box.size.y);
-	if (s <= 1.f) {
-		return;
-	}
-
-	const float p = clamp(pressAmount, 0.f, 1.f);
-	const Vec center = box.size.mult(0.5f);
-	const Vec faceCenter = center.plus(Vec(0.f, crossfade(0.f, 0.72f, p)));
-	const float socketR = s * 0.49f;
-	const float faceR = s * crossfade(0.375f, 0.352f, p);
-
-	nvgBeginPath(args.vg);
-	nvgEllipse(args.vg, center.x + s * 0.055f, center.y + s * crossfade(0.15f, 0.09f, p), s * 0.36f, s * 0.20f);
-	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-		center.x + s * 0.06f,
-		center.y + s * 0.12f,
-		s * 0.06f,
-		s * 0.39f,
-		nvgRGBA(0, 0, 0, int(std::round(crossfade(88.f, 122.f, p)))),
-		nvgRGBA(0, 0, 0, 0)));
-	nvgFill(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, center.x, center.y, socketR);
-	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-		center.x - s * 0.12f,
-		center.y - s * 0.16f,
-		s * 0.20f,
-		socketR,
-		nvgRGBA(32, 25, 18, 255),
-		nvgRGBA(5, 5, 7, 255)));
-	nvgFill(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, center.x, center.y, socketR - 0.75f);
-	nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.055f));
-	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 178));
-	nvgStroke(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, faceCenter.x, faceCenter.y, faceR);
-	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-		faceCenter.x - faceR * 0.38f,
-		faceCenter.y - faceR * 0.48f,
-		faceR * 0.10f,
-		faceR * 1.18f,
-		nvgRGBA(255, 239, 146, int(std::round(crossfade(255.f, 218.f, p)))),
-		nvgRGBA(156, 86, 20, 255)));
-	nvgFill(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, faceCenter.x, faceCenter.y, faceR);
-	nvgStrokeWidth(args.vg, std::max(0.55f, s * 0.05f));
-	nvgStrokePaint(args.vg, nvgLinearGradient(args.vg,
-		faceCenter.x,
-		faceCenter.y - faceR,
-		faceCenter.x,
-		faceCenter.y + faceR,
-		nvgRGBA(255, 248, 186, int(std::round(crossfade(170.f, 92.f, p)))),
-		nvgRGBA(80, 36, 8, 205)));
-	nvgStroke(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, faceCenter.x - faceR * 0.28f, faceCenter.y - faceR * 0.34f, faceR * 0.23f);
-	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-		faceCenter.x - faceR * 0.30f,
-		faceCenter.y - faceR * 0.36f,
-		0.f,
-		faceR * 0.38f,
-		nvgRGBA(255, 255, 230, int(std::round(crossfade(128.f, 54.f, p)))),
-		nvgRGBA(255, 226, 120, 0)));
-	nvgFill(args.vg);
+	app::Switch::draw(args);
 }
 
  void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {
