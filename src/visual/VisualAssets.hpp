@@ -88,6 +88,7 @@ struct GlowShimmerWidget : TransparentWidget {
 	float shimmerPhaseRad = 0.f;
 	float opacity = 0.f;
 	float pulse = 1.f;
+	bool plasmaOrbStyle = false;
 
 	void draw(const DrawArgs& args) override;
 };

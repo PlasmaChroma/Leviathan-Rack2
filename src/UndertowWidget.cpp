@@ -268,8 +268,9 @@ struct UndertowWidget final : ModuleWidget {
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("Undertow", module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/undertow.svg");
+    const std::string panelPath = asset::plugin(pluginInstance, "res/undertow.panel.svg");
     setPanel(createPanel(panelPath));
+    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();
@@ -358,6 +359,19 @@ struct UndertowWidget final : ModuleWidget {
 
     addTinyLight(Undertow::SYNC_LIGHT, "SYNC_LIGHT", Vec(14.456f, 42.500f), nvgRGB(255, 235, 120));
     addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(36.089f, 42.817f), nvgRGB(255, 235, 120));
+
+    {
+      widget::SvgWidget* labels = new widget::SvgWidget();
+      labels->setSvg(visual_assets::loadPluginSvgCached("res/undertow.labels.svg"));
+      labels->box.size = box.size;
+
+      widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
+      labelsFb->box.size = box.size;
+      labelsFb->oversample = 2.0f;
+      labelsFb->dirtyOnSubpixelChange = true;
+      labelsFb->addChild(labels);
+      addChild(labelsFb);
+    }
 
     previewBuildTimer.markAnchorsDone();
   }

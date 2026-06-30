@@ -1960,6 +1960,7 @@ CyanOrbScrew::CyanOrbScrew()
 		glowWidget->coreR = 0xb8;
 		glowWidget->coreG = 0x72;
 		glowWidget->coreB = 0xff;
+		glowWidget->plasmaOrbStyle = true;
 	}
 }
 
@@ -1970,15 +1971,78 @@ void GlowShimmerWidget::draw(const DrawArgs& args) {
 
 	const float radius = std::min(box.size.x, box.size.y) * 0.5f;
 	const Vec center = box.size.mult(0.5f);
+	const float alphaScale = pulse * opacity;
 
 	const uint8_t r = glowR;
 	const uint8_t g = glowG;
 	const uint8_t b = glowB;
 
+	if (plasmaOrbStyle) {
+		const float coreRadius = radius * 0.31f;
+		const float glowRadius = radius * 0.76f;
+		const NVGcolor cyan = nvgRGBA(0x00, 0xc8, 0xff, int(std::round(205.f * alphaScale)));
+		const NVGcolor purple = nvgRGBA(0x8e, 0x34, 0xff, int(std::round(198.f * alphaScale)));
+		const float hue = 0.5f + 0.5f * std::sin(shimmerPhaseRad * 0.41f + 0.6f);
+		const float invHue = 1.f - hue * 0.55f;
+		auto blend = [](NVGcolor a, NVGcolor b, float t) {
+			t = clamp(t, 0.f, 1.f);
+			return nvgRGBAf(
+				a.r + (b.r - a.r) * t,
+				a.g + (b.g - a.g) * t,
+				a.b + (b.b - a.b) * t,
+				a.a + (b.a - a.a) * t);
+		};
+		const NVGcolor glowColor = blend(cyan, purple, hue);
+		const NVGcolor accentColor = blend(purple, cyan, invHue);
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, center.x - radius * 0.72f, center.y - radius * 0.72f, radius * 1.44f, radius * 1.44f);
+
+		NVGpaint outerGlow = nvgRadialGradient(args.vg, center.x, center.y, coreRadius * 0.55f, glowRadius,
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.52f * alphaScale),
+			nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.f));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, glowRadius);
+		nvgFillPaint(args.vg, outerGlow);
+		nvgFill(args.vg);
+
+		NVGpaint violetGlow = nvgRadialGradient(args.vg, center.x + coreRadius * 0.42f, center.y + coreRadius * 0.18f,
+			coreRadius * 0.18f, glowRadius * 0.72f,
+			nvgRGBAf(accentColor.r, accentColor.g, accentColor.b, 0.58f * alphaScale),
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0.f));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, glowRadius * 0.78f);
+		nvgFillPaint(args.vg, violetGlow);
+		nvgFill(args.vg);
+
+		NVGpaint core = nvgRadialGradient(args.vg, center.x - coreRadius * 0.2f, center.y - coreRadius * 0.22f,
+			coreRadius * 0.08f, coreRadius * 1.18f,
+			nvgRGBA(228, 250, 255, int(std::round(238.f * alphaScale))),
+			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, alphaScale));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, coreRadius);
+		nvgFillPaint(args.vg, core);
+		nvgFill(args.vg);
+
+		for (int i = 0; i < 3; ++i) {
+			const float phase = shimmerPhaseRad * (1.25f + 0.23f * float(i)) + float(i) * 1.73f;
+			const float sx = std::sin(phase) * (0.42f + 0.08f * float(i));
+			const float sy = std::cos(phase * 1.21f) * 0.46f;
+			const float sparkR = coreRadius * (0.16f + 0.035f * float(i & 1));
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x + sx * coreRadius, center.y + sy * coreRadius, sparkR);
+			nvgFillColor(args.vg, (i & 1)
+				? nvgRGBA(0xff, 0xb8, 0x00, int(std::round(128.f * alphaScale)))
+				: nvgRGBA(255, 255, 255, int(std::round(146.f * alphaScale))));
+			nvgFill(args.vg);
+		}
+
+		nvgRestore(args.vg);
+		return;
+	}
+
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, center.x, center.y);
-
-	const float alphaScale = pulse * opacity;
 
 	// Outer bloom: deep glow filling most of the orb
 	nvgBeginPath(args.vg);
