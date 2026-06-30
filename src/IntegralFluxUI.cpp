@@ -64,6 +64,45 @@ struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	}
 };
 
+struct IntegralFluxLogoWidget final : TransparentWidget {
+	std::string imagePath = asset::plugin(pluginInstance, "res/icon/Leviathan_Logo.png");
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || box.size.x <= 1.f || box.size.y <= 1.f) {
+			return;
+		}
+		std::shared_ptr<window::Image> image = APP->window->loadImage(imagePath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, imagePath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+		int imageWidth = 0;
+		int imageHeight = 0;
+		nvgImageSize(args.vg, imageHandle, &imageWidth, &imageHeight);
+		if (imageWidth <= 0 || imageHeight <= 0) {
+			return;
+		}
+
+		const float imageAspect = float(imageWidth) / float(imageHeight);
+		float drawWidth = box.size.x;
+		float drawHeight = drawWidth / imageAspect;
+		if (drawHeight > box.size.y) {
+			drawHeight = box.size.y;
+			drawWidth = drawHeight * imageAspect;
+		}
+		const float x = 0.5f * (box.size.x - drawWidth);
+		const float y = 0.5f * (box.size.y - drawHeight);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(args.vg, nvgImagePattern(
+			args.vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f));
+		nvgFill(args.vg);
+	}
+};
+
 // Create a bigger basic button
 struct BigTL1105 : TL1105 {
     BigTL1105() {
@@ -1279,6 +1318,16 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(dragonFb);
 		}
 		previewBuildTimer.markPanelDone();
+		{
+			widget::FramebufferWidget* logoFb = new widget::FramebufferWidget();
+			logoFb->box.pos = mm2px(Vec(27.8f, 120.25f));
+			logoFb->box.size = mm2px(Vec(46.0f, 7.85f));
+			logoFb->dirtyOnSubpixelChange = false;
+			IntegralFluxLogoWidget* logo = new IntegralFluxLogoWidget();
+			logo->box.size = logoFb->box.size;
+			logoFb->addChild(logo);
+			addChild(logoFb);
+		}
 
         // use LeviathanHaloKnob2 for surge/sink and curve shape knobs
         // use SmallAperture LEDs for the indicator lights

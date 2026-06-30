@@ -1061,22 +1061,6 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	return fb;
 }
 
-Widget* createLeviathanFooterLogoWidget(math::Rect boundsMm) {
-	Widget* root = new Widget();
-	root->box.pos = mm2px(boundsMm.pos);
-	root->box.size = mm2px(boundsMm.size);
-
-	AspectFitRasterImageWidget* full = new AspectFitRasterImageWidget("res/icon/leviathan_footer_full.png", 1.f);
-	full->box.size = root->box.size;
-	root->addChild(full);
-
-	AspectFitRasterImageWidget* glow = new AspectFitRasterImageWidget("res/icon/leviathan_footer_glow.png", 1.f);
-	glow->box.size = root->box.size;
-	root->addChild(glow);
-
-	return root;
-}
-
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {
 	if (!parent || svgPath.empty() || idSubstring.empty()) {
 		return 0;
