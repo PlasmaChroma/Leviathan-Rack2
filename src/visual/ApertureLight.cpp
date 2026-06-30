@@ -1,4 +1,5 @@
 #include "ApertureLight.hpp"
+#include "ApertureLightTransfer.hpp"
 
 #include <cmath>
 
@@ -225,9 +226,10 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 	else {
 		activeColor = baseColor;
 	}
-	const float glow = std::pow(t, 0.55f);
-	const float core = std::pow(t, 0.85f);
-	const float hot = std::pow(t, 3.0f);
+	const aperture_light::Transfer transfer = aperture_light::transferFromBrightness(t);
+	const float glow = transfer.glow;
+	const float core = transfer.core;
+	const float hot = transfer.hot;
 	const float bloom = apertureBloomAmount();
 
 	if (t > 0.001f && bloom > 0.f) {
