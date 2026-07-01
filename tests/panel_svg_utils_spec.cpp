@@ -1,6 +1,7 @@
 #include "../src/PanelSvgUtils.hpp"
 #include "../src/PanelAnchorAtlas.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -184,6 +185,24 @@ TestResult testGeneratedAtlasFindsRealPanelAnchor() {
             " cy=" + std::to_string(anchor.cy)};
 }
 
+TestResult testBifurxGlassPathParses() {
+  std::vector<panel_svg::SvgPathMatch> matches;
+  bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
+  const auto input = std::find_if(matches.begin(), matches.end(), [](const panel_svg::SvgPathMatch& match) {
+    return match.id == "inputs";
+  });
+  const bool hasRoundedCurve = input != matches.end() && std::any_of(
+    input->commands.begin(), input->commands.end(), [](const panel_svg::SvgPathCommand& command) {
+      return command.type == panel_svg::SvgPathCommand::QuadTo;
+    });
+  const bool pass = ok && input != matches.end() && !input->commands.empty() && hasRoundedCurve;
+  return {"Bifurx inputs path is available to the glass renderer", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) +
+            " count=" + std::to_string(matches.size()) +
+            " inputs=" + std::to_string(input != matches.end() ? 1 : 0) +
+            " rounded=" + std::to_string(hasRoundedCurve ? 1 : 0)};
+}
+
 } // namespace
 
 int main() {
@@ -195,6 +214,7 @@ int main() {
   tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
+  tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;
   std::cout << "Panel SVG Utils Spec\n";
