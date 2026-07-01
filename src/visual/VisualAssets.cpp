@@ -833,10 +833,10 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		NVGpaint mainSheen = nvgLinearGradient(args.vg, x + w * 0.02f, y - h * 0.04f, x + w * 0.62f, y + h * 0.99f,
 			nvgRGBA(255, 255, 255, mainAlpha), nvgRGBA(255, 255, 255, 0));
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.015f, y - h * 0.035f);
-		nvgLineTo(args.vg, x + w * 0.145f, y - h * 0.035f);
-		nvgLineTo(args.vg, x + w * 0.66f, y + h * 0.995f);
-		nvgLineTo(args.vg, x + w * 0.47f, y + h * 0.995f);
+		nvgMoveTo(args.vg, x + w * 0.045f, y + h * 0.018f);
+		nvgLineTo(args.vg, x + w * 0.18f, y + h * 0.018f);
+		nvgLineTo(args.vg, x + w * 0.58f, y + h * 0.982f);
+		nvgLineTo(args.vg, x + w * 0.40f, y + h * 0.982f);
 		nvgClosePath(args.vg);
 		nvgFillPaint(args.vg, mainSheen);
 		nvgFill(args.vg);
@@ -920,19 +920,21 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
 		nvgStroke(args.vg);
 
-		nvgBeginPath(args.vg);
-		appendGlassPathTopContour(args.vg, glass);
-		nvgStrokeWidth(args.vg, 1.35f);
-		nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w * 0.82f, y + h * 0.16f,
-			nvgRGBA(255, 255, 255, int(std::round(34.f + smallBoost * 12.f))),
-			nvgRGBA(255, 255, 255, 0)));
-		nvgStroke(args.vg);
+		if (!glass.useTemporalDeckInputsGlare) {
+			nvgBeginPath(args.vg);
+			appendGlassPathTopContour(args.vg, glass);
+			nvgStrokeWidth(args.vg, 1.35f);
+			nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w * 0.82f, y + h * 0.16f,
+				nvgRGBA(255, 255, 255, int(std::round(34.f + smallBoost * 12.f))),
+				nvgRGBA(255, 255, 255, 0)));
+			nvgStroke(args.vg);
 
-		nvgBeginPath(args.vg);
-		appendGlassPathTopContour(args.vg, glass);
-		nvgStrokeWidth(args.vg, 0.42f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(58.f + smallBoost * 14.f))));
-		nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			appendGlassPathTopContour(args.vg, glass);
+			nvgStrokeWidth(args.vg, 0.42f);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(58.f + smallBoost * 14.f))));
+			nvgStroke(args.vg);
+		}
 
 		if (gPanelGlassTint.currentAmount > 0.f) {
 			nvgBeginPath(args.vg);
