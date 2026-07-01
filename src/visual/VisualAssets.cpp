@@ -1427,6 +1427,16 @@ uint64_t eclipseShadowDrawCount() {
 
 namespace {
 
+float rackHaloBloomAmount() {
+	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+	if (bloomRaw <= 0.001f) {
+		return 0.f;
+	}
+	const float bloomLow = bloomRaw + 2.22f * bloomRaw * (1.f - bloomRaw);
+	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+	return bloomLow * (1.44f + 1.05f * bloomRamp * bloomRamp);
+}
+
 struct OrbScrewRasterLayer : TransparentWidget {
 	std::string path;
 	const float* rotationRad = nullptr;
@@ -3179,7 +3189,8 @@ void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
 	const float cy = box.size.y * 0.5f;
 	const float lensR = s * 0.255f;
 	const float coreR = s * 0.17f;
-	const float bloomR = s * 0.55f;
+	const float bloomR = s * 0.78f;
+	const float bloomAmount = rackHaloBloomAmount();
 	const NVGcolor hotWhite = nvgRGBAf(1.f, 1.f, 1.f, 1.f);
 	auto withAlpha = [](NVGcolor color, float alpha) {
 		color.a = clamp(alpha, 0.f, 1.f);
@@ -3194,16 +3205,29 @@ void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
 			a.a + (b.a - a.a) * t);
 	};
 
-	nvgBeginPath(args.vg);
-	nvgCircle(args.vg, cx, cy, bloomR);
-	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
-		cx,
-		cy,
-		coreR * 0.55f,
-		bloomR,
-		withAlpha(activeColor, 0.28f * transfer.glow),
-		withAlpha(activeColor, 0.f)));
-	nvgFill(args.vg);
+	if (bloomAmount > 0.f) {
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx, cy, bloomR);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			cx,
+			cy,
+			coreR * 0.55f,
+			bloomR,
+			withAlpha(activeColor, 0.34f * transfer.glow * bloomAmount),
+			withAlpha(activeColor, 0.f)));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx, cy, lensR * 1.92f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			cx,
+			cy,
+			coreR * 0.36f,
+			lensR * 1.92f,
+			withAlpha(activeColor, 0.26f * transfer.glow * bloomAmount),
+			withAlpha(activeColor, 0.f)));
+		nvgFill(args.vg);
+	}
 
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, cx, cy, lensR * 1.08f);

@@ -301,7 +301,7 @@ struct UndertowWidget final : ModuleWidget {
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
       auto* button = createLightParamCentered<SmallGoldApertureButton>(
         mm2px(posMm), module, paramId, lightId);
-      static_cast<SmallGoldApertureLight*>(button->getLight())->setBaseColor(nvgRGB(255, 235, 120));
+      static_cast<SmallGoldApertureLight*>(button->getLight())->setBaseColor(nvgRGB(255, 118, 24));
       addParam(button);
     };
     auto addInputPort = [&](int inputId, const char* anchorId, const Vec& fallbackMm) {
