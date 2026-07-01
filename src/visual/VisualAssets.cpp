@@ -833,8 +833,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		NVGpaint mainSheen = nvgLinearGradient(args.vg, x + w * 0.02f, y - h * 0.04f, x + w * 0.62f, y + h * 0.99f,
 			nvgRGBA(255, 255, 255, mainAlpha), nvgRGBA(255, 255, 255, 0));
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.045f, y + h * 0.018f);
-		nvgLineTo(args.vg, x + w * 0.18f, y + h * 0.018f);
+		nvgMoveTo(args.vg, x + w * 0.0384f, y);
+		nvgLineTo(args.vg, x + w * 0.1725f, y);
 		nvgLineTo(args.vg, x + w * 0.58f, y + h * 0.982f);
 		nvgLineTo(args.vg, x + w * 0.40f, y + h * 0.982f);
 		nvgClosePath(args.vg);
