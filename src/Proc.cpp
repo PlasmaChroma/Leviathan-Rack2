@@ -1597,6 +1597,85 @@ struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
 	}
 };
 
+struct ProcLinearPointOverlay : TransparentWidget {
+	Vec centerPx;
+
+	static constexpr float LINEAR_SHAPE_VALUE = Proc::LINEAR_SHAPE;
+	static constexpr float SHARK_FIN_LINEAR_SHAPE_VALUE = 0.5f;
+	static constexpr float BASE_ANGLE_DEG = 120.f;
+	static constexpr float SWEEP_ANGLE_DEG = 300.f;
+	static constexpr float LINE_RADIUS_MM = 8.6f;
+	static constexpr float LABEL_RADIUS_MM = 10.9f;
+	static constexpr float LABEL_TANGENT_OFFSET_MM = 0.85f;
+	static constexpr float LABEL_Y_OFFSET_MM = 0.32f;
+	static constexpr float LABEL_TOP_Y_OFFSET_MM = 0.18f;
+	static constexpr float LABEL_MIRROR_X_OFFSET_MM = 0.38f;
+	static constexpr float LABEL_MIRROR_Y_OFFSET_MM = -0.28f;
+	static constexpr float LINE_WIDTH_MM = 0.5f;
+	static constexpr float TRIANGLE_GLYPH_WIDTH_MM = 4.1f;
+	static constexpr float TRIANGLE_GLYPH_HEIGHT_MM = 2.35f;
+	static constexpr float TRIANGLE_GLYPH_LINE_WIDTH_MM = 0.42f;
+
+	explicit ProcLinearPointOverlay(Vec centerPx)
+		: centerPx(centerPx) {
+		box.pos = Vec(0.f, 0.f);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float angle = (BASE_ANGLE_DEG + SWEEP_ANGLE_DEG * LINEAR_SHAPE_VALUE) * (float(M_PI) / 180.f);
+		const Vec dir(std::cos(angle), std::sin(angle));
+		const Vec tangent(-dir.y, dir.x);
+		const float lineRadius = mm2px(Vec(LINE_RADIUS_MM, 0.f)).x;
+		const float labelRadius = mm2px(Vec(LABEL_RADIUS_MM, 0.f)).x;
+		const float tangentOffset = mm2px(Vec(LABEL_TANGENT_OFFSET_MM, 0.f)).x
+			* clamp(std::fabs(LINEAR_SHAPE_VALUE - SHARK_FIN_LINEAR_SHAPE_VALUE)
+				/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
+		const float topBlend = clamp((LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE)
+			/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
+		const float labelYOffset = mm2px(Vec(0.f, LABEL_Y_OFFSET_MM + LABEL_TOP_Y_OFFSET_MM * topBlend)).y;
+		const Vec mirrorOffset = mm2px(Vec(
+			LABEL_MIRROR_X_OFFSET_MM * (1.f - topBlend),
+			LABEL_MIRROR_Y_OFFSET_MM * (1.f - topBlend)));
+		const float lineWidth = mm2px(Vec(LINE_WIDTH_MM, 0.f)).x;
+		const float triangleWidth = mm2px(Vec(TRIANGLE_GLYPH_WIDTH_MM, 0.f)).x;
+		const float triangleHeight = mm2px(Vec(0.f, TRIANGLE_GLYPH_HEIGHT_MM)).y;
+		const float triangleLineWidth = mm2px(Vec(TRIANGLE_GLYPH_LINE_WIDTH_MM, 0.f)).x;
+		const Vec lineEnd = centerPx.plus(dir.mult(lineRadius));
+		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset)).plus(Vec(0.f, labelYOffset)).plus(mirrorOffset);
+		const Vec triangleLeft(labelPos.x - 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
+		const Vec trianglePeak(labelPos.x, labelPos.y - 0.5f * triangleHeight);
+		const Vec triangleRight(labelPos.x + 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
+
+		nvgSave(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, centerPx.x, centerPx.y);
+		nvgLineTo(args.vg, lineEnd.x, lineEnd.y);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgStrokeWidth(args.vg, lineWidth);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStrokeWidth(args.vg, triangleLineWidth);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, triangleLeft.x, triangleLeft.y);
+		nvgLineTo(args.vg, trianglePeak.x, trianglePeak.y);
+		nvgLineTo(args.vg, triangleRight.x, triangleRight.y);
+		NVGpaint triangleGradient = nvgLinearGradient(
+			args.vg,
+			triangleLeft.x,
+			triangleLeft.y,
+			triangleRight.x,
+			triangleRight.y,
+			nvgRGBA(255, 184, 0, 255),
+			nvgRGBA(220, 94, 30, 255));
+		nvgStrokePaint(args.vg, triangleGradient);
+		nvgStroke(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
 struct ProcEdgeHalo2Knob : LeviathanHaloKnob2 {
 	enum PreviewEdge {
 		PREVIEW_EDGE_RISE,
@@ -1796,6 +1875,18 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("EOC_LIGHT", &eocLightPos);
 		applyPointOverride("MAIN_LIGHT", &outLightPos);
 		applyPointOverride("NEG_LIGHT", &negLightPos);
+
+		{
+			widget::FramebufferWidget* linearPointFb = new widget::FramebufferWidget();
+			const Vec centerPx = mm2px(shapePos);
+			linearPointFb->box.size = mm2px(Vec(27.f, 27.f));
+			linearPointFb->box.pos = centerPx.minus(linearPointFb->box.size.mult(0.5f));
+			linearPointFb->dirtyOnSubpixelChange = false;
+			ProcLinearPointOverlay* linearPoint = new ProcLinearPointOverlay(centerPx.minus(linearPointFb->box.pos));
+			linearPoint->box.size = linearPointFb->box.size;
+			linearPointFb->addChild(linearPoint);
+			addChild(linearPointFb);
+		}
 
 		addParam(createParamCentered<GoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
 		{

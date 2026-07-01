@@ -248,13 +248,13 @@
    inkscape:document-units="mm"
    inkscape:zoom="3.3736828"
    inkscape:cx="-9.0405654"
-   inkscape:cy="204.96888"
+   inkscape:cy="157.54297"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="glass"
+   inkscape:current-layer="panel_graphics"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -372,8 +372,8 @@
       </g>
       
     <g
-   id="lines_gen1_side"><path
-     style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+   id="connector_lines"><path
+     style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
      d="m 2161.9375,6802.2764 -657.9069,-539.492"
      id="linear_line"
      sodipodi:nodetypes="cc" /><path
@@ -576,11 +576,11 @@
    y="6692.2412"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">CURVE</text>
-        <text
+  <text
    id="reworked_text27"
    x="377.88834"
    y="5064.1782"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="display:none;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LIN</text>
         
         
@@ -700,7 +700,7 @@
         <path
    d="m 192.89115,5137.5562 q -3.10446,0 -4.7978,-1.6933 -1.69333,-1.9756 -1.69333,-4.7978 v -184.5739 q 0,-2.8222 1.69333,-4.5155 1.69334,-1.9756 4.7978,-1.9756 h 14.95781 q 2.82223,0 4.51557,1.9756 1.69334,1.6933 1.69334,4.5155 v 166.5116 h 93.98026 q 3.10445,0 4.79779,1.9756 1.69334,1.6933 1.69334,4.7977 v 11.289 q 0,2.8222 -1.69334,4.7978 -1.69334,1.6933 -4.79779,1.6933 z m 158.89146,0 q -3.10445,0 -4.79779,-1.6933 -1.69334,-1.9756 -1.69334,-4.7978 v -184.5739 q 0,-2.8222 1.69334,-4.5155 1.69334,-1.9756 4.79779,-1.9756 h 14.95782 q 2.82223,0 4.51557,1.9756 1.97556,1.6933 1.97556,4.5155 v 184.5739 q 0,2.8222 -1.97556,4.7978 -1.69334,1.6933 -4.51557,1.6933 z m 77.04707,0 q -3.10445,0 -4.79779,-1.6933 -1.69334,-1.9756 -1.69334,-4.7978 v -184.2916 q 0,-3.1045 1.69334,-4.7978 1.69334,-1.9756 4.79779,-1.9756 h 12.98226 q 3.38668,0 5.08001,1.6933 1.69334,1.4112 1.97557,2.2578 l 93.69803,143.9338 v -141.1115 q 0,-3.1045 1.69334,-4.7978 1.69333,-1.9756 4.79779,-1.9756 h 13.5467 q 3.10445,0 4.79779,1.9756 1.97556,1.6933 1.97556,4.7978 v 184.0093 q 0,2.8223 -1.97556,4.7978 -1.69334,1.9756 -4.51557,1.9756 h -13.5467 q -3.10445,0 -4.79779,-1.6933 -1.41112,-1.6934 -1.97556,-2.2578 l -93.41581,-142.5226 v 139.9826 q 0,2.8222 -1.97556,4.7978 -1.69334,1.6933 -4.79779,1.6933 z"
    id="text13"
-   style="font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   style="display:none;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    aria-label="LIN" />
         
         
