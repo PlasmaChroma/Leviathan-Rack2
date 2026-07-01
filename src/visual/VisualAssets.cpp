@@ -1,4 +1,5 @@
 #include "VisualAssets.hpp"
+#include "ApertureLightTransfer.hpp"
 #include "../MathHelpers.hpp"
 #include "../NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
@@ -3082,6 +3083,198 @@ void SmallGoldButton::step() {
 
 void SmallGoldButton::draw(const DrawArgs& args) {
 	app::Switch::draw(args);
+}
+
+SmallGoldApertureLight::SmallGoldApertureLight() {
+	box.size = Vec(13.f, 13.f);
+	addBaseColor(baseColor);
+}
+
+void SmallGoldApertureLight::setBaseColor(NVGcolor color) {
+	baseColor = color;
+	activeColor = color;
+	baseColors.clear();
+	addBaseColor(color);
+}
+
+void SmallGoldApertureLight::drawBackground(const DrawArgs& args) {
+	const float s = std::min(box.size.x, box.size.y);
+	if (s <= 1.f) {
+		return;
+	}
+	const float cx = box.size.x * 0.5f;
+	const float cy = box.size.y * 0.5f;
+	const float socketR = s * 0.35f;
+	const float lensR = s * 0.255f;
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, socketR);
+	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+		cx - socketR * 0.22f,
+		cy - socketR * 0.25f,
+		socketR * 0.18f,
+		socketR,
+		nvgRGBA(86, 48, 16, 178),
+		nvgRGBA(2, 2, 3, 230)));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, socketR);
+	nvgStrokeWidth(args.vg, std::max(0.45f, s * 0.055f));
+	nvgStrokePaint(args.vg, nvgLinearGradient(args.vg,
+		cx - socketR,
+		cy - socketR,
+		cx + socketR,
+		cy + socketR,
+		nvgRGBA(255, 230, 138, 92),
+		nvgRGBA(38, 16, 2, 180)));
+	nvgStroke(args.vg);
+
+	NVGcolor glassCenter = nvgRGBAf(
+		baseColor.r * 0.14f,
+		baseColor.g * 0.14f,
+		baseColor.b * 0.14f,
+		0.62f);
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, lensR);
+	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+		cx - lensR * 0.28f,
+		cy - lensR * 0.34f,
+		lensR * 0.12f,
+		lensR,
+		glassCenter,
+		nvgRGBA(1, 2, 4, 228)));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, lensR);
+	nvgStrokeWidth(args.vg, std::max(0.35f, s * 0.038f));
+	nvgStrokeColor(args.vg, nvgRGBA(255, 246, 184, 46));
+	nvgStroke(args.vg);
+}
+
+void SmallGoldApertureLight::drawLight(const DrawArgs& args) {
+	float brightness = 0.f;
+	float colorWeight = 0.f;
+	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
+	for (size_t i = 0; i < baseColors.size(); ++i) {
+		engine::Light* light = getLight(int(i));
+		const float b = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		brightness = std::max(brightness, b);
+		colorWeight += b;
+		mixedColor.r += baseColors[i].r * b;
+		mixedColor.g += baseColors[i].g * b;
+		mixedColor.b += baseColors[i].b * b;
+	}
+	activeColor = colorWeight > 1e-6f
+		? nvgRGBAf(mixedColor.r / colorWeight, mixedColor.g / colorWeight, mixedColor.b / colorWeight, 1.f)
+		: baseColor;
+
+	if (brightness <= 0.001f) {
+		return;
+	}
+	const aperture_light::Transfer transfer = aperture_light::transferFromBrightness(clamp(brightness * 1.55f, 0.f, 1.f));
+	const float s = std::min(box.size.x, box.size.y);
+	const float cx = box.size.x * 0.5f;
+	const float cy = box.size.y * 0.5f;
+	const float lensR = s * 0.255f;
+	const float coreR = s * 0.17f;
+	const float bloomR = s * 0.55f;
+	const NVGcolor hotWhite = nvgRGBAf(1.f, 1.f, 1.f, 1.f);
+	auto withAlpha = [](NVGcolor color, float alpha) {
+		color.a = clamp(alpha, 0.f, 1.f);
+		return color;
+	};
+	auto mixColor = [](NVGcolor a, NVGcolor b, float t) {
+		t = clamp(t, 0.f, 1.f);
+		return nvgRGBAf(
+			a.r + (b.r - a.r) * t,
+			a.g + (b.g - a.g) * t,
+			a.b + (b.b - a.b) * t,
+			a.a + (b.a - a.a) * t);
+	};
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, bloomR);
+	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+		cx,
+		cy,
+		coreR * 0.55f,
+		bloomR,
+		withAlpha(activeColor, 0.28f * transfer.glow),
+		withAlpha(activeColor, 0.f)));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, lensR * 1.08f);
+	nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+		cx - lensR * 0.10f,
+		cy - lensR * 0.14f,
+		coreR * 0.18f,
+		lensR * 1.12f,
+		withAlpha(mixColor(activeColor, hotWhite, 0.62f), 0.40f * transfer.core + 0.34f * transfer.hot),
+		withAlpha(activeColor, 0.86f * transfer.core)));
+	nvgFill(args.vg);
+
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, cx, cy, coreR);
+	nvgFillColor(args.vg, withAlpha(mixColor(activeColor, hotWhite, 0.36f), 0.22f * transfer.core + 0.24f * transfer.hot));
+	nvgFill(args.vg);
+
+	if (transfer.hot > 0.001f) {
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx - lensR * 0.34f, cy - lensR * 0.38f, lensR * 0.22f);
+		nvgFillPaint(args.vg, nvgRadialGradient(args.vg,
+			cx - lensR * 0.34f,
+			cy - lensR * 0.38f,
+			0.f,
+			lensR * 0.26f,
+			nvgRGBAf(1.f, 1.f, 1.f, 0.58f * transfer.hot),
+			nvgRGBAf(1.f, 1.f, 1.f, 0.f)));
+		nvgFill(args.vg);
+	}
+}
+
+void SmallGoldApertureLight::drawHalo(const DrawArgs& args) {
+}
+
+SmallGoldApertureButton::SmallGoldApertureButton() {
+	momentary = false;
+	if (light) {
+		light->box.pos = box.size.div(2).minus(light->box.size.div(2));
+	}
+}
+
+void SmallGoldApertureButton::step() {
+	app::Switch::step();
+	const float target = visualHeld ? 1.f : 0.f;
+	pressAmount += (target - pressAmount) * (target > pressAmount ? 0.38f : 0.46f);
+	if (std::fabs(target - pressAmount) < 0.001f) {
+		pressAmount = target;
+	}
+	if (faceFb && std::fabs(pressAmount - lastRenderedPressAmount) > 0.0001f) {
+		faceFb->setDirty();
+		if (shadowFb) {
+			shadowFb->setDirty();
+		}
+		lastRenderedPressAmount = pressAmount;
+	}
+	if (light) {
+		const float p = clamp(pressAmount, 0.f, 1.f);
+		light->box.pos = box.size.div(2)
+			.plus(Vec(0.f, crossfade(0.f, 0.72f, p)))
+			.minus(light->box.size.div(2));
+	}
+}
+
+void SmallGoldApertureButton::onDragStart(const event::DragStart& e) {
+	visualHeld = true;
+	app::Switch::onDragStart(e);
+}
+
+void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
+	visualHeld = false;
+	app::Switch::onDragEnd(e);
 }
 
  void GearKnobInvertSized::ActiveRingWidget::draw(const DrawArgs& args) {

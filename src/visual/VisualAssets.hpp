@@ -177,6 +177,26 @@ struct SmallGoldButton : app::Switch {
 	void draw(const DrawArgs& args) override;
 };
 
+struct SmallGoldApertureLight : app::ModuleLightWidget {
+	NVGcolor baseColor = nvgRGB(255, 235, 120);
+	NVGcolor activeColor = nvgRGB(255, 235, 120);
+
+	SmallGoldApertureLight();
+	void setBaseColor(NVGcolor color);
+	void drawBackground(const DrawArgs& args) override;
+	void drawLight(const DrawArgs& args) override;
+	void drawHalo(const DrawArgs& args) override;
+};
+
+struct SmallGoldApertureButton : LightButton<SmallGoldButton, SmallGoldApertureLight> {
+	bool visualHeld = false;
+
+	SmallGoldApertureButton();
+	void step() override;
+	void onDragStart(const event::DragStart& e) override;
+	void onDragEnd(const event::DragEnd& e) override;
+};
+
 struct GearKnobInvertSized : app::SvgKnob {
 	struct ActiveRingWidget : TransparentWidget {
 		float minAngle = -0.83f * M_PI;

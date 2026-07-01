@@ -299,8 +299,10 @@ struct UndertowWidget final : ModuleWidget {
     auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-        mm2px(posMm), module, paramId, lightId));
+      auto* button = createLightParamCentered<SmallGoldApertureButton>(
+        mm2px(posMm), module, paramId, lightId);
+      static_cast<SmallGoldApertureLight*>(button->getLight())->setBaseColor(nvgRGB(255, 235, 120));
+      addParam(button);
     };
     auto addInputPort = [&](int inputId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
