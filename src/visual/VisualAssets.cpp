@@ -402,6 +402,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		math::Rect boundsPx;
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
 		bool useTemporalDeckInputsGlare = false;
+		bool useBifurxInputsGlare = false;
 	};
 
 	struct MetalRectArt {
@@ -845,6 +846,42 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgRestore(args.vg);
 	}
 
+	static void drawBifurxInputsPathGlare(const DrawArgs& args, const GlassPathArt& glass, float smallBoost) {
+		const float x = glass.boundsPx.pos.x;
+		const float y = glass.boundsPx.pos.y;
+		const float w = glass.boundsPx.size.x;
+		const float h = glass.boundsPx.size.y;
+		const int mainAlpha = int(std::round(10.f + smallBoost * 5.f));
+		const int secondaryAlpha = int(std::round(5.f + smallBoost * 3.f));
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, x, y, w, h);
+
+		NVGpaint mainSheen = nvgLinearGradient(args.vg, x + w * 0.04f, y - h * 0.12f, x + w * 0.45f, y + h * 0.92f,
+			nvgRGBA(255, 255, 255, mainAlpha), nvgRGBA(255, 255, 255, 0));
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x + w * 0.055f, y);
+		nvgLineTo(args.vg, x + w * 0.150f, y);
+		nvgLineTo(args.vg, x + w * 0.335f, y + h);
+		nvgLineTo(args.vg, x + w * 0.230f, y + h);
+		nvgClosePath(args.vg);
+		nvgFillPaint(args.vg, mainSheen);
+		nvgFill(args.vg);
+
+		NVGpaint secondarySheen = nvgLinearGradient(args.vg, x + w * 0.58f, y - h * 0.08f, x + w * 0.82f, y + h * 0.68f,
+			nvgRGBA(255, 255, 255, secondaryAlpha), nvgRGBA(255, 255, 255, 0));
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, x + w * 0.565f, y);
+		nvgLineTo(args.vg, x + w * 0.625f, y);
+		nvgLineTo(args.vg, x + w * 0.750f, y + h);
+		nvgLineTo(args.vg, x + w * 0.690f, y + h);
+		nvgClosePath(args.vg);
+		nvgFillPaint(args.vg, secondarySheen);
+		nvgFill(args.vg);
+
+		nvgRestore(args.vg);
+	}
+
 	void drawGlassPath(const DrawArgs& args, const GlassPathArt& glass) {
 		const float x = glass.boundsPx.pos.x;
 		const float y = glass.boundsPx.pos.y;
@@ -881,6 +918,9 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 		if (glass.useTemporalDeckInputsGlare) {
 			drawTemporalDeckInputsPathGlare(args, glass, smallBoost);
+		}
+		else if (glass.useBifurxInputsGlare) {
+			drawBifurxInputsPathGlare(args, glass, smallBoost);
 		}
 		else {
 			nvgBeginPath(args.vg);
@@ -921,7 +961,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
 		nvgStroke(args.vg);
 
-		if (!glass.useTemporalDeckInputsGlare) {
+		if (!glass.useTemporalDeckInputsGlare && !glass.useBifurxInputsGlare) {
 			nvgBeginPath(args.vg);
 			appendGlassPathTopContour(args.vg, glass);
 			nvgStrokeWidth(args.vg, 1.35f);
@@ -1108,6 +1148,7 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 			PanelSurfaceEffectWidget::GlassPathArt art;
 			art.id = match.id;
 			art.useTemporalDeckInputsGlare = match.id == "inputs" && svgPath.find("deck.panel.svg") != std::string::npos;
+			art.useBifurxInputsGlare = match.id == "inputs" && svgPath.find("bifurx.panel.svg") != std::string::npos;
 			art.boundsPx = math::Rect(mm2px(match.bounds.pos), mm2px(match.bounds.size));
 			art.commandsPx.reserve(match.commands.size());
 			for (panel_svg::SvgPathCommand command : match.commands) {
