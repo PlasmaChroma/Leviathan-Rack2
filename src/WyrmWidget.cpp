@@ -375,12 +375,13 @@ struct WyrmWidget : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
-		));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
-		));
+		auto addModeToggle = [&](int paramId, int lightId, Vec posMm) {
+			auto* button = createLightParamCentered<SmallGoldApertureButton>(mm2px(posMm), module, paramId, lightId);
+			static_cast<SmallGoldApertureLight*>(button->getLight())->setBaseColor(nvgRGB(255, 118, 24));
+			addParam(button);
+		};
+		addModeToggle(Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT, syncModePos);
+		addModeToggle(Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT, lfoModePos);
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
