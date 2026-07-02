@@ -11,6 +11,47 @@
 #include <limits>
 #include <vector>
 
+namespace {
+
+constexpr size_t kTDScopePowLutSize = 1024;
+
+template <size_t N>
+std::array<float, N> makePowLut(float exponent) {
+  std::array<float, N> lut {};
+  for (size_t i = 0; i < N; ++i) {
+    float x = float(i) / float(N - 1u);
+    lut[i] = std::pow(x, exponent);
+  }
+  return lut;
+}
+
+template <size_t N>
+float lookupPow01(const std::array<float, N> &lut, float x) {
+  x = clamp(x, 0.f, 1.f);
+  float scaled = x * float(N - 1u);
+  int i = int(scaled);
+  int j = std::min(i + 1, int(N - 1u));
+  float t = scaled - float(i);
+  return lut[size_t(i)] + (lut[size_t(j)] - lut[size_t(i)]) * t;
+}
+
+const std::array<float, kTDScopePowLutSize> &scopePow060Lut() {
+  static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.60f);
+  return lut;
+}
+
+const std::array<float, kTDScopePowLutSize> &scopePow056Lut() {
+  static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.56f);
+  return lut;
+}
+
+const std::array<float, kTDScopePowLutSize> &scopePow084Lut() {
+  static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.84f);
+  return lut;
+}
+
+} // namespace
+
 struct TDScopeGlWidget final : widget::OpenGlWidget {
   struct LiveScopeBucket {
     float minNorm = 0.f;
@@ -793,7 +834,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(lookupPow01(scopePow060Lut(), intensity) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
@@ -849,7 +890,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
           float fillFraction = (bucket.totalSamples > 0.f) ? (bucket.coveredSamples / bucket.totalSamples) : 0.f;
           float fillInfluence = 0.55f + 0.45f * clamp(fillFraction, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f * fillInfluence, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(lookupPow01(scopePow060Lut(), intensity) * 1.12f * fillInfluence, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kGapHoldFrames;
         }
@@ -893,8 +934,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
             accumulateTransientAgainst(size_t(iy + 1));
           }
-          float transientBoost = std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f);
-          float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * std::pow(transientBoost, 0.84f), 0.f, 1.f);
+          float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
+          float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * lookupPow01(scopePow084Lut(), transientBoost), 0.f, 1.f);
           (*colorDriveOut)[idx] = brightnessLift;
         }
       };
@@ -937,8 +978,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
           accumulateTransientAgainst(size_t(iy + 1));
         }
-        float transientBoost = std::pow(clamp(transientNorm, 0.f, 1.f), 0.56f);
-        float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * std::pow(transientBoost, 0.84f), 0.f, 1.f);
+        float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
+        float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * lookupPow01(scopePow084Lut(), transientBoost), 0.f, 1.f);
         (*colorDriveOut)[idx] = brightnessLift;
       }
     };
@@ -966,7 +1007,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
     const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
-    bool useGeometryHistoryCache = debugRenderMode == TDScope::DEBUG_RENDER_OPENGL;
+    bool useGeometryHistoryCache =
+      debugRenderMode == TDScope::DEBUG_RENDER_OPENGL || debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR;
     bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || verticalInversionChanged ||
                          cachedRowCount != rowCount || stereoLayoutChanged;
     if (useGeometryHistoryCache) {
@@ -1125,7 +1167,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
           float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
           float intensity = clamp(0.65f * peakness + 0.35f * density, 0.f, 1.f);
-          (*visualOut)[idx] = clamp(std::pow(intensity, 0.60f) * 1.12f, 0.f, 1.f);
+          (*visualOut)[idx] = clamp(lookupPow01(scopePow060Lut(), intensity) * 1.12f, 0.f, 1.f);
           (*validOut)[idx] = 1u;
           (*holdOut)[idx] = kRowTailHoldFrames;
         }
