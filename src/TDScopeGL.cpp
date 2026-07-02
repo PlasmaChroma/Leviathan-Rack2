@@ -884,6 +884,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     };
 
     const bool liveMode = !sampleMode;
+    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    const bool useGeometryHistoryCache =
+      debugRenderMode == TDScope::DEBUG_RENDER_OPENGL || debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR;
     const float requestedLiveBucketSpanSamples = std::max(totalWindowSamples / float(std::max(rowCount, 1)), 1e-6f);
     if (!liveMode) {
       liveBucketsInitialized = false;
@@ -977,7 +980,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
     logMarkStage(&logRow.setupUs);
 
-    if (liveMode && msg.publishSeq != liveBucketLastPublishSeq) {
+    if (liveMode && !useGeometryHistoryCache && msg.publishSeq != liveBucketLastPublishSeq) {
       ingestLiveLane(leftScopeBins, &liveBucketsLeft);
       if (renderStereo) {
         ingestLiveLane(rightScopeBins, &liveBucketsRight);
@@ -1250,9 +1253,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
 
     bool stereoLayoutChanged = cachedStereoLayout != renderStereo;
-    const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
-    bool useGeometryHistoryCache =
-      debugRenderMode == TDScope::DEBUG_RENDER_OPENGL || debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR;
     bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || verticalInversionChanged ||
                          cachedRowCount != rowCount || stereoLayoutChanged;
     if (logScopeDraw) {
@@ -2897,9 +2897,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             windowBottomLag >= fieldSampleCacheBottomLag - coverageEpsilon;
           if (cacheCoversVisible) {
             float visibleOffset = (fieldSampleCacheTopLag - windowTopLag) / std::max(fieldSampleCacheRowSpan, 1e-6f);
-            if (verticalInverted) {
-              visibleOffset = float(fieldRowTextureWidth - rowCount) - visibleOffset;
-            }
             fieldTextureRowCount = float(fieldRowTextureWidth);
             fieldTextureRowOffset =
               clamp(visibleOffset, 0.f, float(std::max(fieldRowTextureWidth - rowCount, 0)));
@@ -2917,8 +2914,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                                     float laneCenter, bool laneEnabled) {
             const size_t laneOffset = lane * cacheRowsU * 4u;
             for (int iy = 0; iy < cacheRowCount; ++iy) {
-              const int textureRow = verticalInverted ? (cacheRowCount - 1 - iy) : iy;
-              const size_t base = laneOffset + size_t(textureRow) * 4u;
+              const size_t base = laneOffset + size_t(iy) * 4u;
               float rowMinNorm = 0.f;
               float rowMaxNorm = 0.f;
               bool any = false;
@@ -3033,9 +3029,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fieldSampleCacheRowSpan = cacheRowSpan;
           fieldSampleCacheWidgetWidth = box.size.x;
           float visibleOffset = (cacheTopLag - windowTopLag) / std::max(cacheRowSpan, 1e-6f);
-          if (verticalInverted) {
-            visibleOffset = float(cacheRowCount - rowCount) - visibleOffset;
-          }
           fieldTextureRowCount = float(cacheRowCount);
           fieldTextureRowOffset = clamp(visibleOffset, 0.f, float(std::max(cacheRowCount - rowCount, 0)));
           combinedFieldTextureReady = true;
@@ -3061,7 +3054,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           const size_t laneOffset = lane * rowCountU * 4u;
           for (int iy = 0; iy < rowCount; ++iy) {
             const size_t idx = size_t(iy);
-            const size_t base = laneOffset + size_t(visualRowIndex(iy)) * 4u;
+            const size_t base = laneOffset + idx * 4u;
             if (!laneEnabled || !isValid(idx)) {
               fieldRowData[base + 0u] = laneCenter;
               fieldRowData[base + 1u] = laneCenter;
