@@ -246,8 +246,21 @@ struct WyrmWidget : ModuleWidget {
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.svg");
+		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.panel.svg");
 		setPanel(createPanel(panelPath));
+		addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+		{
+			widget::SvgWidget* labels = new widget::SvgWidget();
+			labels->setSvg(visual_assets::loadPluginSvgCached("res/wyrm.labels.svg"));
+			labels->box.size = box.size;
+
+			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
+			labelsFb->box.size = box.size;
+			labelsFb->oversample = 2.0f;
+			labelsFb->dirtyOnSubpixelChange = true;
+			labelsFb->addChild(labels);
+			addChild(labelsFb);
+		}
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
@@ -270,7 +283,7 @@ struct WyrmWidget : ModuleWidget {
 		};
 
 		math::Rect editorRectMm(Vec(6.0f, 16.0f), Vec(59.12f, 52.0f));
-		panel_svg::loadRectFromSvgMm(panelPath, "WYRm_WAVE_EDITOR", &editorRectMm);
+		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
 		Vec waveformSelectPos(35.56f, 75.2f);
