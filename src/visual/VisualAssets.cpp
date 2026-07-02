@@ -889,8 +889,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const float w = glass.boundsPx.size.x;
 		const float h = glass.boundsPx.size.y;
 		const int mainAlpha = int(std::round(11.f + smallBoost * 5.f));
-		const int lowerAlpha = int(std::round(7.f + smallBoost * 3.f));
-		const int rimAlpha = int(std::round(16.f + smallBoost * 6.f));
 
 		nvgSave(args.vg);
 		nvgScissor(args.vg, x, y, w, h);
@@ -905,25 +903,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgClosePath(args.vg);
 		nvgFillPaint(args.vg, mainSheen);
 		nvgFill(args.vg);
-
-		NVGpaint lowerSheen = nvgLinearGradient(args.vg, x + w * 0.38f, y + h * 0.34f, x + w * 0.58f, y + h * 1.02f,
-			nvgRGBA(255, 255, 255, lowerAlpha), nvgRGBA(255, 255, 255, 0));
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.380f, y + h * 0.46f);
-		nvgLineTo(args.vg, x + w * 0.455f, y + h * 0.46f);
-		nvgLineTo(args.vg, x + w * 0.575f, y + h);
-		nvgLineTo(args.vg, x + w * 0.490f, y + h);
-		nvgClosePath(args.vg);
-		nvgFillPaint(args.vg, lowerSheen);
-		nvgFill(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.665f, y + h * 0.680f);
-		nvgLineTo(args.vg, x + w * 0.965f, y + h * 0.680f);
-		nvgStrokeWidth(args.vg, 1.05f);
-		nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x + w * 0.66f, y + h * 0.68f, x + w * 0.98f, y + h * 0.68f,
-			nvgRGBA(255, 255, 255, rimAlpha), nvgRGBA(255, 255, 255, 0)));
-		nvgStroke(args.vg);
 
 		nvgRestore(args.vg);
 	}
