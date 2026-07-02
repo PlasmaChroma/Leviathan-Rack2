@@ -12,6 +12,7 @@
 #include <functional>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -96,6 +97,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     float liveIngestUs = 0.f;
     float geometryUs = 0.f;
     float glDrawUs = 0.f;
+    float rowUploadUs = 0.f;
+    float fieldDrawUs = 0.f;
+    float glStateUs = 0.f;
+    float framebufferSizeUs = 0.f;
+    float viewportUs = 0.f;
+    float resourceValidateUs = 0.f;
+    float transparentClearUs = 0.f;
+    float scissorSetupUs = 0.f;
+    float scopedClearUs = 0.f;
   };
   struct GlLineVertex {
     GLfloat x;
@@ -244,6 +254,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool fieldRowTextureValidRight = false;
   float fieldQuadW = -1.f;
   float fieldQuadH = -1.f;
+  bool glValidationRequired = true;
+  uint32_t glValidationCountdown = 0u;
   GLsizeiptr shaderVboCapacityBytes = 0;
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
@@ -254,6 +266,19 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
   static std::string scopeDrawLogRootPath() {
     return system::join(asset::user(), "Leviathan/TD.Scope");
+  }
+
+  static std::string scopeDrawLogDateTimeStamp() {
+    std::time_t now = std::time(nullptr);
+    std::tm tm {};
+#if defined(_WIN32)
+    localtime_s(&tm, &now);
+#else
+    localtime_r(&now, &tm);
+#endif
+    std::ostringstream out;
+    out << std::put_time(&tm, "%Y%m%d_%H%M%S");
+    return out.str();
   }
 
   void stopScopeDrawLog() {
@@ -274,10 +299,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       return;
     }
     system::createDirectories(scopeDrawLogRootPath());
-    const uint64_t stampMs = uint64_t(std::max(0.0, system::getTime()) * 1000.0);
+    static uint32_t openSequence = 0u;
     const uint32_t instanceId = module ? module->debugInstanceId : 0u;
     scopeDrawLogPath = system::join(
-      scopeDrawLogRootPath(), "scope_draw_" + std::to_string(instanceId) + "_" + std::to_string(stampMs) + ".csv");
+      scopeDrawLogRootPath(),
+      "scope_draw_" + std::to_string(instanceId) + "_" + scopeDrawLogDateTimeStamp() + "_" +
+        std::to_string(openSequence++) + ".csv");
     scopeDrawLogFile.open(scopeDrawLogPath.c_str(), std::ios::out | std::ios::trunc);
     if (!scopeDrawLogFile.is_open()) {
       WARN("TD.Scope failed to open draw log CSV: %s", scopeDrawLogPath.c_str());
@@ -292,7 +319,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       << "row,module_id,instance_id,publish_seq,render_mode,row_count,scope_bin_count,stereo,live_mode,"
       << "msg_changed,range_changed,vertical_changed,full_history_rebuild,visible_shift_rows,rebuild_start,rebuild_end,"
       << "draw_from_history,row_texture_uploads,field_draws,fallback_renderer,density_pct,rack_zoom,total_us,"
-      << "validate_clear_us,snapshot_us,setup_us,live_ingest_us,geometry_us,gl_draw_us\n";
+      << "validate_clear_us,snapshot_us,setup_us,live_ingest_us,geometry_us,gl_draw_us,row_upload_us,field_draw_us,gl_state_us,"
+      << "framebuffer_size_us,viewport_us,resource_validate_us,transparent_clear_us,scissor_setup_us,scoped_clear_us\n";
   }
 
   void writeScopeDrawLogRow(const ScopeDrawLogRow &row) {
@@ -328,7 +356,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       << row.setupUs << ','
       << row.liveIngestUs << ','
       << row.geometryUs << ','
-      << row.glDrawUs << '\n';
+      << row.glDrawUs << ','
+      << row.rowUploadUs << ','
+      << row.fieldDrawUs << ','
+      << row.glStateUs << ','
+      << row.framebufferSizeUs << ','
+      << row.viewportUs << ','
+      << row.resourceValidateUs << ','
+      << row.transparentClearUs << ','
+      << row.scissorSetupUs << ','
+      << row.scopedClearUs << '\n';
     if ((row.row & 31u) == 31u) {
       scopeDrawLogFile.flush();
     }
@@ -410,6 +447,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     shaderVboCapacityBytes = 0;
     shaderReady = false;
     shaderInitAttempted = false;
+    glValidationRequired = true;
   }
 
   void resetSegmentShaderState() {
@@ -420,6 +458,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     segmentShaderVboCapacityBytes = 0;
     segmentShaderReady = false;
     segmentShaderInitAttempted = false;
+    glValidationRequired = true;
   }
 
   void resetFieldShaderState() {
@@ -453,6 +492,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldQuadH = -1.f;
     fieldShaderReady = false;
     fieldShaderInitAttempted = false;
+    glValidationRequired = true;
   }
 
   void validateGlResourcesForCurrentContext() {
@@ -468,6 +508,20 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
          !gl_lifecycle::areValidTextures({fieldRowTextureLeft, fieldRowTextureRight, fieldColorLutTexture}))) {
       resetFieldShaderState();
     }
+    glValidationRequired = false;
+    glValidationCountdown = 120u;
+  }
+
+  void maybeValidateGlResourcesForCurrentContext() {
+    if (glValidationRequired) {
+      validateGlResourcesForCurrentContext();
+      return;
+    }
+    if (glValidationCountdown > 0u) {
+      --glValidationCountdown;
+      return;
+    }
+    maybeValidateGlResourcesForCurrentContext();
   }
 
   void step() override {
@@ -591,14 +645,30 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       module->uiDebugScopeDensityRows.store(std::max(densityRows, 0), std::memory_order_relaxed);
     };
 
+    PerfClock::time_point subStageStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
     math::Vec fbSize = getFramebufferSize();
+    if (logScopeDraw) {
+      logRow.framebufferSizeUs += logElapsedUs(subStageStart, PerfClock::now());
+      subStageStart = PerfClock::now();
+    }
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    if (logScopeDraw) {
+      logRow.viewportUs += logElapsedUs(subStageStart, PerfClock::now());
+      subStageStart = PerfClock::now();
+    }
     validateGlResourcesForCurrentContext();
+    if (logScopeDraw) {
+      logRow.resourceValidateUs += logElapsedUs(subStageStart, PerfClock::now());
+      subStageStart = PerfClock::now();
+    }
     glDisable(GL_SCISSOR_TEST);
     // Keep framebuffer clear transparent; we draw opaque black only inside the
     // scoped waveform region so panel border lines stay intact.
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    if (logScopeDraw) {
+      logRow.transparentClearUs += logElapsedUs(subStageStart, PerfClock::now());
+    }
     logMarkStage(&logRow.validateClearUs);
 
     if (!module || !module->useOpenGlGeometryRenderMode()) {
@@ -624,8 +694,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const int scissorW = std::max(1, int(std::lround(std::max(1.f, box.size.x - 2.f * xInset) * scaleX)));
     const int scissorY = std::max(0, int(std::lround((box.size.y - drawBottom) * scaleY)));
     const int scissorH = std::max(1, int(std::lround(drawHeight * scaleY)));
+    subStageStart = logScopeDraw ? PerfClock::now() : subStageStart;
     glEnable(GL_SCISSOR_TEST);
     glScissor(scissorX, scissorY, scissorW, scissorH);
+    if (logScopeDraw) {
+      logRow.scissorSetupUs += logElapsedUs(subStageStart, PerfClock::now());
+      subStageStart = PerfClock::now();
+    }
     struct ScissorGuard final {
       ~ScissorGuard() {
         glDisable(GL_SCISSOR_TEST);
@@ -636,6 +711,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     glClearColor(0.f, 0.f, 0.f, 0.f);
+    if (logScopeDraw) {
+      logRow.scopedClearUs += logElapsedUs(subStageStart, PerfClock::now());
+    }
 
     bool linkActive = module->uiLinkActive.load(std::memory_order_relaxed);
     bool previewValid = module->uiPreviewValid.load(std::memory_order_relaxed);
@@ -2343,8 +2421,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
             fieldRowTextureValidRight = false;
           }
           glBindTexture(GL_TEXTURE_2D, rowTex);
+          const PerfClock::time_point uploadStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
           glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
           if (logScopeDraw) {
+            logRow.rowUploadUs += logElapsedUs(uploadStart, PerfClock::now());
             logRow.rowTextureUploads += 1;
           }
           rowTexValid = true;
@@ -2400,8 +2480,24 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glVertexAttribPointer(
           kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
         glBlendFunc(srcBlend, dstBlend);
+        bool narrowedScissor = false;
+        if (renderStereo) {
+          const float lanePad = std::max(3.0f * zoomThicknessMul, 1.5f);
+          const float laneMinX = clamp(laneCenterXForConnectors - laneAmpHalfWidth - lanePad, xInset, box.size.x - xInset);
+          const float laneMaxX = clamp(laneCenterXForConnectors + laneAmpHalfWidth + lanePad, xInset, box.size.x - xInset);
+          const int laneScissorX = std::max(scissorX, int(std::floor(laneMinX * scaleX)));
+          const int laneScissorMaxX = std::min(scissorX + scissorW, int(std::ceil(laneMaxX * scaleX)));
+          const int laneScissorW = std::max(1, laneScissorMaxX - laneScissorX);
+          glScissor(laneScissorX, scissorY, laneScissorW, scissorH);
+          narrowedScissor = true;
+        }
+        const PerfClock::time_point fieldDrawStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        if (narrowedScissor) {
+          glScissor(scissorX, scissorY, scissorW, scissorH);
+        }
         if (logScopeDraw) {
+          logRow.fieldDrawUs += logElapsedUs(fieldDrawStart, PerfClock::now());
           logRow.fieldDraws += 1;
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -2879,6 +2975,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (logScopeDraw) {
       logRow.fallbackRenderer = fallbackRendererActive ? 1 : 0;
       logRow.glDrawUs = logElapsedUs(logStageStart, PerfClock::now());
+      logRow.glStateUs = std::max(0.f, logRow.glDrawUs - logRow.rowUploadUs - logRow.fieldDrawUs);
       logRow.totalUs = logElapsedUs(logStart, PerfClock::now());
       writeScopeDrawLogRow(logRow);
     }
