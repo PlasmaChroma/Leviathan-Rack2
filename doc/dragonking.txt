@@ -3,5 +3,6 @@
   "PreviewWidgetOptions": true,
   "clockworkDragLogging": false,
   "temporalDeckLifetimeLogging": false,
+  "ScopeDrawLogging": false,
   "moduleTeardownLogging": true
 }

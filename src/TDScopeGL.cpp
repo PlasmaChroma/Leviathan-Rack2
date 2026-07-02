@@ -6,9 +6,13 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <ctime>
 #include <cstring>
+#include <fstream>
 #include <functional>
+#include <iomanip>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace {
@@ -61,6 +65,37 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     bool hasData = false;
     int64_t key = std::numeric_limits<int64_t>::min();
     uint64_t updateSeq = 0;
+  };
+  struct ScopeDrawLogRow {
+    uint64_t row = 0;
+    int moduleId = -1;
+    uint32_t instanceId = 0u;
+    uint64_t publishSeq = 0u;
+    int renderMode = 0;
+    int rowCount = 0;
+    int scopeBinCount = 0;
+    int stereo = 0;
+    int liveMode = 0;
+    int msgChanged = 0;
+    int rangeChanged = 0;
+    int verticalChanged = 0;
+    int fullHistoryRebuild = 0;
+    int visibleShiftRows = 0;
+    int rebuildStart = 0;
+    int rebuildEnd = 0;
+    int drawFromHistory = 0;
+    int rowTextureUploads = 0;
+    int fieldDraws = 0;
+    int fallbackRenderer = 0;
+    float densityPct = 0.f;
+    float rackZoom = 1.f;
+    float totalUs = 0.f;
+    float validateClearUs = 0.f;
+    float snapshotUs = 0.f;
+    float setupUs = 0.f;
+    float liveIngestUs = 0.f;
+    float geometryUs = 0.f;
+    float glDrawUs = 0.f;
   };
   struct GlLineVertex {
     GLfloat x;
@@ -158,6 +193,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::vector<GlSegmentQuadVertex> bodySegmentVerts;
   std::vector<GlSegmentQuadVertex> fillSegmentVerts;
   std::vector<GlSegmentQuadVertex> continuitySegmentVerts;
+  std::ofstream scopeDrawLogFile;
+  std::string scopeDrawLogPath;
+  bool scopeDrawLogActive = false;
+  uint64_t scopeDrawLogRowCounter = 0u;
   bool shaderInitAttempted = false;
   bool shaderReady = false;
   GLuint shaderProgram = 0;
@@ -213,6 +252,88 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     return APP && APP->window && APP->window->win && glfwGetCurrentContext() == APP->window->win;
   }
 
+  static std::string scopeDrawLogRootPath() {
+    return system::join(asset::user(), "Leviathan/TD.Scope");
+  }
+
+  void stopScopeDrawLog() {
+    if (scopeDrawLogFile.is_open()) {
+      scopeDrawLogFile.close();
+    }
+    scopeDrawLogPath.clear();
+    scopeDrawLogActive = false;
+    scopeDrawLogRowCounter = 0u;
+  }
+
+  void syncScopeDrawLog(bool enabled) {
+    if (!enabled) {
+      stopScopeDrawLog();
+      return;
+    }
+    if (scopeDrawLogActive && scopeDrawLogFile.is_open()) {
+      return;
+    }
+    system::createDirectories(scopeDrawLogRootPath());
+    const uint64_t stampMs = uint64_t(std::max(0.0, system::getTime()) * 1000.0);
+    const uint32_t instanceId = module ? module->debugInstanceId : 0u;
+    scopeDrawLogPath = system::join(
+      scopeDrawLogRootPath(), "scope_draw_" + std::to_string(instanceId) + "_" + std::to_string(stampMs) + ".csv");
+    scopeDrawLogFile.open(scopeDrawLogPath.c_str(), std::ios::out | std::ios::trunc);
+    if (!scopeDrawLogFile.is_open()) {
+      WARN("TD.Scope failed to open draw log CSV: %s", scopeDrawLogPath.c_str());
+      scopeDrawLogPath.clear();
+      scopeDrawLogActive = false;
+      return;
+    }
+    scopeDrawLogActive = true;
+    scopeDrawLogRowCounter = 0u;
+    scopeDrawLogFile << std::fixed << std::setprecision(3);
+    scopeDrawLogFile
+      << "row,module_id,instance_id,publish_seq,render_mode,row_count,scope_bin_count,stereo,live_mode,"
+      << "msg_changed,range_changed,vertical_changed,full_history_rebuild,visible_shift_rows,rebuild_start,rebuild_end,"
+      << "draw_from_history,row_texture_uploads,field_draws,fallback_renderer,density_pct,rack_zoom,total_us,"
+      << "validate_clear_us,snapshot_us,setup_us,live_ingest_us,geometry_us,gl_draw_us\n";
+  }
+
+  void writeScopeDrawLogRow(const ScopeDrawLogRow &row) {
+    if (!scopeDrawLogActive || !scopeDrawLogFile.is_open()) {
+      return;
+    }
+    scopeDrawLogFile
+      << row.row << ','
+      << row.moduleId << ','
+      << row.instanceId << ','
+      << row.publishSeq << ','
+      << row.renderMode << ','
+      << row.rowCount << ','
+      << row.scopeBinCount << ','
+      << row.stereo << ','
+      << row.liveMode << ','
+      << row.msgChanged << ','
+      << row.rangeChanged << ','
+      << row.verticalChanged << ','
+      << row.fullHistoryRebuild << ','
+      << row.visibleShiftRows << ','
+      << row.rebuildStart << ','
+      << row.rebuildEnd << ','
+      << row.drawFromHistory << ','
+      << row.rowTextureUploads << ','
+      << row.fieldDraws << ','
+      << row.fallbackRenderer << ','
+      << row.densityPct << ','
+      << row.rackZoom << ','
+      << row.totalUs << ','
+      << row.validateClearUs << ','
+      << row.snapshotUs << ','
+      << row.setupUs << ','
+      << row.liveIngestUs << ','
+      << row.geometryUs << ','
+      << row.glDrawUs << '\n';
+    if ((row.row & 31u) == 31u) {
+      scopeDrawLogFile.flush();
+    }
+  }
+
   void releaseGlResources(bool deleteGlObjects) {
     if (deleteGlObjects && shaderVbo) {
       glDeleteBuffers(1, &shaderVbo);
@@ -265,6 +386,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   }
 
   ~TDScopeGlWidget() override {
+    stopScopeDrawLog();
     // Widget teardown can happen after the host/editor has already disturbed the
     // GL context. Only issue driver calls when Rack's window context is
     // definitely current; otherwise fall back to state invalidation only.
@@ -427,7 +549,29 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
   void drawFramebuffer() override {
     const bool measurePerf = module && isDragonKingDebugEnabled();
+    const bool logScopeDraw = module && isDragonKingDebugEnabled() && isScopeDrawLoggingEnabled();
+    syncScopeDrawLog(logScopeDraw);
+    using PerfClock = std::chrono::steady_clock;
     auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    const PerfClock::time_point logStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
+    PerfClock::time_point logStageStart = logStart;
+    ScopeDrawLogRow logRow;
+    if (logScopeDraw && module) {
+      logRow.row = scopeDrawLogRowCounter++;
+      logRow.moduleId = module->id;
+      logRow.instanceId = module->debugInstanceId;
+    }
+    auto logElapsedUs = [](PerfClock::time_point start, PerfClock::time_point end) -> float {
+      return float(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) * 0.001f;
+    };
+    auto logMarkStage = [&](float *bucket) {
+      if (!logScopeDraw || !bucket) {
+        return;
+      }
+      const PerfClock::time_point now = PerfClock::now();
+      *bucket += logElapsedUs(logStageStart, now);
+      logStageStart = now;
+    };
     fallbackRendererActive = false;
     if (measurePerf) {
       module->uiDebugScopeDrawCalls.fetch_add(1u, std::memory_order_relaxed);
@@ -455,6 +599,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     // scoped waveform region so panel border lines stay intact.
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    logMarkStage(&logRow.validateClearUs);
 
     if (!module || !module->useOpenGlGeometryRenderMode()) {
       publishUiDebugMetrics(0.f, 0);
@@ -515,6 +660,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       msg = lastGoodMsg;
     }
+    logMarkStage(&logRow.snapshotUs);
     module->uiDebugScopeDrawSeq.store(msg.publishSeq, std::memory_order_relaxed);
 
     uint32_t scopeBinCount = std::min(msg.scopeBinCount, temporaldeck_expander::SCOPE_BIN_COUNT);
@@ -528,6 +674,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const temporaldeck_expander::ScopeBin *leftScopeBins = msg.scope;
     const temporaldeck_expander::ScopeBin *rightScopeBins = msg.scopeRight;
     const bool verticalInverted = module->scopeVerticalInverted.load(std::memory_order_relaxed);
+    if (logScopeDraw) {
+      logRow.publishSeq = msg.publishSeq;
+      logRow.scopeBinCount = int(scopeBinCount);
+      logRow.stereo = renderStereo ? 1 : 0;
+    }
 
     int peakQAbs = 0;
     for (uint32_t i = 0; i < scopeBinCount; ++i) {
@@ -554,6 +705,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const bool rangeModeChanged = scopeDisplayRangeMode != cachedRangeMode;
     const bool verticalInversionChanged = cachedVerticalInverted != verticalInverted;
     const bool dragActive = module->uiLagDragActive.load(std::memory_order_relaxed);
+    if (logScopeDraw) {
+      logRow.msgChanged = msgChanged ? 1 : 0;
+      logRow.rangeChanged = rangeModeChanged ? 1 : 0;
+      logRow.verticalChanged = verticalInversionChanged ? 1 : 0;
+    }
 
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
@@ -598,6 +754,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float densityPct = 100.f * (float(rowCount) / float(fullDensityRowCount));
     size_t rowCountU = size_t(rowCount);
     const float rowStep = drawHeight / float(rowCount);
+    if (logScopeDraw) {
+      logRow.rowCount = rowCount;
+      logRow.liveMode = sampleMode ? 0 : 1;
+      logRow.densityPct = densityPct;
+      logRow.rackZoom = rackZoom;
+    }
     auto visualRowIndex = [&](int iy) {
       return verticalInverted ? (rowCount - 1 - iy) : iy;
     };
@@ -734,6 +896,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
     };
 
+    logMarkStage(&logRow.setupUs);
+
     if (liveMode && msg.publishSeq != liveBucketLastPublishSeq) {
       ingestLiveLane(leftScopeBins, &liveBucketsLeft);
       if (renderStereo) {
@@ -741,6 +905,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       liveBucketLastPublishSeq = msg.publishSeq;
     }
+    logMarkStage(&logRow.liveIngestUs);
 
     auto sampleEnvelopeOverInterval = [&](const temporaldeck_expander::ScopeBin *scopeData, float t0, float t1,
                                           float *minNormOut, float *maxNormOut) -> bool {
@@ -1011,7 +1176,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       debugRenderMode == TDScope::DEBUG_RENDER_OPENGL || debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR;
     bool shouldRebuild = !cachedGeometryValid || msgChanged || rangeModeChanged || verticalInversionChanged ||
                          cachedRowCount != rowCount || stereoLayoutChanged;
-    if (useGeometryHistoryCache) {
+    if (logScopeDraw) {
+      logRow.renderMode = debugRenderMode;
+    }
+    if (useGeometryHistoryCache && shouldRebuild) {
       int historyMargin = rowCount;
       int historyCapacity = rowCount * 3;
       auto resetHistoryVectors = [&]() {
@@ -1221,6 +1389,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         rebuildEnd = historyMarginRows + rowCount - 1;
         historyShiftResidualRows = 0.f;
       }
+      if (logScopeDraw) {
+        logRow.fullHistoryRebuild = fullHistoryRebuild ? 1 : 0;
+        logRow.visibleShiftRows = visibleShiftRows;
+        logRow.rebuildStart = rebuildStart;
+        logRow.rebuildEnd = rebuildEnd;
+      }
       rebuildHistoryLaneRows(
         leftScopeBins, lane0CenterX, laneAmpHalfWidth, &historyX0, &historyX1, &historyVisualIntensity, &historyValid,
         &historyHoldFrames, rebuildStart, rebuildEnd);
@@ -1306,6 +1480,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
 
     if (shouldRebuild) {
+      if (logScopeDraw) {
+        logRow.fullHistoryRebuild = 1;
+        logRow.rebuildStart = 0;
+        logRow.rebuildEnd = rowCount - 1;
+      }
       if (liveMode) {
         rebuildLaneFromLiveBuckets(
           &liveBucketsLeft, lane0CenterX, laneAmpHalfWidth, &rowX0, &rowX1, &rowVisualIntensity, &rowValid, &rowHoldFrames);
@@ -1350,6 +1529,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       cachedStereoLayout = renderStereo;
       cachedGeometryValid = true;
     }
+    logMarkStage(&logRow.geometryUs);
 
     static std::array<std::array<NVGcolor, 256>, TDScope::COLOR_SCHEME_COUNT> colorLut;
     static std::array<uint8_t, TDScope::COLOR_SCHEME_COUNT> colorLutValid {};
@@ -2164,6 +2344,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           }
           glBindTexture(GL_TEXTURE_2D, rowTex);
           glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
+          if (logScopeDraw) {
+            logRow.rowTextureUploads += 1;
+          }
           rowTexValid = true;
           rowTexSeq = msg.publishSeq;
         }
@@ -2218,6 +2401,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
         glBlendFunc(srcBlend, dstBlend);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        if (logScopeDraw) {
+          logRow.fieldDraws += 1;
+        }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDisableVertexAttribArray(kAttrPos);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -2594,6 +2780,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       renderLaneGlBackend();
     };
 
+    logStageStart = logScopeDraw ? PerfClock::now() : logStageStart;
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0.0, box.size.x, box.size.y, 0.0, -1.0, 1.0);
@@ -2634,6 +2821,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
                                      historyX0.size() == historyValidRight.size() &&
                                      !historyX0.empty();
     const bool drawFromHistory = useGeometryHistoryCache && historyValidState && historyCapacityRows > 0 && historyBuffersReady;
+    if (logScopeDraw) {
+      logRow.drawFromHistory = drawFromHistory ? 1 : 0;
+    }
     if (drawFromHistory) {
       drawLane(
         [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
@@ -2685,6 +2875,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glMatrixMode(GL_PROJECTION);
       glPopMatrix();
       glMatrixMode(GL_MODELVIEW);
+    }
+    if (logScopeDraw) {
+      logRow.fallbackRenderer = fallbackRendererActive ? 1 : 0;
+      logRow.glDrawUs = logElapsedUs(logStageStart, PerfClock::now());
+      logRow.totalUs = logElapsedUs(logStart, PerfClock::now());
+      writeScopeDrawLogRow(logRow);
     }
 
     publishUiDebugMetrics(densityPct, rowCount);

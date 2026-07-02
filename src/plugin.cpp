@@ -15,6 +15,7 @@ static std::atomic<bool> gDragonKingPreviewWidgetOptionsEnabled{false};
 static std::atomic<bool> gClockworkDragDebugLoggingEnabled{false};
 static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
+static std::atomic<bool> gScopeDrawLoggingEnabled{false};
 static std::mutex gModuleTeardownLogMutex;
 
 void refreshDragonKingDebugEnabled() {
@@ -23,6 +24,7 @@ void refreshDragonKingDebugEnabled() {
 	gClockworkDragDebugLoggingEnabled.store(false, std::memory_order_relaxed);
 	gTemporalDeckLifetimeLoggingEnabled.store(false, std::memory_order_relaxed);
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
+	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
 		return;
 	}
@@ -43,11 +45,13 @@ void refreshDragonKingDebugEnabled() {
 		json_t* clockworkDragLoggingJ = json_object_get(root, "clockworkDragLogging");
 		json_t* temporalDeckLifetimeLoggingJ = json_object_get(root, "temporalDeckLifetimeLogging");
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
+		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
 		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);
 		gTemporalDeckLifetimeLoggingEnabled.store(json_boolean_value(temporalDeckLifetimeLoggingJ), std::memory_order_relaxed);
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
+		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
 	}
 	json_decref(root);
 }
@@ -70,6 +74,10 @@ bool isTemporalDeckLifetimeLoggingEnabled() {
 
 bool isModuleTeardownLoggingEnabled() {
 	return gModuleTeardownLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isScopeDrawLoggingEnabled() {
+	return gScopeDrawLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 ModuleTeardownTimer::ModuleTeardownTimer(const char* moduleName)

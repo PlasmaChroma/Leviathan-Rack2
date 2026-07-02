@@ -43,6 +43,7 @@ bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
+bool isScopeDrawLoggingEnabled();
 void refreshDragonKingDebugEnabled();
 
 struct ModuleTeardownTimer {
