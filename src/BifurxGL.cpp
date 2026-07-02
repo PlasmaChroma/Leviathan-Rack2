@@ -9,6 +9,7 @@
 namespace bifurx {
 
 static constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
+static constexpr size_t kCurveTextureRingSize = 3;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
@@ -36,7 +37,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	GLuint textureVertex = 0;
 	GLuint textureFragment = 0;
 	GLuint textureVbo = 0;
-	GLuint curveTex = 0;
+	std::array<GLuint, kCurveTextureRingSize> curveTextures {};
+	size_t curveTextureIndex = kCurveTextureRingSize - 1u;
 	bool textureShaderInitAttempted = false;
 	bool textureShaderReady = false;
 	GLint textureUniformViewport = -1;
@@ -134,10 +136,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDeleteBuffers(1, &textureVbo);
 		}
 		textureVbo = 0;
-		if (deleteGlObjects && curveTex) {
-			glDeleteTextures(1, &curveTex);
+		if (deleteGlObjects) {
+			glDeleteTextures(GLsizei(curveTextures.size()), curveTextures.data());
 		}
-		curveTex = 0;
+		curveTextures.fill(0);
+		curveTextureIndex = kCurveTextureRingSize - 1u;
 		if (deleteGlObjects && textureProgram) {
 			glDeleteProgram(textureProgram);
 		}
@@ -616,15 +619,17 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		textureUniformPlotHeight = glGetUniformLocation(textureProgram, "uPlotHeight");
 
 		glGenBuffers(1, &textureVbo);
-		glGenTextures(1, &curveTex);
+		glGenTextures(GLsizei(curveTextures.size()), curveTextures.data());
 
-		glBindTexture(GL_TEXTURE_2D, curveTex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		// Pre-allocate storage once; drawFramebuffer updates it with glTexSubImage2D.
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, kCurvePointCount, 1, 0, GL_RGBA, GL_UNSIGNED_SHORT, nullptr);
+		for (GLuint curveTexture : curveTextures) {
+			glBindTexture(GL_TEXTURE_2D, curveTexture);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			// Pre-allocate every ring slot so frame updates only replace texels.
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, kCurvePointCount, 1, 0, GL_RGBA, GL_UNSIGNED_SHORT, nullptr);
+		}
 		glBindTexture(GL_TEXTURE_2D, 0);
 
 		textureShaderReady = true;
@@ -828,10 +833,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			strokeShaderInitAttempted = false;
 		}
 		if (textureShaderReady &&
-			(!gl_lifecycle::isValidProgramBufferPair(textureProgram, textureVbo) || !glIsTexture(curveTex))) {
+			(!gl_lifecycle::isValidProgramBufferPair(textureProgram, textureVbo) ||
+			 !gl_lifecycle::areValidTextures({curveTextures[0], curveTextures[1], curveTextures[2]}))) {
 			textureProgram = 0;
 			textureVbo = 0;
-			curveTex = 0;
+			curveTextures.fill(0);
+			curveTextureIndex = kCurveTextureRingSize - 1u;
 			textureVertex = 0;
 			textureFragment = 0;
 			textureShaderReady = false;
@@ -1009,8 +1016,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				}
 
 				// 2. Update pre-allocated texture (no storage reallocation)
+				curveTextureIndex = (curveTextureIndex + 1u) % curveTextures.size();
+				const GLuint curveTexture = curveTextures[curveTextureIndex];
 				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, curveTex);
+				glBindTexture(GL_TEXTURE_2D, curveTexture);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kCurvePointCount, 1, GL_RGBA, GL_UNSIGNED_SHORT, curveTexels.data());
 
 				// 3. Set up uniforms and program
