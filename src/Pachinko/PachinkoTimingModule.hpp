@@ -72,6 +72,9 @@ struct PachinkoTimingModule : Module {
     std::vector<Ball> balls;
     std::array<float, NUM_OUTPUTS> bucketOutputs;
     std::array<float, NUM_OUTPUTS> outputDecay;
+    
+    // Cached output values for UI thread access (must be accessed with mutex)
+    std::array<float, NUM_OUTPUTS> lastOutputValues;
 
     // Timing
     float ballRate = 1.0f; // balls per second

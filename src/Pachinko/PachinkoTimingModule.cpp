@@ -21,6 +21,7 @@ PachinkoTimingModule::PachinkoTimingModule() {
     }
     std::fill(bucketOutputs.begin(), bucketOutputs.end(), 0.0f);
     std::fill(outputDecay.begin(), outputDecay.end(), 0.0f);
+    std::fill(lastOutputValues.begin(), lastOutputValues.end(), 0.0f);
     lastBallTime = 0.0f;
     generatePegs();
 }
@@ -148,7 +149,9 @@ void PachinkoTimingModule::process(const ProcessArgs& args) {
     }
     
     // Generate new balls based on clock
-    if (clockTriggered || (clockValue > 2.0f && currentTime - lastBallTime > 1.0f / ballRate)) {
+    // Prevent division by zero when ballRate is 0
+    float minBallRate = std::max(ballRate, 0.001f);
+    if (clockTriggered || (clockValue > 2.0f && currentTime - lastBallTime > 1.0f / minBallRate)) {
         // Find inactive ball
         for (auto& ball : balls) {
             if (!ball.active) {
@@ -197,7 +200,7 @@ void PachinkoTimingModule::process(const ProcessArgs& args) {
             float distSq = delta.x * delta.x + delta.y * delta.y;
             float minDist = pegRadius + ballRadius;
             
-            if (distSq < minDist * minDist && distSq > 0.0f) {
+            if (distSq < minDist * minDist && distSq > 0.0001f) {
                 float dist = std::sqrt(distSq);
                 math::Vec normal = delta / dist;
                 
@@ -214,7 +217,7 @@ void PachinkoTimingModule::process(const ProcessArgs& args) {
                 ball.velocity.x *= friction;
                 
                 // Add randomness for pachinko effect
-                std::mt19937 ballGen(static_cast<unsigned int>(ball.position.x * 1000 + ball.position.y * 1000));
+                std::mt19937 ballGen(static_cast<unsigned int>(ball.position.x * 1000.0f + ball.position.y * 1000.0f + currentTime * 1000.0f));
                 std::uniform_real_distribution<float> rand(-1.0f, 1.0f);
                 ball.velocity.x += rand(ballGen) * 30.0f;
             }
@@ -228,7 +231,7 @@ void PachinkoTimingModule::process(const ProcessArgs& args) {
                 math::Vec ballDelta = ball.position - balls[i].position;
                 float ballDistSq = ballDelta.x * ballDelta.x + ballDelta.y * ballDelta.y;
                 
-                if (ballDistSq < minBallDistSq && ballDistSq > 0.0f) {
+                if (ballDistSq < minBallDistSq && ballDistSq > 0.0001f) {
                     float ballDist = std::sqrt(ballDistSq);
                     math::Vec ballNormal = ballDelta / ballDist;
                     
@@ -283,6 +286,8 @@ void PachinkoTimingModule::process(const ProcessArgs& args) {
             outputs[GATE_1_OUTPUT + i].value = outputDecay[i];
             lights[GATE_1_LIGHT + i].value = (outputDecay[i] > 1.0f) ? 1.0f : 0.0f;
         }
+        // Cache output value for UI thread access
+        lastOutputValues[i] = outputs[GATE_1_OUTPUT + i].value;
     }
 }
 

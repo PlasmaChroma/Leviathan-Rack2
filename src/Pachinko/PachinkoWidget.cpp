@@ -104,8 +104,8 @@ void PachinkoWidget::PachinkoVisualWidget::draw(const DrawArgs& args) {
         nvgFillColor(vg, nvgRGB(100, 100, 100));
         nvgFill(vg);
         
-        // Highlight active bucket
-        if (module->outputs[PachinkoTimingModule::GATE_1_OUTPUT + i].getVoltage() > 1.0f) {
+        // Highlight active bucket (use cached value for thread-safe access)
+        if (module->lastOutputValues[PachinkoTimingModule::GATE_1_OUTPUT + i] > 1.0f) {
             nvgBeginPath(vg);
             nvgRect(vg, x + 175.0f, 240.0f, bucketWidth - 2, 20);
             nvgFillColor(vg, nvgRGB(255, 100, 0));
