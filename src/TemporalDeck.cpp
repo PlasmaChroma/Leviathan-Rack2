@@ -376,6 +376,7 @@ struct ScopeWindowParams {
   int scopeStride = 1;
   int64_t scopeStartLagFp = 0;
   float scopeStartLagSamples = 0.f;
+  float scopeVisibleStartLagSamples = 0.f;
   int64_t binSpanLagFp = 1;
   float binSpanSamples = 1.f;
   double newestPos = 0.0;
@@ -455,14 +456,15 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   out->sampleRate = sampleRate;
   out->lagSamples = lagSamples;
   out->accessibleLagSamples = accessibleLagSamples;
-  out->binCount = temporaldeck_expander::SCOPE_BIN_COUNT;
+  out->binCount =
+    sampleMode ? temporaldeck_expander::SAMPLE_SCOPE_BIN_COUNT : temporaldeck_expander::LIVE_SCOPE_BIN_COUNT;
   if (out->binCount == 0u || engine.buffer.size <= 0) {
     return false;
   }
 
   float sr = std::max(sampleRate, 1.f);
   float halfWindowSamples = sr * kScopeHalfWindowSeconds;
-  float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+  float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples * (sampleMode ? 3.f : 1.f));
   int64_t totalWindowLagFp =
     std::max<int64_t>(kScopeLagFpOne, int64_t(std::llround(double(totalWindowSamples) * double(kScopeLagFpOne))));
   out->binSpanLagFp = std::max<int64_t>(1, totalWindowLagFp / int64_t(out->binCount));
@@ -471,8 +473,8 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   int effectiveEvalBudget = kScopeEvaluationBudgetPerPublish;
   out->scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(effectiveEvalBudget))));
 
-  float forwardWindowSamples = halfWindowSamples;
-  float backwardWindowSamples = halfWindowSamples;
+  float forwardWindowSamples = sampleMode ? 3.f * halfWindowSamples : halfWindowSamples;
+  float backwardWindowSamples = forwardWindowSamples;
   if (!sampleMode) {
     // Live mode: when near NOW, keep full 1.8s window but bias it backward
     // so the read-head can move toward the bottom of the scope.
@@ -488,6 +490,7 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
     out->scopeStartLagFp = ((out->scopeStartLagFp + out->binSpanLagFp - 1) / out->binSpanLagFp) * out->binSpanLagFp;
   }
   out->scopeStartLagSamples = float(double(out->scopeStartLagFp) / double(kScopeLagFpOne));
+  out->scopeVisibleStartLagSamples = sampleMode ? (lagSamples + halfWindowSamples) : out->scopeStartLagSamples;
 
   out->newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples))
                               : (liveNewestAbsolutePosOverride >= 0.0
@@ -2059,6 +2062,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBins;
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBinsRight;
         float scopeStartLagSamples = 0.f;
+        float scopeVisibleStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
         float scopeNewestPosSamples = 0.f;
         uint32_t scopeBinCount = 0u;
@@ -2085,6 +2089,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
             scopeBinCount = leftCount;
           }
           scopeStartLagSamples = scopeParams.scopeStartLagSamples;
+          scopeVisibleStartLagSamples = scopeParams.scopeVisibleStartLagSamples;
           scopeBinSpanSamples = scopeParams.binSpanSamples;
           scopeNewestPosSamples = float(scopeParams.newestPos);
         } else {
@@ -2157,6 +2162,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float(frame.sampleProgress), sampleAbsolutePeakVolts, combinedSensitivity,
           uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
+          scopeVisibleStartLagSamples,
           scopeBinSpanSamples, scopeNewestPosSamples, scopeBinCount, scopeBins.data(),
           wantStereoScope ? scopeBinsRight.data() : nullptr);
         right->leftExpander.messageFlipRequested = true;

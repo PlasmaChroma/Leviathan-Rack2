@@ -89,6 +89,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     int drawFromHistory = 0;
     int rowTextureUploads = 0;
     int fieldDraws = 0;
+    int sampleCacheHit = 0;
+    int textureRows = 0;
+    int uploadedRows = 0;
     int fallbackRenderer = 0;
     float densityPct = 0.f;
     float rackZoom = 1.f;
@@ -236,6 +239,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint fieldColorLutTexture = 0;
   GLint fieldUniformRowTex = -1;
   GLint fieldUniformRowTexV = -1;
+  GLint fieldUniformTextureRowCount = -1;
+  GLint fieldUniformTextureRowOffset = -1;
   GLint fieldUniformColorLutTex = -1;
   GLint fieldUniformRowCount = -1;
   GLint fieldUniformDrawTop = -1;
@@ -253,6 +258,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   float fieldColorLutBrightness = NAN;
   uint64_t fieldRowTexturePublishSeq = 0;
   bool fieldRowTextureValid = false;
+  bool fieldSampleCacheValid = false;
+  uint64_t fieldSampleCacheGeneration = 0u;
+  float fieldSampleCacheTopLag = 0.f;
+  float fieldSampleCacheBottomLag = 0.f;
+  float fieldSampleCacheRowSpan = 1.f;
+  float fieldSampleCacheWidgetWidth = 0.f;
+  float fieldTextureRowCount = 512.f;
+  float fieldTextureRowOffset = 0.f;
   float fieldQuadW = -1.f;
   float fieldQuadH = -1.f;
   GLsizeiptr shaderVboCapacityBytes = 0;
@@ -317,7 +330,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     scopeDrawLogFile
       << "row,module_id,instance_id,publish_seq,render_mode,row_count,scope_bin_count,stereo,live_mode,"
       << "msg_changed,range_changed,vertical_changed,full_history_rebuild,visible_shift_rows,rebuild_start,rebuild_end,"
-      << "draw_from_history,row_texture_uploads,field_draws,fallback_renderer,density_pct,rack_zoom,total_us,"
+      << "draw_from_history,row_texture_uploads,field_draws,sample_cache_hit,texture_rows,uploaded_rows,"
+      << "fallback_renderer,density_pct,rack_zoom,total_us,"
       << "validate_clear_us,snapshot_us,setup_us,live_ingest_us,geometry_us,gl_draw_us,row_upload_us,field_draw_us,gl_state_us,"
       << "framebuffer_size_us,viewport_us,resource_validate_us,transparent_clear_us,scissor_setup_us,scoped_clear_us\n";
   }
@@ -346,6 +360,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       << row.drawFromHistory << ','
       << row.rowTextureUploads << ','
       << row.fieldDraws << ','
+      << row.sampleCacheHit << ','
+      << row.textureRows << ','
+      << row.uploadedRows << ','
       << row.fallbackRenderer << ','
       << row.densityPct << ','
       << row.rackZoom << ','
@@ -466,6 +483,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldColorLutTexture = 0;
     fieldUniformRowTex = -1;
     fieldUniformRowTexV = -1;
+    fieldUniformTextureRowCount = -1;
+    fieldUniformTextureRowOffset = -1;
     fieldUniformColorLutTex = -1;
     fieldUniformRowCount = -1;
     fieldUniformDrawTop = -1;
@@ -482,6 +501,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldColorLutBrightness = NAN;
     fieldRowTexturePublishSeq = 0;
     fieldRowTextureValid = false;
+    fieldSampleCacheValid = false;
+    fieldSampleCacheGeneration = 0u;
+    fieldSampleCacheTopLag = 0.f;
+    fieldSampleCacheBottomLag = 0.f;
+    fieldSampleCacheRowSpan = 1.f;
+    fieldSampleCacheWidgetWidth = 0.f;
+    fieldTextureRowCount = 512.f;
+    fieldTextureRowOffset = 0.f;
     fieldQuadW = -1.f;
     fieldQuadH = -1.f;
     fieldShaderReady = false;
@@ -741,22 +768,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       logRow.stereo = renderStereo ? 1 : 0;
     }
 
-    int peakQAbs = 0;
-    for (uint32_t i = 0; i < scopeBinCount; ++i) {
-      const temporaldeck_expander::ScopeBin &bin = leftScopeBins[i];
-      if (!temporaldeck_expander::isScopeBinValid(bin)) {
-        continue;
-      }
-      peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.min))));
-      peakQAbs = std::max(peakQAbs, int(std::abs(int(bin.max))));
-      if (renderStereo) {
-        const temporaldeck_expander::ScopeBin &binR = rightScopeBins[i];
-        if (temporaldeck_expander::isScopeBinValid(binR)) {
-          peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.min))));
-          peakQAbs = std::max(peakQAbs, int(std::abs(int(binR.max))));
-        }
-      }
-    }
     tdscope::ScopeLaneGeometry laneGeo = tdscope::computeScopeLaneGeometry(box.size.x, renderStereo);
     const float lane0CenterX = laneGeo.lane0CenterX;
     const float lane1CenterX = laneGeo.lane1CenterX;
@@ -772,11 +783,24 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       logRow.verticalChanged = verticalInversionChanged ? 1 : 0;
     }
 
+    tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
+    float totalWindowSamples = lagSpan.totalWindowSamples;
+    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
+    float windowTopLag = lagSpan.windowTopLag;
+    float windowBottomLag = lagSpan.windowBottomLag;
+    float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
+    const float visibleBinPos0 = (msg.scopeStartLagSamples - windowTopLag) / scopeBinSpanSamples;
+    const float visibleBinPos1 = (msg.scopeStartLagSamples - windowBottomLag) / scopeBinSpanSamples;
+    const uint32_t visibleScopeBinStart =
+      uint32_t(clamp(int(std::floor(std::min(visibleBinPos0, visibleBinPos1))), 0, int(scopeBinCount - 1u)));
+    const uint32_t visibleScopeBinEnd =
+      uint32_t(clamp(int(std::ceil(std::max(visibleBinPos0, visibleBinPos1))), 0, int(scopeBinCount - 1u)));
+    const uint32_t visibleScopeBinCount = visibleScopeBinEnd - visibleScopeBinStart + 1u;
+
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
-      bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
       const std::pair<float, float> liveStats = tdscope::computeScopePeakStatsFromBins(
-        leftScopeBins, rightScopeBins, scopeBinCount, renderStereo);
+        leftScopeBins + visibleScopeBinStart, rightScopeBins + visibleScopeBinStart, visibleScopeBinCount, renderStereo);
       displayFullScaleVolts = tdscope::updateScopeAutoScale(
         &autoScaleState,
         true,
@@ -803,12 +827,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     module->uiDebugScopeRackZoom.store(rackZoom, std::memory_order_relaxed);
     module->uiDebugScopeZoomThicknessMul.store(zoomThicknessMul, std::memory_order_relaxed);
 
-    tdscope::ScopeWindowLagSpan lagSpan = tdscope::computeScopeWindowLagSpan(msg);
-    float totalWindowSamples = lagSpan.totalWindowSamples;
-    bool sampleMode = (msg.flags & temporaldeck_expander::FLAG_SAMPLE_MODE) != 0u;
-    float windowTopLag = lagSpan.windowTopLag;
-    float windowBottomLag = lagSpan.windowBottomLag;
-    float scopeBinSpanSamples = std::max(msg.scopeBinSpanSamples, 1e-6f);
     const int rowCount = 512;
     const int fullDensityRowCount =
       std::max(1, int(std::ceil(drawHeight * tdscope::kScopeDisplayVerticalSupersampleMax)));
@@ -1967,6 +1985,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "#version 120\n"
         "uniform sampler2D uRowTex;\n"
         "uniform float uRowTexV;\n"
+        "uniform float uTextureRowCount;\n"
+        "uniform float uTextureRowOffset;\n"
         "uniform sampler2D uColorLutTex;\n"
         "uniform float uRowCount;\n"
         "uniform float uDrawTop;\n"
@@ -1980,7 +2000,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRenderContinuity;\n"
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
-        "  float t = (clamp(idx, 0.0, uRowCount - 1.0) + 0.5) / max(uRowCount, 1.0);\n"
+        "  float textureIdx = uTextureRowOffset + clamp(idx, 0.0, uRowCount - 1.0);\n"
+        "  float t = (textureIdx + 0.5) / max(uTextureRowCount, 1.0);\n"
         "  return texture2D(uRowTex, vec2(t, uRowTexV));\n"
         "}\n"
         "bool rowValid(vec4 row) {\n"
@@ -2237,6 +2258,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
       fieldUniformRowTex = glGetUniformLocation(fieldShaderProgram, "uRowTex");
       fieldUniformRowTexV = glGetUniformLocation(fieldShaderProgram, "uRowTexV");
+      fieldUniformTextureRowCount = glGetUniformLocation(fieldShaderProgram, "uTextureRowCount");
+      fieldUniformTextureRowOffset = glGetUniformLocation(fieldShaderProgram, "uTextureRowOffset");
       fieldUniformColorLutTex = glGetUniformLocation(fieldShaderProgram, "uColorLutTex");
       fieldUniformRowCount = glGetUniformLocation(fieldShaderProgram, "uRowCount");
       fieldUniformDrawTop = glGetUniformLocation(fieldShaderProgram, "uDrawTop");
@@ -2248,7 +2271,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
-      if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
+      if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformTextureRowCount < 0 ||
+          fieldUniformTextureRowOffset < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
@@ -2385,6 +2409,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         glUseProgram(fieldShaderProgram);
         glUniform1i(fieldUniformRowTex, 0);
         glUniform1f(fieldUniformRowTexV, fieldLaneSlot != 0 ? 0.75f : 0.25f);
+        glUniform1f(fieldUniformTextureRowCount, fieldTextureRowCount);
+        glUniform1f(fieldUniformTextureRowOffset, fieldTextureRowOffset);
         glUniform1i(fieldUniformColorLutTex, 1);
         glUniform1f(fieldUniformRowCount, float(rowCount));
         glUniform1f(fieldUniformDrawTop, drawTop);
@@ -2853,6 +2879,172 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (!module->useOpenGlShaderRenderMode() || !initFieldShaderPipeline()) {
           return;
         }
+        if (sampleMode) {
+          const float cacheTopLag = msg.scopeStartLagSamples;
+          const float cacheSpanSamples = float(scopeBinCount) * scopeBinSpanSamples;
+          const float cacheBottomLag = cacheTopLag - cacheSpanSamples;
+          const float cacheRowSpan = totalWindowSamples / float(std::max(rowCount, 1));
+          const int cacheRowCount =
+            std::max(rowCount, int(std::floor(cacheSpanSamples / std::max(cacheRowSpan, 1e-6f) + 0.5f)));
+          const float coverageEpsilon = std::max(cacheRowSpan * 0.55f, 1e-3f);
+          const bool cacheCompatible =
+            fieldSampleCacheValid && fieldRowTextureValid && fieldSampleCacheGeneration == msg.bufferGeneration &&
+            fieldRowTextureWidth == cacheRowCount && std::fabs(fieldSampleCacheRowSpan - cacheRowSpan) <= coverageEpsilon &&
+            std::fabs(fieldSampleCacheWidgetWidth - box.size.x) <= 1e-4f && !rangeModeChanged &&
+            !verticalInversionChanged && !stereoLayoutChanged;
+          const bool cacheCoversVisible =
+            cacheCompatible && windowTopLag <= fieldSampleCacheTopLag + coverageEpsilon &&
+            windowBottomLag >= fieldSampleCacheBottomLag - coverageEpsilon;
+          if (cacheCoversVisible) {
+            float visibleOffset = (fieldSampleCacheTopLag - windowTopLag) / std::max(fieldSampleCacheRowSpan, 1e-6f);
+            if (verticalInverted) {
+              visibleOffset = float(fieldRowTextureWidth - rowCount) - visibleOffset;
+            }
+            fieldTextureRowCount = float(fieldRowTextureWidth);
+            fieldTextureRowOffset =
+              clamp(visibleOffset, 0.f, float(std::max(fieldRowTextureWidth - rowCount, 0)));
+            if (logScopeDraw) {
+              logRow.sampleCacheHit = 1;
+              logRow.textureRows = fieldRowTextureWidth;
+            }
+            combinedFieldTextureReady = true;
+            return;
+          }
+
+          const size_t cacheRowsU = size_t(cacheRowCount);
+          fieldRowData.assign(cacheRowsU * 8u, 0.f);
+          auto packSampleLane = [&](size_t lane, const temporaldeck_expander::ScopeBin *scopeData,
+                                    float laneCenter, bool laneEnabled) {
+            const size_t laneOffset = lane * cacheRowsU * 4u;
+            for (int iy = 0; iy < cacheRowCount; ++iy) {
+              const int textureRow = verticalInverted ? (cacheRowCount - 1 - iy) : iy;
+              const size_t base = laneOffset + size_t(textureRow) * 4u;
+              float rowMinNorm = 0.f;
+              float rowMaxNorm = 0.f;
+              bool any = false;
+              if (laneEnabled && scopeData) {
+                const float lagHi = cacheTopLag - float(iy) * cacheRowSpan;
+                const float lagLo = lagHi - cacheRowSpan;
+                const float binPos0 = (msg.scopeStartLagSamples - lagHi) / scopeBinSpanSamples;
+                const float binPos1 = (msg.scopeStartLagSamples - lagLo) / scopeBinSpanSamples;
+                const int binIndex0 = std::max(0, int(std::floor(std::min(binPos0, binPos1))));
+                const int binIndex1 =
+                  std::min(int(scopeBinCount - 1u), int(std::ceil(std::max(binPos0, binPos1))));
+                for (int i = binIndex0; i <= binIndex1; ++i) {
+                  const auto &bin = scopeData[size_t(i)];
+                  if (!temporaldeck_expander::isScopeBinValid(bin)) {
+                    continue;
+                  }
+                  float minNorm = 0.f;
+                  float maxNorm = 0.f;
+                  decodeScopeBin(bin, &minNorm, &maxNorm);
+                  if (!any) {
+                    rowMinNorm = minNorm;
+                    rowMaxNorm = maxNorm;
+                    any = true;
+                  } else {
+                    rowMinNorm = std::min(rowMinNorm, minNorm);
+                    rowMaxNorm = std::max(rowMaxNorm, maxNorm);
+                  }
+                }
+              }
+              if (!any) {
+                fieldRowData[base + 0u] = laneCenter;
+                fieldRowData[base + 1u] = laneCenter;
+                fieldRowData[base + 2u] = -1.f;
+                fieldRowData[base + 3u] = 0.f;
+                continue;
+              }
+              float x0 = laneCenter + rowMinNorm * laneAmpHalfWidth;
+              float x1 = laneCenter + rowMaxNorm * laneAmpHalfWidth;
+              if (x1 < x0) {
+                std::swap(x0, x1);
+              }
+              const float peakness = clamp(std::max(std::fabs(rowMinNorm), std::fabs(rowMaxNorm)), 0.f, 1.f);
+              const float density = clamp(0.5f * (rowMaxNorm - rowMinNorm), 0.f, 1.f);
+              const float intensity =
+                clamp(lookupPow01(scopePow060Lut(), 0.65f * peakness + 0.35f * density) * 1.12f, 0.f, 1.f);
+              fieldRowData[base + 0u] = x0;
+              fieldRowData[base + 1u] = x1;
+              fieldRowData[base + 2u] = intensity;
+            }
+            const float laneWidthDen = std::max(2.f * laneAmpHalfWidth, 1e-3f);
+            for (int iy = 0; iy < cacheRowCount; ++iy) {
+              const size_t base = laneOffset + size_t(iy) * 4u;
+              if (fieldRowData[base + 2u] < 0.f) {
+                continue;
+              }
+              const float center = 0.5f * (fieldRowData[base + 0u] + fieldRowData[base + 1u]);
+              const float span = fieldRowData[base + 1u] - fieldRowData[base + 0u];
+              float transientNorm = 0.f;
+              auto compareNeighbor = [&](int neighborRow) {
+                if (neighborRow < 0 || neighborRow >= cacheRowCount) {
+                  return;
+                }
+                const size_t neighborBase = laneOffset + size_t(neighborRow) * 4u;
+                if (fieldRowData[neighborBase + 2u] < 0.f) {
+                  return;
+                }
+                const float neighborCenter =
+                  0.5f * (fieldRowData[neighborBase + 0u] + fieldRowData[neighborBase + 1u]);
+                const float neighborSpan = fieldRowData[neighborBase + 1u] - fieldRowData[neighborBase + 0u];
+                transientNorm =
+                  std::max(transientNorm,
+                           std::max(std::fabs(center - neighborCenter) / laneWidthDen * 1.15f,
+                                    std::fabs(span - neighborSpan) / laneWidthDen * 1.35f));
+              };
+              compareNeighbor(iy - 1);
+              compareNeighbor(iy + 1);
+              const float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
+              fieldRowData[base + 3u] =
+                clamp((0.38f + 0.92f * fieldRowData[base + 2u]) *
+                        lookupPow01(scopePow084Lut(), transientBoost),
+                      0.f, 1.f);
+            }
+          };
+          packSampleLane(0u, leftScopeBins, lane0CenterX, true);
+          packSampleLane(1u, rightScopeBins, lane1CenterX, renderStereo);
+
+          if (fieldRowTextureWidth != cacheRowCount) {
+            for (GLuint texture : fieldRowTextures) {
+              glBindTexture(GL_TEXTURE_2D, texture);
+              glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cacheRowCount, 2, 0, GL_RGBA, GL_FLOAT, nullptr);
+            }
+            fieldRowTextureWidth = cacheRowCount;
+            fieldRowTextureValid = false;
+          }
+          fieldRowTextureIndex = (fieldRowTextureIndex + 1u) % fieldRowTextures.size();
+          glBindTexture(GL_TEXTURE_2D, fieldRowTextures[fieldRowTextureIndex]);
+          const PerfClock::time_point uploadStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
+          glTexSubImage2D(
+            GL_TEXTURE_2D, 0, 0, 0, cacheRowCount, 2, GL_RGBA, GL_FLOAT, fieldRowData.data());
+          if (logScopeDraw) {
+            logRow.rowUploadUs += logElapsedUs(uploadStart, PerfClock::now());
+            logRow.rowTextureUploads += 1;
+            logRow.textureRows = cacheRowCount;
+            logRow.uploadedRows = cacheRowCount;
+          }
+          fieldRowTextureValid = true;
+          fieldRowTexturePublishSeq = msg.publishSeq;
+          fieldSampleCacheValid = true;
+          fieldSampleCacheGeneration = msg.bufferGeneration;
+          fieldSampleCacheTopLag = cacheTopLag;
+          fieldSampleCacheBottomLag = cacheBottomLag;
+          fieldSampleCacheRowSpan = cacheRowSpan;
+          fieldSampleCacheWidgetWidth = box.size.x;
+          float visibleOffset = (cacheTopLag - windowTopLag) / std::max(cacheRowSpan, 1e-6f);
+          if (verticalInverted) {
+            visibleOffset = float(cacheRowCount - rowCount) - visibleOffset;
+          }
+          fieldTextureRowCount = float(cacheRowCount);
+          fieldTextureRowOffset = clamp(visibleOffset, 0.f, float(std::max(cacheRowCount - rowCount, 0)));
+          combinedFieldTextureReady = true;
+          return;
+        }
+
+        fieldSampleCacheValid = false;
+        fieldTextureRowCount = float(rowCount);
+        fieldTextureRowOffset = 0.f;
         const bool rowUploadNeeded =
           fieldRowTextureWidth != rowCount || !fieldRowTextureValid || msgChanged ||
           fieldRowTexturePublishSeq != msg.publishSeq;
@@ -2901,6 +3093,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (logScopeDraw) {
           logRow.rowUploadUs += logElapsedUs(uploadStart, PerfClock::now());
           logRow.rowTextureUploads += 1;
+          logRow.textureRows = rowCount;
+          logRow.uploadedRows = rowCount;
         }
         fieldRowTextureValid = true;
         fieldRowTexturePublishSeq = msg.publishSeq;

@@ -55,8 +55,9 @@ inline ScopeWindowLagSpan computeScopeWindowLagSpan(const temporaldeck_expander:
   span.windowBottomLag = msg.lagSamples - span.forwardWindowSamples;
   if (msg.scopeBinCount > 0u && std::isfinite(msg.scopeStartLagSamples) && std::isfinite(msg.scopeBinSpanSamples) &&
       msg.scopeBinSpanSamples > 0.f) {
-    span.windowTopLag = msg.scopeStartLagSamples;
-    span.windowBottomLag = msg.scopeStartLagSamples - span.totalWindowSamples;
+    span.windowTopLag =
+      std::isfinite(msg.scopeVisibleStartLagSamples) ? msg.scopeVisibleStartLagSamples : msg.scopeStartLagSamples;
+    span.windowBottomLag = span.windowTopLag - span.totalWindowSamples;
     if (!sampleMode) {
       span.backwardWindowSamples = span.windowTopLag - msg.lagSamples;
       span.forwardWindowSamples = msg.lagSamples - span.windowBottomLag;

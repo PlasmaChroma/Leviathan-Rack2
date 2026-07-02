@@ -10,11 +10,13 @@
 namespace temporaldeck_expander {
 
 constexpr uint32_t MAGIC = 0x54445831u; // "TDX1"
-constexpr uint16_t VERSION = 5u;
+constexpr uint16_t VERSION = 6u;
 constexpr uint32_t DISPLAY_MAGIC = 0x54445844u; // "TDXD"
 constexpr uint16_t DISPLAY_VERSION = 4u;
 constexpr uint32_t PREVIEW_BIN_COUNT = 4096u;
-constexpr uint32_t SCOPE_BIN_COUNT = 1024u;
+constexpr uint32_t LIVE_SCOPE_BIN_COUNT = 1024u;
+constexpr uint32_t SAMPLE_SCOPE_BIN_COUNT = 3072u;
+constexpr uint32_t SCOPE_BIN_COUNT = SAMPLE_SCOPE_BIN_COUNT;
 constexpr float kPreviewQuantizeVolts = 10.f;
 
 enum HostFlags : uint32_t {
@@ -92,6 +94,7 @@ struct HostToDisplay {
 
   float scopeHalfWindowMs = 900.f;
   float scopeStartLagSamples = 0.f;
+  float scopeVisibleStartLagSamples = 0.f;
   float scopeBinSpanSamples = 1.f;
   float scopeNewestPosSamples = 0.f;
   uint32_t scopeBinCount = 0;
@@ -297,7 +300,8 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
                                 float samplePlayheadSec, float sampleDurationSec, float sampleProgress,
                                 float sampleAbsolutePeakVolts, float scratchSensitivity,
                                 uint32_t bufferCapacityFrames, uint32_t bufferFilledFrames,
-                                float scopeHalfWindowMs, float scopeStartLagSamples, float scopeBinSpanSamples,
+                                float scopeHalfWindowMs, float scopeStartLagSamples, float scopeVisibleStartLagSamples,
+                                float scopeBinSpanSamples,
                                 float scopeNewestPosSamples,
                                 uint32_t scopeBinCount, const ScopeBin *scopeBins, const ScopeBin *scopeRightBins = nullptr) {
   if (!out) {
@@ -323,6 +327,7 @@ inline void populateHostMessage(HostToDisplay *out, uint64_t publishSeq, uint64_
   out->bufferFilledFrames = bufferFilledFrames;
   out->scopeHalfWindowMs = scopeHalfWindowMs;
   out->scopeStartLagSamples = scopeStartLagSamples;
+  out->scopeVisibleStartLagSamples = scopeVisibleStartLagSamples;
   out->scopeBinSpanSamples = scopeBinSpanSamples;
   out->scopeNewestPosSamples = scopeNewestPosSamples;
   out->scopeBinCount = std::min(scopeBinCount, SCOPE_BIN_COUNT);
