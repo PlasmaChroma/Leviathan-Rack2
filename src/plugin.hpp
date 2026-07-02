@@ -44,6 +44,7 @@ bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
+bool isExtraGlValidationEnabled();
 void refreshDragonKingDebugEnabled();
 
 struct ModuleTeardownTimer {

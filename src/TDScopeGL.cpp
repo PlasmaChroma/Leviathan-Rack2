@@ -254,8 +254,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool fieldRowTextureValidRight = false;
   float fieldQuadW = -1.f;
   float fieldQuadH = -1.f;
-  bool glValidationRequired = true;
-  uint32_t glValidationCountdown = 0u;
   GLsizeiptr shaderVboCapacityBytes = 0;
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
@@ -447,7 +445,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     shaderVboCapacityBytes = 0;
     shaderReady = false;
     shaderInitAttempted = false;
-    glValidationRequired = true;
   }
 
   void resetSegmentShaderState() {
@@ -458,7 +455,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     segmentShaderVboCapacityBytes = 0;
     segmentShaderReady = false;
     segmentShaderInitAttempted = false;
-    glValidationRequired = true;
   }
 
   void resetFieldShaderState() {
@@ -492,7 +488,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldQuadH = -1.f;
     fieldShaderReady = false;
     fieldShaderInitAttempted = false;
-    glValidationRequired = true;
   }
 
   void validateGlResourcesForCurrentContext() {
@@ -508,20 +503,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
          !gl_lifecycle::areValidTextures({fieldRowTextureLeft, fieldRowTextureRight, fieldColorLutTexture}))) {
       resetFieldShaderState();
     }
-    glValidationRequired = false;
-    glValidationCountdown = 120u;
-  }
-
-  void maybeValidateGlResourcesForCurrentContext() {
-    if (glValidationRequired) {
-      validateGlResourcesForCurrentContext();
-      return;
-    }
-    if (glValidationCountdown > 0u) {
-      --glValidationCountdown;
-      return;
-    }
-    maybeValidateGlResourcesForCurrentContext();
   }
 
   void step() override {
@@ -656,7 +637,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       logRow.viewportUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();
     }
-    validateGlResourcesForCurrentContext();
+    if (isExtraGlValidationEnabled()) {
+      validateGlResourcesForCurrentContext();
+    }
     if (logScopeDraw) {
       logRow.resourceValidateUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();

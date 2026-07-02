@@ -814,7 +814,9 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		validateGlResourcesForCurrentContext();
+		if (isExtraGlValidationEnabled()) {
+			validateGlResourcesForCurrentContext();
+		}
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 

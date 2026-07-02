@@ -4,5 +4,6 @@
   "clockworkDragLogging": false,
   "temporalDeckLifetimeLogging": false,
   "ScopeDrawLogging": false,
+  "extraGlValidation": false,
   "moduleTeardownLogging": true
 }

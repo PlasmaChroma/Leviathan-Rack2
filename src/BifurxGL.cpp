@@ -953,7 +953,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
 		if (!vbo) glGenBuffers(1, &vbo);
-		validateShaderResourcesForCurrentContext();
+		if (isExtraGlValidationEnabled()) {
+			validateShaderResourcesForCurrentContext();
+		}
 
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));

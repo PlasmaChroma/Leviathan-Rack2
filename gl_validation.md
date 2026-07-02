@@ -24,9 +24,7 @@ Clear calls were not the source:
 - `scoped_clear_us` stayed very small.
 - `resource_validate_us` owned the large `validate_clear_us` spikes.
 
-After throttling validation to run immediately after reset and then periodically, the
-multi-millisecond validation spikes disappeared. Remaining validation cost appeared only on
-periodic validation rows.
+After disabling steady-state validation, the multi-millisecond validation spikes disappeared.
 
 ## Current Interpretation
 
@@ -45,23 +43,12 @@ For normal operation, the primary lifecycle protections should be:
 
 Use an event-driven fast path for production:
 
-- Validate immediately after local GL resource state has been reset.
-- Validate immediately after resource creation if needed.
-- Do not call `glIs*` every steady-state draw.
+- Do not call `glIs*` during steady-state draws.
 - Rely on `onContextDestroy()` and local reset paths for normal context lifecycle.
+- Lazily recreate resources on the next draw after a reset.
 
-Keep periodic validation as a debug diagnostic, not a production steady-state cost:
-
-```cpp
-if (glValidationRequired) {
-  validateGlResourcesForCurrentContext();
-} else if (isDragonKingDebugEnabled() && validationCountdownExpired()) {
-  validateGlResourcesForCurrentContext();
-}
-```
-
-`ScopeDrawLogging` can also be treated as a debug mode that enables periodic validation while
-collecting lifecycle/performance data.
+Set `"extraGlValidation": true` in `res/dragonking.txt` to enable per-draw validation as a
+diagnostic. It defaults to false.
 
 ## Tradeoff
 
@@ -70,8 +57,7 @@ The risk is delayed detection if a host or driver invalidates GL resources witho
 destroy notification. That is expected to be rare. In that case, debug-periodic validation remains
 available to diagnose the issue.
 
-## Follow-Up
+## Current Implementation
 
-TD.Scope currently uses throttled validation. A likely next refinement is to make the periodic
-validation path conditional on DragonKing debug or `ScopeDrawLogging`, leaving production draws
-with startup/context/reset validation only.
+TD.Scope, Bifurx, and WyrmSand gate their steady-state `glIs*` checks behind
+`extraGlValidation`. Normal production draws use lifecycle-driven reset and lazy recreation.
