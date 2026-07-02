@@ -231,12 +231,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint fieldShaderVertex = 0;
   GLuint fieldShaderFragment = 0;
   GLuint fieldShaderVbo = 0;
-  std::array<GLuint, kFieldRowTextureRingSize> fieldRowTexturesLeft {};
-  std::array<GLuint, kFieldRowTextureRingSize> fieldRowTexturesRight {};
-  size_t fieldRowTextureIndexLeft = kFieldRowTextureRingSize - 1u;
-  size_t fieldRowTextureIndexRight = kFieldRowTextureRingSize - 1u;
+  std::array<GLuint, kFieldRowTextureRingSize> fieldRowTextures {};
+  size_t fieldRowTextureIndex = kFieldRowTextureRingSize - 1u;
   GLuint fieldColorLutTexture = 0;
   GLint fieldUniformRowTex = -1;
+  GLint fieldUniformRowTexV = -1;
   GLint fieldUniformColorLutTex = -1;
   GLint fieldUniformRowCount = -1;
   GLint fieldUniformDrawTop = -1;
@@ -252,10 +251,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   int fieldRowTextureWidth = 0;
   int fieldColorLutScheme = -1;
   float fieldColorLutBrightness = NAN;
-  uint64_t fieldRowTexturePublishSeqLeft = 0;
-  uint64_t fieldRowTexturePublishSeqRight = 0;
-  bool fieldRowTextureValidLeft = false;
-  bool fieldRowTextureValidRight = false;
+  uint64_t fieldRowTexturePublishSeq = 0;
+  bool fieldRowTextureValid = false;
   float fieldQuadW = -1.f;
   float fieldQuadH = -1.f;
   GLsizeiptr shaderVboCapacityBytes = 0;
@@ -415,8 +412,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glDeleteShader(fieldShaderFragment);
     }
     if (deleteGlObjects) {
-      glDeleteTextures(GLsizei(fieldRowTexturesLeft.size()), fieldRowTexturesLeft.data());
-      glDeleteTextures(GLsizei(fieldRowTexturesRight.size()), fieldRowTexturesRight.data());
+      glDeleteTextures(GLsizei(fieldRowTextures.size()), fieldRowTextures.data());
       glDeleteTextures(1, &fieldColorLutTexture);
     }
     resetFieldShaderState();
@@ -465,12 +461,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldShaderVertex = 0;
     fieldShaderFragment = 0;
     fieldShaderVbo = 0;
-    fieldRowTexturesLeft.fill(0);
-    fieldRowTexturesRight.fill(0);
-    fieldRowTextureIndexLeft = kFieldRowTextureRingSize - 1u;
-    fieldRowTextureIndexRight = kFieldRowTextureRingSize - 1u;
+    fieldRowTextures.fill(0);
+    fieldRowTextureIndex = kFieldRowTextureRingSize - 1u;
     fieldColorLutTexture = 0;
     fieldUniformRowTex = -1;
+    fieldUniformRowTexV = -1;
     fieldUniformColorLutTex = -1;
     fieldUniformRowCount = -1;
     fieldUniformDrawTop = -1;
@@ -485,10 +480,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldRowTextureWidth = 0;
     fieldColorLutScheme = -1;
     fieldColorLutBrightness = NAN;
-    fieldRowTexturePublishSeqLeft = 0;
-    fieldRowTexturePublishSeqRight = 0;
-    fieldRowTextureValidLeft = false;
-    fieldRowTextureValidRight = false;
+    fieldRowTexturePublishSeq = 0;
+    fieldRowTextureValid = false;
     fieldQuadW = -1.f;
     fieldQuadH = -1.f;
     fieldShaderReady = false;
@@ -506,8 +499,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (fieldShaderReady &&
         (!gl_lifecycle::isValidProgramBufferPair(fieldShaderProgram, fieldShaderVbo) ||
          !gl_lifecycle::areValidTextures({
-           fieldRowTexturesLeft[0], fieldRowTexturesLeft[1], fieldRowTexturesLeft[2],
-           fieldRowTexturesRight[0], fieldRowTexturesRight[1], fieldRowTexturesRight[2],
+           fieldRowTextures[0], fieldRowTextures[1], fieldRowTextures[2],
            fieldColorLutTexture}))) {
       resetFieldShaderState();
     }
@@ -1974,6 +1966,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       static const char *kFragmentShaderSrc =
         "#version 120\n"
         "uniform sampler2D uRowTex;\n"
+        "uniform float uRowTexV;\n"
         "uniform sampler2D uColorLutTex;\n"
         "uniform float uRowCount;\n"
         "uniform float uDrawTop;\n"
@@ -1988,7 +1981,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "varying vec2 vLocalPos;\n"
         "vec4 fetchRow(float idx) {\n"
         "  float t = (clamp(idx, 0.0, uRowCount - 1.0) + 0.5) / max(uRowCount, 1.0);\n"
-        "  return texture2D(uRowTex, vec2(t, 0.5));\n"
+        "  return texture2D(uRowTex, vec2(t, uRowTexV));\n"
         "}\n"
         "bool rowValid(vec4 row) {\n"
         "  return row.z >= 0.0;\n"
@@ -2218,21 +2211,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
 
       glGenBuffers(1, &fieldShaderVbo);
-      glGenTextures(GLsizei(fieldRowTexturesLeft.size()), fieldRowTexturesLeft.data());
-      glGenTextures(GLsizei(fieldRowTexturesRight.size()), fieldRowTexturesRight.data());
+      glGenTextures(GLsizei(fieldRowTextures.size()), fieldRowTextures.data());
       glGenTextures(1, &fieldColorLutTexture);
       const bool rowTexturesReady =
-        std::all_of(fieldRowTexturesLeft.begin(), fieldRowTexturesLeft.end(), [](GLuint texture) { return texture != 0; }) &&
-        std::all_of(fieldRowTexturesRight.begin(), fieldRowTexturesRight.end(), [](GLuint texture) { return texture != 0; });
+        std::all_of(fieldRowTextures.begin(), fieldRowTextures.end(), [](GLuint texture) { return texture != 0; });
       if (!fieldShaderVbo || !rowTexturesReady || !fieldColorLutTexture) {
         if (fieldShaderVbo) {
           glDeleteBuffers(1, &fieldShaderVbo);
           fieldShaderVbo = 0;
         }
-        glDeleteTextures(GLsizei(fieldRowTexturesLeft.size()), fieldRowTexturesLeft.data());
-        glDeleteTextures(GLsizei(fieldRowTexturesRight.size()), fieldRowTexturesRight.data());
-        fieldRowTexturesLeft.fill(0);
-        fieldRowTexturesRight.fill(0);
+        glDeleteTextures(GLsizei(fieldRowTextures.size()), fieldRowTextures.data());
+        fieldRowTextures.fill(0);
         if (fieldColorLutTexture) {
           glDeleteTextures(1, &fieldColorLutTexture);
           fieldColorLutTexture = 0;
@@ -2247,6 +2236,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
 
       fieldUniformRowTex = glGetUniformLocation(fieldShaderProgram, "uRowTex");
+      fieldUniformRowTexV = glGetUniformLocation(fieldShaderProgram, "uRowTexV");
       fieldUniformColorLutTex = glGetUniformLocation(fieldShaderProgram, "uColorLutTex");
       fieldUniformRowCount = glGetUniformLocation(fieldShaderProgram, "uRowCount");
       fieldUniformDrawTop = glGetUniformLocation(fieldShaderProgram, "uDrawTop");
@@ -2258,7 +2248,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
-      if (fieldUniformRowTex < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
+      if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
@@ -2281,8 +2271,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         }
       };
-      configureRowTextures(fieldRowTexturesLeft);
-      configureRowTextures(fieldRowTexturesRight);
+      configureRowTextures(fieldRowTextures);
       glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -2303,10 +2292,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glBindBuffer(GL_ARRAY_BUFFER, 0);
       fieldQuadW = -1.f;
       fieldQuadH = -1.f;
-      fieldRowTextureValidLeft = false;
-      fieldRowTextureValidRight = false;
-      fieldRowTexturePublishSeqLeft = 0;
-      fieldRowTexturePublishSeqRight = 0;
+      fieldRowTextureValid = false;
+      fieldRowTexturePublishSeq = 0;
 
       fieldShaderReady = true;
       return true;
@@ -2320,6 +2307,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr float kGlMainWidthGain = 1.10f;
     constexpr float kGlConnectorWidthGain = 1.08f;
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
+    bool combinedFieldTextureReady = false;
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
@@ -2343,7 +2331,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float glZoomInAlphaComp = 1.f + 0.05f * glZoomInEase + 0.10f * glDeepZoomEase;
       float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
       float glDeepZoomEnergyFill = 0.55f * glDeepZoomEase;
-      auto uploadFieldLaneTextures = [&]() -> bool {
+      auto prepareFieldLaneDraw = [&]() -> bool {
         if (!initFieldShaderPipeline()) {
           return false;
         }
@@ -2367,68 +2355,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         };
         ensureFieldQuad();
 
-        const bool useRightLaneTexture = fieldLaneSlot != 0;
-        auto &rowTextures = useRightLaneTexture ? fieldRowTexturesRight : fieldRowTexturesLeft;
-        size_t &rowTexIndex = useRightLaneTexture ? fieldRowTextureIndexRight : fieldRowTextureIndexLeft;
-        uint64_t &rowTexSeq = useRightLaneTexture ? fieldRowTexturePublishSeqRight : fieldRowTexturePublishSeqLeft;
-        bool &rowTexValid = useRightLaneTexture ? fieldRowTextureValidRight : fieldRowTextureValidLeft;
-        bool rowUploadNeeded = (fieldRowTextureWidth != rowCount) || !rowTexValid || msgChanged || rowTexSeq != msg.publishSeq;
-
-        if (fieldRowData.size() != rowCountU * 4u) {
-          fieldRowData.assign(rowCountU * 4u, 0.f);
-        }
-        if (rowUploadNeeded) {
-          for (int iy = 0; iy < rowCount; ++iy) {
-            size_t idx = size_t(iy);
-            size_t texIdx = size_t(visualRowIndex(iy));
-            if (texIdx >= rowCountU || idx >= colorDrive.size()) {
-              continue;
-            }
-            size_t base = texIdx * 4u;
-            if ((base + 3u) >= fieldRowData.size()) {
-              continue;
-            }
-            if (!isValid(idx)) {
-              fieldRowData[base + 0u] = laneCenterXForConnectors;
-              fieldRowData[base + 1u] = laneCenterXForConnectors;
-              fieldRowData[base + 2u] = -1.f;
-              fieldRowData[base + 3u] = 0.f;
-              continue;
-            }
-            fieldRowData[base + 0u] = getX0(idx);
-            fieldRowData[base + 1u] = getX1(idx);
-            fieldRowData[base + 2u] = clamp(getVisualIntensity(idx), 0.f, 1.f);
-            fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
-          }
-
-          if (fieldRowTextureWidth != rowCount) {
-            // Allocate every ring slot together so uploads can rotate away from
-            // textures that may still be consumed by an earlier draw.
-            for (GLuint texture : fieldRowTexturesLeft) {
-              glBindTexture(GL_TEXTURE_2D, texture);
-              glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, nullptr);
-            }
-            for (GLuint texture : fieldRowTexturesRight) {
-              glBindTexture(GL_TEXTURE_2D, texture);
-              glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, rowCount, 1, 0, GL_RGBA, GL_FLOAT, nullptr);
-            }
-            fieldRowTextureWidth = rowCount;
-            fieldRowTextureValidLeft = false;
-            fieldRowTextureValidRight = false;
-          }
-          rowTexIndex = (rowTexIndex + 1u) % rowTextures.size();
-          const GLuint rowTex = rowTextures[rowTexIndex];
-          glBindTexture(GL_TEXTURE_2D, rowTex);
-          const PerfClock::time_point uploadStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
-          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 1, GL_RGBA, GL_FLOAT, fieldRowData.data());
-          if (logScopeDraw) {
-            logRow.rowUploadUs += logElapsedUs(uploadStart, PerfClock::now());
-            logRow.rowTextureUploads += 1;
-          }
-          rowTexValid = true;
-          rowTexSeq = msg.publishSeq;
-        }
-
         int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
         ensureColorLut(scheme);
         float colorBrightness = module->scopeColorBrightnessClamped();
@@ -2447,20 +2373,18 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           fieldColorLutBrightness = colorBrightness;
         }
 
-        return true;
+        return combinedFieldTextureReady;
       };
       auto drawFieldLanePass = [&](float renderMain, float renderContinuity, GLenum srcBlend,
                                    GLenum dstBlend) -> bool {
         static const GLuint kAttrPos = 0;
-        const bool useRightLaneTexture = fieldLaneSlot != 0;
-        const auto &rowTextures = useRightLaneTexture ? fieldRowTexturesRight : fieldRowTexturesLeft;
-        const size_t rowTexIndex = useRightLaneTexture ? fieldRowTextureIndexRight : fieldRowTextureIndexLeft;
-        const GLuint rowTex = rowTextures[rowTexIndex];
+        const GLuint rowTex = fieldRowTextures[fieldRowTextureIndex];
         if (!rowTex) {
           return false;
         }
         glUseProgram(fieldShaderProgram);
         glUniform1i(fieldUniformRowTex, 0);
+        glUniform1f(fieldUniformRowTexV, fieldLaneSlot != 0 ? 0.75f : 0.25f);
         glUniform1i(fieldUniformColorLutTex, 1);
         glUniform1f(fieldUniformRowCount, float(rowCount));
         glUniform1f(fieldUniformDrawTop, drawTop);
@@ -2575,7 +2499,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       auto renderLaneShaderBackend = [&]() -> bool {
         const bool renderMainField = true;
         const bool renderContinuityField = true;
-        bool fieldDrawOk = uploadFieldLaneTextures();
+        bool fieldDrawOk = prepareFieldLaneDraw();
         if (fieldDrawOk) {
           fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
                                          GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
@@ -2921,7 +2845,77 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (logScopeDraw) {
       logRow.drawFromHistory = drawFromHistory ? 1 : 0;
     }
+    auto uploadCombinedFieldTexture =
+      [&](const RowFloatAccessor &getX0Left, const RowFloatAccessor &getX1Left,
+          const RowFloatAccessor &getVisualLeft, const RowValidAccessor &isValidLeft,
+          const RowFloatAccessor &getX0Right, const RowFloatAccessor &getX1Right,
+          const RowFloatAccessor &getVisualRight, const RowValidAccessor &isValidRight) {
+        if (!module->useOpenGlShaderRenderMode() || !initFieldShaderPipeline()) {
+          return;
+        }
+        const bool rowUploadNeeded =
+          fieldRowTextureWidth != rowCount || !fieldRowTextureValid || msgChanged ||
+          fieldRowTexturePublishSeq != msg.publishSeq;
+        if (!rowUploadNeeded) {
+          combinedFieldTextureReady = true;
+          return;
+        }
+        if (fieldRowData.size() != rowCountU * 8u) {
+          fieldRowData.assign(rowCountU * 8u, 0.f);
+        }
+        auto packLane = [&](size_t lane, const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
+                            const RowFloatAccessor &getVisual, const std::vector<float> &colorDrive,
+                            const RowValidAccessor &isValid, float laneCenter, bool laneEnabled) {
+          const size_t laneOffset = lane * rowCountU * 4u;
+          for (int iy = 0; iy < rowCount; ++iy) {
+            const size_t idx = size_t(iy);
+            const size_t base = laneOffset + size_t(visualRowIndex(iy)) * 4u;
+            if (!laneEnabled || !isValid(idx)) {
+              fieldRowData[base + 0u] = laneCenter;
+              fieldRowData[base + 1u] = laneCenter;
+              fieldRowData[base + 2u] = -1.f;
+              fieldRowData[base + 3u] = 0.f;
+              continue;
+            }
+            fieldRowData[base + 0u] = getX0(idx);
+            fieldRowData[base + 1u] = getX1(idx);
+            fieldRowData[base + 2u] = clamp(getVisual(idx), 0.f, 1.f);
+            fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
+          }
+        };
+        packLane(0u, getX0Left, getX1Left, getVisualLeft, rowColorDrive, isValidLeft, lane0CenterX, true);
+        packLane(1u, getX0Right, getX1Right, getVisualRight, rowColorDriveRight, isValidRight, lane1CenterX, renderStereo);
+
+        if (fieldRowTextureWidth != rowCount) {
+          for (GLuint texture : fieldRowTextures) {
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, rowCount, 2, 0, GL_RGBA, GL_FLOAT, nullptr);
+          }
+          fieldRowTextureWidth = rowCount;
+          fieldRowTextureValid = false;
+        }
+        fieldRowTextureIndex = (fieldRowTextureIndex + 1u) % fieldRowTextures.size();
+        glBindTexture(GL_TEXTURE_2D, fieldRowTextures[fieldRowTextureIndex]);
+        const PerfClock::time_point uploadStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rowCount, 2, GL_RGBA, GL_FLOAT, fieldRowData.data());
+        if (logScopeDraw) {
+          logRow.rowUploadUs += logElapsedUs(uploadStart, PerfClock::now());
+          logRow.rowTextureUploads += 1;
+        }
+        fieldRowTextureValid = true;
+        fieldRowTexturePublishSeq = msg.publishSeq;
+        combinedFieldTextureReady = true;
+      };
     if (drawFromHistory) {
+      uploadCombinedFieldTexture(
+        [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; },
+        [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; },
+        [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; });
       drawLane(
         [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
@@ -2935,6 +2929,12 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
           [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX, 1);
       }
     } else {
+      uploadCombinedFieldTexture(
+        [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
+        [&](size_t idx) { return rowVisualIntensity[idx]; }, [&](size_t idx) { return rowValid[idx] != 0u; },
+        [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
+        [&](size_t idx) { return rowVisualIntensityRight[idx]; },
+        [&](size_t idx) { return rowValidRight[idx] != 0u; });
       drawLane(
         [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
         [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
