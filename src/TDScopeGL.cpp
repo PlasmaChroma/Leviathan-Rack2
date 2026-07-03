@@ -10,7 +10,6 @@
 #include <ctime>
 #include <cstring>
 #include <fstream>
-#include <functional>
 #include <iomanip>
 #include <limits>
 #include <sstream>
@@ -21,6 +20,29 @@ namespace {
 
 constexpr size_t kTDScopePowLutSize = 1024;
 constexpr size_t kFieldRowTextureRingSize = 3;
+
+template <typename Signature>
+class FunctionRef;
+
+template <typename Result, typename Arg>
+class FunctionRef<Result(Arg)> {
+public:
+  template <typename Callable>
+  FunctionRef(const Callable &callable)
+    : callable_(&callable),
+      invoke_([](const void *object, Arg arg) -> Result {
+        return (*static_cast<const Callable *>(object))(arg);
+      }) {
+  }
+
+  Result operator()(Arg arg) const {
+    return invoke_(callable_, arg);
+  }
+
+private:
+  const void *callable_;
+  Result (*invoke_)(const void *, Arg);
+};
 
 template <size_t N>
 std::array<float, N> makePowLut(float exponent) {
@@ -65,6 +87,78 @@ const std::array<float, kTDScopePowLutSize> &scopePow090Lut() {
 const std::array<float, kTDScopePowLutSize> &scopePow092Lut() {
   static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.92f);
   return lut;
+}
+
+template <typename GetX0, typename GetX1, typename GetVisual, typename IsValid>
+void rebuildTransientColorDriveRangeFast(const GetX0 &getX0, const GetX1 &getX1,
+                                         const GetVisual &getVisual, const IsValid &isValid,
+                                         int rowCount, float laneHalfWidth,
+                                         std::vector<float> *colorDriveOut, int startRow, int endRow) {
+  if (!colorDriveOut || colorDriveOut->size() != size_t(rowCount) || rowCount <= 0) {
+    return;
+  }
+  startRow = clamp(startRow, 0, rowCount - 1);
+  endRow = clamp(endRow, 0, rowCount - 1);
+  if (endRow < startRow) {
+    return;
+  }
+  const float laneWidthDen = std::max(2.f * laneHalfWidth, 1e-3f);
+  for (int iy = startRow; iy <= endRow; ++iy) {
+    const size_t idx = size_t(iy);
+    const float baseDrive = clamp(getVisual(idx), 0.f, 1.f);
+    if (!isValid(idx)) {
+      (*colorDriveOut)[idx] = 0.f;
+      continue;
+    }
+    const float x0 = getX0(idx);
+    const float x1 = getX1(idx);
+    const float center = 0.5f * (x0 + x1);
+    const float span = x1 - x0;
+    float transientNorm = 0.f;
+    if (iy > 0 && isValid(idx - 1u)) {
+      const float otherX0 = getX0(idx - 1u);
+      const float otherX1 = getX1(idx - 1u);
+      transientNorm =
+        std::max(transientNorm,
+                 std::max(std::fabs(center - 0.5f * (otherX0 + otherX1)) / laneWidthDen * 1.15f,
+                          std::fabs(span - (otherX1 - otherX0)) / laneWidthDen * 1.35f));
+    }
+    if (iy + 1 < rowCount && isValid(idx + 1u)) {
+      const float otherX0 = getX0(idx + 1u);
+      const float otherX1 = getX1(idx + 1u);
+      transientNorm =
+        std::max(transientNorm,
+                 std::max(std::fabs(center - 0.5f * (otherX0 + otherX1)) / laneWidthDen * 1.15f,
+                          std::fabs(span - (otherX1 - otherX0)) / laneWidthDen * 1.35f));
+    }
+    const float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
+    (*colorDriveOut)[idx] =
+      clamp((0.38f + 0.92f * baseDrive) * lookupPow01(scopePow084Lut(), transientBoost), 0.f, 1.f);
+  }
+}
+
+template <typename GetX0, typename GetX1, typename GetVisual, typename IsValid>
+void packFieldLaneFast(std::vector<float> *fieldRowData, size_t lane, int rowCount,
+                       const GetX0 &getX0, const GetX1 &getX1, const GetVisual &getVisual,
+                       const std::vector<float> &colorDrive, const IsValid &isValid,
+                       float laneCenter, bool laneEnabled) {
+  const size_t rowCountU = size_t(rowCount);
+  const size_t laneOffset = lane * rowCountU * 4u;
+  for (int iy = 0; iy < rowCount; ++iy) {
+    const size_t idx = size_t(iy);
+    const size_t base = laneOffset + idx * 4u;
+    if (!laneEnabled || !isValid(idx)) {
+      (*fieldRowData)[base + 0u] = laneCenter;
+      (*fieldRowData)[base + 1u] = laneCenter;
+      (*fieldRowData)[base + 2u] = -1.f;
+      (*fieldRowData)[base + 3u] = 0.f;
+      continue;
+    }
+    (*fieldRowData)[base + 0u] = getX0(idx);
+    (*fieldRowData)[base + 1u] = getX1(idx);
+    (*fieldRowData)[base + 2u] = clamp(getVisual(idx), 0.f, 1.f);
+    (*fieldRowData)[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
+  }
 }
 
 } // namespace
@@ -1178,93 +1272,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       };
 
-    using RowFloatAccessor = std::function<float(size_t)>;
-    using RowValidAccessor = std::function<bool(size_t)>;
-    auto rebuildTransientColorDrive = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
-                                         const RowFloatAccessor &getVisualIntensity, const RowValidAccessor &isValid,
-                                         float laneHalfWidthLocal, std::vector<float> *colorDriveOut) {
-      if (!colorDriveOut || colorDriveOut->size() != rowCountU) {
-        return;
-      }
-      float laneWidthDen = std::max(2.f * laneHalfWidthLocal, 1e-3f);
-      auto updateRange = [&](int startRow, int endRow) {
-        startRow = clamp(startRow, 0, rowCount - 1);
-        endRow = clamp(endRow, 0, rowCount - 1);
-        if (endRow < startRow) {
-          return;
-        }
-        for (int iy = startRow; iy <= endRow; ++iy) {
-          size_t idx = size_t(iy);
-          float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          if (!isValid(idx)) {
-            (*colorDriveOut)[idx] = 0.f;
-            continue;
-          }
-          float center = 0.5f * (getX0(idx) + getX1(idx));
-          float span = getX1(idx) - getX0(idx);
-          float transientNorm = 0.f;
-          auto accumulateTransientAgainst = [&](size_t otherIdx) {
-            float otherCenter = 0.5f * (getX0(otherIdx) + getX1(otherIdx));
-            float otherSpan = getX1(otherIdx) - getX0(otherIdx);
-            transientNorm = std::max(transientNorm,
-                                     std::max(std::fabs(center - otherCenter) / laneWidthDen * 1.15f,
-                                              std::fabs(span - otherSpan) / laneWidthDen * 1.35f));
-          };
-          if (iy > 0 && isValid(size_t(iy - 1))) {
-            accumulateTransientAgainst(size_t(iy - 1));
-          }
-          if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
-            accumulateTransientAgainst(size_t(iy + 1));
-          }
-          float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
-          float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * lookupPow01(scopePow084Lut(), transientBoost), 0.f, 1.f);
-          (*colorDriveOut)[idx] = brightnessLift;
-        }
-      };
-      updateRange(0, rowCount - 1);
-    };
-
-    auto rebuildTransientColorDriveRange = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
-                                               const RowFloatAccessor &getVisualIntensity,
-                                               const RowValidAccessor &isValid, float laneHalfWidthLocal,
-                                               std::vector<float> *colorDriveOut, int startRow, int endRow) {
-      if (!colorDriveOut || colorDriveOut->size() != rowCountU) {
-        return;
-      }
-      float laneWidthDen = std::max(2.f * laneHalfWidthLocal, 1e-3f);
-      startRow = clamp(startRow, 0, rowCount - 1);
-      endRow = clamp(endRow, 0, rowCount - 1);
-      if (endRow < startRow) {
-        return;
-      }
-      for (int iy = startRow; iy <= endRow; ++iy) {
-        size_t idx = size_t(iy);
-        float baseDrive = clamp(getVisualIntensity(idx), 0.f, 1.f);
-        if (!isValid(idx)) {
-          (*colorDriveOut)[idx] = 0.f;
-          continue;
-        }
-        float center = 0.5f * (getX0(idx) + getX1(idx));
-        float span = getX1(idx) - getX0(idx);
-        float transientNorm = 0.f;
-        auto accumulateTransientAgainst = [&](size_t otherIdx) {
-          float otherCenter = 0.5f * (getX0(otherIdx) + getX1(otherIdx));
-          float otherSpan = getX1(otherIdx) - getX0(otherIdx);
-          transientNorm = std::max(transientNorm,
-                                   std::max(std::fabs(center - otherCenter) / laneWidthDen * 1.15f,
-                                            std::fabs(span - otherSpan) / laneWidthDen * 1.35f));
-        };
-        if (iy > 0 && isValid(size_t(iy - 1))) {
-          accumulateTransientAgainst(size_t(iy - 1));
-        }
-        if (iy + 1 < rowCount && isValid(size_t(iy + 1))) {
-          accumulateTransientAgainst(size_t(iy + 1));
-        }
-        float transientBoost = lookupPow01(scopePow056Lut(), transientNorm);
-        float brightnessLift = clamp((0.38f + 0.92f * baseDrive) * lookupPow01(scopePow084Lut(), transientBoost), 0.f, 1.f);
-        (*colorDriveOut)[idx] = brightnessLift;
-      }
-    };
+    using RowFloatAccessor = FunctionRef<float(size_t)>;
+    using RowValidAccessor = FunctionRef<bool(size_t)>;
     auto shiftVisibleColorDrive = [&](std::vector<float> *colorDriveOut, int shiftRows) {
       if (!colorDriveOut || colorDriveOut->size() != rowCountU || shiftRows == 0 || std::abs(shiftRows) >= rowCount) {
         if (colorDriveOut && colorDriveOut->size() == rowCountU && std::abs(shiftRows) >= rowCount) {
@@ -1569,14 +1578,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         visibleRebuildStart = std::max(0, visibleRebuildStart - 1);
         visibleRebuildEnd = std::min(rowCount - 1, visibleRebuildEnd + 1);
       }
-      rebuildTransientColorDriveRange(
-        historyGetX0, historyGetX1, historyGetVisual, historyIsValid, laneAmpHalfWidth, &rowColorDrive, visibleRebuildStart,
-        visibleRebuildEnd);
+      rebuildTransientColorDriveRangeFast(
+        historyGetX0, historyGetX1, historyGetVisual, historyIsValid, rowCount, laneAmpHalfWidth, &rowColorDrive,
+        visibleRebuildStart, visibleRebuildEnd);
       if (renderStereo) {
-        rebuildTransientColorDriveRange(
-          historyGetX0Right, historyGetX1Right, historyGetVisualRight, historyIsValidRight, laneAmpHalfWidth,
-          &rowColorDriveRight,
-          visibleRebuildStart, visibleRebuildEnd);
+        rebuildTransientColorDriveRangeFast(
+          historyGetX0Right, historyGetX1Right, historyGetVisualRight, historyIsValidRight, rowCount,
+          laneAmpHalfWidth, &rowColorDriveRight, visibleRebuildStart, visibleRebuildEnd);
       } else {
         std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
       }
@@ -1623,15 +1631,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
 
-      rebuildTransientColorDrive(
+      rebuildTransientColorDriveRangeFast(
         [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
         [&](size_t idx) { return rowVisualIntensity[idx]; }, [&](size_t idx) { return rowValid[idx] != 0u; },
-        laneAmpHalfWidth, &rowColorDrive);
+        rowCount, laneAmpHalfWidth, &rowColorDrive, 0, rowCount - 1);
       if (renderStereo) {
-        rebuildTransientColorDrive(
+        rebuildTransientColorDriveRangeFast(
           [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
           [&](size_t idx) { return rowVisualIntensityRight[idx]; },
-          [&](size_t idx) { return rowValidRight[idx] != 0u; }, laneAmpHalfWidth, &rowColorDriveRight);
+          [&](size_t idx) { return rowValidRight[idx] != 0u; }, rowCount, laneAmpHalfWidth,
+          &rowColorDriveRight, 0, rowCount - 1);
       } else {
         std::fill(rowColorDriveRight.begin(), rowColorDriveRight.end(), 0.f);
       }
@@ -3004,11 +3013,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     if (logScopeDraw) {
       logRow.drawFromHistory = drawFromHistory ? 1 : 0;
     }
-    auto uploadCombinedFieldTexture =
-      [&](const RowFloatAccessor &getX0Left, const RowFloatAccessor &getX1Left,
-          const RowFloatAccessor &getVisualLeft, const RowValidAccessor &isValidLeft,
-          const RowFloatAccessor &getX0Right, const RowFloatAccessor &getX1Right,
-          const RowFloatAccessor &getVisualRight, const RowValidAccessor &isValidRight) {
+    auto uploadCombinedFieldTexture = [&]() {
         if (!module->useOpenGlShaderRenderMode() || !initFieldShaderPipeline()) {
           return;
         }
@@ -3181,28 +3186,29 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         if (fieldRowData.size() != rowCountU * 8u) {
           fieldRowData.assign(rowCountU * 8u, 0.f);
         }
-        auto packLane = [&](size_t lane, const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
-                            const RowFloatAccessor &getVisual, const std::vector<float> &colorDrive,
-                            const RowValidAccessor &isValid, float laneCenter, bool laneEnabled) {
-          const size_t laneOffset = lane * rowCountU * 4u;
-          for (int iy = 0; iy < rowCount; ++iy) {
-            const size_t idx = size_t(iy);
-            const size_t base = laneOffset + idx * 4u;
-            if (!laneEnabled || !isValid(idx)) {
-              fieldRowData[base + 0u] = laneCenter;
-              fieldRowData[base + 1u] = laneCenter;
-              fieldRowData[base + 2u] = -1.f;
-              fieldRowData[base + 3u] = 0.f;
-              continue;
-            }
-            fieldRowData[base + 0u] = getX0(idx);
-            fieldRowData[base + 1u] = getX1(idx);
-            fieldRowData[base + 2u] = clamp(getVisual(idx), 0.f, 1.f);
-            fieldRowData[base + 3u] = clamp(colorDrive[idx], 0.f, 1.f);
-          }
-        };
-        packLane(0u, getX0Left, getX1Left, getVisualLeft, rowColorDrive, isValidLeft, lane0CenterX, true);
-        packLane(1u, getX0Right, getX1Right, getVisualRight, rowColorDriveRight, isValidRight, lane1CenterX, renderStereo);
+        if (drawFromHistory) {
+          packFieldLaneFast(
+            &fieldRowData, 0u, rowCount,
+            [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
+            [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, true);
+          packFieldLaneFast(
+            &fieldRowData, 1u, rowCount,
+            [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; }, rowColorDriveRight,
+            [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX, renderStereo);
+        } else {
+          packFieldLaneFast(
+            &fieldRowData, 0u, rowCount, [&](size_t idx) { return rowX0[idx]; },
+            [&](size_t idx) { return rowX1[idx]; }, [&](size_t idx) { return rowVisualIntensity[idx]; },
+            rowColorDrive, [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, true);
+          packFieldLaneFast(
+            &fieldRowData, 1u, rowCount, [&](size_t idx) { return rowX0Right[idx]; },
+            [&](size_t idx) { return rowX1Right[idx]; }, [&](size_t idx) { return rowVisualIntensityRight[idx]; },
+            rowColorDriveRight, [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX, renderStereo);
+        }
 
         if (fieldRowTextureWidth != rowCount) {
           for (GLuint texture : fieldRowTextures) {
@@ -3227,15 +3233,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         combinedFieldTextureReady = true;
       };
     if (drawFromHistory) {
-      uploadCombinedFieldTexture(
-        [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; },
-        [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; });
+      uploadCombinedFieldTexture();
       const bool drewCombinedStereoField =
         renderStereo && useShaderRenderMode &&
         drawCombinedStereoFieldPass(1.f, 1.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -3254,12 +3252,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
     } else {
-      uploadCombinedFieldTexture(
-        [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
-        [&](size_t idx) { return rowVisualIntensity[idx]; }, [&](size_t idx) { return rowValid[idx] != 0u; },
-        [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
-        [&](size_t idx) { return rowVisualIntensityRight[idx]; },
-        [&](size_t idx) { return rowValidRight[idx] != 0u; });
+      uploadCombinedFieldTexture();
       const bool drewCombinedStereoField =
         renderStereo && useShaderRenderMode &&
         drawCombinedStereoFieldPass(1.f, 1.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
