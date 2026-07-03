@@ -140,8 +140,11 @@ inline float computeLagDragVelocity(float previousLagSamples, float currentLagSa
 inline std::pair<float, float> computeScopePeakStatsFromBins(const temporaldeck_expander::ScopeBin* leftScopeBins,
                                                              const temporaldeck_expander::ScopeBin* rightScopeBins,
                                                              uint32_t scopeBinCount,
-                                                             bool renderStereo) {
-  std::vector<float> peaks;
+                                                             bool renderStereo,
+                                                             std::vector<float>* scratchPeaks = nullptr) {
+  std::vector<float> localPeaks;
+  std::vector<float>& peaks = scratchPeaks ? *scratchPeaks : localPeaks;
+  peaks.clear();
   peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
   for (uint32_t i = 0; i < scopeBinCount; ++i) {
     const temporaldeck_expander::ScopeBin& bin = leftScopeBins[i];

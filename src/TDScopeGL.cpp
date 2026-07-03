@@ -220,6 +220,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   std::vector<GlSegmentQuadVertex> bodySegmentVerts;
   std::vector<GlSegmentQuadVertex> fillSegmentVerts;
   std::vector<GlSegmentQuadVertex> continuitySegmentVerts;
+  std::vector<float> peakStatsScratch;
   std::ofstream scopeDrawLogFile;
   std::string scopeDrawLogPath;
   bool scopeDrawLogActive = false;
@@ -833,7 +834,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     float displayFullScaleVolts = std::max(module->scopeDisplayFullScaleVolts(), 0.001f);
     if (scopeDisplayRangeMode == TDScope::SCOPE_RANGE_AUTO) {
       const std::pair<float, float> liveStats = tdscope::computeScopePeakStatsFromBins(
-        leftScopeBins + visibleScopeBinStart, rightScopeBins + visibleScopeBinStart, visibleScopeBinCount, renderStereo);
+        leftScopeBins + visibleScopeBinStart, rightScopeBins + visibleScopeBinStart, visibleScopeBinCount, renderStereo,
+        &peakStatsScratch);
       displayFullScaleVolts = tdscope::updateScopeAutoScale(
         &autoScaleState,
         true,
