@@ -1,6 +1,8 @@
 #include "PlasmaSwitch.hpp"
+#include "../NvgGraphicsLifecycle.hpp"
 #include "VisualAssets.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 
@@ -11,6 +13,11 @@ constexpr float kWidthPx = kHeightPx * (168.f / 262.f);
 constexpr float kShadowBleedPx = 8.f;
 constexpr double kAnimationFps = 120.0;
 constexpr bool kDrawGlass = false;
+thread_local PlasmaSwitchDrawMetrics gPlasmaSwitchDrawMetrics;
+
+uint64_t elapsedNs(std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end) {
+	return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+}
 
 uint64_t animationFrame() {
 	static const double startSec = system::getTime();
@@ -187,6 +194,14 @@ void drawGlass(const Widget::DrawArgs& args, float lensX, float lensY, float len
 
 } // namespace
 
+void resetPlasmaSwitchDrawMetrics() {
+	gPlasmaSwitchDrawMetrics = PlasmaSwitchDrawMetrics();
+}
+
+PlasmaSwitchDrawMetrics getPlasmaSwitchDrawMetrics() {
+	return gPlasmaSwitchDrawMetrics;
+}
+
 PlasmaSwitch::PlasmaSwitch() {
 	momentary = false;
 	box.size = Vec(kWidthPx, kHeightPx);
@@ -202,6 +217,56 @@ PlasmaSwitch::PlasmaSwitch() {
 	shadowLayer->componentSize = box.size;
 	shadowFb->addChild(shadowLayer);
 	addChild(shadowFb);
+}
+
+PlasmaSwitch::~PlasmaSwitch() {
+	resetBackingImageHandle(backingImageOwnerVg, false);
+}
+
+void PlasmaSwitch::resetBackingImageHandle(NVGcontext* currentVg, bool deleteCurrentHandle) {
+	nvg_gfx_lifecycle::resetOwnedNvgImage(
+		backingImageOwnerVg,
+		backingImageHandle,
+		backingImageWidth,
+		backingImageHeight,
+		currentVg,
+		deleteCurrentHandle);
+	backingImageCreateAttempted = false;
+}
+
+int PlasmaSwitch::ensureBackingImageHandle(NVGcontext* vg) {
+	if (!vg || backingFullPath.empty()) {
+		return -1;
+	}
+	if (backingImageOwnerVg && backingImageOwnerVg != vg) {
+		++gPlasmaSwitchDrawMetrics.contextResets;
+		resetBackingImageHandle(vg, false);
+	}
+	if (backingImageOwnerVg == vg && backingImageHandle >= 0) {
+		if (backingImageWidth > 0 && backingImageHeight > 0
+			&& nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, backingImageHandle, backingImageWidth, backingImageHeight)) {
+			return backingImageHandle;
+		}
+		resetBackingImageHandle(vg, true);
+	}
+	if (!backingImageCreateAttempted) {
+		backingImageCreateAttempted = true;
+		backingImageHandle = nvgCreateImage(vg, backingFullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+		if (backingImageHandle >= 0) {
+			backingImageOwnerVg = vg;
+			nvgImageSize(vg, backingImageHandle, &backingImageWidth, &backingImageHeight);
+			++gPlasmaSwitchDrawMetrics.imageCreates;
+			return backingImageHandle;
+		}
+	}
+	if (!fallbackBackingImage && APP && APP->window) {
+		fallbackBackingImage = APP->window->loadImage(backingFullPath);
+	}
+	if (fallbackBackingImage && fallbackBackingImage->handle >= 0) {
+		++gPlasmaSwitchDrawMetrics.imageFallbacks;
+		return fallbackBackingImage->handle;
+	}
+	return -1;
 }
 
 void PlasmaSwitch::step() {
@@ -244,23 +309,27 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 		displayValue = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
 		displayValueInitialized = true;
 	}
+	const auto shadowStart = std::chrono::steady_clock::now();
 	if (shadowFb) {
 		drawChild(shadowFb, args);
 	}
+	const auto shadowEnd = std::chrono::steady_clock::now();
+	gPlasmaSwitchDrawMetrics.shadowNs += elapsedNs(shadowStart, shadowEnd);
 
-	std::shared_ptr<window::Image> backingImage = APP->window->loadImage(backingFullPath);
-	if (backingImage && backingImage->handle >= 0) {
-		int imageHandle =
-			visual_assets::loadPluginRasterMipmapHandle(args.vg, backingImage, backingFullPath);
-		if (imageHandle < 0) {
-			imageHandle = backingImage->handle;
-		}
+	const auto imageEnsureStart = std::chrono::steady_clock::now();
+	const int imageHandle = ensureBackingImageHandle(args.vg);
+	const auto imageEnsureEnd = std::chrono::steady_clock::now();
+	gPlasmaSwitchDrawMetrics.imageEnsureNs += elapsedNs(imageEnsureStart, imageEnsureEnd);
+	if (imageHandle >= 0) {
+		const auto imagePaintStart = std::chrono::steady_clock::now();
 		NVGpaint paint =
 			nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgFillPaint(args.vg, paint);
 		nvgFill(args.vg);
+		const auto imagePaintEnd = std::chrono::steady_clock::now();
+		gPlasmaSwitchDrawMetrics.imagePaintNs += elapsedNs(imagePaintStart, imagePaintEnd);
 	}
 
 	const float lensX = box.size.x * 0.245f;
@@ -274,6 +343,7 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	const float tubeH = box.size.y * 0.690f;
 	const float tubeR = box.size.x * 0.105f;
 
+	const auto bodyStart = std::chrono::steady_clock::now();
 	nvgSave(args.vg);
 	drawChamferRect(args.vg, tubeX, tubeY, tubeW, tubeH, tubeR);
 	NVGpaint tubeBase = nvgLinearGradient(args.vg, tubeX, tubeY, tubeX + tubeW, tubeY,
@@ -286,6 +356,8 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 145));
 	nvgStroke(args.vg);
 	nvgRestore(args.vg);
+	const auto bodyEnd = std::chrono::steady_clock::now();
+	gPlasmaSwitchDrawMetrics.bodyNs += elapsedNs(bodyStart, bodyEnd);
 
 	const float cx = box.size.x * 0.5f;
 	const float cy = crossfade(box.size.y * 0.665f, box.size.y * 0.335f, clamp(displayValue, 0.f, 1.f));
@@ -296,6 +368,7 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	const NVGcolor glowColor = blendColor(cyan, purple, hueAmount);
 	const NVGcolor accentColor = blendColor(purple, cyan, 1.f - hueAmount * 0.55f);
 
+	const auto orbStart = std::chrono::steady_clock::now();
 	nvgSave(args.vg);
 	const float insetX = box.size.x * 0.024f;
 	const float insetY = box.size.x * 0.014f;
@@ -306,6 +379,8 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	nvgScissor(args.vg, clipX, clipY, clipW, clipH);
 	drawOrb(args, box.size, cx, cy, coreR, glowR, glowColor, accentColor, sparkOffsetX, sparkOffsetY);
 	nvgRestore(args.vg);
+	const auto orbEnd = std::chrono::steady_clock::now();
+	gPlasmaSwitchDrawMetrics.orbNs += elapsedNs(orbStart, orbEnd);
 
 	if (kDrawGlass) {
 		drawGlass(args, lensX, lensY, lensW, lensH, lensR);

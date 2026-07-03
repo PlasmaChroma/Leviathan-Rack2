@@ -1478,6 +1478,14 @@ struct IntegralFluxWidget : ModuleWidget {
 		float previewFramebufferUs = 0.f;
 		float ch1PreviewFramebufferUs = 0.f;
 		float ch4PreviewFramebufferUs = 0.f;
+		float plasmaSwitchShadowUs = 0.f;
+		float plasmaSwitchImageEnsureUs = 0.f;
+		float plasmaSwitchImagePaintUs = 0.f;
+		float plasmaSwitchBodyUs = 0.f;
+		float plasmaSwitchOrbUs = 0.f;
+		uint32_t plasmaSwitchImageCreates = 0u;
+		uint32_t plasmaSwitchImageFallbacks = 0u;
+		uint32_t plasmaSwitchContextResets = 0u;
 		uint32_t previewDirtyRequests = 0u;
 		uint32_t previewPointRebuilds = 0u;
 		uint32_t previewTracerCaptures = 0u;
@@ -1546,7 +1554,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "gear_draw_us,eclipse_draw_us,eclipse_shadow_us,eclipse_shadow_count,aperture_draw_us,"
 			<< "linear_point_draw_us,shape_glyph_draw_us,plasma_switch_draw_us,"
 			<< "preview_draw_us,ch1_preview_draw_us,ch4_preview_draw_us,preview_framebuffer_us,"
-			<< "ch1_preview_framebuffer_us,ch4_preview_framebuffer_us,preview_dirty_requests,"
+			<< "ch1_preview_framebuffer_us,ch4_preview_framebuffer_us,"
+			<< "plasma_switch_shadow_us,plasma_switch_image_ensure_us,plasma_switch_image_paint_us,"
+			<< "plasma_switch_body_us,plasma_switch_orb_us,plasma_switch_image_creates,"
+			<< "plasma_switch_image_fallbacks,plasma_switch_context_resets,preview_dirty_requests,"
 			<< "preview_point_rebuilds,preview_tracer_captures,linear_point_dirty_requests,"
 			<< "shape_glyph_dirty_requests,halo_dirty_draw_count,halo_active_draw_count,halo_dragging_draw_count,"
 			<< "ui_step_ema_us,ui_draw_ema_us\n";
@@ -1581,6 +1592,14 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< row.previewFramebufferUs << ','
 			<< row.ch1PreviewFramebufferUs << ','
 			<< row.ch4PreviewFramebufferUs << ','
+			<< row.plasmaSwitchShadowUs << ','
+			<< row.plasmaSwitchImageEnsureUs << ','
+			<< row.plasmaSwitchImagePaintUs << ','
+			<< row.plasmaSwitchBodyUs << ','
+			<< row.plasmaSwitchOrbUs << ','
+			<< row.plasmaSwitchImageCreates << ','
+			<< row.plasmaSwitchImageFallbacks << ','
+			<< row.plasmaSwitchContextResets << ','
 			<< row.previewDirtyRequests << ','
 			<< row.previewPointRebuilds << ','
 			<< row.previewTracerCaptures << ','
@@ -1979,6 +1998,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
 			gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
 			gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
+			resetPlasmaSwitchDrawMetrics();
 			visual_assets::resetEclipseShadowDrawMetrics();
 		}
 		DrawLogRow logRow;
@@ -2093,6 +2113,15 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.previewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsThisFrame) * 1e-3f;
 			logRow.ch1PreviewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsByChannel[1]) * 1e-3f;
 			logRow.ch4PreviewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsByChannel[4]) * 1e-3f;
+			const PlasmaSwitchDrawMetrics switchMetrics = getPlasmaSwitchDrawMetrics();
+			logRow.plasmaSwitchShadowUs = float(switchMetrics.shadowNs) * 1e-3f;
+			logRow.plasmaSwitchImageEnsureUs = float(switchMetrics.imageEnsureNs) * 1e-3f;
+			logRow.plasmaSwitchImagePaintUs = float(switchMetrics.imagePaintNs) * 1e-3f;
+			logRow.plasmaSwitchBodyUs = float(switchMetrics.bodyNs) * 1e-3f;
+			logRow.plasmaSwitchOrbUs = float(switchMetrics.orbNs) * 1e-3f;
+			logRow.plasmaSwitchImageCreates = switchMetrics.imageCreates;
+			logRow.plasmaSwitchImageFallbacks = switchMetrics.imageFallbacks;
+			logRow.plasmaSwitchContextResets = switchMetrics.contextResets;
 			logRow.previewDirtyRequests = gIntegralFluxPreviewDirtyRequestsThisFrame;
 			logRow.previewPointRebuilds = gIntegralFluxPreviewPointRebuildsThisFrame;
 			logRow.previewTracerCaptures = gIntegralFluxPreviewTracerCapturesThisFrame;
