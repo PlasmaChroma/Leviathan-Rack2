@@ -48,7 +48,8 @@ Use an event-driven fast path for production:
 - Lazily recreate resources on the next draw after a reset.
 
 Set `"extraGlValidation": true` in `res/dragonking.txt` to enable per-draw validation as a
-diagnostic. It defaults to false.
+diagnostic. `"ExtraGlValidation": true` is also accepted for consistency with the other
+DragonKing debug flags. It defaults to false.
 
 ## Tradeoff
 
@@ -61,3 +62,8 @@ available to diagnose the issue.
 
 TD.Scope, Bifurx, and WyrmSand gate their steady-state `glIs*` checks behind
 `extraGlValidation`. Normal production draws use lifecycle-driven reset and lazy recreation.
+
+TD.Scope CSV logging includes `extra_gl_validation` so validation-enabled frames are explicit.
+When that column is `0`, `resource_validate_us` should be zero because the expensive validation
+function did not run. If `resource_validate_us` is large while `extra_gl_validation` is `0`, that
+is a logging or instrumentation bug rather than real GL resource validation cost.
