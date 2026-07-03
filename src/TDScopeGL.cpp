@@ -2333,6 +2333,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
              fieldUniformRenderContinuity);
         return false;
       }
+      glUseProgram(fieldShaderProgram);
+      glUniform1i(fieldUniformRowTex, 0);
+      glUniform1i(fieldUniformColorLutTex, 1);
+      glUseProgram(0);
 
       auto configureRowTextures = [](const std::array<GLuint, kFieldRowTextureRingSize> &textures) {
         for (GLuint texture : textures) {
@@ -2473,13 +2477,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     auto bindFieldShaderResources = [&](GLuint rowTex, float rowTexV, float rowTexVRight, float stereoMode,
                                         float renderMain, float renderContinuity) {
       glUseProgram(fieldShaderProgram);
-      glUniform1i(fieldUniformRowTex, 0);
       glUniform1f(fieldUniformRowTexV, rowTexV);
       glUniform1f(fieldUniformRowTexVRight, rowTexVRight);
       glUniform1f(fieldUniformStereoFieldMode, stereoMode);
       glUniform1f(fieldUniformTextureRowCount, fieldTextureRowCount);
       glUniform1f(fieldUniformTextureRowOffset, fieldTextureRowOffset);
-      glUniform1i(fieldUniformColorLutTex, 1);
       glUniform1f(fieldUniformRowCount, float(rowCount));
       glUniform1f(fieldUniformDrawTop, drawTop);
       glUniform1f(fieldUniformRowStep, rowStep);
@@ -2800,144 +2802,151 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       };
       auto renderLaneGlBackend = [&]() {
-      {
-        const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
-        const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
-        for (auto &verts : mainBatchVerts) {
-          verts.clear();
-        }
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!isValid(idx)) {
-            continue;
+        glEnable(GL_LINE_SMOOTH);
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+        {
+          const ShaderPassParams mainShaderParams = makeShaderPassParams(1.04f, 0.04f, 1.06f, 0.97f);
+          const ShaderPassParams fillShaderParams = makeShaderPassParams(1.03f, 0.03f, 0.96f, 1.00f);
+          for (auto &verts : mainBatchVerts) {
+            verts.clear();
           }
-          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
-          int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
-          NVGcolor c = brightenColor(
-            gradientColorForIntensity(
-              tone,
-              uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-            clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
-          c = applyFixedFunctionPassParams(c, mainShaderParams);
-          GLubyte r = encodeColorByte(c.r);
-          GLubyte g = encodeColorByte(c.g);
-          GLubyte b = encodeColorByte(c.b);
-          GLubyte a = encodeColorByte(c.a);
-          mainBatchVerts[size_t(rowBin)].push_back({getX0(idx), rowY[idx], r, g, b, a});
-          mainBatchVerts[size_t(rowBin)].push_back({getX1(idx), rowY[idx], r, g, b, a});
-        }
-        for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
-          float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
-          float mainW =
-            (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain * glZoomInWidthComp;
-          drawBatch(mainBatchVerts[size_t(widthBin)], mainW, mainShaderParams);
-        }
-        if (glDeepZoomEnergyFill > 1e-4f) {
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-          for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
-            std::vector<GlLineVertex> &verts = mainBatchVerts[size_t(widthBin)];
-            if (verts.empty()) {
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            if (!isValid(idx)) {
               continue;
             }
-            float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
-            float fillW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * (1.01f + 0.04f * glDeepZoomEnergyFill);
-            float fillAlphaNorm = applyFixedFunctionAlphaParams(
-              kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, fillShaderParams);
-            GLubyte fillAlpha = GLubyte(std::lround(clamp(255.f * fillAlphaNorm, 0.f, 255.f)));
-            if (fillAlpha == 0u) {
-              continue;
-            }
-            fillScratchVerts = verts;
-            for (GlLineVertex &v : fillScratchVerts) {
-              v.a = fillAlpha;
-            }
-            drawBatch(fillScratchVerts, fillW, fillShaderParams);
-          }
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        }
-      }
-      {
-        const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.74f, 1.10f);
-        const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
-        std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
-        for (auto &verts : connectorBodyBatchVerts) {
-          verts.reserve(size_t(rowCount / 2 + 8) * 2u);
-        }
-        bool prevValid = false;
-        float prevX0 = laneCenterXForConnectors;
-        float prevX1 = laneCenterXForConnectors;
-        float prevY = drawTop + 0.5f;
-        float prevVisual = 0.f;
-        float prevColorDrive = 0.f;
-        for (int iy = 0; iy < rowCount; ++iy) {
-          size_t idx = size_t(iy);
-          if (!isValid(idx)) {
-            prevValid = false;
-            continue;
-          }
-          float x0 = getX0(idx);
-          float x1 = getX1(idx);
-          float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
-          float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
-          if (prevValid) {
-            if (std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx) {
-              prevX0 = x0;
-              prevX1 = x1;
-              prevY = rowY[idx];
-              prevVisual = visual;
-              prevColorDrive = transientLift;
-              continue;
-            }
-            float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
-            float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
-            float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
-            int rowBin = quantizeStrokeBin(tone, kGlConnectorStrokeBins);
+            float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+            float tone = clamp(0.70f * visual + 0.30f * transientLift, 0.f, 1.f);
+            int rowBin = quantizeStrokeBin(tone, kGlMainStrokeBins);
             NVGcolor c = brightenColor(
               gradientColorForIntensity(
-                connectVisual,
-                uint8_t(std::lround(clamp(
-                  (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
-              clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
-            c = applyFixedFunctionPassParams(c, connectorBodyShaderParams);
+                tone,
+                uint8_t(std::lround(clamp((122.f + 120.f * tone) * kGlMainAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+              clamp(transientLift * 0.62f * kGlMainLiftGain * glZoomInLiftComp, 0.f, 1.f));
+            c = applyFixedFunctionPassParams(c, mainShaderParams);
             GLubyte r = encodeColorByte(c.r);
             GLubyte g = encodeColorByte(c.g);
             GLubyte b = encodeColorByte(c.b);
             GLubyte a = encodeColorByte(c.a);
-            float leftDrift = std::fabs(x0 - prevX0);
-            float rightDrift = std::fabs(x1 - prevX1);
-            float edgeDrift = std::max(leftDrift, rightDrift);
-            float spanAvg = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
-            if (spanAvg > connectorMinDeltaPx * 1.2f && edgeDrift > connectorMinDeltaPx * 0.70f) {
-              float driftT = clamp((edgeDrift - connectorMinDeltaPx * 0.70f) / std::max(connectorMinDeltaPx * 1.80f, 1e-4f), 0.f, 1.f);
-              GLubyte bodyAlpha = GLubyte(std::lround(clamp(
-                float(a) * (0.36f + 0.10f * glDeepZoomEnergyFill) * driftT, 0.f, 255.f)));
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX0, prevY, r, g, b, bodyAlpha});
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, bodyAlpha});
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, bodyAlpha});
-              connectorBodyBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, bodyAlpha});
+            mainBatchVerts[size_t(rowBin)].push_back({getX0(idx), rowY[idx], r, g, b, a});
+            mainBatchVerts[size_t(rowBin)].push_back({getX1(idx), rowY[idx], r, g, b, a});
+          }
+          for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
+            float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
+            float mainW =
+              (0.78f + 0.62f * toneCenter) * zoomThicknessMul * kGlMainWidthGain * glZoomInWidthComp;
+            drawBatch(mainBatchVerts[size_t(widthBin)], mainW, mainShaderParams);
+          }
+          if (glDeepZoomEnergyFill > 1e-4f) {
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            for (int widthBin = 0; widthBin < kGlMainStrokeBins; ++widthBin) {
+              std::vector<GlLineVertex> &verts = mainBatchVerts[size_t(widthBin)];
+              if (verts.empty()) {
+                continue;
+              }
+              float toneCenter = strokeBinCenter(widthBin, kGlMainStrokeBins);
+              float fillW = (0.78f + 0.62f * toneCenter) * zoomThicknessMul * (1.01f + 0.04f * glDeepZoomEnergyFill);
+              float fillAlphaNorm = applyFixedFunctionAlphaParams(
+                kGlDeepZoomEnergyFillAlpha * glDeepZoomEnergyFill, fillShaderParams);
+              GLubyte fillAlpha = GLubyte(std::lround(clamp(255.f * fillAlphaNorm, 0.f, 255.f)));
+              if (fillAlpha == 0u) {
+                continue;
+              }
+              fillScratchVerts = verts;
+              for (GlLineVertex &v : fillScratchVerts) {
+                v.a = fillAlpha;
+              }
+              drawBatch(fillScratchVerts, fillW, fillShaderParams);
+            }
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+          }
+        }
+        {
+          const ShaderPassParams connectorBodyShaderParams = makeShaderPassParams(1.02f, 0.03f, 0.74f, 1.10f);
+          const float connectorMinDeltaPx = std::max(0.60f * zoomThicknessMul, 0.40f);
+          std::array<std::vector<GlLineVertex>, kGlConnectorStrokeBins> connectorBodyBatchVerts;
+          for (auto &verts : connectorBodyBatchVerts) {
+            verts.reserve(size_t(rowCount / 2 + 8) * 2u);
+          }
+          bool prevValid = false;
+          float prevX0 = laneCenterXForConnectors;
+          float prevX1 = laneCenterXForConnectors;
+          float prevY = drawTop + 0.5f;
+          float prevVisual = 0.f;
+          float prevColorDrive = 0.f;
+          for (int iy = 0; iy < rowCount; ++iy) {
+            size_t idx = size_t(iy);
+            if (!isValid(idx)) {
+              prevValid = false;
+              continue;
+            }
+            float x0 = getX0(idx);
+            float x1 = getX1(idx);
+            float visual = clamp(getVisualIntensity(idx), 0.f, 1.f);
+            float transientLift = clamp(colorDrive[idx], 0.f, 1.f);
+            if (prevValid) {
+              if (std::fabs(x0 - prevX0) < connectorMinDeltaPx && std::fabs(x1 - prevX1) < connectorMinDeltaPx) {
+                prevX0 = x0;
+                prevX1 = x1;
+                prevY = rowY[idx];
+                prevVisual = visual;
+                prevColorDrive = transientLift;
+                continue;
+              }
+              float connectVisual = clamp(0.5f * (prevVisual + visual), 0.f, 1.f);
+              float connectTransientLift = clamp(0.5f * (prevColorDrive + transientLift), 0.f, 1.f);
+              float tone = clamp(0.82f * connectVisual + 0.18f * connectTransientLift, 0.f, 1.f);
+              int rowBin = quantizeStrokeBin(tone, kGlConnectorStrokeBins);
+              NVGcolor c = brightenColor(
+                gradientColorForIntensity(
+                  connectVisual,
+                  uint8_t(std::lround(clamp(
+                    (104.f + 108.f * connectVisual) * kGlConnectorAlphaGain * glZoomInAlphaComp, 0.f, 255.f)))),
+                clamp(connectTransientLift * 0.62f * kGlConnectorLiftGain * glZoomInLiftComp, 0.f, 1.f));
+              c = applyFixedFunctionPassParams(c, connectorBodyShaderParams);
+              GLubyte r = encodeColorByte(c.r);
+              GLubyte g = encodeColorByte(c.g);
+              GLubyte b = encodeColorByte(c.b);
+              GLubyte a = encodeColorByte(c.a);
+              float leftDrift = std::fabs(x0 - prevX0);
+              float rightDrift = std::fabs(x1 - prevX1);
+              float edgeDrift = std::max(leftDrift, rightDrift);
+              float spanAvg = 0.5f * (std::fabs(prevX1 - prevX0) + std::fabs(x1 - x0));
+              if (spanAvg > connectorMinDeltaPx * 1.2f && edgeDrift > connectorMinDeltaPx * 0.70f) {
+                float driftT = clamp((edgeDrift - connectorMinDeltaPx * 0.70f) / std::max(connectorMinDeltaPx * 1.80f, 1e-4f), 0.f, 1.f);
+                GLubyte bodyAlpha = GLubyte(std::lround(clamp(
+                  float(a) * (0.36f + 0.10f * glDeepZoomEnergyFill) * driftT, 0.f, 255.f)));
+                connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX0, prevY, r, g, b, bodyAlpha});
+                connectorBodyBatchVerts[size_t(rowBin)].push_back({x0, rowY[idx], r, g, b, bodyAlpha});
+                connectorBodyBatchVerts[size_t(rowBin)].push_back({prevX1, prevY, r, g, b, bodyAlpha});
+                connectorBodyBatchVerts[size_t(rowBin)].push_back({x1, rowY[idx], r, g, b, bodyAlpha});
+              }
+            }
+            prevX0 = x0;
+            prevX1 = x1;
+            prevY = rowY[idx];
+            prevVisual = visual;
+            prevColorDrive = transientLift;
+            prevValid = true;
+          }
+          for (int widthBin = 0; widthBin < kGlConnectorStrokeBins; ++widthBin) {
+            if (!connectorBodyBatchVerts[size_t(widthBin)].empty()) {
+              float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
+              float bodyW =
+                (0.92f + 0.52f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * (1.04f + 0.10f * glZoomInWidthComp);
+              bodyW *= (1.02f + 0.10f * glDeepZoomEnergyFill);
+              glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+              drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW, connectorBodyShaderParams);
+              glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             }
           }
-          prevX0 = x0;
-          prevX1 = x1;
-          prevY = rowY[idx];
-          prevVisual = visual;
-          prevColorDrive = transientLift;
-          prevValid = true;
         }
-        for (int widthBin = 0; widthBin < kGlConnectorStrokeBins; ++widthBin) {
-          if (!connectorBodyBatchVerts[size_t(widthBin)].empty()) {
-            float toneCenter = strokeBinCenter(widthBin, kGlConnectorStrokeBins);
-            float bodyW =
-              (0.92f + 0.52f * toneCenter) * zoomThicknessMul * kGlConnectorWidthGain * (1.04f + 0.10f * glZoomInWidthComp);
-            bodyW *= (1.02f + 0.10f * glDeepZoomEnergyFill);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            drawBatch(connectorBodyBatchVerts[size_t(widthBin)], bodyW, connectorBodyShaderParams);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-          }
-        }
-      }
+        glDisableClientState(GL_COLOR_ARRAY);
+        glDisableClientState(GL_VERTEX_ARRAY);
+        glDisable(GL_LINE_SMOOTH);
       };
 
       // Shared lane preparation happens above; backend choice is isolated here.
@@ -2971,10 +2980,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     // The scope region is cleared opaque black above. Preserve that alpha so
     // translucent fixed-function line draws cannot punch panel art back through.
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
 
     auto historyVisibleSlot = [&](size_t visibleIdx) {
       int slot = historyHeadRow + historyMarginRows + int(visibleIdx);
@@ -3269,11 +3274,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         }
       }
     }
-    glDisableClientState(GL_COLOR_ARRAY);
-    glDisableClientState(GL_VERTEX_ARRAY);
     glPopMatrix();
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glDisable(GL_LINE_SMOOTH);
     if (fallbackRendererActive) {
       glDisable(GL_BLEND);
       glMatrixMode(GL_PROJECTION);
