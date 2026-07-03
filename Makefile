@@ -49,6 +49,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec \
 	build/tests/aperture_light_transfer_spec \
+	build/tests/iris_wavetable_spec \
 	build/tests/wave_preview_simplification_spec
 
 
@@ -193,6 +194,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
+	$(call run_test_bin,build/tests/iris_wavetable_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 
 test-rack: test-build-rack
@@ -285,6 +287,9 @@ build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/Bulkhea
 
 build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp src/visual/ApertureLightTransfer.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable.hpp src/IrisIO.cpp src/IrisIO.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/IrisIO.cpp -o $@
 
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
