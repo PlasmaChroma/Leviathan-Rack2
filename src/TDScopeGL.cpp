@@ -57,6 +57,16 @@ const std::array<float, kTDScopePowLutSize> &scopePow084Lut() {
   return lut;
 }
 
+const std::array<float, kTDScopePowLutSize> &scopePow090Lut() {
+  static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.90f);
+  return lut;
+}
+
+const std::array<float, kTDScopePowLutSize> &scopePow092Lut() {
+  static const std::array<float, kTDScopePowLutSize> lut = makePowLut<kTDScopePowLutSize>(0.92f);
+  return lut;
+}
+
 } // namespace
 
 struct TDScopeGlWidget final : widget::OpenGlWidget {
@@ -2377,9 +2387,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     bool combinedFieldTextureReady = false;
     const bool useShaderRenderMode = module->useOpenGlShaderRenderMode();
     float glZoomInT = clamp((rackZoom - 1.12f) / 2.9f, 0.f, 1.f);
-    float glZoomInEase = std::pow(glZoomInT, 0.92f);
+    float glZoomInEase = lookupPow01(scopePow092Lut(), glZoomInT);
     float glDeepZoomT = clamp((rackZoom - 2.55f) / 1.75f, 0.f, 1.f);
-    float glDeepZoomEase = std::pow(glDeepZoomT, 0.90f);
+    float glDeepZoomEase = lookupPow01(scopePow090Lut(), glDeepZoomT);
     float glZoomInWidthComp = 1.f + 0.07f * glZoomInEase + 0.03f * glDeepZoomEase;
     float glZoomInAlphaComp = 1.f + 0.05f * glZoomInEase + 0.10f * glDeepZoomEase;
     float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
@@ -2645,12 +2655,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       auto renderLaneShaderBackend = [&]() -> bool {
         const bool renderMainField = true;
         const bool renderContinuityField = true;
-        bool fieldDrawOk = prepareFieldLaneDraw();
-        if (fieldDrawOk) {
-          fieldDrawOk = drawFieldPass(fieldLaneSlot, laneCenterXForConnectors, renderMainField ? 1.f : 0.f,
-                                      renderContinuityField ? 1.f : 0.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
-                        fieldDrawOk;
-        }
+        bool fieldDrawOk = drawFieldPass(fieldLaneSlot, laneCenterXForConnectors, renderMainField ? 1.f : 0.f,
+                                         renderContinuityField ? 1.f : 0.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         if (fieldDrawOk) {
           return true;
         }
