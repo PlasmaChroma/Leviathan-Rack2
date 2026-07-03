@@ -52,6 +52,9 @@ void refreshDragonKingDebugEnabled() {
 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
 		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
 		json_t* extraGlValidationJ = json_object_get(root, "extraGlValidation");
+		if (!extraGlValidationJ) {
+			extraGlValidationJ = json_object_get(root, "ExtraGlValidation");
+		}
 		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);

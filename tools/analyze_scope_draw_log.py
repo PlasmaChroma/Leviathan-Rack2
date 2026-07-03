@@ -29,6 +29,7 @@ NUMERIC_COLUMNS = {
     "texture_rows",
     "uploaded_rows",
     "fallback_renderer",
+    "extra_gl_validation",
     "density_pct",
     "rack_zoom",
     "total_us",
@@ -93,6 +94,7 @@ WORST_COLUMNS = [
     "rebuild_end",
     "row_texture_uploads",
     "field_draws",
+    "extra_gl_validation",
     "msg_changed",
 ]
 
@@ -144,6 +146,7 @@ def fmt_value(key: str, value: float) -> str:
         "row_texture_uploads",
         "field_draws",
         "fallback_renderer",
+        "extra_gl_validation",
     }
     if key in integerish:
         return str(int(value))
@@ -210,6 +213,7 @@ def analyze(path: str, worst_count: int) -> None:
         ("sample_cache_hit", lambda r: r.get("sample_cache_hit", 0.0) == 1.0),
         ("sample_cache_miss", lambda r: r.get("sample_cache_hit", 0.0) == 0.0),
         ("full_rebuild", lambda r: r.get("full_history_rebuild", 0.0) == 1.0),
+        ("extra_gl_validation", lambda r: r.get("extra_gl_validation", 0.0) == 1.0),
         ("validate_clear_gt_180", lambda r: r.get("validate_clear_us", 0.0) > 180.0),
         ("resource_validate_gt_100", lambda r: r.get("resource_validate_us", 0.0) > 100.0),
         ("transparent_clear_gt_100", lambda r: r.get("transparent_clear_us", 0.0) > 100.0),

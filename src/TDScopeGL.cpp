@@ -93,6 +93,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     int textureRows = 0;
     int uploadedRows = 0;
     int fallbackRenderer = 0;
+    int extraGlValidation = 0;
     float densityPct = 0.f;
     float rackZoom = 1.f;
     float totalUs = 0.f;
@@ -136,6 +137,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   struct GlFieldVertex {
     GLfloat x;
     GLfloat y;
+    GLfloat lane;
   };
 
   TDScope *module = nullptr;
@@ -241,7 +243,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLint fieldUniformRowTexV = -1;
   GLint fieldUniformRowTexVRight = -1;
   GLint fieldUniformStereoFieldMode = -1;
-  GLint fieldUniformStereoLaneBounds = -1;
   GLint fieldUniformTextureRowCount = -1;
   GLint fieldUniformTextureRowOffset = -1;
   GLint fieldUniformColorLutTex = -1;
@@ -271,6 +272,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   float fieldTextureRowOffset = 0.f;
   float fieldQuadW = -1.f;
   float fieldQuadH = -1.f;
+  int fieldQuadMode = 0;
+  float fieldQuadLeftMinX = -1.f;
+  float fieldQuadLeftMaxX = -1.f;
+  float fieldQuadRightMinX = -1.f;
+  float fieldQuadRightMaxX = -1.f;
   GLsizeiptr shaderVboCapacityBytes = 0;
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
@@ -334,7 +340,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       << "row,module_id,instance_id,publish_seq,render_mode,row_count,scope_bin_count,stereo,live_mode,"
       << "msg_changed,range_changed,vertical_changed,full_history_rebuild,visible_shift_rows,rebuild_start,rebuild_end,"
       << "draw_from_history,row_texture_uploads,field_draws,sample_cache_hit,texture_rows,uploaded_rows,"
-      << "fallback_renderer,density_pct,rack_zoom,total_us,"
+      << "fallback_renderer,extra_gl_validation,density_pct,rack_zoom,total_us,"
       << "validate_clear_us,snapshot_us,setup_us,live_ingest_us,geometry_us,gl_draw_us,row_upload_us,field_draw_us,gl_state_us,"
       << "framebuffer_size_us,viewport_us,resource_validate_us,transparent_clear_us,scissor_setup_us,scoped_clear_us\n";
   }
@@ -367,6 +373,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       << row.textureRows << ','
       << row.uploadedRows << ','
       << row.fallbackRenderer << ','
+      << row.extraGlValidation << ','
       << row.densityPct << ','
       << row.rackZoom << ','
       << row.totalUs << ','
@@ -488,7 +495,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldUniformRowTexV = -1;
     fieldUniformRowTexVRight = -1;
     fieldUniformStereoFieldMode = -1;
-    fieldUniformStereoLaneBounds = -1;
     fieldUniformTextureRowCount = -1;
     fieldUniformTextureRowOffset = -1;
     fieldUniformColorLutTex = -1;
@@ -517,6 +523,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldTextureRowOffset = 0.f;
     fieldQuadW = -1.f;
     fieldQuadH = -1.f;
+    fieldQuadMode = 0;
+    fieldQuadLeftMinX = -1.f;
+    fieldQuadLeftMaxX = -1.f;
+    fieldQuadRightMinX = -1.f;
+    fieldQuadRightMaxX = -1.f;
     fieldShaderReady = false;
     fieldShaderInitAttempted = false;
   }
@@ -670,11 +681,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       logRow.viewportUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();
     }
-    if (isExtraGlValidationEnabled()) {
+    const bool extraGlValidation = isExtraGlValidationEnabled();
+    if (logScopeDraw) {
+      logRow.extraGlValidation = extraGlValidation ? 1 : 0;
+    }
+    if (extraGlValidation) {
       validateGlResourcesForCurrentContext();
+      if (logScopeDraw) {
+        logRow.resourceValidateUs += logElapsedUs(subStageStart, PerfClock::now());
+      }
     }
     if (logScopeDraw) {
-      logRow.resourceValidateUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();
     }
     glDisable(GL_SCISSOR_TEST);
@@ -1979,13 +1996,17 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       }
       fieldShaderInitAttempted = true;
       static const GLuint kAttrPos = 0;
+      static const GLuint kAttrLane = 1;
       static const char *kVertexShaderSrc =
         "#version 120\n"
         "attribute vec2 aPos;\n"
+        "attribute float aLane;\n"
         "varying vec2 vLocalPos;\n"
+        "varying float vLane;\n"
         "void main() {\n"
         "  gl_Position = gl_ModelViewProjectionMatrix * vec4(aPos, 0.0, 1.0);\n"
         "  vLocalPos = aPos;\n"
+        "  vLane = aLane;\n"
         "}\n";
       static const char *kFragmentShaderSrc =
         "#version 120\n"
@@ -1993,7 +2014,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRowTexV;\n"
         "uniform float uRowTexVRight;\n"
         "uniform float uStereoFieldMode;\n"
-        "uniform vec4 uStereoLaneBounds;\n"
         "uniform float uTextureRowCount;\n"
         "uniform float uTextureRowOffset;\n"
         "uniform sampler2D uColorLutTex;\n"
@@ -2008,6 +2028,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRenderMain;\n"
         "uniform float uRenderContinuity;\n"
         "varying vec2 vLocalPos;\n"
+        "varying float vLane;\n"
         "vec4 fetchRow(float idx, float rowTexV) {\n"
         "  float textureIdx = uTextureRowOffset + clamp(idx, 0.0, uRowCount - 1.0);\n"
         "  float t = (textureIdx + 0.5) / max(uTextureRowCount, 1.0);\n"
@@ -2166,14 +2187,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "void main() {\n"
         "  vec2 p = vLocalPos;\n"
         "  float rowTexV = uRowTexV;\n"
-        "  if (uStereoFieldMode > 0.5) {\n"
-        "    bool inLeft = p.x >= uStereoLaneBounds.x && p.x <= uStereoLaneBounds.y;\n"
-        "    bool inRight = p.x >= uStereoLaneBounds.z && p.x <= uStereoLaneBounds.w;\n"
-        "    if (!inLeft && !inRight) {\n"
-        "      discard;\n"
-        "    }\n"
-        "    rowTexV = inRight ? uRowTexVRight : uRowTexV;\n"
-        "  }\n"
+        "  rowTexV = (uStereoFieldMode > 0.5 && vLane > 0.5) ? uRowTexVRight : uRowTexV;\n"
         "  float densityT = rowDensityT();\n"
         "  vec4 base = evaluateFieldAt(p, rowTexV);\n"
         "  float aaBlend = clamp((densityT - 0.18) / 0.82, 0.0, 1.0);\n"
@@ -2230,6 +2244,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glAttachShader(fieldShaderProgram, fieldShaderVertex);
       glAttachShader(fieldShaderProgram, fieldShaderFragment);
       glBindAttribLocation(fieldShaderProgram, kAttrPos, "aPos");
+      glBindAttribLocation(fieldShaderProgram, kAttrLane, "aLane");
       glLinkProgram(fieldShaderProgram);
       GLint linkStatus = GL_FALSE;
       glGetProgramiv(fieldShaderProgram, GL_LINK_STATUS, &linkStatus);
@@ -2278,7 +2293,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRowTexV = glGetUniformLocation(fieldShaderProgram, "uRowTexV");
       fieldUniformRowTexVRight = glGetUniformLocation(fieldShaderProgram, "uRowTexVRight");
       fieldUniformStereoFieldMode = glGetUniformLocation(fieldShaderProgram, "uStereoFieldMode");
-      fieldUniformStereoLaneBounds = glGetUniformLocation(fieldShaderProgram, "uStereoLaneBounds");
       fieldUniformTextureRowCount = glGetUniformLocation(fieldShaderProgram, "uTextureRowCount");
       fieldUniformTextureRowOffset = glGetUniformLocation(fieldShaderProgram, "uTextureRowOffset");
       fieldUniformColorLutTex = glGetUniformLocation(fieldShaderProgram, "uColorLutTex");
@@ -2293,17 +2307,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
       if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformRowTexVRight < 0 ||
-          fieldUniformStereoFieldMode < 0 || fieldUniformStereoLaneBounds < 0 || fieldUniformTextureRowCount < 0 ||
+          fieldUniformStereoFieldMode < 0 || fieldUniformTextureRowCount < 0 ||
           fieldUniformTextureRowOffset < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
           fieldUniformRenderContinuity < 0) {
-        WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d rowTexV=%d rowTexVRight=%d stereoMode=%d stereoBounds=%d "
+        WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d rowTexV=%d rowTexVRight=%d stereoMode=%d "
              "colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d zoomInWidth=%d zoomInAlpha=%d "
              "zoomInLift=%d deepZoomFill=%d renderMain=%d renderContinuity=%d",
              fieldUniformRowTex, fieldUniformRowTexV, fieldUniformRowTexVRight, fieldUniformStereoFieldMode,
-             fieldUniformStereoLaneBounds,
              fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
              fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInAlphaComp,
              fieldUniformZoomInLiftComp, fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain,
@@ -2329,18 +2342,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glBindTexture(GL_TEXTURE_2D, 0);
 
       const GlFieldVertex quad[6] = {
-        {0.f, 0.f},
-        {0.f, 0.f},
-        {0.f, 0.f},
-        {0.f, 0.f},
-        {0.f, 0.f},
-        {0.f, 0.f},
+        {0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f},
+        {0.f, 0.f, 0.f},
       };
       glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
       glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
       fieldQuadW = -1.f;
       fieldQuadH = -1.f;
+      fieldQuadMode = 0;
+      fieldQuadLeftMinX = -1.f;
+      fieldQuadLeftMaxX = -1.f;
+      fieldQuadRightMinX = -1.f;
+      fieldQuadRightMaxX = -1.f;
       fieldRowTextureValid = false;
       fieldRowTexturePublishSeq = 0;
 
@@ -2367,30 +2385,11 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
     float glDeepZoomEnergyFill = 0.55f * glDeepZoomEase;
     static const GLuint kFieldAttrPos = 0;
+    static const GLuint kFieldAttrLane = 1;
     auto prepareFieldLaneDraw = [&]() -> bool {
       if (!initFieldShaderPipeline()) {
         return false;
       }
-      auto ensureFieldQuad = [&]() {
-        if (fieldQuadW == box.size.x && fieldQuadH == box.size.y) {
-          return;
-        }
-        const GlFieldVertex quad[6] = {
-          {0.f, 0.f},
-          {box.size.x, 0.f},
-          {box.size.x, box.size.y},
-          {0.f, 0.f},
-          {box.size.x, box.size.y},
-          {0.f, box.size.y},
-        };
-        glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        fieldQuadW = box.size.x;
-        fieldQuadH = box.size.y;
-      };
-      ensureFieldQuad();
-
       int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
       ensureColorLut(scheme);
       float colorBrightness = module->scopeColorBrightnessClamped();
@@ -2411,15 +2410,63 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
       return combinedFieldTextureReady;
     };
+    auto uploadFullFieldQuad = [&]() {
+      if (fieldQuadMode == 1 && fieldQuadW == box.size.x && fieldQuadH == box.size.y) {
+        return;
+      }
+      const GlFieldVertex quad[6] = {
+        {0.f, 0.f, 0.f},
+        {box.size.x, 0.f, 0.f},
+        {box.size.x, box.size.y, 0.f},
+        {0.f, 0.f, 0.f},
+        {box.size.x, box.size.y, 0.f},
+        {0.f, box.size.y, 0.f},
+      };
+      glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      fieldQuadW = box.size.x;
+      fieldQuadH = box.size.y;
+      fieldQuadMode = 1;
+    };
+    auto uploadStereoFieldQuads = [&](float leftMinX, float leftMaxX, float rightMinX, float rightMaxX) {
+      if (fieldQuadMode == 2 && fieldQuadW == box.size.x && fieldQuadH == box.size.y &&
+          fieldQuadLeftMinX == leftMinX && fieldQuadLeftMaxX == leftMaxX &&
+          fieldQuadRightMinX == rightMinX && fieldQuadRightMaxX == rightMaxX) {
+        return;
+      }
+      const GlFieldVertex quad[12] = {
+        {leftMinX, 0.f, 0.f},
+        {leftMaxX, 0.f, 0.f},
+        {leftMaxX, box.size.y, 0.f},
+        {leftMinX, 0.f, 0.f},
+        {leftMaxX, box.size.y, 0.f},
+        {leftMinX, box.size.y, 0.f},
+        {rightMinX, 0.f, 1.f},
+        {rightMaxX, 0.f, 1.f},
+        {rightMaxX, box.size.y, 1.f},
+        {rightMinX, 0.f, 1.f},
+        {rightMaxX, box.size.y, 1.f},
+        {rightMinX, box.size.y, 1.f},
+      };
+      glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      fieldQuadW = box.size.x;
+      fieldQuadH = box.size.y;
+      fieldQuadMode = 2;
+      fieldQuadLeftMinX = leftMinX;
+      fieldQuadLeftMaxX = leftMaxX;
+      fieldQuadRightMinX = rightMinX;
+      fieldQuadRightMaxX = rightMaxX;
+    };
     auto bindFieldShaderResources = [&](GLuint rowTex, float rowTexV, float rowTexVRight, float stereoMode,
-                                        float leftMinX, float leftMaxX, float rightMinX, float rightMaxX,
                                         float renderMain, float renderContinuity) {
       glUseProgram(fieldShaderProgram);
       glUniform1i(fieldUniformRowTex, 0);
       glUniform1f(fieldUniformRowTexV, rowTexV);
       glUniform1f(fieldUniformRowTexVRight, rowTexVRight);
       glUniform1f(fieldUniformStereoFieldMode, stereoMode);
-      glUniform4f(fieldUniformStereoLaneBounds, leftMinX, leftMaxX, rightMinX, rightMaxX);
       glUniform1f(fieldUniformTextureRowCount, fieldTextureRowCount);
       glUniform1f(fieldUniformTextureRowOffset, fieldTextureRowOffset);
       glUniform1i(fieldUniformColorLutTex, 1);
@@ -2439,11 +2486,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
       glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
       glEnableVertexAttribArray(kFieldAttrPos);
+      glEnableVertexAttribArray(kFieldAttrLane);
       glVertexAttribPointer(
         kFieldAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
+      glVertexAttribPointer(kFieldAttrLane, 1, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex),
+                            reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, lane)));
     };
     auto unbindFieldShaderResources = [&]() {
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glDisableVertexAttribArray(kFieldAttrLane);
       glDisableVertexAttribArray(kFieldAttrPos);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
       glActiveTexture(GL_TEXTURE1);
@@ -2463,8 +2514,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       if (!rowTex || !prepareFieldLaneDraw()) {
         return false;
       }
-      bindFieldShaderResources(rowTex, fieldLaneSlot != 0 ? 0.75f : 0.25f, 0.75f, 0.f, 0.f, box.size.x,
-                               box.size.x, box.size.x, renderMain, renderContinuity);
+      uploadFullFieldQuad();
+      bindFieldShaderResources(rowTex, fieldLaneSlot != 0 ? 0.75f : 0.25f, 0.75f, 0.f, renderMain,
+                               renderContinuity);
       glBlendFunc(srcBlend, dstBlend);
       bool narrowedScissor = false;
       if (renderStereo) {
@@ -2501,8 +2553,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       float rightMaxX = box.size.x;
       laneFieldBounds(lane0CenterX, leftMinX, leftMaxX);
       laneFieldBounds(lane1CenterX, rightMinX, rightMaxX);
-      bindFieldShaderResources(rowTex, 0.25f, 0.75f, 1.f, leftMinX, leftMaxX, rightMinX, rightMaxX,
-                               renderMain, renderContinuity);
+      uploadStereoFieldQuads(leftMinX, leftMaxX, rightMinX, rightMaxX);
+      bindFieldShaderResources(rowTex, 0.25f, 0.75f, 1.f, renderMain, renderContinuity);
       glBlendFunc(srcBlend, dstBlend);
       const int laneScissorX = std::max(scissorX, int(std::floor(std::min(leftMinX, rightMinX) * scaleX)));
       const int laneScissorMaxX =
@@ -2510,7 +2562,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       const int laneScissorW = std::max(1, laneScissorMaxX - laneScissorX);
       glScissor(laneScissorX, scissorY, laneScissorW, scissorH);
       const PerfClock::time_point fieldDrawStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
-      glDrawArrays(GL_TRIANGLES, 0, 6);
+      glDrawArrays(GL_TRIANGLES, 0, 12);
       glScissor(scissorX, scissorY, scissorW, scissorH);
       if (logScopeDraw) {
         logRow.fieldDrawUs += logElapsedUs(fieldDrawStart, PerfClock::now());
