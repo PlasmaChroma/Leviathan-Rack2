@@ -239,6 +239,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLuint fieldColorLutTexture = 0;
   GLint fieldUniformRowTex = -1;
   GLint fieldUniformRowTexV = -1;
+  GLint fieldUniformRowTexVRight = -1;
+  GLint fieldUniformStereoFieldMode = -1;
+  GLint fieldUniformStereoLaneBounds = -1;
   GLint fieldUniformTextureRowCount = -1;
   GLint fieldUniformTextureRowOffset = -1;
   GLint fieldUniformColorLutTex = -1;
@@ -483,6 +486,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     fieldColorLutTexture = 0;
     fieldUniformRowTex = -1;
     fieldUniformRowTexV = -1;
+    fieldUniformRowTexVRight = -1;
+    fieldUniformStereoFieldMode = -1;
+    fieldUniformStereoLaneBounds = -1;
     fieldUniformTextureRowCount = -1;
     fieldUniformTextureRowOffset = -1;
     fieldUniformColorLutTex = -1;
@@ -1985,6 +1991,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "#version 120\n"
         "uniform sampler2D uRowTex;\n"
         "uniform float uRowTexV;\n"
+        "uniform float uRowTexVRight;\n"
+        "uniform float uStereoFieldMode;\n"
+        "uniform vec4 uStereoLaneBounds;\n"
         "uniform float uTextureRowCount;\n"
         "uniform float uTextureRowOffset;\n"
         "uniform sampler2D uColorLutTex;\n"
@@ -1999,10 +2008,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "uniform float uRenderMain;\n"
         "uniform float uRenderContinuity;\n"
         "varying vec2 vLocalPos;\n"
-        "vec4 fetchRow(float idx) {\n"
+        "vec4 fetchRow(float idx, float rowTexV) {\n"
         "  float textureIdx = uTextureRowOffset + clamp(idx, 0.0, uRowCount - 1.0);\n"
         "  float t = (textureIdx + 0.5) / max(uTextureRowCount, 1.0);\n"
-        "  return texture2D(uRowTex, vec2(t, uRowTexV));\n"
+        "  return texture2D(uRowTex, vec2(t, rowTexV));\n"
         "}\n"
         "bool rowValid(vec4 row) {\n"
         "  return row.z >= 0.0;\n"
@@ -2135,14 +2144,14 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "  baseRgb = baseRgb * (1.0 - contCover) + c.rgb * contAlpha;\n"
         "  baseAlphaMax = max(baseAlphaMax, contAlpha);\n"
         "}\n"
-        "vec4 evaluateFieldAt(vec2 p) {\n"
+        "vec4 evaluateFieldAt(vec2 p, float rowTexV) {\n"
         "  float rowPos = ((p.y - uDrawTop) / max(uRowStep, 1e-6)) - 0.5;\n"
         "  float i0 = floor(rowPos);\n"
         "  float i1 = i0 + 1.0;\n"
-        "  vec4 row0 = fetchRow(i0);\n"
-        "  vec4 row1 = fetchRow(i1);\n"
-        "  vec4 rowPrev = fetchRow(i0 - 1.0);\n"
-        "  vec4 rowBody = fetchRow(rowPos);\n"
+        "  vec4 row0 = fetchRow(i0, rowTexV);\n"
+        "  vec4 row1 = fetchRow(i1, rowTexV);\n"
+        "  vec4 rowPrev = fetchRow(i0 - 1.0, rowTexV);\n"
+        "  vec4 rowBody = fetchRow(rowPos, rowTexV);\n"
         "  vec3 baseRgb = vec3(0.0);\n"
         "  float baseAlphaMax = 0.0;\n"
         "  accumulateRow(p, rowBody, rowPos, baseRgb, baseAlphaMax);\n"
@@ -2156,13 +2165,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         "}\n"
         "void main() {\n"
         "  vec2 p = vLocalPos;\n"
+        "  float rowTexV = uRowTexV;\n"
+        "  if (uStereoFieldMode > 0.5) {\n"
+        "    bool inLeft = p.x >= uStereoLaneBounds.x && p.x <= uStereoLaneBounds.y;\n"
+        "    bool inRight = p.x >= uStereoLaneBounds.z && p.x <= uStereoLaneBounds.w;\n"
+        "    if (!inLeft && !inRight) {\n"
+        "      discard;\n"
+        "    }\n"
+        "    rowTexV = inRight ? uRowTexVRight : uRowTexV;\n"
+        "  }\n"
         "  float densityT = rowDensityT();\n"
-        "  vec4 base = evaluateFieldAt(p);\n"
+        "  vec4 base = evaluateFieldAt(p, rowTexV);\n"
         "  float aaBlend = clamp((densityT - 0.18) / 0.82, 0.0, 1.0);\n"
         "  if (aaBlend > 0.001) {\n"
         "    float aaOffset = min(uRowStep * (0.22 + 0.16 * aaBlend), 0.42);\n"
-        "    vec4 up = evaluateFieldAt(p + vec2(0.0, aaOffset));\n"
-        "    vec4 down = evaluateFieldAt(p - vec2(0.0, aaOffset));\n"
+        "    vec4 up = evaluateFieldAt(p + vec2(0.0, aaOffset), rowTexV);\n"
+        "    vec4 down = evaluateFieldAt(p - vec2(0.0, aaOffset), rowTexV);\n"
         "    vec3 smoothRgb = base.rgb * 0.72 + (up.rgb + down.rgb) * 0.14;\n"
         "    float smoothAlpha = base.a * 0.76 + (up.a + down.a) * 0.12;\n"
         "    base.rgb = mix(base.rgb, smoothRgb, aaBlend);\n"
@@ -2258,6 +2276,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
 
       fieldUniformRowTex = glGetUniformLocation(fieldShaderProgram, "uRowTex");
       fieldUniformRowTexV = glGetUniformLocation(fieldShaderProgram, "uRowTexV");
+      fieldUniformRowTexVRight = glGetUniformLocation(fieldShaderProgram, "uRowTexVRight");
+      fieldUniformStereoFieldMode = glGetUniformLocation(fieldShaderProgram, "uStereoFieldMode");
+      fieldUniformStereoLaneBounds = glGetUniformLocation(fieldShaderProgram, "uStereoLaneBounds");
       fieldUniformTextureRowCount = glGetUniformLocation(fieldShaderProgram, "uTextureRowCount");
       fieldUniformTextureRowOffset = glGetUniformLocation(fieldShaderProgram, "uTextureRowOffset");
       fieldUniformColorLutTex = glGetUniformLocation(fieldShaderProgram, "uColorLutTex");
@@ -2271,15 +2292,19 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       fieldUniformDeepZoomEnergyFill = glGetUniformLocation(fieldShaderProgram, "uDeepZoomEnergyFill");
       fieldUniformRenderMain = glGetUniformLocation(fieldShaderProgram, "uRenderMain");
       fieldUniformRenderContinuity = glGetUniformLocation(fieldShaderProgram, "uRenderContinuity");
-      if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformTextureRowCount < 0 ||
+      if (fieldUniformRowTex < 0 || fieldUniformRowTexV < 0 || fieldUniformRowTexVRight < 0 ||
+          fieldUniformStereoFieldMode < 0 || fieldUniformStereoLaneBounds < 0 || fieldUniformTextureRowCount < 0 ||
           fieldUniformTextureRowOffset < 0 || fieldUniformColorLutTex < 0 || fieldUniformRowCount < 0 ||
           fieldUniformDrawTop < 0 || fieldUniformRowStep < 0 || fieldUniformZoomThickness < 0 ||
           fieldUniformZoomInWidthComp < 0 || fieldUniformZoomInAlphaComp < 0 ||
           fieldUniformDeepZoomEnergyFill < 0 || fieldUniformRenderMain < 0 ||
           fieldUniformRenderContinuity < 0) {
-        WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d "
-             "zoomInWidth=%d zoomInAlpha=%d zoomInLift=%d deepZoomFill=%d renderMain=%d renderContinuity=%d",
-             fieldUniformRowTex, fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
+        WARN("TDScopeGL field shader uniform lookup failed: rowTex=%d rowTexV=%d rowTexVRight=%d stereoMode=%d stereoBounds=%d "
+             "colorLut=%d rowCount=%d drawTop=%d rowStep=%d zoomThickness=%d zoomInWidth=%d zoomInAlpha=%d "
+             "zoomInLift=%d deepZoomFill=%d renderMain=%d renderContinuity=%d",
+             fieldUniformRowTex, fieldUniformRowTexV, fieldUniformRowTexVRight, fieldUniformStereoFieldMode,
+             fieldUniformStereoLaneBounds,
+             fieldUniformColorLutTex, fieldUniformRowCount, fieldUniformDrawTop, fieldUniformRowStep,
              fieldUniformZoomThickness, fieldUniformZoomInWidthComp, fieldUniformZoomInAlphaComp,
              fieldUniformZoomInLiftComp, fieldUniformDeepZoomEnergyFill, fieldUniformRenderMain,
              fieldUniformRenderContinuity);
@@ -2332,134 +2357,177 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     constexpr float kGlConnectorWidthGain = 1.08f;
     constexpr float kGlDeepZoomEnergyFillAlpha = 0.24f;
     bool combinedFieldTextureReady = false;
+    const bool useShaderRenderMode = module->useOpenGlShaderRenderMode();
+    float glZoomInT = clamp((rackZoom - 1.12f) / 2.9f, 0.f, 1.f);
+    float glZoomInEase = std::pow(glZoomInT, 0.92f);
+    float glDeepZoomT = clamp((rackZoom - 2.55f) / 1.75f, 0.f, 1.f);
+    float glDeepZoomEase = std::pow(glDeepZoomT, 0.90f);
+    float glZoomInWidthComp = 1.f + 0.07f * glZoomInEase + 0.03f * glDeepZoomEase;
+    float glZoomInAlphaComp = 1.f + 0.05f * glZoomInEase + 0.10f * glDeepZoomEase;
+    float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
+    float glDeepZoomEnergyFill = 0.55f * glDeepZoomEase;
+    static const GLuint kFieldAttrPos = 0;
+    auto prepareFieldLaneDraw = [&]() -> bool {
+      if (!initFieldShaderPipeline()) {
+        return false;
+      }
+      auto ensureFieldQuad = [&]() {
+        if (fieldQuadW == box.size.x && fieldQuadH == box.size.y) {
+          return;
+        }
+        const GlFieldVertex quad[6] = {
+          {0.f, 0.f},
+          {box.size.x, 0.f},
+          {box.size.x, box.size.y},
+          {0.f, 0.f},
+          {box.size.x, box.size.y},
+          {0.f, box.size.y},
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        fieldQuadW = box.size.x;
+        fieldQuadH = box.size.y;
+      };
+      ensureFieldQuad();
+
+      int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
+      ensureColorLut(scheme);
+      float colorBrightness = module->scopeColorBrightnessClamped();
+      if (fieldColorLutScheme != scheme || std::fabs(fieldColorLutBrightness - colorBrightness) > 1e-4f) {
+        std::array<GLubyte, 256 * 4> lutBytes {};
+        for (int i = 0; i < 256; ++i) {
+          NVGcolor c = module->applyScopeColorBrightness(colorLut[size_t(scheme)][size_t(i)]);
+          lutBytes[size_t(i) * 4u + 0u] = encodeColorByte(c.r);
+          lutBytes[size_t(i) * 4u + 1u] = encodeColorByte(c.g);
+          lutBytes[size_t(i) * 4u + 2u] = encodeColorByte(c.b);
+          lutBytes[size_t(i) * 4u + 3u] = 255u;
+        }
+        glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, lutBytes.data());
+        fieldColorLutScheme = scheme;
+        fieldColorLutBrightness = colorBrightness;
+      }
+
+      return combinedFieldTextureReady;
+    };
+    auto bindFieldShaderResources = [&](GLuint rowTex, float rowTexV, float rowTexVRight, float stereoMode,
+                                        float leftMinX, float leftMaxX, float rightMinX, float rightMaxX,
+                                        float renderMain, float renderContinuity) {
+      glUseProgram(fieldShaderProgram);
+      glUniform1i(fieldUniformRowTex, 0);
+      glUniform1f(fieldUniformRowTexV, rowTexV);
+      glUniform1f(fieldUniformRowTexVRight, rowTexVRight);
+      glUniform1f(fieldUniformStereoFieldMode, stereoMode);
+      glUniform4f(fieldUniformStereoLaneBounds, leftMinX, leftMaxX, rightMinX, rightMaxX);
+      glUniform1f(fieldUniformTextureRowCount, fieldTextureRowCount);
+      glUniform1f(fieldUniformTextureRowOffset, fieldTextureRowOffset);
+      glUniform1i(fieldUniformColorLutTex, 1);
+      glUniform1f(fieldUniformRowCount, float(rowCount));
+      glUniform1f(fieldUniformDrawTop, drawTop);
+      glUniform1f(fieldUniformRowStep, rowStep);
+      glUniform1f(fieldUniformZoomThickness, zoomThicknessMul);
+      glUniform1f(fieldUniformZoomInWidthComp, glZoomInWidthComp);
+      glUniform1f(fieldUniformZoomInAlphaComp, glZoomInAlphaComp);
+      glUniform1f(fieldUniformZoomInLiftComp, glZoomInLiftComp);
+      glUniform1f(fieldUniformDeepZoomEnergyFill, glDeepZoomEnergyFill);
+      glUniform1f(fieldUniformRenderMain, renderMain);
+      glUniform1f(fieldUniformRenderContinuity, renderContinuity);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, rowTex);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
+      glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
+      glEnableVertexAttribArray(kFieldAttrPos);
+      glVertexAttribPointer(
+        kFieldAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
+    };
+    auto unbindFieldShaderResources = [&]() {
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glDisableVertexAttribArray(kFieldAttrPos);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glUseProgram(0);
+    };
+    auto laneFieldBounds = [&](float laneCenterXForConnectors, float &laneMinX, float &laneMaxX) {
+      const float lanePad = std::max(3.0f * zoomThicknessMul, 1.5f);
+      laneMinX = clamp(laneCenterXForConnectors - laneAmpHalfWidth - lanePad, xInset, box.size.x - xInset);
+      laneMaxX = clamp(laneCenterXForConnectors + laneAmpHalfWidth + lanePad, xInset, box.size.x - xInset);
+    };
+    auto drawFieldPass = [&](int fieldLaneSlot, float laneCenterXForConnectors, float renderMain,
+                             float renderContinuity, GLenum srcBlend, GLenum dstBlend) -> bool {
+      const GLuint rowTex = fieldRowTextures[fieldRowTextureIndex];
+      if (!rowTex || !prepareFieldLaneDraw()) {
+        return false;
+      }
+      bindFieldShaderResources(rowTex, fieldLaneSlot != 0 ? 0.75f : 0.25f, 0.75f, 0.f, 0.f, box.size.x,
+                               box.size.x, box.size.x, renderMain, renderContinuity);
+      glBlendFunc(srcBlend, dstBlend);
+      bool narrowedScissor = false;
+      if (renderStereo) {
+        float laneMinX = 0.f;
+        float laneMaxX = box.size.x;
+        laneFieldBounds(laneCenterXForConnectors, laneMinX, laneMaxX);
+        const int laneScissorX = std::max(scissorX, int(std::floor(laneMinX * scaleX)));
+        const int laneScissorMaxX = std::min(scissorX + scissorW, int(std::ceil(laneMaxX * scaleX)));
+        const int laneScissorW = std::max(1, laneScissorMaxX - laneScissorX);
+        glScissor(laneScissorX, scissorY, laneScissorW, scissorH);
+        narrowedScissor = true;
+      }
+      const PerfClock::time_point fieldDrawStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+      if (narrowedScissor) {
+        glScissor(scissorX, scissorY, scissorW, scissorH);
+      }
+      if (logScopeDraw) {
+        logRow.fieldDrawUs += logElapsedUs(fieldDrawStart, PerfClock::now());
+        logRow.fieldDraws += 1;
+      }
+      unbindFieldShaderResources();
+      return true;
+    };
+    auto drawCombinedStereoFieldPass = [&](float renderMain, float renderContinuity, GLenum srcBlend,
+                                           GLenum dstBlend) -> bool {
+      const GLuint rowTex = fieldRowTextures[fieldRowTextureIndex];
+      if (!renderStereo || !rowTex || !prepareFieldLaneDraw()) {
+        return false;
+      }
+      float leftMinX = 0.f;
+      float leftMaxX = box.size.x;
+      float rightMinX = 0.f;
+      float rightMaxX = box.size.x;
+      laneFieldBounds(lane0CenterX, leftMinX, leftMaxX);
+      laneFieldBounds(lane1CenterX, rightMinX, rightMaxX);
+      bindFieldShaderResources(rowTex, 0.25f, 0.75f, 1.f, leftMinX, leftMaxX, rightMinX, rightMaxX,
+                               renderMain, renderContinuity);
+      glBlendFunc(srcBlend, dstBlend);
+      const int laneScissorX = std::max(scissorX, int(std::floor(std::min(leftMinX, rightMinX) * scaleX)));
+      const int laneScissorMaxX =
+        std::min(scissorX + scissorW, int(std::ceil(std::max(leftMaxX, rightMaxX) * scaleX)));
+      const int laneScissorW = std::max(1, laneScissorMaxX - laneScissorX);
+      glScissor(laneScissorX, scissorY, laneScissorW, scissorH);
+      const PerfClock::time_point fieldDrawStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+      glScissor(scissorX, scissorY, scissorW, scissorH);
+      if (logScopeDraw) {
+        logRow.fieldDrawUs += logElapsedUs(fieldDrawStart, PerfClock::now());
+        logRow.fieldDraws += 1;
+      }
+      unbindFieldShaderResources();
+      return true;
+    };
     auto drawLane = [&](const RowFloatAccessor &getX0, const RowFloatAccessor &getX1,
                         const RowFloatAccessor &getVisualIntensity, const std::vector<float> &colorDrive,
                         const RowValidAccessor &isValid, float laneCenterXForConnectors, int fieldLaneSlot) {
-      const bool useShaderRenderMode = module->useOpenGlShaderRenderMode();
       auto quantizeStrokeBin = [&](float t, int binCount) -> int {
         t = clamp(t, 0.f, 1.f);
         return clamp(int(std::floor(t * float(binCount))), 0, binCount - 1);
       };
       auto strokeBinCenter = [&](int bin, int binCount) -> float {
         return (float(bin) + 0.5f) / float(binCount);
-      };
-      // Keep shader-mode rendering more stable across rack zoom. The base
-      // `zoomThicknessMul` already compensates heavily; these secondary zoom
-      // responses should stay subtle and avoid introducing a distinct new look
-      // at moderate zoom levels.
-      float glZoomInT = clamp((rackZoom - 1.12f) / 2.9f, 0.f, 1.f);
-      float glZoomInEase = std::pow(glZoomInT, 0.92f);
-      float glDeepZoomT = clamp((rackZoom - 2.55f) / 1.75f, 0.f, 1.f);
-      float glDeepZoomEase = std::pow(glDeepZoomT, 0.90f);
-      float glZoomInWidthComp = 1.f + 0.07f * glZoomInEase + 0.03f * glDeepZoomEase;
-      float glZoomInAlphaComp = 1.f + 0.05f * glZoomInEase + 0.10f * glDeepZoomEase;
-      float glZoomInLiftComp = 1.f + 0.10f * glZoomInEase + 0.14f * glDeepZoomEase;
-      float glDeepZoomEnergyFill = 0.55f * glDeepZoomEase;
-      auto prepareFieldLaneDraw = [&]() -> bool {
-        if (!initFieldShaderPipeline()) {
-          return false;
-        }
-        auto ensureFieldQuad = [&]() {
-          if (fieldQuadW == box.size.x && fieldQuadH == box.size.y) {
-            return;
-          }
-          const GlFieldVertex quad[6] = {
-            {0.f, 0.f},
-            {box.size.x, 0.f},
-            {box.size.x, box.size.y},
-            {0.f, 0.f},
-            {box.size.x, box.size.y},
-            {0.f, box.size.y},
-          };
-          glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
-          glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
-          glBindBuffer(GL_ARRAY_BUFFER, 0);
-          fieldQuadW = box.size.x;
-          fieldQuadH = box.size.y;
-        };
-        ensureFieldQuad();
-
-        int scheme = clamp(module->scopeColorScheme, 0, TDScope::COLOR_SCHEME_COUNT - 1);
-        ensureColorLut(scheme);
-        float colorBrightness = module->scopeColorBrightnessClamped();
-        if (fieldColorLutScheme != scheme || std::fabs(fieldColorLutBrightness - colorBrightness) > 1e-4f) {
-          std::array<GLubyte, 256 * 4> lutBytes {};
-          for (int i = 0; i < 256; ++i) {
-            NVGcolor c = module->applyScopeColorBrightness(colorLut[size_t(scheme)][size_t(i)]);
-            lutBytes[size_t(i) * 4u + 0u] = encodeColorByte(c.r);
-            lutBytes[size_t(i) * 4u + 1u] = encodeColorByte(c.g);
-            lutBytes[size_t(i) * 4u + 2u] = encodeColorByte(c.b);
-            lutBytes[size_t(i) * 4u + 3u] = 255u;
-          }
-          glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, lutBytes.data());
-          fieldColorLutScheme = scheme;
-          fieldColorLutBrightness = colorBrightness;
-        }
-
-        return combinedFieldTextureReady;
-      };
-      auto drawFieldLanePass = [&](float renderMain, float renderContinuity, GLenum srcBlend,
-                                   GLenum dstBlend) -> bool {
-        static const GLuint kAttrPos = 0;
-        const GLuint rowTex = fieldRowTextures[fieldRowTextureIndex];
-        if (!rowTex) {
-          return false;
-        }
-        glUseProgram(fieldShaderProgram);
-        glUniform1i(fieldUniformRowTex, 0);
-        glUniform1f(fieldUniformRowTexV, fieldLaneSlot != 0 ? 0.75f : 0.25f);
-        glUniform1f(fieldUniformTextureRowCount, fieldTextureRowCount);
-        glUniform1f(fieldUniformTextureRowOffset, fieldTextureRowOffset);
-        glUniform1i(fieldUniformColorLutTex, 1);
-        glUniform1f(fieldUniformRowCount, float(rowCount));
-        glUniform1f(fieldUniformDrawTop, drawTop);
-        glUniform1f(fieldUniformRowStep, rowStep);
-        glUniform1f(fieldUniformZoomThickness, zoomThicknessMul);
-        glUniform1f(fieldUniformZoomInWidthComp, glZoomInWidthComp);
-        glUniform1f(fieldUniformZoomInAlphaComp, glZoomInAlphaComp);
-        glUniform1f(fieldUniformZoomInLiftComp, glZoomInLiftComp);
-        glUniform1f(fieldUniformDeepZoomEnergyFill, glDeepZoomEnergyFill);
-        glUniform1f(fieldUniformRenderMain, renderMain);
-        glUniform1f(fieldUniformRenderContinuity, renderContinuity);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, rowTex);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, fieldColorLutTexture);
-        glBindBuffer(GL_ARRAY_BUFFER, fieldShaderVbo);
-        glEnableVertexAttribArray(kAttrPos);
-        glVertexAttribPointer(
-          kAttrPos, 2, GL_FLOAT, GL_FALSE, sizeof(GlFieldVertex), reinterpret_cast<const GLvoid *>(offsetof(GlFieldVertex, x)));
-        glBlendFunc(srcBlend, dstBlend);
-        bool narrowedScissor = false;
-        if (renderStereo) {
-          const float lanePad = std::max(3.0f * zoomThicknessMul, 1.5f);
-          const float laneMinX = clamp(laneCenterXForConnectors - laneAmpHalfWidth - lanePad, xInset, box.size.x - xInset);
-          const float laneMaxX = clamp(laneCenterXForConnectors + laneAmpHalfWidth + lanePad, xInset, box.size.x - xInset);
-          const int laneScissorX = std::max(scissorX, int(std::floor(laneMinX * scaleX)));
-          const int laneScissorMaxX = std::min(scissorX + scissorW, int(std::ceil(laneMaxX * scaleX)));
-          const int laneScissorW = std::max(1, laneScissorMaxX - laneScissorX);
-          glScissor(laneScissorX, scissorY, laneScissorW, scissorH);
-          narrowedScissor = true;
-        }
-        const PerfClock::time_point fieldDrawStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        if (narrowedScissor) {
-          glScissor(scissorX, scissorY, scissorW, scissorH);
-        }
-        if (logScopeDraw) {
-          logRow.fieldDrawUs += logElapsedUs(fieldDrawStart, PerfClock::now());
-          logRow.fieldDraws += 1;
-        }
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisableVertexAttribArray(kAttrPos);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glUseProgram(0);
-        return true;
       };
       auto appendSegmentQuad = [&](std::vector<GlSegmentQuadVertex> *verts, float ax, float ay, float bx, float by,
                                    float radius, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
@@ -2527,8 +2595,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         const bool renderContinuityField = true;
         bool fieldDrawOk = prepareFieldLaneDraw();
         if (fieldDrawOk) {
-          fieldDrawOk = drawFieldLanePass(renderMainField ? 1.f : 0.f, renderContinuityField ? 1.f : 0.f,
-                                         GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
+          fieldDrawOk = drawFieldPass(fieldLaneSlot, laneCenterXForConnectors, renderMainField ? 1.f : 0.f,
+                                      renderContinuityField ? 1.f : 0.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA) &&
                         fieldDrawOk;
         }
         if (fieldDrawOk) {
@@ -3103,17 +3171,22 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; },
         [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; });
-      drawLane(
-        [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
-        [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
-        [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, 0);
-      if (renderStereo) {
+      const bool drewCombinedStereoField =
+        renderStereo && useShaderRenderMode &&
+        drawCombinedStereoFieldPass(1.f, 1.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      if (!drewCombinedStereoField) {
         drawLane(
-          [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
-          [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
-          [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; }, rowColorDriveRight,
-          [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX, 1);
+          [&](size_t idx) { return historyX0[historyVisibleSlot(idx)]; },
+          [&](size_t idx) { return historyX1[historyVisibleSlot(idx)]; },
+          [&](size_t idx) { return historyVisualIntensity[historyVisibleSlot(idx)]; }, rowColorDrive,
+          [&](size_t idx) { return historyValid[historyVisibleSlot(idx)] != 0u; }, lane0CenterX, 0);
+        if (renderStereo) {
+          drawLane(
+            [&](size_t idx) { return historyX0Right[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyX1Right[historyVisibleSlot(idx)]; },
+            [&](size_t idx) { return historyVisualIntensityRight[historyVisibleSlot(idx)]; }, rowColorDriveRight,
+            [&](size_t idx) { return historyValidRight[historyVisibleSlot(idx)] != 0u; }, lane1CenterX, 1);
+        }
       }
     } else {
       uploadCombinedFieldTexture(
@@ -3122,15 +3195,20 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
         [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
         [&](size_t idx) { return rowVisualIntensityRight[idx]; },
         [&](size_t idx) { return rowValidRight[idx] != 0u; });
-      drawLane(
-        [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
-        [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
-        [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, 0);
-      if (renderStereo) {
+      const bool drewCombinedStereoField =
+        renderStereo && useShaderRenderMode &&
+        drawCombinedStereoFieldPass(1.f, 1.f, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      if (!drewCombinedStereoField) {
         drawLane(
-          [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
-          [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,
-          [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX, 1);
+          [&](size_t idx) { return rowX0[idx]; }, [&](size_t idx) { return rowX1[idx]; },
+          [&](size_t idx) { return rowVisualIntensity[idx]; }, rowColorDrive,
+          [&](size_t idx) { return rowValid[idx] != 0u; }, lane0CenterX, 0);
+        if (renderStereo) {
+          drawLane(
+            [&](size_t idx) { return rowX0Right[idx]; }, [&](size_t idx) { return rowX1Right[idx]; },
+            [&](size_t idx) { return rowVisualIntensityRight[idx]; }, rowColorDriveRight,
+            [&](size_t idx) { return rowValidRight[idx] != 0u; }, lane1CenterX, 1);
+        }
       }
     }
     glDisableClientState(GL_COLOR_ARRAY);
