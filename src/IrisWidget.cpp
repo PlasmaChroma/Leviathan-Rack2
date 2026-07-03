@@ -1,5 +1,6 @@
 #include "Iris.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <cctype>
@@ -73,10 +74,14 @@ struct IrisDisplay final : OpaqueWidget {
       module->previewSnapshot(&gray, &width, &height);
       rgba.resize(gray.size() * 4u);
       for (size_t i = 0; i < gray.size(); ++i) {
-        const float t = float(gray[i]) / 255.f;
-        rgba[i * 4u + 0u] = uint8_t(30.f + 200.f * t);
-        rgba[i * 4u + 1u] = uint8_t(28.f + 190.f * (1.f - std::fabs(2.f * t - 1.f)));
-        rgba[i * 4u + 2u] = uint8_t(62.f + 190.f * (1.f - t));
+        const float value = float(gray[i]) / 127.5f - 1.f;
+        const float amount = clamp(std::fabs(value), 0.f, 1.f);
+        const float red = value < 0.f ? 122.f : 28.f;
+        const float green = value < 0.f ? 92.f : 204.f;
+        const float blue = value < 0.f ? 255.f : 217.f;
+        rgba[i * 4u + 0u] = uint8_t(std::round(red * amount));
+        rgba[i * 4u + 1u] = uint8_t(std::round(green * amount));
+        rgba[i * 4u + 2u] = uint8_t(std::round(blue * amount));
         rgba[i * 4u + 3u] = 255u;
       }
       nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -104,18 +109,6 @@ struct IrisDisplay final : OpaqueWidget {
     nvgStrokeWidth(args.vg, 1.2f);
     nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 220));
     nvgStroke(args.vg);
-
-    const std::string status = module->statusText();
-    std::string name = module->sourceName();
-    if (name.size() > 30u) name = name.substr(0u, 27u) + "...";
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-    nvgFontSize(args.vg, 9.f);
-    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 235));
-    nvgText(args.vg, 5.f, box.size.y - 5.f, status.c_str(), nullptr);
-    nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM);
-    nvgFillColor(args.vg, nvgRGBA(225, 232, 238, 205));
-    nvgText(args.vg, box.size.x - 5.f, box.size.y - 5.f, name.c_str(), nullptr);
   }
 };
 
@@ -146,27 +139,49 @@ struct IrisWidget final : ModuleWidget {
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
+    math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
+    panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);
     IrisDisplay* display = new IrisDisplay(module);
-    display->box.pos = mm2px(Vec(4.3f, 13.2f));
-    display->box.size = mm2px(Vec(52.36f, 25.9f));
+    display->box.pos = mm2px(displayRectMm.pos);
+    display->box.size = mm2px(displayRectMm.size);
     addChild(display);
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(
+      displayRectMm, visual_assets::PreviewFrameTint::Purple));
 
-    addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(Vec(13.5f, 54.f)), module, Iris::COARSE_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(Vec(30.48f, 54.f)), module, Iris::FINE_PARAM));
-    addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(Vec(47.46f, 54.f)), module, Iris::SCAN_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(Vec(13.5f, 74.f)), module, Iris::FM_ATTEN_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(Vec(30.48f, 74.f)), module, Iris::SCAN_ATTEN_PARAM));
-    addParam(createParamCentered<Eclipse2Knob>(mm2px(Vec(47.46f, 74.f)), module, Iris::LEVEL_PARAM));
+    auto anchor = [&](const char* id, const Vec& fallbackMm) {
+      Vec posMm = fallbackMm;
+      panel_svg::loadPointFromSvgMm(panelPath, id, &posMm);
+      return posMm;
+    };
+
+    addParam(createParamCentered<LeviathanHaloKnob2>(
+      mm2px(anchor("IRIS_COARSE_PARAM", Vec(13.5f, 54.f))), module, Iris::COARSE_PARAM));
+    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+      mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
+    addParam(createParamCentered<LeviathanHaloKnob2>(
+      mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));
+    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+      mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM));
+    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+      mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(
+      mm2px(anchor("IRIS_LEVEL_PARAM", Vec(47.46f, 74.f))), module, Iris::LEVEL_PARAM));
     SmallGoldApertureButton* quant = createLightParamCentered<SmallGoldApertureButton>(
-      mm2px(Vec(30.48f, 84.f)), module, Iris::QUANT_PARAM, Iris::QUANT_LIGHT);
+      mm2px(anchor("IRIS_QUANT_PARAM", Vec(30.48f, 84.f))), module, Iris::QUANT_PARAM, Iris::QUANT_LIGHT);
     addParam(quant);
 
-    addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 99.f)), module, Iris::V_OCT_INPUT));
-    addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(23.f, 99.f)), module, Iris::FM_INPUT));
-    addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(37.96f, 99.f)), module, Iris::SCAN_INPUT));
-    addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(52.46f, 99.f)), module, Iris::SYNC_INPUT));
-    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(19.f, 118.f)), module, Iris::OUT_OUTPUT));
-    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(41.96f, 118.f)), module, Iris::INV_OUTPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(anchor("IRIS_FM_INPUT", Vec(23.f, 99.f))), module, Iris::FM_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(anchor("IRIS_SCAN_INPUT", Vec(37.96f, 99.f))), module, Iris::SCAN_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(anchor("IRIS_SYNC_INPUT", Vec(52.46f, 99.f))), module, Iris::SYNC_INPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(
+      mm2px(anchor("IRIS_OUT_OUTPUT", Vec(19.f, 118.f))), module, Iris::OUT_OUTPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(
+      mm2px(anchor("IRIS_INV_OUTPUT", Vec(41.96f, 118.f))), module, Iris::INV_OUTPUT));
   }
 
   void onPathDrop(const event::PathDrop& e) override {
