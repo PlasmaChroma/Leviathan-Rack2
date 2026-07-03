@@ -16,6 +16,7 @@ static std::atomic<bool> gClockworkDragDebugLoggingEnabled{false};
 static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
 static std::atomic<bool> gScopeDrawLoggingEnabled{false};
+static std::atomic<bool> gIntegralFluxDrawLoggingEnabled{false};
 static std::atomic<bool> gExtraGlValidationEnabled{false};
 static std::mutex gModuleTeardownLogMutex;
 
@@ -26,6 +27,7 @@ void refreshDragonKingDebugEnabled() {
 	gTemporalDeckLifetimeLoggingEnabled.store(false, std::memory_order_relaxed);
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
 	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+	gIntegralFluxDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gExtraGlValidationEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
 		return;
@@ -48,6 +50,7 @@ void refreshDragonKingDebugEnabled() {
 		json_t* temporalDeckLifetimeLoggingJ = json_object_get(root, "temporalDeckLifetimeLogging");
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
+		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
 		json_t* extraGlValidationJ = json_object_get(root, "extraGlValidation");
 		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
@@ -55,6 +58,7 @@ void refreshDragonKingDebugEnabled() {
 		gTemporalDeckLifetimeLoggingEnabled.store(json_boolean_value(temporalDeckLifetimeLoggingJ), std::memory_order_relaxed);
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
 		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
+		gIntegralFluxDrawLoggingEnabled.store(json_boolean_value(integralFluxDrawLoggingJ), std::memory_order_relaxed);
 		gExtraGlValidationEnabled.store(json_boolean_value(extraGlValidationJ), std::memory_order_relaxed);
 	}
 	json_decref(root);
@@ -82,6 +86,10 @@ bool isModuleTeardownLoggingEnabled() {
 
 bool isScopeDrawLoggingEnabled() {
 	return gScopeDrawLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isIntegralFluxDrawLoggingEnabled() {
+	return gIntegralFluxDrawLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 bool isExtraGlValidationEnabled() {

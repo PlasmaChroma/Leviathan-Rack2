@@ -9,6 +9,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -22,6 +27,18 @@ thread_local uint64_t gIntegralFluxApertureDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxPreviewDrawNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxPreviewDrawNsByChannel[5] {};
+thread_local uint64_t gIntegralFluxPreviewFramebufferNsThisFrame = 0u;
+thread_local uint64_t gIntegralFluxPreviewFramebufferNsByChannel[5] {};
+thread_local uint32_t gIntegralFluxPreviewDirtyRequestsThisFrame = 0u;
+thread_local uint32_t gIntegralFluxPreviewPointRebuildsThisFrame = 0u;
+thread_local uint32_t gIntegralFluxPreviewTracerCapturesThisFrame = 0u;
+thread_local uint32_t gIntegralFluxLinearPointDirtyRequestsThisFrame = 0u;
+thread_local uint32_t gIntegralFluxShapeGlyphDirtyRequestsThisFrame = 0u;
+thread_local uint32_t gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
+thread_local uint32_t gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
+thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 
 struct IntegralFluxScopedDrawTimer {
 	using Clock = std::chrono::steady_clock;
@@ -40,6 +57,14 @@ struct IntegralFluxScopedDrawTimer {
 		}
 	}
 };
+
+void resetIntegralFluxStepDiagnosticsForNextDraw() {
+	gIntegralFluxPreviewDirtyRequestsThisFrame = 0u;
+	gIntegralFluxPreviewPointRebuildsThisFrame = 0u;
+	gIntegralFluxPreviewTracerCapturesThisFrame = 0u;
+	gIntegralFluxLinearPointDirtyRequestsThisFrame = 0u;
+	gIntegralFluxShapeGlyphDirtyRequestsThisFrame = 0u;
+}
 
 struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	std::shared_ptr<window::Svg> svg;
@@ -616,6 +641,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	}
 
 	void drawFramebuffer() override {
+		IntegralFluxScopedDrawTimer framebufferTimer(
+			gIntegralFluxPreviewFramebufferNsThisFrame, isDragonKingDebugEnabled());
+		IntegralFluxScopedDrawTimer channelFramebufferTimer(
+			gIntegralFluxPreviewFramebufferNsByChannel[clamp(channel, 0, 4)], isDragonKingDebugEnabled());
 		math::Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
 		glClearColor(0.f, 0.f, 0.f, 0.f);
@@ -831,24 +860,32 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					const WavePreviewTracerCaptureStats stats =
 						curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
+					++gIntegralFluxPreviewTracerCapturesThisFrame;
 				}
 				else {
 					const WavePreviewBufferedTracerStyle style =
 						bufferedTracerStyle(TRAIL_CAPTURE_STRIDE);
 					const WavePreviewTracerCaptureStats stats = frameTracer.capture(points, nowSec, box.size, style);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
+					++gIntegralFluxPreviewTracerCapturesThisFrame;
 				}
 			}
+			++gIntegralFluxPreviewPointRebuildsThisFrame;
 			rebuildPoints(riseTime, fallTime, curveSigned, shapeMode, interactiveRecent);
 			lastVersion = version;
 		}
 		if (openGlRenderer) {
+			++gIntegralFluxPreviewDirtyRequestsThisFrame;
 			setDirty();
 			FramebufferWidget::step();
 		}
 	}
 
 	void draw(const DrawArgs& args) override {
+		IntegralFluxScopedDrawTimer timer(
+			gIntegralFluxPreviewDrawNsThisFrame, isDragonKingDebugEnabled());
+		IntegralFluxScopedDrawTimer channelTimer(
+			gIntegralFluxPreviewDrawNsByChannel[clamp(channel, 0, 4)], isDragonKingDebugEnabled());
 		if (useOpenGlRenderer()) {
 			widget::OpenGlWidget::draw(args);
 			drawFrequencyLabel(args);
@@ -1077,6 +1114,17 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 	}
 
 	void draw(const DrawArgs& args) override {
+		if (isDragonKingDebugEnabled()) {
+			if (fb && fb->dirty) {
+				++gIntegralFluxHaloDirtyDrawCountThisFrame;
+			}
+			if (hovered || dragging || tooltipHovered || tooltipDragging) {
+				++gIntegralFluxHaloActiveDrawCountThisFrame;
+			}
+			if (dragging || tooltipDragging) {
+				++gIntegralFluxHaloDraggingDrawCountThisFrame;
+			}
+		}
 		IntegralFluxScopedDrawTimer timer(
 			gIntegralFluxGearDrawNsThisFrame, isDragonKingDebugEnabled());
 		LeviathanHaloKnob2::draw(args);
@@ -1168,6 +1216,7 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 			dirty = std::fabs(linearValue - previous) > 1e-5f;
 		}
 		if (dirty && framebuffer) {
+			++gIntegralFluxLinearPointDirtyRequestsThisFrame;
 			framebuffer->setDirty();
 		}
 	}
@@ -1262,6 +1311,7 @@ struct IntegralFluxShapeModeGlyphOverlay : TransparentWidget {
 		const IntegralFlux::FunctionShapeMode shapeMode = IntegralFlux::functionShapeModeFromStoredInt(lastMode);
 		svgWidget->setSvg(shapeMode == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN ? sharkSvg : mirrorSvg);
 		svgWidget->box.size = framebuffer->box.size;
+		++gIntegralFluxShapeGlyphDirtyRequestsThisFrame;
 		framebuffer->setDirty();
 	}
 };
@@ -1395,9 +1445,156 @@ struct IntegralFluxWidget : ModuleWidget {
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
+	std::ofstream drawLogFile;
+	std::string drawLogPath;
+	bool drawLogActive = false;
+	uint64_t drawLogRowCounter = 0u;
 	IntegralFluxPreviewEdgeInteraction ch1EdgeInteraction;
 	IntegralFluxPreviewEdgeInteraction ch4EdgeInteraction;
 	IntegralFluxKnobTooltipState centralTooltipState;
+
+	struct DrawLogRow {
+		uint64_t row = 0u;
+		int moduleId = -1;
+		uint32_t instanceId = 0u;
+		int previewRenderMode = 0;
+		int previewTracerEnabled = 0;
+		int previewTracerMode = 0;
+		float totalDrawUs = 0.f;
+		float moduleWidgetDrawUs = 0.f;
+		float debugSubmitUs = 0.f;
+		float debugOverlayUs = 0.f;
+		float gearDrawUs = 0.f;
+		float eclipseDrawUs = 0.f;
+		float eclipseShadowUs = 0.f;
+		uint64_t eclipseShadowCount = 0u;
+		float apertureDrawUs = 0.f;
+		float linearPointDrawUs = 0.f;
+		float shapeGlyphDrawUs = 0.f;
+		float plasmaSwitchDrawUs = 0.f;
+		float previewDrawUs = 0.f;
+		float ch1PreviewDrawUs = 0.f;
+		float ch4PreviewDrawUs = 0.f;
+		float previewFramebufferUs = 0.f;
+		float ch1PreviewFramebufferUs = 0.f;
+		float ch4PreviewFramebufferUs = 0.f;
+		uint32_t previewDirtyRequests = 0u;
+		uint32_t previewPointRebuilds = 0u;
+		uint32_t previewTracerCaptures = 0u;
+		uint32_t linearPointDirtyRequests = 0u;
+		uint32_t shapeGlyphDirtyRequests = 0u;
+		uint32_t haloDirtyDrawCount = 0u;
+		uint32_t haloActiveDrawCount = 0u;
+		uint32_t haloDraggingDrawCount = 0u;
+		float uiStepEmaUs = 0.f;
+		float uiDrawEmaUs = 0.f;
+	};
+
+	static std::string drawLogRootPath() {
+		return system::join(asset::user(), "Leviathan/IntegralFlux");
+	}
+
+	static std::string drawLogDateTimeStamp() {
+		std::time_t now = std::time(nullptr);
+		std::tm tm {};
+#if defined(_WIN32)
+		localtime_s(&tm, &now);
+#else
+		localtime_r(&now, &tm);
+#endif
+		std::ostringstream out;
+		out << std::put_time(&tm, "%Y%m%d_%H%M%S");
+		return out.str();
+	}
+
+	void stopDrawLog() {
+		if (drawLogFile.is_open()) {
+			drawLogFile.close();
+		}
+		drawLogPath.clear();
+		drawLogActive = false;
+		drawLogRowCounter = 0u;
+	}
+
+	void syncDrawLog(bool enabled, uint32_t instanceId) {
+		if (!enabled) {
+			stopDrawLog();
+			return;
+		}
+		if (drawLogActive && drawLogFile.is_open()) {
+			return;
+		}
+		system::createDirectories(drawLogRootPath());
+		static uint32_t openSequence = 0u;
+		drawLogPath = system::join(
+			drawLogRootPath(),
+			"integral_flux_draw_" + std::to_string(instanceId) + "_" + drawLogDateTimeStamp() + "_" +
+				std::to_string(openSequence++) + ".csv");
+		drawLogFile.open(drawLogPath.c_str(), std::ios::out | std::ios::trunc);
+		if (!drawLogFile.is_open()) {
+			WARN("Integral Flux failed to open draw log CSV: %s", drawLogPath.c_str());
+			drawLogPath.clear();
+			drawLogActive = false;
+			return;
+		}
+		drawLogActive = true;
+		drawLogRowCounter = 0u;
+		drawLogFile << std::fixed << std::setprecision(3);
+		drawLogFile
+			<< "row,module_id,instance_id,preview_render_mode,preview_tracer_enabled,preview_tracer_mode,"
+			<< "total_draw_us,module_widget_draw_us,debug_submit_us,debug_overlay_us,"
+			<< "gear_draw_us,eclipse_draw_us,eclipse_shadow_us,eclipse_shadow_count,aperture_draw_us,"
+			<< "linear_point_draw_us,shape_glyph_draw_us,plasma_switch_draw_us,"
+			<< "preview_draw_us,ch1_preview_draw_us,ch4_preview_draw_us,preview_framebuffer_us,"
+			<< "ch1_preview_framebuffer_us,ch4_preview_framebuffer_us,preview_dirty_requests,"
+			<< "preview_point_rebuilds,preview_tracer_captures,linear_point_dirty_requests,"
+			<< "shape_glyph_dirty_requests,halo_dirty_draw_count,halo_active_draw_count,halo_dragging_draw_count,"
+			<< "ui_step_ema_us,ui_draw_ema_us\n";
+	}
+
+	void writeDrawLogRow(const DrawLogRow& row) {
+		if (!drawLogActive || !drawLogFile.is_open()) {
+			return;
+		}
+		drawLogFile
+			<< row.row << ','
+			<< row.moduleId << ','
+			<< row.instanceId << ','
+			<< row.previewRenderMode << ','
+			<< row.previewTracerEnabled << ','
+			<< row.previewTracerMode << ','
+			<< row.totalDrawUs << ','
+			<< row.moduleWidgetDrawUs << ','
+			<< row.debugSubmitUs << ','
+			<< row.debugOverlayUs << ','
+			<< row.gearDrawUs << ','
+			<< row.eclipseDrawUs << ','
+			<< row.eclipseShadowUs << ','
+			<< row.eclipseShadowCount << ','
+			<< row.apertureDrawUs << ','
+			<< row.linearPointDrawUs << ','
+			<< row.shapeGlyphDrawUs << ','
+			<< row.plasmaSwitchDrawUs << ','
+			<< row.previewDrawUs << ','
+			<< row.ch1PreviewDrawUs << ','
+			<< row.ch4PreviewDrawUs << ','
+			<< row.previewFramebufferUs << ','
+			<< row.ch1PreviewFramebufferUs << ','
+			<< row.ch4PreviewFramebufferUs << ','
+			<< row.previewDirtyRequests << ','
+			<< row.previewPointRebuilds << ','
+			<< row.previewTracerCaptures << ','
+			<< row.linearPointDirtyRequests << ','
+			<< row.shapeGlyphDirtyRequests << ','
+			<< row.haloDirtyDrawCount << ','
+			<< row.haloActiveDrawCount << ','
+			<< row.haloDraggingDrawCount << ','
+			<< row.uiStepEmaUs << ','
+			<< row.uiDrawEmaUs << '\n';
+		if ((row.row & 31u) == 0u) {
+			drawLogFile.flush();
+		}
+	}
 
 	static float consumeReductionAverage(std::atomic<uint64_t>& total, std::atomic<uint64_t>& samples) {
 		const uint64_t totalValue = total.exchange(0u, std::memory_order_acq_rel);
@@ -1416,6 +1613,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
 			uiStepUsRange.add(stepMs * 1000.f);
 		}
+	}
+
+	~IntegralFluxWidget() override {
+		stopDrawLog();
 	}
 
 	IntegralFluxWidget(IntegralFlux* module) {
@@ -1755,6 +1956,10 @@ struct IntegralFluxWidget : ModuleWidget {
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
+		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
+		const uint32_t debugInstanceId = flux ? flux->debugInstanceIdForUi() : 0u;
+		const bool logDraw = flux && isDragonKingDebugEnabled() && isIntegralFluxDrawLoggingEnabled();
+		syncDrawLog(logDraw, debugInstanceId);
 		const bool measurePerf = isDragonKingDebugEnabled();
 		if (measurePerf) {
 			gIntegralFluxGearDrawNsThisFrame = 0u;
@@ -1763,17 +1968,30 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 			gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
 			gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
+			gIntegralFluxPreviewDrawNsThisFrame = 0u;
+			for (uint64_t& value : gIntegralFluxPreviewDrawNsByChannel) {
+				value = 0u;
+			}
+			gIntegralFluxPreviewFramebufferNsThisFrame = 0u;
+			for (uint64_t& value : gIntegralFluxPreviewFramebufferNsByChannel) {
+				value = 0u;
+			}
+			gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
+			gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
+			gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 			visual_assets::resetEclipseShadowDrawMetrics();
 		}
+		DrawLogRow logRow;
+		const PerfClock::time_point totalStart = logDraw ? PerfClock::now() : PerfClock::time_point();
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::draw(args);
-		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
+		const PerfClock::time_point afterModuleDraw = (measurePerf || logDraw) ? PerfClock::now() : PerfClock::time_point();
 		if (!flux) {
 			return;
 		}
 		if (measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - perfStart).count()) * 1e-6f;
+				afterModuleDraw - perfStart).count()) * 1e-6f;
 			uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
 			uiDrawUsRange.add(drawMs * 1000.f);
 			const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
@@ -1791,9 +2009,11 @@ struct IntegralFluxWidget : ModuleWidget {
 			flux->setPerfUiRenderMs(uiMs);
 		}
 
+		float debugSubmitUs = 0.f;
+		float debugOverlayUs = 0.f;
 		if (measurePerf) {
+			const PerfClock::time_point submitStart = logDraw ? PerfClock::now() : PerfClock::time_point();
 			double nowSec = system::getTime();
-			const uint32_t debugInstanceId = flux->debugInstanceIdForUi();
 			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
 				lastSubmitSec = nowSec;
@@ -1813,6 +2033,11 @@ struct IntegralFluxWidget : ModuleWidget {
 					ch1CurvePointsReducedAvg,
 					ch1TracerExtraPointsReducedAvg);
 			}
+			if (logDraw) {
+				debugSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+					PerfClock::now() - submitStart).count()) * 1e-3f;
+			}
+			const PerfClock::time_point overlayStart = logDraw ? PerfClock::now() : PerfClock::time_point();
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];
 				std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", debugInstanceId);
@@ -1835,6 +2060,53 @@ struct IntegralFluxWidget : ModuleWidget {
 				nvgText(args.vg, x, y + mm2px(2.0f), plasmaSwitchLabel, nullptr);
 				nvgRestore(args.vg);
 			}
+			if (logDraw) {
+				debugOverlayUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+					PerfClock::now() - overlayStart).count()) * 1e-3f;
+			}
+		}
+
+		if (logDraw) {
+			logRow.row = drawLogRowCounter++;
+			logRow.moduleId = module ? module->id : -1;
+			logRow.instanceId = debugInstanceId;
+			logRow.previewRenderMode = flux->previewRenderModeControl().load(std::memory_order_relaxed);
+			logRow.previewTracerEnabled = flux->previewTracerEnabledControl().load(std::memory_order_relaxed) ? 1 : 0;
+			logRow.previewTracerMode = flux->previewTracerCacheModeControl().load(std::memory_order_relaxed);
+			logRow.totalDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - totalStart).count()) * 1e-3f;
+			logRow.moduleWidgetDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				afterModuleDraw - perfStart).count()) * 1e-3f;
+			logRow.debugSubmitUs = debugSubmitUs;
+			logRow.debugOverlayUs = debugOverlayUs;
+			logRow.gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
+			logRow.eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
+			logRow.eclipseShadowUs = float(visual_assets::eclipseShadowDrawNs()) * 1e-3f;
+			logRow.eclipseShadowCount = visual_assets::eclipseShadowDrawCount();
+			logRow.apertureDrawUs = float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f;
+			logRow.linearPointDrawUs = float(gIntegralFluxLinearPointDrawNsThisFrame) * 1e-3f;
+			logRow.shapeGlyphDrawUs = float(gIntegralFluxShapeGlyphDrawNsThisFrame) * 1e-3f;
+			logRow.plasmaSwitchDrawUs = float(gIntegralFluxPlasmaSwitchDrawNsThisFrame) * 1e-3f;
+			logRow.previewDrawUs = float(gIntegralFluxPreviewDrawNsThisFrame) * 1e-3f;
+			logRow.ch1PreviewDrawUs = float(gIntegralFluxPreviewDrawNsByChannel[1]) * 1e-3f;
+			logRow.ch4PreviewDrawUs = float(gIntegralFluxPreviewDrawNsByChannel[4]) * 1e-3f;
+			logRow.previewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsThisFrame) * 1e-3f;
+			logRow.ch1PreviewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsByChannel[1]) * 1e-3f;
+			logRow.ch4PreviewFramebufferUs = float(gIntegralFluxPreviewFramebufferNsByChannel[4]) * 1e-3f;
+			logRow.previewDirtyRequests = gIntegralFluxPreviewDirtyRequestsThisFrame;
+			logRow.previewPointRebuilds = gIntegralFluxPreviewPointRebuildsThisFrame;
+			logRow.previewTracerCaptures = gIntegralFluxPreviewTracerCapturesThisFrame;
+			logRow.linearPointDirtyRequests = gIntegralFluxLinearPointDirtyRequestsThisFrame;
+			logRow.shapeGlyphDirtyRequests = gIntegralFluxShapeGlyphDirtyRequestsThisFrame;
+			logRow.haloDirtyDrawCount = gIntegralFluxHaloDirtyDrawCountThisFrame;
+			logRow.haloActiveDrawCount = gIntegralFluxHaloActiveDrawCountThisFrame;
+			logRow.haloDraggingDrawCount = gIntegralFluxHaloDraggingDrawCountThisFrame;
+			logRow.uiStepEmaUs = uiStepMsEma * 1000.f;
+			logRow.uiDrawEmaUs = uiDrawMsEma * 1000.f;
+			writeDrawLogRow(logRow);
+		}
+		if (measurePerf) {
+			resetIntegralFluxStepDiagnosticsForNextDraw();
 		}
 	}
 

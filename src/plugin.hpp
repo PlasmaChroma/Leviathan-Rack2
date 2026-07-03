@@ -44,6 +44,7 @@ bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
+bool isIntegralFluxDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 void refreshDragonKingDebugEnabled();
 
