@@ -232,10 +232,14 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));
-    addParam(createParamCentered<Eclipse2Knob>(
-      mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM));
-    addParam(createParamCentered<Eclipse2Knob>(
-      mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM));
+    Eclipse2Knob* fmAtten = createParamCentered<Eclipse2Knob>(
+      mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM);
+    fmAtten->setProgressRingBipolar(true);
+    addParam(fmAtten);
+    Eclipse2Knob* scanAtten = createParamCentered<Eclipse2Knob>(
+      mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM);
+    scanAtten->setProgressRingBipolar(true);
+    addParam(scanAtten);
     SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
       mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
       module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
