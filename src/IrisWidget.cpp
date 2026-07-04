@@ -112,6 +112,84 @@ struct IrisDisplay final : OpaqueWidget {
   }
 };
 
+struct IrisWaveformPreview final : TransparentWidget {
+  Iris* module = nullptr;
+  uint64_t generation = uint64_t(-1);
+  float cachedScan = -1.f;
+  std::vector<float> waveform;
+
+  explicit IrisWaveformPreview(Iris* module) : module(module) {}
+
+  void draw(const DrawArgs& args) override {
+    const float labelWidth = 18.f;
+    const float top = 5.f;
+    const float bottom = box.size.y - 5.f;
+    const float center = 0.5f * (top + bottom);
+    const float left = labelWidth;
+    const float right = box.size.x - 5.f;
+    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.f;
+    const uint64_t currentGeneration =
+      module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
+    if (module && (generation != currentGeneration || std::fabs(scan - cachedScan) >= 1.f / 512.f ||
+                   waveform.empty())) {
+      module->waveformSnapshot(scan, 256, &waveform);
+      generation = currentGeneration;
+      cachedScan = scan;
+    }
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, left, top);
+    nvgLineTo(args.vg, right, top);
+    nvgMoveTo(args.vg, left, center);
+    nvgLineTo(args.vg, right, center);
+    nvgMoveTo(args.vg, left, bottom);
+    nvgLineTo(args.vg, right, bottom);
+    nvgStrokeWidth(args.vg, 0.6f);
+    nvgStrokeColor(args.vg, nvgRGBA(120, 132, 142, 70));
+    nvgStroke(args.vg);
+
+    if (!waveform.empty()) {
+      nvgBeginPath(args.vg);
+      for (size_t i = 0; i < waveform.size(); ++i) {
+        const float x = left + (right - left) * float(i) / float(waveform.size() - 1u);
+        const float y = center - clamp(waveform[i], -1.f, 1.f) * 0.5f * (bottom - top);
+        if (i == 0u) nvgMoveTo(args.vg, x, y);
+        else nvgLineTo(args.vg, x, y);
+      }
+      nvgSave(args.vg);
+      nvgScissor(args.vg, left, top, right - left, center - top);
+      nvgStrokeWidth(args.vg, 1.45f);
+      nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 245));
+      nvgStroke(args.vg);
+      nvgRestore(args.vg);
+
+      nvgBeginPath(args.vg);
+      for (size_t i = 0; i < waveform.size(); ++i) {
+        const float x = left + (right - left) * float(i) / float(waveform.size() - 1u);
+        const float y = center - clamp(waveform[i], -1.f, 1.f) * 0.5f * (bottom - top);
+        if (i == 0u) nvgMoveTo(args.vg, x, y);
+        else nvgLineTo(args.vg, x, y);
+      }
+      nvgSave(args.vg);
+      nvgScissor(args.vg, left, center, right - left, bottom - center);
+      nvgStrokeWidth(args.vg, 1.45f);
+      nvgStrokeColor(args.vg, nvgRGBA(122, 92, 255, 245));
+      nvgStroke(args.vg);
+      nvgRestore(args.vg);
+    }
+
+    if (APP && APP->window && APP->window->uiFont) {
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 7.5f);
+      nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(205, 214, 220, 185));
+      nvgText(args.vg, 3.f, top, "+5", nullptr);
+      nvgText(args.vg, 3.f, center, "0", nullptr);
+      nvgText(args.vg, 3.f, bottom, "-5", nullptr);
+    }
+  }
+};
+
 template <typename EnumType>
 void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
                  const std::vector<std::pair<std::string, EnumType> >& choices) {
@@ -133,7 +211,7 @@ void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
 struct IrisWidget final : ModuleWidget {
   explicit IrisWidget(Iris* module) {
     setModule(module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/iris.panel.svg");
+    const std::string panelPath = asset::plugin(pluginInstance, "res/iris.svg");
     setPanel(createPanel(panelPath));
     addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
@@ -147,6 +225,15 @@ struct IrisWidget final : ModuleWidget {
     addChild(display);
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       displayRectMm, visual_assets::PreviewFrameTint::Purple));
+
+    math::Rect waveformRectMm(Vec(4.3f, 42.f), Vec(52.36f, 18.f));
+    panel_svg::loadRectFromSvgMm(panelPath, "IRIS_WAVE_PREVIEW", &waveformRectMm);
+    IrisWaveformPreview* waveformPreview = new IrisWaveformPreview(module);
+    waveformPreview->box.pos = mm2px(waveformRectMm.pos);
+    waveformPreview->box.size = mm2px(waveformRectMm.size);
+    addChild(waveformPreview);
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(
+      waveformRectMm, visual_assets::PreviewFrameTint::Purple));
 
     auto anchor = [&](const char* id, const Vec& fallbackMm) {
       Vec posMm = fallbackMm;
@@ -164,11 +251,10 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM));
     addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
       mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM));
-    addParam(createParamCentered<Eclipse2Knob>(
-      mm2px(anchor("IRIS_LEVEL_PARAM", Vec(47.46f, 74.f))), module, Iris::LEVEL_PARAM));
-    SmallGoldApertureButton* quant = createLightParamCentered<SmallGoldApertureButton>(
-      mm2px(anchor("IRIS_QUANT_PARAM", Vec(30.48f, 84.f))), module, Iris::QUANT_PARAM, Iris::QUANT_LIGHT);
-    addParam(quant);
+    SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
+      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
+      module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
+    addParam(octaveStep);
 
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));

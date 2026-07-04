@@ -330,14 +330,21 @@ inline ImageWavetable makeDefaultTable() {
         phase < 0.75f ? 2.f - 4.f * phase :
                         4.f * phase - 4.f;
       const float saw = phase < 0.5f ? 2.f * phase : 2.f * phase - 2.f;
-      table.samples[base + size_t(x)] =
-        scan <= 0.5f ? sine + (triangle - sine) * (scan * 2.f)
-                     : triangle + (saw - triangle) * ((scan - 0.5f) * 2.f);
+      const float square = phase < 0.5f ? 1.f : -1.f;
+      if (scan <= 1.f / 3.f) {
+        table.samples[base + size_t(x)] = sine + (triangle - sine) * (scan * 3.f);
+      } else if (scan <= 2.f / 3.f) {
+        table.samples[base + size_t(x)] =
+          triangle + (saw - triangle) * ((scan - 1.f / 3.f) * 3.f);
+      } else {
+        table.samples[base + size_t(x)] =
+          saw + (square - saw) * ((scan - 2.f / 3.f) * 3.f);
+      }
     }
     table.samples[base + size_t(table.frameSize)] = table.samples[base];
   }
   updateStatistics(&table);
-  table.sourceName = "Sine / Triangle / Saw";
+  table.sourceName = "Sine / Triangle / Saw / Square";
   return table;
 }
 

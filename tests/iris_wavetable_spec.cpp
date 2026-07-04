@@ -147,11 +147,13 @@ int main() {
   check("factory table has full row terrain", factory.rowCount == iris::kDefaultRows);
   check("factory table starts with sine",
         std::fabs(factory.sample(0.125f, 0.f) - std::sin(0.25f * 3.14159265358979323846f)) < 1e-5f);
-  check("factory table reaches triangle at midpoint",
-        std::fabs(factory.sample(0.125f, 0.5f) - 0.5f) < 0.01f);
-  check("factory table ends with saw",
-        std::fabs(factory.sample(0.125f, 1.f) - 0.25f) < 1e-5f);
+  check("factory table reaches triangle at first third",
+        std::fabs(factory.sample(0.125f, 1.f / 3.f) - 0.5f) < 0.01f);
+  check("factory table reaches saw at second third",
+        std::fabs(factory.sample(0.125f, 2.f / 3.f) - 0.25f) < 0.01f);
+  check("factory table ends with square",
+        std::fabs(factory.sample(0.125f, 1.f) - 1.f) < 1e-5f);
 
-  std::cout << "Summary: " << (32 - failures) << "/32 passed\n";
+  std::cout << "Summary: " << (33 - failures) << "/33 passed\n";
   return failures == 0 ? 0 : 1;
 }

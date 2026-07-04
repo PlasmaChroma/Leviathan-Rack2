@@ -9,6 +9,26 @@
 #include <mutex>
 #include <thread>
 
+constexpr float kIrisMinHz = 10.f;
+constexpr float kIrisMaxHz = 10000.f;
+constexpr float kIrisCoarseOctaveSpan = 9.96578428466f;
+constexpr float kIrisMinPitchFromC4 = -4.70919513631f;
+
+inline float irisBaseFrequencyFromKnob(float knobNorm) {
+  return kIrisMinHz * std::pow(kIrisMaxHz / kIrisMinHz, clamp(knobNorm, 0.f, 1.f));
+}
+
+inline float irisKnobValueForFrequency(float hz) {
+  hz = clamp(hz, kIrisMinHz, kIrisMaxHz);
+  return std::log(hz / kIrisMinHz) / std::log(kIrisMaxHz / kIrisMinHz);
+}
+
+struct IrisFreqQuantity final : ParamQuantity {
+  float getDisplayValue() override;
+  void setDisplayValue(float displayValue) override;
+  std::string getDisplayValueString() override;
+};
+
 struct Iris final : Module {
   enum ParamId {
     COARSE_PARAM,
@@ -16,8 +36,7 @@ struct Iris final : Module {
     SCAN_PARAM,
     SCAN_ATTEN_PARAM,
     FM_ATTEN_PARAM,
-    LEVEL_PARAM,
-    QUANT_PARAM,
+    COARSE_STEP_MODE_PARAM,
     PARAMS_LEN
   };
 
@@ -38,7 +57,7 @@ struct Iris final : Module {
   enum LightId {
     LOAD_LIGHT,
     ERROR_LIGHT,
-    QUANT_LIGHT,
+    COARSE_STEP_MODE_LIGHT,
     LIGHTS_LEN
   };
 
@@ -64,6 +83,7 @@ struct Iris final : Module {
   std::string sourcePath() const;
   std::string statusText() const;
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
+  void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
   bool embedsTable() const { return embedTable; }
   void setEmbedTable(bool enabled) { embedTable = enabled; }
 

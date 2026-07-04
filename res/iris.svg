@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="60.96mm"
+   height="128.5mm"
+   viewBox="0 0 6096 12850"
+   version="1.1"
+   id="svg18"
+   sodipodi:docname="iris.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs18" />
+  <sodipodi:namedview
+     id="namedview18"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="2.4193417"
+     inkscape:cx="88.66048"
+     inkscape:cy="218.86118"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg18"
+     showgrid="false" />
+  <rect
+     width="6096"
+     height="12850"
+     fill="#090b0f"
+     id="rect1" />
+  <rect
+     x="120"
+     y="120"
+     width="5856"
+     height="12610"
+     rx="90"
+     fill="#11151a"
+     stroke="#39414a"
+     stroke-width="24"
+     id="rect2" />
+  <path
+     d="M300 1040 H5796"
+     stroke="#19c7d4"
+     stroke-width="28"
+     id="path2" />
+  <path
+     d="M300 1068 H5796"
+     stroke="#b54bc8"
+     stroke-width="12"
+     id="path3" />
+  <text
+     x="3048"
+     y="760"
+     fill="#f3f6f8"
+     font-family="sans-serif"
+     font-size="510"
+     text-anchor="middle"
+     id="text3">IRIS</text>
+  <text
+     x="3048"
+     y="1010"
+     fill="#8e9ba6"
+     font-family="sans-serif"
+     font-size="170"
+     text-anchor="middle"
+     id="text4">IMAGE WAVETABLE OSCILLATOR</text>
+  <rect
+     x="430"
+     y="1320"
+     width="5236"
+     height="2590"
+     rx="55"
+     fill="#05070a"
+     stroke="#53616e"
+     stroke-width="24"
+     id="rect4" />
+  <rect
+     x="430"
+     y="4200"
+     width="5236"
+     height="1800"
+     rx="55"
+     fill="#05070a"
+     stroke="#53616e"
+     stroke-width="24"
+     id="rect_wave_preview" />
+  <rect
+     x="3193.4043"
+     y="10484.675"
+     width="2552.5957"
+     height="1295.3621"
+     rx="70"
+     fill="#0a1115"
+     stroke="#1a7782"
+     stroke-width="18"
+     id="rect18" />
+  <g
+     id="components"
+     style="display:inline">
+    <rect
+       id="IRIS_DISPLAY"
+       x="430"
+       y="1320"
+       width="5236"
+       height="2590"
+       rx="55" />
+    <rect
+       id="IRIS_WAVE_PREVIEW"
+       x="430"
+       y="4200"
+       width="5236"
+       height="1800"
+       rx="55" />
+    <circle
+       id="IRIS_COARSE_PARAM"
+       cx="1350"
+       cy="7639.9502"
+       r="520" />
+    <circle
+       id="IRIS_FINE_PARAM"
+       cx="2785.532"
+       cy="7650.8862"
+       r="330" />
+    <circle
+       id="IRIS_SCAN_PARAM"
+       cx="1312.5302"
+       cy="9287.7441"
+       r="520" />
+    <circle
+       id="IRIS_FM_ATTEN_PARAM"
+       cx="2270.2317"
+       cy="11079.697"
+       r="330" />
+    <circle
+       id="IRIS_SCAN_ATTEN_PARAM"
+       cx="2818.3403"
+       cy="9293.3975"
+       r="330" />
+    <circle
+       id="IRIS_COARSE_STEP_MODE_PARAM"
+       cx="5251.916"
+       cy="9202.2607"
+       r="240" />
+    <circle
+       id="IRIS_V_OCT_INPUT"
+       cx="4094.3521"
+       cy="7672.6787"
+       r="260" />
+    <circle
+       id="IRIS_FM_INPUT"
+       cx="1147.777"
+       cy="11097.392"
+       r="260" />
+    <circle
+       id="IRIS_SCAN_INPUT"
+       cx="4054.0715"
+       cy="9287.1152"
+       r="260" />
+    <circle
+       id="IRIS_SYNC_INPUT"
+       cx="5218.4985"
+       cy="7673.4561"
+       r="260" />
+    <circle
+       id="IRIS_OUT_OUTPUT"
+       cx="3796"
+       cy="10960"
+       r="260" />
+    <circle
+       id="IRIS_INV_OUTPUT"
+       cx="5246"
+       cy="10960"
+       r="260" />
+  </g>
+  <g
+     fill="#d8e0e6"
+     font-family="sans-serif"
+     font-size="170"
+     text-anchor="middle"
+     id="g18">
+    <text
+       x="1350"
+       y="7019.9502"
+       id="text6">COARSE</text>
+    <text
+       x="2785.532"
+       y="7030.8862"
+       id="text7">FINE</text>
+    <text
+       x="1312.5302"
+       y="8667.7441"
+       id="text8">SCAN</text>
+    <text
+       x="2270.2317"
+       y="10539.697"
+       id="text9">FM</text>
+    <text
+       x="2818.3403"
+       y="8753.3975"
+       id="text10">SCAN CV</text>
+    <text
+       x="5251.916"
+       y="8862.2607"
+       id="text12">OCTAVE</text>
+    <text
+       x="4094.3521"
+       y="7102.6787"
+       id="text13">V/OCT</text>
+    <text
+       x="1147.777"
+       y="10527.392"
+       id="text14">FM</text>
+    <text
+       x="4054.0715"
+       y="8717.1152"
+       id="text15">SCAN</text>
+    <text
+       x="5218.4985"
+       y="7103.4561"
+       id="text16">SYNC</text>
+    <text
+       x="3791.75"
+       y="11569.983"
+       id="text17"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="3791.75"
+         y="11569.983"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline">OUT+</tspan></text>
+    <text
+       x="5242.6001"
+       y="11569.983"
+       id="text18"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INV</text>
+  </g>
+</svg>

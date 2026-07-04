@@ -25,13 +25,13 @@ bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
 
 Iris::Iris() {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-  configParam(COARSE_PARAM, -4.f, 4.f, 0.f, "Coarse tune", " oct");
+  configParam<IrisFreqQuantity>(
+    COARSE_PARAM, 0.f, 1.f, irisKnobValueForFrequency(dsp::FREQ_C4), "Frequency");
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(SCAN_PARAM, 0.f, 1.f, 0.f, "Image scan", " %", 0.f, 100.f);
   configParam(SCAN_ATTEN_PARAM, -1.f, 1.f, 0.f, "Scan CV attenuverter", " %", 0.f, 100.f);
   configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuverter", " %", 0.f, 100.f);
-  configParam(LEVEL_PARAM, 0.f, 1.f, 1.f, "Output level", " %", 0.f, 100.f);
-  configSwitch(QUANT_PARAM, 0.f, 1.f, 0.f, "Chromatic quantization", {"Off", "On"});
+  configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(FM_INPUT, "Exponential FM");
   configInput(SCAN_INPUT, "Scan CV");
@@ -194,18 +194,18 @@ void Iris::process(const ProcessArgs& args) {
   const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
   outputs[OUT_OUTPUT].setChannels(channels);
   outputs[INV_OUTPUT].setChannels(channels);
-  const float coarse = params[COARSE_PARAM].getValue();
+  float coarsePitch =
+    kIrisMinPitchFromC4 + clamp(params[COARSE_PARAM].getValue(), 0.f, 1.f) * kIrisCoarseOctaveSpan;
+  const bool coarseStepped = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
+  if (coarseStepped) coarsePitch = std::round(coarsePitch);
   const float fine = params[FINE_PARAM].getValue() / 1200.f;
   const float scanKnob = params[SCAN_PARAM].getValue();
   const float scanAtten = params[SCAN_ATTEN_PARAM].getValue();
   const float fmAtten = params[FM_ATTEN_PARAM].getValue();
-  const float level = params[LEVEL_PARAM].getValue();
-  const bool quantize = params[QUANT_PARAM].getValue() > 0.5f;
   float scanDisplay = scanKnob;
   for (int channel = 0; channel < channels; ++channel) {
-    float pitch = coarse + fine + inputs[V_OCT_INPUT].getPolyVoltage(channel) +
+    float pitch = coarsePitch + fine + inputs[V_OCT_INPUT].getPolyVoltage(channel) +
                   inputs[FM_INPUT].getPolyVoltage(channel) * fmAtten;
-    if (quantize) pitch = std::round(pitch * 12.f) / 12.f;
     const float frequency = clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(pitch), 0.f, args.sampleRate * 0.45f);
     float scan = scanKnob + inputs[SCAN_INPUT].getPolyVoltage(channel) * 0.1f * scanAtten;
     scan = clamp(scan, 0.f, 1.f);
@@ -214,14 +214,14 @@ void Iris::process(const ProcessArgs& args) {
       voices[size_t(channel)].oscillator.reset();
     }
     const float wave = table ? voices[size_t(channel)].oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
-    const float volts = std::isfinite(wave) ? 5.f * level * wave : 0.f;
+    const float volts = std::isfinite(wave) ? 5.f * wave : 0.f;
     outputs[OUT_OUTPUT].setVoltage(volts, channel);
     outputs[INV_OUTPUT].setVoltage(-volts, channel);
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
   lights[LOAD_LIGHT].setBrightness(loading.load(std::memory_order_relaxed) ? 1.f : 0.f);
   lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
-  lights[QUANT_LIGHT].setBrightness(quantize ? 1.f : 0.f);
+  lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
 }
 
 void Iris::onAdd(const AddEvent& e) {
@@ -347,4 +347,38 @@ void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height
   if (pixels) *pixels = snapshotPreview;
   if (width) *width = previewWidth;
   if (height) *height = previewHeight;
+}
+
+void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const {
+  if (!samples) return;
+  sampleCount = std::max(sampleCount, 2);
+  samples->resize(size_t(sampleCount));
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  if (!snapshotTable.valid()) {
+    std::fill(samples->begin(), samples->end(), 0.f);
+    return;
+  }
+  scan = clamp(scan, 0.f, 1.f);
+  for (int i = 0; i < sampleCount; ++i) {
+    (*samples)[size_t(i)] = snapshotTable.sample(float(i) / float(sampleCount - 1), scan);
+  }
+}
+
+float IrisFreqQuantity::getDisplayValue() {
+  return irisBaseFrequencyFromKnob(getValue());
+}
+
+void IrisFreqQuantity::setDisplayValue(float displayValue) {
+  setImmediateValue(irisKnobValueForFrequency(displayValue));
+}
+
+std::string IrisFreqQuantity::getDisplayValueString() {
+  const float hz = getDisplayValue();
+  if (hz >= 1000.f) {
+    return string::f("%.2f kHz", hz / 1000.f);
+  }
+  if (hz < 100.f) {
+    return string::f("%.2f Hz", hz);
+  }
+  return string::f("%.1f Hz", hz);
 }
