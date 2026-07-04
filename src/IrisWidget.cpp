@@ -121,12 +121,11 @@ struct IrisWaveformPreview final : TransparentWidget {
   explicit IrisWaveformPreview(Iris* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    const float labelWidth = 18.f;
-    const float top = 5.f;
-    const float bottom = box.size.y - 5.f;
+    const float top = 2.f;
+    const float bottom = box.size.y - 2.f;
     const float center = 0.5f * (top + bottom);
-    const float left = labelWidth;
-    const float right = box.size.x - 5.f;
+    const float left = 2.f;
+    const float right = box.size.x - 2.f;
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.f;
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
@@ -138,12 +137,8 @@ struct IrisWaveformPreview final : TransparentWidget {
     }
 
     nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, left, top);
-    nvgLineTo(args.vg, right, top);
     nvgMoveTo(args.vg, left, center);
     nvgLineTo(args.vg, right, center);
-    nvgMoveTo(args.vg, left, bottom);
-    nvgLineTo(args.vg, right, bottom);
     nvgStrokeWidth(args.vg, 0.6f);
     nvgStrokeColor(args.vg, nvgRGBA(120, 132, 142, 70));
     nvgStroke(args.vg);
@@ -157,7 +152,7 @@ struct IrisWaveformPreview final : TransparentWidget {
         else nvgLineTo(args.vg, x, y);
       }
       nvgSave(args.vg);
-      nvgScissor(args.vg, left, top, right - left, center - top);
+      nvgScissor(args.vg, 0.f, 0.f, box.size.x, center);
       nvgStrokeWidth(args.vg, 1.45f);
       nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 245));
       nvgStroke(args.vg);
@@ -171,21 +166,11 @@ struct IrisWaveformPreview final : TransparentWidget {
         else nvgLineTo(args.vg, x, y);
       }
       nvgSave(args.vg);
-      nvgScissor(args.vg, left, center, right - left, bottom - center);
+      nvgScissor(args.vg, 0.f, center, box.size.x, box.size.y - center);
       nvgStrokeWidth(args.vg, 1.45f);
       nvgStrokeColor(args.vg, nvgRGBA(122, 92, 255, 245));
       nvgStroke(args.vg);
       nvgRestore(args.vg);
-    }
-
-    if (APP && APP->window && APP->window->uiFont) {
-      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-      nvgFontSize(args.vg, 7.5f);
-      nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-      nvgFillColor(args.vg, nvgRGBA(205, 214, 220, 185));
-      nvgText(args.vg, 3.f, top, "+5", nullptr);
-      nvgText(args.vg, 3.f, center, "0", nullptr);
-      nvgText(args.vg, 3.f, bottom, "-5", nullptr);
     }
   }
 };
@@ -233,7 +218,7 @@ struct IrisWidget final : ModuleWidget {
     waveformPreview->box.size = mm2px(waveformRectMm.size);
     addChild(waveformPreview);
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
-      waveformRectMm, visual_assets::PreviewFrameTint::Purple));
+      waveformRectMm, visual_assets::PreviewFrameTint::Cyan));
 
     auto anchor = [&](const char* id, const Vec& fallbackMm) {
       Vec posMm = fallbackMm;
@@ -247,9 +232,9 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+    addParam(createParamCentered<Eclipse2Knob>(
       mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+    addParam(createParamCentered<Eclipse2Knob>(
       mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM));
     SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
       mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
