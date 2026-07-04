@@ -9,10 +9,34 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs18" />
+     id="defs18">
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient500"
+       gradientUnits="userSpaceOnUse"
+       x1="5355.9189"
+       y1="1516.2338"
+       x2="6904.7725"
+       y2="1512.3004"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-3059.0803,-888.31151)" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
+  </defs>
   <sodipodi:namedview
      id="namedview18"
      pagecolor="#ffffff"
@@ -24,76 +48,20 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193417"
-     inkscape:cx="88.66048"
-     inkscape:cy="218.86118"
+     inkscape:cx="84.527124"
+     inkscape:cy="213.90116"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg18"
+     inkscape:current-layer="g18"
      showgrid="false" />
   <rect
      width="6096"
      height="12850"
      fill="#090b0f"
      id="rect1" />
-  <rect
-     x="120"
-     y="120"
-     width="5856"
-     height="12610"
-     rx="90"
-     fill="#11151a"
-     stroke="#39414a"
-     stroke-width="24"
-     id="rect2" />
-  <path
-     d="M300 1040 H5796"
-     stroke="#19c7d4"
-     stroke-width="28"
-     id="path2" />
-  <path
-     d="M300 1068 H5796"
-     stroke="#b54bc8"
-     stroke-width="12"
-     id="path3" />
-  <text
-     x="3048"
-     y="760"
-     fill="#f3f6f8"
-     font-family="sans-serif"
-     font-size="510"
-     text-anchor="middle"
-     id="text3">IRIS</text>
-  <text
-     x="3048"
-     y="1010"
-     fill="#8e9ba6"
-     font-family="sans-serif"
-     font-size="170"
-     text-anchor="middle"
-     id="text4">IMAGE WAVETABLE OSCILLATOR</text>
-  <rect
-     x="430"
-     y="1320"
-     width="5236"
-     height="2590"
-     rx="55"
-     fill="#05070a"
-     stroke="#53616e"
-     stroke-width="24"
-     id="rect4" />
-  <rect
-     x="430"
-     y="4200"
-     width="5236"
-     height="1800"
-     rx="55"
-     fill="#05070a"
-     stroke="#53616e"
-     stroke-width="24"
-     id="rect_wave_preview" />
   <rect
      x="3193.4043"
      y="10484.675"
@@ -109,18 +77,20 @@
      style="display:inline">
     <rect
        id="IRIS_DISPLAY"
-       x="430"
-       y="1320"
-       width="5236"
-       height="2590"
-       rx="55" />
+       x="96.52713"
+       y="931.90002"
+       width="5902.9458"
+       height="3447.2776"
+       rx="0"
+       style="stroke-width:1.23709" />
     <rect
        id="IRIS_WAVE_PREVIEW"
-       x="430"
-       y="4200"
-       width="5236"
+       x="96.52713"
+       y="4479.1777"
+       width="5902.9458"
        height="1800"
-       rx="55" />
+       rx="0"
+       style="stroke-width:1.01782" />
     <circle
        id="IRIS_COARSE_PARAM"
        cx="1350"
@@ -243,5 +213,25 @@
        y="11569.983"
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INV</text>
+    <text
+       id="reworked_module_title_text"
+       x="3037.1521"
+       y="447.23389"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         style="fill:url(#linearGradient500)"
+         x="3037.1521"
+         y="447.23389">Iris</tspan></text>
+    <text
+       x="3048"
+       y="838.99988"
+       fill="#8e9ba6"
+       font-family="sans-serif"
+       font-size="170"
+       text-anchor="middle"
+       id="text4"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:170px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#8e9ba6">IMAGE WAVETABLE OSCILLATOR</text>
   </g>
 </svg>
