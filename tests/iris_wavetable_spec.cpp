@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -154,6 +155,28 @@ int main() {
   check("factory table ends with square",
         std::fabs(factory.sample(0.125f, 1.f) - 1.f) < 1e-5f);
 
-  std::cout << "Summary: " << (33 - failures) << "/33 passed\n";
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  check("non-finite phase is contained", std::isfinite(factory.sample(nan, 0.5f)));
+  check("non-finite scan is contained", std::isfinite(factory.sample(0.25f, nan)));
+  iris::WavetableOscillator guardedOscillator;
+  guardedOscillator.phase = nan;
+  const float guardedOut = guardedOscillator.process(factory, nan, nan, nan);
+  check("non-finite oscillator state is contained",
+        std::isfinite(guardedOut) && std::isfinite(guardedOscillator.phase));
+  guardedOscillator.reset(nan);
+  check("non-finite reset phase is contained", guardedOscillator.phase == 0.f);
+
+  iris::ImageWavetable shortStride = factory;
+  shortStride.stride = shortStride.frameSize;
+  shortStride.samples.resize(size_t(shortStride.rowCount) * size_t(shortStride.stride));
+  check("table rejects stride without wrap sample", !shortStride.valid());
+
+  iris::ImageWavetable nonFiniteTable = factory;
+  nonFiniteTable.samples[10] = nan;
+  check("binary writer rejects non-finite samples",
+        !iris::saveBinaryTable(binaryPath, nonFiniteTable, &ioError));
+  std::remove(binaryPath.c_str());
+
+  std::cout << "Summary: " << (39 - failures) << "/39 passed\n";
   return failures == 0 ? 0 : 1;
 }

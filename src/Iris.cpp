@@ -1,6 +1,7 @@
 #include "Iris.hpp"
 
 #include <chrono>
+#include <new>
 
 namespace {
 
@@ -149,16 +150,28 @@ void Iris::workerLoop() {
       requestPending = false;
     }
 
-    iris::ImageWavetable* built = new iris::ImageWavetable;
+    iris::ImageWavetable* built = nullptr;
     std::string error;
     bool ok = false;
-    if (request.type == REQUEST_DEFAULT) {
-      *built = iris::makeDefaultTable();
-      ok = true;
-    } else if (request.type == REQUEST_EMBEDDED) {
-      ok = iris::loadBinaryTable(request.path, built, &error);
-    } else {
-      ok = iris::importImageFile(request.path, request.settings, built, &error);
+    try {
+      built = new iris::ImageWavetable;
+      if (request.type == REQUEST_DEFAULT) {
+        *built = iris::makeDefaultTable();
+        ok = true;
+      } else if (request.type == REQUEST_EMBEDDED) {
+        ok = iris::loadBinaryTable(request.path, built, &error);
+      } else {
+        ok = iris::importImageFile(request.path, request.settings, built, &error);
+      }
+    } catch (const std::bad_alloc&) {
+      error = "Image worker allocation failed";
+      ok = false;
+    } catch (const std::exception&) {
+      error = "Image worker exception";
+      ok = false;
+    } catch (...) {
+      error = "Unexpected image worker failure";
+      ok = false;
     }
 
     {
@@ -169,15 +182,31 @@ void Iris::workerLoop() {
       }
     }
     if (ok) {
-      publishBuiltTable(built, request.type == REQUEST_EMBEDDED);
-    } else {
+      try {
+        publishBuiltTable(built, request.type == REQUEST_EMBEDDED);
+        built = nullptr;
+      } catch (const std::bad_alloc&) {
+        error = "Table publication allocation failed";
+        ok = false;
+      } catch (const std::exception&) {
+        error = "Table publication exception";
+        ok = false;
+      } catch (...) {
+        error = "Unexpected table publication failure";
+        ok = false;
+      }
+    }
+    if (!ok) {
       delete built;
+      built = nullptr;
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
         lastError = error;
       }
       loading.store(false, std::memory_order_release);
       loadFailed.store(true, std::memory_order_release);
+    } else {
+      built = nullptr;
     }
   }
 }
@@ -194,23 +223,34 @@ void Iris::process(const ProcessArgs& args) {
   const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
   outputs[OUT_OUTPUT].setChannels(channels);
   outputs[INV_OUTPUT].setChannels(channels);
-  float coarsePitch =
-    kIrisMinPitchFromC4 + clamp(params[COARSE_PARAM].getValue(), 0.f, 1.f) * kIrisCoarseOctaveSpan;
+  const float coarseParam = params[COARSE_PARAM].getValue();
+  float coarsePitch = kIrisMinPitchFromC4 +
+    (std::isfinite(coarseParam) ? clamp(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4)) *
+      kIrisCoarseOctaveSpan;
   const bool coarseStepped = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
   if (coarseStepped) coarsePitch = std::round(coarsePitch);
-  const float fine = params[FINE_PARAM].getValue() / 1200.f;
-  const float scanKnob = params[SCAN_PARAM].getValue();
-  const float scanAtten = params[SCAN_ATTEN_PARAM].getValue();
-  const float fmAtten = params[FM_ATTEN_PARAM].getValue();
+  const float fineParam = params[FINE_PARAM].getValue();
+  const float scanParam = params[SCAN_PARAM].getValue();
+  const float scanAttenParam = params[SCAN_ATTEN_PARAM].getValue();
+  const float fmAttenParam = params[FM_ATTEN_PARAM].getValue();
+  const float fine = std::isfinite(fineParam) ? fineParam / 1200.f : 0.f;
+  const float scanKnob = std::isfinite(scanParam) ? clamp(scanParam, 0.f, 1.f) : 0.f;
+  const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
+  const float fmAtten = std::isfinite(fmAttenParam) ? clamp(fmAttenParam, -1.f, 1.f) : 0.f;
   float scanDisplay = scanKnob;
   for (int channel = 0; channel < channels; ++channel) {
-    float pitch = coarsePitch + fine + inputs[V_OCT_INPUT].getPolyVoltage(channel) +
-                  inputs[FM_INPUT].getPolyVoltage(channel) * fmAtten;
+    const float vOctInput = inputs[V_OCT_INPUT].getPolyVoltage(channel);
+    const float fmInput = inputs[FM_INPUT].getPolyVoltage(channel);
+    float pitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f) +
+                  (std::isfinite(fmInput) ? fmInput : 0.f) * fmAtten;
+    pitch = clamp(pitch, -24.f, 16.f);
     const float frequency = clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(pitch), 0.f, args.sampleRate * 0.45f);
-    float scan = scanKnob + inputs[SCAN_INPUT].getPolyVoltage(channel) * 0.1f * scanAtten;
+    const float scanInput = inputs[SCAN_INPUT].getPolyVoltage(channel);
+    float scan = scanKnob + (std::isfinite(scanInput) ? scanInput : 0.f) * 0.1f * scanAtten;
     scan = clamp(scan, 0.f, 1.f);
     if (channel == 0) scanDisplay = scan;
-    if (voices[size_t(channel)].sync.process(inputs[SYNC_INPUT].getPolyVoltage(channel))) {
+    const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
+    if (voices[size_t(channel)].sync.process(std::isfinite(syncInput) ? syncInput : 0.f)) {
       voices[size_t(channel)].oscillator.reset();
     }
     const float wave = table ? voices[size_t(channel)].oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;

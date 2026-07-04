@@ -36,6 +36,29 @@
          offset="1"
          id="stop23" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient20"
+       id="linearGradient300"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.3902179,0,0,1.3902178,-5698.4964,-5277.5488)"
+       x1="5486.8237"
+       y1="12735.478"
+       x2="7088.8071"
+       y2="12738.298"
+       spreadMethod="pad" />
+    <linearGradient
+       id="linearGradient20"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#795cff;stop-opacity:1;"
+         offset="0"
+         id="stop20" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop21" />
+    </linearGradient>
   </defs>
   <sodipodi:namedview
      id="namedview18"
@@ -48,8 +71,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193417"
-     inkscape:cx="84.527124"
-     inkscape:cy="213.90116"
+     inkscape:cx="90.313824"
+     inkscape:cy="294.5016"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -82,7 +105,7 @@
        width="5902.9458"
        height="3447.2776"
        rx="0"
-       style="stroke-width:1.23709" />
+       style="stroke-width:23.30000052;stroke:#5841bf;stroke-opacity:1;stroke-dasharray:none" />
     <rect
        id="IRIS_WAVE_PREVIEW"
        x="96.52713"
@@ -90,7 +113,7 @@
        width="5902.9458"
        height="1800"
        rx="0"
-       style="stroke-width:1.01782" />
+       style="stroke-width:23.30000052;stroke:#1ccad8;stroke-opacity:1;stroke-dasharray:none" />
     <circle
        id="IRIS_COARSE_PARAM"
        cx="1350"
@@ -233,5 +256,12 @@
        text-anchor="middle"
        id="text4"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:170px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#8e9ba6">IMAGE WAVETABLE OSCILLATOR</text>
+    <text
+       id="reworked_LEVIATHAN_LOGO"
+       x="3046.0955"
+       y="12482.233"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+       xml:space="preserve"
+       inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
   </g>
 </svg>

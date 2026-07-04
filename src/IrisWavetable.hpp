@@ -67,7 +67,7 @@ struct ImageWavetable {
   float globalRms = 0.f;
 
   bool valid() const {
-    return frameSize >= 2 && rowCount >= 1 && stride >= frameSize &&
+    return frameSize >= 2 && rowCount >= 1 && stride >= frameSize + 1 &&
            samples.size() == size_t(rowCount) * size_t(stride);
   }
 
@@ -75,6 +75,8 @@ struct ImageWavetable {
     if (!valid()) {
       return 0.f;
     }
+    if (!std::isfinite(phase)) phase = 0.f;
+    if (!std::isfinite(scan)) scan = 0.f;
     phase -= std::floor(phase);
     scan = std::max(0.f, std::min(scan, 1.f));
     const float x = phase * float(frameSize);
@@ -91,7 +93,8 @@ struct ImageWavetable {
     const size_t base1 = size_t(row1) * size_t(stride) + size_t(x0);
     const float a = samples[base0] + (samples[base0 + 1u] - samples[base0]) * xFrac;
     const float b = samples[base1] + (samples[base1 + 1u] - samples[base1]) * xFrac;
-    return a + (b - a) * rowFrac;
+    const float value = a + (b - a) * rowFrac;
+    return std::isfinite(value) ? value : 0.f;
   }
 };
 
@@ -99,18 +102,24 @@ struct WavetableOscillator {
   float phase = 0.f;
 
   void reset(float newPhase = 0.f) {
+    if (!std::isfinite(newPhase)) newPhase = 0.f;
     phase = newPhase - std::floor(newPhase);
   }
 
   float process(const ImageWavetable& table, float frequency, float sampleTime, float scan) {
+    if (!std::isfinite(phase)) phase = 0.f;
+    if (!std::isfinite(frequency) || frequency < 0.f) frequency = 0.f;
+    if (!std::isfinite(sampleTime) || sampleTime < 0.f) sampleTime = 0.f;
     const float out = table.sample(phase, scan);
-    phase += std::max(frequency, 0.f) * sampleTime;
+    phase += frequency * sampleTime;
+    if (!std::isfinite(phase)) phase = 0.f;
     phase -= std::floor(phase);
     return std::isfinite(out) ? out : 0.f;
   }
 };
 
 inline float clamp01(float x) {
+  if (!std::isfinite(x)) return 0.f;
   return std::max(0.f, std::min(x, 1.f));
 }
 
@@ -163,10 +172,11 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
     return false;
   }
   ConversionSettings settings = requested;
-  settings.frameSize = std::max(2, settings.frameSize);
+  settings.frameSize = std::max(2, std::min(settings.frameSize, 16384));
   settings.rows = std::max(2, std::min(settings.rows, kMaxRows));
-  settings.contrast = std::max(settings.contrast, 0.f);
-  settings.gamma = std::max(settings.gamma, 0.01f);
+  settings.contrast = std::isfinite(settings.contrast) ? std::max(settings.contrast, 0.f) : 1.f;
+  settings.brightness = std::isfinite(settings.brightness) ? settings.brightness : 0.f;
+  settings.gamma = std::isfinite(settings.gamma) ? std::max(settings.gamma, 0.01f) : 1.f;
 
   std::vector<std::vector<float> > rows(size_t(settings.rows),
                                         std::vector<float>(size_t(settings.frameSize), 0.f));

@@ -19,6 +19,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <memory>
 
 namespace iris {
 
@@ -37,6 +38,14 @@ struct BinaryHeader {
 
 const char kMagic[8] = {'I', 'R', 'I', 'S', 'W', 'T', '0', '1'};
 
+bool samplesAreFinite(const ImageWavetable& table) {
+  if (!table.valid()) return false;
+  for (size_t i = 0; i < table.samples.size(); ++i) {
+    if (!std::isfinite(table.samples[i])) return false;
+  }
+  return true;
+}
+
 } // namespace
 
 bool importImageFile(const std::string& path, const ConversionSettings& settings,
@@ -44,7 +53,8 @@ bool importImageFile(const std::string& path, const ConversionSettings& settings
   int width = 0;
   int height = 0;
   int channels = 0;
-  stbi_uc* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
+  std::unique_ptr<stbi_uc, void (*)(void*)> pixels(
+    stbi_load(path.c_str(), &width, &height, &channels, 4), stbi_image_free);
   if (!pixels) {
     if (error) {
       const char* reason = stbi_failure_reason();
@@ -53,8 +63,7 @@ bool importImageFile(const std::string& path, const ConversionSettings& settings
     return false;
   }
   ImageWavetable table;
-  const bool ok = buildWavetableFromRgba(pixels, width, height, channels, settings, &table, error);
-  stbi_image_free(pixels);
+  const bool ok = buildWavetableFromRgba(pixels.get(), width, height, channels, settings, &table, error);
   if (!ok) {
     return false;
   }
@@ -66,7 +75,7 @@ bool importImageFile(const std::string& path, const ConversionSettings& settings
 }
 
 bool saveBinaryTable(const std::string& path, const ImageWavetable& table, std::string* error) {
-  if (!table.valid()) {
+  if (!samplesAreFinite(table)) {
     if (error) *error = "Invalid wavetable";
     return false;
   }
@@ -127,7 +136,7 @@ bool loadBinaryTable(const std::string& path, ImageWavetable* out, std::string* 
   table.sourceChannels = int(header.sourceChannels);
   table.samples.resize(sampleCount);
   stream.read(reinterpret_cast<char*>(table.samples.data()), std::streamsize(sampleCount * sizeof(float)));
-  if (!stream || !table.valid()) {
+  if (!stream || !samplesAreFinite(table)) {
     if (error) *error = "Embedded wavetable data is incomplete";
     return false;
   }

@@ -213,12 +213,14 @@ struct IrisWidget final : ModuleWidget {
 
     math::Rect waveformRectMm(Vec(4.3f, 42.f), Vec(52.36f, 18.f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_WAVE_PREVIEW", &waveformRectMm);
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(waveformRectMm));
+    math::Rect waveformContentRectMm = waveformRectMm;
+    waveformContentRectMm.pos = waveformContentRectMm.pos.plus(Vec(0.2f, 0.2f));
+    waveformContentRectMm.size = waveformContentRectMm.size.minus(Vec(0.4f, 0.4f));
     IrisWaveformPreview* waveformPreview = new IrisWaveformPreview(module);
-    waveformPreview->box.pos = mm2px(waveformRectMm.pos);
-    waveformPreview->box.size = mm2px(waveformRectMm.size);
+    waveformPreview->box.pos = mm2px(waveformContentRectMm.pos);
+    waveformPreview->box.size = mm2px(waveformContentRectMm.size);
     addChild(waveformPreview);
-    addChild(visual_assets::createPreviewFrameEnhancementWidget(
-      waveformRectMm, visual_assets::PreviewFrameTint::Cyan));
 
     auto anchor = [&](const char* id, const Vec& fallbackMm) {
       Vec posMm = fallbackMm;
