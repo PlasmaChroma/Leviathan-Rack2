@@ -206,7 +206,7 @@ struct IrisWidget final : ModuleWidget {
     menu->addChild(createMenuItem("Load image...", "", [irisModule]() { chooseIrisImage(irisModule); }));
     menu->addChild(createMenuItem("Reload image", "", [irisModule]() { irisModule->requestReload(); },
                                   irisModule->sourcePath().empty()));
-    menu->addChild(createMenuItem("Clear image", "", [irisModule]() { irisModule->clearToSine(); }));
+    menu->addChild(createMenuItem("Clear image", "", [irisModule]() { irisModule->clearToDefault(); }));
     menu->addChild(new MenuSeparator());
     addEnumMenu(menu, "Normalize", irisModule, &irisModule->conversionSettings.normalizeMode,
       {{"Balanced", iris::NORMALIZE_BALANCED}, {"Global", iris::NORMALIZE_GLOBAL},

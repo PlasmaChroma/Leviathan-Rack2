@@ -315,19 +315,29 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
   return true;
 }
 
-inline ImageWavetable makeSineTable() {
+inline ImageWavetable makeDefaultTable() {
   ImageWavetable table;
-  table.rowCount = 2;
+  table.rowCount = kDefaultRows;
   table.samples.resize(size_t(table.rowCount) * size_t(table.stride));
   for (int row = 0; row < table.rowCount; ++row) {
+    const float scan = float(row) / float(table.rowCount - 1);
     const size_t base = size_t(row) * size_t(table.stride);
     for (int x = 0; x < table.frameSize; ++x) {
-      table.samples[base + size_t(x)] = std::sin(6.28318530717958647692f * float(x) / float(table.frameSize));
+      const float phase = float(x) / float(table.frameSize);
+      const float sine = std::sin(6.28318530717958647692f * phase);
+      const float triangle =
+        phase < 0.25f ? 4.f * phase :
+        phase < 0.75f ? 2.f - 4.f * phase :
+                        4.f * phase - 4.f;
+      const float saw = phase < 0.5f ? 2.f * phase : 2.f * phase - 2.f;
+      table.samples[base + size_t(x)] =
+        scan <= 0.5f ? sine + (triangle - sine) * (scan * 2.f)
+                     : triangle + (saw - triangle) * ((scan - 0.5f) * 2.f);
     }
     table.samples[base + size_t(table.frameSize)] = table.samples[base];
   }
   updateStatistics(&table);
-  table.sourceName = "Sine";
+  table.sourceName = "Sine / Triangle / Saw";
   return table;
 }
 

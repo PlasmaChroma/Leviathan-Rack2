@@ -58,7 +58,7 @@ struct Iris final : Module {
 
   void requestImageLoad(const std::string& path);
   void requestReload();
-  void clearToSine();
+  void clearToDefault();
   void requestRebuild();
   std::string sourceName() const;
   std::string sourcePath() const;
@@ -79,7 +79,7 @@ private:
     REQUEST_IMAGE = 1,
     REQUEST_EMBEDDED = 2,
     REQUEST_REBUILD = 3,
-    REQUEST_SINE = 4,
+    REQUEST_DEFAULT = 4,
   };
 
   struct WorkerRequest {

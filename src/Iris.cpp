@@ -39,7 +39,7 @@ Iris::Iris() {
   configOutput(OUT_OUTPUT, "Wavetable");
   configOutput(INV_OUTPUT, "Inverted wavetable");
 
-  activeTable = new iris::ImageWavetable(iris::makeSineTable());
+  activeTable = new iris::ImageWavetable(iris::makeDefaultTable());
   snapshotTable = *activeTable;
   buildPreview(snapshotTable, &snapshotPreview);
   startWorker();
@@ -104,9 +104,9 @@ void Iris::requestRebuild() {
   submitRequest(request);
 }
 
-void Iris::clearToSine() {
+void Iris::clearToDefault() {
   WorkerRequest request;
-  request.type = REQUEST_SINE;
+  request.type = REQUEST_DEFAULT;
   request.settings = conversionSettings;
   submitRequest(request);
 }
@@ -152,8 +152,8 @@ void Iris::workerLoop() {
     iris::ImageWavetable* built = new iris::ImageWavetable;
     std::string error;
     bool ok = false;
-    if (request.type == REQUEST_SINE) {
-      *built = iris::makeSineTable();
+    if (request.type == REQUEST_DEFAULT) {
+      *built = iris::makeDefaultTable();
       ok = true;
     } else if (request.type == REQUEST_EMBEDDED) {
       ok = iris::loadBinaryTable(request.path, built, &error);
