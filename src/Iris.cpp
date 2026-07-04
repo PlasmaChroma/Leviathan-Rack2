@@ -286,7 +286,7 @@ void Iris::dataFromJson(json_t* root) {
   json_t* conversion = json_object_get(root, "conversion");
   if (conversion) {
     conversionSettings.normalizeMode = iris::NormalizeMode(clamp(
-      jsonIntegerOr(conversion, "normalizeMode", iris::NORMALIZE_GLOBAL), 0, 2));
+      jsonIntegerOr(conversion, "normalizeMode", iris::NORMALIZE_BALANCED), 0, 3));
     conversionSettings.rowOrder = iris::RowOrder(clamp(
       jsonIntegerOr(conversion, "rowOrder", iris::ROW_TOP_TO_BOTTOM), 0, 1));
     conversionSettings.trimMode = iris::TrimMode(clamp(

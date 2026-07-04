@@ -209,7 +209,8 @@ struct IrisWidget final : ModuleWidget {
     menu->addChild(createMenuItem("Clear image", "", [irisModule]() { irisModule->clearToSine(); }));
     menu->addChild(new MenuSeparator());
     addEnumMenu(menu, "Normalize", irisModule, &irisModule->conversionSettings.normalizeMode,
-      {{"Off", iris::NORMALIZE_NONE}, {"Global", iris::NORMALIZE_GLOBAL}, {"Per row", iris::NORMALIZE_PER_ROW}});
+      {{"Balanced", iris::NORMALIZE_BALANCED}, {"Global", iris::NORMALIZE_GLOBAL},
+       {"Per row", iris::NORMALIZE_PER_ROW}, {"Off", iris::NORMALIZE_NONE}});
     addEnumMenu(menu, "Row order", irisModule, &irisModule->conversionSettings.rowOrder,
       {{"Top to bottom", iris::ROW_TOP_TO_BOTTOM}, {"Bottom to top", iris::ROW_BOTTOM_TO_TOP}});
     addEnumMenu(menu, "Trim flat rows", irisModule, &irisModule->conversionSettings.trimMode,

@@ -124,6 +124,25 @@ int main() {
         std::fabs(restored.samples[3] - horizontal.samples[3]) < 1e-7f);
   std::remove(binaryPath.c_str());
 
-  std::cout << "Summary: " << (25 - failures) << "/25 passed\n";
+  settings.frameSize = 5;
+  settings.rows = 2;
+  settings.trimMode = iris::TRIM_OFF;
+  settings.normalizeMode = iris::NORMALIZE_BALANCED;
+  pixels.resize(5u * 2u * 4u, 255u);
+  const uint8_t levels[5] = {0u, 32u, 96u, 160u, 255u};
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 5; ++x) {
+      const size_t base = size_t(y * 5 + x) * 4u;
+      pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = levels[x];
+    }
+  }
+  iris::ImageWavetable balanced;
+  check("balanced normalization converts",
+        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &balanced));
+  check("balanced normalization maps median to zero", std::fabs(balanced.samples[2]) < 1e-5f);
+  check("balanced normalization retains both polarities",
+        balanced.samples[0] < -0.9f && balanced.samples[4] > 0.9f);
+
+  std::cout << "Summary: " << (28 - failures) << "/28 passed\n";
   return failures == 0 ? 0 : 1;
 }

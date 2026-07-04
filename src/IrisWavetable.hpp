@@ -16,6 +16,7 @@ enum NormalizeMode {
   NORMALIZE_NONE = 0,
   NORMALIZE_GLOBAL = 1,
   NORMALIZE_PER_ROW = 2,
+  NORMALIZE_BALANCED = 3,
 };
 
 enum RowOrder {
@@ -40,7 +41,7 @@ enum SeamMode {
 struct ConversionSettings {
   int frameSize = kFrameSize;
   int rows = kDefaultRows;
-  NormalizeMode normalizeMode = NORMALIZE_GLOBAL;
+  NormalizeMode normalizeMode = NORMALIZE_BALANCED;
   RowOrder rowOrder = ROW_TOP_TO_BOTTOM;
   TrimMode trimMode = TRIM_OFF;
   SeamMode seamMode = SEAM_OFF;
@@ -194,7 +195,34 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
     }
   }
 
-  if (settings.normalizeMode == NORMALIZE_GLOBAL) {
+  if (settings.normalizeMode == NORMALIZE_BALANCED) {
+    std::vector<float> distribution;
+    distribution.reserve(size_t(settings.rows) * size_t(settings.frameSize));
+    for (size_t row = 0; row < rows.size(); ++row) {
+      distribution.insert(distribution.end(), rows[row].begin(), rows[row].end());
+    }
+    std::sort(distribution.begin(), distribution.end());
+    const auto percentile = [&](float p) {
+      const float position = p * float(distribution.size() - 1u);
+      const size_t lower = size_t(position);
+      const size_t upper = std::min(lower + 1u, distribution.size() - 1u);
+      const float fraction = position - float(lower);
+      return distribution[lower] + (distribution[upper] - distribution[lower]) * fraction;
+    };
+    const float low = percentile(0.01f);
+    const float midpoint = percentile(0.50f);
+    const float high = percentile(0.99f);
+    if (high - low > 1e-6f) {
+      const float negativeRange = std::max(midpoint - low, 1e-6f);
+      const float positiveRange = std::max(high - midpoint, 1e-6f);
+      for (size_t row = 0; row < rows.size(); ++row) {
+        for (size_t x = 0; x < rows[row].size(); ++x) {
+          const float centered = rows[row][x] - midpoint;
+          rows[row][x] = centered < 0.f ? centered / negativeRange : centered / positiveRange;
+        }
+      }
+    }
+  } else if (settings.normalizeMode == NORMALIZE_GLOBAL) {
     float minValue = rows[0][0];
     float maxValue = rows[0][0];
     for (size_t row = 0; row < rows.size(); ++row) {
