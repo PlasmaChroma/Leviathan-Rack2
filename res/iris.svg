@@ -72,48 +72,106 @@
      inkscape:document-units="mm"
      inkscape:zoom="2.4193417"
      inkscape:cx="13.846742"
-     inkscape:cy="258.5414"
+     inkscape:cy="225.47456"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g18"
+     inkscape:current-layer="svg18"
      showgrid="false" />
   <rect
      width="6096"
      height="12850"
      fill="#090b0f"
      id="rect1" />
-  <rect
-     x="3193.4043"
-     y="10484.675"
-     width="2552.5957"
-     height="1295.3621"
-     rx="70"
-     fill="#0a1115"
-     stroke="#1a7782"
-     stroke-width="18"
-     id="rect18" />
+  <g
+     id="iris_section_fields"
+     style="display:inline">
+    <rect
+       x="76"
+       y="900"
+       width="5944"
+       height="5408"
+       rx="126"
+       ry="126"
+       id="iris_preview_field"
+       style="display:inline;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
+    <path
+       d="M 235 6808 H 5861 C 5980 6808 6040 6868 6040 6988 V 10254 C 6040 10374 5980 10434 5861 10434 H 3280 C 3200 10434 3160 10474 3160 10554 V 11860 C 3160 11940 3120 11980 3040 11980 H 235 C 116 11980 56 11920 56 11800 V 6988 C 56 6868 116 6808 235 6808 Z"
+       id="iris_input_field"
+       style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+    <rect
+       x="3190"
+       y="10470"
+       width="2812"
+       height="1510"
+       rx="126"
+       ry="126"
+       id="iris_output_field"
+       style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
+    <path
+       d="M 1350 7640 H 4094"
+       id="iris_freq_guide"
+       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path
+       d="M 1313 9288 H 4054"
+       id="iris_scan_guide"
+       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path
+       d="M 1148 11097 H 2270"
+       id="iris_fm_guide"
+       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path
+       d="M 3796 10960 H 5246"
+       id="iris_output_guide"
+       style="display:inline;opacity:0.72;fill:none;stroke:#1cccd9;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <circle
+       cx="1350"
+       cy="7640"
+       r="610"
+       id="iris_coarse_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:58;stroke-opacity:0.12" />
+    <circle
+       cx="1313"
+       cy="9288"
+       r="610"
+       id="iris_scan_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:58;stroke-opacity:0.12" />
+    <circle
+       cx="4094"
+       cy="7673"
+       r="374"
+       id="iris_voct_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
+    <circle
+       cx="5218"
+       cy="7673"
+       r="374"
+       id="iris_sync_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
+    <circle
+       cx="4054"
+       cy="9287"
+       r="374"
+       id="iris_scan_input_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
+    <circle
+       cx="3796"
+       cy="10960"
+       r="374"
+       id="iris_out_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.14" />
+    <circle
+       cx="5246"
+       cy="10960"
+       r="374"
+       id="iris_inv_ring"
+       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.14" />
+  </g>
   <g
      id="components"
      style="display:inline">
-    <rect
-       id="IRIS_DISPLAY"
-       x="96.52713"
-       y="931.90002"
-       width="5902.9458"
-       height="3447.2776"
-       rx="0"
-       style="stroke-width:23.30000052;stroke:#5841bf;stroke-opacity:1;stroke-dasharray:none" />
-    <rect
-       id="IRIS_WAVE_PREVIEW"
-       x="96.52713"
-       y="4479.1777"
-       width="5902.9458"
-       height="1800"
-       rx="0"
-       style="stroke-width:23.30000052;stroke:#1ccad8;stroke-opacity:1;stroke-dasharray:none" />
     <circle
        id="IRIS_COARSE_PARAM"
        cx="1350"
@@ -175,6 +233,22 @@
        cy="10960"
        r="260" />
   </g>
+  <rect
+     id="IRIS_DISPLAY"
+     x="96.52713"
+     y="931.90002"
+     width="5902.9458"
+     height="3447.2776"
+     rx="0"
+     style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+  <rect
+     id="IRIS_WAVE_PREVIEW"
+     x="96.52713"
+     y="4479.1777"
+     width="5902.9458"
+     height="1800"
+     rx="0"
+     style="display:inline;stroke:#1ccad8;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
   <g
      fill="#d8e0e6"
      font-family="sans-serif"
@@ -198,42 +272,34 @@
          transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
          style="display:inline">
         <path
-   style="fill:#4995ec"
-   d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
-   id="path149" />
-
+           style="fill:#4995ec"
+           d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+           id="path149" />
         <path
-   style="fill:#7a5cff"
-   d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
-   id="path151" />
-
-        
+           style="fill:#7a5cff"
+           d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+           id="path151" />
         <path
-   style="fill:#1cccd9"
-   d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
-   id="path155" />
-
+           style="fill:#1cccd9"
+           d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+           id="path155" />
       </g>
       <g
          id="branding_wave_right"
          transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
          style="display:inline">
         <path
-   style="fill:#4995ec"
-   d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
-   id="path158" />
-
+           style="fill:#4995ec"
+           d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+           id="path158" />
         <path
-   style="fill:#7a5cff"
-   d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
-   id="path160" />
-
-        
+           style="fill:#7a5cff"
+           d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+           id="path160" />
         <path
-   style="fill:#1cccd9"
-   d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
-   id="path164" />
-
+           style="fill:#1cccd9"
+           d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+           id="path164" />
       </g>
     </g>
     <text
