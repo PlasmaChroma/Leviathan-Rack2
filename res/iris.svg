@@ -115,7 +115,7 @@
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 1313 9288 H 4054"
+       d="M 2270 9288 H 5252"
        id="iris_scan_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
@@ -133,7 +133,7 @@
        id="iris_coarse_ring"
        style="display:inline;fill:none;stroke:#ffffff;stroke-width:58;stroke-opacity:0.12" />
     <circle
-       cx="1313"
+       cx="5252"
        cy="9288"
        r="610"
        id="iris_scan_ring"
@@ -151,7 +151,7 @@
        id="iris_sync_ring"
        style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
     <circle
-       cx="4054"
+       cx="2270"
        cy="9287"
        r="374"
        id="iris_scan_input_ring"
@@ -171,7 +171,7 @@
   </g>
   <g
      id="components"
-     style="display:inline">
+     style="display:none">
     <circle
        id="IRIS_COARSE_PARAM"
        cx="1350"
@@ -184,7 +184,7 @@
        r="330" />
     <circle
        id="IRIS_SCAN_PARAM"
-       cx="1312.5302"
+       cx="5251.916"
        cy="9287.7441"
        r="520" />
     <circle
@@ -194,12 +194,12 @@
        r="330" />
     <circle
        id="IRIS_SCAN_ATTEN_PARAM"
-       cx="2818.3403"
+       cx="3810"
        cy="9293.3975"
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
-       cx="5251.916"
+       cx="1350"
        cy="9202.2607"
        r="240" />
     <circle
@@ -214,7 +214,7 @@
        r="260" />
     <circle
        id="IRIS_SCAN_INPUT"
-       cx="4054.0715"
+       cx="2270.2317"
        cy="9287.1152"
        r="260" />
     <circle
@@ -303,7 +303,7 @@
       </g>
     </g>
     <text
-       x="1312.5302"
+       x="5251.916"
        y="8667.7441"
        id="text8">SCAN</text>
     <text
@@ -311,11 +311,11 @@
        y="10539.697"
        id="text9">FM</text>
     <text
-       x="2818.3403"
+       x="3810"
        y="8753.3975"
        id="text10">SCAN CV</text>
     <text
-       x="5251.916"
+       x="1350"
        y="8862.2607"
        id="text12">OCTAVE</text>
     <text
@@ -327,7 +327,7 @@
        y="10527.392"
        id="text14">FM</text>
     <text
-       x="4054.0715"
+       x="2270.2317"
        y="8717.1152"
        id="text15">SCAN</text>
     <text
