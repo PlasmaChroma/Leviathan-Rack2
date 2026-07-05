@@ -626,4 +626,30 @@ void submitUndertowMetrics(uint32_t instanceId,
   transport().submit("Undertow", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitIrisMetrics(uint32_t instanceId,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs) {
+  submitUiMetricSchema("Iris",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
+  char dataBuf[160];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                "}");
+  double ts = system::getTime();
+  transport().submit("Iris", instanceId, "ui", "metric", dataBuf, ts);
+}
+
 } // namespace debug_terminal

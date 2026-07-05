@@ -144,4 +144,9 @@ void submitUndertowMetrics(uint32_t instanceId,
                            TimingRangeUs stepUs,
                            TimingRangeUs drawUs);
 
+void submitIrisMetrics(uint32_t instanceId,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs);
+
 } // namespace debug_terminal

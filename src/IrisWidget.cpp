@@ -1,13 +1,19 @@
 #include "Iris.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
+#include <chrono>
 #include <cctype>
 #include <cstdlib>
 #include <osdialog.h>
+#include <unordered_map>
 
 namespace {
+
+constexpr double kIrisDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
+std::unordered_map<uint32_t, double> gIrisDebugTerminalLastSubmitSec;
 
 bool supportedImagePath(const std::string& path) {
   std::string extension = system::getExtension(path);
@@ -241,6 +247,11 @@ void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
 } // namespace
 
 struct IrisWidget final : ModuleWidget {
+  float uiStepUsEma = 0.f;
+  float uiDrawUsEma = 0.f;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+
   explicit IrisWidget(Iris* module) {
     setModule(module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/iris.svg");
@@ -306,6 +317,63 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_OUT_OUTPUT", Vec(19.f, 118.f))), module, Iris::OUT_OUTPUT));
     addOutput(createOutputCentered<Magitek2OutputJack>(
       mm2px(anchor("IRIS_INV_OUTPUT", Vec(41.96f, 118.f))), module, Iris::INV_OUTPUT));
+  }
+
+  void step() override {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    ModuleWidget::step();
+    if (measurePerf) {
+      const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
+      uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+      uiStepUsRange.add(stepUs);
+    }
+  }
+
+  void draw(const DrawArgs& args) override {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    ModuleWidget::draw(args);
+    Iris* irisModule = static_cast<Iris*>(module);
+    if (!irisModule) return;
+
+    if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+      char debugIdLabel[32];
+      std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", irisModule->debugInstanceId);
+      const float x = box.size.x - mm2px(0.9f);
+      const float y = mm2px(2.5f);
+      nvgSave(args.vg);
+      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+      nvgFontSize(args.vg, 6.8f);
+      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+      nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
+      nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
+      nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
+      nvgText(args.vg, x, y, debugIdLabel, nullptr);
+      nvgRestore(args.vg);
+    }
+
+    if (measurePerf) {
+      const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
+      uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+      uiDrawUsRange.add(drawUs);
+
+      const double nowSec = system::getTime();
+      double& lastSubmitSec = gIrisDebugTerminalLastSubmitSec[irisModule->debugInstanceId];
+      if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIrisDebugTerminalSubmitIntervalSec) {
+        lastSubmitSec = nowSec;
+        irisModule->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+        irisModule->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+        debug_terminal::submitIrisMetrics(
+          irisModule->debugInstanceId,
+          debug_terminal::consumeAudioProcessTiming(irisModule->perfAudioProcessMinNs,
+                                                    irisModule->perfAudioProcessMaxNs),
+          uiStepUsRange.consume(),
+          uiDrawUsRange.consume());
+      }
+    }
   }
 
   void onPathDrop(const event::PathDrop& e) override {
