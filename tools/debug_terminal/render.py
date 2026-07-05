@@ -369,7 +369,7 @@ def _read_key_nonblocking():
     return None
 
 
-def _keyboard_loop(stop_event, view_state):
+def _keyboard_loop(stop_event, view_state, render_event=None):
     if termios is None or tty is None or not sys.stdin.isatty():
         return
     fd = sys.stdin.fileno()
@@ -383,8 +383,12 @@ def _keyboard_loop(stop_event, view_state):
                 continue
             if key == KEY_QUIT:
                 stop_event.set()
+                if render_event is not None:
+                    render_event.set()
                 break
             view_state.handle_key(key)
+            if render_event is not None:
+                render_event.set()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
@@ -396,7 +400,8 @@ def run_live_renderer(state, host, port, refresh_hz, stop_event):
     console = Console()
     interval_sec = 1.0 / max(1.0, float(refresh_hz))
     view_state = ModuleViewState()
-    key_thread = threading.Thread(target=_keyboard_loop, args=(stop_event, view_state), daemon=True)
+    render_event = threading.Event()
+    key_thread = threading.Thread(target=_keyboard_loop, args=(stop_event, view_state, render_event), daemon=True)
     key_thread.start()
     with Live(
         console=console,
@@ -407,7 +412,8 @@ def run_live_renderer(state, host, port, refresh_hz, stop_event):
     ) as live:
         while not stop_event.is_set():
             live.update(build_table(state.snapshot(), host, port, view_state=view_state))
-            stop_event.wait(interval_sec)
+            render_event.wait(interval_sec)
+            render_event.clear()
 
 
 def run_plain_renderer(state, host, port, refresh_hz, stop_event):
