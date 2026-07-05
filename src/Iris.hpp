@@ -1,12 +1,12 @@
 #pragma once
 
+#include "DebugTerminalMetrics.hpp"
 #include "IrisIO.hpp"
 #include "plugin.hpp"
 
 #include <array>
 #include <atomic>
 #include <condition_variable>
-#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -93,11 +93,7 @@ struct Iris final : Module {
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};
-  std::atomic<uint64_t> perfAudioSampledCount {0};
-  std::atomic<uint64_t> perfAudioProcessNs {0};
-  std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
-  std::atomic<uint64_t> perfAudioProcessMaxNs {0};
-  uint32_t debugInstanceId = 0u;
+  debug_terminal::BaselineModuleMetrics debugMetrics;
 
 private:
   enum WorkerRequestType {

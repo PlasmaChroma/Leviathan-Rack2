@@ -1,17 +1,11 @@
 #include "Undertow.hpp"
 #include "UndertowShape.hpp"
-#include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
-#include <chrono>
-#include <unordered_map>
 
 namespace {
-
-constexpr double kUndertowDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
-std::unordered_map<uint32_t, double> gUndertowDebugTerminalLastSubmitSec;
 
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, const Vec& fallbackMm) {
   if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) {
@@ -260,10 +254,7 @@ struct UndertowShapePreviewWidget final : Widget {
 };
 
 struct UndertowWidget final : ModuleWidget {
-  float uiStepUsEma = 0.f;
-  float uiDrawUsEma = 0.f;
-  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
-  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
+  debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
@@ -380,60 +371,39 @@ struct UndertowWidget final : ModuleWidget {
 
   void step() override {
     const bool measurePerf = isDragonKingDebugEnabled();
-    const auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
     ModuleWidget::step();
     if (measurePerf) {
-      const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now() - stepStart).count()) * 0.001f;
-      uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
-      uiStepUsRange.add(stepUs);
+      debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
     }
   }
 
   void draw(const DrawArgs& args) override {
     const bool measurePerf = isDragonKingDebugEnabled();
-    const auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
     ModuleWidget::draw(args);
     auto* undertow = static_cast<Undertow*>(module);
     if (!undertow) {
       return;
     }
 
-    if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-      char debugIdLabel[32];
-      std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", undertow->debugInstanceId);
-      const float x = box.size.x - mm2px(0.9f);
-      const float y = mm2px(2.5f);
-      nvgSave(args.vg);
-      nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-      nvgFontSize(args.vg, 6.8f);
-      nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-      nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
-      nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
-      nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
-      nvgText(args.vg, x, y, debugIdLabel, nullptr);
-      nvgRestore(args.vg);
+    if (isDragonKingDebugEnabled()) {
+      debug_terminal::drawDebugInstanceId(args.vg, box.size, undertow->debugMetrics.instanceId);
     }
 
     if (measurePerf) {
-      const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now() - drawStart).count()) * 0.001f;
-      uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
-      uiDrawUsRange.add(drawUs);
+      debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
     }
 
     if (measurePerf) {
       const double nowSec = system::getTime();
-      double& lastSubmitSec = gUndertowDebugTerminalLastSubmitSec[undertow->debugInstanceId];
-      if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kUndertowDebugTerminalSubmitIntervalSec) {
-        lastSubmitSec = nowSec;
-        undertow->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-        undertow->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-        debug_terminal::submitUndertowMetrics(
-          undertow->debugInstanceId,
-          debug_terminal::consumeAudioProcessTiming(undertow->perfAudioProcessMinNs, undertow->perfAudioProcessMaxNs),
-          uiStepUsRange.consume(),
-          uiDrawUsRange.consume());
+      if (debug_terminal::baselineSubmitDue("Undertow", undertow->debugMetrics.instanceId, nowSec)) {
+        debug_terminal::submitBaselineMetrics(
+          "Undertow",
+          undertow->debugMetrics.instanceId,
+          undertow->debugMetrics.consumeProcessRange(),
+          debugWidgetMetrics.consumeStepRange(),
+          debugWidgetMetrics.consumeDrawRange());
       }
     }
   }

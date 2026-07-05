@@ -149,4 +149,10 @@ void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs stepUs,
                        TimingRangeUs drawUs);
 
+void submitBaselineMetrics(const char* moduleName,
+                           uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs);
+
 } // namespace debug_terminal

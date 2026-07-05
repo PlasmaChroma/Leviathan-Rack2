@@ -574,11 +574,13 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
 }
 
-void submitProcMetrics(uint32_t instanceId,
-                       TimingRangeUs processUs,
-                       TimingRangeUs stepUs,
-                       TimingRangeUs drawUs) {
-  submitUiMetricSchema("Proc",
+void submitBaselineMetrics(const char* moduleName,
+                           uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs) {
+  const char* safeModuleName = moduleName ? moduleName : "";
+  submitUiMetricSchema(safeModuleName,
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
   char dataBuf[160];
   std::snprintf(dataBuf,
@@ -597,59 +599,28 @@ void submitProcMetrics(uint32_t instanceId,
                 sizeof(dataBuf) - std::strlen(dataBuf),
                 "}");
   double ts = system::getTime();
-  transport().submit("Proc", instanceId, "ui", "metric", dataBuf, ts);
+  transport().submit(safeModuleName, instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitProcMetrics(uint32_t instanceId,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs) {
+  submitBaselineMetrics("Proc", instanceId, processUs, stepUs, drawUs);
 }
 
 void submitUndertowMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
                            TimingRangeUs drawUs) {
-  submitUiMetricSchema("Undertow",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
-  char dataBuf[160];
-  std::snprintf(dataBuf,
-                sizeof(dataBuf),
-                "{");
-  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                ",");
-  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                ",");
-  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                "}");
-  double ts = system::getTime();
-  transport().submit("Undertow", instanceId, "ui", "metric", dataBuf, ts);
+  submitBaselineMetrics("Undertow", instanceId, processUs, stepUs, drawUs);
 }
 
 void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
                        TimingRangeUs drawUs) {
-  submitUiMetricSchema("Iris",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
-  char dataBuf[160];
-  std::snprintf(dataBuf,
-                sizeof(dataBuf),
-                "{");
-  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                ",");
-  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                ",");
-  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
-  std::snprintf(dataBuf + std::strlen(dataBuf),
-                sizeof(dataBuf) - std::strlen(dataBuf),
-                "}");
-  double ts = system::getTime();
-  transport().submit("Iris", instanceId, "ui", "metric", dataBuf, ts);
+  submitBaselineMetrics("Iris", instanceId, processUs, stepUs, drawUs);
 }
 
 } // namespace debug_terminal

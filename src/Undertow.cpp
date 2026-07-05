@@ -1,9 +1,6 @@
 #include "Undertow.hpp"
-#include "DebugTerminalTransport.hpp"
 #include "UndertowShape.hpp"
 #include "WavePreviewTracer.hpp"
-
-#include <chrono>
 
 namespace {
 
@@ -87,7 +84,7 @@ inline void insertBlepStep(dsp::MinBlepGenerator<16, 16>* blep, float step, floa
 } // namespace
 
 Undertow::Undertow() {
-  debugInstanceId = gUndertowDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
+  debugMetrics.assignInstanceId(gUndertowDebugInstanceCounter);
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
   configParam<UndertowFreqQuantity>(COARSE_PARAM, 0.f, 1.f, undertowKnobValueForFrequency(261.63f), "Frequency");
@@ -123,7 +120,7 @@ float Undertow::getShapeAmount() {
 
 void Undertow::process(const ProcessArgs& args) {
   const bool measurePerf = isDragonKingDebugEnabled();
-  const auto processStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+  const auto processStart = debug_terminal::debugTimerStart(measurePerf);
   const bool coarseTuneSteppedNow = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
   float coarseHz = undertowBaseFrequencyFromKnob(params[COARSE_PARAM].getValue());
   if (coarseTuneSteppedNow) {
@@ -248,11 +245,7 @@ void Undertow::process(const ProcessArgs& args) {
   lights[S_GATE_LIGHT].setBrightnessSmooth((sGatePatched && sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
   lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseTuneSteppedNow ? 0.5f : 0.f);
   if (measurePerf) {
-    const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now() - processStart).count());
-    perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
-    perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
-    debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+    debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
   }
 }
 

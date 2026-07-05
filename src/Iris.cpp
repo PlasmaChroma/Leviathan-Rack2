@@ -1,7 +1,5 @@
 #include "Iris.hpp"
-#include "DebugTerminalTransport.hpp"
 
-#include <chrono>
 #include <new>
 
 namespace {
@@ -27,7 +25,7 @@ bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
 } // namespace
 
 Iris::Iris() {
-  debugInstanceId = gIrisDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
+  debugMetrics.assignInstanceId(gIrisDebugInstanceCounter);
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configParam<IrisFreqQuantity>(
     COARSE_PARAM, 0.f, 1.f, irisKnobValueForFrequency(dsp::FREQ_C4), "Frequency");
@@ -216,7 +214,7 @@ void Iris::workerLoop() {
 
 void Iris::process(const ProcessArgs& args) {
   const bool measurePerf = isDragonKingDebugEnabled();
-  const auto processStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+  const auto processStart = debug_terminal::debugTimerStart(measurePerf);
   if (retiredTable.load(std::memory_order_acquire) == nullptr) {
     if (iris::ImageWavetable* pending = pendingTable.exchange(nullptr, std::memory_order_acq_rel)) {
       iris::ImageWavetable* old = activeTable;
@@ -268,11 +266,7 @@ void Iris::process(const ProcessArgs& args) {
   lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
   lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
   if (measurePerf) {
-    const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now() - processStart).count());
-    perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
-    perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
-    debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+    debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
   }
 }
 
