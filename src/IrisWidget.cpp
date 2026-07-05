@@ -27,6 +27,41 @@ void chooseIrisImage(Iris* module) {
   module->requestImageLoad(selected);
 }
 
+const iris::ImageWavetable& irisBrowserPreviewTable() {
+  static const iris::ImageWavetable table = iris::makeDefaultTable();
+  return table;
+}
+
+const std::vector<uint8_t>& irisBrowserPreviewPixels() {
+  static std::vector<uint8_t> pixels;
+  if (pixels.empty()) {
+    const iris::ImageWavetable& table = irisBrowserPreviewTable();
+    const int width = 128;
+    const int height = 64;
+    pixels.assign(size_t(width * height), 0u);
+    for (int y = 0; y < height; ++y) {
+      const float scan = (float(y) + 0.5f) / float(height);
+      for (int x = 0; x < width; ++x) {
+        const float phase = (float(x) + 0.5f) / float(width);
+        const float sample = table.sample(phase, scan);
+        pixels[size_t(y * width + x)] =
+          uint8_t(std::round(clamp(sample * 0.5f + 0.5f, 0.f, 1.f) * 255.f));
+      }
+    }
+  }
+  return pixels;
+}
+
+void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) {
+  if (!samples) return;
+  sampleCount = std::max(sampleCount, 2);
+  samples->resize(size_t(sampleCount));
+  const iris::ImageWavetable& table = irisBrowserPreviewTable();
+  for (int i = 0; i < sampleCount; ++i) {
+    (*samples)[size_t(i)] = table.sample(float(i) / float(sampleCount - 1), scan);
+  }
+}
+
 struct IrisDisplay final : OpaqueWidget {
   Iris* module = nullptr;
   uint64_t generation = uint64_t(-1);
@@ -57,9 +92,9 @@ struct IrisDisplay final : OpaqueWidget {
     nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
     nvgFillColor(args.vg, nvgRGB(4, 7, 10));
     nvgFill(args.vg);
-    if (!module) return;
 
-    const uint64_t currentGeneration = module->previewGeneration.load(std::memory_order_acquire);
+    const uint64_t currentGeneration =
+      module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
     if (imageContext != args.vg) {
       nvg_gfx_lifecycle::resetOwnedNvgImage(
         imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
@@ -71,7 +106,14 @@ struct IrisDisplay final : OpaqueWidget {
       std::vector<uint8_t> gray;
       int width = 0;
       int height = 0;
-      module->previewSnapshot(&gray, &width, &height);
+      if (module) {
+        module->previewSnapshot(&gray, &width, &height);
+      } else {
+        const std::vector<uint8_t>& preview = irisBrowserPreviewPixels();
+        gray.assign(preview.begin(), preview.end());
+        width = 128;
+        height = 64;
+      }
       rgba.resize(gray.size() * 4u);
       for (size_t i = 0; i < gray.size(); ++i) {
         const float value = float(gray[i]) / 127.5f - 1.f;
@@ -102,7 +144,8 @@ struct IrisDisplay final : OpaqueWidget {
       nvgFill(args.vg);
     }
 
-    const float scanY = clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) * box.size.y;
+    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
+    const float scanY = scan * box.size.y;
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, 0.f, scanY);
     nvgLineTo(args.vg, box.size.x, scanY);
@@ -126,12 +169,16 @@ struct IrisWaveformPreview final : TransparentWidget {
     const float center = 0.5f * (top + bottom);
     const float left = 2.f;
     const float right = box.size.x - 2.f;
-    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.f;
+    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    if (module && (generation != currentGeneration || std::fabs(scan - cachedScan) >= 1.f / 512.f ||
-                   waveform.empty())) {
-      module->waveformSnapshot(scan, 256, &waveform);
+    if (generation != currentGeneration || std::fabs(scan - cachedScan) >= 1.f / 512.f ||
+        waveform.empty()) {
+      if (module) {
+        module->waveformSnapshot(scan, 256, &waveform);
+      } else {
+        irisBrowserWaveformSnapshot(scan, 256, &waveform);
+      }
       generation = currentGeneration;
       cachedScan = scan;
     }
