@@ -188,7 +188,7 @@ struct TemporalDeckArcWidget : TransparentWidget {
   }
 
   void draw(const DrawArgs &args) override {
-    if (!module || radiusPx <= 1.f) {
+    if (radiusPx <= 1.f) {
       return;
     }
 
@@ -216,23 +216,30 @@ struct TemporalDeckArcWidget : TransparentWidget {
     const NVGcolor limitHot = nvgRGBA(255, 114, 74, 230);
 
     std::array<float, TemporalDeck::kArcLightCount> redByIndex{};
-    const bool sampleDisplay = module->isSampleModeEnabled() && module->hasLoadedSample();
+    const bool sampleDisplay = module && module->isSampleModeEnabled() && module->hasLoadedSample();
     float limitBrightness = 0.f;
-    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      redByIndex[i] = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
-      limitBrightness = std::max(limitBrightness, redByIndex[i]);
+    if (module) {
+      for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+        redByIndex[i] = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
+        limitBrightness = std::max(limitBrightness, redByIndex[i]);
+      }
+    } else {
+      redByIndex[TemporalDeck::kArcLightCount - 5] = 0.78f;
+      limitBrightness = redByIndex[TemporalDeck::kArcLightCount - 5];
     }
-    const float bufferNorm = clamp(module->params[TemporalDeck::BUFFER_PARAM].getValue(), 0.f, 1.f);
+    const float bufferNorm = module ? clamp(module->params[TemporalDeck::BUFFER_PARAM].getValue(), 0.f, 1.f) : 0.74f;
     const float maxLagSamples =
-      std::max(1.f, module->getUiSampleRate() * temporaldeck_modes::usableBufferSecondsForMode(module->getBufferDurationMode()));
-    const float accessibleLag = std::max(0.f, float(module->getUiAccessibleLagSamples()));
-    const float liveNorm = clamp(float(module->getUiLagSamples()) / maxLagSamples, 0.f, bufferNorm);
-    const float sampleNorm = clamp(float(module->getUiSampleProgress()) * bufferNorm, 0.f, bufferNorm);
+      module ? std::max(1.f, module->getUiSampleRate() *
+                               temporaldeck_modes::usableBufferSecondsForMode(module->getBufferDurationMode()))
+             : 1.f;
+    const float accessibleLag = module ? std::max(0.f, float(module->getUiAccessibleLagSamples())) : bufferNorm;
+    const float liveNorm = module ? clamp(float(module->getUiLagSamples()) / maxLagSamples, 0.f, bufferNorm) : 0.58f;
+    const float sampleNorm = module ? clamp(float(module->getUiSampleProgress()) * bufferNorm, 0.f, bufferNorm) : liveNorm;
     const float valueNorm = sampleDisplay ? sampleNorm : liveNorm;
     const float valueSegmentUnits = clamp(valueNorm * float(TemporalDeck::kArcLightCount), 0.f,
                                           float(TemporalDeck::kArcLightCount));
     const float sampleNewest =
-      std::max(1.f, float(module->getUiSampleDurationSeconds() * module->getUiSampleRate()) - 1.f);
+      module ? std::max(1.f, float(module->getUiSampleDurationSeconds() * module->getUiSampleRate()) - 1.f) : 1.f;
     const float limitRatio = sampleDisplay ? clamp(accessibleLag / sampleNewest, 0.f, 1.f)
                                           : clamp(accessibleLag / maxLagSamples, 0.f, 1.f);
     const float limitLightIndex = (sampleDisplay ? (1.f - limitRatio) : limitRatio) *
