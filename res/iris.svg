@@ -70,9 +70,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193417"
-     inkscape:cx="13.846742"
-     inkscape:cy="225.47456"
+     inkscape:zoom="1.7107329"
+     inkscape:cx="-0.29227239"
+     inkscape:cy="275.02832"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -84,7 +84,49 @@
      width="6096"
      height="12850"
      fill="#090b0f"
-     id="rect1" />
+     id="rect1"
+     x="0"
+     y="0"
+     style="display:inline" />
+  <g
+     id="waves_layer"
+     style="display:inline;opacity:0.5"
+     transform="translate(-2031.9966,142.46203)">
+    <g
+       id="branding_wave_left"
+       transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
+       style="display:inline">
+      <path
+         style="fill:#4995ec"
+         d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+         id="path149" />
+      <path
+         style="fill:#7a5cff"
+         d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+         id="path151" />
+      <path
+         style="fill:#1cccd9"
+         d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+         id="path155" />
+    </g>
+    <g
+       id="branding_wave_right"
+       transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
+       style="display:inline">
+      <path
+         style="fill:#4995ec"
+         d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+         id="path158" />
+      <path
+         style="fill:#7a5cff"
+         d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+         id="path160" />
+      <path
+         style="fill:#1cccd9"
+         d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+         id="path164" />
+    </g>
+  </g>
   <g
      id="iris_section_fields"
      style="display:inline">
@@ -252,88 +294,60 @@
   <g
      fill="#d8e0e6"
      font-family="sans-serif"
-     font-size="170"
+     font-size="170px"
      text-anchor="middle"
-     id="g18">
+     id="labels_text"
+     style="display:inline">
     <text
        x="1350"
-       y="7019.9502"
-       id="text6">COARSE</text>
+       y="8340"
+       id="text6"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">COARSE</text>
     <text
        x="2785.532"
-       y="7030.8862"
-       id="text7">FINE</text>
-    <g
-       id="waves_layer"
-       style="display:inline;opacity:0.5"
-       transform="translate(-2031.9966,142.46203)">
-      <g
-         id="branding_wave_left"
-         transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
-         style="display:inline">
-        <path
-           style="fill:#4995ec"
-           d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
-           id="path149" />
-        <path
-           style="fill:#7a5cff"
-           d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
-           id="path151" />
-        <path
-           style="fill:#1cccd9"
-           d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
-           id="path155" />
-      </g>
-      <g
-         id="branding_wave_right"
-         transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
-         style="display:inline">
-        <path
-           style="fill:#4995ec"
-           d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
-           id="path158" />
-        <path
-           style="fill:#7a5cff"
-           d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
-           id="path160" />
-        <path
-           style="fill:#1cccd9"
-           d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
-           id="path164" />
-      </g>
-    </g>
+       y="8150"
+       id="text7"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FINE</text>
     <text
        x="5251.916"
-       y="8667.7441"
-       id="text8">SCAN</text>
+       y="10025"
+       id="text8"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
     <text
        x="2270.2317"
-       y="10539.697"
-       id="text9">FM</text>
+       y="11670"
+       id="text9"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FM</text>
     <text
        x="3810"
-       y="8753.3975"
-       id="text10">SCAN CV</text>
+       y="9815"
+       id="text10"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN CV</text>
     <text
        x="1350"
-       y="8862.2607"
-       id="text12">OCTAVE</text>
+       y="9670"
+       id="text12"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">OCTAVE</text>
     <text
        x="4094.3521"
-       y="7102.6787"
-       id="text13">V/OCT</text>
+       y="8180"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">V/OCT</text>
     <text
        x="1147.777"
-       y="10527.392"
-       id="text14">FM</text>
+       y="11670"
+       id="text14"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FM</text>
     <text
        x="2270.2317"
-       y="8717.1152"
-       id="text15">SCAN</text>
+       y="9810"
+       id="text15"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
     <text
        x="5218.4985"
-       y="7103.4561"
-       id="text16">SYNC</text>
+       y="8180"
+       id="text16"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SYNC</text>
     <text
        x="3791.75"
        y="11569.983"
@@ -368,7 +382,11 @@
        font-size="170"
        text-anchor="middle"
        id="text4"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:170px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#8e9ba6">IMAGE WAVETABLE OSCILLATOR</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="3048"
+         y="838.99988">image wavetable oscillator</tspan></text>
     <text
        id="reworked_LEVIATHAN_LOGO"
        x="3046.0955"
@@ -377,4 +395,5 @@
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
   </g>
+
 </svg>
