@@ -51,5 +51,7 @@
     <circle id="IRIS_INV_OUTPUT" cx="5323.2476" cy="11048.95" r="260" />
   </g>
   <rect id="IRIS_DISPLAY" x="96.52713" y="931.90002" width="5902.9458" height="3447.2776" rx="0" style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
-  <rect id="IRIS_WAVE_PREVIEW" x="96.52713" y="4479.1777" width="5902.9458" height="1800" rx="0" style="display:inline;stroke:#1ccad8;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+  <g id="screen">
+    <rect id="IRIS_WAVE_PREVIEW" x="96.52713" y="4479.1777" width="5902.9458" height="1800" rx="0" style="display:inline;stroke:#1ccad8;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+  </g>
 </svg>

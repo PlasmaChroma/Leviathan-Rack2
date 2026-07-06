@@ -64,6 +64,7 @@ void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>
 
 struct IrisDisplay final : OpaqueWidget {
   Iris* module = nullptr;
+  widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
   NVGcontext* imageContext = nullptr;
   int imageHandle = -1;
@@ -85,6 +86,15 @@ struct IrisDisplay final : OpaqueWidget {
       return;
     }
     OpaqueWidget::onButton(e);
+  }
+
+  void step() override {
+    const uint64_t currentGeneration =
+      module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
+    if (generation != currentGeneration && framebuffer) {
+      framebuffer->setDirty();
+    }
+    OpaqueWidget::step();
   }
 
   void draw(const DrawArgs& args) override {
@@ -144,6 +154,24 @@ struct IrisDisplay final : OpaqueWidget {
       nvgFill(args.vg);
     }
 
+  }
+};
+
+struct IrisScanLineOverlay final : TransparentWidget {
+  Iris* module = nullptr;
+
+  explicit IrisScanLineOverlay(Iris* module) : module(module) {}
+
+  void onButton(const event::Button& e) override {
+    if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
+      chooseIrisImage(module);
+      e.consume(this);
+      return;
+    }
+    TransparentWidget::onButton(e);
+  }
+
+  void draw(const DrawArgs& args) override {
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const float scanY = scan * box.size.y;
     nvgBeginPath(args.vg);
@@ -157,23 +185,18 @@ struct IrisDisplay final : OpaqueWidget {
 
 struct IrisWaveformPreview final : TransparentWidget {
   Iris* module = nullptr;
+  widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
   float cachedScan = -1.f;
   std::vector<float> waveform;
 
   explicit IrisWaveformPreview(Iris* module) : module(module) {}
 
-  void draw(const DrawArgs& args) override {
-    const float top = 2.f;
-    const float bottom = box.size.y - 2.f;
-    const float center = 0.5f * (top + bottom);
-    const float left = 2.f;
-    const float right = box.size.x - 2.f;
+  bool refreshWaveformIfNeeded() {
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    if (generation != currentGeneration || std::fabs(scan - cachedScan) >= 1.f / 512.f ||
-        waveform.empty()) {
+    if (generation != currentGeneration || std::fabs(scan - cachedScan) >= 1.f / 512.f || waveform.empty()) {
       if (module) {
         module->waveformSnapshot(scan, 256, &waveform);
       } else {
@@ -181,7 +204,26 @@ struct IrisWaveformPreview final : TransparentWidget {
       }
       generation = currentGeneration;
       cachedScan = scan;
+      return true;
     }
+    return false;
+  }
+
+  void step() override {
+    if (refreshWaveformIfNeeded() && framebuffer) {
+      framebuffer->setDirty();
+    }
+    TransparentWidget::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    refreshWaveformIfNeeded();
+
+    const float top = 2.f;
+    const float bottom = box.size.y - 2.f;
+    const float center = 0.5f * (top + bottom);
+    const float left = 2.f;
+    const float right = box.size.x - 2.f;
 
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, left, center);
@@ -265,10 +307,19 @@ struct IrisWidget final : ModuleWidget {
 
     math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);
+    widget::FramebufferWidget* displayFb = new widget::FramebufferWidget();
+    displayFb->box.pos = mm2px(displayRectMm.pos);
+    displayFb->box.size = mm2px(displayRectMm.size);
+    displayFb->dirtyOnSubpixelChange = false;
     IrisDisplay* display = new IrisDisplay(module);
-    display->box.pos = mm2px(displayRectMm.pos);
-    display->box.size = mm2px(displayRectMm.size);
-    addChild(display);
+    display->box.size = displayFb->box.size;
+    display->framebuffer = displayFb;
+    displayFb->addChild(display);
+    addChild(displayFb);
+    IrisScanLineOverlay* scanLine = new IrisScanLineOverlay(module);
+    scanLine->box.pos = mm2px(displayRectMm.pos);
+    scanLine->box.size = mm2px(displayRectMm.size);
+    addChild(scanLine);
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       displayRectMm, visual_assets::PreviewFrameTint::Purple));
 
@@ -278,10 +329,15 @@ struct IrisWidget final : ModuleWidget {
     math::Rect waveformContentRectMm = waveformRectMm;
     waveformContentRectMm.pos = waveformContentRectMm.pos.plus(Vec(0.2f, 0.2f));
     waveformContentRectMm.size = waveformContentRectMm.size.minus(Vec(0.4f, 0.4f));
+    widget::FramebufferWidget* waveformFb = new widget::FramebufferWidget();
+    waveformFb->box.pos = mm2px(waveformContentRectMm.pos);
+    waveformFb->box.size = mm2px(waveformContentRectMm.size);
+    waveformFb->dirtyOnSubpixelChange = false;
     IrisWaveformPreview* waveformPreview = new IrisWaveformPreview(module);
-    waveformPreview->box.pos = mm2px(waveformContentRectMm.pos);
-    waveformPreview->box.size = mm2px(waveformContentRectMm.size);
-    addChild(waveformPreview);
+    waveformPreview->box.size = waveformFb->box.size;
+    waveformPreview->framebuffer = waveformFb;
+    waveformFb->addChild(waveformPreview);
+    addChild(waveformFb);
 
     auto anchor = [&](const char* id, const Vec& fallbackMm) {
       Vec posMm = fallbackMm;
@@ -303,17 +359,17 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM);
     scanAtten->setProgressRingBipolar(true);
     addParam(scanAtten);
-	    SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
-	      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
-	      module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
-	    addParam(octaveStep);
-	    SmallGoldApertureButton* softSync = createLightParamCentered<SmallGoldApertureButton>(
-	      mm2px(anchor("IRIS_SOFT_SYNC_MODE_PARAM", Vec(44.64f, 76.73f))),
-	      module, Iris::SOFT_SYNC_MODE_PARAM, Iris::SOFT_SYNC_MODE_LIGHT);
-	    addParam(softSync);
+    SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
+      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
+      module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
+    addParam(octaveStep);
+    SmallGoldApertureButton* softSync = createLightParamCentered<SmallGoldApertureButton>(
+      mm2px(anchor("IRIS_SOFT_SYNC_MODE_PARAM", Vec(44.64f, 76.73f))),
+      module, Iris::SOFT_SYNC_MODE_PARAM, Iris::SOFT_SYNC_MODE_LIGHT);
+    addParam(softSync);
 
-	    addInput(createInputCentered<Magitek2InputJack>(
-	      mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_FM_INPUT", Vec(23.f, 99.f))), module, Iris::FM_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
@@ -396,6 +452,9 @@ struct IrisWidget final : ModuleWidget {
     addEnumMenu(menu, "Seam smoothing", irisModule, &irisModule->conversionSettings.seamMode,
       {{"Off", iris::SEAM_OFF}, {"Small", iris::SEAM_SMALL}, {"Medium", iris::SEAM_MEDIUM},
        {"Large", iris::SEAM_LARGE}});
+    addEnumMenu(menu, "Wave smoothing", irisModule, &irisModule->conversionSettings.smoothingMode,
+      {{"Off", iris::SMOOTH_OFF}, {"Gentle", iris::SMOOTH_GENTLE}, {"Medium", iris::SMOOTH_MEDIUM},
+       {"Strong", iris::SMOOTH_STRONG}});
     menu->addChild(createCheckMenuItem("Per-row DC removal", "",
       [irisModule]() { return irisModule->conversionSettings.dcRemove; },
       [irisModule]() {

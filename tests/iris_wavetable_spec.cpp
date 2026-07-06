@@ -177,6 +177,28 @@ int main() {
         !iris::saveBinaryTable(binaryPath, nonFiniteTable, &ioError));
   std::remove(binaryPath.c_str());
 
-  std::cout << "Summary: " << (39 - failures) << "/39 passed\n";
+  iris::ConversionSettings smoothingSettings;
+  smoothingSettings.frameSize = 8;
+  smoothingSettings.rows = 2;
+  smoothingSettings.normalizeMode = iris::NORMALIZE_NONE;
+  smoothingSettings.smoothingMode = iris::SMOOTH_STRONG;
+  std::vector<uint8_t> jagged(size_t(8 * 2) * 4u, 255u);
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 8; ++x) {
+      const uint8_t value = (x & 1) ? 255u : 0u;
+      const size_t base = size_t(y * 8 + x) * 4u;
+      jagged[base + 0u] = jagged[base + 1u] = jagged[base + 2u] = value;
+    }
+  }
+  iris::ImageWavetable smoothed;
+  check("wave smoothing converts jagged image",
+        iris::buildWavetableFromRgba(jagged.data(), 8, 2, 4, smoothingSettings, &smoothed));
+  float maxAbs = 0.f;
+  for (int x = 0; x < smoothed.frameSize; ++x) {
+    maxAbs = std::max(maxAbs, std::fabs(smoothed.samples[size_t(x)]));
+  }
+  check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
+
+  std::cout << "Summary: " << (41 - failures) << "/41 passed\n";
   return failures == 0 ? 0 : 1;
 }

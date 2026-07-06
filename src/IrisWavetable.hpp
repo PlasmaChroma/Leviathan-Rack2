@@ -38,6 +38,13 @@ enum SeamMode {
   SEAM_LARGE = 3,
 };
 
+enum SmoothingMode {
+  SMOOTH_OFF = 0,
+  SMOOTH_GENTLE = 1,
+  SMOOTH_MEDIUM = 2,
+  SMOOTH_STRONG = 3,
+};
+
 struct ConversionSettings {
   int frameSize = kFrameSize;
   int rows = kDefaultRows;
@@ -45,6 +52,7 @@ struct ConversionSettings {
   RowOrder rowOrder = ROW_TOP_TO_BOTTOM;
   TrimMode trimMode = TRIM_OFF;
   SeamMode seamMode = SEAM_OFF;
+  SmoothingMode smoothingMode = SMOOTH_OFF;
   bool dcRemove = false;
   bool invert = false;
   float contrast = 1.f;
@@ -101,21 +109,21 @@ struct ImageWavetable {
 struct WavetableOscillator {
   float phase = 0.f;
 
-	  void reset(float newPhase = 0.f) {
-	    if (!std::isfinite(newPhase)) newPhase = 0.f;
-	    phase = newPhase - std::floor(newPhase);
-	  }
+  void reset(float newPhase = 0.f) {
+    if (!std::isfinite(newPhase)) newPhase = 0.f;
+    phase = newPhase - std::floor(newPhase);
+  }
 
-	  void softSync() {
-	    if (!std::isfinite(phase)) {
-	      phase = 0.f;
-	      return;
-	    }
-	    phase = 1.f - phase;
-	    phase -= std::floor(phase);
-	  }
+  void softSync() {
+    if (!std::isfinite(phase)) {
+      phase = 0.f;
+      return;
+    }
+    phase = 1.f - phase;
+    phase -= std::floor(phase);
+  }
 
-	  float process(const ImageWavetable& table, float frequency, float sampleTime, float scan) {
+  float process(const ImageWavetable& table, float frequency, float sampleTime, float scan) {
     if (!std::isfinite(phase)) phase = 0.f;
     if (!std::isfinite(frequency) || frequency < 0.f) frequency = 0.f;
     if (!std::isfinite(sampleTime) || sampleTime < 0.f) sampleTime = 0.f;
@@ -147,6 +155,53 @@ inline int seamSamples(SeamMode mode, int frameSize) {
     case SEAM_MEDIUM: return std::max(4, frameSize / 64);
     case SEAM_LARGE: return std::max(8, frameSize / 32);
     default: return 0;
+  }
+}
+
+inline int smoothingPasses(SmoothingMode mode) {
+  switch (mode) {
+    case SMOOTH_GENTLE: return 1;
+    case SMOOTH_MEDIUM: return 3;
+    case SMOOTH_STRONG: return 6;
+    default: return 0;
+  }
+}
+
+inline float smoothingAmount(SmoothingMode mode) {
+  switch (mode) {
+    case SMOOTH_GENTLE: return 0.32f;
+    case SMOOTH_MEDIUM: return 0.38f;
+    case SMOOTH_STRONG: return 0.44f;
+    default: return 0.f;
+  }
+}
+
+inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, SmoothingMode mode) {
+  if (!rows || rows->empty()) {
+    return;
+  }
+  const int passes = smoothingPasses(mode);
+  const float amount = smoothingAmount(mode);
+  if (passes <= 0 || !(amount > 0.f)) {
+    return;
+  }
+
+  for (size_t row = 0; row < rows->size(); ++row) {
+    std::vector<float>& values = (*rows)[row];
+    if (values.size() < 3u) {
+      continue;
+    }
+    std::vector<float> scratch(values.size(), 0.f);
+    for (int pass = 0; pass < passes; ++pass) {
+      const size_t last = values.size() - 1u;
+      for (size_t x = 0; x < values.size(); ++x) {
+        const float left = values[x == 0u ? last : x - 1u];
+        const float right = values[x == last ? 0u : x + 1u];
+        const float neighborAverage = 0.5f * (left + right);
+        scratch[x] = values[x] + (neighborAverage - values[x]) * amount;
+      }
+      values.swap(scratch);
+    }
   }
 }
 
@@ -299,6 +354,8 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
       rows.swap(endpoints);
     }
   }
+
+  smoothRowsCyclic(&rows, settings.smoothingMode);
 
   const int seam = seamSamples(settings.seamMode, settings.frameSize);
   if (seam > 0) {
