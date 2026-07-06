@@ -9,6 +9,8 @@
 
 namespace {
 
+constexpr float kIrisDisplayVerticalInset = 1.f;
+
 bool supportedImagePath(const std::string& path) {
   std::string extension = system::getExtension(path);
   for (size_t i = 0; i < extension.size(); ++i) extension[i] = char(std::tolower(extension[i]));
@@ -147,9 +149,12 @@ struct IrisDisplay final : OpaqueWidget {
       generation = currentGeneration;
     }
     if (imageHandle >= 0) {
-      NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+      const float imageTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
+      const float imageHeight = std::max(0.f, box.size.y - 2.f * imageTop);
+      NVGpaint paint =
+        nvgImagePattern(args.vg, 0.f, imageTop, box.size.x, imageHeight, 0.f, imageHandle, 1.f);
       nvgBeginPath(args.vg);
-      nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+      nvgRect(args.vg, 0.f, imageTop, box.size.x, imageHeight);
       nvgFillPaint(args.vg, paint);
       nvgFill(args.vg);
     }
@@ -173,7 +178,9 @@ struct IrisScanLineOverlay final : TransparentWidget {
 
   void draw(const DrawArgs& args) override {
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
-    const float scanY = scan * box.size.y;
+    const float scanTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
+    const float scanBottom = std::max(scanTop, box.size.y - kIrisDisplayVerticalInset);
+    const float scanY = scanTop + scan * (scanBottom - scanTop);
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, 0.f, scanY);
     nvgLineTo(args.vg, box.size.x, scanY);
