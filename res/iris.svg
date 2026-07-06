@@ -70,9 +70,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.7107329"
-     inkscape:cx="-0.29227239"
-     inkscape:cy="275.02832"
+     inkscape:zoom="3.4214658"
+     inkscape:cx="115.30146"
+     inkscape:cy="366.36345"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -153,7 +153,7 @@
        id="iris_output_field"
        style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
     <path
-       d="M 1350 7640 H 4094"
+       d="m 1240.7875,7640 h 2744"
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
@@ -165,114 +165,72 @@
        id="iris_fm_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 3796 10960 H 5246"
+       d="m 3873.2474,11048.95 h 1450"
        id="iris_output_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#1cccd9;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
-    <circle
-       cx="1350"
-       cy="7640"
-       r="610"
-       id="iris_coarse_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:58;stroke-opacity:0.12" />
-    <circle
-       cx="5252"
-       cy="9288"
-       r="610"
-       id="iris_scan_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:58;stroke-opacity:0.12" />
-    <circle
-       cx="4094"
-       cy="7673"
-       r="374"
-       id="iris_voct_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
-    <circle
-       cx="5218"
-       cy="7673"
-       r="374"
-       id="iris_sync_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
-    <circle
-       cx="2270"
-       cy="9287"
-       r="374"
-       id="iris_scan_input_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.12" />
-    <circle
-       cx="3796"
-       cy="10960"
-       r="374"
-       id="iris_out_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.14" />
-    <circle
-       cx="5246"
-       cy="10960"
-       r="374"
-       id="iris_inv_ring"
-       style="display:inline;fill:none;stroke:#ffffff;stroke-width:52;stroke-opacity:0.14" />
   </g>
   <g
      id="components"
-     style="display:none">
+     style="display:inline">
     <circle
        id="IRIS_COARSE_PARAM"
-       cx="1350"
+       cx="1240.7875"
        cy="7639.9502"
        r="520" />
     <circle
        id="IRIS_FINE_PARAM"
-       cx="2785.532"
+       cx="2742.9634"
        cy="7650.8862"
        r="330" />
     <circle
        id="IRIS_SCAN_PARAM"
-       cx="5251.916"
+       cx="4968.6929"
        cy="9287.7441"
        r="520" />
     <circle
        id="IRIS_FM_ATTEN_PARAM"
-       cx="2270.2317"
+       cx="2129.6387"
        cy="11079.697"
        r="330" />
     <circle
        id="IRIS_SCAN_ATTEN_PARAM"
-       cx="3810"
+       cx="3419.1658"
        cy="9293.3975"
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
-       cx="1350"
-       cy="9202.2607"
+       cx="989.39923"
+       cy="9287.1152"
        r="240" />
     <circle
        id="IRIS_V_OCT_INPUT"
-       cx="4094.3521"
+       cx="3985.1394"
        cy="7672.6787"
        r="260" />
     <circle
        id="IRIS_FM_INPUT"
-       cx="1147.777"
+       cx="989.39923"
        cy="11097.392"
        r="260" />
     <circle
        id="IRIS_SCAN_INPUT"
-       cx="2270.2317"
+       cx="2129.6387"
        cy="9287.1152"
        r="260" />
     <circle
        id="IRIS_SYNC_INPUT"
-       cx="5218.4985"
+       cx="5109.2861"
        cy="7673.4561"
        r="260" />
     <circle
        id="IRIS_OUT_OUTPUT"
-       cx="3796"
-       cy="10960"
+       cx="3873.2473"
+       cy="11048.95"
        r="260" />
     <circle
        id="IRIS_INV_OUTPUT"
-       cx="5246"
-       cy="10960"
+       cx="5323.2476"
+       cy="11048.95"
        r="260" />
   </g>
   <rect
@@ -296,71 +254,66 @@
      font-family="sans-serif"
      font-size="170px"
      text-anchor="middle"
-     id="labels_text"
+     id="labels"
      style="display:inline">
     <text
-       x="1350"
+       x="1240.7875"
        y="8340"
        id="text6"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">COARSE</text>
     <text
-       x="2785.532"
-       y="8150"
+       x="2739.2593"
+       y="8179.7886"
        id="text7"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FINE</text>
     <text
-       x="5251.916"
+       x="4968.6929"
        y="10025"
        id="text8"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
     <text
-       x="2270.2317"
-       y="11670"
-       id="text9"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FM</text>
-    <text
-       x="3810"
+       x="3418.2134"
        y="9815"
        id="text10"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN CV</text>
     <text
-       x="1350"
-       y="9670"
+       x="989.39923"
+       y="9815"
        id="text12"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">OCTAVE</text>
     <text
-       x="4094.3521"
+       x="3985.1394"
        y="8180"
        id="text13"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">V/OCT</text>
     <text
-       x="1147.777"
+       x="1524.4132"
        y="11670"
        id="text14"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FM</text>
     <text
-       x="2270.2317"
-       y="9810"
+       x="2129.6387"
+       y="9815"
        id="text15"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
     <text
-       x="5218.4985"
+       x="5109.2861"
        y="8180"
        id="text16"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SYNC</text>
     <text
-       x="3791.75"
-       y="11569.983"
+       x="3868.9973"
+       y="11658.934"
        id="text17"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
          sodipodi:role="line"
          id="tspan1"
-         x="3791.75"
-         y="11569.983"
+         x="3868.9973"
+         y="11658.934"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline">OUT+</tspan></text>
     <text
-       x="5242.6001"
-       y="11569.983"
+       x="5319.8477"
+       y="11658.934"
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INV</text>
     <text
@@ -395,5 +348,4 @@
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
   </g>
-
 </svg>
