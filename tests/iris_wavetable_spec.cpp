@@ -181,7 +181,7 @@ int main() {
   smoothingSettings.frameSize = 8;
   smoothingSettings.rows = 2;
   smoothingSettings.normalizeMode = iris::NORMALIZE_NONE;
-  smoothingSettings.smoothingMode = iris::SMOOTH_STRONG;
+  smoothingSettings.waveSmoothing = 1.f;
   std::vector<uint8_t> jagged(size_t(8 * 2) * 4u, 255u);
   for (int y = 0; y < 2; ++y) {
     for (int x = 0; x < 8; ++x) {

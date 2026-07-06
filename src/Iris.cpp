@@ -66,7 +66,7 @@ Iris::Iris() {
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
   configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
-  configButton(SMOOTHING_MENU_PARAM, "Smoothing menu");
+  configButton(SMOOTHING_MENU_PARAM, "Image options");
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(LIN_FM_INPUT, "Linear FM");
   configInput(SCAN_INPUT, "Scan CV");
@@ -211,8 +211,18 @@ void Iris::workerLoop() {
     {
       std::lock_guard<std::mutex> lock(workerMutex);
       if (request.serial != nextRequestSerial) {
-        delete built;
-        continue;
+        // Slider drags continuously replace the queued rebuild request. Publish
+        // completed frames from the same source so the display tracks the drag,
+        // while still rejecting stale loads and source changes.
+        const bool publishIntermediateRebuild =
+          request.type == REQUEST_REBUILD &&
+          requestPending &&
+          workerRequest.type == REQUEST_REBUILD &&
+          request.path == workerRequest.path;
+        if (!publishIntermediateRebuild) {
+          delete built;
+          continue;
+        }
       }
     }
     if (ok) {
@@ -363,8 +373,8 @@ json_t* Iris::dataToJson() {
   json_object_set_new(conversion, "normalizeMode", json_integer(conversionSettings.normalizeMode));
   json_object_set_new(conversion, "rowOrder", json_integer(conversionSettings.rowOrder));
   json_object_set_new(conversion, "trimMode", json_integer(conversionSettings.trimMode));
-  json_object_set_new(conversion, "seamMode", json_integer(conversionSettings.seamMode));
-  json_object_set_new(conversion, "smoothingMode", json_integer(conversionSettings.smoothingMode));
+  json_object_set_new(conversion, "seamSmoothing", json_real(conversionSettings.seamSmoothing));
+  json_object_set_new(conversion, "waveSmoothing", json_real(conversionSettings.waveSmoothing));
   json_object_set_new(conversion, "dcRemove", json_boolean(conversionSettings.dcRemove));
   json_object_set_new(conversion, "invert", json_boolean(conversionSettings.invert));
   json_object_set_new(conversion, "contrast", json_real(conversionSettings.contrast));
@@ -387,10 +397,10 @@ void Iris::dataFromJson(json_t* root) {
       jsonIntegerOr(conversion, "rowOrder", iris::ROW_TOP_TO_BOTTOM), 0, 1));
     conversionSettings.trimMode = iris::TrimMode(clamp(
       jsonIntegerOr(conversion, "trimMode", iris::TRIM_OFF), 0, 3));
-    conversionSettings.seamMode = iris::SeamMode(clamp(
-      jsonIntegerOr(conversion, "seamMode", iris::SEAM_OFF), 0, 3));
-    conversionSettings.smoothingMode = iris::SmoothingMode(clamp(
-      jsonIntegerOr(conversion, "smoothingMode", iris::SMOOTH_OFF), 0, 3));
+    conversionSettings.seamSmoothing =
+      clamp(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, 1.f);
+    conversionSettings.waveSmoothing =
+      clamp(jsonRealOr(conversion, "waveSmoothing", 0.f), 0.f, 1.f);
     conversionSettings.dcRemove = jsonBoolOr(conversion, "dcRemove", false);
     conversionSettings.invert = jsonBoolOr(conversion, "invert", false);
     conversionSettings.contrast = jsonRealOr(conversion, "contrast", 1.f);

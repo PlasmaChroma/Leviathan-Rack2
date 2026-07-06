@@ -193,7 +193,8 @@ TestResult testBifurxGlassPathParses() {
   });
   const bool hasRoundedCurve = input != matches.end() && std::any_of(
     input->commands.begin(), input->commands.end(), [](const panel_svg::SvgPathCommand& command) {
-      return command.type == panel_svg::SvgPathCommand::QuadTo;
+      return command.type == panel_svg::SvgPathCommand::QuadTo ||
+             command.type == panel_svg::SvgPathCommand::BezierTo;
     });
   const bool pass = ok && input != matches.end() && !input->commands.empty() && hasRoundedCurve;
   return {"Bifurx inputs path is available to the glass renderer", pass,

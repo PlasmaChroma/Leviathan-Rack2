@@ -319,6 +319,56 @@ void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
   }));
 }
 
+struct IrisSmoothingMenuQuantity final : Quantity {
+  Iris* module = nullptr;
+  float* setting = nullptr;
+  const char* label = "";
+
+  IrisSmoothingMenuQuantity(Iris* module, float* setting, const char* label)
+    : module(module), setting(setting), label(label) {}
+
+  void setValue(float value) override {
+    if (!module || !setting) return;
+    const float next = clamp(value, 0.f, 1.f);
+    if (std::fabs(*setting - next) > 1e-5f) {
+      *setting = next;
+      module->requestRebuild();
+    }
+  }
+
+  float getValue() override {
+    return setting ? float(*setting) : 0.f;
+  }
+
+  float getDefaultValue() override {
+    return 0.f;
+  }
+
+  float getMinValue() override {
+    return 0.f;
+  }
+
+  float getMaxValue() override {
+    return 1.f;
+  }
+
+  std::string getLabel() override {
+    return label;
+  }
+
+  float getDisplayValue() override {
+    return getValue() * 100.f;
+  }
+
+  void setDisplayValue(float value) override {
+    setValue(value * 0.01f);
+  }
+
+  std::string getDisplayValueString() override {
+    return string::f("%.0f%%", getDisplayValue());
+  }
+};
+
 struct IrisSmoothingMenuButton final : TL1105 {
   Iris* module = nullptr;
 
@@ -330,12 +380,36 @@ struct IrisSmoothingMenuButton final : TL1105 {
     ui::Menu* menu = createMenu();
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Smoothing"));
-    addEnumMenu(menu, "Seam smoothing", module, &module->conversionSettings.seamMode,
-      {{"Off", iris::SEAM_OFF}, {"Small", iris::SEAM_SMALL}, {"Medium", iris::SEAM_MEDIUM},
-       {"Large", iris::SEAM_LARGE}});
-    addEnumMenu(menu, "Wave smoothing", module, &module->conversionSettings.smoothingMode,
-      {{"Off", iris::SMOOTH_OFF}, {"Gentle", iris::SMOOTH_GENTLE}, {"Medium", iris::SMOOTH_MEDIUM},
-       {"Strong", iris::SMOOTH_STRONG}});
+    ui::Slider* seamSlider = new ui::Slider();
+    seamSlider->box.size = Vec(180.f, 24.f);
+    seamSlider->quantity = new IrisSmoothingMenuQuantity(
+      module, &module->conversionSettings.seamSmoothing, "Seam smoothing");
+    menu->addChild(seamSlider);
+    ui::Slider* waveSlider = new ui::Slider();
+    waveSlider->box.size = Vec(180.f, 24.f);
+    waveSlider->quantity = new IrisSmoothingMenuQuantity(
+      module, &module->conversionSettings.waveSmoothing, "Wave smoothing");
+    menu->addChild(waveSlider);
+    addEnumMenu(menu, "Normalize", module, &module->conversionSettings.normalizeMode,
+      {{"Balanced", iris::NORMALIZE_BALANCED}, {"Global", iris::NORMALIZE_GLOBAL},
+       {"Per row", iris::NORMALIZE_PER_ROW}, {"Off", iris::NORMALIZE_NONE}});
+    addEnumMenu(menu, "Row order", module, &module->conversionSettings.rowOrder,
+      {{"Top to bottom", iris::ROW_TOP_TO_BOTTOM}, {"Bottom to top", iris::ROW_BOTTOM_TO_TOP}});
+    addEnumMenu(menu, "Trim flat rows", module, &module->conversionSettings.trimMode,
+      {{"Off", iris::TRIM_OFF}, {"Gentle", iris::TRIM_GENTLE}, {"Medium", iris::TRIM_MEDIUM},
+       {"Aggressive", iris::TRIM_AGGRESSIVE}});
+    menu->addChild(createCheckMenuItem("Per-row DC removal", "",
+      [this]() { return module->conversionSettings.dcRemove; },
+      [this]() {
+        module->conversionSettings.dcRemove = !module->conversionSettings.dcRemove;
+        module->requestRebuild();
+      }));
+    menu->addChild(createCheckMenuItem("Invert conversion", "",
+      [this]() { return module->conversionSettings.invert; },
+      [this]() {
+        module->conversionSettings.invert = !module->conversionSettings.invert;
+        module->requestRebuild();
+      }));
     e.consume(this);
   }
 
@@ -343,18 +417,23 @@ struct IrisSmoothingMenuButton final : TL1105 {
     TL1105::draw(args);
     const float cx = 0.5f * box.size.x;
     const float cy = 0.5f * box.size.y;
-    const float dy = std::max(1.6f, 0.16f * box.size.y);
-    const float halfW = std::max(1.9f, 0.22f * box.size.x);
-    const float y0 = cy - dy;
-    for (int i = 0; i < 3; ++i) {
-      const float y = y0 + dy * float(i);
-      nvgBeginPath(args.vg);
-      nvgMoveTo(args.vg, cx - halfW, y);
-      nvgLineTo(args.vg, cx + halfW, y);
-      nvgStrokeWidth(args.vg, 1.2f);
-      nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
-      nvgStroke(args.vg);
-    }
+    const float halfW = std::max(2.4f, 0.28f * box.size.x);
+    const float amplitude = std::max(1.6f, 0.17f * box.size.y);
+    const float left = cx - halfW;
+    const float right = cx + halfW;
+    const float quarterW = 0.5f * halfW;
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, left, cy);
+    nvgBezierTo(
+      args.vg, left + quarterW * 0.55f, cy - amplitude,
+      cx - quarterW * 0.55f, cy - amplitude, cx, cy);
+    nvgBezierTo(
+      args.vg, cx + quarterW * 0.55f, cy + amplitude,
+      right - quarterW * 0.55f, cy + amplitude, right, cy);
+    nvgStrokeWidth(args.vg, 1.2f);
+    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+    nvgLineCap(args.vg, NVG_ROUND);
+    nvgStroke(args.vg);
   }
 };
 
@@ -528,27 +607,6 @@ struct IrisWidget final : ModuleWidget {
     menu->addChild(createMenuItem("Reload image", "", [irisModule]() { irisModule->requestReload(); },
                                   irisModule->sourcePath().empty()));
     menu->addChild(createMenuItem("Clear image", "", [irisModule]() { irisModule->clearToDefault(); }));
-    menu->addChild(new MenuSeparator());
-    addEnumMenu(menu, "Normalize", irisModule, &irisModule->conversionSettings.normalizeMode,
-      {{"Balanced", iris::NORMALIZE_BALANCED}, {"Global", iris::NORMALIZE_GLOBAL},
-       {"Per row", iris::NORMALIZE_PER_ROW}, {"Off", iris::NORMALIZE_NONE}});
-    addEnumMenu(menu, "Row order", irisModule, &irisModule->conversionSettings.rowOrder,
-      {{"Top to bottom", iris::ROW_TOP_TO_BOTTOM}, {"Bottom to top", iris::ROW_BOTTOM_TO_TOP}});
-    addEnumMenu(menu, "Trim flat rows", irisModule, &irisModule->conversionSettings.trimMode,
-      {{"Off", iris::TRIM_OFF}, {"Gentle", iris::TRIM_GENTLE}, {"Medium", iris::TRIM_MEDIUM},
-       {"Aggressive", iris::TRIM_AGGRESSIVE}});
-    menu->addChild(createCheckMenuItem("Per-row DC removal", "",
-      [irisModule]() { return irisModule->conversionSettings.dcRemove; },
-      [irisModule]() {
-        irisModule->conversionSettings.dcRemove = !irisModule->conversionSettings.dcRemove;
-        irisModule->requestRebuild();
-      }));
-    menu->addChild(createCheckMenuItem("Invert conversion", "",
-      [irisModule]() { return irisModule->conversionSettings.invert; },
-      [irisModule]() {
-        irisModule->conversionSettings.invert = !irisModule->conversionSettings.invert;
-        irisModule->requestRebuild();
-      }));
     menu->addChild(new MenuSeparator());
     menu->addChild(createCheckMenuItem("Embed wavetable in patch", "",
       [irisModule]() { return irisModule->embedsTable(); },

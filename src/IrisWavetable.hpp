@@ -31,28 +31,14 @@ enum TrimMode {
   TRIM_AGGRESSIVE = 3,
 };
 
-enum SeamMode {
-  SEAM_OFF = 0,
-  SEAM_SMALL = 1,
-  SEAM_MEDIUM = 2,
-  SEAM_LARGE = 3,
-};
-
-enum SmoothingMode {
-  SMOOTH_OFF = 0,
-  SMOOTH_GENTLE = 1,
-  SMOOTH_MEDIUM = 2,
-  SMOOTH_STRONG = 3,
-};
-
 struct ConversionSettings {
   int frameSize = kFrameSize;
   int rows = kDefaultRows;
   NormalizeMode normalizeMode = NORMALIZE_BALANCED;
   RowOrder rowOrder = ROW_TOP_TO_BOTTOM;
   TrimMode trimMode = TRIM_OFF;
-  SeamMode seamMode = SEAM_OFF;
-  SmoothingMode smoothingMode = SMOOTH_OFF;
+  float seamSmoothing = 0.f;
+  float waveSmoothing = 0.f;
   bool dcRemove = false;
   bool invert = false;
   float contrast = 1.f;
@@ -149,40 +135,13 @@ inline float trimThreshold(TrimMode mode) {
   }
 }
 
-inline int seamSamples(SeamMode mode, int frameSize) {
-  switch (mode) {
-    case SEAM_SMALL: return std::max(2, frameSize / 128);
-    case SEAM_MEDIUM: return std::max(4, frameSize / 64);
-    case SEAM_LARGE: return std::max(8, frameSize / 32);
-    default: return 0;
-  }
-}
-
-inline int smoothingPasses(SmoothingMode mode) {
-  switch (mode) {
-    case SMOOTH_GENTLE: return 1;
-    case SMOOTH_MEDIUM: return 3;
-    case SMOOTH_STRONG: return 6;
-    default: return 0;
-  }
-}
-
-inline float smoothingAmount(SmoothingMode mode) {
-  switch (mode) {
-    case SMOOTH_GENTLE: return 0.32f;
-    case SMOOTH_MEDIUM: return 0.38f;
-    case SMOOTH_STRONG: return 0.44f;
-    default: return 0.f;
-  }
-}
-
-inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, SmoothingMode mode) {
+inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, float smoothing) {
   if (!rows || rows->empty()) {
     return;
   }
-  const int passes = smoothingPasses(mode);
-  const float amount = smoothingAmount(mode);
-  if (passes <= 0 || !(amount > 0.f)) {
+  constexpr int passes = 6;
+  const float amount = 0.44f * clamp01(smoothing);
+  if (!(amount > 0.f)) {
     return;
   }
 
@@ -241,6 +200,8 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
   settings.contrast = std::isfinite(settings.contrast) ? std::max(settings.contrast, 0.f) : 1.f;
   settings.brightness = std::isfinite(settings.brightness) ? settings.brightness : 0.f;
   settings.gamma = std::isfinite(settings.gamma) ? std::max(settings.gamma, 0.01f) : 1.f;
+  settings.seamSmoothing = clamp01(settings.seamSmoothing);
+  settings.waveSmoothing = clamp01(settings.waveSmoothing);
 
   std::vector<std::vector<float> > rows(size_t(settings.rows),
                                         std::vector<float>(size_t(settings.frameSize), 0.f));
@@ -355,17 +316,19 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
     }
   }
 
-  smoothRowsCyclic(&rows, settings.smoothingMode);
+  smoothRowsCyclic(&rows, settings.waveSmoothing);
 
-  const int seam = seamSamples(settings.seamMode, settings.frameSize);
-  if (seam > 0) {
+  const float seamAmount = settings.seamSmoothing;
+  const int seam = std::min(settings.frameSize / 2, std::max(8, settings.frameSize / 32));
+  if (seamAmount > 0.f) {
     for (size_t row = 0; row < rows.size(); ++row) {
       const float edge = 0.5f * (rows[row].front() + rows[row].back());
       for (int i = 0; i < seam; ++i) {
         const float t = float(i + 1) / float(seam + 1);
-        rows[row][size_t(i)] = edge + (rows[row][size_t(i)] - edge) * t;
+        const float blend = seamAmount * (1.f - t);
+        rows[row][size_t(i)] += (edge - rows[row][size_t(i)]) * blend;
         const size_t right = size_t(settings.frameSize - 1 - i);
-        rows[row][right] = edge + (rows[row][right] - edge) * t;
+        rows[row][right] += (edge - rows[row][right]) * blend;
       }
     }
   }
