@@ -39,6 +39,7 @@ struct Iris final : Module {
 	    LIN_FM_PARAM,
 	    COARSE_STEP_MODE_PARAM,
 	    SOFT_SYNC_MODE_PARAM,
+	    SMOOTHING_MENU_PARAM,
 	    PARAMS_LEN
   };
 

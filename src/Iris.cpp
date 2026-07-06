@@ -66,6 +66,7 @@ Iris::Iris() {
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
   configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
+  configButton(SMOOTHING_MENU_PARAM, "Smoothing menu");
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(LIN_FM_INPUT, "Linear FM");
   configInput(SCAN_INPUT, "Scan CV");

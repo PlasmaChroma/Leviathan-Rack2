@@ -319,6 +319,45 @@ void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
   }));
 }
 
+struct IrisSmoothingMenuButton final : TL1105 {
+  Iris* module = nullptr;
+
+  void onButton(const event::Button& e) override {
+    if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+      TL1105::onButton(e);
+      return;
+    }
+    ui::Menu* menu = createMenu();
+    menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
+    menu->addChild(createMenuLabel("Smoothing"));
+    addEnumMenu(menu, "Seam smoothing", module, &module->conversionSettings.seamMode,
+      {{"Off", iris::SEAM_OFF}, {"Small", iris::SEAM_SMALL}, {"Medium", iris::SEAM_MEDIUM},
+       {"Large", iris::SEAM_LARGE}});
+    addEnumMenu(menu, "Wave smoothing", module, &module->conversionSettings.smoothingMode,
+      {{"Off", iris::SMOOTH_OFF}, {"Gentle", iris::SMOOTH_GENTLE}, {"Medium", iris::SMOOTH_MEDIUM},
+       {"Strong", iris::SMOOTH_STRONG}});
+    e.consume(this);
+  }
+
+  void draw(const DrawArgs& args) override {
+    TL1105::draw(args);
+    const float cx = 0.5f * box.size.x;
+    const float cy = 0.5f * box.size.y;
+    const float dy = std::max(1.6f, 0.16f * box.size.y);
+    const float halfW = std::max(1.9f, 0.22f * box.size.x);
+    const float y0 = cy - dy;
+    for (int i = 0; i < 3; ++i) {
+      const float y = y0 + dy * float(i);
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, cx - halfW, y);
+      nvgLineTo(args.vg, cx + halfW, y);
+      nvgStrokeWidth(args.vg, 1.2f);
+      nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+      nvgStroke(args.vg);
+    }
+  }
+};
+
 } // namespace
 
 struct IrisWidget final : ModuleWidget {
@@ -388,6 +427,13 @@ struct IrisWidget final : ModuleWidget {
       panel_svg::loadPointFromSvgMm(panelPath, id, &posMm);
       return posMm;
     };
+
+    IrisSmoothingMenuButton* smoothingMenu =
+      createParamCentered<IrisSmoothingMenuButton>(
+        mm2px(anchor("IRIS_SMOOTHING_MENU_BUTTON", Vec(3.46f, 65.5f))),
+        module, Iris::SMOOTHING_MENU_PARAM);
+    smoothingMenu->module = module;
+    addParam(smoothingMenu);
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_COARSE_PARAM", Vec(13.5f, 54.f))), module, Iris::COARSE_PARAM));
@@ -491,12 +537,6 @@ struct IrisWidget final : ModuleWidget {
     addEnumMenu(menu, "Trim flat rows", irisModule, &irisModule->conversionSettings.trimMode,
       {{"Off", iris::TRIM_OFF}, {"Gentle", iris::TRIM_GENTLE}, {"Medium", iris::TRIM_MEDIUM},
        {"Aggressive", iris::TRIM_AGGRESSIVE}});
-    addEnumMenu(menu, "Seam smoothing", irisModule, &irisModule->conversionSettings.seamMode,
-      {{"Off", iris::SEAM_OFF}, {"Small", iris::SEAM_SMALL}, {"Medium", iris::SEAM_MEDIUM},
-       {"Large", iris::SEAM_LARGE}});
-    addEnumMenu(menu, "Wave smoothing", irisModule, &irisModule->conversionSettings.smoothingMode,
-      {{"Off", iris::SMOOTH_OFF}, {"Gentle", iris::SMOOTH_GENTLE}, {"Medium", iris::SMOOTH_MEDIUM},
-       {"Strong", iris::SMOOTH_STRONG}});
     menu->addChild(createCheckMenuItem("Per-row DC removal", "",
       [irisModule]() { return irisModule->conversionSettings.dcRemove; },
       [irisModule]() {
