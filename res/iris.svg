@@ -6,7 +6,7 @@
    version="1.1"
    id="svg18"
    sodipodi:docname="iris.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -70,13 +70,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193417"
-     inkscape:cx="132.68072"
-     inkscape:cy="328.18845"
-     inkscape:window-width="1920"
-     inkscape:window-height="1043"
-     inkscape:window-x="3840"
-     inkscape:window-y="0"
+     inkscape:zoom="4.8386834"
+     inkscape:cx="114.18395"
+     inkscape:cy="345.44521"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg18"
      showgrid="false" />
@@ -133,12 +133,12 @@
     <g
        id="glass">
       <path
-         d="M 235 6808 H 5861 C 5980 6808 6040 6868 6040 6988 V 10254 C 6040 10374 5980 10434 5861 10434 H 3280 C 3200 10434 3160 10474 3160 10554 V 11860 C 3160 11940 3120 11980 3040 11980 H 235 C 116 11980 56 11920 56 11800 V 6988 C 56 6868 116 6808 235 6808 Z"
+         d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3280 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z"
          id="iris_input_field"
          style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
       <rect
          x="3190"
-         y="10470"
+         y="10630"
          width="2812"
          height="1510"
          rx="126"
@@ -156,19 +156,19 @@
        id="iris_preview_field"
        style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
     <path
-       d="M 1126.72,7640 H 3358.8802"
+       d="M 1126.72,7760.0522 H 3358.8802"
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 2957.0742,9407.9561 H 5534.926"
+       d="M 2957.0742,9527.9561 H 5534.926"
        id="iris_scan_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 1148 11097 H 2270"
+       d="M 1148,11195.878 H 2270"
        id="iris_fm_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 4704 7673.4561 H 5249.2969"
+       d="m 4704,7793.5083 h 545.2969"
        id="iris_soft_sync_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
   </g>
@@ -178,105 +178,105 @@
     <circle
        id="IRIS_COARSE_PARAM"
        cx="870.79999"
-       cy="7639.9502"
+       cy="7760"
        r="520" />
     <circle
        id="IRIS_FINE_PARAM"
        cx="2274.4182"
-       cy="7650.8862"
+       cy="7770.936"
        r="330" />
     <circle
        id="IRIS_SCAN_PARAM"
        cx="5268.6743"
-       cy="9407.7002"
+       cy="9527.7002"
        r="520" />
     <circle
        id="IRIS_FM_ATTEN_PARAM"
        cx="2249.6001"
-       cy="11079.697"
+       cy="11178.575"
        r="330" />
     <circle
        id="IRIS_SCAN_ATTEN_PARAM"
        cx="3905.7871"
-       cy="9413.3535"
+       cy="9533.3535"
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
        cx="1889.9816"
-       cy="9407.0713"
+       cy="9527.0713"
        r="240" />
     <circle
        id="IRIS_SMOOTHING_MENU_BUTTON"
        cx="346"
-       cy="6550"
+       cy="6710"
        r="113" />
     <g
        id="channel_selector">
       <circle
          id="IRIS_IMAGE_CHANNEL_BUTTON"
          cx="760.00012"
-         cy="9622.5596"
+         cy="9742.5596"
          r="138.11113"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_ALL_LIGHT"
-         cx="360.0001"
-         cy="9252.5596"
+         cx="360.00009"
+         cy="9372.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_RED_LIGHT"
          cx="1160.0001"
-         cy="9252.5596"
+         cy="9372.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_GREEN_LIGHT"
          cx="1160.0001"
-         cy="9992.5596"
+         cy="10112.56"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_BLUE_LIGHT"
-         cx="360.0001"
-         cy="9992.5596"
+         cx="360.00009"
+         cy="10112.56"
          r="97.777786"
          style="stroke-width:1.22224" />
     </g>
     <circle
        id="IRIS_V_OCT_INPUT"
        cx="3418.0366"
-       cy="7672.6787"
+       cy="7792.7285"
        r="260" />
     <circle
        id="IRIS_SOFT_SYNC_MODE_PARAM"
        cx="4463.6665"
-       cy="7673.4561"
+       cy="7793.5059"
        r="240" />
     <circle
        id="IRIS_FM_INPUT"
        cx="989.39923"
-       cy="11097.392"
+       cy="11196.27"
        r="260" />
     <circle
        id="IRIS_SCAN_INPUT"
        cx="2802.9001"
-       cy="9407.0713"
+       cy="9527.0713"
        r="260" />
     <circle
        id="IRIS_SYNC_INPUT"
        cx="5509.2969"
-       cy="7673.4561"
+       cy="7793.5059"
        r="260" />
     <circle
        id="IRIS_OUT_OUTPUT"
-       cx="3873.2473"
-       cy="11048.95"
+       cx="3923.2422"
+       cy="11178.575"
        r="260" />
     <circle
        id="IRIS_INV_OUTPUT"
-       cx="5323.2476"
-       cy="11048.95"
+       cx="5273.2964"
+       cy="11178.575"
        r="260" />
   </g>
   <rect
@@ -291,12 +291,12 @@
      id="screen">
     <rect
        id="IRIS_WAVE_PREVIEW"
-       x="96.52713"
-       y="4479.1777"
-       width="5902.9458"
-       height="1800"
+       x="97.029732"
+       y="4479.6802"
+       width="5901.9414"
+       height="1958.9949"
        rx="0"
-       style="display:inline;stroke:#1ccad8;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+       style="display:inline;stroke:#1ccad8;stroke-width:24.3052;stroke-dasharray:none;stroke-opacity:1" />
   </g>
   <g
      fill="#d8e0e6"
@@ -307,73 +307,79 @@
      style="display:inline">
     <text
        x="870.79999"
-       y="8639.8779"
+       y="8759.9277"
        id="text6"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan5"
          x="870.79999"
-         y="8639.8779">FREQ</tspan></text>
+         y="8759.9277">FREQ</tspan></text>
     <text
        x="2269.4792"
-       y="8359.7148"
+       y="8479.7646"
        id="text7"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
     <text
        x="3912.1372"
-       y="10114.978"
+       y="10354.978"
        id="text10"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan6"
          x="3912.1372"
-         y="10114.978">SCAN</tspan></text>
+         y="10354.978">━━━ SCAN ━━━</tspan></text>
     <text
        x="1889.9816"
-       y="10024.939"
+       y="10144.939"
        id="text12"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan4"
          x="1889.9816"
-         y="10024.939">OCT</tspan></text>
+         y="10144.939">OCT</tspan></text>
     <text
        x="3418.0366"
-       y="8359.9268"
+       y="8479.9766"
        id="text13"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
     <text
        x="4463.6665"
-       y="8359.9268"
+       y="8479.9766"
        id="text15"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SOFT</text>
     <text
        x="1584.3586"
-       y="11718.978"
+       y="11848.603"
        id="text14"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FM</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="1584.3586"
+         y="11848.603">LIN FM</tspan></text>
     <text
        x="5509.2969"
-       y="8359.9268"
+       y="8479.9766"
        id="text16"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SYNC</text>
     <text
-       x="3868.9973"
-       y="11718.978"
+       x="3918.9922"
+       y="11848.603"
        id="text17"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
          sodipodi:role="line"
          id="tspan1"
-         x="3868.9973"
-         y="11718.978"
+         x="3918.9922"
+         y="11848.603"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline">OUT+</tspan></text>
     <text
-       x="5319.8477"
-       y="11718.978"
+       x="5269.8965"
+       y="11848.603"
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
-         id="tspan7">OUT-</tspan></text>
+         id="tspan7"
+         x="5269.8965"
+         y="11848.603">OUT-</tspan></text>
     <text
        id="reworked_module_title_text"
        x="3031.3313"
