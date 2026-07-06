@@ -36,7 +36,7 @@ struct Iris final : Module {
 	    FINE_PARAM,
 	    SCAN_PARAM,
 	    SCAN_ATTEN_PARAM,
-	    FM_ATTEN_PARAM,
+	    LIN_FM_PARAM,
 	    COARSE_STEP_MODE_PARAM,
 	    SOFT_SYNC_MODE_PARAM,
 	    PARAMS_LEN
@@ -44,7 +44,7 @@ struct Iris final : Module {
 
   enum InputId {
     V_OCT_INPUT,
-    FM_INPUT,
+    LIN_FM_INPUT,
     SCAN_INPUT,
     SYNC_INPUT,
     INPUTS_LEN
@@ -67,6 +67,7 @@ struct Iris final : Module {
   struct Voice {
     iris::WavetableOscillator oscillator;
     dsp::SchmittTrigger sync;
+    float linHpState = 0.f;
   };
 
   Iris();
@@ -92,6 +93,7 @@ struct Iris final : Module {
 
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
+  std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};

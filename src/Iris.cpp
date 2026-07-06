@@ -6,6 +6,37 @@ namespace {
 
 const char* kEmbeddedTableName = "iris-table.bin";
 std::atomic<uint32_t> gIrisDebugInstanceCounter {1u};
+constexpr float kLinHpCutoffHz = 4.9f;
+constexpr float kLinFmScale = 0.10f;
+constexpr float kLinFmDriveThreshold = 0.80f;
+constexpr float kLinFmMaxDrive = 4.0f;
+constexpr float kMinFrequencyHz = 8.f;
+constexpr float kMaxFrequencyHz = 20000.f;
+
+float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {
+  const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
+  const float y = x - voice->linHpState;
+  voice->linHpState = x - hpCoeff * y;
+  return y;
+}
+
+float fastAtanApprox(float x) {
+  const float ax = std::fabs(x);
+  if (ax <= 1.f) return x * (0.78539816339f + 0.273f * (1.f - ax));
+  const float inv = 1.f / ax;
+  const float t = inv * (0.78539816339f + 0.273f * (1.f - inv));
+  return x >= 0.f ? 1.57079632679f - t : -1.57079632679f + t;
+}
+
+float drivenLinFm(float lin, float amount) {
+  const float bus = lin * amount * kLinFmScale;
+  const float driveNorm =
+    clamp((amount - kLinFmDriveThreshold) / (1.f - kLinFmDriveThreshold), 0.f, 1.f);
+  if (driveNorm <= 0.f || std::fabs(bus) < 1e-9f) return bus;
+  const float drive = 1.f + driveNorm * (kLinFmMaxDrive - 1.f);
+  const float norm = std::max(fastAtanApprox(drive), 1e-6f);
+  return fastAtanApprox(bus * drive) / norm;
+}
 
 int jsonIntegerOr(json_t* root, const char* key, int fallback) {
   json_t* value = json_object_get(root, key);
@@ -32,11 +63,11 @@ Iris::Iris() {
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(SCAN_PARAM, 0.f, 1.f, 0.f, "Image scan", " %", 0.f, 100.f);
   configParam(SCAN_ATTEN_PARAM, -1.f, 1.f, 0.f, "Scan CV attenuverter", " %", 0.f, 100.f);
-  configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuverter", " %", 0.f, 100.f);
+  configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
   configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
   configInput(V_OCT_INPUT, "V/Oct");
-  configInput(FM_INPUT, "Exponential FM");
+  configInput(LIN_FM_INPUT, "Linear FM");
   configInput(SCAN_INPUT, "Scan CV");
   configInput(SYNC_INPUT, "Sync");
   configOutput(OUT_OUTPUT, "Wavetable");
@@ -236,20 +267,29 @@ void Iris::process(const ProcessArgs& args) {
   const float fineParam = params[FINE_PARAM].getValue();
   const float scanParam = params[SCAN_PARAM].getValue();
   const float scanAttenParam = params[SCAN_ATTEN_PARAM].getValue();
-  const float fmAttenParam = params[FM_ATTEN_PARAM].getValue();
+  const float linFmParam = params[LIN_FM_PARAM].getValue();
   const float fine = std::isfinite(fineParam) ? fineParam / 1200.f : 0.f;
   const float scanKnob = std::isfinite(scanParam) ? clamp(scanParam, 0.f, 1.f) : 0.f;
   const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
-  const float fmAtten = std::isfinite(fmAttenParam) ? clamp(fmAttenParam, -1.f, 1.f) : 0.f;
+  const float linFmAmount = std::isfinite(linFmParam) ? clamp(linFmParam, 0.f, 1.f) : 0.f;
   const bool softSync = params[SOFT_SYNC_MODE_PARAM].getValue() > 0.5f;
   float scanDisplay = scanKnob;
+  float frequencyDisplay = 0.f;
   for (int channel = 0; channel < channels; ++channel) {
     const float vOctInput = inputs[V_OCT_INPUT].getPolyVoltage(channel);
-    const float fmInput = inputs[FM_INPUT].getPolyVoltage(channel);
-    float pitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f) +
-                  (std::isfinite(fmInput) ? fmInput : 0.f) * fmAtten;
-    pitch = clamp(pitch, -24.f, 16.f);
-    const float frequency = clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(pitch), 0.f, args.sampleRate * 0.45f);
+    const float mainPitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f);
+    const float basePitch = clamp(mainPitch, -24.f, 16.f);
+    const float baseFrequency =
+      clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(basePitch), kMinFrequencyHz, kMaxFrequencyHz);
+    const float linInput = inputs[LIN_FM_INPUT].getPolyVoltage(channel);
+    const float lin = acCoupledLinFm(
+      std::isfinite(linInput) ? linInput : 0.f, &voices[size_t(channel)], args.sampleTime);
+    const float linBus = drivenLinFm(lin, linFmAmount);
+    const float frequency =
+      clamp(baseFrequency + baseFrequency * linBus, kMinFrequencyHz, kMaxFrequencyHz);
+    if (channel == 0) {
+      frequencyDisplay = baseFrequency;
+    }
     const float scanInput = inputs[SCAN_INPUT].getPolyVoltage(channel);
     float scan = scanKnob + (std::isfinite(scanInput) ? scanInput : 0.f) * 0.1f * scanAtten;
     scan = clamp(scan, 0.f, 1.f);
@@ -268,6 +308,7 @@ void Iris::process(const ProcessArgs& args) {
     outputs[INV_OUTPUT].setVoltage(-volts, channel);
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
+  displayFrequencyHz.store(frequencyDisplay, std::memory_order_relaxed);
   lights[LOAD_LIGHT].setBrightness(loading.load(std::memory_order_relaxed) ? 1.f : 0.f);
   lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
   lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);

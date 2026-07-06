@@ -264,6 +264,38 @@ struct IrisWaveformPreview final : TransparentWidget {
   }
 };
 
+struct IrisFrequencyReadout final : TransparentWidget {
+  static constexpr float LABEL_FONT_SIZE = 11.5f;
+  Iris* module = nullptr;
+
+  explicit IrisFrequencyReadout(Iris* module) : module(module) {}
+
+  static std::string formatFrequencyText(float hz) {
+    if (!std::isfinite(hz) || hz < 0.f) hz = 0.f;
+    if (hz < 1.f) return string::f("%.1f mHz", hz * 1000.f);
+    if (hz >= 1000.f) return string::f("%.2f kHz", hz / 1000.f);
+    if (hz < 10.f) return string::f("%.2f Hz", hz);
+    if (hz < 100.f) return string::f("%.1f Hz", hz);
+    return string::f("%.0f Hz", hz);
+  }
+
+  void draw(const DrawArgs& args) override {
+    float displayHz = dsp::FREQ_C4;
+    if (module) {
+      displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+      if (displayHz <= 0.f) {
+        displayHz = irisBaseFrequencyFromKnob(module->params[Iris::COARSE_PARAM].getValue());
+      }
+    }
+    const std::string text = formatFrequencyText(displayHz);
+    nvgFontSize(args.vg, LABEL_FONT_SIZE);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+    nvgText(args.vg, box.size.x * 0.5f, 1.5f, text.c_str(), nullptr);
+  }
+};
+
 template <typename EnumType>
 void addEnumMenu(Menu* menu, const char* label, Iris* module, EnumType* setting,
                  const std::vector<std::pair<std::string, EnumType> >& choices) {
@@ -338,6 +370,11 @@ struct IrisWidget final : ModuleWidget {
     waveformPreview->framebuffer = waveformFb;
     waveformFb->addChild(waveformPreview);
     addChild(waveformFb);
+    IrisFrequencyReadout* frequencyReadout = new IrisFrequencyReadout(module);
+    frequencyReadout->box.pos = mm2px(Vec(
+      waveformRectMm.pos.x, waveformRectMm.pos.y + waveformRectMm.size.y));
+    frequencyReadout->box.size = mm2px(Vec(waveformRectMm.size.x, 5.f));
+    addChild(frequencyReadout);
 
     auto anchor = [&](const char* id, const Vec& fallbackMm) {
       Vec posMm = fallbackMm;
@@ -351,10 +388,8 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));
-    Eclipse2Knob* fmAtten = createParamCentered<Eclipse2Knob>(
-      mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::FM_ATTEN_PARAM);
-    fmAtten->setProgressRingBipolar(true);
-    addParam(fmAtten);
+    addParam(createParamCentered<Eclipse2Knob>(
+      mm2px(anchor("IRIS_FM_ATTEN_PARAM", Vec(13.5f, 74.f))), module, Iris::LIN_FM_PARAM));
     Eclipse2Knob* scanAtten = createParamCentered<Eclipse2Knob>(
       mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM);
     scanAtten->setProgressRingBipolar(true);
@@ -371,7 +406,7 @@ struct IrisWidget final : ModuleWidget {
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
-      mm2px(anchor("IRIS_FM_INPUT", Vec(23.f, 99.f))), module, Iris::FM_INPUT));
+      mm2px(anchor("IRIS_FM_INPUT", Vec(23.f, 99.f))), module, Iris::LIN_FM_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_SCAN_INPUT", Vec(37.96f, 99.f))), module, Iris::SCAN_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
