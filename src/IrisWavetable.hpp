@@ -31,12 +31,20 @@ enum TrimMode {
   TRIM_AGGRESSIVE = 3,
 };
 
+enum ImageChannelMode {
+  IMAGE_CHANNEL_ALL = 0,
+  IMAGE_CHANNEL_RED = 1,
+  IMAGE_CHANNEL_GREEN = 2,
+  IMAGE_CHANNEL_BLUE = 3,
+};
+
 struct ConversionSettings {
   int frameSize = kFrameSize;
   int rows = kDefaultRows;
   NormalizeMode normalizeMode = NORMALIZE_BALANCED;
   RowOrder rowOrder = ROW_TOP_TO_BOTTOM;
   TrimMode trimMode = TRIM_OFF;
+  ImageChannelMode imageChannelMode = IMAGE_CHANNEL_ALL;
   float seamSmoothing = 0.f;
   float waveSmoothing = 0.f;
   bool dcRemove = false;
@@ -216,13 +224,22 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
       const int x0 = std::max(0, std::min(int(std::floor(sourceX)), sourceWidth - 1));
       const int x1 = std::min(x0 + 1, sourceWidth - 1);
       const float fx = clamp01(sourceX - float(x0));
-      const auto luma = [&](int px, int py) {
+      const auto channelValue = [&](int px, int py) {
         const size_t base = (size_t(py) * size_t(sourceWidth) + size_t(px)) * 4u;
-        return (0.299f * float(rgba[base]) + 0.587f * float(rgba[base + 1u]) +
-                0.114f * float(rgba[base + 2u])) / 255.f;
+        switch (settings.imageChannelMode) {
+          case IMAGE_CHANNEL_RED: return float(rgba[base]) / 255.f;
+          case IMAGE_CHANNEL_GREEN: return float(rgba[base + 1u]) / 255.f;
+          case IMAGE_CHANNEL_BLUE: return float(rgba[base + 2u]) / 255.f;
+          case IMAGE_CHANNEL_ALL:
+          default:
+            return (0.299f * float(rgba[base]) + 0.587f * float(rgba[base + 1u]) +
+                    0.114f * float(rgba[base + 2u])) / 255.f;
+        }
       };
-      const float top = luma(x0, y0) + (luma(x1, y0) - luma(x0, y0)) * fx;
-      const float bottom = luma(x0, y1) + (luma(x1, y1) - luma(x0, y1)) * fx;
+      const float top =
+        channelValue(x0, y0) + (channelValue(x1, y0) - channelValue(x0, y0)) * fx;
+      const float bottom =
+        channelValue(x0, y1) + (channelValue(x1, y1) - channelValue(x0, y1)) * fx;
       float gray = top + (bottom - top) * fy;
       gray = clamp01((gray - 0.5f) * settings.contrast + 0.5f + settings.brightness);
       gray = std::pow(gray, settings.gamma);

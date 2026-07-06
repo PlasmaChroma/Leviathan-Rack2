@@ -40,6 +40,7 @@ struct Iris final : Module {
 	    COARSE_STEP_MODE_PARAM,
 	    SOFT_SYNC_MODE_PARAM,
 	    SMOOTHING_MENU_PARAM,
+	    IMAGE_CHANNEL_PARAM,
 	    PARAMS_LEN
   };
 
@@ -62,6 +63,10 @@ struct Iris final : Module {
 	    ERROR_LIGHT,
 	    COARSE_STEP_MODE_LIGHT,
 	    SOFT_SYNC_MODE_LIGHT,
+	    IMAGE_CHANNEL_ALL_LIGHT,
+	    IMAGE_CHANNEL_RED_LIGHT,
+	    IMAGE_CHANNEL_GREEN_LIGHT,
+	    IMAGE_CHANNEL_BLUE_LIGHT,
 	    LIGHTS_LEN
   };
 
@@ -95,6 +100,7 @@ struct Iris final : Module {
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
   std::atomic<float> displayFrequencyHz {0.f};
+  std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};

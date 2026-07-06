@@ -67,6 +67,7 @@ Iris::Iris() {
   configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
   configButton(SMOOTHING_MENU_PARAM, "Image options");
+  configButton(IMAGE_CHANNEL_PARAM, "Image color channel");
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(LIN_FM_INPUT, "Linear FM");
   configInput(SCAN_INPUT, "Scan CV");
@@ -324,6 +325,11 @@ void Iris::process(const ProcessArgs& args) {
   lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
   lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
   lights[SOFT_SYNC_MODE_LIGHT].setBrightness(softSync ? 0.5f : 0.f);
+  const int imageChannelMode = clamp(displayImageChannelMode.load(std::memory_order_relaxed), 0, 3);
+  lights[IMAGE_CHANNEL_ALL_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_ALL ? 1.f : 0.f);
+  lights[IMAGE_CHANNEL_RED_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_RED ? 1.f : 0.f);
+  lights[IMAGE_CHANNEL_GREEN_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_GREEN ? 1.f : 0.f);
+  lights[IMAGE_CHANNEL_BLUE_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_BLUE ? 1.f : 0.f);
   if (measurePerf) {
     debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
   }
@@ -373,6 +379,7 @@ json_t* Iris::dataToJson() {
   json_object_set_new(conversion, "normalizeMode", json_integer(conversionSettings.normalizeMode));
   json_object_set_new(conversion, "rowOrder", json_integer(conversionSettings.rowOrder));
   json_object_set_new(conversion, "trimMode", json_integer(conversionSettings.trimMode));
+  json_object_set_new(conversion, "imageChannelMode", json_integer(conversionSettings.imageChannelMode));
   json_object_set_new(conversion, "seamSmoothing", json_real(conversionSettings.seamSmoothing));
   json_object_set_new(conversion, "waveSmoothing", json_real(conversionSettings.waveSmoothing));
   json_object_set_new(conversion, "dcRemove", json_boolean(conversionSettings.dcRemove));
@@ -397,6 +404,9 @@ void Iris::dataFromJson(json_t* root) {
       jsonIntegerOr(conversion, "rowOrder", iris::ROW_TOP_TO_BOTTOM), 0, 1));
     conversionSettings.trimMode = iris::TrimMode(clamp(
       jsonIntegerOr(conversion, "trimMode", iris::TRIM_OFF), 0, 3));
+    conversionSettings.imageChannelMode = iris::ImageChannelMode(clamp(
+      jsonIntegerOr(conversion, "imageChannelMode", iris::IMAGE_CHANNEL_ALL), 0, 3));
+    displayImageChannelMode.store(int(conversionSettings.imageChannelMode), std::memory_order_relaxed);
     conversionSettings.seamSmoothing =
       clamp(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, 1.f);
     conversionSettings.waveSmoothing =

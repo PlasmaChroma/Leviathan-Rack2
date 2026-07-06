@@ -105,6 +105,22 @@ int main() {
   check("RGBA red image converts",
         iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &red));
   check("RGBA channels use resized pixel data", std::fabs(red.samples[0] - (2.f * 0.299f - 1.f)) < 0.01f);
+  settings.imageChannelMode = iris::IMAGE_CHANNEL_RED;
+  iris::ImageWavetable redChannel;
+  check("red channel interpretation selects red",
+        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &redChannel) &&
+        redChannel.samples[0] > 0.99f);
+  settings.imageChannelMode = iris::IMAGE_CHANNEL_GREEN;
+  iris::ImageWavetable greenChannel;
+  check("green channel interpretation rejects red",
+        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &greenChannel) &&
+        greenChannel.samples[0] < -0.99f);
+  settings.imageChannelMode = iris::IMAGE_CHANNEL_BLUE;
+  iris::ImageWavetable blueChannel;
+  check("blue channel interpretation rejects red",
+        iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &blueChannel) &&
+        blueChannel.samples[0] < -0.99f);
+  settings.imageChannelMode = iris::IMAGE_CHANNEL_ALL;
 
   settings.trimMode = iris::TRIM_AGGRESSIVE;
   pixels = solid(2, 4, 128u);
