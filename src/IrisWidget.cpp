@@ -474,8 +474,11 @@ struct IrisWidget final : ModuleWidget {
       labelsFb->addChild(labels);
       addChild(labelsFb);
     }
-    addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
-    addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+    addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+    addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(
+      Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
     math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);
