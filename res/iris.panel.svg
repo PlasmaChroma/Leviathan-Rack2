@@ -34,6 +34,7 @@
     <path d="M 1126.72,7640 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
     <path d="M 2270,9407.9561 H 5252" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path d="M 1148 11097 H 2270" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path d="M 4704 7673.4561 H 5249.2969" id="iris_soft_sync_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
   </g>
   <g id="components" style="display:inline">
     <circle id="IRIS_COARSE_PARAM" cx="870.79999" cy="7639.9502" r="520" />
