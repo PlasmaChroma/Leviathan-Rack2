@@ -8,7 +8,7 @@ Split an SVG into:
 
 By default, the panel/art SVG also strips SVG text elements so the runtime
 panel does not depend on locally installed fonts. The labels-only SVG keeps
-text unchanged.
+text unchanged unless --outline-label-text is passed.
 
 Expected source convention:
   <g id="labels"> ... </g>
@@ -23,7 +23,11 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -136,6 +140,130 @@ def strip_font_text_elements(root: ET.Element) -> int:
     return removed
 
 
+def count_text_elements(root: ET.Element) -> int:
+    text_element_names = {
+        "text",
+        "tspan",
+        "textPath",
+        "flowRoot",
+        "flowRegion",
+        "flowPara",
+        "flowSpan",
+        "flowDiv",
+    }
+    return sum(1 for elem in root.iter() if local_name(elem.tag) in text_element_names)
+
+
+def find_inkscape(override: str | None) -> str:
+    if override:
+        return override
+
+    candidates = [
+        shutil.which("inkscape.com"),
+        shutil.which("inkscape"),
+        shutil.which("inkscape.exe"),
+        "/mnt/c/Program Files/Inkscape/bin/inkscape.com",
+        "/mnt/c/Program Files/Inkscape/bin/inkscape.exe",
+        "/mnt/c/Program Files/Inkscape/inkscape.com",
+        "/mnt/c/Program Files/Inkscape/inkscape.exe",
+        "/mnt/c/Program Files (x86)/Inkscape/bin/inkscape.com",
+        "/mnt/c/Program Files (x86)/Inkscape/bin/inkscape.exe",
+        "/mnt/c/Program Files (x86)/Inkscape/inkscape.com",
+        "/mnt/c/Program Files (x86)/Inkscape/inkscape.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return candidate
+
+    raise RuntimeError(
+        "could not find Inkscape; pass --inkscape-path or install inkscape/inkscape.exe"
+    )
+
+
+def path_for_executable(path: Path, executable: str) -> str:
+    """
+    Windows Inkscape launched from WSL needs Windows-style paths. Native Linux
+    Inkscape should receive normal POSIX paths.
+    """
+    path = path.resolve()
+    exe_lower = executable.lower()
+
+    if exe_lower.endswith(".exe") or exe_lower.endswith(".com"):
+        path_string = str(path)
+        parts = path.parts
+        if len(parts) >= 3 and parts[0] == "/" and parts[1] == "mnt" and len(parts[2]) == 1:
+            drive = parts[2].upper()
+            return drive + ":\\" + "\\".join(parts[3:])
+
+        cygpath = shutil.which("cygpath")
+        if cygpath:
+            return subprocess.check_output(
+                [cygpath, "-w", path_string],
+                text=True,
+            ).strip()
+
+    return str(path)
+
+
+def outline_text_with_inkscape(
+    svg_path: Path,
+    inkscape_path: str | None,
+    inkscape_timeout_sec: float,
+) -> None:
+    executable = find_inkscape(inkscape_path)
+
+    # Write next to the target so Windows Inkscape can access it reliably when
+    # this script is called from WSL/MSYS path spaces.
+    with tempfile.TemporaryDirectory(
+        prefix=f".{svg_path.stem}.outline.",
+        dir=str(svg_path.parent),
+    ) as tmp_dir:
+        tmp_output = Path(tmp_dir) / svg_path.name
+        input_arg = path_for_executable(svg_path, executable)
+        output_arg = path_for_executable(tmp_output, executable)
+
+        command = [
+            executable,
+            input_arg,
+            "--export-type=svg",
+            "--export-plain-svg",
+            "--export-text-to-path",
+            f"--export-filename={output_arg}",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=inkscape_timeout_sec,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "Inkscape text outline timed out after "
+                f"{inkscape_timeout_sec:g}s: {' '.join(command)}"
+                + (f"\nstdout:\n{exc.stdout}" if exc.stdout else "")
+                + (f"\nstderr:\n{exc.stderr}" if exc.stderr else "")
+            )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Inkscape text outline failed"
+                + (f"\nstdout:\n{result.stdout}" if result.stdout else "")
+                + (f"\nstderr:\n{result.stderr}" if result.stderr else "")
+            )
+
+        if not tmp_output.exists():
+            raise RuntimeError("Inkscape text outline did not create an output SVG")
+
+        outlined_tree = ET.parse(tmp_output)
+        remaining_text = strip_font_text_elements(outlined_tree.getroot())
+        if remaining_text:
+            ET.indent(outlined_tree, space="  ")
+            outlined_tree.write(tmp_output, encoding="utf-8", xml_declaration=True)
+
+        svg_path.write_bytes(tmp_output.read_bytes())
+
+
 def split_svg(
     source_path: Path,
     label_id: str,
@@ -144,6 +272,9 @@ def split_svg(
     overwrite: bool,
     cleanup: bool,
     strip_panel_text: bool,
+    outline_label_text: bool,
+    inkscape_path: str | None,
+    inkscape_timeout_sec: float,
 ) -> tuple[Path, Path]:
     tree = ET.parse(source_path)
     root = tree.getroot()
@@ -178,6 +309,9 @@ def split_svg(
     labels_tree = ET.ElementTree(labels_root)
     ET.indent(labels_tree, space="  ")
     labels_tree.write(labels_path, encoding="utf-8", xml_declaration=True)
+
+    if outline_label_text:
+        outline_text_with_inkscape(labels_path, inkscape_path, inkscape_timeout_sec)
 
     # panel-only SVG
     panel_root = copy.deepcopy(root)
@@ -255,6 +389,22 @@ def main() -> int:
         action="store_true",
         help="Do not strip font-backed SVG text elements from the panel output",
     )
+    parser.add_argument(
+        "--outline-label-text",
+        action="store_true",
+        help="Convert font-backed text in the labels output to paths using Inkscape",
+    )
+    parser.add_argument(
+        "--inkscape-path",
+        default=os.environ.get("INKSCAPE"),
+        help="Path to inkscape/inkscape.exe. Defaults to PATH, INKSCAPE, or common Windows install paths.",
+    )
+    parser.add_argument(
+        "--inkscape-timeout",
+        type=float,
+        default=30.0,
+        help="Seconds to wait for Inkscape text outlining before failing.",
+    )
 
     args = parser.parse_args()
 
@@ -281,6 +431,9 @@ def main() -> int:
                 overwrite=args.overwrite,
                 cleanup=not args.no_cleanup,
                 strip_panel_text=not args.keep_panel_text,
+                outline_label_text=args.outline_label_text,
+                inkscape_path=args.inkscape_path,
+                inkscape_timeout_sec=args.inkscape_timeout,
             )
             print(f"{svg_path}")
             print(f"  -> {panel_path}")

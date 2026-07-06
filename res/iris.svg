@@ -71,13 +71,13 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="3.4214658"
-     inkscape:cx="115.30146"
-     inkscape:cy="366.36345"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
-     inkscape:window-maximized="1"
+     inkscape:cx="115.15532"
+     inkscape:cy="342.98165"
+     inkscape:window-width="1865"
+     inkscape:window-height="1211"
+     inkscape:window-x="602"
+     inkscape:window-y="82"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg18"
      showgrid="false" />
   <rect
@@ -153,9 +153,9 @@
        id="iris_output_field"
        style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
     <path
-       d="m 1240.7875,7640 h 2744"
+       d="M 1126.72,7640 H 3358.8802"
        id="iris_freq_guide"
-       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
     <path
        d="M 2270 9288 H 5252"
        id="iris_scan_guide"
@@ -164,22 +164,18 @@
        d="M 1148 11097 H 2270"
        id="iris_fm_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
-    <path
-       d="m 3873.2474,11048.95 h 1450"
-       id="iris_output_guide"
-       style="display:inline;opacity:0.72;fill:none;stroke:#1cccd9;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
   </g>
   <g
      id="components"
      style="display:inline">
     <circle
        id="IRIS_COARSE_PARAM"
-       cx="1240.7875"
+       cx="870.79999"
        cy="7639.9502"
        r="520" />
     <circle
        id="IRIS_FINE_PARAM"
-       cx="2742.9634"
+       cx="2274.4182"
        cy="7650.8862"
        r="330" />
     <circle
@@ -189,7 +185,7 @@
        r="520" />
     <circle
        id="IRIS_FM_ATTEN_PARAM"
-       cx="2129.6387"
+       cx="2249.6001"
        cy="11079.697"
        r="330" />
     <circle
@@ -204,7 +200,7 @@
        r="240" />
     <circle
        id="IRIS_V_OCT_INPUT"
-       cx="3985.1394"
+       cx="3418.0366"
        cy="7672.6787"
        r="260" />
     <circle
@@ -219,7 +215,7 @@
        r="260" />
     <circle
        id="IRIS_SYNC_INPUT"
-       cx="5109.2861"
+       cx="5509.2969"
        cy="7673.4561"
        r="260" />
     <circle
@@ -257,65 +253,67 @@
      id="labels"
      style="display:inline">
     <text
-       x="1240.7875"
-       y="8340"
+       x="870.79999"
+       y="8519.9268"
        id="text6"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">COARSE</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan5"
+         x="870.79999"
+         y="8519.9268">FREQ</tspan></text>
     <text
-       x="2739.2593"
-       y="8179.7886"
+       x="2269.4792"
+       y="8359.7148"
        id="text7"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FINE</text>
-    <text
-       x="4968.6929"
-       y="10025"
-       id="text8"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
     <text
        x="3418.2134"
-       y="9815"
+       y="9994.9775"
        id="text10"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN CV</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         x="3418.2134"
+         y="9994.9775">SCAN</tspan></text>
     <text
        x="989.39923"
-       y="9815"
+       y="9904.9834"
        id="text12"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">OCTAVE</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan4">OCT</tspan></text>
     <text
-       x="3985.1394"
-       y="8180"
+       x="3418.0366"
+       y="8359.9268"
        id="text13"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">V/OCT</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
     <text
-       x="1524.4132"
-       y="11670"
+       x="1584.3586"
+       y="11718.978"
        id="text14"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">FM</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FM</text>
     <text
-       x="2129.6387"
-       y="9815"
-       id="text15"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SCAN</text>
-    <text
-       x="5109.2861"
-       y="8180"
+       x="5509.2969"
+       y="8359.9268"
        id="text16"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">SYNC</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SYNC</text>
     <text
        x="3868.9973"
-       y="11658.934"
+       y="11718.978"
        id="text17"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
          sodipodi:role="line"
          id="tspan1"
          x="3868.9973"
-         y="11658.934"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline">OUT+</tspan></text>
+         y="11718.978"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline">OUT+</tspan></text>
     <text
        x="5319.8477"
-       y="11658.934"
+       y="11718.978"
        id="text18"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">INV</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan7">OUT-</tspan></text>
     <text
        id="reworked_module_title_text"
        x="3037.1521"
