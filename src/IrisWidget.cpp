@@ -548,7 +548,7 @@ struct IrisWidget final : ModuleWidget {
     addParam(smoothingMenu);
 
     const Vec channelButtonPos =
-      anchor("IRIS_IMAGE_CHANNEL_BUTTON", Vec(57.5f, 65.5f));
+      anchor("IRIS_IMAGE_CHANNEL_BUTTON", Vec(3.46f, 94.07f));
     IrisImageChannelButton* channelButton =
       createParamCentered<IrisImageChannelButton>(
         mm2px(channelButtonPos), module, Iris::IMAGE_CHANNEL_PARAM);
@@ -556,16 +556,16 @@ struct IrisWidget final : ModuleWidget {
     channelButton->module = module;
     addParam(channelButton);
     addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(51.15f, 64.4f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(8.f, 92.97f))),
       module, Iris::IMAGE_CHANNEL_ALL_LIGHT));
     addChild(createLightCentered<TinyAperture<RedApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_RED_LIGHT", Vec(53.55f, 64.4f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_RED_LIGHT", Vec(10.4f, 92.97f))),
       module, Iris::IMAGE_CHANNEL_RED_LIGHT));
     addChild(createLightCentered<TinyAperture<GreenApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_GREEN_LIGHT", Vec(53.55f, 66.6f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_GREEN_LIGHT", Vec(10.4f, 95.17f))),
       module, Iris::IMAGE_CHANNEL_GREEN_LIGHT));
     addChild(createLightCentered<TinyAperture<BlueApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(51.15f, 66.6f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(8.f, 95.17f))),
       module, Iris::IMAGE_CHANNEL_BLUE_LIGHT));
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
@@ -581,7 +581,7 @@ struct IrisWidget final : ModuleWidget {
     scanAtten->setProgressRingBipolar(true);
     addParam(scanAtten);
     SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
-      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
+      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(14.2f, 94.07f))),
       module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
     addParam(octaveStep);
     SmallGoldApertureButton* softSync = createLightParamCentered<SmallGoldApertureButton>(
