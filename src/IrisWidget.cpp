@@ -439,17 +439,6 @@ struct IrisSmoothingMenuButton final : TL1105 {
 
 struct IrisImageChannelButton final : SmallGoldButton {
   Iris* module = nullptr;
-  Vec contentScale = Vec(1.f, 1.f);
-
-  void setDisplaySize(Vec size) {
-    const Vec oldSize = box.size;
-    const Vec center = box.pos.plus(oldSize.div(2.f));
-    contentScale = Vec(
-      size.x / std::max(oldSize.x, 1.f),
-      size.y / std::max(oldSize.y, 1.f));
-    box.size = size;
-    box.pos = center.minus(size.div(2.f));
-  }
 
   void onButton(const event::Button& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
@@ -460,13 +449,6 @@ struct IrisImageChannelButton final : SmallGoldButton {
       module->requestRebuild();
     }
     SmallGoldButton::onButton(e);
-  }
-
-  void draw(const DrawArgs& args) override {
-    nvgSave(args.vg);
-    nvgScale(args.vg, contentScale.x, contentScale.y);
-    SmallGoldButton::draw(args);
-    nvgRestore(args.vg);
   }
 };
 
@@ -548,24 +530,23 @@ struct IrisWidget final : ModuleWidget {
     addParam(smoothingMenu);
 
     const Vec channelButtonPos =
-      anchor("IRIS_IMAGE_CHANNEL_BUTTON", Vec(3.46f, 94.07f));
+      anchor("IRIS_IMAGE_CHANNEL_BUTTON", Vec(6.2f, 94.07f));
     IrisImageChannelButton* channelButton =
       createParamCentered<IrisImageChannelButton>(
         mm2px(channelButtonPos), module, Iris::IMAGE_CHANNEL_PARAM);
-    channelButton->setDisplaySize(smoothingMenu->box.size);
     channelButton->module = module;
     addParam(channelButton);
     addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(8.f, 92.97f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(3.4f, 91.47f))),
       module, Iris::IMAGE_CHANNEL_ALL_LIGHT));
     addChild(createLightCentered<TinyAperture<RedApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_RED_LIGHT", Vec(10.4f, 92.97f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_RED_LIGHT", Vec(9.f, 91.47f))),
       module, Iris::IMAGE_CHANNEL_RED_LIGHT));
     addChild(createLightCentered<TinyAperture<GreenApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_GREEN_LIGHT", Vec(10.4f, 95.17f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_GREEN_LIGHT", Vec(9.f, 96.67f))),
       module, Iris::IMAGE_CHANNEL_GREEN_LIGHT));
     addChild(createLightCentered<TinyAperture<BlueApertureLight>>(
-      mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(8.f, 95.17f))),
+      mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(3.4f, 96.67f))),
       module, Iris::IMAGE_CHANNEL_BLUE_LIGHT));
 
     addParam(createParamCentered<LeviathanHaloKnob2>(

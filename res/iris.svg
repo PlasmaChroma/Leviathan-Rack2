@@ -78,7 +78,7 @@
      inkscape:window-x="3840"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="iris_section_fields"
+     inkscape:current-layer="components"
      showgrid="false" />
   <rect
      width="6096"
@@ -202,7 +202,7 @@
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
-       cx="1829.9816"
+       cx="1909.9816"
        cy="9407.0713"
        r="240" />
     <circle
@@ -210,31 +210,39 @@
        cx="346"
        cy="6550"
        r="113" />
-    <circle
-       id="IRIS_IMAGE_CHANNEL_BUTTON"
-       cx="346"
-       cy="9407"
-       r="113" />
-    <circle
-       id="IRIS_IMAGE_CHANNEL_ALL_LIGHT"
-       cx="800"
-       cy="9297"
-       r="80" />
-    <circle
-       id="IRIS_IMAGE_CHANNEL_RED_LIGHT"
-       cx="1040"
-       cy="9297"
-       r="80" />
-    <circle
-       id="IRIS_IMAGE_CHANNEL_GREEN_LIGHT"
-       cx="1040"
-       cy="9517"
-       r="80" />
-    <circle
-       id="IRIS_IMAGE_CHANNEL_BLUE_LIGHT"
-       cx="800"
-       cy="9517"
-       r="80" />
+    <g
+       id="channel_selector">
+      <circle
+         id="IRIS_IMAGE_CHANNEL_BUTTON"
+         cx="840.00012"
+         cy="9622.5596"
+         r="138.11113"
+         style="stroke-width:1.22224" />
+      <circle
+         id="IRIS_IMAGE_CHANNEL_ALL_LIGHT"
+         cx="497.7778"
+         cy="9304.7783"
+         r="97.777786"
+         style="stroke-width:1.22224" />
+      <circle
+         id="IRIS_IMAGE_CHANNEL_RED_LIGHT"
+         cx="1182.2223"
+         cy="9304.7783"
+         r="97.777786"
+         style="stroke-width:1.22224" />
+      <circle
+         id="IRIS_IMAGE_CHANNEL_GREEN_LIGHT"
+         cx="1182.2223"
+         cy="9940.3252"
+         r="97.777786"
+         style="stroke-width:1.22224" />
+      <circle
+         id="IRIS_IMAGE_CHANNEL_BLUE_LIGHT"
+         cx="497.7778"
+         cy="9940.3252"
+         r="97.777786"
+         style="stroke-width:1.22224" />
+    </g>
     <circle
        id="IRIS_V_OCT_INPUT"
        cx="3418.0366"
@@ -321,13 +329,13 @@
          x="3900.4873"
          y="10114.978">SCAN</tspan></text>
     <text
-       x="1829.9816"
+       x="1909.9816"
        y="10024.939"
        id="text12"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan4"
-         x="1829.9816"
+         x="1909.9816"
          y="10024.939">OCT</tspan></text>
     <text
        x="3418.0366"
