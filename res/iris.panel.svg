@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg18" sodipodi:docname="iris.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
   <defs id="defs18">
-    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-3059.0803,-888.31151)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5743.77" y1="1469.6917" x2="6524.6782" y2="1481.2723" gradientTransform="matrix(0.99690805,0,0,0.99690805,-3064.9011,-888.31151)" />
     <linearGradient id="linearGradient22" inkscape:collect="always">
       <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
@@ -30,19 +30,19 @@
     <path d="M 235 6808 H 5861 C 5980 6808 6040 6868 6040 6988 V 10254 C 6040 10374 5980 10434 5861 10434 H 3280 C 3200 10434 3160 10474 3160 10554 V 11860 C 3160 11940 3120 11980 3040 11980 H 235 C 116 11980 56 11920 56 11800 V 6988 C 56 6868 116 6808 235 6808 Z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
     <rect x="3190" y="10470" width="2812" height="1510" rx="126" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
     <path d="M 1126.72,7640 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
-    <path d="M 2270 9288 H 5252" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path d="M 2270,9407.9561 H 5252" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path d="M 1148 11097 H 2270" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
   </g>
   <g id="components" style="display:inline">
     <circle id="IRIS_COARSE_PARAM" cx="870.79999" cy="7639.9502" r="520" />
     <circle id="IRIS_FINE_PARAM" cx="2274.4182" cy="7650.8862" r="330" />
-    <circle id="IRIS_SCAN_PARAM" cx="4968.6929" cy="9287.7441" r="520" />
+    <circle id="IRIS_SCAN_PARAM" cx="4968.6929" cy="9407.7002" r="520" />
     <circle id="IRIS_FM_ATTEN_PARAM" cx="2249.6001" cy="11079.697" r="330" />
-    <circle id="IRIS_SCAN_ATTEN_PARAM" cx="3419.1658" cy="9293.3975" r="330" />
-    <circle id="IRIS_COARSE_STEP_MODE_PARAM" cx="989.39923" cy="9287.1152" r="240" />
+    <circle id="IRIS_SCAN_ATTEN_PARAM" cx="3419.1658" cy="9413.3535" r="330" />
+    <circle id="IRIS_COARSE_STEP_MODE_PARAM" cx="989.39923" cy="9407.0713" r="240" />
     <circle id="IRIS_V_OCT_INPUT" cx="3418.0366" cy="7672.6787" r="260" />
     <circle id="IRIS_FM_INPUT" cx="989.39923" cy="11097.392" r="260" />
-    <circle id="IRIS_SCAN_INPUT" cx="2129.6387" cy="9287.1152" r="260" />
+    <circle id="IRIS_SCAN_INPUT" cx="2129.6387" cy="9407.0713" r="260" />
     <circle id="IRIS_SYNC_INPUT" cx="5509.2969" cy="7673.4561" r="260" />
     <circle id="IRIS_OUT_OUTPUT" cx="3873.2473" cy="11048.95" r="260" />
     <circle id="IRIS_INV_OUTPUT" cx="5323.2476" cy="11048.95" r="260" />

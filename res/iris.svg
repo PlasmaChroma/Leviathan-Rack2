@@ -19,11 +19,11 @@
        xlink:href="#linearGradient22"
        id="linearGradient500"
        gradientUnits="userSpaceOnUse"
-       x1="5355.9189"
-       y1="1516.2338"
-       x2="6904.7725"
-       y2="1512.3004"
-       gradientTransform="matrix(0.99690805,0,0,0.99690805,-3059.0803,-888.31151)" />
+       x1="5743.77"
+       y1="1469.6917"
+       x2="6524.6782"
+       y2="1481.2723"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-3064.9011,-888.31151)" />
     <linearGradient
        id="linearGradient22"
        inkscape:collect="always">
@@ -72,7 +72,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="3.4214658"
      inkscape:cx="115.15532"
-     inkscape:cy="342.98165"
+     inkscape:cy="109.16374"
      inkscape:window-width="1865"
      inkscape:window-height="1211"
      inkscape:window-x="602"
@@ -157,7 +157,7 @@
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="M 2270 9288 H 5252"
+       d="M 2270,9407.9561 H 5252"
        id="iris_scan_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
     <path
@@ -181,7 +181,7 @@
     <circle
        id="IRIS_SCAN_PARAM"
        cx="4968.6929"
-       cy="9287.7441"
+       cy="9407.7002"
        r="520" />
     <circle
        id="IRIS_FM_ATTEN_PARAM"
@@ -191,12 +191,12 @@
     <circle
        id="IRIS_SCAN_ATTEN_PARAM"
        cx="3419.1658"
-       cy="9293.3975"
+       cy="9413.3535"
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
        cx="989.39923"
-       cy="9287.1152"
+       cy="9407.0713"
        r="240" />
     <circle
        id="IRIS_V_OCT_INPUT"
@@ -211,7 +211,7 @@
     <circle
        id="IRIS_SCAN_INPUT"
        cx="2129.6387"
-       cy="9287.1152"
+       cy="9407.0713"
        r="260" />
     <circle
        id="IRIS_SYNC_INPUT"
@@ -254,13 +254,13 @@
      style="display:inline">
     <text
        x="870.79999"
-       y="8519.9268"
+       y="8639.8779"
        id="text6"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan5"
          x="870.79999"
-         y="8519.9268">FREQ</tspan></text>
+         y="8639.8779">FREQ</tspan></text>
     <text
        x="2269.4792"
        y="8359.7148"
@@ -268,20 +268,22 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
     <text
        x="3418.2134"
-       y="9994.9775"
+       y="10114.978"
        id="text10"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan6"
          x="3418.2134"
-         y="9994.9775">SCAN</tspan></text>
+         y="10114.978">SCAN</tspan></text>
     <text
        x="989.39923"
-       y="9904.9834"
+       y="10024.939"
        id="text12"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
-         id="tspan4">OCT</tspan></text>
+         id="tspan4"
+         x="989.39923"
+         y="10024.939">OCT</tspan></text>
     <text
        x="3418.0366"
        y="8359.9268"
@@ -316,17 +318,17 @@
          id="tspan7">OUT-</tspan></text>
     <text
        id="reworked_module_title_text"
-       x="3037.1521"
+       x="3031.3313"
        y="447.23389"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
        xml:space="preserve"><tspan
          sodipodi:role="line"
          id="tspan2"
          style="fill:url(#linearGradient500)"
-         x="3037.1521"
+         x="3031.3313"
          y="447.23389">Iris</tspan></text>
     <text
-       x="3048"
+       x="3042.1792"
        y="838.99988"
        fill="#8e9ba6"
        font-family="sans-serif"
@@ -336,7 +338,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
          id="tspan3"
-         x="3048"
+         x="3042.1792"
          y="838.99988">image wavetable oscillator</tspan></text>
     <text
        id="reworked_LEVIATHAN_LOGO"

@@ -36,6 +36,7 @@ SVG_NS = "http://www.w3.org/2000/svg"
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
 XLINK_NS = "http://www.w3.org/1999/xlink"
+XML_NS = "http://www.w3.org/XML/1998/namespace"
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)
@@ -138,6 +139,39 @@ def strip_font_text_elements(root: ET.Element) -> int:
                 parent.remove(child)
                 removed += 1
     return removed
+
+
+def normalize_text_for_outline(root: ET.Element) -> None:
+    """
+    Avoid feeding pretty-printer indentation into Inkscape as real text.
+
+    Inkscape honors xml:space="preserve" on text nodes. If an authored text
+    element contains an indented <tspan>, ElementTree writes that indentation
+    back out, and Inkscape can include those spaces when converting text to
+    paths. That shifts centered labels because the visible word is centered
+    along with invisible leading/trailing whitespace.
+    """
+    text_element_names = {
+        "text",
+        "tspan",
+        "textPath",
+        "flowPara",
+        "flowSpan",
+        "flowDiv",
+    }
+
+    for elem in root.iter():
+        if local_name(elem.tag) not in text_element_names:
+            continue
+
+        elem.attrib.pop(qname(XML_NS, "space"), None)
+
+        if elem.text is not None:
+            elem.text = elem.text.strip()
+
+        for child in list(elem):
+            if child.tail is not None:
+                child.tail = child.tail.strip()
 
 
 def count_text_elements(root: ET.Element) -> int:
@@ -302,6 +336,9 @@ def split_svg(
     labels_layer = copy.deepcopy(label_group)
     labels_layer.attrib["id"] = label_id
     labels_root.append(labels_layer)
+
+    if outline_label_text:
+        normalize_text_for_outline(labels_root)
 
     if cleanup:
         remove_editor_junk(labels_root)
