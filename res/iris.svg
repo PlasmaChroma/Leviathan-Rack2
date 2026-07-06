@@ -78,7 +78,7 @@
      inkscape:window-x="3840"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="components"
+     inkscape:current-layer="svg18"
      showgrid="false" />
   <rect
      width="6096"
@@ -160,9 +160,9 @@
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
     <path
-       d="m 2569.9798,9407.9561 h 2982"
+       d="M 2957.0742,9407.9561 H 5534.926"
        id="iris_scan_guide"
-       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+       style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
     <path
        d="M 1148 11097 H 2270"
        id="iris_fm_guide"
@@ -197,12 +197,12 @@
        r="330" />
     <circle
        id="IRIS_SCAN_ATTEN_PARAM"
-       cx="3894.1372"
+       cx="3905.7871"
        cy="9413.3535"
        r="330" />
     <circle
        id="IRIS_COARSE_STEP_MODE_PARAM"
-       cx="1909.9816"
+       cx="1889.9816"
        cy="9407.0713"
        r="240" />
     <circle
@@ -214,32 +214,32 @@
        id="channel_selector">
       <circle
          id="IRIS_IMAGE_CHANNEL_BUTTON"
-         cx="840.00012"
+         cx="760.00012"
          cy="9622.5596"
          r="138.11113"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_ALL_LIGHT"
-         cx="497.7778"
-         cy="9304.7783"
+         cx="360.0001"
+         cy="9252.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_RED_LIGHT"
-         cx="1182.2223"
-         cy="9304.7783"
+         cx="1160.0001"
+         cy="9252.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_GREEN_LIGHT"
-         cx="1182.2223"
-         cy="9940.3252"
+         cx="1160.0001"
+         cy="9992.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
       <circle
          id="IRIS_IMAGE_CHANNEL_BLUE_LIGHT"
-         cx="497.7778"
-         cy="9940.3252"
+         cx="360.0001"
+         cy="9992.5596"
          r="97.777786"
          style="stroke-width:1.22224" />
     </g>
@@ -260,7 +260,7 @@
        r="260" />
     <circle
        id="IRIS_SCAN_INPUT"
-       cx="2779.6001"
+       cx="2802.9001"
        cy="9407.0713"
        r="260" />
     <circle
@@ -320,22 +320,22 @@
        id="text7"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
     <text
-       x="3900.4873"
+       x="3912.1372"
        y="10114.978"
        id="text10"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan6"
-         x="3900.4873"
+         x="3912.1372"
          y="10114.978">SCAN</tspan></text>
     <text
-       x="1909.9816"
+       x="1889.9816"
        y="10024.939"
        id="text12"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan4"
-         x="1909.9816"
+         x="1889.9816"
          y="10024.939">OCT</tspan></text>
     <text
        x="3418.0366"
