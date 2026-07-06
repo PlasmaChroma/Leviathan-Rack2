@@ -101,12 +101,21 @@ struct ImageWavetable {
 struct WavetableOscillator {
   float phase = 0.f;
 
-  void reset(float newPhase = 0.f) {
-    if (!std::isfinite(newPhase)) newPhase = 0.f;
-    phase = newPhase - std::floor(newPhase);
-  }
+	  void reset(float newPhase = 0.f) {
+	    if (!std::isfinite(newPhase)) newPhase = 0.f;
+	    phase = newPhase - std::floor(newPhase);
+	  }
 
-  float process(const ImageWavetable& table, float frequency, float sampleTime, float scan) {
+	  void softSync() {
+	    if (!std::isfinite(phase)) {
+	      phase = 0.f;
+	      return;
+	    }
+	    phase = 1.f - phase;
+	    phase -= std::floor(phase);
+	  }
+
+	  float process(const ImageWavetable& table, float frequency, float sampleTime, float scan) {
     if (!std::isfinite(phase)) phase = 0.f;
     if (!std::isfinite(frequency) || frequency < 0.f) frequency = 0.f;
     if (!std::isfinite(sampleTime) || sampleTime < 0.f) sampleTime = 0.f;

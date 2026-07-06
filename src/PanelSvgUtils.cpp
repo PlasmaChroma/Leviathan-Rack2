@@ -563,6 +563,214 @@ void addPathBoundsPoint(bool* hasBounds, float* minX, float* minY, float* maxX, 
 	*maxY = std::max(*maxY, point.y);
 }
 
+Vec reflectPoint(Vec point, Vec around) {
+	return Vec(around.x * 2.f - point.x, around.y * 2.f - point.y);
+}
+
+float pathVectorAngle(float ux, float uy, float vx, float vy) {
+	const float dot = ux * vx + uy * vy;
+	const float len = std::sqrt(std::max(0.f, (ux * ux + uy * uy) * (vx * vx + vy * vy)));
+	if (!(len > 0.f)) {
+		return 0.f;
+	}
+	float angle = std::acos(clamp(dot / len, -1.f, 1.f));
+	if (ux * vy - uy * vx < 0.f) {
+		angle = -angle;
+	}
+	return angle;
+}
+
+void appendTransformedMoveTo(
+	const SvgAffine& transform,
+	Vec point,
+	std::vector<panel_svg::SvgPathCommand>* outCommands,
+	bool* hasBounds,
+	float* minX,
+	float* minY,
+	float* maxX,
+	float* maxY
+) {
+	point = transformPoint(transform, point);
+	panel_svg::SvgPathCommand out;
+	out.type = panel_svg::SvgPathCommand::MoveTo;
+	out.p1 = point;
+	outCommands->push_back(out);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, point);
+}
+
+void appendTransformedLineTo(
+	const SvgAffine& transform,
+	Vec point,
+	std::vector<panel_svg::SvgPathCommand>* outCommands,
+	bool* hasBounds,
+	float* minX,
+	float* minY,
+	float* maxX,
+	float* maxY
+) {
+	point = transformPoint(transform, point);
+	panel_svg::SvgPathCommand out;
+	out.type = panel_svg::SvgPathCommand::LineTo;
+	out.p1 = point;
+	outCommands->push_back(out);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, point);
+}
+
+void appendTransformedQuadTo(
+	const SvgAffine& transform,
+	Vec control,
+	Vec point,
+	std::vector<panel_svg::SvgPathCommand>* outCommands,
+	bool* hasBounds,
+	float* minX,
+	float* minY,
+	float* maxX,
+	float* maxY
+) {
+	control = transformPoint(transform, control);
+	point = transformPoint(transform, point);
+	panel_svg::SvgPathCommand out;
+	out.type = panel_svg::SvgPathCommand::QuadTo;
+	out.p1 = control;
+	out.p2 = point;
+	outCommands->push_back(out);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, control);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, point);
+}
+
+void appendTransformedCubicTo(
+	const SvgAffine& transform,
+	Vec c1,
+	Vec c2,
+	Vec point,
+	std::vector<panel_svg::SvgPathCommand>* outCommands,
+	bool* hasBounds,
+	float* minX,
+	float* minY,
+	float* maxX,
+	float* maxY
+) {
+	c1 = transformPoint(transform, c1);
+	c2 = transformPoint(transform, c2);
+	point = transformPoint(transform, point);
+	panel_svg::SvgPathCommand out;
+	out.type = panel_svg::SvgPathCommand::BezierTo;
+	out.p1 = c1;
+	out.p2 = c2;
+	out.p3 = point;
+	outCommands->push_back(out);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, c1);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, c2);
+	addPathBoundsPoint(hasBounds, minX, minY, maxX, maxY, point);
+}
+
+bool appendSvgArcAsCubics(
+	const SvgAffine& transform,
+	Vec current,
+	Vec target,
+	float rx,
+	float ry,
+	float xAxisRotationDeg,
+	bool largeArc,
+	bool sweep,
+	std::vector<panel_svg::SvgPathCommand>* outCommands,
+	bool* hasBounds,
+	float* minX,
+	float* minY,
+	float* maxX,
+	float* maxY
+) {
+	if (!(rx > 0.f) || !(ry > 0.f)) {
+		appendTransformedLineTo(transform, target, outCommands, hasBounds, minX, minY, maxX, maxY);
+		return true;
+	}
+	if (std::fabs(current.x - target.x) < 1e-6f && std::fabs(current.y - target.y) < 1e-6f) {
+		return true;
+	}
+
+	const float pi = 3.14159265358979323846f;
+	const float phi = xAxisRotationDeg * (pi / 180.f);
+	const float cosPhi = std::cos(phi);
+	const float sinPhi = std::sin(phi);
+	rx = std::fabs(rx);
+	ry = std::fabs(ry);
+
+	const float dx2 = (current.x - target.x) * 0.5f;
+	const float dy2 = (current.y - target.y) * 0.5f;
+	const float x1p = cosPhi * dx2 + sinPhi * dy2;
+	const float y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+	const float rxSq = rx * rx;
+	const float rySq = ry * ry;
+	const float x1pSq = x1p * x1p;
+	const float y1pSq = y1p * y1p;
+	const float radiusScale = x1pSq / rxSq + y1pSq / rySq;
+	if (radiusScale > 1.f) {
+		const float scale = std::sqrt(radiusScale);
+		rx *= scale;
+		ry *= scale;
+	}
+
+	const float adjRxSq = rx * rx;
+	const float adjRySq = ry * ry;
+	const float numerator = adjRxSq * adjRySq - adjRxSq * y1pSq - adjRySq * x1pSq;
+	const float denominator = adjRxSq * y1pSq + adjRySq * x1pSq;
+	const float sign = largeArc == sweep ? -1.f : 1.f;
+	const float coef = denominator > 0.f ? sign * std::sqrt(std::max(0.f, numerator / denominator)) : 0.f;
+	const float cxp = coef * ((rx * y1p) / ry);
+	const float cyp = coef * (-(ry * x1p) / rx);
+
+	const float cx = cosPhi * cxp - sinPhi * cyp + (current.x + target.x) * 0.5f;
+	const float cy = sinPhi * cxp + cosPhi * cyp + (current.y + target.y) * 0.5f;
+
+	const float theta1 = pathVectorAngle(1.f, 0.f, (x1p - cxp) / rx, (y1p - cyp) / ry);
+	float deltaTheta = pathVectorAngle(
+		(x1p - cxp) / rx,
+		(y1p - cyp) / ry,
+		(-x1p - cxp) / rx,
+		(-y1p - cyp) / ry
+	);
+	if (!sweep && deltaTheta > 0.f) {
+		deltaTheta -= 2.f * pi;
+	}
+	else if (sweep && deltaTheta < 0.f) {
+		deltaTheta += 2.f * pi;
+	}
+
+	const int segments = std::max(1, int(std::ceil(std::fabs(deltaTheta) / (pi * 0.5f))));
+	const float segmentDelta = deltaTheta / float(segments);
+	auto pointOnArc = [&](float theta) {
+		const float cosTheta = std::cos(theta);
+		const float sinTheta = std::sin(theta);
+		return Vec(
+			cx + rx * cosPhi * cosTheta - ry * sinPhi * sinTheta,
+			cy + rx * sinPhi * cosTheta + ry * cosPhi * sinTheta
+		);
+	};
+	auto derivativeOnArc = [&](float theta) {
+		const float cosTheta = std::cos(theta);
+		const float sinTheta = std::sin(theta);
+		return Vec(
+			-rx * cosPhi * sinTheta - ry * sinPhi * cosTheta,
+			-rx * sinPhi * sinTheta + ry * cosPhi * cosTheta
+		);
+	};
+
+	for (int i = 0; i < segments; ++i) {
+		const float t0 = theta1 + segmentDelta * float(i);
+		const float t1 = t0 + segmentDelta;
+		const float alpha = (4.f / 3.f) * std::tan((t1 - t0) * 0.25f);
+		const Vec p0 = pointOnArc(t0);
+		const Vec p1 = pointOnArc(t1);
+		const Vec d0 = derivativeOnArc(t0);
+		const Vec d1 = derivativeOnArc(t1);
+		const Vec c1(p0.x + d0.x * alpha, p0.y + d0.y * alpha);
+		const Vec c2(p1.x - d1.x * alpha, p1.y - d1.y * alpha);
+		appendTransformedCubicTo(transform, c1, c2, p1, outCommands, hasBounds, minX, minY, maxX, maxY);
+	}
+	return true;
+}
+
 bool parsePathTagMm(
 	const std::string& pathTag,
 	float unitScale,
@@ -584,13 +792,18 @@ bool parsePathTagMm(
 	Vec current;
 	Vec subpathStart;
 	bool hasCurrent = false;
+	Vec lastCubicControl;
+	Vec lastQuadControl;
+	bool hasLastCubicControl = false;
+	bool hasLastQuadControl = false;
 	bool hasBounds = false;
 	float minX = 0.f;
 	float minY = 0.f;
 	float maxX = 0.f;
 	float maxY = 0.f;
-	auto appendPointBounds = [&](Vec point) {
-		addPathBoundsPoint(&hasBounds, &minX, &minY, &maxX, &maxY, point);
+	auto clearSmoothControls = [&]() {
+		hasLastCubicControl = false;
+		hasLastQuadControl = false;
 	};
 
 	while (index < tokens.size()) {
@@ -609,6 +822,7 @@ bool parsePathTagMm(
 			outCommands->push_back(out);
 			current = subpathStart;
 			hasCurrent = true;
+			clearSmoothControls();
 			command = 0;
 			continue;
 		}
@@ -620,65 +834,50 @@ bool parsePathTagMm(
 				if (!readPathPoint(tokens, &index, unitScale, relative && hasCurrent, current, &point)) {
 					return false;
 				}
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = firstInCommand ? panel_svg::SvgPathCommand::MoveTo : panel_svg::SvgPathCommand::LineTo;
-				out.p1 = point;
-				outCommands->push_back(out);
+				if (firstInCommand) {
+					appendTransformedMoveTo(transform, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				}
+				else {
+					appendTransformedLineTo(transform, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				}
 				current = point;
 				if (firstInCommand) {
 					subpathStart = point;
 				}
 				hasCurrent = true;
-				appendPointBounds(point);
+				clearSmoothControls();
 			}
 			else if (lower == 'l') {
 				Vec point;
 				if (!readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
 					return false;
 				}
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = panel_svg::SvgPathCommand::LineTo;
-				out.p1 = point;
-				outCommands->push_back(out);
+				appendTransformedLineTo(transform, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
 				current = point;
 				hasCurrent = true;
-				appendPointBounds(point);
+				clearSmoothControls();
 			}
 			else if (lower == 'h') {
 				float x = 0.f;
 				if (!readPathNumber(tokens, &index, &x)) {
 					return false;
 				}
-				Vec point((relative ? current.x / unitScale : 0.f) + x, current.y / unitScale);
-				point.x *= unitScale;
-				point.y *= unitScale;
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = panel_svg::SvgPathCommand::LineTo;
-				out.p1 = point;
-				outCommands->push_back(out);
+				Vec point(relative ? current.x + x * unitScale : x * unitScale, current.y);
+				appendTransformedLineTo(transform, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
 				current = point;
 				hasCurrent = true;
-				appendPointBounds(point);
+				clearSmoothControls();
 			}
 			else if (lower == 'v') {
 				float y = 0.f;
 				if (!readPathNumber(tokens, &index, &y)) {
 					return false;
 				}
-				Vec point(current.x / unitScale, (relative ? current.y / unitScale : 0.f) + y);
-				point.x *= unitScale;
-				point.y *= unitScale;
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = panel_svg::SvgPathCommand::LineTo;
-				out.p1 = point;
-				outCommands->push_back(out);
+				Vec point(current.x, relative ? current.y + y * unitScale : y * unitScale);
+				appendTransformedLineTo(transform, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
 				current = point;
 				hasCurrent = true;
-				appendPointBounds(point);
+				clearSmoothControls();
 			}
 			else if (lower == 'q') {
 				Vec c;
@@ -687,17 +886,25 @@ bool parsePathTagMm(
 					|| !readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
 					return false;
 				}
-				c = transformPoint(transform, c);
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = panel_svg::SvgPathCommand::QuadTo;
-				out.p1 = c;
-				out.p2 = point;
-				outCommands->push_back(out);
+				appendTransformedQuadTo(transform, c, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				lastQuadControl = c;
+				hasLastQuadControl = true;
+				hasLastCubicControl = false;
 				current = point;
 				hasCurrent = true;
-				appendPointBounds(c);
-				appendPointBounds(point);
+			}
+			else if (lower == 't') {
+				Vec point;
+				if (!readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
+					return false;
+				}
+				const Vec c = hasLastQuadControl ? reflectPoint(lastQuadControl, current) : current;
+				appendTransformedQuadTo(transform, c, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				lastQuadControl = c;
+				hasLastQuadControl = true;
+				hasLastCubicControl = false;
+				current = point;
+				hasCurrent = true;
 			}
 			else if (lower == 'c') {
 				Vec c1;
@@ -708,20 +915,64 @@ bool parsePathTagMm(
 					|| !readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
 					return false;
 				}
-				c1 = transformPoint(transform, c1);
-				c2 = transformPoint(transform, c2);
-				point = transformPoint(transform, point);
-				panel_svg::SvgPathCommand out;
-				out.type = panel_svg::SvgPathCommand::BezierTo;
-				out.p1 = c1;
-				out.p2 = c2;
-				out.p3 = point;
-				outCommands->push_back(out);
+				appendTransformedCubicTo(transform, c1, c2, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				lastCubicControl = c2;
+				hasLastCubicControl = true;
+				hasLastQuadControl = false;
 				current = point;
 				hasCurrent = true;
-				appendPointBounds(c1);
-				appendPointBounds(c2);
-				appendPointBounds(point);
+			}
+			else if (lower == 's') {
+				Vec c2;
+				Vec point;
+				if (!readPathPoint(tokens, &index, unitScale, relative, current, &c2)
+					|| !readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
+					return false;
+				}
+				const Vec c1 = hasLastCubicControl ? reflectPoint(lastCubicControl, current) : current;
+				appendTransformedCubicTo(transform, c1, c2, point, outCommands, &hasBounds, &minX, &minY, &maxX, &maxY);
+				lastCubicControl = c2;
+				hasLastCubicControl = true;
+				hasLastQuadControl = false;
+				current = point;
+				hasCurrent = true;
+			}
+			else if (lower == 'a') {
+				float rx = 0.f;
+				float ry = 0.f;
+				float xAxisRotationDeg = 0.f;
+				float largeArcFlag = 0.f;
+				float sweepFlag = 0.f;
+				Vec point;
+				if (!readPathNumber(tokens, &index, &rx)
+					|| !readPathNumber(tokens, &index, &ry)
+					|| !readPathNumber(tokens, &index, &xAxisRotationDeg)
+					|| !readPathNumber(tokens, &index, &largeArcFlag)
+					|| !readPathNumber(tokens, &index, &sweepFlag)
+					|| !readPathPoint(tokens, &index, unitScale, relative, current, &point)) {
+					return false;
+				}
+				if (!appendSvgArcAsCubics(
+					transform,
+					current,
+					point,
+					rx * unitScale,
+					ry * unitScale,
+					xAxisRotationDeg,
+					largeArcFlag != 0.f,
+					sweepFlag != 0.f,
+					outCommands,
+					&hasBounds,
+					&minX,
+					&minY,
+					&maxX,
+					&maxY
+				)) {
+					return false;
+				}
+				current = point;
+				hasCurrent = true;
+				clearSmoothControls();
 			}
 			else {
 				return false;

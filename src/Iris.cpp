@@ -31,13 +31,14 @@ Iris::Iris() {
     COARSE_PARAM, 0.f, 1.f, irisKnobValueForFrequency(dsp::FREQ_C4), "Frequency");
   configParam(FINE_PARAM, -100.f, 100.f, 0.f, "Fine tune", " cents");
   configParam(SCAN_PARAM, 0.f, 1.f, 0.f, "Image scan", " %", 0.f, 100.f);
-  configParam(SCAN_ATTEN_PARAM, -1.f, 1.f, 0.f, "Scan CV attenuverter", " %", 0.f, 100.f);
-  configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuverter", " %", 0.f, 100.f);
-  configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
-  configInput(V_OCT_INPUT, "V/Oct");
-  configInput(FM_INPUT, "Exponential FM");
-  configInput(SCAN_INPUT, "Scan CV");
-  configInput(SYNC_INPUT, "Hard sync");
+	  configParam(SCAN_ATTEN_PARAM, -1.f, 1.f, 0.f, "Scan CV attenuverter", " %", 0.f, 100.f);
+	  configParam(FM_ATTEN_PARAM, -1.f, 1.f, 0.f, "FM attenuverter", " %", 0.f, 100.f);
+	  configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
+	  configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
+	  configInput(V_OCT_INPUT, "V/Oct");
+	  configInput(FM_INPUT, "Exponential FM");
+	  configInput(SCAN_INPUT, "Scan CV");
+	  configInput(SYNC_INPUT, "Sync");
   configOutput(OUT_OUTPUT, "Wavetable");
   configOutput(INV_OUTPUT, "Inverted wavetable");
 
@@ -238,9 +239,10 @@ void Iris::process(const ProcessArgs& args) {
   const float fmAttenParam = params[FM_ATTEN_PARAM].getValue();
   const float fine = std::isfinite(fineParam) ? fineParam / 1200.f : 0.f;
   const float scanKnob = std::isfinite(scanParam) ? clamp(scanParam, 0.f, 1.f) : 0.f;
-  const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
-  const float fmAtten = std::isfinite(fmAttenParam) ? clamp(fmAttenParam, -1.f, 1.f) : 0.f;
-  float scanDisplay = scanKnob;
+	  const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
+	  const float fmAtten = std::isfinite(fmAttenParam) ? clamp(fmAttenParam, -1.f, 1.f) : 0.f;
+	  const bool softSync = params[SOFT_SYNC_MODE_PARAM].getValue() > 0.5f;
+	  float scanDisplay = scanKnob;
   for (int channel = 0; channel < channels; ++channel) {
     const float vOctInput = inputs[V_OCT_INPUT].getPolyVoltage(channel);
     const float fmInput = inputs[FM_INPUT].getPolyVoltage(channel);
@@ -252,19 +254,24 @@ void Iris::process(const ProcessArgs& args) {
     float scan = scanKnob + (std::isfinite(scanInput) ? scanInput : 0.f) * 0.1f * scanAtten;
     scan = clamp(scan, 0.f, 1.f);
     if (channel == 0) scanDisplay = scan;
-    const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
-    if (voices[size_t(channel)].sync.process(std::isfinite(syncInput) ? syncInput : 0.f)) {
-      voices[size_t(channel)].oscillator.reset();
-    }
+	    const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
+	    if (voices[size_t(channel)].sync.process(std::isfinite(syncInput) ? syncInput : 0.f)) {
+	      if (softSync) {
+	        voices[size_t(channel)].oscillator.softSync();
+	      } else {
+	        voices[size_t(channel)].oscillator.reset();
+	      }
+	    }
     const float wave = table ? voices[size_t(channel)].oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
     const float volts = std::isfinite(wave) ? 5.f * wave : 0.f;
     outputs[OUT_OUTPUT].setVoltage(volts, channel);
     outputs[INV_OUTPUT].setVoltage(-volts, channel);
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
-  lights[LOAD_LIGHT].setBrightness(loading.load(std::memory_order_relaxed) ? 1.f : 0.f);
-  lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
-  lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
+	  lights[LOAD_LIGHT].setBrightness(loading.load(std::memory_order_relaxed) ? 1.f : 0.f);
+	  lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
+	  lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
+	  lights[SOFT_SYNC_MODE_LIGHT].setBrightness(softSync ? 0.5f : 0.f);
   if (measurePerf) {
     debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
   }

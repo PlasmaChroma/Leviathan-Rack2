@@ -303,13 +303,17 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_SCAN_ATTEN_PARAM", Vec(30.48f, 74.f))), module, Iris::SCAN_ATTEN_PARAM);
     scanAtten->setProgressRingBipolar(true);
     addParam(scanAtten);
-    SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
-      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
-      module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
-    addParam(octaveStep);
+	    SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
+	      mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(30.48f, 84.f))),
+	      module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
+	    addParam(octaveStep);
+	    SmallGoldApertureButton* softSync = createLightParamCentered<SmallGoldApertureButton>(
+	      mm2px(anchor("IRIS_SOFT_SYNC_MODE_PARAM", Vec(44.64f, 76.73f))),
+	      module, Iris::SOFT_SYNC_MODE_PARAM, Iris::SOFT_SYNC_MODE_LIGHT);
+	    addParam(softSync);
 
-    addInput(createInputCentered<Magitek2InputJack>(
-      mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
+	    addInput(createInputCentered<Magitek2InputJack>(
+	      mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_FM_INPUT", Vec(23.f, 99.f))), module, Iris::FM_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(

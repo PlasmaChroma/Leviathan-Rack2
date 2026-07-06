@@ -34,12 +34,13 @@ struct Iris final : Module {
   enum ParamId {
     COARSE_PARAM,
     FINE_PARAM,
-    SCAN_PARAM,
-    SCAN_ATTEN_PARAM,
-    FM_ATTEN_PARAM,
-    COARSE_STEP_MODE_PARAM,
-    PARAMS_LEN
-  };
+	    SCAN_PARAM,
+	    SCAN_ATTEN_PARAM,
+	    FM_ATTEN_PARAM,
+	    COARSE_STEP_MODE_PARAM,
+	    SOFT_SYNC_MODE_PARAM,
+	    PARAMS_LEN
+	  };
 
   enum InputId {
     V_OCT_INPUT,
@@ -56,11 +57,12 @@ struct Iris final : Module {
   };
 
   enum LightId {
-    LOAD_LIGHT,
-    ERROR_LIGHT,
-    COARSE_STEP_MODE_LIGHT,
-    LIGHTS_LEN
-  };
+	    LOAD_LIGHT,
+	    ERROR_LIGHT,
+	    COARSE_STEP_MODE_LIGHT,
+	    SOFT_SYNC_MODE_LIGHT,
+	    LIGHTS_LEN
+	  };
 
   struct Voice {
     iris::WavetableOscillator oscillator;
