@@ -200,11 +200,14 @@ struct IrisDisplay final : OpaqueWidget {
       std::vector<uint8_t> rgb;
       int width = 0;
       int height = 0;
+      bool keepExistingImage = false;
       if (module) {
         if (currentChannelPreview) {
           module->sourcePreviewSnapshot(&rgb, &width, &height);
         }
-        if (!currentChannelPreview || rgb.empty()) {
+        if (currentChannelPreview && rgb.empty() && imageHandle >= 0 && !module->sourcePath().empty()) {
+          keepExistingImage = true;
+        } else if (!currentChannelPreview || rgb.empty()) {
           module->previewSnapshot(&gray, &width, &height);
         }
       } else {
@@ -213,7 +216,11 @@ struct IrisDisplay final : OpaqueWidget {
         width = 128;
         height = 64;
       }
-      if (currentChannelPreview && !rgb.empty()) {
+      if (keepExistingImage) {
+        generation = currentGeneration;
+        channelPreview = currentChannelPreview;
+        channelMode = currentChannelMode;
+      } else if (currentChannelPreview && !rgb.empty()) {
         filterIrisSourcePreview(&rgb, currentChannelMode);
         const size_t pixelCount = rgb.size() / 3u;
         rgba.resize(pixelCount * 4u);
@@ -236,13 +243,15 @@ struct IrisDisplay final : OpaqueWidget {
           rgba[i * 4u + 3u] = uint8_t(std::round(clamp(color.a, 0.f, 1.f) * 255.f));
         }
       }
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-      imageContext = args.vg;
-      if (width > 0 && height > 0 && !rgba.empty()) {
-        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-        uploadedWidth = width;
-        uploadedHeight = height;
+      if (!keepExistingImage) {
+        nvg_gfx_lifecycle::resetOwnedNvgImage(
+          imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
+        imageContext = args.vg;
+        if (width > 0 && height > 0 && !rgba.empty()) {
+          imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+          uploadedWidth = width;
+          uploadedHeight = height;
+        }
       }
       generation = currentGeneration;
       channelPreview = currentChannelPreview;
@@ -581,7 +590,17 @@ struct IrisChannelPreviewButton final : TL1105 {
   void onButton(const event::Button& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
       const bool current = module->displayChannelPreview.load(std::memory_order_relaxed);
-      module->displayChannelPreview.store(!current, std::memory_order_relaxed);
+      const bool next = !current;
+      module->displayChannelPreview.store(next, std::memory_order_relaxed);
+      if (next) {
+        std::vector<uint8_t> sourcePreview;
+        int sourcePreviewW = 0;
+        int sourcePreviewH = 0;
+        module->sourcePreviewSnapshot(&sourcePreview, &sourcePreviewW, &sourcePreviewH);
+        if (sourcePreview.empty() && !module->sourcePath().empty()) {
+          module->requestRebuild();
+        }
+      }
       pressedFrames = 5;
       setPressedVisual(true);
       refreshTooltip();
@@ -654,51 +673,6 @@ struct IrisImageChannelButton final : SmallGoldButton {
       module->requestRebuild();
     }
     SmallGoldButton::onButton(e);
-  }
-};
-
-struct IrisAllChannelApertureLight : WhiteApertureLight {
-  IrisAllChannelApertureLight() {
-    baseColor = nvgRGB(255, 255, 255);
-    activeColor = baseColor;
-    baseColors.clear();
-    addBaseColor(baseColor);
-    bloomAlpha = 0.34f;
-    invalidateStaticBackgroundCache();
-    invalidateBloomCache();
-  }
-
-  void drawLight(const DrawArgs& args) override {
-    if (module) {
-      WhiteApertureLight::drawLight(args);
-      return;
-    }
-
-    const float cx = box.size.x * 0.5f;
-    const float cy = box.size.y * 0.5f;
-    NVGcontext* vg = args.vg;
-
-    NVGpaint bloom = nvgRadialGradient(
-      vg, cx, cy, coreRadius * 0.4f, bloomRadius,
-      nvgRGBA(235, 248, 255, 118), nvgRGBA(74, 184, 255, 0));
-    nvgBeginPath(vg);
-    nvgCircle(vg, cx, cy, bloomRadius);
-    nvgFillPaint(vg, bloom);
-    nvgFill(vg);
-
-    NVGpaint core = nvgRadialGradient(
-      vg, cx - lensRadius * 0.20f, cy - lensRadius * 0.25f,
-      coreRadius * 0.18f, lensRadius,
-      nvgRGBA(255, 255, 255, 255), nvgRGBA(178, 224, 255, 238));
-    nvgBeginPath(vg);
-    nvgCircle(vg, cx, cy, lensRadius * 0.88f);
-    nvgFillPaint(vg, core);
-    nvgFill(vg);
-
-    nvgBeginPath(vg);
-    nvgCircle(vg, cx - lensRadius * 0.24f, cy - lensRadius * 0.30f, coreRadius * 0.34f);
-    nvgFillColor(vg, nvgRGBA(255, 255, 255, 238));
-    nvgFill(vg);
   }
 };
 
@@ -795,7 +769,7 @@ struct IrisWidget final : ModuleWidget {
         mm2px(channelButtonPos), module, Iris::IMAGE_CHANNEL_PARAM);
     channelButton->module = module;
     addParam(channelButton);
-    addChild(createLightCentered<SmallAperture<IrisAllChannelApertureLight>>(
+    addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(
       mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(3.600001f, 92.525596f))),
       module, Iris::IMAGE_CHANNEL_ALL_LIGHT));
     addChild(createLightCentered<SmallAperture<RedApertureLight>>(
