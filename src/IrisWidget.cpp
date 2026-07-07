@@ -38,8 +38,8 @@ const std::vector<uint8_t>& irisBrowserPreviewPixels() {
   static std::vector<uint8_t> pixels;
   if (pixels.empty()) {
     const iris::ImageWavetable& table = irisBrowserPreviewTable();
-    const int width = 128;
-    const int height = 64;
+    const int width = iris::kSourcePreviewWidth;
+    const int height = iris::kSourcePreviewHeight;
     pixels.assign(size_t(width * height), 0u);
     for (int y = 0; y < height; ++y) {
       const float scan = (float(y) + 0.5f) / float(height);
@@ -210,8 +210,8 @@ struct IrisDisplay final : OpaqueWidget {
       } else {
         const std::vector<uint8_t>& preview = irisBrowserPreviewPixels();
         gray.assign(preview.begin(), preview.end());
-        width = 128;
-        height = 64;
+        width = iris::kSourcePreviewWidth;
+        height = iris::kSourcePreviewHeight;
       }
       if (currentChannelPreview && !rgb.empty()) {
         filterIrisSourcePreview(&rgb, currentChannelMode);

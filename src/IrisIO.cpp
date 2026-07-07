@@ -38,7 +38,8 @@ struct BinaryHeader {
 
 const char kMagic[8] = {'I', 'R', 'I', 'S', 'W', 'T', '0', '1'};
 constexpr uint32_t kBinaryVersion = 2u;
-constexpr uint32_t kMaxSourcePreviewPixels = 128u * 64u;
+constexpr uint32_t kMaxSourcePreviewPixels =
+  uint32_t(kSourcePreviewWidth) * uint32_t(kSourcePreviewHeight);
 
 bool samplesAreFinite(const ImageWavetable& table) {
   if (!table.valid()) return false;

@@ -446,8 +446,8 @@ std::string Iris::statusText() const {
 
 void Iris::buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels) {
   if (!pixels) return;
-  const int width = 128;
-  const int height = 64;
+  const int width = iris::kSourcePreviewWidth;
+  const int height = iris::kSourcePreviewHeight;
   pixels->assign(size_t(width * height), 0u);
   if (!table.valid()) return;
   for (int y = 0; y < height; ++y) {

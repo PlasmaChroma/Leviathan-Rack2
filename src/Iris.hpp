@@ -147,8 +147,8 @@ private:
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
   std::vector<uint8_t> snapshotPreview;
-  int previewWidth = 128;
-  int previewHeight = 64;
+  int previewWidth = iris::kSourcePreviewWidth;
+  int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;
   bool embedTable = true;
 };

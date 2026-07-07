@@ -11,6 +11,8 @@ namespace iris {
 constexpr int kFrameSize = 1024;
 constexpr int kDefaultRows = 256;
 constexpr int kMaxRows = 256;
+constexpr int kSourcePreviewWidth = 256;
+constexpr int kSourcePreviewHeight = 128;
 
 enum NormalizeMode {
   NORMALIZE_NONE = 0,
@@ -203,8 +205,8 @@ inline void buildSourcePreviewFromRgba(const uint8_t* rgba, int sourceWidth, int
   if (!rgba || !table || sourceWidth <= 0 || sourceHeight <= 0) {
     return;
   }
-  const int previewWidth = 128;
-  const int previewHeight = 64;
+  const int previewWidth = kSourcePreviewWidth;
+  const int previewHeight = kSourcePreviewHeight;
   table->sourcePreviewWidth = previewWidth;
   table->sourcePreviewHeight = previewHeight;
   table->sourcePreviewRgb.assign(size_t(previewWidth * previewHeight * 3), 0u);
