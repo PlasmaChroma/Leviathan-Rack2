@@ -3,6 +3,7 @@
 #include "third_party/qoi.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -12,6 +13,12 @@
 
 namespace iris {
 namespace {
+
+constexpr size_t kQoiHeaderSize = 14u;
+constexpr size_t kQoiPaddingSize = 8u;
+constexpr size_t kMaxEmbeddedSourceQoiBytes =
+  size_t(kCanonicalSourceWidth) * size_t(kCanonicalSourceHeight) *
+  size_t(kCanonicalSourceChannels + 1) + kQoiHeaderSize + kQoiPaddingSize;
 
 bool failWith(const std::string& message, std::string* error) {
   if (error) *error = message;
@@ -28,15 +35,15 @@ uint32_t readBe32(const uint8_t* p) {
          uint32_t(p[3]);
 }
 
-bool validateQoiHeader(const std::vector<uint8_t>& data, std::string* error) {
-  if (data.size() < 22u) {
+bool validateQoiHeader(const uint8_t* data, size_t size, std::string* error) {
+  if (!data || size < kQoiHeaderSize) {
     return failWith("Embedded source QOI is too small", error);
   }
-  if (std::memcmp(data.data(), "qoif", 4) != 0) {
+  if (std::memcmp(data, "qoif", 4) != 0) {
     return failWith("Embedded source QOI magic is invalid", error);
   }
-  const uint32_t width = readBe32(data.data() + 4);
-  const uint32_t height = readBe32(data.data() + 8);
+  const uint32_t width = readBe32(data + 4);
+  const uint32_t height = readBe32(data + 8);
   const uint8_t channels = data[12];
   if (width != uint32_t(kCanonicalSourceWidth) ||
       height != uint32_t(kCanonicalSourceHeight)) {
@@ -131,9 +138,20 @@ bool loadSourceFieldQoi(const std::string& path, SourceField* out, std::string* 
   if (!stream) {
     return failWith("Embedded source QOI is unavailable", error);
   }
+  std::array<uint8_t, kQoiHeaderSize> header;
+  stream.read(reinterpret_cast<char*>(header.data()), std::streamsize(header.size()));
+  if (!stream) {
+    return failWith("Embedded source QOI is too small", error);
+  }
+  if (!validateQoiHeader(header.data(), header.size(), error)) {
+    return false;
+  }
+
   stream.seekg(0, std::ios::end);
   const std::streamoff size = stream.tellg();
-  if (size <= 0 || size > std::streamoff(std::numeric_limits<int>::max())) {
+  if (size < std::streamoff(kQoiHeaderSize + kQoiPaddingSize) ||
+      size > std::streamoff(kMaxEmbeddedSourceQoiBytes) ||
+      size > std::streamoff(std::numeric_limits<int>::max())) {
     return failWith("Embedded source QOI size is invalid", error);
   }
   stream.seekg(0, std::ios::beg);
@@ -141,9 +159,6 @@ bool loadSourceFieldQoi(const std::string& path, SourceField* out, std::string* 
   stream.read(reinterpret_cast<char*>(data.data()), std::streamsize(size));
   if (!stream) {
     return failWith("Could not read embedded source QOI", error);
-  }
-  if (!validateQoiHeader(data, error)) {
-    return false;
   }
 
   qoi_desc desc;

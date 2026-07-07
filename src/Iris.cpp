@@ -331,7 +331,6 @@ void Iris::process(const ProcessArgs& args) {
       iris::ImageWavetable* old = activeTable;
       activeTable = pending;
       retiredTable.store(old, std::memory_order_release);
-      workerCv.notify_one();
     }
   }
   const iris::ImageWavetable* table = activeTable;
