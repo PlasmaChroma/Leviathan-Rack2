@@ -161,6 +161,7 @@ private:
   int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;
   bool embedSource = true;
+  dsp::ClockDivider lightDivider;
 };
 
 extern Model* modelIris;

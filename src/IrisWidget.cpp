@@ -146,6 +146,11 @@ struct IrisDisplay final : OpaqueWidget {
   explicit IrisDisplay(Iris* module) : module(module) {}
 
   ~IrisDisplay() override {
+    if (APP && APP->window && APP->window->vg) {
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight, APP->window->vg, true);
+      return;
+    }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }

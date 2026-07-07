@@ -88,14 +88,18 @@ struct ImageWavetable {
     }
     if (!std::isfinite(phase)) phase = 0.f;
     if (!std::isfinite(scan)) scan = 0.f;
-    phase -= std::floor(phase);
+    if (phase < 0.f || phase >= 1.f) {
+      phase -= std::floor(phase);
+    }
     scan = std::max(0.f, std::min(scan, 1.f));
     const float x = phase * float(frameSize);
-    int x0 = int(x);
+    const int x0Raw = int(x);
+    float xFrac = x - float(x0Raw);
+    int x0 = x0Raw;
     if (x0 >= frameSize) {
       x0 = 0;
+      xFrac = 0.f;
     }
-    const float xFrac = x - std::floor(x);
     const float rowPos = scan * float(rowCount - 1);
     const int row0 = int(rowPos);
     const int row1 = std::min(row0 + 1, rowCount - 1);
@@ -133,7 +137,9 @@ struct WavetableOscillator {
     const float out = table.sample(phase, scan);
     phase += frequency * sampleTime;
     if (!std::isfinite(phase)) phase = 0.f;
-    phase -= std::floor(phase);
+    if (phase < 0.f || phase >= 1.f) {
+      phase -= std::floor(phase);
+    }
     return std::isfinite(out) ? out : 0.f;
   }
 };
