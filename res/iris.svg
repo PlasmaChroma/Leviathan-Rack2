@@ -210,6 +210,11 @@
        cx="346"
        cy="6710"
        r="113" />
+    <circle
+       id="IRIS_CHANNEL_PREVIEW_BUTTON"
+       cx="5750"
+       cy="6710"
+       r="113" />
     <g
        id="channel_selector">
       <circle

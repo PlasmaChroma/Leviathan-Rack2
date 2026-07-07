@@ -467,6 +467,13 @@ void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height
   if (height) *height = previewHeight;
 }
 
+void Iris::sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  if (pixels) *pixels = snapshotTable.sourcePreviewRgb;
+  if (width) *width = snapshotTable.sourcePreviewWidth;
+  if (height) *height = snapshotTable.sourcePreviewHeight;
+}
+
 void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const {
   if (!samples) return;
   sampleCount = std::max(sampleCount, 2);

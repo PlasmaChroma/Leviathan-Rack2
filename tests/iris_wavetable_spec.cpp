@@ -105,6 +105,11 @@ int main() {
   check("RGBA red image converts",
         iris::buildWavetableFromRgba(pixels.data(), 1, 1, 4, settings, &red));
   check("RGBA channels use resized pixel data", std::fabs(red.samples[0] - (2.f * 0.299f - 1.f)) < 0.01f);
+  check("source preview keeps full RGB",
+        red.sourcePreviewWidth == 128 && red.sourcePreviewHeight == 64 &&
+        red.sourcePreviewRgb.size() == size_t(128 * 64 * 3) &&
+        red.sourcePreviewRgb[0] == 255u && red.sourcePreviewRgb[1] == 0u &&
+        red.sourcePreviewRgb[2] == 0u);
   settings.imageChannelMode = iris::IMAGE_CHANNEL_RED;
   iris::ImageWavetable redChannel;
   check("red channel interpretation selects red",

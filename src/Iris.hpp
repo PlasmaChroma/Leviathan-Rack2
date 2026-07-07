@@ -93,6 +93,7 @@ struct Iris final : Module {
   std::string sourcePath() const;
   std::string statusText() const;
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
+  void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
   bool embedsTable() const { return embedTable; }
   void setEmbedTable(bool enabled) { embedTable = enabled; }
@@ -101,6 +102,7 @@ struct Iris final : Module {
   std::atomic<float> displayScan {0.f};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
+  std::atomic<bool> displayChannelPreview {false};
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};

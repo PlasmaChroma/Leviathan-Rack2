@@ -54,6 +54,73 @@ const std::vector<uint8_t>& irisBrowserPreviewPixels() {
   return pixels;
 }
 
+NVGcolor irisPreviewChannelColor(int mode, float value) {
+  const float amount = clamp(std::fabs(value), 0.f, 1.f);
+  const uint8_t alpha = 255u;
+  switch (mode) {
+    case iris::IMAGE_CHANNEL_RED:
+      return nvgRGBA(
+        uint8_t(std::round(245.f * amount)),
+        uint8_t(std::round(32.f * amount)),
+        uint8_t(std::round(52.f * amount)),
+        alpha);
+    case iris::IMAGE_CHANNEL_GREEN:
+      return nvgRGBA(
+        uint8_t(std::round(36.f * amount)),
+        uint8_t(std::round(230.f * amount)),
+        uint8_t(std::round(112.f * amount)),
+        alpha);
+    case iris::IMAGE_CHANNEL_BLUE:
+      return nvgRGBA(
+        uint8_t(std::round(54.f * amount)),
+        uint8_t(std::round(126.f * amount)),
+        uint8_t(std::round(255.f * amount)),
+        alpha);
+    case iris::IMAGE_CHANNEL_ALL:
+    default:
+      return nvgRGBA(
+        uint8_t(std::round(235.f * amount)),
+        uint8_t(std::round(240.f * amount)),
+        uint8_t(std::round(246.f * amount)),
+        alpha);
+  }
+}
+
+NVGcolor irisPreviewConvertedColor(float value) {
+  const float amount = clamp(std::fabs(value), 0.f, 1.f);
+  const float red = value < 0.f ? 122.f : 28.f;
+  const float green = value < 0.f ? 92.f : 204.f;
+  const float blue = value < 0.f ? 255.f : 217.f;
+  return nvgRGBA(
+    uint8_t(std::round(red * amount)),
+    uint8_t(std::round(green * amount)),
+    uint8_t(std::round(blue * amount)),
+    255);
+}
+
+void filterIrisSourcePreview(std::vector<uint8_t>* rgb, int mode) {
+  if (!rgb || rgb->empty()) return;
+  for (size_t i = 0; i + 2u < rgb->size(); i += 3u) {
+    switch (mode) {
+      case iris::IMAGE_CHANNEL_RED:
+        (*rgb)[i + 1u] = 0u;
+        (*rgb)[i + 2u] = 0u;
+        break;
+      case iris::IMAGE_CHANNEL_GREEN:
+        (*rgb)[i] = 0u;
+        (*rgb)[i + 2u] = 0u;
+        break;
+      case iris::IMAGE_CHANNEL_BLUE:
+        (*rgb)[i] = 0u;
+        (*rgb)[i + 1u] = 0u;
+        break;
+      case iris::IMAGE_CHANNEL_ALL:
+      default:
+        break;
+    }
+  }
+}
+
 void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) {
   if (!samples) return;
   sampleCount = std::max(sampleCount, 2);
@@ -68,6 +135,8 @@ struct IrisDisplay final : OpaqueWidget {
   Iris* module = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
+  bool channelPreview = false;
+  int channelMode = iris::IMAGE_CHANNEL_ALL;
   NVGcontext* imageContext = nullptr;
   int imageHandle = -1;
   int uploadedWidth = 0;
@@ -93,7 +162,13 @@ struct IrisDisplay final : OpaqueWidget {
   void step() override {
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    if (generation != currentGeneration && framebuffer) {
+    const bool currentChannelPreview =
+      module ? module->displayChannelPreview.load(std::memory_order_relaxed) : false;
+    const int currentChannelMode =
+      module ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
+             : iris::IMAGE_CHANNEL_ALL;
+    if ((generation != currentGeneration || channelPreview != currentChannelPreview ||
+         channelMode != currentChannelMode) && framebuffer) {
       framebuffer->setDirty();
     }
     OpaqueWidget::step();
@@ -107,36 +182,59 @@ struct IrisDisplay final : OpaqueWidget {
 
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
+    const bool currentChannelPreview =
+      module ? module->displayChannelPreview.load(std::memory_order_relaxed) : false;
+    const int currentChannelMode =
+      module ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
+             : iris::IMAGE_CHANNEL_ALL;
     if (imageContext != args.vg) {
       nvg_gfx_lifecycle::resetOwnedNvgImage(
         imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
       imageContext = args.vg;
       generation = uint64_t(-1);
     }
-    if (generation != currentGeneration || imageHandle < 0 ||
+    if (generation != currentGeneration || channelPreview != currentChannelPreview ||
+        channelMode != currentChannelMode || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
       std::vector<uint8_t> gray;
+      std::vector<uint8_t> rgb;
       int width = 0;
       int height = 0;
       if (module) {
-        module->previewSnapshot(&gray, &width, &height);
+        if (currentChannelPreview) {
+          module->sourcePreviewSnapshot(&rgb, &width, &height);
+        }
+        if (!currentChannelPreview || rgb.empty()) {
+          module->previewSnapshot(&gray, &width, &height);
+        }
       } else {
         const std::vector<uint8_t>& preview = irisBrowserPreviewPixels();
         gray.assign(preview.begin(), preview.end());
         width = 128;
         height = 64;
       }
-      rgba.resize(gray.size() * 4u);
-      for (size_t i = 0; i < gray.size(); ++i) {
-        const float value = float(gray[i]) / 127.5f - 1.f;
-        const float amount = clamp(std::fabs(value), 0.f, 1.f);
-        const float red = value < 0.f ? 122.f : 28.f;
-        const float green = value < 0.f ? 92.f : 204.f;
-        const float blue = value < 0.f ? 255.f : 217.f;
-        rgba[i * 4u + 0u] = uint8_t(std::round(red * amount));
-        rgba[i * 4u + 1u] = uint8_t(std::round(green * amount));
-        rgba[i * 4u + 2u] = uint8_t(std::round(blue * amount));
-        rgba[i * 4u + 3u] = 255u;
+      if (currentChannelPreview && !rgb.empty()) {
+        filterIrisSourcePreview(&rgb, currentChannelMode);
+        const size_t pixelCount = rgb.size() / 3u;
+        rgba.resize(pixelCount * 4u);
+        for (size_t i = 0; i < pixelCount; ++i) {
+          rgba[i * 4u + 0u] = rgb[i * 3u + 0u];
+          rgba[i * 4u + 1u] = rgb[i * 3u + 1u];
+          rgba[i * 4u + 2u] = rgb[i * 3u + 2u];
+          rgba[i * 4u + 3u] = 255u;
+        }
+      } else {
+        rgba.resize(gray.size() * 4u);
+        for (size_t i = 0; i < gray.size(); ++i) {
+          const float value = float(gray[i]) / 127.5f - 1.f;
+          const NVGcolor color = currentChannelPreview
+            ? irisPreviewChannelColor(currentChannelMode, value)
+            : irisPreviewConvertedColor(value);
+          rgba[i * 4u + 0u] = uint8_t(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
+          rgba[i * 4u + 1u] = uint8_t(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
+          rgba[i * 4u + 2u] = uint8_t(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
+          rgba[i * 4u + 3u] = uint8_t(std::round(clamp(color.a, 0.f, 1.f) * 255.f));
+        }
       }
       nvg_gfx_lifecycle::resetOwnedNvgImage(
         imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
@@ -147,6 +245,8 @@ struct IrisDisplay final : OpaqueWidget {
         uploadedHeight = height;
       }
       generation = currentGeneration;
+      channelPreview = currentChannelPreview;
+      channelMode = currentChannelMode;
     }
     if (imageHandle >= 0) {
       const float imageTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
@@ -437,6 +537,111 @@ struct IrisSmoothingMenuButton final : TL1105 {
   }
 };
 
+struct IrisChannelPreviewButton final : TL1105 {
+  Iris* module = nullptr;
+  ui::Tooltip* tooltip = nullptr;
+  int pressedFrames = 0;
+
+  ~IrisChannelPreviewButton() {
+    destroyTooltip();
+  }
+
+  std::string tooltipText() const {
+    const bool enabled = module && module->displayChannelPreview.load(std::memory_order_relaxed);
+    return enabled ? "Show converted waveform field" : "Show source color channels";
+  }
+
+  void createTooltip() {
+    if (settings::tooltips && !tooltip) {
+      tooltip = new ui::Tooltip();
+      tooltip->text = tooltipText();
+      APP->scene->addChild(tooltip);
+    }
+  }
+
+  void destroyTooltip() {
+    if (tooltip) {
+      APP->scene->removeChild(tooltip);
+      delete tooltip;
+      tooltip = nullptr;
+    }
+  }
+
+  void refreshTooltip() {
+    if (tooltip) tooltip->text = tooltipText();
+  }
+
+  void setPressedVisual(bool pressed) {
+    if (!sw || frames.empty()) return;
+    const size_t frameIndex = pressed && frames.size() > 1u ? 1u : 0u;
+    sw->setSvg(frames[frameIndex]);
+    if (fb) fb->setDirty();
+  }
+
+  void onButton(const event::Button& e) override {
+    if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+      const bool current = module->displayChannelPreview.load(std::memory_order_relaxed);
+      module->displayChannelPreview.store(!current, std::memory_order_relaxed);
+      pressedFrames = 5;
+      setPressedVisual(true);
+      refreshTooltip();
+      e.consume(this);
+      return;
+    }
+    TL1105::onButton(e);
+  }
+
+  void onEnter(const event::Enter& e) override {
+    TL1105::onEnter(e);
+    createTooltip();
+  }
+
+  void onLeave(const event::Leave& e) override {
+    TL1105::onLeave(e);
+    destroyTooltip();
+  }
+
+  void step() override {
+    if (pressedFrames > 0) {
+      --pressedFrames;
+      if (pressedFrames == 0) setPressedVisual(false);
+    }
+    TL1105::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    TL1105::draw(args);
+    const bool enabled = module && module->displayChannelPreview.load(std::memory_order_relaxed);
+    const int mode = module
+      ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
+      : iris::IMAGE_CHANNEL_ALL;
+    const float cx = 0.5f * box.size.x;
+    const float cy = 0.5f * box.size.y;
+    const float rx = std::max(3.1f, 0.31f * box.size.x);
+    const float ry = std::max(1.9f, 0.19f * box.size.y);
+    const NVGcolor stroke = enabled
+      ? irisPreviewChannelColor(mode, 1.f)
+      : nvgRGBA(225, 232, 240, 244);
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, cx - rx, cy);
+    nvgBezierTo(args.vg, cx - rx * 0.58f, cy - ry, cx - rx * 0.24f, cy - ry, cx, cy - ry);
+    nvgBezierTo(args.vg, cx + rx * 0.24f, cy - ry, cx + rx * 0.58f, cy - ry, cx + rx, cy);
+    nvgBezierTo(args.vg, cx + rx * 0.58f, cy + ry, cx + rx * 0.24f, cy + ry, cx, cy + ry);
+    nvgBezierTo(args.vg, cx - rx * 0.24f, cy + ry, cx - rx * 0.58f, cy + ry, cx - rx, cy);
+    nvgStrokeWidth(args.vg, 1.05f);
+    nvgStrokeColor(args.vg, stroke);
+    nvgLineCap(args.vg, NVG_ROUND);
+    nvgLineJoin(args.vg, NVG_ROUND);
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, cx, cy, std::max(1.15f, 0.095f * box.size.x));
+    nvgFillColor(args.vg, stroke);
+    nvgFill(args.vg);
+  }
+};
+
 struct IrisImageChannelButton final : SmallGoldButton {
   Iris* module = nullptr;
 
@@ -531,6 +736,12 @@ struct IrisWidget final : ModuleWidget {
         module, Iris::SMOOTHING_MENU_PARAM);
     smoothingMenu->module = module;
     addParam(smoothingMenu);
+
+    IrisChannelPreviewButton* channelPreviewButton =
+      createWidgetCentered<IrisChannelPreviewButton>(
+        mm2px(anchor("IRIS_CHANNEL_PREVIEW_BUTTON", Vec(57.5f, 65.5f))));
+    channelPreviewButton->module = module;
+    addChild(channelPreviewButton);
 
     const Vec channelButtonPos =
       anchor("IRIS_IMAGE_CHANNEL_BUTTON", Vec(7.600001f, 96.225596f));

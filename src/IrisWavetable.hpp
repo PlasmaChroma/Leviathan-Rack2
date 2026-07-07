@@ -64,6 +64,9 @@ struct ImageWavetable {
   int sourceWidth = 0;
   int sourceHeight = 0;
   int sourceChannels = 0;
+  int sourcePreviewWidth = 0;
+  int sourcePreviewHeight = 0;
+  std::vector<uint8_t> sourcePreviewRgb;
   float globalMin = 0.f;
   float globalMax = 0.f;
   float globalRms = 0.f;
@@ -193,6 +196,45 @@ inline void updateStatistics(ImageWavetable* table) {
   table->globalMin = minValue;
   table->globalMax = maxValue;
   table->globalRms = count ? float(std::sqrt(sumSquares / double(count))) : 0.f;
+}
+
+inline void buildSourcePreviewFromRgba(const uint8_t* rgba, int sourceWidth, int sourceHeight,
+                                       const ConversionSettings& settings, ImageWavetable* table) {
+  if (!rgba || !table || sourceWidth <= 0 || sourceHeight <= 0) {
+    return;
+  }
+  const int previewWidth = 128;
+  const int previewHeight = 64;
+  table->sourcePreviewWidth = previewWidth;
+  table->sourcePreviewHeight = previewHeight;
+  table->sourcePreviewRgb.assign(size_t(previewWidth * previewHeight * 3), 0u);
+  for (int y = 0; y < previewHeight; ++y) {
+    const int mappedY = settings.rowOrder == ROW_BOTTOM_TO_TOP ? previewHeight - 1 - y : y;
+    const float sourceY =
+      (float(mappedY) + 0.5f) * float(sourceHeight) / float(previewHeight) - 0.5f;
+    const int y0 = std::max(0, std::min(int(std::floor(sourceY)), sourceHeight - 1));
+    const int y1 = std::min(y0 + 1, sourceHeight - 1);
+    const float fy = clamp01(sourceY - float(y0));
+    for (int x = 0; x < previewWidth; ++x) {
+      const float sourceX =
+        (float(x) + 0.5f) * float(sourceWidth) / float(previewWidth) - 0.5f;
+      const int x0 = std::max(0, std::min(int(std::floor(sourceX)), sourceWidth - 1));
+      const int x1 = std::min(x0 + 1, sourceWidth - 1);
+      const float fx = clamp01(sourceX - float(x0));
+      const size_t outBase = (size_t(y) * size_t(previewWidth) + size_t(x)) * 3u;
+      for (int c = 0; c < 3; ++c) {
+        const auto component = [&](int px, int py) {
+          const size_t base = (size_t(py) * size_t(sourceWidth) + size_t(px)) * 4u;
+          return float(rgba[base + size_t(c)]);
+        };
+        const float top = component(x0, y0) + (component(x1, y0) - component(x0, y0)) * fx;
+        const float bottom = component(x0, y1) + (component(x1, y1) - component(x0, y1)) * fx;
+        const float value = std::max(0.f, std::min(top + (bottom - top) * fy, 255.f));
+        table->sourcePreviewRgb[outBase + size_t(c)] =
+          uint8_t(std::round(value));
+      }
+    }
+  }
 }
 
 inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sourceHeight,
@@ -357,6 +399,7 @@ inline bool buildWavetableFromRgba(const uint8_t* rgba, int sourceWidth, int sou
   table.sourceWidth = sourceWidth;
   table.sourceHeight = sourceHeight;
   table.sourceChannels = sourceChannels;
+  buildSourcePreviewFromRgba(rgba, sourceWidth, sourceHeight, settings, &table);
   table.samples.resize(size_t(table.rowCount) * size_t(table.stride));
   for (int row = 0; row < table.rowCount; ++row) {
     const size_t base = size_t(row) * size_t(table.stride);
