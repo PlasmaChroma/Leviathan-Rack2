@@ -137,7 +137,7 @@ private:
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
   void workerLoop();
-  void publishWorkerResult(const WorkerResult& result);
+  void publishWorkerResult(WorkerResult& result);
   static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;

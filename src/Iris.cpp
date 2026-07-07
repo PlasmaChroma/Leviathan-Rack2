@@ -1,6 +1,7 @@
 #include "Iris.hpp"
 
 #include <new>
+#include <utility>
 
 namespace {
 
@@ -174,11 +175,11 @@ void Iris::clearToDefault() {
   submitRequest(request);
 }
 
-void Iris::publishWorkerResult(const WorkerResult& result) {
+void Iris::publishWorkerResult(WorkerResult& result) {
   if (!result.table.valid()) {
     return;
   }
-  iris::ImageWavetable* table = new iris::ImageWavetable(result.table);
+  iris::ImageWavetable* table = new iris::ImageWavetable(std::move(result.table));
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (result.hasSource) {
@@ -259,6 +260,8 @@ void Iris::workerLoop() {
           result.source = std::move(source);
           result.hasSource = ok;
         }
+      } else {
+        error = "Unknown Iris image worker request";
       }
     } catch (const std::bad_alloc&) {
       error = "Image worker allocation failed";
@@ -328,6 +331,7 @@ void Iris::process(const ProcessArgs& args) {
       iris::ImageWavetable* old = activeTable;
       activeTable = pending;
       retiredTable.store(old, std::memory_order_release);
+      workerCv.notify_one();
     }
   }
   const iris::ImageWavetable* table = activeTable;

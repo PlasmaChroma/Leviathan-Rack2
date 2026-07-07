@@ -96,6 +96,7 @@ struct ImageWavetable {
     const int x0Raw = int(x);
     float xFrac = x - float(x0Raw);
     int x0 = x0Raw;
+    // Rare rounding guard for phase values that land exactly on the wrap sample.
     if (x0 >= frameSize) {
       x0 = 0;
       xFrac = 0.f;
