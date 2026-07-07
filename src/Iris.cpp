@@ -579,6 +579,14 @@ void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height
 
 void Iris::sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
+  const size_t previewPixels =
+    size_t(snapshotTable.sourcePreviewWidth) * size_t(snapshotTable.sourcePreviewHeight);
+  if (previewPixels > 0u && snapshotTable.sourcePreviewRgb.size() == previewPixels * 3u) {
+    if (pixels) *pixels = snapshotTable.sourcePreviewRgb;
+    if (width) *width = snapshotTable.sourcePreviewWidth;
+    if (height) *height = snapshotTable.sourcePreviewHeight;
+    return;
+  }
   iris::buildDisplayRgb8FromSourceField(snapshotSourceField, pixels, width, height);
 }
 
