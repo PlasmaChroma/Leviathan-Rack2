@@ -657,6 +657,18 @@ struct IrisImageChannelButton final : SmallGoldButton {
   }
 };
 
+struct IrisAllChannelApertureLight : WhiteApertureLight {
+  IrisAllChannelApertureLight() {
+    baseColor = nvgRGB(255, 255, 255);
+    activeColor = baseColor;
+    baseColors.clear();
+    addBaseColor(baseColor);
+    bloomAlpha = 0.34f;
+    invalidateStaticBackgroundCache();
+    invalidateBloomCache();
+  }
+};
+
 } // namespace
 
 struct IrisWidget final : ModuleWidget {
@@ -750,7 +762,7 @@ struct IrisWidget final : ModuleWidget {
         mm2px(channelButtonPos), module, Iris::IMAGE_CHANNEL_PARAM);
     channelButton->module = module;
     addParam(channelButton);
-    addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(
+    addChild(createLightCentered<SmallAperture<IrisAllChannelApertureLight>>(
       mm2px(anchor("IRIS_IMAGE_CHANNEL_ALL_LIGHT", Vec(3.600001f, 92.525596f))),
       module, Iris::IMAGE_CHANNEL_ALL_LIGHT));
     addChild(createLightCentered<SmallAperture<RedApertureLight>>(

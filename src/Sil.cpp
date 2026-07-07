@@ -2502,14 +2502,8 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 		const uint32_t countR = module->micropeakRepairCountR.load(std::memory_order_relaxed);
 		std::snprintf(label, sizeof(label), "Micropeak Smoothing - L : %u R : %u", countL, countR);
 
-		const float boldOffset = 0.16f;
 		nvgFillColor(args.vg, nvgRGBA(8, 8, 8, 210));
 		nvgText(args.vg, textPosPx.x + 0.45f, textPosPx.y + 0.45f, label, nullptr);
-		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
-		nvgText(args.vg, textPosPx.x - boldOffset, textPosPx.y, label, nullptr);
-		nvgText(args.vg, textPosPx.x + boldOffset, textPosPx.y, label, nullptr);
-		nvgText(args.vg, textPosPx.x, textPosPx.y - boldOffset, label, nullptr);
-		nvgText(args.vg, textPosPx.x, textPosPx.y + boldOffset, label, nullptr);
 		nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 255));
 		nvgText(args.vg, textPosPx.x, textPosPx.y, label, nullptr);
 	}
