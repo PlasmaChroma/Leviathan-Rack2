@@ -37,6 +37,8 @@ struct BinaryHeader {
 };
 
 const char kMagic[8] = {'I', 'R', 'I', 'S', 'W', 'T', '0', '1'};
+constexpr uint32_t kBinaryVersion = 2u;
+constexpr uint32_t kMaxSourcePreviewPixels = 128u * 64u;
 
 bool samplesAreFinite(const ImageWavetable& table) {
   if (!table.valid()) return false;
@@ -44,6 +46,15 @@ bool samplesAreFinite(const ImageWavetable& table) {
     if (!std::isfinite(table.samples[i])) return false;
   }
   return true;
+}
+
+bool sourcePreviewPayloadValid(const ImageWavetable& table) {
+  if (table.sourcePreviewWidth <= 0 || table.sourcePreviewHeight <= 0) {
+    return table.sourcePreviewRgb.empty();
+  }
+  const size_t pixelCount = size_t(table.sourcePreviewWidth) * size_t(table.sourcePreviewHeight);
+  return pixelCount <= size_t(kMaxSourcePreviewPixels) &&
+         table.sourcePreviewRgb.size() == pixelCount * 3u;
 }
 
 } // namespace
@@ -86,7 +97,7 @@ bool saveBinaryTable(const std::string& path, const ImageWavetable& table, std::
   }
   BinaryHeader header;
   std::memcpy(header.magic, kMagic, sizeof(kMagic));
-  header.version = 1u;
+  header.version = kBinaryVersion;
   header.frameSize = uint32_t(table.frameSize);
   header.rowCount = uint32_t(table.rowCount);
   header.stride = uint32_t(table.stride);
@@ -96,6 +107,21 @@ bool saveBinaryTable(const std::string& path, const ImageWavetable& table, std::
   stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
   stream.write(reinterpret_cast<const char*>(table.samples.data()),
                std::streamsize(table.samples.size() * sizeof(float)));
+  uint32_t previewWidth = 0u;
+  uint32_t previewHeight = 0u;
+  uint32_t previewByteCount = 0u;
+  if (sourcePreviewPayloadValid(table) && !table.sourcePreviewRgb.empty()) {
+    previewWidth = uint32_t(table.sourcePreviewWidth);
+    previewHeight = uint32_t(table.sourcePreviewHeight);
+    previewByteCount = uint32_t(table.sourcePreviewRgb.size());
+  }
+  stream.write(reinterpret_cast<const char*>(&previewWidth), sizeof(previewWidth));
+  stream.write(reinterpret_cast<const char*>(&previewHeight), sizeof(previewHeight));
+  stream.write(reinterpret_cast<const char*>(&previewByteCount), sizeof(previewByteCount));
+  if (previewByteCount > 0u) {
+    stream.write(reinterpret_cast<const char*>(table.sourcePreviewRgb.data()),
+                 std::streamsize(table.sourcePreviewRgb.size()));
+  }
   if (!stream) {
     if (error) *error = "Could not write complete wavetable";
     return false;
@@ -115,7 +141,8 @@ bool loadBinaryTable(const std::string& path, ImageWavetable* out, std::string* 
   BinaryHeader header;
   stream.read(reinterpret_cast<char*>(&header), sizeof(header));
   const bool headerValid =
-    stream && std::memcmp(header.magic, kMagic, sizeof(kMagic)) == 0 && header.version == 1u &&
+    stream && std::memcmp(header.magic, kMagic, sizeof(kMagic)) == 0 &&
+    (header.version == 1u || header.version == kBinaryVersion) &&
     header.frameSize >= 2u && header.frameSize <= 16384u && header.rowCount >= 1u &&
     header.rowCount <= uint32_t(kMaxRows) && header.stride == header.frameSize + 1u;
   if (!headerValid) {
@@ -139,6 +166,33 @@ bool loadBinaryTable(const std::string& path, ImageWavetable* out, std::string* 
   if (!stream || !samplesAreFinite(table)) {
     if (error) *error = "Embedded wavetable data is incomplete";
     return false;
+  }
+  if (header.version >= 2u) {
+    uint32_t previewWidth = 0u;
+    uint32_t previewHeight = 0u;
+    uint32_t previewByteCount = 0u;
+    stream.read(reinterpret_cast<char*>(&previewWidth), sizeof(previewWidth));
+    stream.read(reinterpret_cast<char*>(&previewHeight), sizeof(previewHeight));
+    stream.read(reinterpret_cast<char*>(&previewByteCount), sizeof(previewByteCount));
+    const size_t previewPixels = size_t(previewWidth) * size_t(previewHeight);
+    const bool previewHeaderValid =
+      stream && previewPixels <= size_t(kMaxSourcePreviewPixels) &&
+      previewByteCount == previewPixels * 3u;
+    if (!previewHeaderValid) {
+      if (error) *error = "Embedded source preview header is invalid";
+      return false;
+    }
+    if (previewByteCount > 0u) {
+      table.sourcePreviewWidth = int(previewWidth);
+      table.sourcePreviewHeight = int(previewHeight);
+      table.sourcePreviewRgb.resize(size_t(previewByteCount));
+      stream.read(reinterpret_cast<char*>(table.sourcePreviewRgb.data()),
+                  std::streamsize(table.sourcePreviewRgb.size()));
+      if (!stream) {
+        if (error) *error = "Embedded source preview data is incomplete";
+        return false;
+      }
+    }
   }
   updateStatistics(&table);
   *out = std::move(table);

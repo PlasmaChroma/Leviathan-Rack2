@@ -144,6 +144,10 @@ int main() {
   check("binary round trip preserves samples",
         restored.samples.size() == horizontal.samples.size() &&
         std::fabs(restored.samples[3] - horizontal.samples[3]) < 1e-7f);
+  check("binary round trip preserves source preview",
+        restored.sourcePreviewWidth == horizontal.sourcePreviewWidth &&
+        restored.sourcePreviewHeight == horizontal.sourcePreviewHeight &&
+        restored.sourcePreviewRgb == horizontal.sourcePreviewRgb);
   std::remove(binaryPath.c_str());
 
   settings.frameSize = 5;

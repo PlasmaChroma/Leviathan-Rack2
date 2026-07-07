@@ -200,14 +200,11 @@ struct IrisDisplay final : OpaqueWidget {
       std::vector<uint8_t> rgb;
       int width = 0;
       int height = 0;
-      bool keepExistingImage = false;
       if (module) {
         if (currentChannelPreview) {
           module->sourcePreviewSnapshot(&rgb, &width, &height);
         }
-        if (currentChannelPreview && rgb.empty() && imageHandle >= 0 && !module->sourcePath().empty()) {
-          keepExistingImage = true;
-        } else if (!currentChannelPreview || rgb.empty()) {
+        if (!currentChannelPreview || rgb.empty()) {
           module->previewSnapshot(&gray, &width, &height);
         }
       } else {
@@ -216,11 +213,7 @@ struct IrisDisplay final : OpaqueWidget {
         width = 128;
         height = 64;
       }
-      if (keepExistingImage) {
-        generation = currentGeneration;
-        channelPreview = currentChannelPreview;
-        channelMode = currentChannelMode;
-      } else if (currentChannelPreview && !rgb.empty()) {
+      if (currentChannelPreview && !rgb.empty()) {
         filterIrisSourcePreview(&rgb, currentChannelMode);
         const size_t pixelCount = rgb.size() / 3u;
         rgba.resize(pixelCount * 4u);
@@ -243,15 +236,13 @@ struct IrisDisplay final : OpaqueWidget {
           rgba[i * 4u + 3u] = uint8_t(std::round(clamp(color.a, 0.f, 1.f) * 255.f));
         }
       }
-      if (!keepExistingImage) {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(
-          imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-        imageContext = args.vg;
-        if (width > 0 && height > 0 && !rgba.empty()) {
-          imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-          uploadedWidth = width;
-          uploadedHeight = height;
-        }
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
+      imageContext = args.vg;
+      if (width > 0 && height > 0 && !rgba.empty()) {
+        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+        uploadedWidth = width;
+        uploadedHeight = height;
       }
       generation = currentGeneration;
       channelPreview = currentChannelPreview;
@@ -592,15 +583,6 @@ struct IrisChannelPreviewButton final : TL1105 {
       const bool current = module->displayChannelPreview.load(std::memory_order_relaxed);
       const bool next = !current;
       module->displayChannelPreview.store(next, std::memory_order_relaxed);
-      if (next) {
-        std::vector<uint8_t> sourcePreview;
-        int sourcePreviewW = 0;
-        int sourcePreviewH = 0;
-        module->sourcePreviewSnapshot(&sourcePreview, &sourcePreviewW, &sourcePreviewH);
-        if (sourcePreview.empty() && !module->sourcePath().empty()) {
-          module->requestRebuild();
-        }
-      }
       pressedFrames = 5;
       setPressedVisual(true);
       refreshTooltip();
