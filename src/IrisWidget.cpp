@@ -667,6 +667,39 @@ struct IrisAllChannelApertureLight : WhiteApertureLight {
     invalidateStaticBackgroundCache();
     invalidateBloomCache();
   }
+
+  void drawLight(const DrawArgs& args) override {
+    if (module) {
+      WhiteApertureLight::drawLight(args);
+      return;
+    }
+
+    const float cx = box.size.x * 0.5f;
+    const float cy = box.size.y * 0.5f;
+    NVGcontext* vg = args.vg;
+
+    NVGpaint bloom = nvgRadialGradient(
+      vg, cx, cy, coreRadius * 0.4f, bloomRadius,
+      nvgRGBA(235, 248, 255, 118), nvgRGBA(74, 184, 255, 0));
+    nvgBeginPath(vg);
+    nvgCircle(vg, cx, cy, bloomRadius);
+    nvgFillPaint(vg, bloom);
+    nvgFill(vg);
+
+    NVGpaint core = nvgRadialGradient(
+      vg, cx - lensRadius * 0.20f, cy - lensRadius * 0.25f,
+      coreRadius * 0.18f, lensRadius,
+      nvgRGBA(255, 255, 255, 255), nvgRGBA(178, 224, 255, 238));
+    nvgBeginPath(vg);
+    nvgCircle(vg, cx, cy, lensRadius * 0.88f);
+    nvgFillPaint(vg, core);
+    nvgFill(vg);
+
+    nvgBeginPath(vg);
+    nvgCircle(vg, cx - lensRadius * 0.24f, cy - lensRadius * 0.30f, coreRadius * 0.34f);
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 238));
+    nvgFill(vg);
+  }
 };
 
 } // namespace
