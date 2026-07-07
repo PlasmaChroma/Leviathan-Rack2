@@ -4,7 +4,7 @@
 
 namespace {
 
-const char* kEmbeddedTableName = "iris-table.bin";
+const char* kEmbeddedSourceName = "iris-source.qoi";
 std::atomic<uint32_t> gIrisDebugInstanceCounter {1u};
 constexpr float kLinHpCutoffHz = 4.9f;
 constexpr float kLinFmScale = 0.10f;
@@ -119,7 +119,7 @@ void Iris::submitRequest(const WorkerRequest& request) {
 void Iris::requestImageLoad(const std::string& path) {
   if (path.empty()) return;
   WorkerRequest request;
-  request.type = REQUEST_IMAGE;
+  request.type = REQUEST_IMPORT_IMAGE_FILE;
   request.path = path;
   request.settings = conversionSettings;
   submitRequest(request);
@@ -127,16 +127,42 @@ void Iris::requestImageLoad(const std::string& path) {
 
 void Iris::requestReload() {
   const std::string path = sourcePath();
-  if (!path.empty()) requestImageLoad(path);
+  WorkerRequest request;
+  request.settings = conversionSettings;
+  if (!path.empty()) {
+    request.type = REQUEST_RELOAD_IMAGE_FILE;
+    request.path = path;
+    {
+      std::lock_guard<std::mutex> lock(snapshotMutex);
+      request.source = snapshotSourceField;
+    }
+  } else {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (!snapshotSourceField.valid()) return;
+    request.type = REQUEST_REBUILD_FROM_SOURCE;
+    request.source = snapshotSourceField;
+  }
+  submitRequest(request);
 }
 
 void Iris::requestRebuild() {
-  const std::string path = sourcePath();
-  if (path.empty()) return;
   WorkerRequest request;
-  request.type = REQUEST_REBUILD;
-  request.path = path;
   request.settings = conversionSettings;
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (snapshotSourceField.valid()) {
+      request.type = REQUEST_REBUILD_FROM_SOURCE;
+      request.source = snapshotSourceField;
+    } else if (!snapshotSourceField.sourcePath.empty()) {
+      request.type = REQUEST_IMPORT_IMAGE_FILE;
+      request.path = snapshotSourceField.sourcePath;
+    } else if (!snapshotTable.sourcePath.empty()) {
+      request.type = REQUEST_IMPORT_IMAGE_FILE;
+      request.path = snapshotTable.sourcePath;
+    } else {
+      request.type = REQUEST_DEFAULT;
+    }
+  }
   submitRequest(request);
 }
 
@@ -147,16 +173,17 @@ void Iris::clearToDefault() {
   submitRequest(request);
 }
 
-void Iris::publishBuiltTable(iris::ImageWavetable* table, bool preserveSourceMetadata) {
-  if (!table || !table->valid()) {
-    delete table;
+void Iris::publishWorkerResult(const WorkerResult& result) {
+  if (!result.table.valid()) {
     return;
   }
+  iris::ImageWavetable* table = new iris::ImageWavetable(result.table);
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (preserveSourceMetadata) {
-      table->sourcePath = snapshotTable.sourcePath;
-      table->sourceName = snapshotTable.sourceName;
+    if (result.hasSource) {
+      snapshotSourceField = result.source;
+    } else if (!result.preserveExistingSource) {
+      snapshotSourceField = iris::SourceField();
     }
     snapshotTable = *table;
     buildPreview(snapshotTable, &snapshotPreview);
@@ -185,18 +212,52 @@ void Iris::workerLoop() {
       requestPending = false;
     }
 
-    iris::ImageWavetable* built = nullptr;
+    WorkerResult result;
     std::string error;
     bool ok = false;
     try {
-      built = new iris::ImageWavetable;
       if (request.type == REQUEST_DEFAULT) {
-        *built = iris::makeDefaultTable();
+        result.table = iris::makeDefaultTable();
         ok = true;
-      } else if (request.type == REQUEST_EMBEDDED) {
-        ok = iris::loadBinaryTable(request.path, built, &error);
-      } else {
-        ok = iris::importImageFile(request.path, request.settings, built, &error);
+      } else if (request.type == REQUEST_LOAD_EMBEDDED_SOURCE) {
+        iris::SourceField source;
+        ok = iris::loadSourceField(request.path, &source, &error);
+        if (ok) {
+          source.sourcePath = request.source.sourcePath;
+          source.sourceName = request.source.sourceName;
+          source.originalWidth = request.source.originalWidth;
+          source.originalHeight = request.source.originalHeight;
+          source.originalChannels = request.source.originalChannels;
+          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          result.source = std::move(source);
+          result.hasSource = ok;
+        }
+      } else if (request.type == REQUEST_REBUILD_FROM_SOURCE) {
+        ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
+        result.preserveExistingSource = true;
+      } else if (request.type == REQUEST_RELOAD_IMAGE_FILE) {
+        iris::SourceField source;
+        ok = iris::importImageFileToSourceField(request.path, &source, &error);
+        if (ok) {
+          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          result.source = std::move(source);
+          result.hasSource = ok;
+        } else if (request.source.valid()) {
+          const std::string reloadError = error;
+          ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
+          result.preserveExistingSource = true;
+          if (ok && !reloadError.empty()) {
+            error = reloadError;
+          }
+        }
+      } else if (request.type == REQUEST_IMPORT_IMAGE_FILE) {
+        iris::SourceField source;
+        ok = iris::importImageFileToSourceField(request.path, &source, &error);
+        if (ok) {
+          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          result.source = std::move(source);
+          result.hasSource = ok;
+        }
       }
     } catch (const std::bad_alloc&) {
       error = "Image worker allocation failed";
@@ -216,20 +277,18 @@ void Iris::workerLoop() {
         // completed frames from the same source so the display tracks the drag,
         // while still rejecting stale loads and source changes.
         const bool publishIntermediateRebuild =
-          request.type == REQUEST_REBUILD &&
+          request.type == REQUEST_REBUILD_FROM_SOURCE &&
           requestPending &&
-          workerRequest.type == REQUEST_REBUILD &&
-          request.path == workerRequest.path;
+          workerRequest.type == REQUEST_REBUILD_FROM_SOURCE &&
+          request.source.sourcePath == workerRequest.source.sourcePath;
         if (!publishIntermediateRebuild) {
-          delete built;
           continue;
         }
       }
     }
     if (ok) {
       try {
-        publishBuiltTable(built, request.type == REQUEST_EMBEDDED);
-        built = nullptr;
+        publishWorkerResult(result);
       } catch (const std::bad_alloc&) {
         error = "Table publication allocation failed";
         ok = false;
@@ -242,16 +301,20 @@ void Iris::workerLoop() {
       }
     }
     if (!ok) {
-      delete built;
-      built = nullptr;
+      if (request.type != REQUEST_DEFAULT) {
+        WorkerResult fallback;
+        fallback.table = iris::makeDefaultTable();
+        try {
+          publishWorkerResult(fallback);
+        } catch (...) {
+        }
+      }
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
         lastError = error;
       }
       loading.store(false, std::memory_order_release);
       loadFailed.store(true, std::memory_order_release);
-    } else {
-      built = nullptr;
     }
   }
 }
@@ -337,42 +400,60 @@ void Iris::process(const ProcessArgs& args) {
 
 void Iris::onAdd(const AddEvent& e) {
   Module::onAdd(e);
-  if (!embedTable) return;
   const std::string directory = getPatchStorageDirectory();
-  if (directory.empty()) return;
-  const std::string tablePath = system::join(directory, kEmbeddedTableName);
-  if (!system::isFile(tablePath)) return;
   WorkerRequest request;
-  request.type = REQUEST_EMBEDDED;
-  request.path = tablePath;
   request.settings = conversionSettings;
-  submitRequest(request);
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    request.source = snapshotSourceField;
+  }
+  if (embedSource && !directory.empty()) {
+    const std::string sourcePath = system::join(directory, kEmbeddedSourceName);
+    if (system::isFile(sourcePath)) {
+      request.type = REQUEST_LOAD_EMBEDDED_SOURCE;
+      request.path = sourcePath;
+      submitRequest(request);
+      return;
+    }
+  }
+  if (!request.source.sourcePath.empty()) {
+    request.type = REQUEST_IMPORT_IMAGE_FILE;
+    request.path = request.source.sourcePath;
+    submitRequest(request);
+  }
 }
 
 void Iris::onSave(const SaveEvent& e) {
   Module::onSave(e);
-  if (!embedTable) return;
-  iris::ImageWavetable snapshot;
+  if (!embedSource) return;
+  iris::SourceField source;
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    snapshot = snapshotTable;
+    source = snapshotSourceField;
   }
+  if (!source.valid()) return;
   const std::string directory = createPatchStorageDirectory();
   std::string error;
-  if (!iris::saveBinaryTable(system::join(directory, kEmbeddedTableName), snapshot, &error)) {
-    WARN("Iris: failed to save embedded wavetable: %s", error.c_str());
+  if (!iris::saveSourceField(system::join(directory, kEmbeddedSourceName), source, &error)) {
+    WARN("Iris: failed to save embedded source field: %s", error.c_str());
   }
 }
 
 json_t* Iris::dataToJson() {
   json_t* root = json_object();
-  json_object_set_new(root, "version", json_integer(1));
+  json_object_set_new(root, "version", json_integer(2));
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    json_object_set_new(root, "sourcePath", json_string(snapshotTable.sourcePath.c_str()));
-    json_object_set_new(root, "sourceName", json_string(snapshotTable.sourceName.c_str()));
-    json_object_set_new(root, "sourceWidth", json_integer(snapshotTable.sourceWidth));
-    json_object_set_new(root, "sourceHeight", json_integer(snapshotTable.sourceHeight));
+    const std::string sourcePath = snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
+    const std::string sourceName = snapshotSourceField.sourceName.empty() ? snapshotTable.sourceName : snapshotSourceField.sourceName;
+    const int sourceWidth = snapshotSourceField.originalWidth > 0 ? snapshotSourceField.originalWidth : snapshotTable.sourceWidth;
+    const int sourceHeight = snapshotSourceField.originalHeight > 0 ? snapshotSourceField.originalHeight : snapshotTable.sourceHeight;
+    const int sourceChannels = snapshotSourceField.originalChannels > 0 ? snapshotSourceField.originalChannels : snapshotTable.sourceChannels;
+    json_object_set_new(root, "sourcePath", json_string(sourcePath.c_str()));
+    json_object_set_new(root, "sourceName", json_string(sourceName.c_str()));
+    json_object_set_new(root, "sourceWidth", json_integer(sourceWidth));
+    json_object_set_new(root, "sourceHeight", json_integer(sourceHeight));
+    json_object_set_new(root, "sourceChannels", json_integer(sourceChannels));
     json_object_set_new(root, "rowCount", json_integer(snapshotTable.rowCount));
   }
   json_t* conversion = json_object();
@@ -388,14 +469,23 @@ json_t* Iris::dataToJson() {
   json_object_set_new(conversion, "brightness", json_real(conversionSettings.brightness));
   json_object_set_new(conversion, "gamma", json_real(conversionSettings.gamma));
   json_object_set_new(root, "conversion", conversion);
-  json_object_set_new(root, "embedTable", json_boolean(embedTable));
-  json_object_set_new(root, "embeddedTableFile", json_string(kEmbeddedTableName));
+  json_object_set_new(root, "embedSource", json_boolean(embedSource));
+  json_object_set_new(root, "embeddedSourceFile", json_string(kEmbeddedSourceName));
+  json_object_set_new(root, "sourceStorageFormat", json_string("rgb8-qoi"));
+  json_object_set_new(root, "canonicalSourceWidth", json_integer(iris::kCanonicalSourceWidth));
+  json_object_set_new(root, "canonicalSourceHeight", json_integer(iris::kCanonicalSourceHeight));
+  json_object_set_new(root, "showSourceColorPreview",
+                      json_boolean(displayChannelPreview.load(std::memory_order_relaxed)));
   return root;
 }
 
 void Iris::dataFromJson(json_t* root) {
   if (!root) return;
-  embedTable = jsonBoolOr(root, "embedTable", true);
+  embedSource = jsonBoolOr(root, "embedSource", jsonBoolOr(root, "embedTable", true));
+  displayChannelPreview.store(
+    jsonBoolOr(root, "showSourceColorPreview", jsonBoolOr(root, "displayChannelPreview", false)),
+    std::memory_order_relaxed);
+  previewGeneration.fetch_add(1u, std::memory_order_release);
   json_t* conversion = json_object_get(root, "conversion");
   if (conversion) {
     conversionSettings.normalizeMode = iris::NormalizeMode(clamp(
@@ -419,21 +509,34 @@ void Iris::dataFromJson(json_t* root) {
   }
   json_t* sourcePathJ = json_object_get(root, "sourcePath");
   json_t* sourceNameJ = json_object_get(root, "sourceName");
-  if ((sourcePathJ && json_is_string(sourcePathJ)) || (sourceNameJ && json_is_string(sourceNameJ))) {
+  json_t* sourceWidthJ = json_object_get(root, "sourceWidth");
+  json_t* sourceHeightJ = json_object_get(root, "sourceHeight");
+  json_t* sourceChannelsJ = json_object_get(root, "sourceChannels");
+  if ((sourcePathJ && json_is_string(sourcePathJ)) || (sourceNameJ && json_is_string(sourceNameJ)) ||
+      sourceWidthJ || sourceHeightJ || sourceChannelsJ) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (sourcePathJ && json_is_string(sourcePathJ)) snapshotTable.sourcePath = json_string_value(sourcePathJ);
-    if (sourceNameJ && json_is_string(sourceNameJ)) snapshotTable.sourceName = json_string_value(sourceNameJ);
+    if (sourcePathJ && json_is_string(sourcePathJ)) {
+      snapshotTable.sourcePath = json_string_value(sourcePathJ);
+      snapshotSourceField.sourcePath = json_string_value(sourcePathJ);
+    }
+    if (sourceNameJ && json_is_string(sourceNameJ)) {
+      snapshotTable.sourceName = json_string_value(sourceNameJ);
+      snapshotSourceField.sourceName = json_string_value(sourceNameJ);
+    }
+    snapshotSourceField.originalWidth = jsonIntegerOr(root, "sourceWidth", 0);
+    snapshotSourceField.originalHeight = jsonIntegerOr(root, "sourceHeight", 0);
+    snapshotSourceField.originalChannels = jsonIntegerOr(root, "sourceChannels", 0);
   }
 }
 
 std::string Iris::sourceName() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  return snapshotTable.sourceName;
+  return snapshotSourceField.sourceName.empty() ? snapshotTable.sourceName : snapshotSourceField.sourceName;
 }
 
 std::string Iris::sourcePath() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  return snapshotTable.sourcePath;
+  return snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
 }
 
 std::string Iris::statusText() const {
@@ -441,6 +544,7 @@ std::string Iris::statusText() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   if (!lastError.empty()) return "Load failed";
   if (!snapshotTable.valid()) return "No image";
+  if (!snapshotSourceField.valid() && snapshotTable.sourcePath.empty()) return "Default";
   return std::to_string(snapshotTable.rowCount) + " x " + std::to_string(snapshotTable.frameSize);
 }
 
@@ -469,9 +573,7 @@ void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height
 
 void Iris::sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  if (pixels) *pixels = snapshotTable.sourcePreviewRgb;
-  if (width) *width = snapshotTable.sourcePreviewWidth;
-  if (height) *height = snapshotTable.sourcePreviewHeight;
+  iris::buildDisplayRgb8FromSourceField(snapshotSourceField, pixels, width, height);
 }
 
 void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const {

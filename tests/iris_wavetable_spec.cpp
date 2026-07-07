@@ -1,6 +1,9 @@
 #include "../src/IrisWavetable.hpp"
 #include "../src/IrisIO.hpp"
 
+#define QOI_IMPLEMENTATION
+#include "../src/third_party/qoi.h"
+
 #include <cstdio>
 #include <cmath>
 #include <iostream>
@@ -11,8 +14,10 @@
 namespace {
 
 int failures = 0;
+int checks = 0;
 
 void check(const std::string& name, bool condition) {
+  ++checks;
   std::cout << (condition ? "[PASS] " : "[FAIL] ") << name << "\n";
   if (!condition) ++failures;
 }
@@ -151,6 +156,47 @@ int main() {
         restored.sourcePreviewRgb == horizontal.sourcePreviewRgb);
   std::remove(binaryPath.c_str());
 
+  std::vector<uint8_t> alphaA(size_t(2 * 2) * 4u, 0u);
+  std::vector<uint8_t> alphaB(size_t(2 * 2) * 4u, 0u);
+  for (int i = 0; i < 4; ++i) {
+    alphaA[size_t(i) * 4u + 0u] = alphaB[size_t(i) * 4u + 0u] = uint8_t(20 + i * 10);
+    alphaA[size_t(i) * 4u + 1u] = alphaB[size_t(i) * 4u + 1u] = uint8_t(90 + i * 10);
+    alphaA[size_t(i) * 4u + 2u] = alphaB[size_t(i) * 4u + 2u] = uint8_t(150 + i * 10);
+    alphaA[size_t(i) * 4u + 3u] = 0u;
+    alphaB[size_t(i) * 4u + 3u] = 255u;
+  }
+  iris::SourceField sourceA;
+  iris::SourceField sourceB;
+  check("source field import succeeds",
+        iris::buildSourceFieldFromRgba8(alphaA.data(), 2, 2, 4, &sourceA));
+  check("source field uses canonical dimensions",
+        sourceA.width == iris::kCanonicalSourceWidth &&
+        sourceA.height == iris::kCanonicalSourceHeight &&
+        sourceA.channels == 3 && sourceA.bitDepth == 8 && sourceA.valid());
+  check("alpha does not influence source field",
+        iris::buildSourceFieldFromRgba8(alphaB.data(), 2, 2, 4, &sourceB) &&
+        sourceA.rgb8 == sourceB.rgb8);
+  sourceA.sourcePath = "/tmp/source-image.png";
+  sourceA.sourceName = "source-image.png";
+  sourceA.originalWidth = 2;
+  sourceA.originalHeight = 2;
+  sourceA.originalChannels = 4;
+  const std::string qoiPath = "/tmp/leviathan_iris_source_field_spec.qoi";
+  check("source field QOI saves", iris::saveSourceField(qoiPath, sourceA, &ioError));
+  iris::SourceField qoiRestored;
+  check("source field QOI loads", iris::loadSourceField(qoiPath, &qoiRestored, &ioError));
+  check("source field QOI round trip preserves canonical pixels",
+        qoiRestored.width == sourceA.width && qoiRestored.height == sourceA.height &&
+        qoiRestored.channels == sourceA.channels && qoiRestored.rgb8 == sourceA.rgb8);
+  iris::ImageWavetable sourceBuiltA;
+  iris::ImageWavetable sourceBuiltB;
+  check("source field builds wavetable",
+        iris::buildWavetableFromSourceField(sourceA, settings, &sourceBuiltA, &ioError));
+  check("QOI-restored source builds same wavetable",
+        iris::buildWavetableFromSourceField(qoiRestored, settings, &sourceBuiltB, &ioError) &&
+        sourceBuiltA.samples == sourceBuiltB.samples);
+  std::remove(qoiPath.c_str());
+
   settings.frameSize = 5;
   settings.rows = 2;
   settings.trimMode = iris::TRIM_OFF;
@@ -225,6 +271,6 @@ int main() {
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
 
-  std::cout << "Summary: " << (41 - failures) << "/41 passed\n";
+  std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;
 }

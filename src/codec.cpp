@@ -16,6 +16,9 @@
 #define DR_MP3_IMPLEMENTATION
 #include "third_party/dr_mp3.h"
 
+#define QOI_IMPLEMENTATION
+#include "third_party/qoi.h"
+
 namespace temporaldeck {
 namespace {
 

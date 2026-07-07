@@ -858,9 +858,9 @@ struct IrisWidget final : ModuleWidget {
                                   irisModule->sourcePath().empty()));
     menu->addChild(createMenuItem("Clear image", "", [irisModule]() { irisModule->clearToDefault(); }));
     menu->addChild(new MenuSeparator());
-    menu->addChild(createCheckMenuItem("Embed wavetable in patch", "",
-      [irisModule]() { return irisModule->embedsTable(); },
-      [irisModule]() { irisModule->setEmbedTable(!irisModule->embedsTable()); }));
+    menu->addChild(createCheckMenuItem("Embed image source in patch", "",
+      [irisModule]() { return irisModule->embedsSource(); },
+      [irisModule]() { irisModule->setEmbedSource(!irisModule->embedsSource()); }));
   }
 };
 

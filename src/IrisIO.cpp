@@ -60,8 +60,7 @@ bool sourcePreviewPayloadValid(const ImageWavetable& table) {
 
 } // namespace
 
-bool importImageFile(const std::string& path, const ConversionSettings& settings,
-                     ImageWavetable* out, std::string* error) {
+bool importImageFileToSourceField(const std::string& path, SourceField* out, std::string* error) {
   int width = 0;
   int height = 0;
   int channels = 0;
@@ -74,16 +73,39 @@ bool importImageFile(const std::string& path, const ConversionSettings& settings
     }
     return false;
   }
-  ImageWavetable table;
-  const bool ok = buildWavetableFromRgba(pixels.get(), width, height, channels, settings, &table, error);
+  SourceField source;
+  const bool ok = buildSourceFieldFromRgba8(pixels.get(), width, height, channels, &source, error);
   if (!ok) {
     return false;
   }
-  table.sourcePath = path;
+  source.sourcePath = path;
   const size_t slash = path.find_last_of("/\\");
-  table.sourceName = slash == std::string::npos ? path : path.substr(slash + 1u);
+  source.sourceName = slash == std::string::npos ? path : path.substr(slash + 1u);
+  *out = std::move(source);
+  return true;
+}
+
+bool importImageFile(const std::string& path, const ConversionSettings& settings,
+                     ImageWavetable* out, std::string* error) {
+  SourceField source;
+  if (!importImageFileToSourceField(path, &source, error)) {
+    return false;
+  }
+  ImageWavetable table;
+  const bool ok = buildWavetableFromSourceField(source, settings, &table, error);
+  if (!ok) {
+    return false;
+  }
   *out = std::move(table);
   return true;
+}
+
+bool saveSourceField(const std::string& path, const SourceField& source, std::string* error) {
+  return saveSourceFieldQoi(path, source, error);
+}
+
+bool loadSourceField(const std::string& path, SourceField* out, std::string* error) {
+  return loadSourceFieldQoi(path, out, error);
 }
 
 bool saveBinaryTable(const std::string& path, const ImageWavetable& table, std::string* error) {

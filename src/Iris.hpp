@@ -95,8 +95,8 @@ struct Iris final : Module {
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
-  bool embedsTable() const { return embedTable; }
-  void setEmbedTable(bool enabled) { embedTable = enabled; }
+  bool embedsSource() const { return embedSource; }
+  void setEmbedSource(bool enabled) { embedSource = enabled; }
 
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
@@ -111,24 +111,33 @@ struct Iris final : Module {
 private:
   enum WorkerRequestType {
     REQUEST_NONE = 0,
-    REQUEST_IMAGE = 1,
-    REQUEST_EMBEDDED = 2,
-    REQUEST_REBUILD = 3,
+    REQUEST_IMPORT_IMAGE_FILE = 1,
+    REQUEST_LOAD_EMBEDDED_SOURCE = 2,
+    REQUEST_REBUILD_FROM_SOURCE = 3,
     REQUEST_DEFAULT = 4,
+    REQUEST_RELOAD_IMAGE_FILE = 5,
   };
 
   struct WorkerRequest {
     WorkerRequestType type = REQUEST_NONE;
     std::string path;
     iris::ConversionSettings settings;
+    iris::SourceField source;
     uint64_t serial = 0u;
+  };
+
+  struct WorkerResult {
+    iris::SourceField source;
+    iris::ImageWavetable table;
+    bool hasSource = false;
+    bool preserveExistingSource = false;
   };
 
   void startWorker();
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
   void workerLoop();
-  void publishBuiltTable(iris::ImageWavetable* table, bool preserveSourceMetadata);
+  void publishWorkerResult(const WorkerResult& result);
   static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;
@@ -146,11 +155,12 @@ private:
 
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
+  iris::SourceField snapshotSourceField;
   std::vector<uint8_t> snapshotPreview;
   int previewWidth = iris::kSourcePreviewWidth;
   int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;
-  bool embedTable = true;
+  bool embedSource = true;
 };
 
 extern Model* modelIris;
