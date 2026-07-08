@@ -5,6 +5,7 @@ All notable changes to this project are documented in this file.
 ## [v2.5.4]
 - Fix visual glitch for high DPI displays
 - Fix browser preview for Temporal Deck to show arc lights widget
+- Improved rendering for TD.Scope
 
 ## [v2.5.3]
 - Total visual rework with modules, interface, layering, etc.
