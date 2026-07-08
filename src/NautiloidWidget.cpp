@@ -116,10 +116,20 @@ struct NautiloidDisplay final : OpaqueWidget {
       if (box.size.x > 1.f && box.size.y > 1.f && (std::fabs(delta.x) > 0.f || std::fabs(delta.y) > 0.f)) {
         const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
         const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
-        module->fractalCenterX = clamp(module->fractalCenterX - delta.x / box.size.x * 2.f * halfSpan.x, -2.f, 2.f);
-        module->fractalCenterY = clamp(module->fractalCenterY - delta.y / box.size.y * 2.f * halfSpan.y, -2.f, 2.f);
+        const Vec centerDelta(
+          -delta.x / box.size.x * 2.f * halfSpan.x,
+          -delta.y / box.size.y * 2.f * halfSpan.y);
+        module->fractalCenterX = clamp(module->fractalCenterX + centerDelta.x, -2.f, 2.f);
+        module->fractalCenterY = clamp(module->fractalCenterY + centerDelta.y, -2.f, 2.f);
         if (nautiloidRequestDue(&lastPanRequestTime, 0.05)) {
-          module->requestRender();
+          const float cacheLead = 3.f;
+          const float maxLeadX = 0.35f * halfSpan.x;
+          const float maxLeadY = 0.35f * halfSpan.y;
+          const float cacheCenterX =
+            clamp(module->fractalCenterX + clamp(centerDelta.x * cacheLead, -maxLeadX, maxLeadX), -2.f, 2.f);
+          const float cacheCenterY =
+            clamp(module->fractalCenterY + clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY), -2.f, 2.f);
+          module->requestRenderWithCacheCenter(cacheCenterX, cacheCenterY);
         }
       }
       e.consume(this);

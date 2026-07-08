@@ -36,6 +36,7 @@ struct Nautiloid final : Module {
 
   void requestFractal(int mode);
   void requestRender();
+  void requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY);
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
@@ -65,6 +66,8 @@ private:
     float zoom = 0.f;
     float centerX = 0.f;
     float centerY = 0.f;
+    float cacheCenterX = 0.f;
+    float cacheCenterY = 0.f;
     uint64_t serial = 0u;
   };
 
