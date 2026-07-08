@@ -272,16 +272,20 @@ int main() {
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
 
-  iris::SourceField fractal;
-  check("builtin Mandelbrot fractal source generates",
-        iris::makeBuiltinFractalSource(iris::FRACTAL_MANDELBROT, &fractal));
-  check("builtin fractal uses canonical source dimensions",
-        fractal.valid() && fractal.width == iris::kCanonicalSourceWidth &&
-        fractal.height == iris::kCanonicalSourceHeight && !fractal.rgb8.empty());
-  iris::ImageWavetable fractalTable;
-  check("builtin fractal converts to wavetable",
-        iris::buildWavetableFromSourceField(fractal, settings, &fractalTable, &ioError) &&
-        fractalTable.valid() && fractalTable.sourceName == "Fractal: Mandelbrot");
+  for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
+    iris::SourceField fractal;
+    check(std::string("builtin fractal source generates: ") + iris::builtinFractalName(mode),
+          iris::makeBuiltinFractalSource(mode, &fractal));
+    check(std::string("builtin fractal uses canonical source dimensions: ") +
+            iris::builtinFractalName(mode),
+          fractal.valid() && fractal.width == iris::kCanonicalSourceWidth &&
+          fractal.height == iris::kCanonicalSourceHeight && !fractal.rgb8.empty());
+    iris::ImageWavetable fractalTable;
+    check(std::string("builtin fractal converts to wavetable: ") + iris::builtinFractalName(mode),
+          iris::buildWavetableFromSourceField(fractal, settings, &fractalTable, &ioError) &&
+          fractalTable.valid() &&
+          fractalTable.sourceName == std::string("Fractal: ") + iris::builtinFractalName(mode));
+  }
 
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;

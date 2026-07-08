@@ -2,6 +2,7 @@
 
 #include "IrisWavetable.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace iris {
@@ -81,29 +82,36 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
   source.sourceName = std::string("Fractal: ") + builtinFractalName(mode);
   source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
 
-  const int maxIter = mode == FRACTAL_NEWTON ? 36 : 140;
+  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) ? 36 : 140;
   for (int y = 0; y < source.height; ++y) {
     const float ny = (float(y) + 0.5f) / float(source.height) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {
       const float nx = (float(x) + 0.5f) / float(source.width) * 2.f - 1.f;
       const size_t base = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
 
-      if (mode == FRACTAL_NEWTON) {
-        double zr = nx * 2.45;
-        double zi = ny * 0.98;
+      if (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) {
+        double zr = nx * (mode == FRACTAL_NOVA ? 2.0 : 2.45);
+        double zi = ny * (mode == FRACTAL_NOVA ? 0.86 : 0.98);
+        const double cr = -0.52;
+        const double ci = 0.38;
         int iter = 0;
         for (; iter < maxIter; ++iter) {
           const double zr2 = zr * zr;
           const double zi2 = zi * zi;
           const double denom = 3.0 * ((zr2 - zi2) * (zr2 - zi2) + 4.0 * zr2 * zi2);
           if (denom < 1e-14) break;
-          const double nr = (2.0 * zr * (zr2 + zi2) + (zr2 - zi2)) / denom;
-          const double ni = (2.0 * zi * (zr2 + zi2) - 2.0 * zr * zi) / denom;
+          double nr = (2.0 * zr * (zr2 + zi2) + (zr2 - zi2)) / denom;
+          double ni = (2.0 * zi * (zr2 + zi2) - 2.0 * zr * zi) / denom;
+          if (mode == FRACTAL_NOVA) {
+            nr += cr;
+            ni += ci;
+          }
           const double dr = nr - zr;
           const double di = ni - zi;
           zr = nr;
           zi = ni;
           if (dr * dr + di * di < 1e-12) break;
+          if (zr * zr + zi * zi > 64.0) break;
         }
         const double d0 = (zr - 1.0) * (zr - 1.0) + zi * zi;
         const double d1 = (zr + 0.5) * (zr + 0.5) + (zi - 0.86602540378) * (zi - 0.86602540378);
@@ -111,9 +119,10 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
         const int root = d0 < d1 && d0 < d2 ? 0 : (d1 < d2 ? 1 : 2);
         const float t = 1.f - float(iter) / float(maxIter);
         const float v = 0.20f + 0.80f * std::sqrt(clamp01(t));
-        source.rgb8[base + 0u] = detail::fractalByte((root == 0 ? 0.95f : 0.20f) * v);
-        source.rgb8[base + 1u] = detail::fractalByte((root == 1 ? 0.90f : 0.30f) * v);
-        source.rgb8[base + 2u] = detail::fractalByte((root == 2 ? 1.00f : 0.46f) * v);
+        const float phase = mode == FRACTAL_NOVA ? 0.18f : 0.f;
+        source.rgb8[base + 0u] = detail::fractalByte((root == 0 ? 0.95f : 0.20f + phase) * v);
+        source.rgb8[base + 1u] = detail::fractalByte((root == 1 ? 0.90f : 0.30f + phase) * v);
+        source.rgb8[base + 2u] = detail::fractalByte((root == 2 ? 1.00f : 0.46f + phase) * v);
         continue;
       }
 
@@ -121,17 +130,44 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
       double ci = 0.0;
       double zr = 0.0;
       double zi = 0.0;
+      double pr = 0.0;
+      double pi = 0.0;
       if (mode == FRACTAL_MANDELBROT) {
         cr = -0.72 + double(nx) * 1.62;
         ci = 0.03 + double(ny) * 0.86;
+      } else if (mode == FRACTAL_MANDELBROT_SEAHORSE) {
+        cr = -0.7460 + double(nx) * 0.082;
+        ci = 0.1040 + double(ny) * 0.038;
+      } else if (mode == FRACTAL_MANDELBROT_SPIRAL) {
+        cr = -0.7616 + double(nx) * 0.030;
+        ci = 0.0840 + double(ny) * 0.014;
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;
         zr = double(nx) * 1.58;
         zi = double(ny) * 0.72;
+      } else if (mode == FRACTAL_PHOENIX_JULIA) {
+        cr = -0.42;
+        ci = 0.08;
+        zr = double(nx) * 1.62;
+        zi = double(ny) * 0.74;
+      } else if (mode == FRACTAL_LAMBDA_JULIA) {
+        cr = 0.82;
+        ci = 0.28;
+        zr = 0.5 + double(nx) * 0.78;
+        zi = double(ny) * 0.58;
       } else if (mode == FRACTAL_BURNING_SHIP) {
         cr = -1.76 + double(nx) * 0.42;
         ci = -0.045 + double(ny) * 0.145;
+      } else if (mode == FRACTAL_CELTIC) {
+        cr = -0.25 + double(nx) * 1.62;
+        ci = 0.02 + double(ny) * 0.88;
+      } else if (mode == FRACTAL_BUFFALO) {
+        cr = -0.58 + double(nx) * 1.55;
+        ci = double(ny) * 0.84;
+      } else if (mode == FRACTAL_SPIDER) {
+        cr = -0.52 + double(nx) * 1.56;
+        ci = double(ny) * 0.84;
       } else {
         cr = -0.12 + double(nx) * 1.68;
         ci = double(ny) * 0.90;
@@ -141,19 +177,53 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
       int iter = 0;
       double mag2 = 0.0;
       for (; iter < maxIter; ++iter) {
-        if (mode == FRACTAL_BURNING_SHIP) {
+        if (mode == FRACTAL_BURNING_SHIP || mode == FRACTAL_BUFFALO) {
           zr = std::fabs(zr);
           zi = std::fabs(zi);
         }
         const double zr2 = zr * zr;
         const double zi2 = zi * zi;
         minOrbit = std::min(minOrbit, zr2 + zi2);
-        if (mode == FRACTAL_TRICORN) {
-          zi = -2.0 * zr * zi + ci;
+        if (mode == FRACTAL_LAMBDA_JULIA) {
+          const double oneMinusZr = 1.0 - zr;
+          const double oneMinusZi = -zi;
+          const double ar = zr * oneMinusZr - zi * oneMinusZi;
+          const double ai = zr * oneMinusZi + zi * oneMinusZr;
+          zi = cr * ai + ci * ar;
+          zr = cr * ar - ci * ai;
+        } else if (mode == FRACTAL_PHOENIX_JULIA) {
+          const double nextR = zr2 - zi2 + cr + 0.48 * pr;
+          const double nextI = 2.0 * zr * zi + ci + 0.48 * pi;
+          pr = zr;
+          pi = zi;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_TRICORN) {
+          const double nextR = zr2 - zi2 + cr;
+          const double nextI = -2.0 * zr * zi + ci;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_CELTIC) {
+          const double nextR = std::fabs(zr2 - zi2) + cr;
+          const double nextI = 2.0 * zr * zi + ci;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_BUFFALO) {
+          const double nextR = std::fabs(zr2 - zi2) + cr;
+          const double nextI = std::fabs(2.0 * zr * zi) + ci;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_SPIDER) {
+          const double nextR = zr2 - zi2 + cr;
+          const double nextI = 2.0 * zr * zi + ci;
+          cr = 0.5 * cr + nextR;
+          ci = 0.5 * ci + nextI;
+          zr = nextR;
+          zi = nextI;
         } else {
           zi = 2.0 * zr * zi + ci;
+          zr = zr2 - zi2 + cr;
         }
-        zr = zr2 - zi2 + cr;
         mag2 = zr * zr + zi * zi;
         if (mag2 > 16.0) break;
       }

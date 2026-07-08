@@ -86,11 +86,23 @@ NVGcolor irisPreviewChannelColor(int mode, float value) {
   }
 }
 
-NVGcolor irisPreviewConvertedColor(float value) {
+NVGcolor irisPreviewConvertedColor(float value, float yNorm = 0.5f) {
   const float amount = clamp(std::fabs(value), 0.f, 1.f);
-  const float red = value < 0.f ? 122.f : 28.f;
-  const float green = value < 0.f ? 92.f : 204.f;
-  const float blue = value < 0.f ? 255.f : 217.f;
+  yNorm = clamp(yNorm, 0.f, 1.f);
+  const float center = 0.5f;
+  const float t = yNorm < center ? yNorm / center : (yNorm - center) / center;
+  const float topR = 28.f;
+  const float topG = 204.f;
+  const float topB = 217.f;
+  const float midR = 77.f;
+  const float midG = 148.f;
+  const float midB = 238.f;
+  const float bottomR = 122.f;
+  const float bottomG = 92.f;
+  const float bottomB = 255.f;
+  const float red = yNorm < center ? topR + (midR - topR) * t : midR + (bottomR - midR) * t;
+  const float green = yNorm < center ? topG + (midG - topG) * t : midG + (bottomG - midG) * t;
+  const float blue = yNorm < center ? topB + (midB - topB) * t : midB + (bottomB - midB) * t;
   return nvgRGBA(
     uint8_t(std::round(red * amount)),
     uint8_t(std::round(green * amount)),
@@ -232,9 +244,12 @@ struct IrisDisplay final : OpaqueWidget {
         rgba.resize(gray.size() * 4u);
         for (size_t i = 0; i < gray.size(); ++i) {
           const float value = float(gray[i]) / 127.5f - 1.f;
+          const float yNorm = width > 0 && height > 1
+            ? float(i / size_t(width)) / float(height - 1)
+            : 0.5f;
           const NVGcolor color = currentChannelPreview
             ? irisPreviewChannelColor(currentChannelMode, value)
-            : irisPreviewConvertedColor(value);
+            : irisPreviewConvertedColor(value, yNorm);
           rgba[i * 4u + 0u] = uint8_t(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
           rgba[i * 4u + 1u] = uint8_t(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
           rgba[i * 4u + 2u] = uint8_t(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
@@ -355,7 +370,11 @@ struct IrisWaveformPreview final : TransparentWidget {
       nvgSave(args.vg);
       nvgScissor(args.vg, 0.f, 0.f, box.size.x, center);
       nvgStrokeWidth(args.vg, 1.45f);
-      nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 245));
+      const NVGcolor centerColor = nvgRGBA(77, 148, 238, 236);
+      const NVGpaint positivePaint = nvgLinearGradient(
+        args.vg, 0.f, top, 0.f, center,
+        nvgRGBA(28, 204, 217, 245), centerColor);
+      nvgStrokePaint(args.vg, positivePaint);
       nvgStroke(args.vg);
       nvgRestore(args.vg);
 
@@ -369,7 +388,10 @@ struct IrisWaveformPreview final : TransparentWidget {
       nvgSave(args.vg);
       nvgScissor(args.vg, 0.f, center, box.size.x, box.size.y - center);
       nvgStrokeWidth(args.vg, 1.45f);
-      nvgStrokeColor(args.vg, nvgRGBA(122, 92, 255, 245));
+      const NVGpaint negativePaint = nvgLinearGradient(
+        args.vg, 0.f, center, 0.f, bottom,
+        centerColor, nvgRGBA(122, 92, 255, 245));
+      nvgStrokePaint(args.vg, negativePaint);
       nvgStroke(args.vg);
       nvgRestore(args.vg);
     }
