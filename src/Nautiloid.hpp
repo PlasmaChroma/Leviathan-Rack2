@@ -38,11 +38,27 @@ struct Nautiloid final : Module {
 
   void requestFractal(int mode);
   void requestRender();
-  void requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY);
+  void requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter = false);
+  void requestRenderWithCenteredCache();
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   std::shared_ptr<const iris::SourceField> irisExpanderSourceSnapshot(uint64_t* generation) const;
+
+  struct DisplayTileCacheSnapshot {
+    int columns = 0;
+    int rows = 0;
+    int tileSize = 0;
+    int cacheWidth = 0;
+    int cacheHeight = 0;
+    float cacheScale = 1.f;
+    bool current = false;
+    float cacheCenterX = 0.f;
+    float cacheCenterY = 0.f;
+    std::vector<uint8_t> tileCurrent;
+  };
+
+  void displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) const;
 
   int fractalMode = iris::FRACTAL_MANDELBROT;
   float fractalZoom = 0.f;
@@ -67,7 +83,10 @@ struct Nautiloid final : Module {
   struct DisplayCacheTile {
     int x = 0;
     int y = 0;
-    iris::SourceField source;
+    int width = 0;
+    int height = 0;
+    bool valid = false;
+    std::vector<uint8_t> rgb8;
   };
 
   struct DisplayTileCache {
@@ -78,6 +97,8 @@ struct Nautiloid final : Module {
     std::vector<DisplayCacheTile> tiles;
 
     void clear();
+    void ensureStorage(int cacheWidth, int cacheHeight, int tileSize);
+    size_t validTileCount() const;
   };
 
 private:
@@ -88,6 +109,7 @@ private:
     float centerY = 0.f;
     float cacheCenterX = 0.f;
     float cacheCenterY = 0.f;
+    bool forceCacheRecenter = false;
     uint64_t serial = 0u;
   };
 

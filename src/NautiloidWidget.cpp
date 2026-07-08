@@ -142,7 +142,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && panActive) {
       panActive = false;
       if (module) {
-        module->requestRender();
+        module->requestRenderWithCenteredCache();
       }
       e.consume(this);
       return;
@@ -336,6 +336,81 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
   }
 };
 
+struct NautiloidTileCacheGrid final : TransparentWidget {
+  Nautiloid* module = nullptr;
+
+  explicit NautiloidTileCacheGrid(Nautiloid* module) : module(module) {}
+
+  void draw(const DrawArgs& args) override {
+    nvgBeginPath(args.vg);
+    nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3.f);
+    nvgFillColor(args.vg, nvgRGB(4, 7, 10));
+    nvgFill(args.vg);
+    nvgStrokeWidth(args.vg, 1.f);
+    nvgStrokeColor(args.vg, nvgRGBA(88, 65, 191, 150));
+    nvgStroke(args.vg);
+
+    if (!module) return;
+
+    Nautiloid::DisplayTileCacheSnapshot snapshot;
+    module->displayTileCacheSnapshot(&snapshot);
+    if (snapshot.columns <= 0 || snapshot.rows <= 0 ||
+        snapshot.tileCurrent.size() != size_t(snapshot.columns) * size_t(snapshot.rows)) {
+      return;
+    }
+
+    constexpr float pad = 3.2f;
+    const float gap = 1.05f;
+    const float cellW = (box.size.x - 2.f * pad - gap * float(snapshot.columns - 1)) / float(snapshot.columns);
+    const float cellH = (box.size.y - 2.f * pad - gap * float(snapshot.rows - 1)) / float(snapshot.rows);
+    const float cell = std::max(1.f, std::min(cellW, cellH));
+    const float gridW = float(snapshot.columns) * cell + float(snapshot.columns - 1) * gap;
+    const float gridH = float(snapshot.rows) * cell + float(snapshot.rows - 1) * gap;
+    const float x0 = 0.5f * (box.size.x - gridW);
+    const float y0 = 0.5f * (box.size.y - gridH);
+
+    const NVGcolor staleColor = snapshot.current ? nvgRGBA(33, 40, 56, 205) : nvgRGBA(45, 30, 70, 145);
+    const NVGcolor currentColor = nvgRGB(28, 204, 217);
+    const NVGcolor edgeColor = nvgRGBA(226, 232, 240, 58);
+    for (int row = 0; row < snapshot.rows; ++row) {
+      for (int column = 0; column < snapshot.columns; ++column) {
+        const size_t index = size_t(row) * size_t(snapshot.columns) + size_t(column);
+        const bool current = snapshot.tileCurrent[index] != 0u;
+        const float x = x0 + float(column) * (cell + gap);
+        const float y = y0 + float(row) * (cell + gap);
+        nvgBeginPath(args.vg);
+        nvgRoundedRect(args.vg, x, y, cell, cell, std::min(1.8f, cell * 0.25f));
+        nvgFillColor(args.vg, current ? currentColor : staleColor);
+        nvgFill(args.vg);
+        nvgStrokeWidth(args.vg, 0.65f);
+        nvgStrokeColor(args.vg, current ? nvgRGBA(220, 255, 255, 90) : edgeColor);
+        nvgStroke(args.vg);
+      }
+    }
+
+    if (snapshot.current) {
+      const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
+      const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+      const float cacheScale = std::max(1.f, snapshot.cacheScale);
+      const float cacheHalfX = halfSpan.x * cacheScale;
+      const float cacheHalfY = halfSpan.y * cacheScale;
+      if (cacheHalfX > 0.f && cacheHalfY > 0.f) {
+        const float dx = module->fractalCenterX - snapshot.cacheCenterX;
+        const float dy = module->fractalCenterY - snapshot.cacheCenterY;
+        const float centerX = x0 + (0.5f + dx / (2.f * cacheHalfX)) * gridW;
+        const float centerY = y0 + (0.5f + dy / (2.f * cacheHalfY)) * gridH;
+        const float viewW = gridW / cacheScale;
+        const float viewH = gridH / cacheScale;
+        nvgBeginPath(args.vg);
+        nvgRect(args.vg, centerX - 0.5f * viewW, centerY - 0.5f * viewH, viewW, viewH);
+        nvgStrokeWidth(args.vg, 1.2f);
+        nvgStrokeColor(args.vg, nvgRGBA(236, 240, 255, 190));
+        nvgStroke(args.vg);
+      }
+    }
+  }
+};
+
 struct NautiloidDebugCounters final : TransparentWidget {
   Nautiloid* module = nullptr;
   double lastLogTime = -INFINITY;
@@ -487,11 +562,18 @@ struct NautiloidZoomSlider final : ui::Slider {
 
   void draw(const DrawArgs& args) override {
     const float value = zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f;
+    const float zoomAmount =
+      module ? clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f) : 0.f;
     const float centerX = 0.5f * box.size.x;
     const float handleX = value * box.size.x;
     const float trackH = std::max(3.f, std::min(8.f, box.size.y * 0.34f));
-    const float trackY = 0.5f * (box.size.y - trackH);
+    const float progressH = std::max(2.f, std::min(4.f, box.size.y * 0.18f));
+    const float gap = std::max(2.f, box.size.y * 0.14f);
+    const float contentH = trackH + gap + progressH;
+    const float trackY = std::max(0.f, 0.5f * (box.size.y - contentH));
+    const float progressY = trackY + trackH + gap;
     const float radius = 0.5f * trackH;
+    const float progressRadius = 0.5f * progressH;
 
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, 0.f, trackY, box.size.x, trackH, radius);
@@ -505,10 +587,13 @@ struct NautiloidZoomSlider final : ui::Slider {
     const float fillW = std::fabs(handleX - centerX);
     if (fillW > 0.75f) {
       const bool zoomIn = handleX > centerX;
+      nvgSave(args.vg);
+      nvgIntersectScissor(args.vg, fillLeft, trackY - 1.f, fillW, trackH + 2.f);
       nvgBeginPath(args.vg);
-      nvgRoundedRect(args.vg, fillLeft, trackY, fillW, trackH, radius);
+      nvgRoundedRect(args.vg, fillLeft - (zoomIn ? 0.f : radius), trackY, fillW + radius, trackH, radius);
       nvgFillColor(args.vg, zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255));
       nvgFill(args.vg);
+      nvgRestore(args.vg);
     }
 
     nvgBeginPath(args.vg);
@@ -528,6 +613,25 @@ struct NautiloidZoomSlider final : ui::Slider {
     nvgStrokeWidth(args.vg, 1.f);
     nvgStrokeColor(args.vg, nvgRGBA(20, 24, 30, 180));
     nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgRoundedRect(args.vg, 0.f, progressY, box.size.x, progressH, progressRadius);
+    nvgFillColor(args.vg, nvgRGB(8, 11, 16));
+    nvgFill(args.vg);
+    nvgStrokeWidth(args.vg, 1.f);
+    nvgStrokeColor(args.vg, nvgRGBA(160, 170, 188, 58));
+    nvgStroke(args.vg);
+
+    const float progressW = zoomAmount * box.size.x;
+    if (progressW > 0.5f) {
+      nvgSave(args.vg);
+      nvgIntersectScissor(args.vg, 0.f, progressY - 1.f, progressW, progressH + 2.f);
+      nvgBeginPath(args.vg);
+      nvgRoundedRect(args.vg, 0.f, progressY, box.size.x, progressH, progressRadius);
+      nvgFillColor(args.vg, nvgRGB(28, 204, 217));
+      nvgFill(args.vg);
+      nvgRestore(args.vg);
+    }
   }
 
   void stopZoom() {
@@ -629,7 +733,7 @@ struct NautiloidWidget final : ModuleWidget {
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
     zoomSlider->box.pos = mm2px(Vec(5.f, 79.f));
-    zoomSlider->box.size = mm2px(Vec(91.6f, 7.f));
+    zoomSlider->box.size = mm2px(Vec(91.6f, 9.f));
     NautiloidZoomSpeedQuantity* zoomSpeed = new NautiloidZoomSpeedQuantity();
     zoomSlider->zoomSpeed = zoomSpeed;
     zoomSlider->quantity = zoomSpeed;
@@ -645,7 +749,13 @@ struct NautiloidWidget final : ModuleWidget {
     resetButton->module = module;
     addParam(resetButton);
 
-    const math::Rect irisPreviewRectMm(Vec(24.62f, 102.f), Vec(52.36f, 25.9f));
+    const math::Rect tileCacheRectMm(Vec(2.f, 102.f), Vec(42.f, 25.9f));
+    NautiloidTileCacheGrid* tileCacheGrid = new NautiloidTileCacheGrid(module);
+    tileCacheGrid->box.pos = mm2px(tileCacheRectMm.pos);
+    tileCacheGrid->box.size = mm2px(tileCacheRectMm.size);
+    addChild(tileCacheGrid);
+
+    const math::Rect irisPreviewRectMm(Vec(47.4f, 102.f), Vec(52.36f, 25.9f));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       irisPreviewRectMm, visual_assets::PreviewFrameTint::Purple));
     widget::FramebufferWidget* irisPreviewFb = new widget::FramebufferWidget();
@@ -659,8 +769,8 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(irisPreviewFb);
 
     NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);
-    counters->box.pos = mm2px(Vec(25.3f, 96.6f));
-    counters->box.size = mm2px(Vec(51.f, 8.f));
+    counters->box.pos = mm2px(Vec(48.0f, 96.6f));
+    counters->box.size = mm2px(Vec(50.5f, 8.f));
     addChild(counters);
   }
 

@@ -302,6 +302,29 @@ int main() {
           fractalTable.sourceName == std::string("Fractal: ") + iris::builtinFractalName(mode));
   }
 
+  iris::NautiloidFractalSourceParams nautiloidParams;
+  nautiloidParams.mode = iris::FRACTAL_BURNING_SHIP;
+  nautiloidParams.zoom = 2.25f;
+  nautiloidParams.centerX = -0.18f;
+  nautiloidParams.centerY = 0.07f;
+  nautiloidParams.generation = 42u;
+  iris::SourceField nautiloidSource;
+  check("Nautiloid Iris source helper generates canonical source",
+        iris::makeNautiloidIrisSource(nautiloidParams, &nautiloidSource, &ioError) &&
+        nautiloidSource.valid() &&
+        nautiloidSource.sourceName == "Nautiloid: Burning Ship");
+  check("Nautiloid Iris source helper stores generator metadata",
+        iris::sourceHasNautiloidFractalParams(nautiloidSource) &&
+        nautiloidSource.generatorFractalMode == nautiloidParams.mode &&
+        std::fabs(nautiloidSource.generatorFractalZoom - nautiloidParams.zoom) < 1e-6f &&
+        std::fabs(nautiloidSource.generatorFractalCenterX - nautiloidParams.centerX) < 1e-6f &&
+        std::fabs(nautiloidSource.generatorFractalCenterY - nautiloidParams.centerY) < 1e-6f &&
+        nautiloidSource.generatorGeneration == nautiloidParams.generation);
+  iris::ImageWavetable nautiloidTable;
+  check("Nautiloid Iris source converts to wavetable",
+        iris::buildWavetableFromSourceField(nautiloidSource, settings, &nautiloidTable, &ioError) &&
+        nautiloidTable.valid());
+
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;
 }

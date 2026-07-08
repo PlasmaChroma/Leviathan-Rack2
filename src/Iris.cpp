@@ -173,7 +173,7 @@ Iris::Iris() {
   configInput(SCAN_INPUT, "Scan CV");
   configInput(SYNC_INPUT, "Sync");
   configOutput(OUT_OUTPUT, "Wavetable");
-  configOutput(INV_OUTPUT, "Inverted wavetable");
+  configOutput(Q_OUTPUT, "Quadrature wavetable");
   lightDivider.setDivision(64);
 
   activeTable = new iris::ImageWavetable(iris::makeDefaultTable());
@@ -262,9 +262,25 @@ void Iris::requestReload() {
     requestBuiltinFractal(builtinFractalMode());
     return;
   }
-  const std::string path = sourcePath();
   WorkerRequest request;
   request.settings = conversionSettings;
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
+        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+      const iris::NautiloidFractalSourceParams params =
+        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+      request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
+      request.fractalMode = params.mode;
+      request.fractalZoom = params.zoom;
+      request.fractalCenterX = params.centerX;
+      request.fractalCenterY = params.centerY;
+      request.sourceGeneration = params.generation;
+      submitRequest(request);
+      return;
+    }
+  }
+  const std::string path = sourcePath();
   if (!path.empty()) {
     request.type = REQUEST_RELOAD_IMAGE_FILE;
     request.path = path;
@@ -286,7 +302,17 @@ void Iris::requestRebuild() {
   request.settings = conversionSettings;
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (snapshotSourceField.valid()) {
+    if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
+        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+      const iris::NautiloidFractalSourceParams params =
+        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+      request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
+      request.fractalMode = params.mode;
+      request.fractalZoom = params.zoom;
+      request.fractalCenterX = params.centerX;
+      request.fractalCenterY = params.centerY;
+      request.sourceGeneration = params.generation;
+    } else if (snapshotSourceField.valid()) {
       request.type = REQUEST_REBUILD_FROM_SOURCE;
       request.source = snapshotSourceField;
     } else if (!snapshotSourceField.sourcePath.empty()) {
@@ -385,9 +411,30 @@ void Iris::workerLoop() {
             result.source.sourceName = "Nautiloid";
           }
           result.hasSource = ok;
-          result.sourceKind = iris::SOURCE_EXPANDER_IMAGE;
+          result.sourceKind = iris::sourceHasNautiloidFractalParams(result.source)
+            ? iris::SOURCE_NAUTILOID_FRACTAL
+            : iris::SOURCE_EXPANDER_IMAGE;
+          if (result.sourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
+            result.fractalMode = result.source.generatorFractalMode;
+          }
         } else {
           error = "Invalid expander source";
+        }
+      } else if (request.type == REQUEST_NAUTILOID_FRACTAL_SOURCE) {
+        iris::NautiloidFractalSourceParams params;
+        params.mode = request.fractalMode;
+        params.zoom = request.fractalZoom;
+        params.centerX = request.fractalCenterX;
+        params.centerY = request.fractalCenterY;
+        params.generation = request.sourceGeneration;
+        iris::SourceField source;
+        ok = iris::makeNautiloidIrisSource(params, &source, &error);
+        if (ok) {
+          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          result.source = std::move(source);
+          result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_NAUTILOID_FRACTAL;
+          result.fractalMode = params.mode;
         }
       } else if (request.type == REQUEST_BUILTIN_FRACTAL) {
         iris::SourceField source;
@@ -560,7 +607,7 @@ void Iris::process(const ProcessArgs& args) {
   const iris::ImageWavetable* table = activeTable;
   const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
   outputs[OUT_OUTPUT].setChannels(channels);
-  outputs[INV_OUTPUT].setChannels(channels);
+  outputs[Q_OUTPUT].setChannels(channels);
   const float coarseParam = params[COARSE_PARAM].getValue();
   float coarsePitch = kIrisMinPitchFromC4 +
     (std::isfinite(coarseParam) ? clamp(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4)) *
@@ -598,17 +645,20 @@ void Iris::process(const ProcessArgs& args) {
     scan = clamp(scan, 0.f, 1.f);
     if (channel == 0) scanDisplay = scan;
     const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
-    if (voices[size_t(channel)].sync.process(std::isfinite(syncInput) ? syncInput : 0.f)) {
+    Voice& voice = voices[size_t(channel)];
+    if (voice.sync.process(std::isfinite(syncInput) ? syncInput : 0.f)) {
       if (softSync) {
-        voices[size_t(channel)].oscillator.softSync();
+        voice.oscillator.softSync();
       } else {
-        voices[size_t(channel)].oscillator.reset();
+        voice.oscillator.reset();
       }
     }
-    const float wave = table ? voices[size_t(channel)].oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
+    const float quadWave = table ? table->sample(voice.oscillator.phase + 0.25f, scan) : 0.f;
+    const float wave = table ? voice.oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
     const float volts = std::isfinite(wave) ? 5.f * wave : 0.f;
+    const float quadVolts = std::isfinite(quadWave) ? 5.f * quadWave : 0.f;
     outputs[OUT_OUTPUT].setVoltage(volts, channel);
-    outputs[INV_OUTPUT].setVoltage(-volts, channel);
+    outputs[Q_OUTPUT].setVoltage(quadVolts, channel);
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
   displayFrequencyHz.store(frequencyDisplay, std::memory_order_relaxed);
@@ -644,6 +694,19 @@ void Iris::onAdd(const AddEvent& e) {
   }
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
+        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+      const iris::NautiloidFractalSourceParams params =
+        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+      request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
+      request.fractalMode = params.mode;
+      request.fractalZoom = params.zoom;
+      request.fractalCenterX = params.centerX;
+      request.fractalCenterY = params.centerY;
+      request.sourceGeneration = params.generation;
+      submitRequest(request);
+      return;
+    }
     request.source = snapshotSourceField;
   }
   if (embedSource && !directory.empty()) {
@@ -676,7 +739,8 @@ void Iris::onSave(const SaveEvent& e) {
   }
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE) {
+    if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+        currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
       const std::string directory = getPatchStorageDirectory();
       if (!directory.empty()) {
         const std::string sourcePath = system::join(directory, kEmbeddedSourceName);
@@ -723,6 +787,21 @@ json_t* Iris::dataToJson() {
     json_object_set_new(root, "sourceHeight", json_integer(sourceHeight));
     json_object_set_new(root, "sourceChannels", json_integer(sourceChannels));
     json_object_set_new(root, "rowCount", json_integer(snapshotTable.rowCount));
+    if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
+        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+      json_object_set_new(root, "nautiloidFractalVersion",
+                          json_integer(snapshotSourceField.generatorVersion));
+      json_object_set_new(root, "nautiloidFractalMode",
+                          json_integer(snapshotSourceField.generatorFractalMode));
+      json_object_set_new(root, "nautiloidFractalZoom",
+                          json_real(snapshotSourceField.generatorFractalZoom));
+      json_object_set_new(root, "nautiloidFractalCenterX",
+                          json_real(snapshotSourceField.generatorFractalCenterX));
+      json_object_set_new(root, "nautiloidFractalCenterY",
+                          json_real(snapshotSourceField.generatorFractalCenterY));
+      json_object_set_new(root, "nautiloidFractalGeneration",
+                          json_integer(json_int_t(snapshotSourceField.generatorGeneration)));
+    }
   }
   json_t* conversion = json_object();
   json_object_set_new(conversion, "normalizeMode", json_integer(conversionSettings.normalizeMode));
@@ -760,7 +839,7 @@ void Iris::dataFromJson(json_t* root) {
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     currentSourceKind = clamp(jsonIntegerOr(root, "sourceKind", iris::SOURCE_IMAGE),
-                              iris::SOURCE_IMAGE, iris::SOURCE_EXPANDER_IMAGE);
+                              iris::SOURCE_IMAGE, iris::SOURCE_NAUTILOID_FRACTAL);
     currentFractalMode = clamp(jsonIntegerOr(root, "fractalMode", iris::FRACTAL_NONE),
                                iris::FRACTAL_NONE, iris::kLastBuiltinFractalMode);
     if (currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&
@@ -809,6 +888,30 @@ void Iris::dataFromJson(json_t* root) {
     snapshotSourceField.originalWidth = jsonIntegerOr(root, "sourceWidth", 0);
     snapshotSourceField.originalHeight = jsonIntegerOr(root, "sourceHeight", 0);
     snapshotSourceField.originalChannels = jsonIntegerOr(root, "sourceChannels", 0);
+    if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
+      snapshotSourceField.generatorKind = iris::SOURCE_GENERATOR_NAUTILOID_FRACTAL;
+      snapshotSourceField.generatorVersion =
+        jsonIntegerOr(root, "nautiloidFractalVersion", iris::kNautiloidFractalSourceVersion);
+      snapshotSourceField.generatorFractalMode =
+        jsonIntegerOr(root, "nautiloidFractalMode", currentFractalMode);
+      snapshotSourceField.generatorFractalZoom =
+        clamp(jsonRealOr(root, "nautiloidFractalZoom", 0.f), 0.f, 5.f);
+      snapshotSourceField.generatorFractalCenterX =
+        clamp(jsonRealOr(root, "nautiloidFractalCenterX", 0.f), -2.f, 2.f);
+      snapshotSourceField.generatorFractalCenterY =
+        clamp(jsonRealOr(root, "nautiloidFractalCenterY", 0.f), -2.f, 2.f);
+      json_t* generationJ = json_object_get(root, "nautiloidFractalGeneration");
+      if (generationJ && json_is_integer(generationJ)) {
+        const json_int_t generation = json_integer_value(generationJ);
+        snapshotSourceField.generatorGeneration = generation > 0 ? uint64_t(generation) : 0u;
+      }
+      if (!iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+        currentSourceKind = iris::SOURCE_IMAGE;
+        currentFractalMode = iris::FRACTAL_NONE;
+      } else {
+        currentFractalMode = snapshotSourceField.generatorFractalMode;
+      }
+    }
   }
 }
 

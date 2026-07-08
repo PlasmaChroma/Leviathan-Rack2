@@ -56,7 +56,8 @@ struct Iris final : Module {
 
   enum OutputId {
     OUT_OUTPUT,
-    INV_OUTPUT,
+    Q_OUTPUT,
+    INV_OUTPUT = Q_OUTPUT,
     OUTPUTS_LEN
   };
 
@@ -127,6 +128,7 @@ private:
     REQUEST_RELOAD_IMAGE_FILE = 5,
     REQUEST_BUILTIN_FRACTAL = 6,
     REQUEST_EXPANDER_SOURCE = 7,
+    REQUEST_NAUTILOID_FRACTAL_SOURCE = 8,
   };
 
   struct WorkerRequest {

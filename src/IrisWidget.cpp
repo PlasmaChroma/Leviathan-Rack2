@@ -1039,7 +1039,7 @@ struct IrisWidget final : ModuleWidget {
     addOutput(createOutputCentered<Magitek2OutputJack>(
       mm2px(anchor("IRIS_OUT_OUTPUT", Vec(19.f, 118.f))), module, Iris::OUT_OUTPUT));
     addOutput(createOutputCentered<Magitek2OutputJack>(
-      mm2px(anchor("IRIS_INV_OUTPUT", Vec(41.96f, 118.f))), module, Iris::INV_OUTPUT));
+      mm2px(anchor("IRIS_INV_OUTPUT", Vec(41.96f, 118.f))), module, Iris::Q_OUTPUT));
   }
 
   void step() override {

@@ -11,6 +11,11 @@ constexpr int kCanonicalSourceHeight = 256;
 constexpr int kCanonicalSourceChannels = 3;
 constexpr int kCanonicalSourceBitDepth = 8;
 
+enum SourceGeneratorKind {
+  SOURCE_GENERATOR_NONE = 0,
+  SOURCE_GENERATOR_NAUTILOID_FRACTAL = 1,
+};
+
 struct SourceField {
   int width = 0;
   int height = 0;
@@ -22,6 +27,13 @@ struct SourceField {
   int originalWidth = 0;
   int originalHeight = 0;
   int originalChannels = 0;
+  int generatorKind = SOURCE_GENERATOR_NONE;
+  int generatorVersion = 0;
+  int generatorFractalMode = 0;
+  float generatorFractalZoom = 0.f;
+  float generatorFractalCenterX = 0.f;
+  float generatorFractalCenterY = 0.f;
+  uint64_t generatorGeneration = 0u;
 
   bool valid() const {
     return width > 0 && height > 0 && channels == kCanonicalSourceChannels &&

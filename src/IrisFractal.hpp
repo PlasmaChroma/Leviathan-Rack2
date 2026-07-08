@@ -4,8 +4,47 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <utility>
 
 namespace iris {
+
+constexpr int kNautiloidFractalSourceVersion = 1;
+
+struct NautiloidFractalSourceParams {
+  int mode = FRACTAL_MANDELBROT;
+  float zoom = 0.f;
+  float centerX = 0.f;
+  float centerY = 0.f;
+  uint64_t generation = 0u;
+};
+
+inline bool sourceHasNautiloidFractalParams(const SourceField& source) {
+  return source.generatorKind == SOURCE_GENERATOR_NAUTILOID_FRACTAL &&
+         source.generatorVersion == kNautiloidFractalSourceVersion &&
+         isBuiltinFractalMode(source.generatorFractalMode);
+}
+
+inline NautiloidFractalSourceParams nautiloidFractalParamsFromSource(const SourceField& source) {
+  NautiloidFractalSourceParams params;
+  params.mode = source.generatorFractalMode;
+  params.zoom = source.generatorFractalZoom;
+  params.centerX = source.generatorFractalCenterX;
+  params.centerY = source.generatorFractalCenterY;
+  params.generation = source.generatorGeneration;
+  return params;
+}
+
+inline void applyNautiloidFractalParams(SourceField* source, const NautiloidFractalSourceParams& params) {
+  if (!source) return;
+  source->generatorKind = SOURCE_GENERATOR_NAUTILOID_FRACTAL;
+  source->generatorVersion = kNautiloidFractalSourceVersion;
+  source->generatorFractalMode = params.mode;
+  source->generatorFractalZoom = params.zoom;
+  source->generatorFractalCenterX = params.centerX;
+  source->generatorFractalCenterY = params.centerY;
+  source->generatorGeneration = params.generation;
+}
 
 namespace detail {
 
@@ -76,6 +115,7 @@ inline void writeEscapeColor(int iter, int maxIter, float mag2, float minOrbit, 
   writePalette(t, orbit, base, rgb8);
 }
 
+#if defined(LEVIATHAN_IRIS_ENABLE_RACK_SIMD)
 inline void renderMandelbrotFamilySimd(
   int mode,
   float zoomScale,
@@ -159,6 +199,7 @@ inline void renderMandelbrotFamilySimd(
     }
   }
 }
+#endif
 
 inline float mandelbrotFamilySimdMaxZoom(int mode) {
   switch (mode) {
@@ -222,6 +263,7 @@ inline bool makeBuiltinFractalSourceSized(
   const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
   const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
     source.width == fullWidth && source.height == fullHeight;
+#if defined(LEVIATHAN_IRIS_ENABLE_RACK_SIMD)
   if (fullViewport && detail::kUseSimdFractalRenderer && simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
     detail::renderMandelbrotFamilySimd(
       mode,
@@ -238,6 +280,10 @@ inline bool makeBuiltinFractalSourceSized(
     *out = std::move(source);
     return true;
   }
+#else
+  (void)simdMaxZoom;
+  (void)fullViewport;
+#endif
   for (int y = 0; y < source.height; ++y) {
     const int viewportY = pixelY0 + y;
     const float ny = (float(viewportY) + 0.5f) / float(fullHeight) * 2.f - 1.f;
@@ -424,6 +470,37 @@ inline bool makeBuiltinFractalSource(
     1.f,
     out,
     error);
+}
+
+inline bool makeBuiltinFractalSource(
+  int mode,
+  SourceField* out,
+  std::string* error = nullptr) {
+  return makeBuiltinFractalSource(mode, 0.f, 0.f, 0.f, out, error);
+}
+
+inline bool makeNautiloidIrisSource(
+  const NautiloidFractalSourceParams& params,
+  SourceField* out,
+  std::string* error = nullptr) {
+  SourceField source;
+  if (!makeBuiltinFractalSourceSized(
+        params.mode,
+        params.zoom,
+        params.centerX,
+        params.centerY,
+        kCanonicalSourceWidth,
+        kCanonicalSourceHeight,
+        1.f,
+        &source,
+        error)) {
+    return false;
+  }
+  source.sourcePath.clear();
+  source.sourceName = std::string("Nautiloid: ") + builtinFractalName(params.mode);
+  applyNautiloidFractalParams(&source, params);
+  *out = std::move(source);
+  return true;
 }
 
 } // namespace iris

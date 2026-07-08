@@ -48,6 +48,7 @@ enum SourceKind {
   SOURCE_IMAGE = 0,
   SOURCE_BUILTIN_FRACTAL = 1,
   SOURCE_EXPANDER_IMAGE = 2,
+  SOURCE_NAUTILOID_FRACTAL = 3,
 };
 
 enum BuiltinFractalMode {
@@ -64,6 +65,9 @@ enum BuiltinFractalMode {
   FRACTAL_EYE_OF_THE_WORLD = 14,
 };
 
+constexpr int FRACTAL_MANDELBROT_SEAHORSE = FRACTAL_EYE_OF_THE_WORLD;
+constexpr int FRACTAL_MANDELBROT_SPIRAL = FRACTAL_MANDELBROT;
+constexpr int FRACTAL_BUFFALO = FRACTAL_CELTIC;
 constexpr int kBuiltinFractalVersion = 1;
 constexpr int kFirstBuiltinFractalMode = FRACTAL_MANDELBROT;
 constexpr int kLastBuiltinFractalMode = FRACTAL_EYE_OF_THE_WORLD;
