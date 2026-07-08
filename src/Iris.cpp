@@ -244,6 +244,19 @@ void Iris::requestBuiltinFractal(int mode) {
   submitRequest(request);
 }
 
+void Iris::requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation) {
+  if (!source || !source->valid() || generation == 0u) return;
+  if (generation == lastExpanderSourceGeneration && source == lastExpanderSourceSeen) return;
+  lastExpanderSourceGeneration = generation;
+  lastExpanderSourceSeen = source;
+  WorkerRequest request;
+  request.type = REQUEST_EXPANDER_SOURCE;
+  request.sharedSource = std::move(source);
+  request.sourceGeneration = generation;
+  request.settings = conversionSettings;
+  submitRequest(request);
+}
+
 void Iris::requestReload() {
   if (isBuiltinFractalSource()) {
     requestBuiltinFractal(builtinFractalMode());
@@ -363,6 +376,19 @@ void Iris::workerLoop() {
       } else if (request.type == REQUEST_REBUILD_FROM_SOURCE) {
         ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
         result.preserveExistingSource = true;
+      } else if (request.type == REQUEST_EXPANDER_SOURCE) {
+        if (request.sharedSource && request.sharedSource->valid()) {
+          ok = iris::buildWavetableFromSourceField(*request.sharedSource, request.settings, &result.table, &error);
+          result.source = *request.sharedSource;
+          result.source.sourcePath.clear();
+          if (result.source.sourceName.empty()) {
+            result.source.sourceName = "Nautiloid";
+          }
+          result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_EXPANDER_IMAGE;
+        } else {
+          error = "Invalid expander source";
+        }
       } else if (request.type == REQUEST_BUILTIN_FRACTAL) {
         iris::SourceField source;
         constexpr float kFractalCacheScale = 1.5f;
@@ -474,12 +500,16 @@ void Iris::workerLoop() {
           requestPending &&
           workerRequest.type == REQUEST_REBUILD_FROM_SOURCE &&
           request.source.sourcePath == workerRequest.source.sourcePath;
+        const bool publishIntermediateExpander =
+          request.type == REQUEST_EXPANDER_SOURCE &&
+          requestPending &&
+          workerRequest.type == REQUEST_EXPANDER_SOURCE;
         const bool publishIntermediateFractal =
           request.type == REQUEST_BUILTIN_FRACTAL &&
           requestPending &&
           workerRequest.type == REQUEST_BUILTIN_FRACTAL &&
           request.fractalMode == workerRequest.fractalMode;
-        if (!publishIntermediateRebuild && !publishIntermediateFractal) {
+        if (!publishIntermediateRebuild && !publishIntermediateExpander && !publishIntermediateFractal) {
           continue;
         }
       }
@@ -644,6 +674,19 @@ void Iris::onSave(const SaveEvent& e) {
     }
     return;
   }
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE) {
+      const std::string directory = getPatchStorageDirectory();
+      if (!directory.empty()) {
+        const std::string sourcePath = system::join(directory, kEmbeddedSourceName);
+        if (system::isFile(sourcePath)) {
+          system::remove(sourcePath);
+        }
+      }
+      return;
+    }
+  }
   if (!embedSource) return;
   iris::SourceField source;
   {
@@ -717,7 +760,7 @@ void Iris::dataFromJson(json_t* root) {
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     currentSourceKind = clamp(jsonIntegerOr(root, "sourceKind", iris::SOURCE_IMAGE),
-                              iris::SOURCE_IMAGE, iris::SOURCE_BUILTIN_FRACTAL);
+                              iris::SOURCE_IMAGE, iris::SOURCE_EXPANDER_IMAGE);
     currentFractalMode = clamp(jsonIntegerOr(root, "fractalMode", iris::FRACTAL_NONE),
                                iris::FRACTAL_NONE, iris::kLastBuiltinFractalMode);
     if (currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&

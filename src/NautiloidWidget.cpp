@@ -380,8 +380,9 @@ struct NautiloidDebugCounters final : TransparentWidget {
       (unsigned long long) load(module->displayCacheHits),
       (unsigned long long) load(module->displayCacheMisses));
     const std::string right = string::f(
-      "iris %llu  cache %llu/%llu  stale d/i %llu/%llu",
+      "iris %llu  exp %llu  cache %llu/%llu  stale d/i %llu/%llu",
       (unsigned long long) load(module->irisRendersCompleted),
+      (unsigned long long) load(module->irisExpanderPublishes),
       (unsigned long long) load(module->cacheRequestsDequeued),
       (unsigned long long) load(module->displayCacheRendersCompleted),
       (unsigned long long) load(module->displayRendersDroppedStale),
@@ -401,7 +402,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
     if (needsHeader) {
       log << "time,zoom,center_x,center_y,loading,req,display_gen,iris_gen,display_done,"
              "display_stale,cache_hits,cache_misses,cache_submitted,cache_dequeued,"
-             "cache_done,iris_done,iris_stale\n";
+             "cache_done,iris_done,iris_stale,iris_expander_publishes\n";
     }
     log
       << now << ','
@@ -421,6 +422,8 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->displayCacheRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->irisRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
+      << ','
+      << module->irisExpanderPublishes.load(std::memory_order_relaxed)
       << '\n';
   }
 };

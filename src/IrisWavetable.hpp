@@ -47,6 +47,7 @@ enum ImageChannelMode {
 enum SourceKind {
   SOURCE_IMAGE = 0,
   SOURCE_BUILTIN_FRACTAL = 1,
+  SOURCE_EXPANDER_IMAGE = 2,
 };
 
 enum BuiltinFractalMode {

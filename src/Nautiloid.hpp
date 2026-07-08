@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -41,6 +42,7 @@ struct Nautiloid final : Module {
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
+  std::shared_ptr<const iris::SourceField> irisExpanderSourceSnapshot(uint64_t* generation) const;
 
   int fractalMode = iris::FRACTAL_MANDELBROT;
   float fractalZoom = 0.f;
@@ -58,6 +60,7 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> displayCacheRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
+  std::atomic<uint64_t> irisExpanderPublishes {0u};
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> loading {false};
 
@@ -113,11 +116,14 @@ private:
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;
   iris::SourceField irisCompatibleSource;
+  std::shared_ptr<const iris::SourceField> irisExpanderSource;
   uint64_t irisCompatibleSerial = 0u;
   int irisCompatibleMode = iris::FRACTAL_NONE;
   float irisCompatibleZoom = -1.f;
   float irisCompatibleCenterX = 0.f;
   float irisCompatibleCenterY = 0.f;
+  uint64_t lastExpanderGenerationSentLeft = 0u;
+  uint64_t lastExpanderGenerationSentRight = 0u;
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;

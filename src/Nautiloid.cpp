@@ -1,6 +1,8 @@
 #include "Nautiloid.hpp"
+#include "Iris.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -191,6 +193,41 @@ Nautiloid::~Nautiloid() {
 }
 
 void Nautiloid::process(const ProcessArgs& args) {
+  const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
+  if (generation == 0u) return;
+  std::shared_ptr<const iris::SourceField> source;
+  if (Module* right = rightExpander.module) {
+    if (right->model == modelIris && generation != lastExpanderGenerationSentRight) {
+      if (!source) {
+        source = irisExpanderSourceSnapshot(nullptr);
+      }
+      if (source) {
+        if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
+          irisModule->requestExpanderSource(source, generation);
+          lastExpanderGenerationSentRight = generation;
+          irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
+        }
+      }
+    }
+  } else {
+    lastExpanderGenerationSentRight = 0u;
+  }
+  if (Module* left = leftExpander.module) {
+    if (left->model == modelIris && generation != lastExpanderGenerationSentLeft) {
+      if (!source) {
+        source = irisExpanderSourceSnapshot(nullptr);
+      }
+      if (source) {
+        if (Iris* irisModule = dynamic_cast<Iris*>(left)) {
+          irisModule->requestExpanderSource(source, generation);
+          lastExpanderGenerationSentLeft = generation;
+          irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
+        }
+      }
+    }
+  } else {
+    lastExpanderGenerationSentLeft = 0u;
+  }
 }
 
 json_t* Nautiloid::dataToJson() {
@@ -271,6 +308,13 @@ void Nautiloid::irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* 
   } else {
     rgb->clear();
   }
+}
+
+std::shared_ptr<const iris::SourceField> Nautiloid::irisExpanderSourceSnapshot(uint64_t* generation) const {
+  if (generation) {
+    *generation = irisPreviewGeneration.load(std::memory_order_acquire);
+  }
+  return std::atomic_load_explicit(&irisExpanderSource, std::memory_order_acquire);
 }
 
 void Nautiloid::startWorker() {
@@ -428,8 +472,14 @@ void Nautiloid::cacheWorkerLoop() {
       if (irisOk) {
         std::lock_guard<std::mutex> workerLock(workerMutex);
         if (request.serial == nextRequestSerial) {
+          nextIrisSource.sourcePath.clear();
+          nextIrisSource.sourceName =
+            std::string("Nautiloid: ") + iris::builtinFractalName(request.mode);
+          std::shared_ptr<const iris::SourceField> nextSharedSource =
+            std::make_shared<const iris::SourceField>(nextIrisSource);
           std::lock_guard<std::mutex> lock(snapshotMutex);
           irisCompatibleSource = std::move(nextIrisSource);
+          std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
           irisCompatibleSerial = request.serial;
           irisCompatibleMode = request.mode;
           irisCompatibleZoom = request.zoom;

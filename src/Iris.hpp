@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -88,6 +89,7 @@ struct Iris final : Module {
 
   void requestImageLoad(const std::string& path);
   void requestBuiltinFractal(int mode);
+  void requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation);
   void requestReload();
   void clearToDefault();
   void requestRebuild();
@@ -124,6 +126,7 @@ private:
     REQUEST_DEFAULT = 4,
     REQUEST_RELOAD_IMAGE_FILE = 5,
     REQUEST_BUILTIN_FRACTAL = 6,
+    REQUEST_EXPANDER_SOURCE = 7,
   };
 
   struct WorkerRequest {
@@ -131,10 +134,12 @@ private:
     std::string path;
     iris::ConversionSettings settings;
     iris::SourceField source;
+    std::shared_ptr<const iris::SourceField> sharedSource;
     int fractalMode = iris::FRACTAL_NONE;
     float fractalZoom = 0.f;
     float fractalCenterX = 0.f;
     float fractalCenterY = 0.f;
+    uint64_t sourceGeneration = 0u;
     uint64_t serial = 0u;
   };
 
@@ -182,6 +187,8 @@ private:
   bool embedSource = true;
   int currentSourceKind = iris::SOURCE_IMAGE;
   int currentFractalMode = iris::FRACTAL_NONE;
+  uint64_t lastExpanderSourceGeneration = 0u;
+  std::shared_ptr<const iris::SourceField> lastExpanderSourceSeen;
   dsp::ClockDivider lightDivider;
 };
 
