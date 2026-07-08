@@ -2,14 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
-## [v2.6.0]
-- New module Bifurx
+## [v2.5.4]
+- Fix visual glitch for high DPI displays
+
+## [v2.5.3]
+- Total visual rework with modules, interface, layering, etc.
+
+## [v2.5.2]
 - Resolve trigger issue in Integral Flux and Proc allowing trigger restarts in rising edge
 - Fix save sample from Temporal Deck being at totally the wrong level
 
 ## [v2.5.0]
 - New module TD.Scope
-- New module Crownstep
 
 ## [v2.3.12]
 
