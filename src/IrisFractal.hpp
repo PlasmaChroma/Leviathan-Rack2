@@ -181,6 +181,10 @@ inline bool makeBuiltinFractalSourceSized(
   int width,
   int height,
   float viewportScale,
+  int viewportPixelWidth,
+  int viewportPixelHeight,
+  int viewportPixelX,
+  int viewportPixelY,
   SourceField* out,
   std::string* error = nullptr) {
   if (!out) {
@@ -208,11 +212,17 @@ inline bool makeBuiltinFractalSourceSized(
   const double viewScale = std::max(1.f, viewportScale);
   const double panX = std::max(-2.f, std::min(centerX, 2.f));
   const double panY = std::max(-2.f, std::min(centerY, 2.f));
+  const int fullWidth = std::max(2, viewportPixelWidth);
+  const int fullHeight = std::max(2, viewportPixelHeight);
+  const int pixelX0 = std::max(0, viewportPixelX);
+  const int pixelY0 = std::max(0, viewportPixelY);
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
     ? 36
     : (mode == FRACTAL_EYE_OF_THE_WORLD ? 360 : 140);
   const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
-  if (detail::kUseSimdFractalRenderer && simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
+  const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
+    source.width == fullWidth && source.height == fullHeight;
+  if (fullViewport && detail::kUseSimdFractalRenderer && simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
     detail::renderMandelbrotFamilySimd(
       mode,
       float(zoomScale),
@@ -229,9 +239,11 @@ inline bool makeBuiltinFractalSourceSized(
     return true;
   }
   for (int y = 0; y < source.height; ++y) {
-    const float ny = (float(y) + 0.5f) / float(source.height) * 2.f - 1.f;
+    const int viewportY = pixelY0 + y;
+    const float ny = (float(viewportY) + 0.5f) / float(fullHeight) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {
-      const float nx = (float(x) + 0.5f) / float(source.width) * 2.f - 1.f;
+      const int viewportX = pixelX0 + x;
+      const float nx = (float(viewportX) + 0.5f) / float(fullWidth) * 2.f - 1.f;
       const size_t base = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
 
       if (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) {
@@ -367,6 +379,32 @@ inline bool makeBuiltinFractalSourceSized(
   }
   *out = std::move(source);
   return true;
+}
+
+inline bool makeBuiltinFractalSourceSized(
+  int mode,
+  float zoom,
+  float centerX,
+  float centerY,
+  int width,
+  int height,
+  float viewportScale,
+  SourceField* out,
+  std::string* error = nullptr) {
+  return makeBuiltinFractalSourceSized(
+    mode,
+    zoom,
+    centerX,
+    centerY,
+    width,
+    height,
+    viewportScale,
+    width,
+    height,
+    0,
+    0,
+    out,
+    error);
 }
 
 inline bool makeBuiltinFractalSource(

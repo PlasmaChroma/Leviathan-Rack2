@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 struct Nautiloid final : Module {
   enum ParamId {
@@ -60,6 +61,22 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> loading {false};
 
+  struct DisplayCacheTile {
+    int x = 0;
+    int y = 0;
+    iris::SourceField source;
+  };
+
+  struct DisplayTileCache {
+    int mode = iris::FRACTAL_NONE;
+    float zoom = -1.f;
+    float centerX = 0.f;
+    float centerY = 0.f;
+    std::vector<DisplayCacheTile> tiles;
+
+    void clear();
+  };
+
 private:
   struct WorkerRequest {
     int mode = iris::FRACTAL_MANDELBROT;
@@ -103,11 +120,7 @@ private:
   float irisCompatibleCenterY = 0.f;
 
   mutable std::mutex cacheDataMutex;
-  iris::SourceField fractalCacheSource;
-  int fractalCacheMode = iris::FRACTAL_NONE;
-  float fractalCacheZoom = -1.f;
-  float fractalCacheCenterX = 0.f;
-  float fractalCacheCenterY = 0.f;
+  DisplayTileCache displayTileCache;
 };
 
 extern Model* modelNautiloid;
