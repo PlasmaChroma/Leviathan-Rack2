@@ -326,13 +326,13 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">FINE</text>
     <text
        x="3912.1372"
-       y="10354.978"
+       y="10414.978"
        id="text10"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
-         id="tspan6"
+         id="tspan10"
          x="3912.1372"
-         y="10354.978">━━━ SCAN ━━━</tspan></text>
+         y="10414.978">━━━━ SCAN ━━━━</tspan></text>
     <text
        x="1889.9816"
        y="10144.939"
@@ -342,6 +342,13 @@
          id="tspan4"
          x="1889.9816"
          y="10144.939">OCT</tspan></text>
+    <text
+       x="763.81018"
+       y="10624.962"
+       id="text12-9"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan9">COLOR</tspan></text>
     <text
        x="3418.0366"
        y="8479.9766"

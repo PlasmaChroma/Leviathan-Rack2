@@ -651,6 +651,37 @@ struct IrisChannelPreviewButton final : TL1105 {
 struct IrisImageChannelButton final : SmallGoldButton {
   Iris* module = nullptr;
 
+  std::string tooltipText() const {
+    const int mode = module
+      ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
+      : iris::IMAGE_CHANNEL_ALL;
+    const char* modeName = "All";
+    switch (mode) {
+      case iris::IMAGE_CHANNEL_RED: modeName = "Red"; break;
+      case iris::IMAGE_CHANNEL_GREEN: modeName = "Green"; break;
+      case iris::IMAGE_CHANNEL_BLUE: modeName = "Blue"; break;
+      case iris::IMAGE_CHANNEL_ALL:
+      default: modeName = "All"; break;
+    }
+    return std::string("Color channel: ") + modeName;
+  }
+
+  void updateTooltipName() {
+    if (ParamQuantity* quantity = getParamQuantity()) {
+      quantity->name = tooltipText();
+    }
+  }
+
+  void initParamQuantity() override {
+    SmallGoldButton::initParamQuantity();
+    updateTooltipName();
+  }
+
+  void step() override {
+    updateTooltipName();
+    SmallGoldButton::step();
+  }
+
   void onButton(const event::Button& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
       const int current = clamp(int(module->conversionSettings.imageChannelMode), 0, 3);
@@ -658,8 +689,14 @@ struct IrisImageChannelButton final : SmallGoldButton {
       module->displayImageChannelMode.store(
         int(module->conversionSettings.imageChannelMode), std::memory_order_relaxed);
       module->requestRebuild();
+      updateTooltipName();
     }
     SmallGoldButton::onButton(e);
+  }
+
+  void onEnter(const event::Enter& e) override {
+    updateTooltipName();
+    SmallGoldButton::onEnter(e);
   }
 };
 
