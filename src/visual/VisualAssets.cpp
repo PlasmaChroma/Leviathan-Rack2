@@ -1497,71 +1497,38 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	return fb;
 }
 
-struct FittedPanelSvgWidget final : TransparentWidget {
-	std::shared_ptr<window::Svg> svg;
-
-	explicit FittedPanelSvgWidget(std::shared_ptr<window::Svg> svg) : svg(std::move(svg)) {
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!svg || !svg->handle || box.size.x <= 0.f || box.size.y <= 0.f) {
-			return;
-		}
-		const Vec svgSize = svg->getSize();
-		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
-			return;
-		}
-
-		nvgSave(args.vg);
-		nvgScale(args.vg, box.size.x / svgSize.x, box.size.y / svgSize.y);
-		svg->draw(args.vg);
-		nvgRestore(args.vg);
-	}
-};
-
 struct CachedPanelLabelsWidget final : Widget {
 	widget::FramebufferWidget* fb = nullptr;
-	float requestedOversample = 1.f;
-	float cachedOversample = 0.f;
 
-	CachedPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float requestedOversample) {
+	CachedPanelLabelsWidget(const char* svgPath, Vec panelSizePx) {
 		box.size = panelSizePx;
-		this->requestedOversample = requestedOversample;
 		fb = new widget::FramebufferWidget();
-		fb->box.size = panelSizePx;
 		fb->oversample = targetOversample();
 		fb->dirtyOnSubpixelChange = false;
-		cachedOversample = fb->oversample;
 
-		FittedPanelSvgWidget* labels = new FittedPanelSvgWidget(loadPluginSvgCached(svgPath));
-		labels->box.size = panelSizePx;
+		widget::SvgWidget* labels = new widget::SvgWidget();
+		labels->setSvg(loadPluginSvgCached(svgPath));
+		fb->box.size = labels->box.size;
 		fb->addChild(labels);
 		addChild(fb);
 	}
 
 	float targetOversample() const {
 		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
-		if (pixelRatio >= 1.9f) {
-			return 1.f;
-		}
-		return clamp(requestedOversample, 1.f, 1.5f);
+		return (pixelRatio < 2.f) ? 2.f : 1.f;
 	}
 
 	void step() override {
 		if (fb) {
-			const float nextOversample = targetOversample();
-			if (std::fabs(nextOversample - cachedOversample) > 0.01f) {
-				fb->oversample = nextOversample;
-				fb->setDirty();
-				cachedOversample = nextOversample;
-			}
+			fb->oversample = targetOversample();
 		}
 		Widget::step();
 	}
 };
 
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
-	return new CachedPanelLabelsWidget(svgPath, panelSizePx, oversample);
+	(void) oversample;
+	return new CachedPanelLabelsWidget(svgPath, panelSizePx);
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {
