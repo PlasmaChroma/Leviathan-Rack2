@@ -7,5 +7,5 @@
   <text x="5080" y="1050" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="520" font-weight="700" fill="#e8edf7">Nautiloid</text>
   <text x="3600" y="10100" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="260" fill="#d9e5f7">FRACTAL</text>
   <text x="6560" y="10100" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="260" fill="#d9e5f7">RESET</text>
-  <text x="5080" y="11880" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="280" fill="#8da0bc">Leviathan</text>
+  <text x="5080" y="100" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="1" fill="#8da0bc"></text>
 </svg>

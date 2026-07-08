@@ -233,6 +233,89 @@ struct NautiloidZoomSpeedQuantity final : Quantity {
   }
 };
 
+struct NautiloidIrisMiniDisplay final : OpaqueWidget {
+  Nautiloid* module = nullptr;
+  widget::FramebufferWidget* framebuffer = nullptr;
+  uint64_t generation = uint64_t(-1);
+  NVGcontext* imageContext = nullptr;
+  int imageHandle = -1;
+  int uploadedWidth = 0;
+  int uploadedHeight = 0;
+  std::vector<uint8_t> rgba;
+
+  explicit NautiloidIrisMiniDisplay(Nautiloid* module) : module(module) {}
+
+  ~NautiloidIrisMiniDisplay() override {
+    if (APP && APP->window && APP->window->vg) {
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight, APP->window->vg, true);
+      return;
+    }
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+  }
+
+  void step() override {
+    const uint64_t currentGeneration =
+      module ? module->irisPreviewGeneration.load(std::memory_order_acquire) : 0u;
+    if (generation != currentGeneration && framebuffer) {
+      framebuffer->setDirty();
+    }
+    OpaqueWidget::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    nvgBeginPath(args.vg);
+    nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+    nvgFillColor(args.vg, nvgRGB(3, 5, 7));
+    nvgFill(args.vg);
+
+    const uint64_t currentGeneration =
+      module ? module->irisPreviewGeneration.load(std::memory_order_acquire) : 0u;
+    if (imageContext != args.vg) {
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
+      imageContext = args.vg;
+      generation = uint64_t(-1);
+    }
+    if (generation != currentGeneration || imageHandle < 0 ||
+        !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
+      std::vector<uint8_t> rgb;
+      int width = 0;
+      int height = 0;
+      if (module) {
+        module->irisPreviewSnapshot(&rgb, &width, &height);
+      }
+      rgba.resize(rgb.size() / 3u * 4u);
+      for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
+        const size_t out = (i / 3u) * 4u;
+        rgba[out + 0u] = rgb[i + 0u];
+        rgba[out + 1u] = rgb[i + 1u];
+        rgba[out + 2u] = rgb[i + 2u];
+        rgba[out + 3u] = 255u;
+      }
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
+      imageContext = args.vg;
+      if (width > 0 && height > 0 && !rgba.empty()) {
+        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+        uploadedWidth = width;
+        uploadedHeight = height;
+      }
+      generation = currentGeneration;
+    }
+
+    if (imageHandle >= 0) {
+      NVGpaint paint =
+        nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, imageHandle, 1.f);
+      nvgBeginPath(args.vg);
+      nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+      nvgFillPaint(args.vg, paint);
+      nvgFill(args.vg);
+    }
+  }
+};
+
 struct NautiloidZoomSlider final : ui::Slider {
   Nautiloid* module = nullptr;
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
@@ -449,6 +532,19 @@ struct NautiloidWidget final : ModuleWidget {
       createParamCentered<NautiloidResetButton>(mm2px(Vec(65.6f, 96.f)), module, Nautiloid::RESET_VIEW_PARAM);
     resetButton->module = module;
     addParam(resetButton);
+
+    const math::Rect irisPreviewRectMm(Vec(24.62f, 102.f), Vec(52.36f, 25.9f));
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(
+      irisPreviewRectMm, visual_assets::PreviewFrameTint::Purple));
+    widget::FramebufferWidget* irisPreviewFb = new widget::FramebufferWidget();
+    irisPreviewFb->box.pos = mm2px(irisPreviewRectMm.pos.plus(Vec(0.35f, 0.35f)));
+    irisPreviewFb->box.size = mm2px(irisPreviewRectMm.size.minus(Vec(0.7f, 0.7f)));
+    irisPreviewFb->dirtyOnSubpixelChange = false;
+    NautiloidIrisMiniDisplay* irisPreview = new NautiloidIrisMiniDisplay(module);
+    irisPreview->framebuffer = irisPreviewFb;
+    irisPreview->box.size = irisPreviewFb->box.size;
+    irisPreviewFb->addChild(irisPreview);
+    addChild(irisPreviewFb);
   }
 };
 

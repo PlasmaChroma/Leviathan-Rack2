@@ -38,12 +38,14 @@ struct Nautiloid final : Module {
   void requestRender();
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
+  void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
 
   int fractalMode = iris::FRACTAL_MANDELBROT;
   float fractalZoom = 0.f;
   float fractalCenterX = 0.f;
   float fractalCenterY = 0.f;
   std::atomic<uint64_t> previewGeneration {0u};
+  std::atomic<uint64_t> irisPreviewGeneration {0u};
   std::atomic<bool> loading {false};
 
 private:
@@ -79,6 +81,12 @@ private:
 
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;
+  iris::SourceField irisCompatibleSource;
+  uint64_t irisCompatibleSerial = 0u;
+  int irisCompatibleMode = iris::FRACTAL_NONE;
+  float irisCompatibleZoom = -1.f;
+  float irisCompatibleCenterX = 0.f;
+  float irisCompatibleCenterY = 0.f;
 
   mutable std::mutex cacheDataMutex;
   iris::SourceField fractalCacheSource;
