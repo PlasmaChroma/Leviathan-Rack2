@@ -1519,16 +1519,49 @@ struct FittedPanelSvgWidget final : TransparentWidget {
 	}
 };
 
-Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
-	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
-	fb->box.size = panelSizePx;
-	fb->oversample = clamp(oversample, 1.f, 1.5f);
-	fb->dirtyOnSubpixelChange = false;
+struct CachedPanelLabelsWidget final : Widget {
+	widget::FramebufferWidget* fb = nullptr;
+	float requestedOversample = 1.f;
+	float cachedOversample = 0.f;
 
-	FittedPanelSvgWidget* labels = new FittedPanelSvgWidget(loadPluginSvgCached(svgPath));
-	labels->box.size = panelSizePx;
-	fb->addChild(labels);
-	return fb;
+	CachedPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float requestedOversample) {
+		box.size = panelSizePx;
+		this->requestedOversample = requestedOversample;
+		fb = new widget::FramebufferWidget();
+		fb->box.size = panelSizePx;
+		fb->oversample = targetOversample();
+		fb->dirtyOnSubpixelChange = false;
+		cachedOversample = fb->oversample;
+
+		FittedPanelSvgWidget* labels = new FittedPanelSvgWidget(loadPluginSvgCached(svgPath));
+		labels->box.size = panelSizePx;
+		fb->addChild(labels);
+		addChild(fb);
+	}
+
+	float targetOversample() const {
+		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+		if (pixelRatio >= 1.9f) {
+			return 1.f;
+		}
+		return clamp(requestedOversample, 1.f, 1.5f);
+	}
+
+	void step() override {
+		if (fb) {
+			const float nextOversample = targetOversample();
+			if (std::fabs(nextOversample - cachedOversample) > 0.01f) {
+				fb->oversample = nextOversample;
+				fb->setDirty();
+				cachedOversample = nextOversample;
+			}
+		}
+		Widget::step();
+	}
+};
+
+Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
+	return new CachedPanelLabelsWidget(svgPath, panelSizePx, oversample);
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {
