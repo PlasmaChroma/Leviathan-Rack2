@@ -170,6 +170,11 @@ private:
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
   iris::SourceField snapshotSourceField;
+  iris::SourceField fractalCacheSource;
+  int fractalCacheMode = iris::FRACTAL_NONE;
+  float fractalCacheZoom = -1.f;
+  float fractalCacheCenterX = 0.f;
+  float fractalCacheCenterY = 0.f;
   std::vector<uint8_t> snapshotPreview;
   int previewWidth = iris::kSourcePreviewWidth;
   int previewHeight = iris::kSourcePreviewHeight;

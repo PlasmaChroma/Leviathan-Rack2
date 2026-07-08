@@ -55,6 +55,103 @@ bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
   return value ? json_boolean_value(value) != 0 : fallback;
 }
 
+Vec irisFractalViewportHalfSpan(int mode) {
+  switch (mode) {
+    case iris::FRACTAL_MANDELBROT:
+      return Vec(1.62f, 0.86f);
+    case iris::FRACTAL_JULIA:
+      return Vec(1.58f, 0.72f);
+    case iris::FRACTAL_PHOENIX_JULIA:
+      return Vec(1.62f, 0.74f);
+    case iris::FRACTAL_BURNING_SHIP:
+      return Vec(0.42f, 0.145f);
+    case iris::FRACTAL_CELTIC:
+      return Vec(1.62f, 0.88f);
+    case iris::FRACTAL_SPIDER:
+      return Vec(1.56f, 0.84f);
+    case iris::FRACTAL_NOVA:
+      return Vec(2.0f, 0.86f);
+    case iris::FRACTAL_NEWTON:
+      return Vec(2.45f, 0.98f);
+    case iris::FRACTAL_EYE_OF_THE_WORLD:
+      return Vec(0.0075f, 0.00395f);
+    case iris::FRACTAL_TRICORN:
+    default:
+      return Vec(1.68f, 0.90f);
+  }
+}
+
+bool cropFractalCacheToCanonical(
+  const iris::SourceField& cache,
+  float cacheCenterX,
+  float cacheCenterY,
+  int mode,
+  float zoom,
+  float centerX,
+  float centerY,
+  float cacheScale,
+  iris::SourceField* out) {
+  if (!cache.valid() || !out || cacheScale <= 1.f) return false;
+  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, 1.f));
+  const Vec halfSpan = irisFractalViewportHalfSpan(mode).mult(zoomScale);
+  const float marginX = (cacheScale - 1.f) * halfSpan.x;
+  const float marginY = (cacheScale - 1.f) * halfSpan.y;
+  const float dx = centerX - cacheCenterX;
+  const float dy = centerY - cacheCenterY;
+  if (std::fabs(dx) > marginX || std::fabs(dy) > marginY) return false;
+
+  iris::SourceField source;
+  source.width = iris::kCanonicalSourceWidth;
+  source.height = iris::kCanonicalSourceHeight;
+  source.channels = iris::kCanonicalSourceChannels;
+  source.bitDepth = iris::kCanonicalSourceBitDepth;
+  source.originalWidth = source.width;
+  source.originalHeight = source.height;
+  source.originalChannels = source.channels;
+  source.sourceName = cache.sourceName;
+  source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
+
+  const float cacheHalfX = halfSpan.x * cacheScale;
+  const float cacheHalfY = halfSpan.y * cacheScale;
+  const float cacheCenterPx = (0.5f + dx / (2.f * cacheHalfX)) * float(cache.width);
+  const float cacheCenterPy = (0.5f + dy / (2.f * cacheHalfY)) * float(cache.height);
+  const float cropW = float(cache.width) / cacheScale;
+  const float cropH = float(cache.height) / cacheScale;
+  const float cropLeft = cacheCenterPx - 0.5f * cropW;
+  const float cropTop = cacheCenterPy - 0.5f * cropH;
+  if (cropLeft < -0.01f || cropTop < -0.01f ||
+      cropLeft + cropW > float(cache.width) + 0.01f ||
+      cropTop + cropH > float(cache.height) + 0.01f) {
+    return false;
+  }
+
+  for (int y = 0; y < source.height; ++y) {
+    const float srcY = cropTop + (float(y) + 0.5f) * cropH / float(source.height) - 0.5f;
+    const int y0 = clamp(int(std::floor(srcY)), 0, cache.height - 1);
+    const int y1 = std::min(y0 + 1, cache.height - 1);
+    const float fy = clamp(srcY - float(y0), 0.f, 1.f);
+    for (int x = 0; x < source.width; ++x) {
+      const float srcX = cropLeft + (float(x) + 0.5f) * cropW / float(source.width) - 0.5f;
+      const int x0 = clamp(int(std::floor(srcX)), 0, cache.width - 1);
+      const int x1 = std::min(x0 + 1, cache.width - 1);
+      const float fx = clamp(srcX - float(x0), 0.f, 1.f);
+      const size_t outBase = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
+      for (int c = 0; c < 3; ++c) {
+        const auto component = [&](int px, int py) {
+          return float(cache.rgb8[(size_t(py) * size_t(cache.width) + size_t(px)) * 3u + size_t(c)]);
+        };
+        const float top = component(x0, y0) + (component(x1, y0) - component(x0, y0)) * fx;
+        const float bottom = component(x0, y1) + (component(x1, y1) - component(x0, y1)) * fx;
+        source.rgb8[outBase + size_t(c)] =
+          uint8_t(std::round(clamp(top + (bottom - top) * fy, 0.f, 255.f)));
+      }
+    }
+  }
+
+  *out = std::move(source);
+  return true;
+}
+
 } // namespace
 
 Iris::Iris() {
@@ -131,6 +228,12 @@ void Iris::requestImageLoad(const std::string& path) {
 
 void Iris::requestBuiltinFractal(int mode) {
   if (!iris::isBuiltinFractalMode(mode)) return;
+  const int previousMode = builtinFractalMode();
+  if (previousMode != mode) {
+    fractalZoom = 0.f;
+    fractalCenterX = 0.f;
+    fractalCenterY = 0.f;
+  }
   WorkerRequest request;
   request.type = REQUEST_BUILTIN_FRACTAL;
   request.fractalMode = mode;
@@ -262,13 +365,58 @@ void Iris::workerLoop() {
         result.preserveExistingSource = true;
       } else if (request.type == REQUEST_BUILTIN_FRACTAL) {
         iris::SourceField source;
-        ok = iris::makeBuiltinFractalSource(
-          request.fractalMode,
-          request.fractalZoom,
-          request.fractalCenterX,
-          request.fractalCenterY,
-          &source,
-          &error);
+        constexpr float kFractalCacheScale = 1.5f;
+        constexpr int kFractalCacheWidth = int(float(iris::kCanonicalSourceWidth) * kFractalCacheScale);
+        constexpr int kFractalCacheHeight = int(float(iris::kCanonicalSourceHeight) * kFractalCacheScale);
+        const bool cacheCompatible =
+          fractalCacheSource.valid() &&
+          fractalCacheMode == request.fractalMode &&
+          std::fabs(fractalCacheZoom - request.fractalZoom) <= 1e-5f;
+        if (!cacheCompatible ||
+            !cropFractalCacheToCanonical(
+              fractalCacheSource,
+              fractalCacheCenterX,
+              fractalCacheCenterY,
+              request.fractalMode,
+              request.fractalZoom,
+              request.fractalCenterX,
+              request.fractalCenterY,
+              kFractalCacheScale,
+              &source)) {
+          iris::SourceField nextCache;
+          ok = iris::makeBuiltinFractalSourceSized(
+            request.fractalMode,
+            request.fractalZoom,
+            request.fractalCenterX,
+            request.fractalCenterY,
+            kFractalCacheWidth,
+            kFractalCacheHeight,
+            kFractalCacheScale,
+            &nextCache,
+            &error);
+          if (ok) {
+            fractalCacheSource = std::move(nextCache);
+            fractalCacheMode = request.fractalMode;
+            fractalCacheZoom = request.fractalZoom;
+            fractalCacheCenterX = request.fractalCenterX;
+            fractalCacheCenterY = request.fractalCenterY;
+            ok = cropFractalCacheToCanonical(
+              fractalCacheSource,
+              fractalCacheCenterX,
+              fractalCacheCenterY,
+              request.fractalMode,
+              request.fractalZoom,
+              request.fractalCenterX,
+              request.fractalCenterY,
+              kFractalCacheScale,
+              &source);
+            if (!ok) {
+              error = "Fractal cache crop failed";
+            }
+          }
+        } else {
+          ok = true;
+        }
         if (ok) {
           ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
           result.source = std::move(source);

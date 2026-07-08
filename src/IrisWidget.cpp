@@ -134,6 +134,15 @@ Vec irisFractalViewportHalfSpan(int mode) {
   }
 }
 
+bool irisFractalRequestDue(double* lastRequestTime, double minIntervalSec, bool force = false) {
+  const double now = system::getTime();
+  if (force || !std::isfinite(*lastRequestTime) || now - *lastRequestTime >= minIntervalSec) {
+    *lastRequestTime = now;
+    return true;
+  }
+  return false;
+}
+
 void filterIrisSourcePreview(std::vector<uint8_t>* rgb, int mode) {
   if (!rgb || rgb->empty()) return;
   for (size_t i = 0; i + 2u < rgb->size(); i += 3u) {
@@ -180,6 +189,7 @@ struct IrisDisplay final : OpaqueWidget {
   std::vector<uint8_t> rgba;
   bool fractalPanActive = false;
   Vec lastPanLocal;
+  double lastFractalPanRequestTime = -INFINITY;
 
   explicit IrisDisplay(Iris* module) : module(module) {}
 
@@ -229,7 +239,9 @@ struct IrisDisplay final : OpaqueWidget {
         const Vec halfSpan = irisFractalViewportHalfSpan(mode).mult(zoomScale);
         module->fractalCenterX = clamp(module->fractalCenterX - delta.x / box.size.x * 2.f * halfSpan.x, -2.f, 2.f);
         module->fractalCenterY = clamp(module->fractalCenterY - delta.y / box.size.y * 2.f * halfSpan.y, -2.f, 2.f);
-        module->requestBuiltinFractal(mode);
+        if (irisFractalRequestDue(&lastFractalPanRequestTime, 0.05)) {
+          module->requestBuiltinFractal(mode);
+        }
       }
       e.consume(this);
       return;
@@ -239,6 +251,9 @@ struct IrisDisplay final : OpaqueWidget {
 
   void onDragEnd(const event::DragEnd& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && fractalPanActive) {
+      if (module && module->isBuiltinFractalSource()) {
+        module->requestBuiltinFractal(module->builtinFractalMode());
+      }
       fractalPanActive = false;
       e.consume(this);
       return;
@@ -563,6 +578,7 @@ struct IrisSmoothingMenuQuantity final : Quantity {
 
 struct IrisFractalZoomMenuQuantity final : Quantity {
   Iris* module = nullptr;
+  double lastFractalZoomRequestTime = -INFINITY;
 
   explicit IrisFractalZoomMenuQuantity(Iris* module) : module(module) {}
 
@@ -572,7 +588,9 @@ struct IrisFractalZoomMenuQuantity final : Quantity {
     if (std::fabs(module->fractalZoom - next) > 1e-5f) {
       module->fractalZoom = next;
       if (module->isBuiltinFractalSource()) {
-        module->requestBuiltinFractal(module->builtinFractalMode());
+        if (irisFractalRequestDue(&lastFractalZoomRequestTime, 0.05)) {
+          module->requestBuiltinFractal(module->builtinFractalMode());
+        }
       }
     }
   }

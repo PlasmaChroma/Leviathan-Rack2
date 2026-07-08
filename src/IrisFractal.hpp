@@ -64,11 +64,14 @@ inline void writeSetInterior(size_t base, std::vector<uint8_t>* rgb8) {
 
 } // namespace detail
 
-inline bool makeBuiltinFractalSource(
+inline bool makeBuiltinFractalSourceSized(
   int mode,
   float zoom,
   float centerX,
   float centerY,
+  int width,
+  int height,
+  float viewportScale,
   SourceField* out,
   std::string* error = nullptr) {
   if (!out) {
@@ -81,8 +84,8 @@ inline bool makeBuiltinFractalSource(
   }
 
   SourceField source;
-  source.width = kCanonicalSourceWidth;
-  source.height = kCanonicalSourceHeight;
+  source.width = std::max(2, width);
+  source.height = std::max(2, height);
   source.channels = kCanonicalSourceChannels;
   source.bitDepth = kCanonicalSourceBitDepth;
   source.originalWidth = source.width;
@@ -93,6 +96,7 @@ inline bool makeBuiltinFractalSource(
 
   zoom = clamp(zoom, 0.f, 1.f);
   const double zoomScale = std::pow(0.05, double(zoom));
+  const double viewScale = std::max(1.f, viewportScale);
   const double panX = clamp(centerX, -2.f, 2.f);
   const double panY = clamp(centerY, -2.f, 2.f);
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
@@ -105,8 +109,8 @@ inline bool makeBuiltinFractalSource(
       const size_t base = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
 
       if (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) {
-        double zr = panX + nx * (mode == FRACTAL_NOVA ? 2.0 : 2.45) * zoomScale;
-        double zi = panY + ny * (mode == FRACTAL_NOVA ? 0.86 : 0.98) * zoomScale;
+        double zr = panX + nx * (mode == FRACTAL_NOVA ? 2.0 : 2.45) * zoomScale * viewScale;
+        double zi = panY + ny * (mode == FRACTAL_NOVA ? 0.86 : 0.98) * zoomScale * viewScale;
         const double cr = -0.52;
         const double ci = 0.38;
         int iter = 0;
@@ -148,33 +152,33 @@ inline bool makeBuiltinFractalSource(
       double pr = 0.0;
       double pi = 0.0;
       if (mode == FRACTAL_MANDELBROT) {
-        cr = -0.72 + panX + double(nx) * 1.62 * zoomScale;
-        ci = 0.03 + panY + double(ny) * 0.86 * zoomScale;
+        cr = -0.72 + panX + double(nx) * 1.62 * zoomScale * viewScale;
+        ci = 0.03 + panY + double(ny) * 0.86 * zoomScale * viewScale;
       } else if (mode == FRACTAL_EYE_OF_THE_WORLD) {
-        cr = -0.743643887037151 + panX + double(nx) * 0.0075 * zoomScale;
-        ci = 0.131825904205330 + panY + double(ny) * 0.00395 * zoomScale;
+        cr = -0.743643887037151 + panX + double(nx) * 0.0075 * zoomScale * viewScale;
+        ci = 0.131825904205330 + panY + double(ny) * 0.00395 * zoomScale * viewScale;
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;
-        zr = panX + double(nx) * 1.58 * zoomScale;
-        zi = panY + double(ny) * 0.72 * zoomScale;
+        zr = panX + double(nx) * 1.58 * zoomScale * viewScale;
+        zi = panY + double(ny) * 0.72 * zoomScale * viewScale;
       } else if (mode == FRACTAL_PHOENIX_JULIA) {
         cr = -0.42;
         ci = 0.08;
-        zr = panX + double(nx) * 1.62 * zoomScale;
-        zi = panY + double(ny) * 0.74 * zoomScale;
+        zr = panX + double(nx) * 1.62 * zoomScale * viewScale;
+        zi = panY + double(ny) * 0.74 * zoomScale * viewScale;
       } else if (mode == FRACTAL_BURNING_SHIP) {
-        cr = -1.76 + panX + double(nx) * 0.42 * zoomScale;
-        ci = -0.045 + panY + double(ny) * 0.145 * zoomScale;
+        cr = -1.76 + panX + double(nx) * 0.42 * zoomScale * viewScale;
+        ci = -0.045 + panY + double(ny) * 0.145 * zoomScale * viewScale;
       } else if (mode == FRACTAL_CELTIC) {
-        cr = -0.25 + panX + double(nx) * 1.62 * zoomScale;
-        ci = 0.02 + panY + double(ny) * 0.88 * zoomScale;
+        cr = -0.25 + panX + double(nx) * 1.62 * zoomScale * viewScale;
+        ci = 0.02 + panY + double(ny) * 0.88 * zoomScale * viewScale;
       } else if (mode == FRACTAL_SPIDER) {
-        cr = -0.52 + panX + double(nx) * 1.56 * zoomScale;
-        ci = panY + double(ny) * 0.84 * zoomScale;
+        cr = -0.52 + panX + double(nx) * 1.56 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.84 * zoomScale * viewScale;
       } else {
-        cr = -0.12 + panX + double(nx) * 1.68 * zoomScale;
-        ci = panY + double(ny) * 0.90 * zoomScale;
+        cr = -0.12 + panX + double(nx) * 1.68 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.90 * zoomScale * viewScale;
       }
 
       double minOrbit = 1e9;
@@ -237,6 +241,25 @@ inline bool makeBuiltinFractalSource(
   }
   *out = std::move(source);
   return true;
+}
+
+inline bool makeBuiltinFractalSource(
+  int mode,
+  float zoom,
+  float centerX,
+  float centerY,
+  SourceField* out,
+  std::string* error = nullptr) {
+  return makeBuiltinFractalSourceSized(
+    mode,
+    zoom,
+    centerX,
+    centerY,
+    kCanonicalSourceWidth,
+    kCanonicalSourceHeight,
+    1.f,
+    out,
+    error);
 }
 
 } // namespace iris
