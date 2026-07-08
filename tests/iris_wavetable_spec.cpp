@@ -1,5 +1,6 @@
 #include "../src/IrisWavetable.hpp"
 #include "../src/IrisIO.hpp"
+#include "../src/IrisFractal.hpp"
 
 #define QOI_IMPLEMENTATION
 #include "../src/third_party/qoi.h"
@@ -270,6 +271,17 @@ int main() {
     maxAbs = std::max(maxAbs, std::fabs(smoothed.samples[size_t(x)]));
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
+
+  iris::SourceField fractal;
+  check("builtin Mandelbrot fractal source generates",
+        iris::makeBuiltinFractalSource(iris::FRACTAL_MANDELBROT, &fractal));
+  check("builtin fractal uses canonical source dimensions",
+        fractal.valid() && fractal.width == iris::kCanonicalSourceWidth &&
+        fractal.height == iris::kCanonicalSourceHeight && !fractal.rgb8.empty());
+  iris::ImageWavetable fractalTable;
+  check("builtin fractal converts to wavetable",
+        iris::buildWavetableFromSourceField(fractal, settings, &fractalTable, &ioError) &&
+        fractalTable.valid() && fractalTable.sourceName == "Fractal: Mandelbrot");
 
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;

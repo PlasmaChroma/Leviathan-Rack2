@@ -41,6 +41,7 @@ struct Iris final : Module {
 	    SOFT_SYNC_MODE_PARAM,
 	    SMOOTHING_MENU_PARAM,
 	    IMAGE_CHANNEL_PARAM,
+	    SOURCE_MENU_PARAM,
 	    PARAMS_LEN
   };
 
@@ -86,6 +87,7 @@ struct Iris final : Module {
   void dataFromJson(json_t* root) override;
 
   void requestImageLoad(const std::string& path);
+  void requestBuiltinFractal(int mode);
   void requestReload();
   void clearToDefault();
   void requestRebuild();
@@ -97,6 +99,8 @@ struct Iris final : Module {
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
   bool embedsSource() const { return embedSource; }
   void setEmbedSource(bool enabled) { embedSource = enabled; }
+  bool isBuiltinFractalSource() const;
+  int builtinFractalMode() const;
 
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
@@ -116,6 +120,7 @@ private:
     REQUEST_REBUILD_FROM_SOURCE = 3,
     REQUEST_DEFAULT = 4,
     REQUEST_RELOAD_IMAGE_FILE = 5,
+    REQUEST_BUILTIN_FRACTAL = 6,
   };
 
   struct WorkerRequest {
@@ -123,6 +128,7 @@ private:
     std::string path;
     iris::ConversionSettings settings;
     iris::SourceField source;
+    int fractalMode = iris::FRACTAL_NONE;
     uint64_t serial = 0u;
   };
 
@@ -131,6 +137,8 @@ private:
     iris::ImageWavetable table;
     bool hasSource = false;
     bool preserveExistingSource = false;
+    int sourceKind = iris::SOURCE_IMAGE;
+    int fractalMode = iris::FRACTAL_NONE;
   };
 
   void startWorker();
@@ -161,6 +169,8 @@ private:
   int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;
   bool embedSource = true;
+  int currentSourceKind = iris::SOURCE_IMAGE;
+  int currentFractalMode = iris::FRACTAL_NONE;
   dsp::ClockDivider lightDivider;
 };
 

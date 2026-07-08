@@ -44,6 +44,36 @@ enum ImageChannelMode {
   IMAGE_CHANNEL_BLUE = 3,
 };
 
+enum SourceKind {
+  SOURCE_IMAGE = 0,
+  SOURCE_BUILTIN_FRACTAL = 1,
+};
+
+enum BuiltinFractalMode {
+  FRACTAL_NONE = 0,
+  FRACTAL_MANDELBROT = 1,
+  FRACTAL_JULIA = 2,
+  FRACTAL_BURNING_SHIP = 3,
+  FRACTAL_TRICORN = 4,
+  FRACTAL_NEWTON = 5,
+};
+
+constexpr int kBuiltinFractalVersion = 1;
+constexpr int kFirstBuiltinFractalMode = FRACTAL_MANDELBROT;
+constexpr int kLastBuiltinFractalMode = FRACTAL_NEWTON;
+
+inline const char* builtinFractalName(int mode) {
+  switch (mode) {
+    case FRACTAL_MANDELBROT: return "Mandelbrot";
+    case FRACTAL_JULIA: return "Julia Lattice";
+    case FRACTAL_BURNING_SHIP: return "Burning Ship";
+    case FRACTAL_TRICORN: return "Tricorn";
+    case FRACTAL_NEWTON: return "Newton Roots";
+    case FRACTAL_NONE:
+    default: return "Image";
+  }
+}
+
 struct ConversionSettings {
   int frameSize = kFrameSize;
   int rows = kDefaultRows;

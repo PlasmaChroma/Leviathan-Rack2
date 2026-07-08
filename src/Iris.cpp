@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "IrisFractal.hpp"
 
 #include <new>
 #include <utility>
@@ -69,6 +70,7 @@ Iris::Iris() {
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
   configButton(SMOOTHING_MENU_PARAM, "Image options");
   configButton(IMAGE_CHANNEL_PARAM, "Image color channel");
+  configButton(SOURCE_MENU_PARAM, "Built-in source");
   configInput(V_OCT_INPUT, "V/Oct");
   configInput(LIN_FM_INPUT, "Linear FM");
   configInput(SCAN_INPUT, "Scan CV");
@@ -127,7 +129,19 @@ void Iris::requestImageLoad(const std::string& path) {
   submitRequest(request);
 }
 
+void Iris::requestBuiltinFractal(int mode) {
+  WorkerRequest request;
+  request.type = REQUEST_BUILTIN_FRACTAL;
+  request.fractalMode = clamp(mode, iris::kFirstBuiltinFractalMode, iris::kLastBuiltinFractalMode);
+  request.settings = conversionSettings;
+  submitRequest(request);
+}
+
 void Iris::requestReload() {
+  if (isBuiltinFractalSource()) {
+    requestBuiltinFractal(builtinFractalMode());
+    return;
+  }
   const std::string path = sourcePath();
   WorkerRequest request;
   request.settings = conversionSettings;
@@ -187,6 +201,10 @@ void Iris::publishWorkerResult(WorkerResult& result) {
     } else if (!result.preserveExistingSource) {
       snapshotSourceField = iris::SourceField();
     }
+    if (!result.preserveExistingSource) {
+      currentSourceKind = result.sourceKind;
+      currentFractalMode = result.fractalMode;
+    }
     snapshotTable = *table;
     buildPreview(snapshotTable, &snapshotPreview);
     lastError.clear();
@@ -233,10 +251,21 @@ void Iris::workerLoop() {
           ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
           result.source = std::move(source);
           result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_IMAGE;
         }
       } else if (request.type == REQUEST_REBUILD_FROM_SOURCE) {
         ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
         result.preserveExistingSource = true;
+      } else if (request.type == REQUEST_BUILTIN_FRACTAL) {
+        iris::SourceField source;
+        ok = iris::makeBuiltinFractalSource(request.fractalMode, &source, &error);
+        if (ok) {
+          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          result.source = std::move(source);
+          result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_BUILTIN_FRACTAL;
+          result.fractalMode = request.fractalMode;
+        }
       } else if (request.type == REQUEST_RELOAD_IMAGE_FILE) {
         iris::SourceField source;
         ok = iris::importImageFileToSourceField(request.path, &source, &error);
@@ -244,6 +273,7 @@ void Iris::workerLoop() {
           ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
           result.source = std::move(source);
           result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_IMAGE;
         } else if (request.source.valid()) {
           const std::string reloadError = error;
           ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
@@ -259,6 +289,7 @@ void Iris::workerLoop() {
           ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
           result.source = std::move(source);
           result.hasSource = ok;
+          result.sourceKind = iris::SOURCE_IMAGE;
         }
       } else {
         error = "Unknown Iris image worker request";
@@ -409,6 +440,12 @@ void Iris::onAdd(const AddEvent& e) {
   const std::string directory = getPatchStorageDirectory();
   WorkerRequest request;
   request.settings = conversionSettings;
+  if (isBuiltinFractalSource()) {
+    request.type = REQUEST_BUILTIN_FRACTAL;
+    request.fractalMode = builtinFractalMode();
+    submitRequest(request);
+    return;
+  }
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     request.source = snapshotSourceField;
@@ -431,6 +468,16 @@ void Iris::onAdd(const AddEvent& e) {
 
 void Iris::onSave(const SaveEvent& e) {
   Module::onSave(e);
+  if (isBuiltinFractalSource()) {
+    const std::string directory = getPatchStorageDirectory();
+    if (!directory.empty()) {
+      const std::string sourcePath = system::join(directory, kEmbeddedSourceName);
+      if (system::isFile(sourcePath)) {
+        system::remove(sourcePath);
+      }
+    }
+    return;
+  }
   if (!embedSource) return;
   iris::SourceField source;
   {
@@ -455,6 +502,9 @@ json_t* Iris::dataToJson() {
     const int sourceWidth = snapshotSourceField.originalWidth > 0 ? snapshotSourceField.originalWidth : snapshotTable.sourceWidth;
     const int sourceHeight = snapshotSourceField.originalHeight > 0 ? snapshotSourceField.originalHeight : snapshotTable.sourceHeight;
     const int sourceChannels = snapshotSourceField.originalChannels > 0 ? snapshotSourceField.originalChannels : snapshotTable.sourceChannels;
+    json_object_set_new(root, "sourceKind", json_integer(currentSourceKind));
+    json_object_set_new(root, "fractalMode", json_integer(currentFractalMode));
+    json_object_set_new(root, "fractalVersion", json_integer(iris::kBuiltinFractalVersion));
     json_object_set_new(root, "sourcePath", json_string(sourcePath.c_str()));
     json_object_set_new(root, "sourceName", json_string(sourceName.c_str()));
     json_object_set_new(root, "sourceWidth", json_integer(sourceWidth));
@@ -492,6 +542,18 @@ void Iris::dataFromJson(json_t* root) {
     jsonBoolOr(root, "showSourceColorPreview", jsonBoolOr(root, "displayChannelPreview", false)),
     std::memory_order_relaxed);
   previewGeneration.fetch_add(1u, std::memory_order_release);
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    currentSourceKind = clamp(jsonIntegerOr(root, "sourceKind", iris::SOURCE_IMAGE),
+                              iris::SOURCE_IMAGE, iris::SOURCE_BUILTIN_FRACTAL);
+    currentFractalMode = clamp(jsonIntegerOr(root, "fractalMode", iris::FRACTAL_NONE),
+                               iris::FRACTAL_NONE, iris::kLastBuiltinFractalMode);
+    if (currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&
+        currentFractalMode < iris::kFirstBuiltinFractalMode) {
+      currentSourceKind = iris::SOURCE_IMAGE;
+      currentFractalMode = iris::FRACTAL_NONE;
+    }
+  }
   json_t* conversion = json_object_get(root, "conversion");
   if (conversion) {
     conversionSettings.normalizeMode = iris::NormalizeMode(clamp(
@@ -543,6 +605,18 @@ std::string Iris::sourceName() const {
 std::string Iris::sourcePath() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   return snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
+}
+
+bool Iris::isBuiltinFractalSource() const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  return currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&
+         currentFractalMode >= iris::kFirstBuiltinFractalMode &&
+         currentFractalMode <= iris::kLastBuiltinFractalMode;
+}
+
+int Iris::builtinFractalMode() const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  return currentFractalMode;
 }
 
 std::string Iris::statusText() const {

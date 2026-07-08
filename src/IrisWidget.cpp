@@ -542,6 +542,55 @@ struct IrisSmoothingMenuButton final : TL1105 {
   }
 };
 
+struct IrisSourceMenuButton final : TL1105 {
+  Iris* module = nullptr;
+
+  void onButton(const event::Button& e) override {
+    if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+      TL1105::onButton(e);
+      return;
+    }
+    ui::Menu* menu = createMenu();
+    menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
+    menu->addChild(createMenuLabel("Source"));
+    menu->addChild(createCheckMenuItem(
+      "Image file...", "", [this]() { return !module->isBuiltinFractalSource(); },
+      [this]() { chooseIrisImage(module); }));
+    menu->addChild(new MenuSeparator());
+    for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
+      menu->addChild(createCheckMenuItem(
+        iris::builtinFractalName(mode), "",
+        [this, mode]() {
+          return module->isBuiltinFractalSource() && module->builtinFractalMode() == mode;
+        },
+        [this, mode]() { module->requestBuiltinFractal(mode); }));
+    }
+    e.consume(this);
+  }
+
+  void draw(const DrawArgs& args) override {
+    TL1105::draw(args);
+    const float cx = 0.5f * box.size.x;
+    const float cy = 0.5f * box.size.y;
+    const float radius = std::max(1.3f, 0.13f * box.size.x);
+    const NVGcolor stroke = nvgRGBA(225, 232, 240, 244);
+    nvgStrokeWidth(args.vg, 1.1f);
+    nvgStrokeColor(args.vg, stroke);
+    nvgLineCap(args.vg, NVG_ROUND);
+    nvgLineJoin(args.vg, NVG_ROUND);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, cx, cy, radius);
+    nvgMoveTo(args.vg, cx, cy - radius);
+    nvgBezierTo(args.vg, cx + radius * 2.1f, cy - radius * 1.5f,
+                cx + radius * 2.1f, cy + radius * 1.5f, cx, cy + radius);
+    nvgMoveTo(args.vg, cx, cy - radius);
+    nvgBezierTo(args.vg, cx - radius * 2.1f, cy - radius * 1.5f,
+                cx - radius * 2.1f, cy + radius * 1.5f, cx, cy + radius);
+    nvgStroke(args.vg);
+  }
+};
+
 struct IrisChannelPreviewButton final : TL1105 {
   Iris* module = nullptr;
   ui::Tooltip* tooltip = nullptr;
@@ -768,6 +817,13 @@ struct IrisWidget final : ModuleWidget {
         module, Iris::SMOOTHING_MENU_PARAM);
     smoothingMenu->module = module;
     addParam(smoothingMenu);
+
+    IrisSourceMenuButton* sourceMenu =
+      createParamCentered<IrisSourceMenuButton>(
+        mm2px(anchor("IRIS_SOURCE_MENU_BUTTON", Vec(7.4f, 65.5f))),
+        module, Iris::SOURCE_MENU_PARAM);
+    sourceMenu->module = module;
+    addParam(sourceMenu);
 
     IrisChannelPreviewButton* channelPreviewButton =
       createWidgetCentered<IrisChannelPreviewButton>(
