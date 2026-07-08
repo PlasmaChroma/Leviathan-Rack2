@@ -1772,18 +1772,7 @@ struct ProcWidget : ModuleWidget {
 		const std::string panelBasePath = asset::plugin(pluginInstance, "res/proc.panel.svg");
 		setPanel(createPanel(panelBasePath));
 		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
-		{
-			widget::SvgWidget* labels = new widget::SvgWidget();
-			labels->setSvg(visual_assets::loadPluginSvgCached("res/proc.labels.svg"));
-			labels->box.size = box.size;
-
-			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
-			labelsFb->box.size = box.size;
-			labelsFb->oversample = 2.0f;
-			labelsFb->dirtyOnSubpixelChange = true;
-			labelsFb->addChild(labels);
-			addChild(labelsFb);
-		}
+		addChild(visual_assets::createPanelLabelsWidget("res/proc.labels.svg", box.size));
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));

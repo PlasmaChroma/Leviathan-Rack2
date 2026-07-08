@@ -673,18 +673,7 @@ struct IrisWidget final : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/iris.panel.svg");
     setPanel(createPanel(panelPath));
     addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-    {
-      widget::SvgWidget* labels = new widget::SvgWidget();
-      labels->setSvg(visual_assets::loadPluginSvgCached("res/iris.labels.svg"));
-      labels->box.size = box.size;
-
-      widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
-      labelsFb->box.size = box.size;
-      labelsFb->oversample = 2.0f;
-      labelsFb->dirtyOnSubpixelChange = true;
-      labelsFb->addChild(labels);
-      addChild(labelsFb);
-    }
+    addChild(visual_assets::createPanelLabelsWidget("res/iris.labels.svg", box.size));
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));

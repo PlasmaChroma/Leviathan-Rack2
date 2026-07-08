@@ -353,18 +353,7 @@ struct UndertowWidget final : ModuleWidget {
     addTinyLight(Undertow::SYNC_LIGHT, "SYNC_LIGHT", Vec(14.456f, 42.500f), nvgRGB(255, 235, 120));
     addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(36.089f, 42.817f), nvgRGB(255, 235, 120));
 
-    {
-      widget::SvgWidget* labels = new widget::SvgWidget();
-      labels->setSvg(visual_assets::loadPluginSvgCached("res/undertow.labels.svg"));
-      labels->box.size = box.size;
-
-      widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
-      labelsFb->box.size = box.size;
-      labelsFb->oversample = 2.0f;
-      labelsFb->dirtyOnSubpixelChange = true;
-      labelsFb->addChild(labels);
-      addChild(labelsFb);
-    }
+    addChild(visual_assets::createPanelLabelsWidget("res/undertow.labels.svg", box.size));
 
     previewBuildTimer.markAnchorsDone();
   }

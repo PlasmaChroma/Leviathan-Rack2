@@ -1497,6 +1497,40 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	return fb;
 }
 
+struct FittedPanelSvgWidget final : TransparentWidget {
+	std::shared_ptr<window::Svg> svg;
+
+	explicit FittedPanelSvgWidget(std::shared_ptr<window::Svg> svg) : svg(std::move(svg)) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!svg || !svg->handle || box.size.x <= 0.f || box.size.y <= 0.f) {
+			return;
+		}
+		const Vec svgSize = svg->getSize();
+		if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+			return;
+		}
+
+		nvgSave(args.vg);
+		nvgScale(args.vg, box.size.x / svgSize.x, box.size.y / svgSize.y);
+		svg->draw(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
+	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
+	fb->box.size = panelSizePx;
+	fb->oversample = clamp(oversample, 1.f, 1.5f);
+	fb->dirtyOnSubpixelChange = false;
+
+	FittedPanelSvgWidget* labels = new FittedPanelSvgWidget(loadPluginSvgCached(svgPath));
+	labels->box.size = panelSizePx;
+	fb->addChild(labels);
+	return fb;
+}
+
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {
 	if (!parent || svgPath.empty() || idSubstring.empty()) {
 		return 0;

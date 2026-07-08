@@ -249,18 +249,7 @@ struct WyrmWidget : ModuleWidget {
 		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.panel.svg");
 		setPanel(createPanel(panelPath));
 		addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-		{
-			widget::SvgWidget* labels = new widget::SvgWidget();
-			labels->setSvg(visual_assets::loadPluginSvgCached("res/wyrm.labels.svg"));
-			labels->box.size = box.size;
-
-			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
-			labelsFb->box.size = box.size;
-			labelsFb->oversample = 2.0f;
-			labelsFb->dirtyOnSubpixelChange = true;
-			labelsFb->addChild(labels);
-			addChild(labelsFb);
-		}
+		addChild(visual_assets::createPanelLabelsWidget("res/wyrm.labels.svg", box.size));
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));

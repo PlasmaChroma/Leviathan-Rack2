@@ -22,6 +22,7 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
+Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 bool isPanelGlassColorCycleEnabled();
 void togglePanelGlassColorCycle();
 float panelGlassTintAmount();

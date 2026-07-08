@@ -1644,18 +1644,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		const std::string panelBasePath = asset::plugin(pluginInstance, "res/flux.panel.svg");
 		setPanel(createPanel(panelBasePath));
 		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
-		{
-			widget::SvgWidget* labels = new widget::SvgWidget();
-			labels->setSvg(visual_assets::loadPluginSvgCached("res/flux.labels.svg"));
-			labels->box.size = box.size;
-
-			widget::FramebufferWidget* labelsFb = new widget::FramebufferWidget();
-			labelsFb->box.size = box.size;
-			labelsFb->oversample = 2.0f;
-			labelsFb->dirtyOnSubpixelChange = true;
-			labelsFb->addChild(labels);
-			addChild(labelsFb);
-		}
+		addChild(visual_assets::createPanelLabelsWidget("res/flux.labels.svg", box.size));
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {

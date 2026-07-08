@@ -3555,18 +3555,7 @@ struct TemporalDeckWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/deck.panel.svg");
     setPanel(createPanel(panelPath));
     addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-    {
-      widget::SvgWidget *labels = new widget::SvgWidget();
-      labels->setSvg(visual_assets::loadPluginSvgCached("res/deck.labels.svg"));
-      labels->box.size = box.size;
-
-      widget::FramebufferWidget *labelsFb = new widget::FramebufferWidget();
-      labelsFb->box.size = box.size;
-      labelsFb->oversample = 2.0f;
-      labelsFb->dirtyOnSubpixelChange = true;
-      labelsFb->addChild(labels);
-      addChild(labelsFb);
-    }
+    addChild(visual_assets::createPanelLabelsWidget("res/deck.labels.svg", box.size));
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
