@@ -92,9 +92,9 @@ NVGcolor irisPreviewConvertedColor(float value) {
   const float topR = 28.f;
   const float topG = 204.f;
   const float topB = 217.f;
-  const float midR = 12.f;
-  const float midG = 20.f;
-  const float midB = 44.f;
+  const float midR = 7.f;
+  const float midG = 12.f;
+  const float midB = 31.f;
   const float bottomR = 122.f;
   const float bottomG = 92.f;
   const float bottomB = 255.f;
@@ -106,6 +106,32 @@ NVGcolor irisPreviewConvertedColor(float value) {
     uint8_t(std::round(green)),
     uint8_t(std::round(blue)),
     255);
+}
+
+Vec irisFractalViewportHalfSpan(int mode) {
+  switch (mode) {
+    case iris::FRACTAL_MANDELBROT:
+      return Vec(1.62f, 0.86f);
+    case iris::FRACTAL_JULIA:
+      return Vec(1.58f, 0.72f);
+    case iris::FRACTAL_PHOENIX_JULIA:
+      return Vec(1.62f, 0.74f);
+    case iris::FRACTAL_BURNING_SHIP:
+      return Vec(0.42f, 0.145f);
+    case iris::FRACTAL_CELTIC:
+      return Vec(1.62f, 0.88f);
+    case iris::FRACTAL_SPIDER:
+      return Vec(1.56f, 0.84f);
+    case iris::FRACTAL_NOVA:
+      return Vec(2.0f, 0.86f);
+    case iris::FRACTAL_NEWTON:
+      return Vec(2.45f, 0.98f);
+    case iris::FRACTAL_EYE_OF_THE_WORLD:
+      return Vec(0.018f, 0.0095f);
+    case iris::FRACTAL_TRICORN:
+    default:
+      return Vec(1.68f, 0.90f);
+  }
 }
 
 void filterIrisSourcePreview(std::vector<uint8_t>* rgb, int mode) {
@@ -152,6 +178,8 @@ struct IrisDisplay final : OpaqueWidget {
   int uploadedWidth = 0;
   int uploadedHeight = 0;
   std::vector<uint8_t> rgba;
+  bool fractalPanActive = false;
+  Vec lastPanLocal;
 
   explicit IrisDisplay(Iris* module) : module(module) {}
 
@@ -167,11 +195,62 @@ struct IrisDisplay final : OpaqueWidget {
 
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
-      chooseIrisImage(module);
+      if (module->isBuiltinFractalSource()) {
+        fractalPanActive = true;
+        lastPanLocal = currentLocalMousePos();
+        e.consume(this);
+        return;
+      }
+    }
+    if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
+      fractalPanActive = false;
+    }
+    OpaqueWidget::onButton(e);
+  }
+
+  void onDragStart(const event::DragStart& e) override {
+    if (module && module->isBuiltinFractalSource() && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+      fractalPanActive = true;
+      lastPanLocal = currentLocalMousePos();
       e.consume(this);
       return;
     }
-    OpaqueWidget::onButton(e);
+    OpaqueWidget::onDragStart(e);
+  }
+
+  void onDragMove(const event::DragMove& e) override {
+    if (module && fractalPanActive && module->isBuiltinFractalSource() && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+      const Vec current = currentLocalMousePos();
+      const Vec delta = current.minus(lastPanLocal);
+      lastPanLocal = current;
+      if (box.size.x > 1.f && box.size.y > 1.f && (std::fabs(delta.x) > 0.f || std::fabs(delta.y) > 0.f)) {
+        const int mode = module->builtinFractalMode();
+        const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, 1.f));
+        const Vec halfSpan = irisFractalViewportHalfSpan(mode).mult(zoomScale);
+        module->fractalCenterX = clamp(module->fractalCenterX - delta.x / box.size.x * 2.f * halfSpan.x, -2.f, 2.f);
+        module->fractalCenterY = clamp(module->fractalCenterY - delta.y / box.size.y * 2.f * halfSpan.y, -2.f, 2.f);
+        module->requestBuiltinFractal(mode);
+      }
+      e.consume(this);
+      return;
+    }
+    OpaqueWidget::onDragMove(e);
+  }
+
+  void onDragEnd(const event::DragEnd& e) override {
+    if (e.button == GLFW_MOUSE_BUTTON_LEFT && fractalPanActive) {
+      fractalPanActive = false;
+      e.consume(this);
+      return;
+    }
+    OpaqueWidget::onDragEnd(e);
+  }
+
+  Vec currentLocalMousePos() const {
+    if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+      return Vec();
+    }
+    return APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
   }
 
   void step() override {
@@ -282,15 +361,6 @@ struct IrisScanLineOverlay final : TransparentWidget {
 
   explicit IrisScanLineOverlay(Iris* module) : module(module) {}
 
-  void onButton(const event::Button& e) override {
-    if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
-      chooseIrisImage(module);
-      e.consume(this);
-      return;
-    }
-    TransparentWidget::onButton(e);
-  }
-
   void draw(const DrawArgs& args) override {
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const float scanTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
@@ -365,7 +435,7 @@ struct IrisWaveformPreview final : TransparentWidget {
       nvgSave(args.vg);
       nvgScissor(args.vg, 0.f, 0.f, box.size.x, center);
       nvgStrokeWidth(args.vg, 1.45f);
-      const NVGcolor centerColor = nvgRGBA(77, 148, 238, 236);
+      const NVGcolor centerColor = nvgRGBA(178, 212, 246, 238);
       const NVGpaint positivePaint = nvgLinearGradient(
         args.vg, 0.f, top, 0.f, center,
         nvgRGBA(28, 204, 217, 245), centerColor);
@@ -491,6 +561,51 @@ struct IrisSmoothingMenuQuantity final : Quantity {
   }
 };
 
+struct IrisFractalZoomMenuQuantity final : Quantity {
+  Iris* module = nullptr;
+
+  explicit IrisFractalZoomMenuQuantity(Iris* module) : module(module) {}
+
+  void setValue(float value) override {
+    if (!module) return;
+    const float next = clamp(value, 0.f, 1.f);
+    if (std::fabs(module->fractalZoom - next) > 1e-5f) {
+      module->fractalZoom = next;
+      if (module->isBuiltinFractalSource()) {
+        module->requestBuiltinFractal(module->builtinFractalMode());
+      }
+    }
+  }
+
+  float getValue() override {
+    return module ? module->fractalZoom : 0.f;
+  }
+
+  float getDefaultValue() override {
+    return 0.f;
+  }
+
+  float getDisplayValue() override {
+    return getValue() * 100.f;
+  }
+
+  void setDisplayValue(float displayValue) override {
+    setValue(displayValue / 100.f);
+  }
+
+  std::string getLabel() override {
+    return "Zoom";
+  }
+
+  std::string getUnit() override {
+    return "%";
+  }
+
+  std::string getDisplayValueString() override {
+    return string::f("%.0f", getDisplayValue());
+  }
+};
+
 struct IrisSmoothingMenuButton final : TL1105 {
   Iris* module = nullptr;
 
@@ -574,6 +689,11 @@ struct IrisSourceMenuButton final : TL1105 {
       "Image file...", "", [this]() { return !module->isBuiltinFractalSource(); },
       [this]() { chooseIrisImage(module); }));
     menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Fractals"));
+    ui::Slider* zoomSlider = new ui::Slider();
+    zoomSlider->box.size = Vec(180.f, 24.f);
+    zoomSlider->quantity = new IrisFractalZoomMenuQuantity(module);
+    menu->addChild(zoomSlider);
     for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
       if (!iris::isBuiltinFractalMode(mode)) continue;
       menu->addChild(createCheckMenuItem(

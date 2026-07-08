@@ -64,7 +64,13 @@ inline void writeSetInterior(size_t base, std::vector<uint8_t>* rgb8) {
 
 } // namespace detail
 
-inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* error = nullptr) {
+inline bool makeBuiltinFractalSource(
+  int mode,
+  float zoom,
+  float centerX,
+  float centerY,
+  SourceField* out,
+  std::string* error = nullptr) {
   if (!out) {
     if (error) *error = "Missing fractal output";
     return false;
@@ -85,7 +91,13 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
   source.sourceName = std::string("Fractal: ") + builtinFractalName(mode);
   source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
 
-  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) ? 36 : 140;
+  zoom = clamp(zoom, 0.f, 1.f);
+  const double zoomScale = std::pow(0.05, double(zoom));
+  const double panX = clamp(centerX, -2.f, 2.f);
+  const double panY = clamp(centerY, -2.f, 2.f);
+  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
+    ? 36
+    : (mode == FRACTAL_EYE_OF_THE_WORLD ? 240 : 140);
   for (int y = 0; y < source.height; ++y) {
     const float ny = (float(y) + 0.5f) / float(source.height) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {
@@ -93,8 +105,8 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
       const size_t base = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
 
       if (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) {
-        double zr = nx * (mode == FRACTAL_NOVA ? 2.0 : 2.45);
-        double zi = ny * (mode == FRACTAL_NOVA ? 0.86 : 0.98);
+        double zr = panX + nx * (mode == FRACTAL_NOVA ? 2.0 : 2.45) * zoomScale;
+        double zi = panY + ny * (mode == FRACTAL_NOVA ? 0.86 : 0.98) * zoomScale;
         const double cr = -0.52;
         const double ci = 0.38;
         int iter = 0;
@@ -136,46 +148,40 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
       double pr = 0.0;
       double pi = 0.0;
       if (mode == FRACTAL_MANDELBROT) {
-        cr = -0.72 + double(nx) * 1.62;
-        ci = 0.03 + double(ny) * 0.86;
-      } else if (mode == FRACTAL_MANDELBROT_SEAHORSE) {
-        cr = -0.7460 + double(nx) * 0.082;
-        ci = 0.1040 + double(ny) * 0.038;
-      } else if (mode == FRACTAL_MANDELBROT_SPIRAL) {
-        cr = -0.7616 + double(nx) * 0.030;
-        ci = 0.0840 + double(ny) * 0.014;
+        cr = -0.72 + panX + double(nx) * 1.62 * zoomScale;
+        ci = 0.03 + panY + double(ny) * 0.86 * zoomScale;
+      } else if (mode == FRACTAL_EYE_OF_THE_WORLD) {
+        cr = -0.743643887037151 + panX + double(nx) * 0.018 * zoomScale;
+        ci = 0.131825904205330 + panY + double(ny) * 0.0095 * zoomScale;
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;
-        zr = double(nx) * 1.58;
-        zi = double(ny) * 0.72;
+        zr = panX + double(nx) * 1.58 * zoomScale;
+        zi = panY + double(ny) * 0.72 * zoomScale;
       } else if (mode == FRACTAL_PHOENIX_JULIA) {
         cr = -0.42;
         ci = 0.08;
-        zr = double(nx) * 1.62;
-        zi = double(ny) * 0.74;
+        zr = panX + double(nx) * 1.62 * zoomScale;
+        zi = panY + double(ny) * 0.74 * zoomScale;
       } else if (mode == FRACTAL_BURNING_SHIP) {
-        cr = -1.76 + double(nx) * 0.42;
-        ci = -0.045 + double(ny) * 0.145;
+        cr = -1.76 + panX + double(nx) * 0.42 * zoomScale;
+        ci = -0.045 + panY + double(ny) * 0.145 * zoomScale;
       } else if (mode == FRACTAL_CELTIC) {
-        cr = -0.25 + double(nx) * 1.62;
-        ci = 0.02 + double(ny) * 0.88;
-      } else if (mode == FRACTAL_BUFFALO) {
-        cr = -0.58 + double(nx) * 1.55;
-        ci = double(ny) * 0.84;
+        cr = -0.25 + panX + double(nx) * 1.62 * zoomScale;
+        ci = 0.02 + panY + double(ny) * 0.88 * zoomScale;
       } else if (mode == FRACTAL_SPIDER) {
-        cr = -0.52 + double(nx) * 1.56;
-        ci = double(ny) * 0.84;
+        cr = -0.52 + panX + double(nx) * 1.56 * zoomScale;
+        ci = panY + double(ny) * 0.84 * zoomScale;
       } else {
-        cr = -0.12 + double(nx) * 1.68;
-        ci = double(ny) * 0.90;
+        cr = -0.12 + panX + double(nx) * 1.68 * zoomScale;
+        ci = panY + double(ny) * 0.90 * zoomScale;
       }
 
       double minOrbit = 1e9;
       int iter = 0;
       double mag2 = 0.0;
       for (; iter < maxIter; ++iter) {
-        if (mode == FRACTAL_BURNING_SHIP || mode == FRACTAL_BUFFALO) {
+        if (mode == FRACTAL_BURNING_SHIP) {
           zr = std::fabs(zr);
           zi = std::fabs(zi);
         }
@@ -197,11 +203,6 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
         } else if (mode == FRACTAL_CELTIC) {
           const double nextR = std::fabs(zr2 - zi2) + cr;
           const double nextI = 2.0 * zr * zi + ci;
-          zr = nextR;
-          zi = nextI;
-        } else if (mode == FRACTAL_BUFFALO) {
-          const double nextR = std::fabs(zr2 - zi2) + cr;
-          const double nextI = std::fabs(2.0 * zr * zi) + ci;
           zr = nextR;
           zi = nextI;
         } else if (mode == FRACTAL_SPIDER) {

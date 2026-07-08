@@ -103,6 +103,9 @@ struct Iris final : Module {
   int builtinFractalMode() const;
 
   iris::ConversionSettings conversionSettings;
+  float fractalZoom = 0.f;
+  float fractalCenterX = 0.f;
+  float fractalCenterY = 0.f;
   std::atomic<float> displayScan {0.f};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
@@ -129,6 +132,9 @@ private:
     iris::ConversionSettings settings;
     iris::SourceField source;
     int fractalMode = iris::FRACTAL_NONE;
+    float fractalZoom = 0.f;
+    float fractalCenterX = 0.f;
+    float fractalCenterY = 0.f;
     uint64_t serial = 0u;
   };
 
