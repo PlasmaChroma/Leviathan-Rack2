@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 ## [v2.5.2]
 - Resolve trigger issue in Integral Flux and Proc allowing trigger restarts in rising edge
 - Fix save sample from Temporal Deck being at totally the wrong level
+- New module Undertow
 
 ## [v2.5.0]
 - New module TD.Scope
