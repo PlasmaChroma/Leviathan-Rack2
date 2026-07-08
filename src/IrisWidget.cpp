@@ -86,11 +86,9 @@ NVGcolor irisPreviewChannelColor(int mode, float value) {
   }
 }
 
-NVGcolor irisPreviewConvertedColor(float value, float yNorm = 0.5f) {
-  const float amount = clamp(std::fabs(value), 0.f, 1.f);
-  yNorm = clamp(yNorm, 0.f, 1.f);
-  const float center = 0.5f;
-  const float t = yNorm < center ? yNorm / center : (yNorm - center) / center;
+NVGcolor irisPreviewConvertedColor(float value) {
+  value = clamp(value, -1.f, 1.f);
+  const float t = value < 0.f ? value + 1.f : value;
   const float topR = 28.f;
   const float topG = 204.f;
   const float topB = 217.f;
@@ -100,13 +98,13 @@ NVGcolor irisPreviewConvertedColor(float value, float yNorm = 0.5f) {
   const float bottomR = 122.f;
   const float bottomG = 92.f;
   const float bottomB = 255.f;
-  const float red = yNorm < center ? topR + (midR - topR) * t : midR + (bottomR - midR) * t;
-  const float green = yNorm < center ? topG + (midG - topG) * t : midG + (bottomG - midG) * t;
-  const float blue = yNorm < center ? topB + (midB - topB) * t : midB + (bottomB - midB) * t;
+  const float red = value < 0.f ? bottomR + (midR - bottomR) * t : midR + (topR - midR) * t;
+  const float green = value < 0.f ? bottomG + (midG - bottomG) * t : midG + (topG - midG) * t;
+  const float blue = value < 0.f ? bottomB + (midB - bottomB) * t : midB + (topB - midB) * t;
   return nvgRGBA(
-    uint8_t(std::round(red * amount)),
-    uint8_t(std::round(green * amount)),
-    uint8_t(std::round(blue * amount)),
+    uint8_t(std::round(red)),
+    uint8_t(std::round(green)),
+    uint8_t(std::round(blue)),
     255);
 }
 
@@ -244,12 +242,9 @@ struct IrisDisplay final : OpaqueWidget {
         rgba.resize(gray.size() * 4u);
         for (size_t i = 0; i < gray.size(); ++i) {
           const float value = float(gray[i]) / 127.5f - 1.f;
-          const float yNorm = width > 0 && height > 1
-            ? float(i / size_t(width)) / float(height - 1)
-            : 0.5f;
           const NVGcolor color = currentChannelPreview
             ? irisPreviewChannelColor(currentChannelMode, value)
-            : irisPreviewConvertedColor(value, yNorm);
+            : irisPreviewConvertedColor(value);
           rgba[i * 4u + 0u] = uint8_t(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
           rgba[i * 4u + 1u] = uint8_t(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
           rgba[i * 4u + 2u] = uint8_t(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
