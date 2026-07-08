@@ -65,6 +65,16 @@
       "hidden": false
     },
     {
+      "slug": "Iris",
+      "name": "Iris",
+      "description": "Polyphonic image-to-wavetable oscillator with smooth table scanning.",
+      "tags": [
+        "Oscillator",
+        "Visual"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Crownstep",
       "name": "Crownstep",
       "description": "Checkers-driven sequencer.",
@@ -126,16 +136,6 @@
         "Reverb"
       ],
       "hidden": true
-    },
-    {
-      "slug": "Iris",
-      "name": "Iris",
-      "description": "Polyphonic image-to-wavetable oscillator with smooth table scanning.",
-      "tags": [
-        "Oscillator",
-        "Visual"
-      ],
-      "hidden": false
     }
   ]
 }
