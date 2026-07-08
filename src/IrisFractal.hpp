@@ -94,11 +94,11 @@ inline bool makeBuiltinFractalSourceSized(
   source.sourceName = std::string("Fractal: ") + builtinFractalName(mode);
   source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
 
-  zoom = clamp(zoom, 0.f, 1.f);
+  zoom = clamp01(zoom);
   const double zoomScale = std::pow(0.05, double(zoom));
   const double viewScale = std::max(1.f, viewportScale);
-  const double panX = clamp(centerX, -2.f, 2.f);
-  const double panY = clamp(centerY, -2.f, 2.f);
+  const double panX = std::max(-2.f, std::min(centerX, 2.f));
+  const double panY = std::max(-2.f, std::min(centerY, 2.f));
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
     ? 36
     : (mode == FRACTAL_EYE_OF_THE_WORLD ? 360 : 140);

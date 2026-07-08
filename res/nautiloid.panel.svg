@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850">
+  <rect width="10160" height="12850" fill="#07090d"/>
+  <rect x="260" y="260" width="9640" height="12330" rx="120" fill="#0c1018" stroke="#293142" stroke-width="34"/>
+  <rect x="500" y="800" width="9160" height="6100" rx="96" fill="#030507" stroke="#5841bf" stroke-width="46"/>
+  <rect x="800" y="7500" width="8560" height="700" rx="80" fill="#111827" stroke="#1cccd9" stroke-width="34" opacity="0.72"/>
+  <text x="5080" y="1050" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="520" font-weight="700" fill="#e8edf7">Nautiloid</text>
+  <text x="3600" y="9600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="260" fill="#d9e5f7">FRACTAL</text>
+  <text x="6560" y="9600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="260" fill="#d9e5f7">RESET</text>
+  <text x="5080" y="11880" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="280" fill="#8da0bc">Leviathan</text>
+</svg>
