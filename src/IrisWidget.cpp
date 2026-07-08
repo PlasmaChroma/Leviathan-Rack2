@@ -92,9 +92,9 @@ NVGcolor irisPreviewConvertedColor(float value) {
   const float topR = 28.f;
   const float topG = 204.f;
   const float topB = 217.f;
-  const float midR = 77.f;
-  const float midG = 148.f;
-  const float midB = 238.f;
+  const float midR = 12.f;
+  const float midG = 20.f;
+  const float midB = 44.f;
   const float bottomR = 122.f;
   const float bottomG = 92.f;
   const float bottomB = 255.f;
