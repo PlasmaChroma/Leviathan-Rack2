@@ -46,6 +46,17 @@ struct Nautiloid final : Module {
   float fractalCenterY = 0.f;
   std::atomic<uint64_t> previewGeneration {0u};
   std::atomic<uint64_t> irisPreviewGeneration {0u};
+  std::atomic<uint64_t> renderRequestsSubmitted {0u};
+  std::atomic<uint64_t> displayRendersCompleted {0u};
+  std::atomic<uint64_t> displayRendersDroppedStale {0u};
+  std::atomic<uint64_t> displayCacheHits {0u};
+  std::atomic<uint64_t> displayCacheMisses {0u};
+  std::atomic<uint64_t> cacheRequestsSubmitted {0u};
+  std::atomic<uint64_t> cacheRequestsDequeued {0u};
+  std::atomic<uint64_t> displayCacheRendersCompleted {0u};
+  std::atomic<uint64_t> irisRendersCompleted {0u};
+  std::atomic<uint64_t> irisRendersDroppedStale {0u};
+  std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> loading {false};
 
 private:

@@ -47,6 +47,11 @@ float jsonRealOr(json_t* root, const char* key, float fallback) {
   return value ? float(json_number_value(value)) : fallback;
 }
 
+bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
+  json_t* value = json_object_get(root, key);
+  return value ? json_boolean_value(value) != 0 : fallback;
+}
+
 bool cropFractalCacheToSize(
   const iris::SourceField& cache,
   float cacheCenterX,
@@ -134,6 +139,8 @@ json_t* Nautiloid::dataToJson() {
   json_object_set_new(root, "fractalZoom", json_real(fractalZoom));
   json_object_set_new(root, "fractalCenterX", json_real(fractalCenterX));
   json_object_set_new(root, "fractalCenterY", json_real(fractalCenterY));
+  json_object_set_new(root, "debugFileLoggingEnabled",
+                      json_boolean(debugFileLoggingEnabled.load(std::memory_order_relaxed)));
   return root;
 }
 
@@ -144,6 +151,8 @@ void Nautiloid::dataFromJson(json_t* root) {
   fractalZoom = clamp(jsonRealOr(root, "fractalZoom", 0.f), 0.f, kNautiloidMaxFractalZoom);
   fractalCenterX = clamp(jsonRealOr(root, "fractalCenterX", 0.f), -2.f, 2.f);
   fractalCenterY = clamp(jsonRealOr(root, "fractalCenterY", 0.f), -2.f, 2.f);
+  debugFileLoggingEnabled.store(
+    jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   requestRender();
 }
 
@@ -231,6 +240,7 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
     std::lock_guard<std::mutex> lock(workerMutex);
     workerRequest = request;
     workerRequest.serial = ++nextRequestSerial;
+    renderRequestsSubmitted.fetch_add(1u, std::memory_order_relaxed);
     requestPending = true;
     loading.store(true, std::memory_order_release);
   }
@@ -242,6 +252,7 @@ void Nautiloid::submitCacheRequest(const WorkerRequest& request) {
     std::lock_guard<std::mutex> lock(cacheRequestMutex);
     cacheRequest = request;
     cacheRequestPending = true;
+    cacheRequestsSubmitted.fetch_add(1u, std::memory_order_relaxed);
   }
   cacheRequestCv.notify_one();
 }
@@ -280,6 +291,11 @@ void Nautiloid::workerLoop() {
           kDisplaySourceHeight,
           &source);
     }
+    if (ok) {
+      displayCacheHits.fetch_add(1u, std::memory_order_relaxed);
+    } else {
+      displayCacheMisses.fetch_add(1u, std::memory_order_relaxed);
+    }
     if (!ok) {
       ok = iris::makeBuiltinFractalSourceSized(
         request.mode,
@@ -302,6 +318,7 @@ void Nautiloid::workerLoop() {
       std::lock_guard<std::mutex> lock(workerMutex);
       if (request.serial != nextRequestSerial) {
         if (!(requestPending && workerRequest.mode == request.mode)) {
+          displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
           continue;
         }
       }
@@ -311,6 +328,7 @@ void Nautiloid::workerLoop() {
       previewSource = std::move(source);
     }
     previewGeneration.fetch_add(1u, std::memory_order_release);
+    displayRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
     loading.store(false, std::memory_order_release);
     submitCacheRequest(request);
   }
@@ -325,6 +343,7 @@ void Nautiloid::cacheWorkerLoop() {
       if (cacheWorkerStop) break;
       request = cacheRequest;
       cacheRequestPending = false;
+      cacheRequestsDequeued.fetch_add(1u, std::memory_order_relaxed);
     }
 
     bool irisCompatibleCurrent = false;
@@ -358,6 +377,9 @@ void Nautiloid::cacheWorkerLoop() {
           irisCompatibleCenterX = request.centerX;
           irisCompatibleCenterY = request.centerY;
           irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
+          irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
+        } else {
+          irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
         }
       }
     }
@@ -390,6 +412,7 @@ void Nautiloid::cacheWorkerLoop() {
     {
       std::lock_guard<std::mutex> lock(workerMutex);
       if (request.serial != nextRequestSerial) {
+        displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
         continue;
       }
     }
@@ -401,5 +424,6 @@ void Nautiloid::cacheWorkerLoop() {
       fractalCacheCenterX = request.centerX;
       fractalCacheCenterY = request.centerY;
     }
+    displayCacheRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
   }
 }

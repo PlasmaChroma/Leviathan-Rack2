@@ -2,11 +2,21 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 
+#include <fstream>
+
 namespace {
 
 constexpr float kNautiloidWidthMm = 101.6f;
 constexpr float kNautiloidHeightMm = 128.5f;
 constexpr float kNautiloidMaxFractalZoom = 5.f;
+
+std::string nautiloidUserRootPath() {
+  return system::join(asset::user(), "Leviathan/Nautiloid");
+}
+
+std::string nautiloidDebugLogPath() {
+  return system::join(nautiloidUserRootPath(), "fractal-pipeline.csv");
+}
 
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
@@ -316,6 +326,95 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
   }
 };
 
+struct NautiloidDebugCounters final : TransparentWidget {
+  Nautiloid* module = nullptr;
+  double lastLogTime = -INFINITY;
+  uint64_t lastLoggedRequests = uint64_t(-1);
+  uint64_t lastLoggedIrisGeneration = uint64_t(-1);
+
+  explicit NautiloidDebugCounters(Nautiloid* module) : module(module) {}
+
+  void step() override {
+    if (module && module->debugFileLoggingEnabled.load(std::memory_order_relaxed)) {
+      const double now = system::getTime();
+      const uint64_t requests = module->renderRequestsSubmitted.load(std::memory_order_relaxed);
+      const uint64_t irisGeneration = module->irisPreviewGeneration.load(std::memory_order_relaxed);
+      if ((!std::isfinite(lastLogTime) || now - lastLogTime >= 0.25) &&
+          (requests != lastLoggedRequests || irisGeneration != lastLoggedIrisGeneration)) {
+        lastLogTime = now;
+        lastLoggedRequests = requests;
+        lastLoggedIrisGeneration = irisGeneration;
+        appendLog(now);
+      }
+    }
+    TransparentWidget::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    if (!module) return;
+
+    const auto load = [](const std::atomic<uint64_t>& value) {
+      return value.load(std::memory_order_relaxed);
+    };
+
+    nvgFontSize(args.vg, 7.5f);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextLetterSpacing(args.vg, 0.f);
+    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+    nvgFillColor(args.vg, nvgRGBA(205, 218, 235, 210));
+
+    const std::string left = string::f(
+      "req %llu  disp %llu  hit/miss %llu/%llu",
+      (unsigned long long) load(module->renderRequestsSubmitted),
+      (unsigned long long) load(module->displayRendersCompleted),
+      (unsigned long long) load(module->displayCacheHits),
+      (unsigned long long) load(module->displayCacheMisses));
+    const std::string right = string::f(
+      "iris %llu  cache %llu/%llu  stale d/i %llu/%llu",
+      (unsigned long long) load(module->irisRendersCompleted),
+      (unsigned long long) load(module->cacheRequestsDequeued),
+      (unsigned long long) load(module->displayCacheRendersCompleted),
+      (unsigned long long) load(module->displayRendersDroppedStale),
+      (unsigned long long) load(module->irisRendersDroppedStale));
+
+    nvgText(args.vg, 0.f, 0.f, left.c_str(), nullptr);
+    nvgText(args.vg, 0.f, 9.f, right.c_str(), nullptr);
+  }
+
+  void appendLog(double now) {
+    const std::string dir = nautiloidUserRootPath();
+    system::createDirectories(dir);
+    const std::string path = nautiloidDebugLogPath();
+    const bool needsHeader = !system::exists(path) || system::getFileSize(path) == 0u;
+    std::ofstream log(path, std::ios::app);
+    if (!log) return;
+    if (needsHeader) {
+      log << "time,zoom,center_x,center_y,loading,req,display_gen,iris_gen,display_done,"
+             "display_stale,cache_hits,cache_misses,cache_submitted,cache_dequeued,"
+             "cache_done,iris_done,iris_stale\n";
+    }
+    log
+      << now << ','
+      << module->fractalZoom << ','
+      << module->fractalCenterX << ','
+      << module->fractalCenterY << ','
+      << (module->loading.load(std::memory_order_relaxed) ? 1 : 0) << ','
+      << module->renderRequestsSubmitted.load(std::memory_order_relaxed) << ','
+      << module->previewGeneration.load(std::memory_order_relaxed) << ','
+      << module->irisPreviewGeneration.load(std::memory_order_relaxed) << ','
+      << module->displayRendersCompleted.load(std::memory_order_relaxed) << ','
+      << module->displayRendersDroppedStale.load(std::memory_order_relaxed) << ','
+      << module->displayCacheHits.load(std::memory_order_relaxed) << ','
+      << module->displayCacheMisses.load(std::memory_order_relaxed) << ','
+      << module->cacheRequestsSubmitted.load(std::memory_order_relaxed) << ','
+      << module->cacheRequestsDequeued.load(std::memory_order_relaxed) << ','
+      << module->displayCacheRendersCompleted.load(std::memory_order_relaxed) << ','
+      << module->irisRendersCompleted.load(std::memory_order_relaxed) << ','
+      << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
+      << '\n';
+  }
+};
+
 struct NautiloidZoomSlider final : ui::Slider {
   Nautiloid* module = nullptr;
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
@@ -395,7 +494,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       const bool zoomIn = handleX > centerX;
       nvgBeginPath(args.vg);
       nvgRoundedRect(args.vg, fillLeft, trackY, fillW, trackH, radius);
-      nvgFillColor(args.vg, zoomIn ? nvgRGB(79, 206, 184) : nvgRGB(228, 148, 80));
+      nvgFillColor(args.vg, zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255));
       nvgFill(args.vg);
     }
 
@@ -524,12 +623,12 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(zoomSlider);
 
     NautiloidSourceButton* sourceButton =
-      createParamCentered<NautiloidSourceButton>(mm2px(Vec(36.f, 96.f)), module, Nautiloid::SOURCE_MENU_PARAM);
+      createParamCentered<NautiloidSourceButton>(mm2px(Vec(42.f, 75.4f)), module, Nautiloid::SOURCE_MENU_PARAM);
     sourceButton->module = module;
     addParam(sourceButton);
 
     NautiloidResetButton* resetButton =
-      createParamCentered<NautiloidResetButton>(mm2px(Vec(65.6f, 96.f)), module, Nautiloid::RESET_VIEW_PARAM);
+      createParamCentered<NautiloidResetButton>(mm2px(Vec(59.6f, 75.4f)), module, Nautiloid::RESET_VIEW_PARAM);
     resetButton->module = module;
     addParam(resetButton);
 
@@ -545,6 +644,30 @@ struct NautiloidWidget final : ModuleWidget {
     irisPreview->box.size = irisPreviewFb->box.size;
     irisPreviewFb->addChild(irisPreview);
     addChild(irisPreviewFb);
+
+    NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);
+    counters->box.pos = mm2px(Vec(25.3f, 96.6f));
+    counters->box.size = mm2px(Vec(51.f, 8.f));
+    addChild(counters);
+  }
+
+  void appendContextMenu(Menu* menu) override {
+    ModuleWidget::appendContextMenu(menu);
+    Nautiloid* naut = dynamic_cast<Nautiloid*>(module);
+    if (!naut || !isDragonKingDebugEnabled()) return;
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("Nautiloid Debug"));
+    menu->addChild(createCheckMenuItem(
+      "Log fractal pipeline to file", "",
+      [naut]() {
+        return naut->debugFileLoggingEnabled.load(std::memory_order_relaxed);
+      },
+      [naut]() {
+        const bool current = naut->debugFileLoggingEnabled.load(std::memory_order_relaxed);
+        naut->debugFileLoggingEnabled.store(!current, std::memory_order_relaxed);
+      }));
+    menu->addChild(createMenuLabel(nautiloidDebugLogPath()));
   }
 };
 
