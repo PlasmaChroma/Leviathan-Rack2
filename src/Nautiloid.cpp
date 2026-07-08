@@ -91,24 +91,15 @@ bool cropFractalCacheToCanonical(
 
   for (int y = 0; y < source.height; ++y) {
     const float srcY = cropTop + (float(y) + 0.5f) * cropH / float(source.height) - 0.5f;
-    const int y0 = clamp(int(std::floor(srcY)), 0, cache.height - 1);
-    const int y1 = std::min(y0 + 1, cache.height - 1);
-    const float fy = clamp(srcY - float(y0), 0.f, 1.f);
+    const int srcYi = clamp(int(std::round(srcY)), 0, cache.height - 1);
     for (int x = 0; x < source.width; ++x) {
       const float srcX = cropLeft + (float(x) + 0.5f) * cropW / float(source.width) - 0.5f;
-      const int x0 = clamp(int(std::floor(srcX)), 0, cache.width - 1);
-      const int x1 = std::min(x0 + 1, cache.width - 1);
-      const float fx = clamp(srcX - float(x0), 0.f, 1.f);
+      const int srcXi = clamp(int(std::round(srcX)), 0, cache.width - 1);
       const size_t outBase = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
-      for (int c = 0; c < 3; ++c) {
-        const auto component = [&](int px, int py) {
-          return float(cache.rgb8[(size_t(py) * size_t(cache.width) + size_t(px)) * 3u + size_t(c)]);
-        };
-        const float top = component(x0, y0) + (component(x1, y0) - component(x0, y0)) * fx;
-        const float bottom = component(x0, y1) + (component(x1, y1) - component(x0, y1)) * fx;
-        source.rgb8[outBase + size_t(c)] =
-          uint8_t(std::round(clamp(top + (bottom - top) * fy, 0.f, 255.f)));
-      }
+      const size_t inBase = (size_t(srcYi) * size_t(cache.width) + size_t(srcXi)) * 3u;
+      source.rgb8[outBase + 0u] = cache.rgb8[inBase + 0u];
+      source.rgb8[outBase + 1u] = cache.rgb8[inBase + 1u];
+      source.rgb8[outBase + 2u] = cache.rgb8[inBase + 2u];
     }
   }
 
