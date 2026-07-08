@@ -1,7 +1,7 @@
 #pragma once
 
-#include "IrisFractal.hpp"
 #include "plugin.hpp"
+#include "IrisFractal.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -58,7 +58,9 @@ private:
   void startWorker();
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
+  void submitCacheRequest(const WorkerRequest& request);
   void workerLoop();
+  void cacheWorkerLoop();
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;
@@ -68,8 +70,17 @@ private:
   uint64_t nextRequestSerial = 0u;
   std::thread worker;
 
+  mutable std::mutex cacheRequestMutex;
+  std::condition_variable cacheRequestCv;
+  bool cacheWorkerStop = false;
+  bool cacheRequestPending = false;
+  WorkerRequest cacheRequest;
+  std::thread cacheWorker;
+
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;
+
+  mutable std::mutex cacheDataMutex;
   iris::SourceField fractalCacheSource;
   int fractalCacheMode = iris::FRACTAL_NONE;
   float fractalCacheZoom = -1.f;

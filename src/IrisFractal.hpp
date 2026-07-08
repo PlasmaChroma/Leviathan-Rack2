@@ -9,6 +9,8 @@ namespace iris {
 
 namespace detail {
 
+constexpr bool kUseSimdFractalRenderer = false;
+
 inline uint8_t fractalByte(float x) {
   x = clamp01(x);
   return uint8_t(std::round(x * 255.f));
@@ -62,6 +64,113 @@ inline void writeSetInterior(size_t base, std::vector<uint8_t>* rgb8) {
   (*rgb8)[base + 2u] = 18u;
 }
 
+inline void writeEscapeColor(int iter, int maxIter, float mag2, float minOrbit, size_t base, std::vector<uint8_t>* rgb8) {
+  if (iter >= maxIter) {
+    writeSetInterior(base, rgb8);
+    return;
+  }
+  const float smooth = float(iter) + 1.f -
+    float(std::log(std::log(std::sqrt(std::max(mag2, 1.000001f)))) / std::log(2.0f));
+  const float t = clamp01(smooth / float(maxIter));
+  const float orbit = 1.f - clamp01(float(std::sqrt(std::min(minOrbit, 4.f)) * 0.5f));
+  writePalette(t, orbit, base, rgb8);
+}
+
+inline void renderMandelbrotFamilySimd(
+  int mode,
+  float zoomScale,
+  float viewScale,
+  float panX,
+  float panY,
+  int maxIter,
+  SourceField* source) {
+  const float baseR = mode == FRACTAL_EYE_OF_THE_WORLD ? -0.743643887037151f : -0.72f;
+  const float baseI = mode == FRACTAL_EYE_OF_THE_WORLD ? 0.131825904205330f : 0.03f;
+  const float spanX = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.0075f : 1.62f) * zoomScale * viewScale;
+  const float spanY = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.00395f : 0.86f) * zoomScale * viewScale;
+  const float invWidth = 1.f / float(source->width);
+  const float invHeight = 1.f / float(source->height);
+  const rack::simd::float_4 lane(0.f, 1.f, 2.f, 3.f);
+
+  for (int y = 0; y < source->height; ++y) {
+    const float ny = (float(y) + 0.5f) * invHeight * 2.f - 1.f;
+    const rack::simd::float_4 ci(baseI + panY + ny * spanY);
+    int x = 0;
+    for (; x + 3 < source->width; x += 4) {
+      const rack::simd::float_4 nx = (rack::simd::float_4(float(x) + 0.5f) + lane) * (2.f * invWidth) - 1.f;
+      const rack::simd::float_4 cr = baseR + panX + nx * spanX;
+      rack::simd::float_4 zr = rack::simd::float_4::zero();
+      rack::simd::float_4 zi = rack::simd::float_4::zero();
+      rack::simd::float_4 mag2 = rack::simd::float_4::zero();
+      rack::simd::float_4 minOrbit(1e9f);
+      rack::simd::int32_4 iter = rack::simd::int32_4::zero();
+      rack::simd::float_4 active = rack::simd::float_4::mask();
+
+      for (int i = 0; i < maxIter; ++i) {
+        if (!rack::simd::movemask(active)) break;
+        const rack::simd::float_4 zr2 = zr * zr;
+        const rack::simd::float_4 zi2 = zi * zi;
+        minOrbit = rack::simd::ifelse(active, rack::simd::fmin(minOrbit, zr2 + zi2), minOrbit);
+        const rack::simd::float_4 nextI = 2.f * zr * zi + ci;
+        const rack::simd::float_4 nextR = zr2 - zi2 + cr;
+        const rack::simd::float_4 nextMag2 = nextR * nextR + nextI * nextI;
+        const rack::simd::float_4 nextActive = active & (nextMag2 <= 16.f);
+        iter += rack::simd::int32_4::cast(nextActive) & rack::simd::int32_4(1);
+        zr = rack::simd::ifelse(active, nextR, zr);
+        zi = rack::simd::ifelse(active, nextI, zi);
+        mag2 = rack::simd::ifelse(active, nextMag2, mag2);
+        active = nextActive;
+      }
+
+      int32_t iterLanes[4];
+      float mag2Lanes[4];
+      float orbitLanes[4];
+      iter.store(iterLanes);
+      mag2.store(mag2Lanes);
+      minOrbit.store(orbitLanes);
+      for (int laneIndex = 0; laneIndex < 4; ++laneIndex) {
+        const size_t base = (size_t(y) * size_t(source->width) + size_t(x + laneIndex)) * 3u;
+        writeEscapeColor(iterLanes[laneIndex], maxIter, mag2Lanes[laneIndex], orbitLanes[laneIndex], base, &source->rgb8);
+      }
+    }
+
+    for (; x < source->width; ++x) {
+      const float nx = (float(x) + 0.5f) * invWidth * 2.f - 1.f;
+      float cr = baseR + panX + nx * spanX;
+      const float ciScalar = baseI + panY + ny * spanY;
+      float zr = 0.f;
+      float zi = 0.f;
+      float minOrbit = 1e9f;
+      int iter = 0;
+      float mag2 = 0.f;
+      for (; iter < maxIter; ++iter) {
+        const float zr2 = zr * zr;
+        const float zi2 = zi * zi;
+        minOrbit = std::min(minOrbit, zr2 + zi2);
+        const float nextI = 2.f * zr * zi + ciScalar;
+        const float nextR = zr2 - zi2 + cr;
+        zr = nextR;
+        zi = nextI;
+        mag2 = zr * zr + zi * zi;
+        if (mag2 > 16.f) break;
+      }
+      const size_t base = (size_t(y) * size_t(source->width) + size_t(x)) * 3u;
+      writeEscapeColor(iter, maxIter, mag2, minOrbit, base, &source->rgb8);
+    }
+  }
+}
+
+inline float mandelbrotFamilySimdMaxZoom(int mode) {
+  switch (mode) {
+    case FRACTAL_EYE_OF_THE_WORLD:
+      return 1.75f;
+    case FRACTAL_MANDELBROT:
+      return 3.f;
+    default:
+      return -1.f;
+  }
+}
+
 } // namespace detail
 
 inline bool makeBuiltinFractalSourceSized(
@@ -94,7 +203,7 @@ inline bool makeBuiltinFractalSourceSized(
   source.sourceName = std::string("Fractal: ") + builtinFractalName(mode);
   source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
 
-  zoom = clamp01(zoom);
+  zoom = std::max(0.f, zoom);
   const double zoomScale = std::pow(0.05, double(zoom));
   const double viewScale = std::max(1.f, viewportScale);
   const double panX = std::max(-2.f, std::min(centerX, 2.f));
@@ -102,6 +211,23 @@ inline bool makeBuiltinFractalSourceSized(
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
     ? 36
     : (mode == FRACTAL_EYE_OF_THE_WORLD ? 360 : 140);
+  const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
+  if (detail::kUseSimdFractalRenderer && simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
+    detail::renderMandelbrotFamilySimd(
+      mode,
+      float(zoomScale),
+      float(viewScale),
+      float(panX),
+      float(panY),
+      maxIter,
+      &source);
+    if (!source.valid()) {
+      if (error) *error = "Generated fractal source is invalid";
+      return false;
+    }
+    *out = std::move(source);
+    return true;
+  }
   for (int y = 0; y < source.height; ++y) {
     const float ny = (float(y) + 0.5f) / float(source.height) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {

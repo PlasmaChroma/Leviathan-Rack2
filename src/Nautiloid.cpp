@@ -4,6 +4,11 @@
 
 namespace {
 
+constexpr float kNautiloidMaxFractalZoom = 5.f;
+constexpr float kFractalCacheScale = 1.5f;
+constexpr int kFractalCacheWidth = int(float(iris::kCanonicalSourceWidth) * kFractalCacheScale);
+constexpr int kFractalCacheHeight = int(float(iris::kCanonicalSourceHeight) * kFractalCacheScale);
+
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
     case iris::FRACTAL_MANDELBROT:
@@ -51,7 +56,7 @@ bool cropFractalCacheToCanonical(
   float cacheScale,
   iris::SourceField* out) {
   if (!cache.valid() || !out || cacheScale <= 1.f) return false;
-  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, 1.f));
+  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
   const float marginX = (cacheScale - 1.f) * halfSpan.x;
   const float marginY = (cacheScale - 1.f) * halfSpan.y;
@@ -141,7 +146,7 @@ void Nautiloid::dataFromJson(json_t* root) {
   if (!root) return;
   const int mode = jsonIntegerOr(root, "fractalMode", iris::FRACTAL_MANDELBROT);
   fractalMode = iris::isBuiltinFractalMode(mode) ? mode : iris::FRACTAL_MANDELBROT;
-  fractalZoom = clamp(jsonRealOr(root, "fractalZoom", 0.f), 0.f, 1.f);
+  fractalZoom = clamp(jsonRealOr(root, "fractalZoom", 0.f), 0.f, kNautiloidMaxFractalZoom);
   fractalCenterX = clamp(jsonRealOr(root, "fractalCenterX", 0.f), -2.f, 2.f);
   fractalCenterY = clamp(jsonRealOr(root, "fractalCenterY", 0.f), -2.f, 2.f);
   requestRender();
@@ -161,7 +166,7 @@ void Nautiloid::requestFractal(int mode) {
 void Nautiloid::requestRender() {
   WorkerRequest request;
   request.mode = fractalMode;
-  request.zoom = clamp(fractalZoom, 0.f, 1.f);
+  request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clamp(fractalCenterX, -2.f, 2.f);
   request.centerY = clamp(fractalCenterY, -2.f, 2.f);
   submitRequest(request);
@@ -188,7 +193,9 @@ void Nautiloid::previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* heig
 
 void Nautiloid::startWorker() {
   workerStop = false;
+  cacheWorkerStop = false;
   worker = std::thread([this]() { workerLoop(); });
+  cacheWorker = std::thread([this]() { cacheWorkerLoop(); });
 }
 
 void Nautiloid::stopWorker() {
@@ -198,8 +205,17 @@ void Nautiloid::stopWorker() {
     requestPending = false;
   }
   workerCv.notify_one();
+  {
+    std::lock_guard<std::mutex> lock(cacheRequestMutex);
+    cacheWorkerStop = true;
+    cacheRequestPending = false;
+  }
+  cacheRequestCv.notify_one();
   if (worker.joinable()) {
     worker.join();
+  }
+  if (cacheWorker.joinable()) {
+    cacheWorker.join();
   }
 }
 
@@ -212,6 +228,15 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
     loading.store(true, std::memory_order_release);
   }
   workerCv.notify_one();
+}
+
+void Nautiloid::submitCacheRequest(const WorkerRequest& request) {
+  {
+    std::lock_guard<std::mutex> lock(cacheRequestMutex);
+    cacheRequest = request;
+    cacheRequestPending = true;
+  }
+  cacheRequestCv.notify_one();
 }
 
 void Nautiloid::workerLoop() {
@@ -227,43 +252,15 @@ void Nautiloid::workerLoop() {
 
     iris::SourceField source;
     std::string error;
-    constexpr float kFractalCacheScale = 1.5f;
-    constexpr int kFractalCacheWidth = int(float(iris::kCanonicalSourceWidth) * kFractalCacheScale);
-    constexpr int kFractalCacheHeight = int(float(iris::kCanonicalSourceHeight) * kFractalCacheScale);
-    const bool cacheCompatible =
-      fractalCacheSource.valid() &&
-      fractalCacheMode == request.mode &&
-      std::fabs(fractalCacheZoom - request.zoom) <= 1e-5f;
-    bool ok = cacheCompatible &&
-      cropFractalCacheToCanonical(
-        fractalCacheSource,
-        fractalCacheCenterX,
-        fractalCacheCenterY,
-        request.mode,
-        request.zoom,
-        request.centerX,
-        request.centerY,
-        kFractalCacheScale,
-        &source);
-    if (!ok) {
-      iris::SourceField nextCache;
-      ok = iris::makeBuiltinFractalSourceSized(
-        request.mode,
-        request.zoom,
-        request.centerX,
-        request.centerY,
-        kFractalCacheWidth,
-        kFractalCacheHeight,
-        kFractalCacheScale,
-        &nextCache,
-        &error);
-      if (ok) {
-        fractalCacheSource = std::move(nextCache);
-        fractalCacheMode = request.mode;
-        fractalCacheZoom = request.zoom;
-        fractalCacheCenterX = request.centerX;
-        fractalCacheCenterY = request.centerY;
-        ok = cropFractalCacheToCanonical(
+    bool ok = false;
+    {
+      std::lock_guard<std::mutex> lock(cacheDataMutex);
+      const bool cacheCompatible =
+        fractalCacheSource.valid() &&
+        fractalCacheMode == request.mode &&
+        std::fabs(fractalCacheZoom - request.zoom) <= 1e-5f;
+      ok = cacheCompatible &&
+        cropFractalCacheToCanonical(
           fractalCacheSource,
           fractalCacheCenterX,
           fractalCacheCenterY,
@@ -273,7 +270,18 @@ void Nautiloid::workerLoop() {
           request.centerY,
           kFractalCacheScale,
           &source);
-      }
+    }
+    if (!ok) {
+      ok = iris::makeBuiltinFractalSourceSized(
+        request.mode,
+        request.zoom,
+        request.centerX,
+        request.centerY,
+        iris::kCanonicalSourceWidth,
+        iris::kCanonicalSourceHeight,
+        1.f,
+        &source,
+        &error);
     }
 
     if (!ok) {
@@ -295,5 +303,59 @@ void Nautiloid::workerLoop() {
     }
     previewGeneration.fetch_add(1u, std::memory_order_release);
     loading.store(false, std::memory_order_release);
+    submitCacheRequest(request);
+  }
+}
+
+void Nautiloid::cacheWorkerLoop() {
+  while (true) {
+    WorkerRequest request;
+    {
+      std::unique_lock<std::mutex> lock(cacheRequestMutex);
+      cacheRequestCv.wait(lock, [this]() { return cacheWorkerStop || cacheRequestPending; });
+      if (cacheWorkerStop) break;
+      request = cacheRequest;
+      cacheRequestPending = false;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(cacheDataMutex);
+      if (fractalCacheSource.valid() &&
+          fractalCacheMode == request.mode &&
+          std::fabs(fractalCacheZoom - request.zoom) <= 1e-5f &&
+          std::fabs(fractalCacheCenterX - request.centerX) <= 1e-5f &&
+          std::fabs(fractalCacheCenterY - request.centerY) <= 1e-5f) {
+        continue;
+      }
+    }
+
+    iris::SourceField nextCache;
+    std::string error;
+    const bool ok = iris::makeBuiltinFractalSourceSized(
+      request.mode,
+      request.zoom,
+      request.centerX,
+      request.centerY,
+      kFractalCacheWidth,
+      kFractalCacheHeight,
+      kFractalCacheScale,
+      &nextCache,
+      &error);
+    if (!ok) continue;
+
+    {
+      std::lock_guard<std::mutex> lock(workerMutex);
+      if (request.serial != nextRequestSerial) {
+        continue;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(cacheDataMutex);
+      fractalCacheSource = std::move(nextCache);
+      fractalCacheMode = request.mode;
+      fractalCacheZoom = request.zoom;
+      fractalCacheCenterX = request.centerX;
+      fractalCacheCenterY = request.centerY;
+    }
   }
 }
