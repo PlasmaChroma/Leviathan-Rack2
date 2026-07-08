@@ -127,7 +127,7 @@ Vec irisFractalViewportHalfSpan(int mode) {
     case iris::FRACTAL_NEWTON:
       return Vec(2.45f, 0.98f);
     case iris::FRACTAL_EYE_OF_THE_WORLD:
-      return Vec(0.018f, 0.0095f);
+      return Vec(0.0075f, 0.00395f);
     case iris::FRACTAL_TRICORN:
     default:
       return Vec(1.68f, 0.90f);

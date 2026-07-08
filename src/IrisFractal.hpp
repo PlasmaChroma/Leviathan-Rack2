@@ -97,7 +97,7 @@ inline bool makeBuiltinFractalSource(
   const double panY = clamp(centerY, -2.f, 2.f);
   const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
     ? 36
-    : (mode == FRACTAL_EYE_OF_THE_WORLD ? 240 : 140);
+    : (mode == FRACTAL_EYE_OF_THE_WORLD ? 360 : 140);
   for (int y = 0; y < source.height; ++y) {
     const float ny = (float(y) + 0.5f) / float(source.height) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {
@@ -151,8 +151,8 @@ inline bool makeBuiltinFractalSource(
         cr = -0.72 + panX + double(nx) * 1.62 * zoomScale;
         ci = 0.03 + panY + double(ny) * 0.86 * zoomScale;
       } else if (mode == FRACTAL_EYE_OF_THE_WORLD) {
-        cr = -0.743643887037151 + panX + double(nx) * 0.018 * zoomScale;
-        ci = 0.131825904205330 + panY + double(ny) * 0.0095 * zoomScale;
+        cr = -0.743643887037151 + panX + double(nx) * 0.0075 * zoomScale;
+        ci = 0.131825904205330 + panY + double(ny) * 0.00395 * zoomScale;
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;
