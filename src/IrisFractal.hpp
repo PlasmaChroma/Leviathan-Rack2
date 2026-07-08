@@ -69,7 +69,10 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
     if (error) *error = "Missing fractal output";
     return false;
   }
-  mode = std::max(kFirstBuiltinFractalMode, std::min(mode, kLastBuiltinFractalMode));
+  if (!isBuiltinFractalMode(mode)) {
+    if (error) *error = "Unknown built-in fractal mode";
+    return false;
+  }
 
   SourceField source;
   source.width = kCanonicalSourceWidth;
@@ -151,11 +154,6 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
         ci = 0.08;
         zr = double(nx) * 1.62;
         zi = double(ny) * 0.74;
-      } else if (mode == FRACTAL_LAMBDA_JULIA) {
-        cr = 0.82;
-        ci = 0.28;
-        zr = 0.5 + double(nx) * 0.78;
-        zi = double(ny) * 0.58;
       } else if (mode == FRACTAL_BURNING_SHIP) {
         cr = -1.76 + double(nx) * 0.42;
         ci = -0.045 + double(ny) * 0.145;
@@ -184,14 +182,7 @@ inline bool makeBuiltinFractalSource(int mode, SourceField* out, std::string* er
         const double zr2 = zr * zr;
         const double zi2 = zi * zi;
         minOrbit = std::min(minOrbit, zr2 + zi2);
-        if (mode == FRACTAL_LAMBDA_JULIA) {
-          const double oneMinusZr = 1.0 - zr;
-          const double oneMinusZi = -zi;
-          const double ar = zr * oneMinusZr - zi * oneMinusZi;
-          const double ai = zr * oneMinusZi + zi * oneMinusZr;
-          zi = cr * ai + ci * ar;
-          zr = cr * ar - ci * ai;
-        } else if (mode == FRACTAL_PHOENIX_JULIA) {
+        if (mode == FRACTAL_PHOENIX_JULIA) {
           const double nextR = zr2 - zi2 + cr + 0.48 * pr;
           const double nextI = 2.0 * zr * zi + ci + 0.48 * pi;
           pr = zr;

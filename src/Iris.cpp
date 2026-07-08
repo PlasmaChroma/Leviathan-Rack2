@@ -130,9 +130,10 @@ void Iris::requestImageLoad(const std::string& path) {
 }
 
 void Iris::requestBuiltinFractal(int mode) {
+  if (!iris::isBuiltinFractalMode(mode)) return;
   WorkerRequest request;
   request.type = REQUEST_BUILTIN_FRACTAL;
-  request.fractalMode = clamp(mode, iris::kFirstBuiltinFractalMode, iris::kLastBuiltinFractalMode);
+  request.fractalMode = mode;
   request.settings = conversionSettings;
   submitRequest(request);
 }
@@ -549,7 +550,7 @@ void Iris::dataFromJson(json_t* root) {
     currentFractalMode = clamp(jsonIntegerOr(root, "fractalMode", iris::FRACTAL_NONE),
                                iris::FRACTAL_NONE, iris::kLastBuiltinFractalMode);
     if (currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&
-        currentFractalMode < iris::kFirstBuiltinFractalMode) {
+        !iris::isBuiltinFractalMode(currentFractalMode)) {
       currentSourceKind = iris::SOURCE_IMAGE;
       currentFractalMode = iris::FRACTAL_NONE;
     }
@@ -610,8 +611,7 @@ std::string Iris::sourcePath() const {
 bool Iris::isBuiltinFractalSource() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   return currentSourceKind == iris::SOURCE_BUILTIN_FRACTAL &&
-         currentFractalMode >= iris::kFirstBuiltinFractalMode &&
-         currentFractalMode <= iris::kLastBuiltinFractalMode;
+         iris::isBuiltinFractalMode(currentFractalMode);
 }
 
 int Iris::builtinFractalMode() const {

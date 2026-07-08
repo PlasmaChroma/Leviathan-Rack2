@@ -575,6 +575,7 @@ struct IrisSourceMenuButton final : TL1105 {
       [this]() { chooseIrisImage(module); }));
     menu->addChild(new MenuSeparator());
     for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
+      if (!iris::isBuiltinFractalMode(mode)) continue;
       menu->addChild(createCheckMenuItem(
         iris::builtinFractalName(mode), "",
         [this, mode]() {

@@ -272,7 +272,22 @@ int main() {
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
 
-  for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
+  const int fractalModes[] = {
+    iris::FRACTAL_MANDELBROT,
+    iris::FRACTAL_MANDELBROT_SEAHORSE,
+    iris::FRACTAL_MANDELBROT_SPIRAL,
+    iris::FRACTAL_JULIA,
+    iris::FRACTAL_PHOENIX_JULIA,
+    iris::FRACTAL_BURNING_SHIP,
+    iris::FRACTAL_CELTIC,
+    iris::FRACTAL_BUFFALO,
+    iris::FRACTAL_TRICORN,
+    iris::FRACTAL_SPIDER,
+    iris::FRACTAL_NEWTON,
+    iris::FRACTAL_NOVA,
+  };
+  for (size_t modeIndex = 0; modeIndex < sizeof(fractalModes) / sizeof(fractalModes[0]); ++modeIndex) {
+    const int mode = fractalModes[modeIndex];
     iris::SourceField fractal;
     check(std::string("builtin fractal source generates: ") + iris::builtinFractalName(mode),
           iris::makeBuiltinFractalSource(mode, &fractal));
